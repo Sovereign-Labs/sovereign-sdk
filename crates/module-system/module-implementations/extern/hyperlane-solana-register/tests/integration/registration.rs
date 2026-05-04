@@ -34,7 +34,7 @@ fn test_user_is_registered_correctly() {
     runner.query_state(|state| {
         assert!(
             !sov_accounts::Accounts::<S>::default()
-                .is_authorized(&payer_addr, &credential, state)
+                .is_explicitly_authorized(&payer_addr, &credential, state)
                 .unwrap_infallible(),
             "Embedded credential should not yet be authorized for the payer address"
         );
@@ -67,7 +67,7 @@ fn test_user_is_registered_correctly() {
     runner.query_state(|state| {
         assert!(
             sov_accounts::Accounts::<S>::default()
-                .is_authorized(&payer_addr, &credential, state)
+                .is_explicitly_authorized(&payer_addr, &credential, state)
                 .unwrap_infallible(),
             "Embedded credential should be authorized for the payer address after registration"
         );
@@ -131,13 +131,13 @@ fn test_two_payers_registering_same_embedded_both_succeed() {
         let accounts = sov_accounts::Accounts::<S>::default();
         assert!(
             accounts
-                .is_authorized(&payer_a_addr, &credential, state)
+                .is_explicitly_authorized(&payer_a_addr, &credential, state)
                 .unwrap_infallible(),
             "First (payer_a, embedded) authorization should be recorded"
         );
         assert!(
             accounts
-                .is_authorized(&payer_b_addr, &credential, state)
+                .is_explicitly_authorized(&payer_b_addr, &credential, state)
                 .unwrap_infallible(),
             "Second (payer_b, embedded) authorization should also be recorded"
         );

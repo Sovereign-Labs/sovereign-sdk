@@ -69,12 +69,9 @@ impl<S: Spec> std::str::FromStr for AccountOwnerKey<S> {
             .rsplit_once('/')
             .ok_or_else(|| anyhow::anyhow!("invalid AccountOwnerKey: missing '/' separator"))?;
         Ok(Self {
-            address: addr_str
-                .parse()
-                .map_err(|e| anyhow::anyhow!("invalid address in AccountOwnerKey: {e:?}"))?,
-            credential_id: cred_str
-                .parse()
-                .map_err(|e| anyhow::anyhow!("invalid credential_id in AccountOwnerKey: {e:?}"))?,
+            address: <S::Address as std::str::FromStr>::from_str(addr_str)
+                .map_err(|e| anyhow::Error::from_boxed(e.into()))?,
+            credential_id: cred_str.parse()?,
         })
     }
 }

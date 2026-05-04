@@ -46,9 +46,10 @@ impl<S: Spec> Accounts<S> {
         Ok(*default_address)
     }
 
-    /// Returns `true` if `credential_id` has an explicit `account_owners`
-    /// authorization for `address`.
-    pub fn is_authorized<ST: StateReader<User>>(
+    /// Returns `true` only if `(address, credential_id)` has an explicit entry
+    /// in `account_owners`. For the full authorization check including
+    /// legacy and canonical fallback, use [`Self::is_authorized_for`].
+    pub fn is_explicitly_authorized<ST: StateReader<User>>(
         &self,
         address: &S::Address,
         credential_id: &CredentialId,
@@ -82,6 +83,6 @@ impl<S: Spec> Accounts<S> {
             return Ok(true);
         }
 
-        self.is_authorized(address, credential_id, state)
+        self.is_explicitly_authorized(address, credential_id, state)
     }
 }

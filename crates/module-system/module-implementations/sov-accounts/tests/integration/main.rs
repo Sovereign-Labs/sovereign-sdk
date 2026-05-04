@@ -375,7 +375,7 @@ fn test_register_new_account() {
             Response::AccountEmpty
         );
         assert!(!accounts
-            .is_authorized(
+            .is_explicitly_authorized(
                 &non_registered_account.address(),
                 &non_registered_account.credential_id(),
                 state
@@ -402,7 +402,7 @@ fn test_register_new_account() {
             let accounts = Accounts::<S>::default();
 
             assert!(accounts
-                .is_authorized(&non_registered_account.address(), &new_credential, state)
+                .is_explicitly_authorized(&non_registered_account.address(), &new_credential, state)
                 .unwrap());
             assert!(accounts
                 .is_authorized_for(&non_registered_account.address(), &new_credential, state)
@@ -413,7 +413,7 @@ fn test_register_new_account() {
             );
 
             assert!(!accounts
-                .is_authorized(
+                .is_explicitly_authorized(
                     &non_registered_account.address(),
                     &non_registered_account.credential_id(),
                     state
@@ -459,7 +459,7 @@ fn test_resolve_sender_address_with_default_address_non_registered() {
             non_registered_account.address()
         );
         assert!(!accounts
-            .is_authorized(
+            .is_explicitly_authorized(
                 &non_registered_account.address(),
                 &non_registered_account.credential_id(),
                 state
@@ -548,8 +548,12 @@ fn test_resolve_address_with_multi_credential_ownership() {
             addr
         );
 
-        assert!(accounts.is_authorized(&addr, &credential_1, state).unwrap());
-        assert!(accounts.is_authorized(&addr, &credential_2, state).unwrap());
+        assert!(accounts
+            .is_explicitly_authorized(&addr, &credential_1, state)
+            .unwrap());
+        assert!(accounts
+            .is_explicitly_authorized(&addr, &credential_2, state)
+            .unwrap());
         assert!(accounts
             .is_authorized_for(&addr, &credential_1, state)
             .unwrap());
@@ -585,7 +589,7 @@ fn test_resolve_with_different_default_address() {
             account_1.address()
         );
         assert!(!accounts
-            .is_authorized(&account_1.address(), &random_credential, state)
+            .is_explicitly_authorized(&account_1.address(), &random_credential, state)
             .unwrap());
         assert_eq!(
             accounts.get_account(random_credential, state),
