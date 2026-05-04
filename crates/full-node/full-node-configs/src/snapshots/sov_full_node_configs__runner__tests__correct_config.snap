@@ -68,6 +68,7 @@ expression: config
     },
     "max_batch_size_bytes": 1048576,
     "max_concurrent_batch_blobs": 16,
+    "max_concurrent_proof_blobs": 8,
     "blob_processing_timeout_secs": 60,
     "extension": null
   },
