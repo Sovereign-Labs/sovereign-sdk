@@ -3,9 +3,10 @@
 use std::sync::{Arc, Mutex};
 
 use crate::guest::SP1Guest;
-use crate::metrics::submit_network_proving_metric;
+use crate::metrics::submit_proving_metric;
 use crate::SP1MethodId;
 use serde::Serialize;
+use sov_metrics::ZkCircuit;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::aggregated_proof::common::{
@@ -56,7 +57,7 @@ impl SP1AggregationHost {
         inner_vk: sp1_sdk::SP1VerifyingKey,
         previous_aggregated_proof: Option<SerializedAggregatedProof>,
     ) -> anyhow::Result<Self> {
-        let prover = SP1Prover::new(elf)?;
+        let prover = SP1Prover::new_outer(elf)?;
         let outer_vk = prover.verifying_key().clone();
 
         let prev_agg_proof = previous_aggregated_proof
@@ -156,15 +157,26 @@ impl SP1AggregationHost {
 pub struct SP1Prover {
     prover: EnvProver,
     pk: Arc<EnvProvingKey>,
+    circuit: ZkCircuit,
 }
 
 impl SP1Prover {
-    /// Create a new [`SP1Prover`] by setting up a proving key from `elf`.
+    /// Create a new [`SP1Prover`] for an inner state-transition circuit.
     pub fn new(elf: &[u8]) -> anyhow::Result<Self> {
+        Self::with_circuit(elf, ZkCircuit::Inner)
+    }
+
+    /// Create a new [`SP1Prover`] for the outer aggregation circuit.
+    pub(crate) fn new_outer(elf: &[u8]) -> anyhow::Result<Self> {
+        Self::with_circuit(elf, ZkCircuit::Outer)
+    }
+
+    fn with_circuit(elf: &[u8], circuit: ZkCircuit) -> anyhow::Result<Self> {
         let (prover, pk) = prover_and_pk(elf)?;
         Ok(Self {
             prover,
             pk: Arc::new(pk),
+            circuit,
         })
     }
 
@@ -221,7 +233,7 @@ impl SP1Prover {
             let EnvProvingKey::Network { pk, .. } = &*self.pk else {
                 anyhow::bail!("EnvProver is Network but proving key variant is not Network");
             };
-            return Self::run_network(network, pk, stdin);
+            return self.run_network(network, pk, stdin);
         }
 
         // Under the mock backend the inner compressed proofs are dummies that
@@ -243,6 +255,7 @@ impl SP1Prover {
     }
 
     fn run_network(
+        &self,
         network: &NetworkProver,
         pk: &SP1ProvingKey,
         stdin: SP1Stdin,
@@ -257,7 +270,7 @@ impl SP1Prover {
             .wait_proof(request_id, None, None)
             .map_err(|e| anyhow::anyhow!("SP1 network proof wait failed. Error: {:?}", e))?;
 
-        submit_network_proving_metric(network, request_id);
+        submit_proving_metric(network, request_id, self.circuit);
 
         Ok(proof)
     }
