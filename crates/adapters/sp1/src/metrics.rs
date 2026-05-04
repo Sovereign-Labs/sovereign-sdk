@@ -40,11 +40,7 @@ impl Metric for Sp1ProvingMetric {
 ///
 /// Telemetry must never fail proving. Any error or missing-details response is
 /// silently dropped — the occasional missing datapoint is acceptable.
-pub(crate) fn submit_proving_metric(
-    network: &NetworkProver,
-    request_id: B256,
-    circuit: ZkCircuit,
-) {
+pub(crate) fn submit_proving_metric(network: &NetworkProver, request_id: B256, circuit: ZkCircuit) {
     // Best-effort metric: drop on RPC failure or missing details.
     let Ok(Some(req)) = network.get_proof_request(request_id) else {
         return;
