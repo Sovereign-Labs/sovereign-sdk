@@ -1292,8 +1292,7 @@ fn build_v1_payload(
     }
 }
 
-/// `address_override: None` is omitted from the serialized JSON, so pre-change signed messages
-/// remain byte-identical and existing signatures verify unchanged.
+/// `address_override: None` is omitted from the serialized JSON.
 #[test]
 fn test_v1_payload_omits_address_override_when_none() {
     let multisig_address: <S as Spec>::Address = [0xABu8; 32].into();

@@ -698,6 +698,65 @@ fn test_v1_address_override_some_unauthorized_skipped() {
     });
 }
 
+/// `address_override = None` ignores any pre-existing `(X, multisig_credential_id)`
+/// mapping and routes to the multisig's default address. The mapping is untouched.
+#[test]
+fn test_v1_address_override_none_ignores_existing_mapping() {
+    let MultisigEnv {
+        keys,
+        multisig,
+        credential_id: multisig_credential_id,
+        user: multisig_user,
+    } = make_multisig_env();
+    let multisig_default_address = multisig_user.address();
+
+    // Alice has an authorization for the multisig credential, but the V1 tx below
+    // signs with `None` and so must not route through her address.
+    let alice = TestUser::<S>::generate_with_default_balance();
+    let alice_address = alice.address();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user, alice]);
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: multisig_credential_id,
+        address: alice_address,
+    });
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let inner_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut tx = make_v1_tx(&multisig, inner_credential, None);
+    sign_v1(&mut tx, &keys[0]);
+    sign_v1(&mut tx, &keys[1]);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(tx),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(
+                accounts
+                    .is_explicitly_authorized(&multisig_default_address, &inner_credential, state)
+                    .unwrap(),
+                "None must route to multisig default"
+            );
+            assert!(
+                !accounts
+                    .is_explicitly_authorized(&alice_address, &inner_credential, state)
+                    .unwrap(),
+                "None must not write under alice's address"
+            );
+            assert!(
+                accounts
+                    .is_explicitly_authorized(&alice_address, &multisig_credential_id, state)
+                    .unwrap(),
+                "pre-existing (alice, multisig_credential_id) authorization must be preserved"
+            );
+        }),
+    });
+}
+
 /// `address_override` is part of the signed bytes: tampering with it after signing
 /// invalidates the signature.
 #[test]
