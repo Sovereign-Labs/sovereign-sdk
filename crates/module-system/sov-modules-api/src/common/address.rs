@@ -67,13 +67,10 @@ macro_rules! impl_bech32_conversion {
             PartialEq,
             Clone,
             Eq,
-            schemars::JsonSchema,
         )]
         #[serde(try_from = "String", into = "String")]
-        #[schemars(description = "A bech32 string")]
         pub struct $bech32_version (
             /// A validated bech32 string
-            #[schemars(regex = "__bech32_conversion_impls::RegexValidator")]
             String,
         );
 
@@ -81,6 +78,20 @@ macro_rules! impl_bech32_conversion {
             $human_readable_prefix
         }
 
+        impl schemars::JsonSchema for $bech32_version {
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                stringify!($bech32_version).into()
+            }
+
+            fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+                serde_json::from_value(serde_json::json!({
+                    "type": "string",
+                    "pattern": format!("^{}1[a-zA-Z0-9]+$", __bech32_hrp()),
+                    "description": "A bech32 string",
+                }))
+                .unwrap()
+            }
+        }
 
         mod __bech32_conversion_impls {
             use super:: $id;
@@ -91,19 +102,6 @@ macro_rules! impl_bech32_conversion {
             use $crate::prelude::{bech32, serde, anyhow};
             use bech32::primitives::decode::{UncheckedHrpstring, CheckedHrpstring};
             use bech32::{Bech32m, Hrp};
-
-            /// A regex validator for the bech32 string
-            ///
-            /// Schemars allows any type which has a `to_string` method to provide the regex pattern, so
-            /// we generate a unit type that yields regex with the correct HRP.
-            pub struct RegexValidator;
-            impl core::fmt::Display for RegexValidator {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    write!(f, "{}1[a-zA-Z0-9]+$", super::__bech32_hrp())
-                }
-            }
-
-
 
             impl From<$bech32_version> for String {
                 fn from(bech: $bech32_version) -> Self {
