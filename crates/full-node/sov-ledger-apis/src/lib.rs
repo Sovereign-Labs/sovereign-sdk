@@ -93,7 +93,7 @@ pub struct LedgerState<T: LedgerStateProvider + Clone + Send + Sync + 'static> {
 
 impl<T, B, TxReceipt, E> LedgerRoutes<T, B, TxReceipt, E>
 where
-    T: LedgerStateProvider + LedgerStateProviderExt + Clone + Send + Sync + 'static,
+    T: LedgerStateProviderExt + Clone + Send + Sync + 'static,
     B: serde::Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
     TxReceipt: TxReceiptContents,
     E: EventModuleName
@@ -434,12 +434,7 @@ where
         let mut events = Vec::new();
         for event_key in matching_keys {
             let mut response = ledger
-                .get_events_by_key::<RuntimeEventResponse<E>>(
-                    &event_key,
-                    None,
-                    per_key_fetch,
-                    None,
-                )
+                .get_events_by_key::<RuntimeEventResponse<E>>(&event_key, None, per_key_fetch, None)
                 .await?
                 .events_response;
             events.append(&mut response);
