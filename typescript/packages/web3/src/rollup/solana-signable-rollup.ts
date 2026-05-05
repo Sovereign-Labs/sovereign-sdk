@@ -4,8 +4,8 @@ import type {
   Transaction,
   TransactionV1,
   TxDetails,
-  UnsignedTransaction,
   Uniqueness,
+  UnsignedTransaction,
 } from "@sovereign-sdk/types";
 import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
 import bs58 from "bs58";

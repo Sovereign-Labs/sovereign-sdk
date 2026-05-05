@@ -733,7 +733,11 @@ fn test_v1_address_override_none_ignores_existing_mapping() {
     runner.execute_transaction(TransactionTestCase {
         input: submit_v1(tx),
         assert: Box::new(move |result, state| {
-            assert!(result.tx_receipt.is_successful());
+            assert!(
+                result.tx_receipt.is_successful(),
+                "V1 address_override=None should succeed, got {:?}",
+                result.tx_receipt
+            );
             let accounts = Accounts::<S>::default();
             assert!(
                 accounts
