@@ -33,7 +33,8 @@ pub struct SolanaOffchainUnsignedTransactionV0<R: TransactionCallable, S: Spec> 
     /// from malicious chains (if the chain name matches some other chain the use but didn't expect
     /// to be signing for right now).
     pub chain_name: SafeString,
-    /// Signer-declared address override. See [`AuthorizationData::address_override`] for routing semantics.
+    /// Signer-declared address override. This field is part of the signed bytes.
+    /// See [`sov_modules_api::capabilities::AuthorizationData::address_override`] for routing semantics.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address_override: Option<S::Address>,
 }
@@ -82,7 +83,8 @@ pub struct SolanaOffchainUnsignedTransactionV1<R: TransactionCallable, S: Spec> 
     /// This is the "multisig address" except if the credential is mapped to another address in
     /// `sov-accounts`.
     pub multisig_id: S::Address,
-    /// Signer-declared address override. See [`AuthorizationData::address_override`] for routing semantics.
+    /// Signer-declared address override. This field is part of the signed bytes.
+    /// See [`sov_modules_api::capabilities::AuthorizationData::address_override`] for routing semantics.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address_override: Option<S::Address>,
     /// Message format version. Must be `1` for this struct.

@@ -349,7 +349,10 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         _state: &mut impl StateAccessor,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
-        // The tx sender & sequencer are the same entity
+        // `address_override` is intentionally ignored: this path runs for sequencer
+        // self-registration before `account_owners` has any entries to authorize against,
+        // so the only meaningful sender is the credential's canonical address.
+        // The tx sender & sequencer are the same entity.
         Ok(Context::new(
             auth_data.default_address,
             auth_data.credentials.clone(),

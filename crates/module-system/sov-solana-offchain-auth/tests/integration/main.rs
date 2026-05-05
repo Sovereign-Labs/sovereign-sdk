@@ -1165,7 +1165,7 @@ async fn test_submit_ledger_signed_multisig_transaction() {
 /// genesis authorizes `(admin.address(), multisig_credential_id)` in `account_owners` — routes
 /// execution as `admin`, not as the multisig's default address. Proves that `address_override`
 /// flows from the signed JSON through `authenticate`, `build_auth_data`, `AuthorizationData`,
-/// and into `resolve_sender`.
+/// and into `resolve_context`.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_multisig_with_authorized_address_override() {
     // Build a 2-of-3 multisig (its default address is never funded).
