@@ -1,8 +1,6 @@
 use std::borrow::Cow;
 
-use schemars::r#gen::SchemaGenerator;
-use schemars::schema::{InstanceType, Schema, SchemaObject};
-use schemars::JsonSchema;
+use schemars::{JsonSchema, Schema, SchemaGenerator};
 
 /// We may use [`NotInstantiable`] type for modules that do not support calls.
 ///
@@ -42,8 +40,8 @@ impl borsh::BorshSerialize for NotInstantiable {
 
 // Override the jsonschema to be null rather than an enum with no variants. This allows quicktype to handle this type.
 impl JsonSchema for NotInstantiable {
-    fn schema_name() -> String {
-        "NotInstantiable".to_owned()
+    fn schema_name() -> Cow<'static, str> {
+        "NotInstantiable".into()
     }
 
     fn schema_id() -> Cow<'static, str> {
@@ -51,11 +49,6 @@ impl JsonSchema for NotInstantiable {
     }
 
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
-        SchemaObject {
-            instance_type: Some(InstanceType::Null.into()),
-            format: None,
-            ..Default::default()
-        }
-        .into()
+        serde_json::from_value(serde_json::json!({"type": "null"})).unwrap()
     }
 }

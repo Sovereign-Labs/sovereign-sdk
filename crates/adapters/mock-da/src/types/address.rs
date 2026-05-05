@@ -49,11 +49,11 @@ impl MockAddress {
 }
 
 impl schemars::JsonSchema for MockAddress {
-    fn schema_name() -> String {
-        "MockAddress".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "MockAddress".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         serde_json::from_value(serde_json::json!({
             "type": "string",
             "pattern": "^[a-fA-F0-9]{64}$",

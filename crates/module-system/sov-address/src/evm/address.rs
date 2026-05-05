@@ -126,11 +126,11 @@ impl std::fmt::Display for EthereumAddress {
 }
 
 impl schemars::JsonSchema for EthereumAddress {
-    fn schema_name() -> String {
-        "EthereumAddress".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "EthereumAddress".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         serde_json::from_value(serde_json::json!({
             "type": "string",
             "pattern": "^0x[a-fA-F0-9]{40}$",

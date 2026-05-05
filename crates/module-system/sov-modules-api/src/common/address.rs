@@ -322,11 +322,11 @@ macro_rules! impl_hash32_type {
         }
 
         impl schemars::JsonSchema for $id {
-            fn schema_name() -> String {
-                stringify!($id).to_string()
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                stringify!($id).into()
             }
 
-            fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+            fn json_schema(gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
                 <$bech32_version as schemars::JsonSchema>::json_schema(gen)
             }
         }
@@ -371,11 +371,11 @@ pub const fn address_prefix() -> &'static str {
 pub struct AddressSchema(#[sov_wallet(display(bech32m(prefix = "address_prefix()")))] [u8; 28]);
 
 impl schemars::JsonSchema for Address {
-    fn schema_name() -> String {
-        "Address".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Address".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         let address_prefix = config_value_private!("ADDRESS_PREFIX");
 
         serde_json::from_value(serde_json::json!({
@@ -489,11 +489,11 @@ impl From<CredentialId> for Base58Address {
 }
 
 impl schemars::JsonSchema for Base58Address {
-    fn schema_name() -> String {
-        "Address".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Address".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         serde_json::from_value(serde_json::json!({
             "type": "string",
             "pattern": "^[a-zA-Z0-9]{36,44}$",

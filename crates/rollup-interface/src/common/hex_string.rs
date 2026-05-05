@@ -26,11 +26,11 @@ where
     T: AsRef<[u8]>;
 
 impl schemars::JsonSchema for HexString {
-    fn schema_name() -> String {
-        "HexString".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "HexString".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         serde_json::from_value(serde_json::json!({
             "type": "string",
             "pattern": "^0x(?:[a-fA-F0-9]{2})+$",
@@ -42,11 +42,11 @@ impl schemars::JsonSchema for HexString {
 
 // Useful for representing Ethereum addresses
 impl<const N: usize> schemars::JsonSchema for HexString<[u8; N]> {
-    fn schema_name() -> String {
-        "HexHash".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "HexHash".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         serde_json::from_value(serde_json::json!({
             "type": "string",
             "pattern": format!("^0x[a-fA-F0-9]{{{}}}$", N * 2),
@@ -57,11 +57,11 @@ impl<const N: usize> schemars::JsonSchema for HexString<[u8; N]> {
 }
 
 impl<const N: usize> schemars::JsonSchema for HexString<SafeVec<u8, N>> {
-    fn schema_name() -> String {
-        "HexHash".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "HexHash".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         serde_json::from_value(serde_json::json!({
             "type": "string",
             "pattern": format!("^0x(?:[a-fA-F0-9]{{2}}){{0,{}}}$", N),

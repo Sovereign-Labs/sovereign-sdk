@@ -17,8 +17,7 @@ use std::slice::SliceIndex;
 use std::vec::Drain;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use schemars::gen::SchemaGenerator;
-use schemars::JsonSchema;
+use schemars::{JsonSchema, SchemaGenerator};
 use serde::de::{SeqAccess, Visitor};
 use serde::{Deserialize, Deserializer, Serialize};
 use sov_universal_wallet::schema::{OverrideSchema, UniversalWallet as SovSchemaGenerator};
@@ -62,15 +61,15 @@ impl<T: SovSchemaGenerator, const MAX_SIZE: usize> OverrideSchema for SafeVec<T,
 }
 
 impl<T: JsonSchema, const MAX_SIZE: usize> JsonSchema for SafeVec<T, MAX_SIZE> {
-    fn schema_name() -> String {
-        format!("SafeVec_{}_of_{}", MAX_SIZE, T::schema_name())
+    fn schema_name() -> Cow<'static, str> {
+        format!("SafeVec_{}_of_{}", MAX_SIZE, T::schema_name()).into()
     }
 
     fn schema_id() -> Cow<'static, str> {
         format!("SafeVec<{}, {}>", MAX_SIZE, T::schema_id()).into()
     }
 
-    fn json_schema(generator: &mut SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(generator: &mut SchemaGenerator) -> schemars::Schema {
         serde_json::from_value(serde_json::json!({
             "type": "array",
             "items": generator.subschema_for::<T>(),
