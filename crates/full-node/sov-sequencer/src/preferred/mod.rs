@@ -487,7 +487,7 @@ where
                 }
                 AcceptTxError::BatchError {
                     batch_creation_error,
-                    nb_of_concurrent_blob_submissions,
+                    nb_of_batch_blobs_in_flight,
                 } => match batch_creation_error {
                     BatchCreationError::NoFinalizedSlotAvailable => {
                         return Err(sequencer_overloaded_503("No finalized slots available"));
@@ -495,8 +495,8 @@ where
                     BatchCreationError::BlobSenderBusy => {
                         return Err(error_not_fully_synced(
                             SequencerNotReadyDetails::WaitingOnBlobSender {
-                                max_concurrent_blobs: self.config.max_concurrent_blobs,
-                                nb_of_blobs_in_flight: nb_of_concurrent_blob_submissions,
+                                max_concurrent_batch_blobs: self.config.max_concurrent_batch_blobs,
+                                nb_of_batch_blobs_in_flight,
                             },
                         ));
                     }
@@ -787,7 +787,7 @@ where
         // same logic.
         self.synchronized_state_updator
             .check_readiness_msg(
-                self.config.max_concurrent_blobs,
+                self.config.max_concurrent_batch_blobs,
                 self.stop_at_rollup_height,
                 "check_readiness",
             )

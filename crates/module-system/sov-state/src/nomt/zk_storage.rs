@@ -237,6 +237,7 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
     fn maybe_iter_user_values_with_prefix(
         &self,
         _prefix: SlotKey,
+        _cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
         unimplemented!("The NomtVerifierStorage does not support `iter_with_prefix`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
         // We have to put this here to allow type inference, but we prefer to panic since calling this method is a bug.
@@ -247,6 +248,7 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
     fn maybe_iter_kernel_values_with_prefix(
         &self,
         _prefix: SlotKey,
+        _cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
         unimplemented!("The NomtVerifierStorage does not support `iter_with_prefix`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
         // We have to put this here to allow type inference, but we prefer to panic since calling this method is a bug.

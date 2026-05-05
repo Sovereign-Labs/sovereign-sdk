@@ -1,0 +1,46 @@
+[package]
+name = "sov-timelock"
+description = "Sovereign SDK module for timelock proposal management"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+
+version = { workspace = true }
+readme = "README.md"
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true, features = ["rc"] }
+schemars = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }
+sov-chain-state = { workspace = true }
+sov-modules-api = { workspace = true }
+thiserror = { workspace = true }
+
+[dev-dependencies]
+sov-test-modules = { workspace = true, features = ["native"] }
+sov-test-utils = { workspace = true }
+sov-timelock = { path = ".", version = "*", features = ["native"] }
+sov-value-setter = { workspace = true, features = ["native"] }
+strum = { workspace = true }
+
+[features]
+default = []
+arbitrary = [
+	"sov-modules-api/arbitrary",
+	"sov-test-utils/arbitrary",
+	"sov-timelock/arbitrary"
+]
+native = [
+	"sov-chain-state/native",
+	"sov-modules-api/native",
+	"sov-test-modules/native",
+	"sov-timelock/native",
+	"sov-value-setter/native"
+]

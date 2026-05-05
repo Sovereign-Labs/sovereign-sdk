@@ -57,8 +57,8 @@ pub enum SequencerNotReadyDetails {
     },
     /// The sequencer is waiting for the blob sender to be ready.
     WaitingOnBlobSender {
-        max_concurrent_blobs: usize,
-        nb_of_blobs_in_flight: usize,
+        max_concurrent_batch_blobs: usize,
+        nb_of_batch_blobs_in_flight: usize,
     },
     /// The sequencer is a preferred sequencer and dropped too far out of sync, and is currently
     /// attempting to recover.

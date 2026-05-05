@@ -16,6 +16,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_universal_wallet::UniversalWallet;
 
+use crate::common::SlotNumber;
 use crate::crypto::{PublicKey, Signature};
 use crate::da::{DaSpec, RelevantBlobs, RelevantProofs};
 use crate::zk::aggregated_proof::SerializedAggregatedProof;
@@ -63,14 +64,6 @@ pub trait Zkvm: Default + Clone + Send + Sync + 'static {
     /// Only available under the `"native"` feature.
     #[cfg(feature = "native")]
     type OuterHost: aggregated_proof::OuterZkvmHost;
-
-    /// Network proving implementation for this Zkvm.
-    /// Only available under the `"native"` feature.
-    ///
-    /// This is an optional component - if the Zkvm does not support network proving, this can be set to `NoopZkvmNetwork<Self::Guest>`,
-    /// which is a dummy implementation that cannot be used or constructed.
-    #[cfg(feature = "native")]
-    type Network: ZkvmNetwork<Guest: ZkvmGuest<Verifier = Self::Verifier>>;
 }
 
 /// The code commitment for the Zkvm
@@ -165,80 +158,6 @@ pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
     ) -> Result<T, Self::Error>;
 }
 
-/// A network prover that can submit proofs asynchronously and poll for results.
-///
-/// Unlike [`ZkvmHost`] which runs proofs synchronously via [`ZkvmHost::add_hint_and_run`],
-/// a `ZkvmNetwork` submits proof requests to a remote proving service and returns
-/// a handle that can be polled for completion. This enables concurrent proof generation
-/// across multiple blocks.
-#[cfg(feature = "native")]
-pub trait ZkvmNetwork: Send + Sync + 'static {
-    /// The associated guest type.
-    type Guest: ZkvmGuest;
-
-    /// An opaque handle returned by [`ZkvmNetwork::submit`] that identifies a pending proof.
-    type ProofHandle: Send + Sync + Clone + core::fmt::Debug + 'static;
-
-    /// Add a hint and submit the proof request in one atomic operation.
-    ///
-    /// Network proving always generates a real proof.
-    /// Returns a [`Self::ProofHandle`] that can be passed to [`ZkvmNetwork::poll`] to check for the result.
-    fn add_hint_and_submit<T: Serialize + Send + Sync>(
-        &self,
-        item: &T,
-    ) -> impl core::future::Future<Output = anyhow::Result<Self::ProofHandle>> + Send;
-
-    /// Check whether a previously submitted proof is ready.
-    ///
-    /// Returns `Ok(Some(proof_bytes))` when the proof is complete,
-    /// `Ok(None)` if it is still pending, or an error if proving failed.
-    fn poll(
-        &self,
-        handle: &Self::ProofHandle,
-    ) -> impl core::future::Future<Output = anyhow::Result<Option<Vec<u8>>>> + Send;
-
-    /// Returns a commitment to the program being proven.
-    ///
-    /// This is the verifying key that identifies the guest program and can be
-    /// stored at genesis for proof verification.
-    fn code_commitment(
-        &self,
-    ) -> anyhow::Result<<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment>;
-}
-
-/// A no-op [`ZkvmNetwork`] for ZKVMs that don't support network proving.
-///
-/// This type cannot be constructed because it contains an [`Infallible`](core::convert::Infallible)
-/// field. All trait methods use `match self._void {}` to statically prove they are unreachable.
-#[cfg(feature = "native")]
-pub struct NoopZkvmNetwork<G> {
-    _guest: core::marker::PhantomData<G>,
-    _void: core::convert::Infallible,
-}
-
-#[cfg(feature = "native")]
-impl<G: ZkvmGuest + 'static> ZkvmNetwork for NoopZkvmNetwork<G> {
-    type Guest = G;
-    type ProofHandle = ();
-
-    async fn add_hint_and_submit<T: Serialize + Send + Sync>(
-        &self,
-        _item: &T,
-    ) -> anyhow::Result<Self::ProofHandle> {
-        match self._void {}
-    }
-
-    async fn poll(&self, _handle: &Self::ProofHandle) -> anyhow::Result<Option<Vec<u8>>> {
-        match self._void {}
-    }
-
-    fn code_commitment(
-        &self,
-    ) -> anyhow::Result<<<Self::Guest as ZkvmGuest>::Verifier as ZkVerifier>::CodeCommitment> {
-        match self._void {}
-    }
-}
-
 /// A trait which is accessible from within a zkVM program.
 pub trait ZkvmGuest: Send + Sync {
     /// The verifier type associated with this vm.
@@ -277,6 +196,8 @@ pub struct StateTransitionPublicData<Address, Da: DaSpec, Root> {
         deserialize = "Root: borsh::de::BorshDeserialize"
     ))]
     pub final_state_root: Root,
+    /// The canonical slot number of the transition within the rollup's DA fork.
+    pub slot_number: SlotNumber,
     /// The slot hash of the state transition
     #[borsh(bound(
         serialize = "<Da as DaSpec>::SlotHash: borsh::ser::BorshSerialize",
@@ -306,6 +227,8 @@ pub struct StateTransitionWitness<StateRoot, Witness, Da: DaSpec> {
     pub relevant_blobs: RelevantBlobs<<Da as DaSpec>::BlobTransaction>,
     /// The witness for the state transition
     pub witness: Witness,
+    /// The canonical slot number of the transition within the rollup's DA fork.
+    pub slot_number: SlotNumber,
 }
 
 #[derive(Serialize, Deserialize, UniversalWallet)]

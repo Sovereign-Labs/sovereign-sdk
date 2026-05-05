@@ -561,6 +561,7 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
     fn maybe_iter_user_values_with_prefix(
         &self,
         _prefix: SlotKey,
+        _cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
         Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
     }
@@ -569,6 +570,7 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
     fn maybe_iter_kernel_values_with_prefix(
         &self,
         _prefix: SlotKey,
+        _cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
         Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
     }

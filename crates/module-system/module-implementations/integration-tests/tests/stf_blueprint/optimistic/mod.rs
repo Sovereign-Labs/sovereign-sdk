@@ -3,5 +3,6 @@ pub mod optimistic_rt;
 mod registered;
 mod sequencer;
 mod stf_tests;
+mod timelock;
 mod tx_revert_tests;
 mod unregistered;

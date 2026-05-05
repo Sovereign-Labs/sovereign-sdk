@@ -53,7 +53,7 @@ async fn start_node_with_genesis(
     builder
         .set_config(|c| {
             c.storage = StoragePath::Tmp(dir.into());
-            c.max_concurrent_blobs = 65536;
+            c.max_concurrent_batch_blobs = 65536;
             c.rollup_prover_config = RollupProverConfig::Disabled;
             c.aggregated_proof_block_jump = 5;
             c.max_infos_in_db = 30;

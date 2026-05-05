@@ -39,6 +39,9 @@ pub(crate) struct ZkProofManagerMetrics {
     pub proofs_to_create: usize,
     /// The slot number of the most recently received state transition.
     pub slot_number: u64,
+    /// Number of pending aggregated-proof metadata items currently buffered in the
+    /// intake-to-aggregator channel (capacity `max_number_of_aggregated_proofs_in_memory`).
+    pub pending_agg_metadata: usize,
 }
 
 impl Metric for ZkProofManagerMetrics {
@@ -49,11 +52,12 @@ impl Metric for ZkProofManagerMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} proving_lag={}i,proofs_to_create={}i,slot_number={}i",
+            "{} proving_lag={}i,proofs_to_create={}i,slot_number={}i,pending_agg_metadata={}i",
             self.measurement_name(),
             self.proving_lag,
             self.proofs_to_create,
             self.slot_number,
+            self.pending_agg_metadata,
         )
     }
 }
@@ -80,25 +84,25 @@ impl Metric for ZkAggregatedProofMetrics {
     }
 }
 
-/// Metrics for the network prover.
-/// Emitted after each proof submission to the proving network.
+/// Metrics tracking the number of in-flight proving tasks in the parallel prover service.
+/// Emitted on every increment / decrement of the pending task counter.
 #[derive(Debug)]
-pub(crate) struct ZkNetworkProverMetrics {
-    /// Time in milliseconds for submitting a proof request to the network.
-    pub submit_duration_ms: u128,
+pub(crate) struct PendingProverTasksMetric {
+    /// Number of proving tasks currently in flight.
+    pub pending_tasks_count: usize,
 }
 
-impl Metric for ZkNetworkProverMetrics {
+impl Metric for PendingProverTasksMetric {
     fn measurement_name(&self) -> &'static str {
-        "sov_rollup_zk_network_prover"
+        "sov_prover_service_pending_tasks"
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} submit_duration_ms={}i",
+            "{} pending_tasks_count={}i",
             self.measurement_name(),
-            self.submit_duration_ms,
+            self.pending_tasks_count,
         )
     }
 }

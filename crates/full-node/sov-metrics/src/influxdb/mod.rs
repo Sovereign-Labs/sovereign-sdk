@@ -168,6 +168,36 @@ pub fn safe_telegraf_string(string: &str) -> String {
     replace_chars(string, &TELEGRAF_ESCAPED_CHARS)
 }
 
+/// Writes an InfluxDB line-protocol string-field *value* into `buffer`, escaping `\`
+/// and `"` in a single pass. Does not emit the surrounding quotes; callers own the `"..."`
+/// wrapping. Allocation-free in the common case (no `\` or `"` in the input).
+pub fn write_escaped_field_value(buffer: &mut Vec<u8>, value: &str) -> std::io::Result<()> {
+    for chunk in value.split_inclusive(['\\', '"']) {
+        let (head, trailer) = match chunk.as_bytes().last() {
+            Some(&b'\\') => (&chunk[..chunk.len() - 1], &b"\\\\"[..]),
+            Some(&b'"') => (&chunk[..chunk.len() - 1], &b"\\\""[..]),
+            _ => (chunk, &b""[..]),
+        };
+        buffer.write_all(head.as_bytes())?;
+        buffer.write_all(trailer)?;
+    }
+    Ok(())
+}
+
+pub(crate) fn write_metadata_fields_for_telegraf(
+    buffer: &mut Vec<u8>,
+    metadata: &[(String, String)],
+) -> std::io::Result<()> {
+    for (key, value) in metadata {
+        let safe_key = safe_telegraf_string(key);
+        write!(buffer, ",{safe_key}=\"")?;
+        write_escaped_field_value(buffer, value)?;
+        buffer.write_all(b"\"")?;
+    }
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -179,6 +209,39 @@ mod tests {
     use std::io::Write;
     use std::str::FromStr;
     use tokio::sync::watch;
+
+    #[test]
+    fn escaped_field_value_preserves_plain_input() {
+        let mut buffer = Vec::new();
+        write_escaped_field_value(&mut buffer, "plain utf-8 – no escape").unwrap();
+        assert_eq!(
+            std::str::from_utf8(&buffer).unwrap(),
+            "plain utf-8 – no escape"
+        );
+    }
+
+    #[test]
+    fn escaped_field_value_escapes_backslash_and_quote() {
+        let mut buffer = Vec::new();
+        write_escaped_field_value(&mut buffer, r#"a\b"c"\"#).unwrap();
+        assert_eq!(std::str::from_utf8(&buffer).unwrap(), r#"a\\b\"c\"\\"#);
+    }
+
+    #[test]
+    fn metadata_fields_are_written_as_escaped_string_fields() {
+        let mut buffer = b"my_metric,tag=value count=1".to_vec();
+        let metadata = vec![
+            ("block height".to_string(), "10".to_string()),
+            ("path".to_string(), r#"a\b"c"#.to_string()),
+        ];
+
+        write_metadata_fields_for_telegraf(&mut buffer, &metadata).unwrap();
+
+        assert_eq!(
+            std::str::from_utf8(&buffer).unwrap(),
+            r#"my_metric,tag=value count=1,block\ height="10",path="a\\b\"c""#
+        );
+    }
 
     /// Starts publisher tasks and checks that tracker pushes all required metrics
     #[tokio::test(flavor = "multi_thread")]

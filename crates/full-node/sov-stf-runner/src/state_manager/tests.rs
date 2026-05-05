@@ -16,7 +16,7 @@ use sov_mock_da::{
 };
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_rollup_interface::common::{HexHash, RollupHeight, SlotNumber};
-use sov_rollup_interface::da::{DaSpec, RelevantBlobIters};
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, RelevantBlobIters};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::stf::GenesisParams;
@@ -89,7 +89,7 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for MockStf {
         _pre_state_root: &Self::StateRoot,
         _base_state: Self::PreState,
         _witness: Self::Witness,
-        _slot_header: &Da::BlockHeader,
+        slot_header: &Da::BlockHeader,
         _relevant_blobs: RelevantBlobIters<&mut [<Da as DaSpec>::BlobTransaction]>,
         _execution_context: ExecutionContext,
     ) -> ApplySlotOutput<Da, Self> {
@@ -105,7 +105,8 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for MockStf {
             }],
             discarded_blobs: Default::default(),
             witness: (),
-            rollup_height: RollupHeight::new(0),
+            rollup_height: RollupHeight::new(slot_header.height()),
+            slot_number: SlotNumber::new(slot_header.height()),
         }
     }
 }
@@ -172,6 +173,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
         state_manager.ledger_db.clone(),
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
+        None,
     )
     .await?;
     state_manager.stf_info_sender = Some(sender);
@@ -194,7 +196,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
             sender.inc_next_height_to_receive();
         };
 
-        assert_eq!(height, finalized.slot_number.get());
+        assert_eq!(height, finalized.slot_number().get());
         assert_eq!(filtered_block.header, finalized.data.da_block_header);
         assert_eq!(state_root, finalized.data.initial_state_root);
         state_root.clone_from(&finalized.data.final_state_root);
@@ -228,6 +230,7 @@ async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Res
         state_manager.ledger_db.clone(),
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
+        None,
     )
     .await?;
     state_manager.stf_info_sender = Some(sender);
@@ -1311,6 +1314,7 @@ async fn produce_synthetic_state_transition_witness<Da: DaService>(
         relevant_proofs,
         relevant_blobs,
         witness: (),
+        slot_number: SlotNumber::new(filtered_block.header().height()),
     };
 
     (change_set, transition_witness)

@@ -45,6 +45,7 @@
 - sov-blob-storage
 - sov-solana-offchain-auth
 - sov-uniqueness
+- sov-timelock
 - sov-evm
 - sov-paymaster
 - sov-operator-incentives

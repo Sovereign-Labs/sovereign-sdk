@@ -7,7 +7,10 @@ use sov_stf_runner::processes::{
     ProverServiceError,
 };
 
-use super::{make_header, make_transition_info, wait_for_aggregated_proof, Address, StateRoot};
+use super::{
+    make_chained_headers, make_header, make_transition_info, wait_for_aggregated_proof, Address,
+    StateRoot,
+};
 use crate::helpers::genesis_state_root;
 
 struct TestProver {
@@ -44,7 +47,7 @@ async fn test_successful_prover_execution() -> Result<(), ProverServiceError> {
         ..
     } = make_new_prover();
 
-    let header = make_header(MockHash::from([0; 32]), 1);
+    let header = make_header(MockHash::from([0; 32]), 0);
     prover_service
         .prove(make_transition_info(header.clone()))
         .await?;
@@ -86,8 +89,8 @@ async fn test_prover_status_busy() -> anyhow::Result<()> {
 
     let genesis_state_root = genesis_state_root();
 
-    let headers: Vec<_> = (1..num_worker_threads + 1)
-        .map(|height| make_header(MockHash::from([height as u8; 32]), height as u64))
+    let headers: Vec<_> = (0..num_worker_threads)
+        .map(|height| make_header(MockHash::from([(height + 1) as u8; 32]), height as u64))
         .collect();
 
     // Saturate the prover.
@@ -202,9 +205,7 @@ async fn test_aggregated_proof() -> Result<(), ProverServiceError> {
         ..
     } = make_new_prover();
 
-    let headers: Vec<_> = (0..total_nb_of_blocks)
-        .map(|height| make_header(MockHash::from([height as u8; 32]), height as u64))
-        .collect();
+    let headers: Vec<_> = make_chained_headers(total_nb_of_blocks);
 
     let genesis_state_root = genesis_state_root();
 
@@ -242,8 +243,8 @@ async fn test_aggregated_proof() -> Result<(), ProverServiceError> {
                         AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
                     >(&serialized_proof, &MockCodeCommitment::default())
                     .unwrap();
-                assert_eq!(public_data.initial_slot_number.get(), 0);
-                assert_eq!(public_data.final_slot_number.get(), (jump - 1) as u64);
+                assert_eq!(public_data.initial_slot_number.get(), 1);
+                assert_eq!(public_data.final_slot_number.get(), jump as u64);
             }
             ProofAggregationStatus::ProofGenerationInProgress => panic!("Prover should succeed"),
         }
@@ -272,10 +273,10 @@ async fn test_aggregated_proof() -> Result<(), ProverServiceError> {
                         AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
                     >(&serialized_proof, &MockCodeCommitment::default())
                     .unwrap();
-                assert_eq!(public_data.initial_slot_number.get() as usize, jump);
+                assert_eq!(public_data.initial_slot_number.get() as usize, jump + 1);
                 assert_eq!(
                     public_data.final_slot_number.get() as usize,
-                    total_nb_of_blocks - 1
+                    total_nb_of_blocks
                 );
             }
             ProofAggregationStatus::ProofGenerationInProgress => panic!("Proves should succeed"),

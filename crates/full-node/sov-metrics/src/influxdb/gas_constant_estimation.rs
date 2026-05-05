@@ -4,7 +4,7 @@ use std::io::{self, Write};
 
 use tokio::task_local;
 
-use crate::influxdb::safe_telegraf_string;
+use crate::influxdb::write_metadata_fields_for_telegraf;
 use crate::{timestamp, Metric, MetricsTracker};
 
 task_local! {
@@ -55,17 +55,15 @@ impl GasConstantTracker {
 
 #[derive(Debug)]
 pub struct GasConstantMetric {
-    /// Name of the caller site, usually a function or method
+    /// Name of the caller site, usually a function or method. Emitted as the `name` tag.
     pub name: String,
-    /// The gas constant tracked
+    /// The gas constant being tracked. Emitted as the `constant` tag.
     pub constant: String,
-    /// A numerical value representing the number of invocations of the gas constant
+    /// Number of invocations of the gas constant within the caller site.
     pub num_invocations: i64,
-    /// Additional metadata to be included in the metrics. The metadata is added as a
-    /// measurement attribute according to the [influxdb line protocol](https://docs.influxdata.com/influxdb/cloud/reference/syntax/line-protocol/)
-    /// We are parsing the metadata in the `tag_key=tag_value` format of influxdb.
-    /// This can be used to filter metrics data in telegraf, by querying metrics for some
-    /// specific metadata.
+    /// Arbitrary key/value metadata captured from the caller's arguments.
+    /// Emitted as string **fields** (not tags) so unbounded values like hashes or heights
+    /// do not cause series-cardinality explosion in InfluxDB.
     pub metadata: Vec<(String, String)>,
 }
 
@@ -99,33 +97,18 @@ impl Metric for GasConstantMetric {
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        // `name` and `constant` are the only tags (both bounded — one value per annotated
+        // function and per declared gas constant). `metadata` is emitted as string *fields*
+        // rather than tags because callers pass unbounded values (hashes, heights, tx ids)
+        // and using those as tags would explode InfluxDB series cardinality.
         write!(
             buffer,
-            "{},name={},constant={}",
+            "{},name={},constant={} num_invocations={}",
             self.measurement_name(),
             self.name,
             self.constant,
+            self.num_invocations,
         )?;
-
-        let parsed_metadata = self
-            .metadata
-            .iter()
-            .map(|(key, value)| {
-                // Replace spaces with underscores to make them compatible with telegraf
-                // Source: (Special telegraf characters)[`https://docs.influxdata.com/influxdb/cloud/reference/syntax/line-protocol/#special-characters`]
-                let telegraf_formatted_key = safe_telegraf_string(key);
-
-                format!("{telegraf_formatted_key}={value}")
-            })
-            .collect::<Vec<_>>();
-
-        if !parsed_metadata.is_empty() {
-            // We are adding the metadata as measurement tags in the influxdb line protocol.
-            write!(buffer, ",{}", parsed_metadata.join(","))?;
-        }
-
-        // Now actual value. Note, leading space is important.
-        write!(buffer, " num_invocations={}", self.num_invocations)?;
-        Ok(())
+        write_metadata_fields_for_telegraf(buffer, &self.metadata)
     }
 }

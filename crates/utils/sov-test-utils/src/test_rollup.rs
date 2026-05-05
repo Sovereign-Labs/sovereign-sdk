@@ -13,7 +13,7 @@ use crate::postgres::CreatePostgresError;
 use crate::{Transaction, TEST_MOCK_DA_POLLING_INTERVAL};
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BLOBS,
+    TEST_MAX_CONCURRENT_BATCH_BLOBS,
 };
 use anyhow::Context;
 use derivative::Derivative;
@@ -112,7 +112,7 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub axum_host: String,
     pub axum_port: u16,
     pub max_batch_size_bytes: usize,
-    pub max_concurrent_blobs: usize,
+    pub max_concurrent_batch_blobs: usize,
     pub blob_processing_timeout_secs: u64,
     pub start_at_rollup_height: Option<RollupHeight>,
     pub stop_at_rollup_height: Option<RollupHeight>,
@@ -370,6 +370,8 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_number_of_transitions_in_memory: NonZero::new(self.config.max_channel_size)
                     .unwrap(),
                 eager_proof_submission: true,
+                prover_thread_count_override: None,
+                max_number_of_aggregated_proofs_in_memory: NonZero::new(5).unwrap(),
             },
             sequencer: SequencerConfig {
                 automatic_batch_production: self.config.automatic_batch_production,
@@ -381,7 +383,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 admin_addresses: vec![],
                 sequencer_kind_config: self.config.sequencer_config.clone(),
                 max_batch_size_bytes: self.config.max_batch_size_bytes,
-                max_concurrent_blobs: self.config.max_concurrent_blobs,
+                max_concurrent_batch_blobs: self.config.max_concurrent_batch_blobs,
                 blob_processing_timeout_secs: self.config.blob_processing_timeout_secs,
                 extension: self.config.extension,
             },
@@ -403,7 +405,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         RollupBuilderConfig {
             max_allowed_node_distance_behind: 10,
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
-            max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
+            max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
             max_channel_size: 60,
             max_infos_in_db: 250 + finalization_blocks as u64,
             automatic_batch_production: true,

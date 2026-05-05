@@ -42,7 +42,15 @@ where
     Da: DaService,
     Address:
         BorshSerialize + Serialize + DeserializeOwned + AsRef<[u8]> + Clone + Send + Sync + 'static,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
+    StateRoot: Serialize
+        + DeserializeOwned
+        + Clone
+        + AsRef<[u8]>
+        + PartialEq
+        + core::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     pub(crate) fn new(prover_address: Address, num_threads: usize) -> Self {
@@ -103,16 +111,22 @@ where
             let StateTransitionInfo {
                 data,
                 aggregated_proofs,
-                slot_number,
             } = state_transition_info;
+
+            let slot_number = data.slot_number;
 
             let data = StateTransitionWitnessWithAddress {
                 stf_witness: data,
                 prover_address: self.prover_address.clone(),
             };
 
+            let span_block_header_hash = block_header_hash.clone();
             self.pool.spawn(move || {
-                tracing::info_span!("guest_execution").in_scope(|| {
+                tracing::info_span!("guest_execution", slot_number = %slot_number).in_scope(|| {
+                    info!(
+                        "Submitting inner proof for slot {} (slot_hash={})",
+                        slot_number, span_block_header_hash
+                    );
                     let inner_proof =
                         Self::make_inner_proof::<InnerVm>(inner_vm, &data, aggregated_proofs);
 
@@ -141,10 +155,10 @@ where
                         st: StateTransitionPublicData::<Address, Da::Spec, StateRoot> {
                             initial_state_root,
                             final_state_root,
+                            slot_number,
                             slot_hash: block_header_hash.clone(),
                             prover_address,
                         },
-                        slot_number,
                     });
 
                     prover_state.set_to_proved(block_header_hash, block_proof);
@@ -195,8 +209,20 @@ where
 
         let (tx, rx) = oneshot::channel();
         self.pool.spawn(move || {
+            let proving_start = std::time::Instant::now();
             let result =
                 outer_vm.run_proof_aggregation(genesis_state_root, headers_with_block_proofs);
+
+            sov_metrics::track_metrics(|tracker| {
+                let proving_time = proving_start.elapsed();
+                let is_success = result.is_ok();
+                tracker.submit(sov_metrics::ZkProvingTime {
+                    proving_time,
+                    is_success,
+                    zk_circuit: sov_metrics::ZkCircuit::Outer,
+                });
+            });
+
             let _ = tx.send(result);
         });
 

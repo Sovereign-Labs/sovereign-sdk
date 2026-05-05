@@ -119,12 +119,18 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     ) -> Self::DaService;
 
     /// Creates an instance of [`ProverService`].
+    ///
+    /// Returns the prover service together with the `final_slot_number` of the
+    /// latest aggregated proof persisted in the ledger DB (if any). The caller
+    /// uses this slot to anchor the STF-info stream so the next aggregation is
+    /// contiguous with the proof on disk.
     async fn create_prover_service(
         &self,
         prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
-    ) -> Self::ProverService;
+        ledger_db: &LedgerDb,
+    ) -> (Self::ProverService, Option<SlotNumber>);
 
     /// Creates an instance of [`Self::StorageManager`].
     /// Panics if initialization fails.
@@ -492,6 +498,18 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
         let axum_socket_addr = axum_tcp.local_addr()?;
 
+        // The prover service validates the latest aggregated proof persisted in
+        // the ledger DB and returns its `final_slot_number`. We pass this slot
+        // into the runner so the STF-info stream resumes at `final_slot + 1`.
+        let (prover_service, latest_proof_final_slot) = if prover_config.is_enabled() {
+            let (svc, slot) = self
+                .create_prover_service(prover_config, &rollup_config, &da_service, &ledger_db)
+                .await;
+            (Some(svc), slot)
+        } else {
+            (None, None)
+        };
+
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             axum_tcp,
@@ -513,6 +531,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             da_sync_state.clone(),
             da_service_with_cache,
             genesis_da_height,
+            latest_proof_final_slot,
         )
         .await?;
 
@@ -532,10 +551,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             .await?;
 
         if let Some(stf_info_receiver) = runner.take_stf_info_receiver() {
-            let prover_service = self
-                .create_prover_service(prover_config, &rollup_config, &da_service)
-                .await;
-
+            let prover_service = prover_service
+                .expect("prover service must be present when stf_info_receiver is Some");
             let proof_sender =
                 Box::new(self.create_proof_sender(&rollup_config, sequencer.proof_sender.clone())?);
 
@@ -562,6 +579,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         prover_service,
                         rollup_config.proof_manager.aggregated_proof_block_jump,
                         rollup_config.proof_manager.eager_proof_submission,
+                        rollup_config
+                            .proof_manager
+                            .max_number_of_aggregated_proofs_in_memory,
                         proof_sender,
                         genesis_state_root,
                         stf_info_receiver,

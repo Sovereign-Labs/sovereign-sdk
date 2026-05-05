@@ -136,9 +136,13 @@ where
         prover_config: sov_stf_runner::processes::RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
-    ) -> Self::ProverService {
+        ledger_db: &sov_db::ledger_db::LedgerDb,
+    ) -> (
+        Self::ProverService,
+        Option<sov_rollup_interface::common::SlotNumber>,
+    ) {
         self.inner
-            .create_prover_service(prover_config, rollup_config, da_service)
+            .create_prover_service(prover_config, rollup_config, da_service, ledger_db)
             .await
     }
 

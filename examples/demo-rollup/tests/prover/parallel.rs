@@ -2,7 +2,6 @@ use std::time::Duration;
 
 use sov_mock_da::{MockDaService, MockDaSpec};
 use sov_modules_api::{AggregatedProofPublicData, Spec, Storage, ZkVerifier};
-use sov_rollup_interface::common::SlotNumber;
 use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
 use sov_sp1_adapter::{SP1Verifier, SP1};
 use sov_stf_runner::processes::{
@@ -65,6 +64,7 @@ async fn test_parallel_proof_generation() {
         outer_vm,
         da_verifier,
         prover_address,
+        3,
     );
 
     let (genesis_state_root, witnesses) = super::generate_witnesses().await;
@@ -74,8 +74,7 @@ async fn test_parallel_proof_generation() {
     for (i, witness) in witnesses.into_iter().enumerate() {
         block_headers.push(witness.da_block_header.clone());
 
-        let slot_number = SlotNumber::new(i as u64 + 1);
-        let state_transition_info = StateTransitionInfo::new(witness, slot_number);
+        let state_transition_info = StateTransitionInfo::new(witness);
 
         let status = prover_service
             .prove(state_transition_info)

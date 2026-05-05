@@ -19,7 +19,11 @@ use crate::zk::SerializedZkProof;
 /// Host-side interface for the outer zkVM that produces aggregated proofs.
 pub trait OuterZkvmHost: Clone + Send + Sync + 'static {
     /// Aggregates per-block inner proofs into a single serialized aggregated proof.
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + Clone,
+        Da: DaSpec,
+        Root: Serialize + DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
+    >(
         &self,
         genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
@@ -31,8 +35,6 @@ pub trait OuterZkvmHost: Clone + Send + Sync + 'static {
 pub struct BlockProof<Address, Da: DaSpec, Root> {
     /// The raw proof bytes.
     pub proof: SerializedZkProof,
-    /// The slot number this proof covers.
-    pub slot_number: SlotNumber,
     /// The state transition public data for this block.
     pub st: StateTransitionPublicData<Address, Da, Root>,
 }
@@ -87,9 +89,9 @@ impl core::fmt::Display for CodeCommitmentHash {
 /// Public data of an aggregated proof.
 #[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
 pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {
-    /// Initial rollup height.
+    /// Initial rollup slot.
     pub initial_slot_number: SlotNumber,
-    /// Final rollup height.
+    /// Final rollup slot.
     pub final_slot_number: SlotNumber,
     /// The genesis state root of the aggregated proof.
     pub genesis_state_root: Root,
@@ -129,8 +131,8 @@ where
             .collect();
         Self {
             rewarded_addresses,
-            initial_slot_number: initial.slot_number,
-            final_slot_number: final_bp.slot_number,
+            initial_slot_number: initial.st.slot_number,
+            final_slot_number: final_bp.st.slot_number,
             genesis_state_root,
             initial_state_root: initial.st.initial_state_root.clone(),
             final_state_root: final_bp.st.final_state_root.clone(),

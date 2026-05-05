@@ -22,10 +22,7 @@ pub mod guest;
 #[cfg(feature = "native")]
 pub mod host;
 #[cfg(feature = "native")]
-pub mod network;
-
-#[cfg(feature = "native")]
-pub mod metrics;
+mod metrics;
 
 /// Uniquely identifies a SP1 binary. Stored as a serialized version of `SP1VerifyingKey`.
 ///
@@ -167,9 +164,6 @@ impl sov_rollup_interface::zk::Zkvm for SP1 {
 
     #[cfg(feature = "native")]
     type OuterHost = crate::host::SP1AggregationHost;
-
-    #[cfg(feature = "native")]
-    type Network = crate::network::SP1Network;
 }
 
 #[cfg(target_os = "zkvm")]

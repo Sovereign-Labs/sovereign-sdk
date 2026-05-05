@@ -1,53 +1,56 @@
-//! Defines utilities for collecting runtime metrics from inside a SP1 VM
+//! SP1-specific telemetry emitted from the host.
+
 use std::io::Write;
 
-use sov_metrics::Metric;
+use sov_metrics::{Metric, ZkCircuit};
+use sp1_sdk::blocking::NetworkProver;
+use sp1_sdk::network::B256;
 
-/// The type of SP1 prover that generated a proof.
+/// Cycles and PGUs reported by the Succinct prover network for one fulfilled
+/// proof request. Both values are optional because the network only populates
+/// them once the request reaches the EXECUTED state — if we ever observe a
+/// fulfilled request without them, we still want the (empty) datapoint so the
+/// dashboard surfaces the gap.
 #[derive(Debug)]
-#[allow(dead_code)]
-pub(crate) enum ProverType {
-    /// Local CPU prover.
-    Cpu,
-    /// Succinct proving network.
-    Network,
+pub(crate) struct Sp1ProvingMetric {
+    pub circuit: ZkCircuit,
+    pub cycles: Option<u64>,
+    pub gas_used: Option<u64>,
 }
 
-impl ProverType {
-    /// Returns the string representation for use in metrics serialization.
-    pub fn as_str(&self) -> &'static str {
-        match self {
-            ProverType::Cpu => "cpu",
-            ProverType::Network => "network",
-        }
-    }
-}
-
-/// Metrics emitted when the SP1 proving network fulfills a proof request.
-#[derive(Debug)]
-pub(crate) struct SP1ProofFulfillmentMetrics {
-    /// The type of prover emitting the metric.
-    pub prover_type: ProverType,
-    /// The hex-encoded proof request ID.
-    pub request_id: String,
-    /// Time from proof request creation to fulfillment, in seconds, as reported by the SP1
-    /// network.
-    pub fulfillment_duration_secs: u64,
-}
-
-impl Metric for SP1ProofFulfillmentMetrics {
+impl Metric for Sp1ProvingMetric {
     fn measurement_name(&self) -> &'static str {
-        "sov_rollup_sp1_proof_fulfillment"
+        "sov_rollup_sp1_proving"
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},prover_type={} request_id=\"{}\",fulfillment_duration_secs={}i",
+            "{},circuit={:?} cycles={},gas_used={}",
             self.measurement_name(),
-            self.prover_type.as_str(),
-            self.request_id,
-            self.fulfillment_duration_secs,
+            self.circuit,
+            self.cycles.unwrap_or(0),
+            self.gas_used.unwrap_or(0),
         )
     }
+}
+
+/// Best-effort: fetch the canonical cycles + PGUs the network recorded for
+/// `request_id` and submit a [`Sp1ProvingMetric`].
+///
+/// Telemetry must never fail proving. Any error or missing-details response is
+/// silently dropped — the occasional missing datapoint is acceptable.
+pub(crate) fn submit_proving_metric(network: &NetworkProver, request_id: B256, circuit: ZkCircuit) {
+    // Best-effort metric: drop on RPC failure or missing details.
+    let Ok(Some(req)) = network.get_proof_request(request_id) else {
+        return;
+    };
+
+    sov_metrics::track_metrics(|tracker| {
+        tracker.submit(Sp1ProvingMetric {
+            circuit,
+            cycles: req.cycles,
+            gas_used: req.gas_used,
+        });
+    });
 }

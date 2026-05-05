@@ -110,14 +110,14 @@ where
 
     pub(crate) async fn check_readiness_msg(
         &self,
-        max_concurrent_blobs: usize,
+        max_concurrent_batch_blobs: usize,
         height_to_stop_at: Option<RollupHeight>,
         reason: &'static str,
     ) -> Result<Result<(), SequencerNotReadyDetails>, SequencerStateUpdatorError> {
         let (resp, recv) = oneshot::channel();
         self.send(Message::CheckReadiness {
             resp,
-            max_concurrent_blobs,
+            max_concurrent_batch_blobs,
             height_to_stop_at,
             reason,
         })

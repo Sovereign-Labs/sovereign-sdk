@@ -212,7 +212,8 @@ impl PinnedCache {
         }
 
         // If the storage doesn't support iteration, we can't load the bucket. Return early.
-        let Some(iter) = storage.maybe_iter_user_values_with_prefix(bucket_id.0.clone())? else {
+        let Some(iter) = storage.maybe_iter_user_values_with_prefix(bucket_id.0.clone(), None)?
+        else {
             return Ok(LoadBucketOutcome::NotSupportedByStorage);
         };
 

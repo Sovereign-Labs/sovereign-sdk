@@ -5752,6 +5752,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-state",
+ "sov-test-modules",
  "sov-test-utils",
  "sov-value-setter",
  "strum 0.26.3",
@@ -9550,7 +9551,7 @@ dependencies = [
 [[package]]
 name = "rockbound"
 version = "0.1.0"
-source = "git+https://github.com/sovereign-labs/rockbound?rev=00d4a84f0b9256da681e2138949e01e4c138a5ae#00d4a84f0b9256da681e2138949e01e4c138a5ae"
+source = "git+https://github.com/sovereign-labs/rockbound?rev=d8b270d399d0d355a19fbeedf9af009baee8ae66#d8b270d399d0d355a19fbeedf9af009baee8ae66"
 dependencies = [
  "anyhow",
  "parking_lot",
@@ -12373,6 +12374,7 @@ dependencies = [
  "sov-bank",
  "sov-chain-state",
  "sov-db",
+ "sov-metrics",
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
@@ -13017,6 +13019,25 @@ dependencies = [
  "tokio-stream",
  "tracing",
  "tracing-subscriber 0.3.20",
+]
+
+[[package]]
+name = "sov-timelock"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "borsh",
+ "schemars 0.8.22",
+ "serde",
+ "serde_json",
+ "sov-chain-state",
+ "sov-modules-api",
+ "sov-test-modules",
+ "sov-test-utils",
+ "sov-timelock",
+ "sov-value-setter",
+ "strum 0.26.3",
+ "thiserror 2.0.17",
 ]
 
 [[package]]

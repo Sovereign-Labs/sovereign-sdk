@@ -36,6 +36,41 @@ type GenesisParams<ST, Da> = <ST as StateTransitionFunction<Da>>::GenesisParams;
 
 type NextDaHeightToProcess = u64;
 
+fn validate_proof_manager_config<Address>(
+    config: &ProofManagerConfig<Address>,
+) -> anyhow::Result<()> {
+    let aggregated_proof_block_jump = u64::try_from(config.aggregated_proof_block_jump.get())
+        .context("aggregated_proof_block_jump does not fit in u64")?;
+    let buffered_windows = u64::try_from(config.max_number_of_aggregated_proofs_in_memory.get())
+        .context("max_number_of_aggregated_proofs_in_memory does not fit in u64")?;
+    // Windows resident across the pipeline: the one intake is filling, the one
+    // the aggregator is working on, plus `buffered_windows` queued in the
+    // intake→aggregator channel.
+    let pipelined_windows = buffered_windows
+        .checked_add(2)
+        .context("aggregated proof window count overflowed")?;
+    let pipelined_backlog = aggregated_proof_block_jump
+        .checked_mul(pipelined_windows)
+        .context("aggregated proof backlog overflowed")?;
+    let required_transitions_in_db = config
+        .max_number_of_transitions_in_memory
+        .get()
+        .checked_add(pipelined_backlog)
+        .context("required STF info DB capacity overflowed")?;
+
+    anyhow::ensure!(
+        config.max_number_of_transitions_in_db.get() >= required_transitions_in_db,
+        "Invalid proof manager config: `max_number_of_transitions_in_db` must be at least `max_number_of_transitions_in_memory + (max_number_of_aggregated_proofs_in_memory + 2) * aggregated_proof_block_jump` for pipelined aggregated proof posting (got db={}, memory={}, jump={}, buffered={}, required={})",
+        config.max_number_of_transitions_in_db,
+        config.max_number_of_transitions_in_memory,
+        config.aggregated_proof_block_jump,
+        config.max_number_of_aggregated_proofs_in_memory,
+        required_transitions_in_db,
+    );
+
+    Ok(())
+}
+
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
 #[allow(clippy::type_complexity)]
 pub struct StateTransitionRunner<Stf, Sm, Da>
@@ -139,6 +174,7 @@ where
         sync_state: Arc<DaSyncState>,
         da_service_with_cached_finalized_headers: DaServiceWithCachedFinalizedHeaders<Da>,
         genesis_da_height: u64,
+        latest_proof_final_slot: Option<SlotNumber>,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
@@ -168,10 +204,12 @@ where
             "Initializing StfRunner");
 
         let (stf_info_sender, stf_info_receiver) = if let Some(config) = pm_config {
+            validate_proof_manager_config(&config)?;
             let channel = new_stf_info_channel(
                 ledger_db.clone(),
                 config.max_number_of_transitions_in_memory,
                 config.max_number_of_transitions_in_db,
+                latest_proof_final_slot,
             )
             .await?;
 
@@ -200,7 +238,7 @@ where
             first_unprocessed_height_at_startup,
             runner_config.concurrent_sync_tasks,
             runner_config.pre_fetched_blocks_capacity.get(),
-            shutdown_receiver.clone(),
+            secondary_shutdown_receiver.clone(),
         )
         .await?;
         background_handles.push(fetcher_background_handle);
@@ -362,8 +400,10 @@ where
 
         let mut next_da_height = self.first_unprocessed_height_at_startup;
 
-        let status_updater_handle = self
-            .spawn_sync_status_updater(self.da_polling_interval, self.shutdown_receiver.clone());
+        let status_updater_handle = self.spawn_sync_status_updater(
+            self.da_polling_interval,
+            self.secondary_shutdown_sender.subscribe(),
+        );
 
         let start_at_rollup_height = self.start_at_rollup_height;
         let stop_at_rollup_height = self.stop_at_rollup_height;
@@ -622,6 +662,7 @@ where
                 relevant_proofs,
                 relevant_blobs,
                 witness: slot_result.witness,
+                slot_number: slot_result.slot_number,
             };
 
         let (aggregated_proofs, proof_receipts) =

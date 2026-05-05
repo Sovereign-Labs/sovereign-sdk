@@ -43,6 +43,7 @@
     "crates/module-system/module-implementations/integration-tests",
     "crates/module-system/sov-capabilities",
     "crates/module-system/module-implementations/sov-uniqueness",
+    "crates/module-system/module-implementations/sov-timelock",
     "crates/utils/sov-node-client",
     "crates/universal-wallet/schema",
     "crates/universal-wallet/macros",

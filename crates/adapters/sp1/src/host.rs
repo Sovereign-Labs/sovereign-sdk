@@ -3,8 +3,10 @@
 use std::sync::{Arc, Mutex};
 
 use crate::guest::SP1Guest;
+use crate::metrics::submit_proving_metric;
 use crate::SP1MethodId;
 use serde::Serialize;
+use sov_metrics::ZkCircuit;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::reexports::anyhow;
 use sov_rollup_interface::zk::aggregated_proof::common::{
@@ -14,11 +16,12 @@ use sov_rollup_interface::zk::aggregated_proof::{
     BlockHeaderWithProof, BlockProof, CodeCommitmentHash, OuterZkvmHost, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{SerializedZkProof, ZkvmHost};
-use sp1_sdk::blocking::ProveRequest;
-use sp1_sdk::blocking::{EnvProver, EnvProvingKey, Prover, ProverClient};
+use sp1_sdk::blocking::{
+    EnvProver, EnvProvingKey, NetworkProver, ProveRequest, Prover, ProverClient,
+};
 use sp1_sdk::ProvingKey;
 use sp1_sdk::SP1VerifyingKey;
-use sp1_sdk::{HashableKey, SP1Proof, SP1Stdin};
+use sp1_sdk::{HashableKey, SP1Proof, SP1ProvingKey, SP1Stdin};
 
 /// SP1 host that produces aggregated (outer) proofs by recursively verifying
 /// a batch of inner state-transition proofs inside an SP1 guest program.
@@ -43,15 +46,30 @@ impl SP1AggregationHost {
     /// Creates a new aggregation host from the aggregation guest `elf` binary
     /// and the verifying key (`inner_method_id`) of the inner proof program.
     pub fn new(elf: &'static [u8], inner_vk: sp1_sdk::SP1VerifyingKey) -> anyhow::Result<Self> {
-        let prover = SP1Prover::new(elf)?;
+        Self::new_with_previous_proof(elf, inner_vk, None)
+    }
+
+    /// Like [`Self::new`], but seeded with the latest aggregated proof
+    /// previously persisted in the ledger DB so that recursive verification of
+    /// the previous outer proof survives a node restart.
+    pub fn new_with_previous_proof(
+        elf: &'static [u8],
+        inner_vk: sp1_sdk::SP1VerifyingKey,
+        previous_aggregated_proof: Option<SerializedAggregatedProof>,
+    ) -> anyhow::Result<Self> {
+        let prover = SP1Prover::new_outer(elf)?;
         let outer_vk = prover.verifying_key().clone();
+
+        let prev_agg_proof = previous_aggregated_proof
+            .map(|proof| crate::decode_sp1_proof(&proof.to_serialized_zk_proof()))
+            .transpose()?;
 
         Ok(Self {
             inner: Arc::new(Inner {
                 prover,
                 outer_vk,
                 inner_vk,
-                prev_agg_proof: Mutex::new(None),
+                prev_agg_proof: Mutex::new(prev_agg_proof),
             }),
         })
     }
@@ -139,15 +157,26 @@ impl SP1AggregationHost {
 pub struct SP1Prover {
     prover: EnvProver,
     pk: Arc<EnvProvingKey>,
+    circuit: ZkCircuit,
 }
 
 impl SP1Prover {
-    /// Create a new [`SP1Prover`] by setting up a proving key from `elf`.
+    /// Create a new [`SP1Prover`] for an inner state-transition circuit.
     pub fn new(elf: &[u8]) -> anyhow::Result<Self> {
+        Self::with_circuit(elf, ZkCircuit::Inner)
+    }
+
+    /// Create a new [`SP1Prover`] for the outer aggregation circuit.
+    pub(crate) fn new_outer(elf: &[u8]) -> anyhow::Result<Self> {
+        Self::with_circuit(elf, ZkCircuit::Outer)
+    }
+
+    fn with_circuit(elf: &[u8], circuit: ZkCircuit) -> anyhow::Result<Self> {
         let (prover, pk) = prover_and_pk(elf)?;
         Ok(Self {
             prover,
             pk: Arc::new(pk),
+            circuit,
         })
     }
 
@@ -159,6 +188,23 @@ impl SP1Prover {
     /// Method id.
     pub fn method_id(&self) -> SP1MethodId {
         SP1MethodId(self.pk.verifying_key().hash_u32())
+    }
+
+    /// Sleeps for the duration (in milliseconds) read from `env_var`, but only
+    /// when running under the SP1 mock backend. Used in tests/soak runs to
+    /// throttle the otherwise-instant mock prover. No-op if the env var is
+    /// unset or not parseable, or if the prover is not a mock.
+    fn maybe_mock_sleep(&self, env_var: &str) {
+        if !matches!(&self.prover, &EnvProver::Mock(_)) {
+            return;
+        }
+        let Some(ms) = std::env::var(env_var)
+            .ok()
+            .and_then(|s| s.parse::<u64>().ok())
+        else {
+            return;
+        };
+        std::thread::sleep(std::time::Duration::from_millis(ms));
     }
 
     fn add_proof_helper(
@@ -180,6 +226,16 @@ impl SP1Prover {
     }
 
     fn run(&self, stdin: SP1Stdin) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
+        // For network proving we go through the explicit two-step API
+        // (`request()` + `wait_proof()`) so we can capture the request_id and
+        // afterwards fetch the canonical cycles + PGUs the network recorded.
+        if let EnvProver::Network(network) = &self.prover {
+            let EnvProvingKey::Network { pk, .. } = &*self.pk else {
+                anyhow::bail!("EnvProver is Network but proving key variant is not Network");
+            };
+            return self.run_network(network, pk, stdin);
+        }
+
         // Under the mock backend the inner compressed proofs are dummies that
         // would fail the executor-side deferred-proof check. Skip that check so
         // mock aggregation can run end-to-end; real backends keep it on.
@@ -196,6 +252,27 @@ impl SP1Prover {
             .map_err(|e| anyhow::anyhow!("SP1 proving failed. Error: {:?}", e))?;
 
         Ok(output)
+    }
+
+    fn run_network(
+        &self,
+        network: &NetworkProver,
+        pk: &SP1ProvingKey,
+        stdin: SP1Stdin,
+    ) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
+        let request_id = network
+            .prove(pk, stdin)
+            .compressed()
+            .request()
+            .map_err(|e| anyhow::anyhow!("SP1 network proof submission failed. Error: {:?}", e))?;
+
+        let proof = network
+            .wait_proof(request_id, None, None)
+            .map_err(|e| anyhow::anyhow!("SP1 network proof wait failed. Error: {:?}", e))?;
+
+        submit_proving_metric(network, request_id, self.circuit);
+
+        Ok(proof)
     }
 
     /// Serialize `item` as a hint, produce a compressed proof, and encode it.
@@ -286,6 +363,7 @@ impl ZkvmHost for SP1Host {
         item: &T,
         agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
+        self.prover.maybe_mock_sleep("SOV_MOCK_PROVE_SLEEP_MS");
         self.add_hint_deferred_and_run_helper(item, agg_proofs)
     }
 
@@ -295,7 +373,11 @@ impl ZkvmHost for SP1Host {
 }
 
 impl OuterZkvmHost for SP1AggregationHost {
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + Clone,
+        Da: DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
+    >(
         &self,
         _genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
@@ -308,6 +390,9 @@ impl OuterZkvmHost for SP1AggregationHost {
             })
             .collect();
 
+        self.inner
+            .prover
+            .maybe_mock_sleep("SOV_MOCK_AGGREGATION_SLEEP_MS");
         self.run(proofs_and_headers)
     }
 }

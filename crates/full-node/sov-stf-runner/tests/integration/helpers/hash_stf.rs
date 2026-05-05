@@ -5,7 +5,7 @@ use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::{
     AggregatedProofPublicData, ProofOutcome, ProofReceipt, ProofReceiptContents, Storage,
 };
-use sov_rollup_interface::common::RollupHeight;
+use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec, RelevantBlobIters};
 use sov_rollup_interface::stf::{ApplySlotOutput, GenesisParams, StateTransitionFunction};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
@@ -221,7 +221,8 @@ impl<Da: DaSpec> StateTransitionFunction<Da> for HashStf {
             batch_receipts: vec![],
             discarded_blobs: vec![],
             witness,
-            rollup_height: RollupHeight::new(0),
+            rollup_height: RollupHeight::new(slot_header.height()),
+            slot_number: SlotNumber::new(slot_header.height()),
         }
     }
 }

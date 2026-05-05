@@ -29,6 +29,8 @@ pub use chain_state::*;
 mod sequencing_data;
 pub use sequencing_data::*;
 pub use sov_rollup_interface::common::RollupHeight;
+mod timelock;
+pub use timelock::*;
 
 use crate::Spec;
 
@@ -127,6 +129,11 @@ pub trait HasCapabilities<S: Spec> {
     ) -> impl SequencingDataHandler<S, SequencingData = Self::SequencingData> {
         self.capabilities().inner
     }
+
+    /// Returns the [`TimelockCapability`] implementation for this runtime.
+    ///
+    /// Timelocks are opt-in, so the default implementation is a no-op.
+    fn timelock(&mut self) -> impl TimelockCapability<S> {}
 }
 
 /// Indicates that a type provides the necessary kernel capabilities for a runtime.
