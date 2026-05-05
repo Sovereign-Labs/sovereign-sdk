@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use sov_db::schema::types::{BatchNumber, EventNumber, TxNumber};
 use sov_modules_api::da::Time;
+use sov_modules_api::rpc::LedgerStateProviderExt;
 pub use sov_modules_api::ApiTxEffect as TxEffect;
 use sov_modules_api::{EventModuleName, FullyBakedTx, RuntimeEventResponse};
 use sov_rest_utils::errors::ReportableWsError;
@@ -86,7 +87,7 @@ pub struct LedgerState<T: LedgerStateProvider + Clone + Send + Sync + 'static> {
 
 impl<T, B, TxReceipt, E> LedgerRoutes<T, B, TxReceipt, E>
 where
-    T: LedgerStateProvider + Clone + Send + Sync + 'static,
+    T: LedgerStateProvider + LedgerStateProviderExt + Clone + Send + Sync + 'static,
     B: serde::Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
     TxReceipt: TxReceiptContents,
     E: EventModuleName
@@ -363,8 +364,23 @@ where
             PageSelection::First => 0,
             PageSelection::Last => return Err(errors::not_implemented_501()),
         };
+        if let Some(prefix) = event_key_prefix_opt
+            .as_ref()
+            .map(|q| q.0.prefix.as_str())
+            .filter(|p| !p.is_empty() && start == 0)
+        {
+            let events = Self::list_events_by_prefix_first_page(
+                &state.ledger,
+                prefix,
+                pagination.size as usize,
+            )
+            .await
+            .map_err(errors::database_error_response_500)?;
+            return Ok(events.into());
+        }
+
         let end = start.saturating_add(pagination.size as u64);
-        let nums = (start..=end)
+        let nums = (start..end)
             .map(EventIdentifier::Number)
             .collect::<Vec<_>>();
         let events = state
@@ -383,6 +399,33 @@ where
             })
             .collect::<Vec<_>>();
         Ok(events.into())
+    }
+
+    async fn list_events_by_prefix_first_page(
+        ledger: &T,
+        prefix: &str,
+        limit: usize,
+    ) -> Result<Vec<RuntimeEventResponse<E>>, T::Error> {
+        let matching_keys = ledger
+            .get_event_key_counts()
+            .await?
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|key| key.starts_with(prefix))
+            .collect::<Vec<_>>();
+
+        let mut events = Vec::new();
+        for event_key in matching_keys {
+            let mut response = ledger
+                .get_events_by_key::<RuntimeEventResponse<E>>(&event_key, None, limit, None)
+                .await?
+                .events_response;
+            events.append(&mut response);
+        }
+
+        events.sort_by_key(|event| event.number);
+        events.truncate(limit);
+        Ok(events)
     }
 
     async fn get_latest_event(

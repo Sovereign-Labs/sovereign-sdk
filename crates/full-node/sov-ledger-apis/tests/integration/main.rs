@@ -396,6 +396,49 @@ async fn get_event() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn list_events_respects_page_size() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::Simple)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    let events: serde_json::Value = reqwest::get(format!(
+        "http://{addr}/ledger/events?page=first&page[size]=1"
+    ))
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+
+    let events = events.as_array().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["number"].as_u64(), Some(0));
+    assert_eq!(events[0]["key"].as_str(), Some("foo0"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_events_prefix_reads_past_first_raw_page() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::Complex)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    let events: serde_json::Value =
+        reqwest::get(format!("http://{addr}/ledger/events?prefix=foo100"))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+
+    let events = events.as_array().unwrap();
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0]["number"].as_u64(), Some(200));
+    assert_eq!(events[0]["key"].as_str(), Some("foo100"));
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn get_latest_aggregated_proof() {
     let response = ledger_response_body(|client| async move {
         client
