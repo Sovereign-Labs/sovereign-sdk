@@ -60,37 +60,6 @@ impl<'a, S: Spec, T> StandardProvenRollupCapabilities<'a, S, T> {
 
         rewarded_token_holder
     }
-
-    /// Resolves the sender address. When `auth_data.address` is `Some(X)`, requires
-    /// `is_explicitly_authorized(X, credential_id)`. When `None`, falls through to
-    /// `resolve_sender_address` (default-address / legacy mapping).
-    fn resolve_sender(
-        &mut self,
-        auth_data: &AuthorizationData<S>,
-        state: &mut impl StateAccessor,
-    ) -> anyhow::Result<S::Address> {
-        match auth_data.address {
-            Some(requested) => {
-                if !self.accounts.is_explicitly_authorized(
-                    &requested,
-                    &auth_data.credential_id,
-                    state,
-                )? {
-                    anyhow::bail!(
-                        "credential {} not authorized for target address {}",
-                        auth_data.credential_id,
-                        requested,
-                    );
-                }
-                Ok(requested)
-            }
-            None => Ok(self.accounts.resolve_sender_address(
-                &auth_data.default_address,
-                &auth_data.credential_id,
-                state,
-            )?),
-        }
-    }
 }
 
 trait HasGasPayer<S: Spec> {
