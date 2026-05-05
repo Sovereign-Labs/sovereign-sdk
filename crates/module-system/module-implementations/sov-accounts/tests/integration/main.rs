@@ -1,4 +1,4 @@
-use sov_accounts::{Accounts, CallMessage, Response};
+use sov_accounts::{Accounts, CallMessage};
 use sov_modules_api::transaction::{UnsignedTransactionV0, Version1};
 use sov_modules_api::{
     CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
@@ -74,11 +74,13 @@ fn test_config_account() {
         runner,
     ) = setup();
 
-    // The account is registered at genesis.
+    // The account is registered at genesis: its credential is authorized for
+    // the user's address via `account_owners`.
     runner.query_visible_state(|state| {
         let accounts = Accounts::<S>::default();
-        let response = accounts.get_account(user.credential_id(), state);
-        assert_eq!(response, Response::AccountEmpty);
+        assert!(accounts
+            .is_explicitly_authorized(&user.address(), &user.credential_id(), state)
+            .unwrap());
     });
 }
 
@@ -103,17 +105,10 @@ fn test_update_account() {
 
             let accounts = Accounts::<S>::default();
 
-            // New credential has no `accounts` map entry under the new model.
-            assert_eq!(
-                accounts.get_account(new_credential, state),
-                Response::AccountEmpty
-            );
-            // Sender's own credential also has no `accounts` map entry.
-            assert_eq!(
-                accounts.get_account(user.credential_id(), state),
-                Response::AccountEmpty
-            );
-
+            // The new credential is authorized for the user's address.
+            assert!(accounts
+                .is_explicitly_authorized(&user.address(), &new_credential, state)
+                .unwrap());
             assert_ne!(new_credential, user.credential_id());
         }),
     });
@@ -365,15 +360,10 @@ fn test_register_new_account() {
         mut runner,
     ) = setup();
 
-    // The credential has no legacy/custom account-map entry at genesis.
     assert_eq!(non_registered_account.custom_credential_id, None);
 
     runner.query_visible_state(|state| {
         let accounts = Accounts::<S>::default();
-        assert_eq!(
-            accounts.get_account(non_registered_account.credential_id(), state),
-            Response::AccountEmpty
-        );
         assert!(!accounts
             .is_explicitly_authorized(
                 &non_registered_account.address(),
@@ -407,10 +397,6 @@ fn test_register_new_account() {
             assert!(accounts
                 .is_authorized_for(&non_registered_account.address(), &new_credential, state)
                 .unwrap());
-            assert_eq!(
-                accounts.get_account(new_credential, state),
-                Response::AccountEmpty
-            );
 
             assert!(!accounts
                 .is_explicitly_authorized(
@@ -426,10 +412,6 @@ fn test_register_new_account() {
                     state
                 )
                 .unwrap());
-            assert_eq!(
-                accounts.get_account(non_registered_account.credential_id(), state),
-                Response::AccountEmpty
-            );
 
             assert_ne!(new_credential, non_registered_account.credential_id());
         }),
@@ -465,10 +447,6 @@ fn test_resolve_sender_address_with_default_address_non_registered() {
                 state
             )
             .unwrap());
-        assert_eq!(
-            accounts.get_account(non_registered_account.credential_id(), state),
-            Response::AccountEmpty
-        );
     });
 }
 
@@ -560,14 +538,6 @@ fn test_resolve_address_with_multi_credential_ownership() {
         assert!(accounts
             .is_authorized_for(&addr, &credential_2, state)
             .unwrap());
-        assert_eq!(
-            accounts.get_account(credential_1, state),
-            Response::AccountEmpty
-        );
-        assert_eq!(
-            accounts.get_account(credential_2, state),
-            Response::AccountEmpty
-        );
     });
 }
 
@@ -591,10 +561,6 @@ fn test_resolve_with_different_default_address() {
         assert!(!accounts
             .is_explicitly_authorized(&account_1.address(), &random_credential, state)
             .unwrap());
-        assert_eq!(
-            accounts.get_account(random_credential, state),
-            Response::AccountEmpty
-        );
     });
 }
 

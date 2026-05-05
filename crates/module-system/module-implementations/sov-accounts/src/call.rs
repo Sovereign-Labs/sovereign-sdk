@@ -12,8 +12,7 @@ use crate::{AccountOwnerKey, Accounts};
 #[serde(rename_all = "snake_case")]
 pub enum CallMessage {
     /// Authorizes `credential_id` as a signer for the caller's address.
-    /// Fails if the credential has a legacy/custom account mapping or is
-    /// already authorized for the caller's address.
+    /// Fails if the credential is already authorized for the caller's address.
     InsertCredentialId(
         /// The credential id being authorized.
         CredentialId,
@@ -45,13 +44,6 @@ impl<S: Spec> Accounts<S> {
         address: &S::Address,
         state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
-        anyhow::ensure!(
-            self.accounts
-                .get(new_credential_id, state)
-                .context("Failed to read legacy account mapping")?
-                .is_none(),
-            "New CredentialId already exists"
-        );
         anyhow::ensure!(
             self.account_owners
                 .get(&AccountOwnerKey::new(*address, *new_credential_id), state)

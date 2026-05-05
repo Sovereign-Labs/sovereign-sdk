@@ -7,9 +7,7 @@ mod fuzz;
 mod genesis;
 pub use genesis::*;
 #[cfg(feature = "native")]
-mod query;
-#[cfg(feature = "native")]
-pub use query::*;
+pub mod migrations;
 #[cfg(test)]
 mod tests;
 pub use call::CallMessage;
@@ -85,8 +83,16 @@ pub struct Accounts<S: Spec> {
     #[id]
     pub id: ModuleId,
 
-    /// Legacy/custom `credential_id -> address` routing index. New
-    /// authorization writes use [`Self::account_owners`] instead.
+    /// Tombstone for the legacy `credential_id -> address` routing index.
+    ///
+    /// **Do not read or write outside [`crate::migrations`].** The field is
+    /// retained only to preserve the `#[state]` field discriminant ordering
+    /// derived by the `ModuleInfo` macro (this is the first state field, so
+    /// removing it would shift the discriminants of every following field
+    /// and corrupt their on-disk data). Existing entries are migrated to
+    /// [`Self::account_owners`] by
+    /// [`crate::migrations::migrate_legacy_accounts_to_owners`] and the
+    /// source rows are deleted.
     #[state]
     pub(crate) accounts: StateMap<CredentialId, Account<S>>,
 

@@ -1,4 +1,4 @@
-use sov_modules_api::{CredentialId, Spec, StateAccessor, StateReader, StateWriter};
+use sov_modules_api::{CredentialId, Spec, StateReader, StateWriter};
 use sov_state::User;
 
 use crate::{AccountOwnerKey, Accounts};
@@ -19,17 +19,17 @@ impl<S: Spec> Accounts<S> {
     }
 
     /// Resolve the sender's credential to an address.
-    /// If `credential_id` has a legacy/custom mapping in `accounts`, return it.
-    /// Otherwise, return the supplied `default_address` without writing account state.
-    pub fn resolve_sender_address<ST: StateAccessor>(
+    ///
+    /// Returns `default_address` unconditionally. The legacy `accounts` map is
+    /// no longer consulted; operators must run the legacy-accounts migration
+    /// (see [`crate::migrations`]) before deploying a binary that includes
+    /// this code on a chain with pre-upgrade entries.
+    pub fn resolve_sender_address<ST: StateReader<User>>(
         &mut self,
         default_address: &S::Address,
-        credential_id: &CredentialId,
-        state: &mut ST,
-    ) -> Result<S::Address, <ST as StateWriter<User>>::Error> {
-        if let Some(account) = self.accounts.get(credential_id, state)? {
-            return Ok(account.addr);
-        }
+        _credential_id: &CredentialId,
+        _state: &mut ST,
+    ) -> Result<S::Address, ST::Error> {
         Ok(*default_address)
     }
 
@@ -37,18 +37,15 @@ impl<S: Spec> Accounts<S> {
     pub fn resolve_sender_address_read_only<ST: StateReader<User>>(
         &self,
         default_address: &S::Address,
-        credential_id: &CredentialId,
-        state: &mut ST,
+        _credential_id: &CredentialId,
+        _state: &mut ST,
     ) -> Result<S::Address, ST::Error> {
-        if let Some(account) = self.accounts.get(credential_id, state)? {
-            return Ok(account.addr);
-        }
         Ok(*default_address)
     }
 
     /// Returns `true` only if `(address, credential_id)` has an explicit entry
-    /// in `account_owners`. For the full authorization check including
-    /// legacy and canonical fallback, use [`Self::is_authorized_for`].
+    /// in `account_owners`. For the full authorization check including the
+    /// canonical fallback, use [`Self::is_authorized_for`].
     pub fn is_explicitly_authorized<ST: StateReader<User>>(
         &self,
         address: &S::Address,
@@ -63,21 +60,15 @@ impl<S: Spec> Accounts<S> {
 
     /// Returns `true` if `credential_id` is authorized to act as `address`.
     ///
-    /// Precedence: if `credential_id` has a legacy mapping in `accounts`, that
-    /// mapping is authoritative and only the mapped address is considered
-    /// authorized. Otherwise, returns `true` if `address` is the canonical
-    /// address of `credential_id`, or if an explicit `account_owners`
-    /// authorization exists.
+    /// Returns `true` when `address` is the canonical address of
+    /// `credential_id` (i.e. `credential_id.into() == address`) or when an
+    /// explicit `account_owners` authorization exists.
     pub fn is_authorized_for<ST: StateReader<User>>(
         &self,
         address: &S::Address,
         credential_id: &CredentialId,
         state: &mut ST,
     ) -> Result<bool, ST::Error> {
-        if let Some(account) = self.accounts.get(credential_id, state)? {
-            return Ok(account.addr == *address);
-        }
-
         let canonical_address: S::Address = (*credential_id).into();
         if canonical_address == *address {
             return Ok(true);
