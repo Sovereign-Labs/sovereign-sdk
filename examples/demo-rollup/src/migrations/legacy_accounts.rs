@@ -12,10 +12,8 @@ use std::path::PathBuf;
 use anyhow::{bail, Context};
 use clap::Parser;
 use demo_stf::runtime::Runtime;
-use rockbound::SchemaBatch;
 use serde::Serialize;
 use sov_db::ledger_db::LedgerDb;
-use sov_db::schema::tables::SlotByNumber;
 use sov_db::storage_manager::NomtStorageManager;
 use sov_full_node_configs::runner::from_toml_path;
 use sov_mock_da::storable::StorableMockDaService;
@@ -24,11 +22,17 @@ use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{ModuleInfo, Spec, StateCheckpoint, StateWriter};
 use sov_modules_rollup_blueprint::RollupBlueprint;
-use sov_rollup_interface::common::SlotNumber;
 use sov_state::{Kernel, NativeStorage, Prefix, SlotKey, StateUpdate};
 use sov_stf_runner::RollupConfig;
 
 use sov_demo_rollup::MockDemoRollup;
+
+#[path = "common.rs"]
+mod common;
+use common::{
+    assert_ledger_head_state_root_matches_storage_root,
+    assert_storage_latest_version_matches_ledger_head, make_ledger_root_patch,
+};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -104,15 +108,11 @@ fn run() -> anyhow::Result<()> {
         sov_accounts::migrations::collect_legacy_account_entries(&runtime.accounts, &storage)
             .context("failed to collect legacy accounts entries")?;
 
-    // The historical-state DB enforces that any version touching the User
-    // namespace also touches the Kernel namespace (see
-    // `sov-db/src/historical_state.rs` "User namespace got updated without
-    // kernel namespace"). Our migration only writes User entries, so we
-    // round-trip the kernel `chain_state.true_slot_number` value to register
-    // a state-root-neutral kernel write. NOMT roots are pure functions of
-    // (key, value) pairs, so writing the same bytes back to the same key
-    // leaves the post-migration root identical to what the user-only diff
-    // would produce.
+    // The historical-state DB rejects User-namespace writes that don't also touch
+    // Kernel (sov-db/src/historical_state.rs). Round-trip
+    // `chain_state.true_slot_number` to satisfy the invariant — NOMT roots are
+    // pure functions of (key, value) pairs, so re-writing the same bytes is
+    // state-root-neutral.
     let true_slot_key = SlotKey::singleton(&Prefix::new(
         runtime.chain_state.discriminant(),
         sov_chain_state::ChainState::<RollupSpec>::TRUE_SLOT_NUMBER_ITEM_DISCRIMINANT,
@@ -137,7 +137,7 @@ fn run() -> anyhow::Result<()> {
         .context("failed to round-trip kernel value to satisfy historical-state invariant")?;
 
     let (next_state_root, mut state_update, accessory_delta, _witness, storage_after) =
-        checkpoint.materialize_update(pre_state_root.clone());
+        checkpoint.materialize_update(pre_state_root);
     state_update.add_accessory_items(accessory_delta.freeze());
     let change_set = storage_after.materialize_changes_at_version(state_update, head_slot_number);
 
@@ -211,58 +211,4 @@ fn load_storage_config(args: &Args) -> anyhow::Result<sov_db::config::RollupDbCo
         storage.path = db_path_override.clone();
     }
     Ok(storage)
-}
-
-fn assert_storage_latest_version_matches_ledger_head<S: NativeStorage>(
-    storage: &S,
-    ledger_db: &LedgerDb,
-    phase: &str,
-) -> anyhow::Result<SlotNumber> {
-    let (head_slot_number, _head_slot) = ledger_db
-        .get_head_slot()?
-        .ok_or_else(|| anyhow::anyhow!("ledger has no head slot; cannot migrate an empty DB"))?;
-    let storage_latest_version = storage.latest_version();
-    if storage_latest_version != head_slot_number {
-        bail!(
-            "{phase} invariant failed: storage.latest_version ({}) != ledger head slot ({})",
-            storage_latest_version,
-            head_slot_number
-        );
-    }
-    Ok(head_slot_number)
-}
-
-fn assert_ledger_head_state_root_matches_storage_root<S: NativeStorage>(
-    storage: &S,
-    ledger_db: &LedgerDb,
-    phase: &str,
-) -> anyhow::Result<()> {
-    let (head_slot_number, head_slot) = ledger_db
-        .get_head_slot()?
-        .ok_or_else(|| anyhow::anyhow!("ledger has no head slot; cannot migrate an empty DB"))?;
-    let storage_root = storage
-        .get_root_hash(head_slot_number)
-        .context("failed to read storage root at ledger head slot")?;
-    if head_slot.state_root.as_ref() != storage_root.as_ref() {
-        bail!(
-            "{phase} invariant failed: ledger head state_root does not match storage root at slot {}",
-            head_slot_number
-        );
-    }
-    Ok(())
-}
-
-fn make_ledger_root_patch(
-    ledger_db: &LedgerDb,
-    new_state_root: &[u8],
-) -> anyhow::Result<SchemaBatch> {
-    let (head_slot_number, mut head_slot) = ledger_db
-        .get_head_slot()?
-        .ok_or_else(|| anyhow::anyhow!("ledger has no head slot; cannot patch state root"))?;
-
-    head_slot.state_root = new_state_root.to_vec().into();
-
-    let mut batch = SchemaBatch::new();
-    batch.put::<SlotByNumber>(&head_slot_number, &head_slot)?;
-    Ok(batch)
 }
