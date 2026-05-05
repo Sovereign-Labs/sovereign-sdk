@@ -33,10 +33,10 @@ pub struct SolanaOffchainUnsignedTransactionV0<R: TransactionCallable, S: Spec> 
     /// from malicious chains (if the chain name matches some other chain the use but didn't expect
     /// to be signing for right now).
     pub chain_name: SafeString,
-    /// Signer-declared target address. See [`AuthorizationData::address`] for routing semantics.
+    /// Signer-declared address override. See [`AuthorizationData::address_override`] for routing semantics.
     /// Skipped from JSON when `None` so pre-change signed messages stay byte-identical.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target_address: Option<S::Address>,
+    pub address_override: Option<S::Address>,
 }
 
 impl<R, S> SolanaOffchainUnsignedTransactionV0<R, S>
@@ -50,7 +50,7 @@ where
             runtime_call: self.runtime_call,
             uniqueness: self.uniqueness,
             details: self.details,
-            target_address: self.target_address,
+            address_override: self.address_override,
         })
     }
 
@@ -83,10 +83,10 @@ pub struct SolanaOffchainUnsignedTransactionV1<R: TransactionCallable, S: Spec> 
     /// This is the "multisig address" except if the credential is mapped to another address in
     /// `sov-accounts`.
     pub multisig_id: S::Address,
-    /// Signer-declared target address. See [`AuthorizationData::address`] for routing semantics.
+    /// Signer-declared address override. See [`AuthorizationData::address_override`] for routing semantics.
     /// Skipped from JSON when `None` so pre-change signed messages stay byte-identical.
     #[serde(default, skip_serializing_if = "Option::is_none")]
-    pub target_address: Option<S::Address>,
+    pub address_override: Option<S::Address>,
     /// Message format version. Must be `1` for this struct.
     #[serde(deserialize_with = "deserialize_version_1")]
     pub version: u8,
@@ -116,7 +116,7 @@ where
             uniqueness: self.uniqueness,
             details: self.details,
             credential_address: self.multisig_id,
-            target_address: self.target_address,
+            address_override: self.address_override,
         })
     }
 

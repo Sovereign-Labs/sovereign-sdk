@@ -63,7 +63,7 @@ export function standardTypeBuilder<
         runtime_call: runtimeCall,
         uniqueness,
         details,
-        target_address: overrides.target_address ?? null,
+        address_override: overrides.address_override ?? null,
       } as S["UnsignedTransaction"];
     },
     async transaction({
@@ -89,7 +89,7 @@ export type SimulateParams = Omit<
   SovereignClient.RollupSimulateParams,
   "call" | "sender"
 > &
-  SignerParams & { target_address?: string | null };
+  SignerParams & { address_override?: string | null };
 
 export class StandardRollup<RuntimeCall> extends Rollup<
   StandardRollupSpec<RuntimeCall>,

@@ -258,9 +258,9 @@ export class MultisigTransaction {
    * Converts the multisig to a V1 transaction that can be submitted to the network.
    * @returns A V1 transaction containing all collected signatures and unused public keys
    */
-  asTransaction(targetAddress?: string | null): Transaction<unknown> {
-    const resolvedTargetAddress =
-      targetAddress ?? this.unsignedTx.target_address;
+  asTransaction(addressOverride?: string | null): Transaction<unknown> {
+    const resolvedAddressOverride =
+      addressOverride ?? this.unsignedTx.address_override;
     return {
       V1: {
         runtime_call: this.unsignedTx.runtime_call,
@@ -269,7 +269,7 @@ export class MultisigTransaction {
         unused_pub_keys: Array.from(this.unusedPubKeys),
         signatures: this.signatures,
         min_signers: this.minSigners,
-        target_address: resolvedTargetAddress,
+        address_override: resolvedAddressOverride,
       },
     };
   }
@@ -293,7 +293,7 @@ function asUnsignedTransaction(
       runtime_call: tx.V0.runtime_call,
       uniqueness: tx.V0.uniqueness,
       details: tx.V0.details,
-      target_address: tx.V0.target_address,
+      address_override: tx.V0.address_override,
     };
   }
 
@@ -302,7 +302,7 @@ function asUnsignedTransaction(
       runtime_call: tx.V1.runtime_call,
       uniqueness: tx.V1.uniqueness,
       details: tx.V1.details,
-      target_address: tx.V1.target_address,
+      address_override: tx.V1.address_override,
     };
   }
 

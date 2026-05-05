@@ -173,7 +173,7 @@ async fn test_simulation_success() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_simulation_success_with_target_address() {
+async fn test_simulation_success_with_address_override() {
     let mut data = TestData::setup().await;
     let delegated_credential: CredentialId = [9u8; 32].into();
     let registration_call = json_obj!({
@@ -206,7 +206,7 @@ async fn test_simulation_success_with_target_address() {
     });
     data.send_storage();
 
-    let target_address = data.user.address();
+    let address_override = data.user.address();
     let receiver = TestUser::<S>::generate_with_default_balance().address();
     let call = sov_bank::CallMessage::<S>::Transfer {
         to: receiver,
@@ -217,7 +217,7 @@ async fn test_simulation_success_with_target_address() {
     };
     let params = json_obj!({
         "sender": delegated_credential.to_string(),
-        "target_address": target_address.to_string(),
+        "address_override": address_override.to_string(),
         "call": {
             "bank": call,
         },
@@ -241,7 +241,7 @@ async fn test_simulation_success_with_target_address() {
             "value": {
                 "token_transferred": {
                     "from": {
-                        "user": target_address
+                        "user": address_override
                     },
                     "to": {
                         "user": receiver

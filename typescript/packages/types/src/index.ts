@@ -35,8 +35,8 @@ export type UnsignedTransaction<RuntimeCall> = {
   uniqueness: Uniqueness;
   /** Transaction execution details including fees and gas limits */
   details: TxDetails;
-  /** Optional target address for execution; null uses default routing */
-  target_address: string | null;
+  /** Optional address override for execution; null uses default routing */
+  address_override: string | null;
 };
 
 /**

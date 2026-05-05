@@ -262,7 +262,7 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
                 gas_limit: None,
                 chain_id,
             },
-            target_address: inner.target_address,
+            address_override: inner.address_override,
         }),
         Transaction::V1(_inner) => {
             todo!("Bad signature generation for multisig transactions is not yet supported");

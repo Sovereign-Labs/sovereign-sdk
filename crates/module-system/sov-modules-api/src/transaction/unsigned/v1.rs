@@ -31,9 +31,9 @@ pub struct UnsignedTransactionV1<R: TransactionCallable, S: Spec> {
     /// and prevent credential malleability from reusing signed bytes in a different
     /// multisig envelope.
     pub credential_address: S::Address,
-    /// Signer-declared target address. See [`AuthorizationData::address`] for routing semantics.
+    /// Signer-declared address override. See [`AuthorizationData::address_override`] for routing semantics.
     #[serde(default)]
-    pub target_address: Option<S::Address>,
+    pub address_override: Option<S::Address>,
 }
 
 impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV1<R, S> {
@@ -43,7 +43,7 @@ impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV1<R, S> {
             uniqueness: self.uniqueness,
             details: self.details.clone(),
             credential_address: self.credential_address,
-            target_address: self.target_address,
+            address_override: self.address_override,
         }
     }
 }
@@ -53,7 +53,7 @@ impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransactionV1<R, S> 
             && self.uniqueness == other.uniqueness
             && self.details == other.details
             && self.credential_address == other.credential_address
-            && self.target_address == other.target_address
+            && self.address_override == other.address_override
     }
 }
 impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransactionV1<R, S> {}

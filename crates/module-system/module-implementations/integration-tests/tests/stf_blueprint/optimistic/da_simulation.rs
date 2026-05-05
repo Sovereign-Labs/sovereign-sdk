@@ -53,7 +53,7 @@ pub fn simulate_da_with_bad_sig(key: TestPrivateKey) -> Vec<FullyBakedTx> {
         ),
         uniqueness: UniquenessData::Generation(create_token_message.generation),
         details: create_token_message.details,
-        target_address: None,
+        address_override: None,
     });
 
     vec![encode_with_auth(tx)]

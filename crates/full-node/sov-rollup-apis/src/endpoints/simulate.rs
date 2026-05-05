@@ -308,13 +308,13 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
         let credential_id = CredentialId::from_str(&params.sender).map_err(|_| {
             SimulateError::InvalidInput("failed to parse sender credential id".to_owned())
         })?;
-        let address = params
-            .target_address
+        let address_override = params
+            .address_override
             .as_deref()
             .map(S::Address::from_str)
             .transpose()
             .map_err(|e| {
-                SimulateError::InvalidInput(format!("failed to parse target address: {e:?}"))
+                SimulateError::InvalidInput(format!("failed to parse address override: {e:?}"))
             })?;
         let uniqueness = params.uniqueness.unwrap_or_else(|| {
             let generation = Uniqueness::<S>::default()
@@ -330,7 +330,7 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
             credential_id,
             default_address: credential_id.into(),
             credentials: Credentials::new(credential_id),
-            address,
+            address_override,
         })
     }
 
@@ -413,8 +413,8 @@ pub struct SimulateParameters {
     /// Optional uniqueness data for the transaction.
     /// If not provided a valid uniqueness will be used.
     pub uniqueness: Option<UniquenessData>,
-    /// Optional target address for execution. If not provided, default routing is used.
-    pub target_address: Option<String>,
+    /// Optional address override for execution. If not provided, default routing is used.
+    pub address_override: Option<String>,
 }
 
 impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {

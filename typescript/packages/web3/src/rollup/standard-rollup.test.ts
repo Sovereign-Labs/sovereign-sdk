@@ -54,7 +54,7 @@ describe("standardTypeBuilder", () => {
           max_fee: "1000",
           chain_id: 1,
         },
-        target_address: null,
+        address_override: null,
       });
     });
 
@@ -75,7 +75,7 @@ describe("standardTypeBuilder", () => {
           max_fee: "1000",
           chain_id: 1,
         },
-        target_address: null,
+        address_override: null,
       });
     });
 
@@ -102,7 +102,7 @@ describe("standardTypeBuilder", () => {
           gas_limit: [1000000, 1000000],
           chain_id: 1,
         },
-        target_address: null,
+        address_override: null,
       });
     });
   });
@@ -121,7 +121,7 @@ describe("standardTypeBuilder", () => {
             chain_id: 1,
             gas_limit: null,
           },
-          target_address: null,
+          address_override: null,
         },
         sender: new Uint8Array([4, 5, 6]),
         signature: new Uint8Array([7, 8, 9]),
@@ -142,7 +142,7 @@ describe("standardTypeBuilder", () => {
             chain_id: 1,
             gas_limit: null,
           },
-          target_address: null,
+          address_override: null,
         },
       });
     });
@@ -284,7 +284,7 @@ describe("createStandardRollup", () => {
 
     await rollup.simulate(runtimeCall, {
       signer: signer as any,
-      target_address: "sov1target",
+      address_override: "sov1target",
       tx_details: txDetails,
       uniqueness: { nonce: 7 },
     });
@@ -292,7 +292,7 @@ describe("createStandardRollup", () => {
     expect(client.rollup.simulate).toHaveBeenCalledWith({
       sender: "abcd",
       call: runtimeCall,
-      target_address: "sov1target",
+      address_override: "sov1target",
       tx_details: txDetails,
       uniqueness: { nonce: 7 },
     });

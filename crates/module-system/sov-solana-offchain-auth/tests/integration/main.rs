@@ -99,7 +99,7 @@ async fn create_test_rollup() -> anyhow::Result<(
 
 /// Variant of [`create_test_rollup`] that seeds additional `(credential_id, address)` pairs
 /// into `sov-accounts` at genesis. Callers use this to authorize a multisig credential for a
-/// specific target address so V1 transactions carrying `target_address = Some(X)` can resolve
+/// specific address override so V1 transactions carrying `address_override = Some(X)` can resolve
 /// their sender to `X` instead of the multisig's default address.
 ///
 /// `extra_account_owners_for` is a closure invoked with the generated admin user so the caller
@@ -198,13 +198,13 @@ async fn create_test_rollup_with_extra_account_owners(
 }
 
 fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
-    create_transfer_tx_json_with_target(amount, recipient, None)
+    create_transfer_tx_json_with_address_override(amount, recipient, None)
 }
 
-fn create_transfer_tx_json_with_target(
+fn create_transfer_tx_json_with_address_override(
     amount: Amount,
     recipient: &str,
-    target_address: Option<<S as Spec>::Address>,
+    address_override: Option<<S as Spec>::Address>,
 ) -> String {
     let msg: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
@@ -226,7 +226,7 @@ fn create_transfer_tx_json_with_target(
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
         chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
-        target_address,
+        address_override,
     };
 
     serde_json::to_string(&solana_unsigned_tx).unwrap()
@@ -491,7 +491,7 @@ fn create_multisig_transfer_tx_json(
     amount: Amount,
     recipient: &str,
     multisig_id: <S as Spec>::Address,
-    target_address: Option<<S as Spec>::Address>,
+    address_override: Option<<S as Spec>::Address>,
 ) -> String {
     let msg: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
@@ -514,7 +514,7 @@ fn create_multisig_transfer_tx_json(
         details: unsigned_tx.details,
         chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
         multisig_id,
-        target_address,
+        address_override,
         version: 1,
     };
     serde_json::to_string(&solana_unsigned_tx).unwrap()
@@ -1161,13 +1161,13 @@ async fn test_submit_ledger_signed_multisig_transaction() {
     );
 }
 
-/// End-to-end plumbing test: a V1 transaction carrying `target_address = Some(admin)` — where
+/// End-to-end plumbing test: a V1 transaction carrying `address_override = Some(admin)` — where
 /// genesis authorizes `(admin.address(), multisig_credential_id)` in `account_owners` — routes
-/// execution as `admin`, not as the multisig's default address. Proves that `target_address`
+/// execution as `admin`, not as the multisig's default address. Proves that `address_override`
 /// flows from the signed JSON through `authenticate`, `build_auth_data`, `AuthorizationData`,
 /// and into `resolve_sender`.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_submit_multisig_with_authorized_target_address() {
+async fn test_submit_multisig_with_authorized_address_override() {
     // Build a 2-of-3 multisig (its default address is never funded).
     let key1 = Ed25519PrivateKey::generate();
     let key2 = Ed25519PrivateKey::generate();
@@ -1230,7 +1230,7 @@ async fn test_submit_multisig_with_authorized_target_address() {
     let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
     assert!(
         response.status().is_success(),
-        "Expected multisig-with-target_address transaction to succeed. Response: {response:?}"
+        "Expected multisig-with-address_override transaction to succeed. Response: {response:?}"
     );
 
     // Recipient got the transfer.
@@ -1238,7 +1238,7 @@ async fn test_submit_multisig_with_authorized_target_address() {
     assert_eq!(
         recipient_balance,
         Some(Amount::new(7_000)),
-        "Expected recipient to have received 7,000 tokens via target-routed multisig tx"
+        "Expected recipient to have received 7,000 tokens via override-routed multisig tx"
     );
 
     // Admin's balance decreased (fees + transferred amount). We only check the ordering
@@ -1246,7 +1246,7 @@ async fn test_submit_multisig_with_authorized_target_address() {
     let admin_balance_after = query_balance(&test_rollup.client, &admin_address_str).await;
     assert!(
         admin_balance_after < admin_balance_before,
-        "Expected admin balance to decrease after target-routed tx; before={admin_balance_before:?}, after={admin_balance_after:?}"
+        "Expected admin balance to decrease after override-routed tx; before={admin_balance_before:?}, after={admin_balance_after:?}"
     );
 
     // The multisig's default address was never funded and should still have no balance —
@@ -1264,7 +1264,7 @@ async fn test_submit_multisig_with_authorized_target_address() {
 fn build_v1_payload(
     recipient: &str,
     multisig_id: <S as Spec>::Address,
-    target_address: Option<<S as Spec>::Address>,
+    address_override: Option<<S as Spec>::Address>,
 ) -> SolanaOffchainUnsignedTransactionV1<RT, S> {
     let call: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
@@ -1287,49 +1287,49 @@ fn build_v1_payload(
         details: unsigned_tx.details,
         chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
         multisig_id,
-        target_address,
+        address_override,
         version: 1,
     }
 }
 
-/// `target_address: None` is omitted from the serialized JSON, so pre-change signed messages
+/// `address_override: None` is omitted from the serialized JSON, so pre-change signed messages
 /// remain byte-identical and existing signatures verify unchanged.
 #[test]
-fn test_v1_payload_omits_target_address_when_none() {
+fn test_v1_payload_omits_address_override_when_none() {
     let multisig_address: <S as Spec>::Address = [0xABu8; 32].into();
     let payload = build_v1_payload(RECIPIENT_ADDRESS, multisig_address, None);
 
     let json = serde_json::to_string(&payload).expect("serialize");
     assert!(
-        !json.contains("target_address"),
-        "target_address must not appear in JSON when it is None; got: {json}"
+        !json.contains("address_override"),
+        "address_override must not appear in JSON when it is None; got: {json}"
     );
 }
 
-/// Pre-change JSON (no `target_address` key) deserializes into a payload with `target_address:
+/// Pre-change JSON (no `address_override` key) deserializes into a payload with `address_override:
 /// None`. Pins the `#[serde(default)]` promise: future refactors cannot silently break deployed
 /// Solana signers.
 #[test]
-fn test_v1_payload_without_target_address_field_deserializes_as_none() {
+fn test_v1_payload_without_address_override_field_deserializes_as_none() {
     let multisig_address: <S as Spec>::Address = [0xABu8; 32].into();
     let expected = build_v1_payload(RECIPIENT_ADDRESS, multisig_address, None);
     let canonical_json = serde_json::to_string(&expected).expect("serialize baseline");
     assert!(
-        !canonical_json.contains("target_address"),
-        "guard: the canonical None-payload already omits target_address"
+        !canonical_json.contains("address_override"),
+        "guard: the canonical None-payload already omits address_override"
     );
 
     let parsed: SolanaOffchainUnsignedTransactionV1<RT, S> =
         serde_json::from_str(&canonical_json).expect("deserialize");
     assert_eq!(
-        parsed.target_address, None,
-        "missing target_address field must default to None"
+        parsed.address_override, None,
+        "missing address_override field must default to None"
     );
 }
 
-/// A `target_address: Some(X)` round-trips through serialize/deserialize unchanged.
+/// A `address_override: Some(X)` round-trips through serialize/deserialize unchanged.
 #[test]
-fn test_v1_payload_with_target_address_round_trips() {
+fn test_v1_payload_with_address_override_round_trips() {
     let multisig_address: <S as Spec>::Address = [0xABu8; 32].into();
     let target: <S as Spec>::Address =
         <S as Spec>::Address::from_str(RECIPIENT_ADDRESS).expect("parse recipient");
@@ -1337,21 +1337,21 @@ fn test_v1_payload_with_target_address_round_trips() {
 
     let json = serde_json::to_string(&original).expect("serialize");
     assert!(
-        json.contains("target_address"),
-        "target_address must appear in JSON when it is Some; got: {json}"
+        json.contains("address_override"),
+        "address_override must appear in JSON when it is Some; got: {json}"
     );
 
     let parsed: SolanaOffchainUnsignedTransactionV1<RT, S> =
         serde_json::from_str(&json).expect("deserialize");
-    assert_eq!(parsed.target_address, Some(target));
+    assert_eq!(parsed.address_override, Some(target));
     assert_eq!(parsed.multisig_id, multisig_address);
 }
 
 /// End-to-end plumbing test for single-sig V0: admin's credential is explicitly
 /// authorized for a delegated address at genesis, that delegated address is funded,
-/// and a V0 tx carrying `target_address = Some(delegated)` spends from it.
+/// and a V0 tx carrying `address_override = Some(delegated)` spends from it.
 #[tokio::test(flavor = "multi_thread")]
-async fn test_submit_single_sig_with_authorized_target_address() {
+async fn test_submit_single_sig_with_authorized_address_override() {
     let delegated_user = TestUser::<S>::generate_with_default_balance();
     let delegated_address = delegated_user.address();
     let delegated_address_str = delegated_address.to_string();
@@ -1379,12 +1379,12 @@ async fn test_submit_single_sig_with_authorized_target_address() {
     assert_eq!(
         delegated_balance_before,
         Some(Amount::new(8_000)),
-        "Expected delegated address to be funded before target-routed transfer"
+        "Expected delegated address to be funded before override-routed transfer"
     );
 
     let response = submit_simple_json_tx(
         test_rollup.api_client(),
-        create_transfer_tx_json_with_target(
+        create_transfer_tx_json_with_address_override(
             Amount(7_000),
             RECIPIENT_ADDRESS,
             Some(delegated_address),
@@ -1394,32 +1394,32 @@ async fn test_submit_single_sig_with_authorized_target_address() {
     .await;
     assert!(
         response.status().is_success(),
-        "Expected single-sig V0 target-routed tx to succeed. Response: {response:?}"
+        "Expected single-sig V0 override-routed tx to succeed. Response: {response:?}"
     );
 
     let recipient_balance = query_balance(&test_rollup.client, RECIPIENT_ADDRESS).await;
     assert_eq!(
         recipient_balance,
         Some(Amount::new(7_000)),
-        "Expected recipient to receive 7,000 tokens via target-routed V0 tx"
+        "Expected recipient to receive 7,000 tokens via override-routed V0 tx"
     );
 
     let delegated_balance_after = query_balance(&test_rollup.client, &delegated_address_str).await;
     assert_eq!(
         delegated_balance_after,
         Some(Amount::new(1_000)),
-        "Expected target-routed V0 tx to spend from delegated address"
+        "Expected override-routed V0 tx to spend from delegated address"
     );
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_submit_single_sig_with_unauthorized_target_address_fails() {
+async fn test_submit_single_sig_with_unauthorized_address_override_fails() {
     let (test_rollup, admin) = create_test_rollup().await.expect("Failed to create rollup");
     let unowned_address = TestUser::<S>::generate_with_default_balance().address();
 
     let response = submit_simple_json_tx(
         test_rollup.api_client(),
-        create_transfer_tx_json_with_target(
+        create_transfer_tx_json_with_address_override(
             Amount(1_000),
             RECIPIENT_ADDRESS,
             Some(unowned_address),
@@ -1431,17 +1431,17 @@ async fn test_submit_single_sig_with_unauthorized_target_address_fails() {
     assert_eq!(
         response.status(),
         400,
-        "Expected 400 status for unauthorized target address"
+        "Expected 400 status for unauthorized address override"
     );
     let response_text = response.text().await.expect("Failed to read response body");
     assert!(
-        response_text.contains("not authorized for target address"),
-        "Expected unauthorized target error, got: {response_text}"
+        response_text.contains("not authorized for address override"),
+        "Expected unauthorized address override error, got: {response_text}"
     );
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_submit_single_sig_with_tampered_target_address_fails_signature() {
+async fn test_submit_single_sig_with_tampered_address_override_fails_signature() {
     let delegated_user = TestUser::<S>::generate_with_default_balance();
     let delegated_address = delegated_user.address();
     let (test_rollup, admin) = create_test_rollup_with_extra_account_owners(|admin| {
@@ -1453,7 +1453,7 @@ async fn test_submit_single_sig_with_tampered_target_address_fails_signature() {
     .await
     .expect("Failed to create rollup");
 
-    let json = create_transfer_tx_json_with_target(
+    let json = create_transfer_tx_json_with_address_override(
         Amount(1_000),
         RECIPIENT_ADDRESS,
         Some(delegated_address),
@@ -1461,7 +1461,7 @@ async fn test_submit_single_sig_with_tampered_target_address_fails_signature() {
     let signature = admin.private_key().sign(json.as_bytes());
     let mut payload: SolanaOffchainUnsignedTransactionV0<RT, S> =
         serde_json::from_str(&json).expect("deserialize");
-    payload.target_address = Some(admin.address());
+    payload.address_override = Some(admin.address());
     let tampered_json = serde_json::to_string(&payload).expect("serialize");
     let message = SolanaOffchainSimpleMessage::<S> {
         signed_message: tampered_json.into_bytes(),
@@ -1474,7 +1474,7 @@ async fn test_submit_single_sig_with_tampered_target_address_fails_signature() {
     assert_eq!(
         response.status(),
         400,
-        "Expected 400 status for tampered target address"
+        "Expected 400 status for tampered address override"
     );
     let response_text = response.text().await.expect("Failed to read response body");
     assert!(
@@ -1486,7 +1486,7 @@ async fn test_submit_single_sig_with_tampered_target_address_fails_signature() {
 
 fn build_v0_payload(
     recipient: &str,
-    target_address: Option<<S as Spec>::Address>,
+    address_override: Option<<S as Spec>::Address>,
 ) -> SolanaOffchainUnsignedTransactionV0<RT, S> {
     let call: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
@@ -1508,51 +1508,51 @@ fn build_v0_payload(
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
         chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
-        target_address,
+        address_override,
     }
 }
 
 #[test]
-fn test_v0_payload_omits_target_address_when_none() {
+fn test_v0_payload_omits_address_override_when_none() {
     let payload = build_v0_payload(RECIPIENT_ADDRESS, None);
 
     let json = serde_json::to_string(&payload).expect("serialize");
     assert!(
-        !json.contains("target_address"),
-        "target_address must not appear in JSON when it is None; got: {json}"
+        !json.contains("address_override"),
+        "address_override must not appear in JSON when it is None; got: {json}"
     );
 }
 
 #[test]
-fn test_v0_payload_without_target_address_field_deserializes_as_none() {
+fn test_v0_payload_without_address_override_field_deserializes_as_none() {
     let expected = build_v0_payload(RECIPIENT_ADDRESS, None);
     let canonical_json = serde_json::to_string(&expected).expect("serialize baseline");
     assert!(
-        !canonical_json.contains("target_address"),
-        "guard: the canonical None-payload already omits target_address"
+        !canonical_json.contains("address_override"),
+        "guard: the canonical None-payload already omits address_override"
     );
 
     let parsed: SolanaOffchainUnsignedTransactionV0<RT, S> =
         serde_json::from_str(&canonical_json).expect("deserialize");
     assert_eq!(
-        parsed.target_address, None,
-        "missing target_address field must default to None"
+        parsed.address_override, None,
+        "missing address_override field must default to None"
     );
 }
 
 #[test]
-fn test_v0_payload_with_target_address_round_trips() {
+fn test_v0_payload_with_address_override_round_trips() {
     let target: <S as Spec>::Address =
         <S as Spec>::Address::from_str(RECIPIENT_ADDRESS).expect("parse recipient");
     let original = build_v0_payload(RECIPIENT_ADDRESS, Some(target));
 
     let json = serde_json::to_string(&original).expect("serialize");
     assert!(
-        json.contains("target_address"),
-        "target_address must appear in JSON when it is Some; got: {json}"
+        json.contains("address_override"),
+        "address_override must appear in JSON when it is Some; got: {json}"
     );
 
     let parsed: SolanaOffchainUnsignedTransactionV0<RT, S> =
         serde_json::from_str(&json).expect("deserialize");
-    assert_eq!(parsed.target_address, Some(target));
+    assert_eq!(parsed.address_override, Some(target));
 }

@@ -316,17 +316,17 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>> {
-        let sender = match auth_data.address {
-            Some(target_address) => {
+        let sender = match auth_data.address_override {
+            Some(address_override) => {
                 anyhow::ensure!(
                     self.accounts.is_explicitly_authorized(
-                        &target_address,
+                        &address_override,
                         &auth_data.credential_id,
                         state,
                     )?,
-                    "not authorized for target address"
+                    "not authorized for address override"
                 );
-                target_address
+                address_override
             }
             None => auth_data.default_address,
         };

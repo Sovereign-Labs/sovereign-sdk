@@ -103,13 +103,13 @@ pub struct AuthorizationData<S: Spec> {
     /// The default address.
     pub default_address: S::Address,
 
-    /// Signer-declared target address for execution.
+    /// Signer-declared override of the default execution address.
     ///
     /// `None` ⇒ resolve to the credential's default address.
     /// `Some(X)` ⇒ requires an explicit `(X, credential_id)` entry in `account_owners`;
     /// the transaction is skipped otherwise.
     ///
-    /// Set by authenticators that carry a signed target_address (sov-tx V0/V1,
+    /// Set by authenticators that carry a signed `address_override` (sov-tx V0/V1,
     /// Solana off-chain auth). Other authenticators leave it `None`.
-    pub address: Option<S::Address>,
+    pub address_override: Option<S::Address>,
 }

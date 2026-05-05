@@ -122,12 +122,12 @@ fn verify_signatures<S: Spec>(
 }
 
 /// Builds authorization data for either single-sig or multisig transactions.
-/// `target_address` is forwarded from the signed payload — see
-/// [`sov_modules_api::capabilities::AuthorizationData::address`] for routing semantics.
+/// `address_override` is forwarded from the signed payload — see
+/// [`sov_modules_api::capabilities::AuthorizationData::address_override`] for routing semantics.
 fn build_auth_data<S: Spec>(
     unpacked: &UnpackedSolanaMessage<S>,
     uniqueness: UniquenessData,
-    target_address: Option<S::Address>,
+    address_override: Option<S::Address>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
@@ -157,7 +157,7 @@ fn build_auth_data<S: Spec>(
                 credential_id,
                 credentials: Credentials::new(pub_key.clone()),
                 default_address: credential_id.into(),
-                address: target_address,
+                address_override,
             })
         }
         UnpackedSolanaMessage::V1 {
@@ -186,7 +186,7 @@ fn build_auth_data<S: Spec>(
                 credential_id,
                 credentials: Credentials::new(multisig),
                 default_address: credential_id.into(),
-                address: target_address,
+                address_override,
             })
         }
     }
@@ -283,14 +283,14 @@ where
             raw_tx_hash,
         )
     };
-    let (provided_chain_name, target_address, unsigned_tx) = match &unpacked_message {
+    let (provided_chain_name, address_override, unsigned_tx) = match &unpacked_message {
         UnpackedSolanaMessage::V0 { .. } => {
             let tx = SolanaOffchainUnsignedTransactionV0::<D, S>::unmetered_deserialize(json_slice)
                 .map_err(deser_err)?;
-            let target_address = tx.target_address;
+            let address_override = tx.address_override;
             (
                 tx.chain_name.to_string(),
-                target_address,
+                address_override,
                 tx.into_unsigned_tx(),
             )
         }
@@ -309,10 +309,10 @@ where
                 *min_signers,
                 raw_tx_hash,
             )?;
-            let target_address = tx.target_address;
+            let address_override = tx.address_override;
             (
                 tx.chain_name.to_string(),
-                target_address,
+                address_override,
                 tx.into_unsigned_tx(),
             )
         }
@@ -348,7 +348,7 @@ where
     let authorization_data = build_auth_data::<S>(
         &unpacked_message,
         unsigned_tx.uniqueness(),
-        target_address,
+        address_override,
         raw_tx_hash,
         state,
     )?;

@@ -22,7 +22,7 @@ const createUnsignedTx = (nonce = 1): UnsignedTransaction<string> => ({
     gas_limit: null,
     chain_id: 1,
   },
-  target_address: null,
+  address_override: null,
 });
 
 const createTransactionV0 = (
@@ -49,7 +49,7 @@ describe("MultisigTransaction", () => {
           gas_limit: null,
           chain_id: 1,
         },
-        target_address: null,
+        address_override: null,
       };
       const tx = createTransactionV0(unsignedTx, "pubkey1", "sig1");
 
@@ -248,17 +248,17 @@ describe("MultisigTransaction", () => {
   });
 
   describe("asTransaction", () => {
-    it("should include a null target address by default", () => {
+    it("should include a null address override by default", () => {
       const multisig = MultisigTransaction.empty(createUnsignedTx(), 1, [
         "pubkey1",
       ]);
 
       const result = multisig.asTransaction() as TransactionV1<string>;
 
-      expect(result.V1.target_address).toBeNull();
+      expect(result.V1.address_override).toBeNull();
     });
 
-    it("should include the provided target address", () => {
+    it("should include the provided address override", () => {
       const multisig = MultisigTransaction.empty(createUnsignedTx(), 1, [
         "pubkey1",
       ]);
@@ -267,7 +267,7 @@ describe("MultisigTransaction", () => {
         "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4",
       ) as TransactionV1<string>;
 
-      expect(result.V1.target_address).toBe(
+      expect(result.V1.address_override).toBe(
         "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4",
       );
     });

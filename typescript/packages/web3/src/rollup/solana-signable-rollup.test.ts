@@ -160,7 +160,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: null,
           chain_id: 1,
         },
-        target_address: null,
+        address_override: null,
       } as any,
       {
         signer: createMockSigner(),
@@ -206,7 +206,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: null,
           chain_id: fixtureChainId,
         },
-        target_address: null,
+        address_override: null,
       } as any,
       {
         signer: createMockSigner(),
@@ -289,7 +289,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: [1000000000, 1000000000],
           chain_id: 4321,
         },
-        target_address: null,
+        address_override: null,
       };
 
       await rollup.signAndSubmitTransaction(unsignedTx, {
@@ -376,7 +376,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: [1000000000, 1000000000],
           chain_id: 4321,
         },
-        target_address: null,
+        address_override: null,
       };
 
       await rollup.signAndSubmitTransaction(unsignedTx, {
@@ -472,7 +472,7 @@ describe("SolanaSignableRollup", () => {
         gas_limit: [1000000000, 1000000000],
         chain_id: 4321,
       },
-      target_address: null,
+      address_override: null,
     };
 
     // Each signer signs independently (same order as Rust: key3, key1)
@@ -544,7 +544,7 @@ describe("SolanaSignableRollup", () => {
         gas_limit: null,
         chain_id: 1,
       },
-      target_address: null,
+      address_override: null,
     };
 
     const signedTx = await rollup.signTransactionForMultisig(
@@ -649,7 +649,7 @@ describe("SolanaSignableRollup", () => {
         gas_limit: [1000000000, 1000000000],
         chain_id: 4321,
       },
-      target_address: null,
+      address_override: null,
     };
 
     const signedTx3 = await rollup.signTransactionForMultisig(unsignedTx, {
@@ -726,7 +726,7 @@ describe("SolanaSignableRollup", () => {
             gas_limit: null,
             chain_id: 1,
           },
-          target_address: null,
+          address_override: null,
         } as any,
         {
           signer: ledgerSigner,
@@ -778,7 +778,7 @@ describe("SolanaSignableRollup", () => {
             gas_limit: null,
             chain_id: 1,
           },
-          target_address: null,
+          address_override: null,
         } as any,
         {
           signer: ed25519Signer,
@@ -796,7 +796,7 @@ describe("SolanaSignableRollup", () => {
     });
   });
 
-  describe("V1 target_address", () => {
+  describe("V1 address_override", () => {
     // Shared fixture: builds a rollup + multisig context the same way the byte-compatibility
     // tests above do, then exposes the pieces each test needs.
     async function setupMultisigContext(): Promise<{
@@ -879,7 +879,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: [1000000000, 1000000000],
           chain_id: 4321,
         },
-        target_address: null,
+        address_override: null,
       };
 
       return {
@@ -914,7 +914,7 @@ describe("SolanaSignableRollup", () => {
       return { mock, captured };
     }
 
-    it("omits target_address from the signed JSON when no targetAddress is provided (backward compat)", async () => {
+    it("omits address_override from the signed JSON when no addressOverride is provided (backward compat)", async () => {
       const { rollup, multisigAddress, multisigPubkeys, signers, unsignedTx } =
         await setupMultisigContext();
 
@@ -928,20 +928,20 @@ describe("SolanaSignableRollup", () => {
 
       expect(captured.bytes).toBeDefined();
       const signedJson = new TextDecoder().decode(captured.bytes!);
-      expect(signedJson).not.toContain("target_address");
+      expect(signedJson).not.toContain("address_override");
       const parsed = JSON.parse(signedJson);
-      expect(parsed).not.toHaveProperty("target_address");
+      expect(parsed).not.toHaveProperty("address_override");
     });
 
-    it("includes target_address in the signed JSON before version when targetAddress is provided", async () => {
+    it("includes address_override in the signed JSON before version when addressOverride is provided", async () => {
       // Field order matches Rust's `SolanaOffchainUnsignedTransactionV1`: signers sign the raw
       // JSON bytes, so TS and Rust must emit fields in the same order or signatures produced
       // in one language won't verify against JSON produced in the other.
       const { rollup, multisigAddress, multisigPubkeys, signers, unsignedTx } =
         await setupMultisigContext();
 
-      const targetAddress = new Uint8Array(32);
-      targetAddress.fill(0x42);
+      const addressOverride = new Uint8Array(32);
+      addressOverride.fill(0x42);
 
       const { mock, captured } = captureSignerInput(signers.signer1);
       await rollup.signTransactionForMultisig(unsignedTx, {
@@ -949,21 +949,21 @@ describe("SolanaSignableRollup", () => {
         authenticator: "solanaSimple",
         multisigAddress,
         multisigPubkeys,
-        targetAddress,
+        addressOverride,
       });
 
       expect(captured.bytes).toBeDefined();
       const signedJson = new TextDecoder().decode(captured.bytes!);
-      expect(JSON.parse(signedJson).target_address).toBe(
-        bs58.encode(targetAddress),
+      expect(JSON.parse(signedJson).address_override).toBe(
+        bs58.encode(addressOverride),
       );
-      const targetIdx = signedJson.indexOf('"target_address"');
+      const overrideIdx = signedJson.indexOf('"address_override"');
       const versionIdx = signedJson.indexOf('"version"');
-      expect(targetIdx).toBeGreaterThanOrEqual(0);
-      expect(targetIdx).toBeLessThan(versionIdx);
+      expect(overrideIdx).toBeGreaterThanOrEqual(0);
+      expect(overrideIdx).toBeLessThan(versionIdx);
     });
 
-    it("forwards tx.target_address into the submitted JSON via submitMultisigTransaction", async () => {
+    it("forwards tx.address_override into the submitted JSON via submitMultisigTransaction", async () => {
       const {
         rollup,
         capturedPayloadRef,
@@ -974,25 +974,25 @@ describe("SolanaSignableRollup", () => {
         unsignedTx,
       } = await setupMultisigContext();
 
-      const targetAddress = new Uint8Array(32);
-      targetAddress.fill(0x99);
-      const targetAddressBs58 = bs58.encode(targetAddress);
+      const addressOverride = new Uint8Array(32);
+      addressOverride.fill(0x99);
+      const addressOverrideBs58 = bs58.encode(addressOverride);
 
-      // Each signer signs with the same target_address — the signatures cover the full JSON
-      // including the target_address field.
+      // Each signer signs with the same address_override — the signatures cover the full JSON
+      // including the address_override field.
       const signedTx3 = await rollup.signTransactionForMultisig(unsignedTx, {
         signer: signers.signer3,
         authenticator: "solanaSimple",
         multisigAddress,
         multisigPubkeys,
-        targetAddress,
+        addressOverride,
       });
       const signedTx1 = await rollup.signTransactionForMultisig(unsignedTx, {
         signer: signers.signer1,
         authenticator: "solanaSimple",
         multisigAddress,
         multisigPubkeys,
-        targetAddress,
+        addressOverride,
       });
 
       const v0_3 = (signedTx3 as any).V0;
@@ -1006,7 +1006,7 @@ describe("SolanaSignableRollup", () => {
           ],
           unused_pub_keys: [pubHexes.pub2],
           min_signers: 2,
-          target_address: targetAddressBs58,
+          address_override: addressOverrideBs58,
         },
       };
 
@@ -1023,7 +1023,7 @@ describe("SolanaSignableRollup", () => {
       const submittedBytes = Buffer.from(submittedBody, "base64");
       const submittedText = new TextDecoder().decode(submittedBytes);
       expect(submittedText).toContain(
-        `"target_address":"${targetAddressBs58}"`,
+        `"address_override":"${addressOverrideBs58}"`,
       );
     });
   });

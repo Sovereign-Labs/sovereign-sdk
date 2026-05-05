@@ -29,9 +29,9 @@ pub struct UnsignedTransactionV0<R: TransactionCallable, S: Spec> {
     pub uniqueness: UniquenessData,
     /// Data related to fees and gas handling.
     pub details: TxDetails<S>,
-    /// Signer-declared target address. See [`AuthorizationData::address`] for routing semantics.
+    /// Signer-declared address override. See [`AuthorizationData::address_override`] for routing semantics.
     #[serde(default)]
-    pub target_address: Option<S::Address>,
+    pub address_override: Option<S::Address>,
 }
 
 // Manually implemented to ensure correct trait bounds (derive would require R: Clone/PartialEq)
@@ -41,7 +41,7 @@ impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV0<R, S> {
             runtime_call: self.runtime_call.clone(),
             uniqueness: self.uniqueness,
             details: self.details.clone(),
-            target_address: self.target_address,
+            address_override: self.address_override,
         }
     }
 }
@@ -50,7 +50,7 @@ impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransactionV0<R, S> 
         self.runtime_call == other.runtime_call
             && self.uniqueness == other.uniqueness
             && self.details == other.details
-            && self.target_address == other.target_address
+            && self.address_override == other.address_override
     }
 }
 impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransactionV0<R, S> {}
@@ -88,7 +88,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
                 gas_limit,
                 chain_id,
             },
-            target_address: None,
+            address_override: None,
         }
     }
 
@@ -102,7 +102,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
             runtime_call,
             uniqueness,
             details,
-            target_address: None,
+            address_override: None,
         }
     }
 
@@ -119,16 +119,16 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
             runtime_call: self.runtime_call,
             uniqueness: self.uniqueness,
             details: self.details,
-            target_address: self.target_address,
+            address_override: self.address_override,
         })
     }
 
     /// Creates a new `V1` transaction from this unsigned transaction.
-    /// See [`crate::capabilities::AuthorizationData::address`] for `target_address` routing.
+    /// See [`crate::capabilities::AuthorizationData::address_override`] for routing semantics.
     pub fn to_multisig_tx(
         self,
         multisig: Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
-        target_address: Option<S::Address>,
+        address_override: Option<S::Address>,
     ) -> Version1<R, S> {
         Version1 {
             signatures: SafeVec::new(),
@@ -140,7 +140,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
             runtime_call: self.runtime_call,
             uniqueness: self.uniqueness,
             details: self.details,
-            target_address,
+            address_override,
         }
     }
 

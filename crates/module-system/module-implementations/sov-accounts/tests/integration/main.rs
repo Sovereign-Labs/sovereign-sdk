@@ -22,7 +22,7 @@ type RT = TestAccountsRuntime<S>;
 struct TestData<S: Spec> {
     account_1: TestUser<S>,
     // `account_2` is intentionally kept in the fixture for the upcoming
-    // `target_address` PR. Until then it has no readers — silence the lint.
+    // `address_override` PR. Until then it has no readers — silence the lint.
     #[allow(dead_code)]
     account_2: TestUser<S>,
     non_registered_account: TestUser<S>,
@@ -517,27 +517,27 @@ fn make_multisig_env() -> MultisigEnv {
 fn make_v1_tx(
     multisig: &sov_modules_api::Multisig<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey>,
     inner_credential: sov_modules_api::CredentialId,
-    target_address: Option<<S as Spec>::Address>,
+    address_override: Option<<S as Spec>::Address>,
 ) -> Version1<RT, S> {
     UnsignedTransactionV0::<RT, S>::new_with_details(
         TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
         sov_modules_api::capabilities::UniquenessData::Generation(0),
         default_test_tx_details::<S>(),
     )
-    .to_multisig_tx(multisig.clone(), target_address)
+    .to_multisig_tx(multisig.clone(), address_override)
 }
 
 fn make_v0_tx(
     sender: &TestUser<S>,
     inner_credential: sov_modules_api::CredentialId,
-    target_address: Option<<S as Spec>::Address>,
+    address_override: Option<<S as Spec>::Address>,
 ) -> Transaction<RT, S> {
     let mut utx = UnsignedTransactionV0::<RT, S>::new_with_details(
         TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
         sov_modules_api::capabilities::UniquenessData::Generation(0),
         default_test_tx_details::<S>(),
     );
-    utx.target_address = target_address;
+    utx.address_override = address_override;
     utx.sign(sender.private_key(), &<RT as Runtime<S>>::CHAIN_HASH)
 }
 
@@ -558,11 +558,11 @@ fn submit_v1(tx: Version1<RT, S>) -> TransactionType<RT, S> {
     })
 }
 
-/// V1 tx with `target_address = None` executes as the multisig's default
+/// V1 tx with `address_override = None` executes as the multisig's default
 /// address. Evidence: the `InsertCredentialId` call writes
 /// `(multisig_default, inner_credential)` to `account_owners`.
 #[test]
-fn test_v1_target_none_uses_default_resolver() {
+fn test_v1_address_override_none_uses_default_resolver() {
     let MultisigEnv {
         keys,
         multisig,
@@ -590,18 +590,18 @@ fn test_v1_target_none_uses_default_resolver() {
                 accounts
                     .is_explicitly_authorized(&multisig_default_address, &inner_credential, state)
                     .unwrap(),
-                "target=None should route to multisig default; the InsertCredentialId \
+                "address_override=None should route to multisig default; the InsertCredentialId \
                  call must write the new credential under that address"
             );
         }),
     });
 }
 
-/// V1 tx with `target_address = Some(X)` where `(X, multisig_credential_id)` is
+/// V1 tx with `address_override = Some(X)` where `(X, multisig_credential_id)` is
 /// authorized resolves context as `X`. Evidence: `InsertCredentialId` writes
 /// `(X, inner_credential)` — not `(multisig_default, inner_credential)`.
 #[test]
-fn test_v1_target_some_authorized_succeeds() {
+fn test_v1_address_override_some_authorized_succeeds() {
     let MultisigEnv {
         keys,
         multisig,
@@ -633,7 +633,7 @@ fn test_v1_target_some_authorized_succeeds() {
         assert: Box::new(move |result, state| {
             assert!(
                 result.tx_receipt.is_successful(),
-                "V1 target=Some(authorized) should succeed, got {:?}",
+                "V1 address_override=Some(authorized) should succeed, got {:?}",
                 result.tx_receipt
             );
             let accounts = Accounts::<S>::default();
@@ -641,17 +641,17 @@ fn test_v1_target_some_authorized_succeeds() {
                 accounts
                     .is_explicitly_authorized(&alice_address, &inner_credential, state)
                     .unwrap(),
-                "InsertCredentialId should write under target_address, not multisig default"
+                "InsertCredentialId should write under address_override, not multisig default"
             );
         }),
     });
 }
 
-/// V1 tx with `target_address = Some(Y)` where `(Y, credential_id) ∉ account_owners`
+/// V1 tx with `address_override = Some(Y)` where `(Y, credential_id) ∉ account_owners`
 /// is skipped, not reverted. No state is mutated — in particular, no auto-register
 /// on the `Some` path.
 #[test]
-fn test_v1_target_some_unauthorized_skipped() {
+fn test_v1_address_override_some_unauthorized_skipped() {
     let MultisigEnv {
         keys,
         multisig,
@@ -679,7 +679,7 @@ fn test_v1_target_some_unauthorized_skipped() {
                 TxEffect::Skipped(SkippedTxContents { error, .. }) => {
                     let msg = error.to_string();
                     assert!(
-                        msg.contains("not authorized for target address"),
+                        msg.contains("not authorized for address override"),
                         "unexpected skip reason: {msg}"
                     );
                 }
@@ -692,16 +692,16 @@ fn test_v1_target_some_unauthorized_skipped() {
                 !accounts
                     .is_explicitly_authorized(&unowned_address, &inner_credential, state)
                     .unwrap(),
-                "unauthorized target path must not auto-register any tuple"
+                "unauthorized address_override path must not auto-register any tuple"
             );
         }),
     });
 }
 
-/// `target_address` is part of the signed bytes: tampering with it after signing
+/// `address_override` is part of the signed bytes: tampering with it after signing
 /// invalidates the signature.
 #[test]
-fn test_v1_target_tamper_breaks_signature() {
+fn test_v1_address_override_tamper_breaks_signature() {
     let MultisigEnv {
         keys,
         multisig,
@@ -734,7 +734,7 @@ fn test_v1_target_tamper_breaks_signature() {
     sign_v1(&mut tx, &keys[0]);
     sign_v1(&mut tx, &keys[1]);
     // Mutate after signing.
-    tx.target_address = Some(tampered_address);
+    tx.address_override = Some(tampered_address);
 
     runner.execute_transaction(TransactionTestCase {
         input: submit_v1(tx),
@@ -743,7 +743,7 @@ fn test_v1_target_tamper_breaks_signature() {
                 let msg = error.to_string();
                 assert!(
                     msg.contains("Verification equation was not satisfied"),
-                    "expected signature failure after target_address tamper, got: {msg}"
+                    "expected signature failure after address_override tamper, got: {msg}"
                 );
             }
             other => panic!("expected skipped tx, got {other:?}"),
@@ -751,9 +751,9 @@ fn test_v1_target_tamper_breaks_signature() {
     });
 }
 
-/// V0 tx with `target_address = None` executes as the signer's default address.
+/// V0 tx with `address_override = None` executes as the signer's default address.
 #[test]
-fn test_v0_target_none_uses_default_resolver() {
+fn test_v0_address_override_none_uses_default_resolver() {
     let sender = TestUser::<S>::generate_with_default_balance();
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![sender.clone()]);
@@ -773,16 +773,16 @@ fn test_v0_target_none_uses_default_resolver() {
                 accounts
                     .is_explicitly_authorized(&sender.address(), &inner_credential, state)
                     .unwrap(),
-                "target=None should route to the signer's default address"
+                "address_override=None should route to the signer's default address"
             );
         }),
     });
 }
 
-/// V0 tx with `target_address = Some(X)` where `(X, credential_id)` is
+/// V0 tx with `address_override = Some(X)` where `(X, credential_id)` is
 /// authorized resolves context as `X`.
 #[test]
-fn test_v0_target_some_authorized_succeeds() {
+fn test_v0_address_override_some_authorized_succeeds() {
     let sender = TestUser::<S>::generate_with_default_balance();
     let alice = TestUser::<S>::generate_with_default_balance();
     let alice_address = alice.address();
@@ -805,7 +805,7 @@ fn test_v0_target_some_authorized_succeeds() {
         assert: Box::new(move |result, state| {
             assert!(
                 result.tx_receipt.is_successful(),
-                "V0 target=Some(authorized) should succeed, got {:?}",
+                "V0 address_override=Some(authorized) should succeed, got {:?}",
                 result.tx_receipt
             );
             let accounts = Accounts::<S>::default();
@@ -813,16 +813,16 @@ fn test_v0_target_some_authorized_succeeds() {
                 accounts
                     .is_explicitly_authorized(&alice_address, &inner_credential, state)
                     .unwrap(),
-                "InsertCredentialId should write under target_address, not sender default"
+                "InsertCredentialId should write under address_override, not sender default"
             );
         }),
     });
 }
 
-/// V0 tx with `target_address = Some(Y)` where `(Y, credential_id) ∉ account_owners`
+/// V0 tx with `address_override = Some(Y)` where `(Y, credential_id) ∉ account_owners`
 /// is skipped, not reverted.
 #[test]
-fn test_v0_target_some_unauthorized_skipped() {
+fn test_v0_address_override_some_unauthorized_skipped() {
     let sender = TestUser::<S>::generate_with_default_balance();
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![sender.clone()]);
@@ -841,7 +841,7 @@ fn test_v0_target_some_unauthorized_skipped() {
                 TxEffect::Skipped(SkippedTxContents { error, .. }) => {
                     let msg = error.to_string();
                     assert!(
-                        msg.contains("not authorized for target address"),
+                        msg.contains("not authorized for address override"),
                         "unexpected skip reason: {msg}"
                     );
                 }
@@ -852,16 +852,16 @@ fn test_v0_target_some_unauthorized_skipped() {
                 !accounts
                     .is_explicitly_authorized(&unowned_address, &inner_credential, state)
                     .unwrap(),
-                "unauthorized target path must not auto-register any tuple"
+                "unauthorized address_override path must not auto-register any tuple"
             );
         }),
     });
 }
 
-/// `target_address` is part of the signed bytes for V0 as well: tampering with it
+/// `address_override` is part of the signed bytes for V0 as well: tampering with it
 /// after signing invalidates the signature.
 #[test]
-fn test_v0_target_tamper_breaks_signature() {
+fn test_v0_address_override_tamper_breaks_signature() {
     let sender = TestUser::<S>::generate_with_default_balance();
     let alice = TestUser::<S>::generate_with_default_balance();
     let alice_address = alice.address();
@@ -886,7 +886,7 @@ fn test_v0_target_tamper_breaks_signature() {
     let Transaction::V0(inner) = &mut tx else {
         panic!("expected v0 tx");
     };
-    inner.target_address = Some(tampered_address);
+    inner.address_override = Some(tampered_address);
 
     runner.execute_transaction(TransactionTestCase {
         input: submit_v0(tx),
@@ -895,7 +895,7 @@ fn test_v0_target_tamper_breaks_signature() {
                 let msg = error.to_string();
                 assert!(
                     msg.contains("Verification equation was not satisfied"),
-                    "expected signature failure after target_address tamper, got: {msg}"
+                    "expected signature failure after address_override tamper, got: {msg}"
                 );
             }
             other => panic!("expected skipped tx, got {other:?}"),

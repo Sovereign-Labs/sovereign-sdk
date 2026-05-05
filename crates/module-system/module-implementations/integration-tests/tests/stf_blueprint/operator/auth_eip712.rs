@@ -176,12 +176,12 @@ pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
 
 /// Signs a V1 (multisig) unsigned transaction with the given private key using EIP712.
 /// The credential_address is computed from the provided multisig.
-/// `target_address` is forwarded into the signed `UnsignedTransactionV1`;
-/// pass `None` to match pre-target routing or `Some(X)` to sign for a specific target account.
+/// `address_override` is forwarded into the signed `UnsignedTransactionV1`;
+/// pass `None` to match default routing or `Some(X)` to sign for a specific override account.
 pub fn sign_utx_v1_in_place<S: Spec, RT: Runtime<S>>(
     utx: &UnsignedTransactionV0<RT, S>,
     multisig: &Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
-    target_address: Option<S::Address>,
+    address_override: Option<S::Address>,
     private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
 ) -> <S::CryptoSpec as CryptoSpec>::Signature {
     let schema = TestSchemaProvider::get_schema();
@@ -200,7 +200,7 @@ pub fn sign_utx_v1_in_place<S: Spec, RT: Runtime<S>>(
         uniqueness: utx.uniqueness,
         details: utx.details.clone(),
         credential_address,
-        target_address,
+        address_override,
     });
     let utx_bytes = borsh::to_vec(&utx_enum).expect("Failed to serialize unsigned transaction");
     let eip712_signing_data = schema
@@ -306,17 +306,18 @@ fn test_multisig_signature_verification() {
 
     // Generate a signature from a random private key that's not part of the multisig. We'll use this in some of the test cases.
     let random_private_key = TestPrivateKey::generate();
-    let target = None;
+    let address_override = None;
     let make_multisig_tx = |generation| {
         let utx = create_utx_with_generation::<S, RT>(encode_message::<_, RT>(), generation);
         let signatures = multisig_keys
             .iter()
-            .map(|key| sign_utx_v1_in_place(&utx, &multisig, target, key))
+            .map(|key| sign_utx_v1_in_place(&utx, &multisig, address_override, key))
             .collect::<Vec<_>>();
-        let random_signature = sign_utx_v1_in_place(&utx, &multisig, target, &random_private_key);
+        let random_signature =
+            sign_utx_v1_in_place(&utx, &multisig, address_override, &random_private_key);
 
         (
-            utx.to_multisig_tx(multisig.clone(), target),
+            utx.to_multisig_tx(multisig.clone(), address_override),
             signatures,
             random_signature,
         )

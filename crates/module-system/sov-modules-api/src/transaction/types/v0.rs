@@ -41,9 +41,9 @@ pub struct Version0<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Sp
     pub uniqueness: UniquenessData,
     /// The transaction metadata. Contains gas parameters and the chain ID.
     pub details: TxDetails<S>,
-    /// Signer-declared target address. See [`AuthorizationData::address`] for routing semantics.
+    /// Signer-declared address override. See [`AuthorizationData::address_override`] for routing semantics.
     #[serde(default)]
-    pub target_address: Option<S::Address>,
+    pub address_override: Option<S::Address>,
 }
 
 impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
@@ -53,7 +53,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
             runtime_call: self.runtime_call.clone(),
             uniqueness: self.uniqueness,
             details: self.details.clone(),
-            target_address: self.target_address,
+            address_override: self.address_override,
         })
     }
 
@@ -75,7 +75,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
             credential_id,
             credentials: Credentials::new(pub_key),
             default_address: credential_id.into(),
-            address: self.target_address,
+            address_override: self.address_override,
         })
     }
 }
