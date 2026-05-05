@@ -54,6 +54,7 @@ describe("standardTypeBuilder", () => {
           max_fee: "1000",
           chain_id: 1,
         },
+        target_address: null,
       });
     });
 
@@ -74,6 +75,7 @@ describe("standardTypeBuilder", () => {
           max_fee: "1000",
           chain_id: 1,
         },
+        target_address: null,
       });
     });
 
@@ -100,6 +102,7 @@ describe("standardTypeBuilder", () => {
           gas_limit: [1000000, 1000000],
           chain_id: 1,
         },
+        target_address: null,
       });
     });
   });
@@ -118,6 +121,7 @@ describe("standardTypeBuilder", () => {
             chain_id: 1,
             gas_limit: null,
           },
+          target_address: null,
         },
         sender: new Uint8Array([4, 5, 6]),
         signature: new Uint8Array([7, 8, 9]),
@@ -138,6 +142,7 @@ describe("standardTypeBuilder", () => {
             chain_id: 1,
             gas_limit: null,
           },
+          target_address: null,
         },
       });
     });

@@ -35,6 +35,8 @@ export type UnsignedTransaction<RuntimeCall> = {
   uniqueness: Uniqueness;
   /** Transaction execution details including fees and gas limits */
   details: TxDetails;
+  /** Optional target address for execution; null uses default routing */
+  target_address: string | null;
 };
 
 /**
@@ -73,8 +75,6 @@ export type TransactionV1<RuntimeCall> = {
     signatures: SignatureAndPubKey[];
     /** Minimum number of signatures required for transaction validity */
     min_signers: number;
-    /** Optional target address for execution; null uses default routing */
-    target_address: string | null;
   } & UnsignedTransaction<RuntimeCall>;
 };
 

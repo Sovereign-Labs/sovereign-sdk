@@ -22,6 +22,7 @@ const createUnsignedTx = (nonce = 1): UnsignedTransaction<string> => ({
     gas_limit: null,
     chain_id: 1,
   },
+  target_address: null,
 });
 
 const createTransactionV0 = (
@@ -48,6 +49,7 @@ describe("MultisigTransaction", () => {
           gas_limit: null,
           chain_id: 1,
         },
+        target_address: null,
       };
       const tx = createTransactionV0(unsignedTx, "pubkey1", "sig1");
 
@@ -67,7 +69,6 @@ describe("MultisigTransaction", () => {
           unused_pub_keys: ["pubkey2"],
           signatures: [{ pub_key: "pubkey1", signature: "sig1" }],
           min_signers: 1,
-          target_address: null,
           ...unsignedTx,
         },
       };

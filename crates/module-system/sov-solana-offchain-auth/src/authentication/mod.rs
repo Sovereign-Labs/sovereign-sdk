@@ -122,11 +122,8 @@ fn verify_signatures<S: Spec>(
 }
 
 /// Builds authorization data for either single-sig or multisig transactions.
-///
-/// `target_address` is the signer-declared target extracted from the deserialized V1 JSON payload.
-/// It must always be `None` for V0; for V1, it is forwarded from
-/// `SolanaOffchainUnsignedTransactionV1::target_address` so that the authorization layer can route
-/// execution to a pre-authorized account instead of the multisig's default address.
+/// `target_address` is forwarded from the signed payload — see
+/// [`sov_modules_api::capabilities::AuthorizationData::address`] for routing semantics.
 fn build_auth_data<S: Spec>(
     unpacked: &UnpackedSolanaMessage<S>,
     uniqueness: UniquenessData,
@@ -160,7 +157,7 @@ fn build_auth_data<S: Spec>(
                 credential_id,
                 credentials: Credentials::new(pub_key.clone()),
                 default_address: credential_id.into(),
-                address: None,
+                address: target_address,
             })
         }
         UnpackedSolanaMessage::V1 {
@@ -290,7 +287,12 @@ where
         UnpackedSolanaMessage::V0 { .. } => {
             let tx = SolanaOffchainUnsignedTransactionV0::<D, S>::unmetered_deserialize(json_slice)
                 .map_err(deser_err)?;
-            (tx.chain_name.to_string(), None, tx.into_unsigned_tx())
+            let target_address = tx.target_address;
+            (
+                tx.chain_name.to_string(),
+                target_address,
+                tx.into_unsigned_tx(),
+            )
         }
         UnpackedSolanaMessage::V1 {
             signatures,

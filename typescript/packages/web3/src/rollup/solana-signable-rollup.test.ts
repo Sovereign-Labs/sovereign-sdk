@@ -160,6 +160,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: null,
           chain_id: 1,
         },
+        target_address: null,
       } as any,
       {
         signer: createMockSigner(),
@@ -205,6 +206,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: null,
           chain_id: fixtureChainId,
         },
+        target_address: null,
       } as any,
       {
         signer: createMockSigner(),
@@ -287,6 +289,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: [1000000000, 1000000000],
           chain_id: 4321,
         },
+        target_address: null,
       };
 
       await rollup.signAndSubmitTransaction(unsignedTx, {
@@ -373,6 +376,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: [1000000000, 1000000000],
           chain_id: 4321,
         },
+        target_address: null,
       };
 
       await rollup.signAndSubmitTransaction(unsignedTx, {
@@ -468,6 +472,7 @@ describe("SolanaSignableRollup", () => {
         gas_limit: [1000000000, 1000000000],
         chain_id: 4321,
       },
+      target_address: null,
     };
 
     // Each signer signs independently (same order as Rust: key3, key1)
@@ -539,6 +544,7 @@ describe("SolanaSignableRollup", () => {
         gas_limit: null,
         chain_id: 1,
       },
+      target_address: null,
     };
 
     const signedTx = await rollup.signTransactionForMultisig(
@@ -643,6 +649,7 @@ describe("SolanaSignableRollup", () => {
         gas_limit: [1000000000, 1000000000],
         chain_id: 4321,
       },
+      target_address: null,
     };
 
     const signedTx3 = await rollup.signTransactionForMultisig(unsignedTx, {
@@ -719,6 +726,7 @@ describe("SolanaSignableRollup", () => {
             gas_limit: null,
             chain_id: 1,
           },
+          target_address: null,
         } as any,
         {
           signer: ledgerSigner,
@@ -770,6 +778,7 @@ describe("SolanaSignableRollup", () => {
             gas_limit: null,
             chain_id: 1,
           },
+          target_address: null,
         } as any,
         {
           signer: ed25519Signer,
@@ -870,6 +879,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: [1000000000, 1000000000],
           chain_id: 4321,
         },
+        target_address: null,
       };
 
       return {

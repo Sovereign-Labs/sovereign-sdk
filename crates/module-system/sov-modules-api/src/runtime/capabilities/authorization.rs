@@ -104,11 +104,12 @@ pub struct AuthorizationData<S: Spec> {
     pub default_address: S::Address,
 
     /// Signer-declared target address for execution.
-    /// `None` routes the transaction through the default resolver
-    /// (default address + legacy fallback).
-    /// `Some(X)` requires `(X, credential_id) ∈ account_owners`;
+    ///
+    /// `None` ⇒ resolve to the credential's default address.
+    /// `Some(X)` ⇒ requires an explicit `(X, credential_id)` entry in `account_owners`;
     /// the transaction is skipped otherwise.
-    /// Populated from V1 transactions' signed `target_address` field;
-    /// always `None` for V0 and non-sov-tx authenticators.
+    ///
+    /// Set by authenticators that carry a signed target_address (sov-tx V0/V1,
+    /// Solana off-chain auth). Other authenticators leave it `None`.
     pub address: Option<S::Address>,
 }

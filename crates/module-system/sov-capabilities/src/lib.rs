@@ -311,13 +311,28 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         auth_data: &AuthorizationData<S>,
         sequencer: &<S::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
-        _state: &mut impl StateAccessor,
+        state: &mut impl StateAccessor,
         sequencing_data: Option<Bytes>,
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>> {
+        let sender = match auth_data.address {
+            Some(target_address) => {
+                anyhow::ensure!(
+                    self.accounts.is_explicitly_authorized(
+                        &target_address,
+                        &auth_data.credential_id,
+                        state,
+                    )?,
+                    "not authorized for target address"
+                );
+                target_address
+            }
+            None => auth_data.default_address,
+        };
+
         Ok(Context::new(
-            auth_data.default_address,
+            sender,
             auth_data.credentials.clone(),
             sequencer_rollup_address,
             *sequencer,

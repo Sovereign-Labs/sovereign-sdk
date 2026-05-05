@@ -6,7 +6,9 @@ use sov_universal_wallet::UniversalWallet;
 
 use crate::{
     capabilities::UniquenessData,
-    transaction::{PriorityFeeBips, Transaction, TransactionCallable, TxDetails, Version1},
+    transaction::{
+        PriorityFeeBips, Transaction, TransactionCallable, TxDetails, Version0, Version1,
+    },
     Amount, CryptoSpecExt, Multisig, Spec,
 };
 
@@ -27,6 +29,9 @@ pub struct UnsignedTransactionV0<R: TransactionCallable, S: Spec> {
     pub uniqueness: UniquenessData,
     /// Data related to fees and gas handling.
     pub details: TxDetails<S>,
+    /// Signer-declared target address. See [`AuthorizationData::address`] for routing semantics.
+    #[serde(default)]
+    pub target_address: Option<S::Address>,
 }
 
 // Manually implemented to ensure correct trait bounds (derive would require R: Clone/PartialEq)
@@ -36,6 +41,7 @@ impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV0<R, S> {
             runtime_call: self.runtime_call.clone(),
             uniqueness: self.uniqueness,
             details: self.details.clone(),
+            target_address: self.target_address,
         }
     }
 }
@@ -44,6 +50,7 @@ impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransactionV0<R, S> 
         self.runtime_call == other.runtime_call
             && self.uniqueness == other.uniqueness
             && self.details == other.details
+            && self.target_address == other.target_address
     }
 }
 impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransactionV0<R, S> {}
@@ -81,6 +88,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
                 gas_limit,
                 chain_id,
             },
+            target_address: None,
         }
     }
 
@@ -94,6 +102,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
             runtime_call,
             uniqueness,
             details,
+            target_address: None,
         }
     }
 
@@ -104,13 +113,14 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
         pub_key: C::PublicKey,
         signature: C::Signature,
     ) -> Transaction<R, S, C> {
-        Transaction::new_with_details_v0(
-            pub_key,
-            self.runtime_call,
+        Transaction::V0(Version0 {
             signature,
-            self.uniqueness,
-            self.details,
-        )
+            pub_key,
+            runtime_call: self.runtime_call,
+            uniqueness: self.uniqueness,
+            details: self.details,
+            target_address: self.target_address,
+        })
     }
 
     /// Creates a new `V1` transaction from this unsigned transaction.

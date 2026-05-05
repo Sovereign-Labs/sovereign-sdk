@@ -19,7 +19,7 @@ use sov_test_utils::runtime::{config_gas_token_id, Payable, TestRunner};
 
 type S = sov_test_utils::TestSpec;
 
-use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransactionV0};
+use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransactionV0, Version0};
 use sov_modules_api::{PrivateKey, RawTx};
 use sov_test_utils::{EncodeCall, TestUser, TEST_DEFAULT_MAX_FEE};
 use sov_value_setter::ValueSetter;
@@ -251,18 +251,19 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
     let bad_signature = signer.private_key.sign(&[1, 2, 3]);
 
     match signed_tx {
-        Transaction::V0(inner) => Transaction::new_with_details_v0(
-            inner.pub_key,
-            inner.runtime_call,
-            bad_signature,
-            inner.uniqueness,
-            TxDetails {
+        Transaction::V0(inner) => Transaction::V0(Version0 {
+            signature: bad_signature,
+            pub_key: inner.pub_key,
+            runtime_call: inner.runtime_call,
+            uniqueness: inner.uniqueness,
+            details: TxDetails {
                 max_priority_fee_bips,
                 max_fee: Amount::new(200_000),
                 gas_limit: None,
                 chain_id,
             },
-        ),
+            target_address: inner.target_address,
+        }),
         Transaction::V1(_inner) => {
             todo!("Bad signature generation for multisig transactions is not yet supported");
         }

@@ -63,6 +63,7 @@ export function standardTypeBuilder<
         runtime_call: runtimeCall,
         uniqueness,
         details,
+        target_address: overrides.target_address ?? null,
       } as S["UnsignedTransaction"];
     },
     async transaction({

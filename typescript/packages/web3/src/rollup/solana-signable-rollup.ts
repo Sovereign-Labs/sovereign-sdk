@@ -3,7 +3,9 @@ import { type Signer, isLedgerSolanaSigner } from "@sovereign-sdk/signers";
 import type {
   Transaction,
   TransactionV1,
+  TxDetails,
   UnsignedTransaction,
+  Uniqueness,
 } from "@sovereign-sdk/types";
 import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
 import bs58 from "bs58";
@@ -19,9 +21,21 @@ import {
   standardTypeBuilder,
 } from "./standard-rollup";
 
-export type SolanaOffchainUnsignedTransaction<RuntimeCall> =
-  UnsignedTransaction<RuntimeCall> & {
-    chain_name: string;
+export type SolanaOffchainUnsignedTransaction<RuntimeCall> = {
+  runtime_call: RuntimeCall;
+  uniqueness: Uniqueness;
+  details: TxDetails;
+  chain_name: string;
+};
+
+export type SolanaOffchainUnsignedTransactionV0<RuntimeCall> =
+  SolanaOffchainUnsignedTransaction<RuntimeCall> & {
+    /**
+     * Signer-declared target address. Omitted from the serialized JSON when not set,
+     * preserving byte equivalence with pre-change signed messages so existing signatures
+     * continue to verify. See `AuthorizationData::address` (Rust) for routing semantics.
+     */
+    target_address?: string;
   };
 
 export type SolanaOffchainUnsignedTransactionV1<RuntimeCall> =
@@ -338,11 +352,15 @@ export class SolanaSignableRollup<RuntimeCall> {
     const schema = serializer.schema;
     const chainName = schema.chain_data.chain_name || "";
 
-    const solanaUnsignedTx: SolanaOffchainUnsignedTransaction<RuntimeCall> = {
+    const solanaUnsignedTx: SolanaOffchainUnsignedTransactionV0<RuntimeCall> = {
       runtime_call: unsignedTx.runtime_call,
       uniqueness: unsignedTx.uniqueness,
       details: unsignedTx.details,
       chain_name: chainName,
+      ...(unsignedTx.target_address !== null &&
+        unsignedTx.target_address !== undefined && {
+          target_address: unsignedTx.target_address,
+        }),
     };
 
     // JSON serialize the Solana unsigned transaction
@@ -758,6 +776,7 @@ export class SolanaSignableRollup<RuntimeCall> {
       runtime_call: tx.runtime_call,
       uniqueness: tx.uniqueness,
       details: tx.details,
+      target_address: tx.target_address,
     };
 
     // Decode the signed `target_address` back to bytes so we can pass it through the same

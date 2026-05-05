@@ -198,6 +198,14 @@ async fn create_test_rollup_with_extra_account_owners(
 }
 
 fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
+    create_transfer_tx_json_with_target(amount, recipient, None)
+}
+
+fn create_transfer_tx_json_with_target(
+    amount: Amount,
+    recipient: &str,
+    target_address: Option<<S as Spec>::Address>,
+) -> String {
     let msg: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
         coins: Coins {
@@ -218,9 +226,25 @@ fn create_transfer_tx_json(amount: Amount, recipient: &str) -> String {
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
         chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
+        target_address,
     };
 
     serde_json::to_string(&solana_unsigned_tx).unwrap()
+}
+
+async fn submit_simple_json_tx(
+    client: &sov_api_spec::client::Client,
+    json: String,
+    signer: &Ed25519PrivateKey,
+) -> reqwest::Response {
+    let signed_message = json.into_bytes();
+    let message = SolanaOffchainSimpleMessage::<S> {
+        signed_message: signed_message.clone(),
+        chain_hash: RT::CHAIN_HASH,
+        pubkey: signer.pub_key(),
+        signature: signer.sign(&signed_message),
+    };
+    submit_tx(client, borsh::to_vec(&message).unwrap()).await
 }
 
 async fn submit_tx(
@@ -1321,4 +1345,214 @@ fn test_v1_payload_with_target_address_round_trips() {
         serde_json::from_str(&json).expect("deserialize");
     assert_eq!(parsed.target_address, Some(target));
     assert_eq!(parsed.multisig_id, multisig_address);
+}
+
+/// End-to-end plumbing test for single-sig V0: admin's credential is explicitly
+/// authorized for a delegated address at genesis, that delegated address is funded,
+/// and a V0 tx carrying `target_address = Some(delegated)` spends from it.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_single_sig_with_authorized_target_address() {
+    let delegated_user = TestUser::<S>::generate_with_default_balance();
+    let delegated_address = delegated_user.address();
+    let delegated_address_str = delegated_address.to_string();
+    let (test_rollup, admin) = create_test_rollup_with_extra_account_owners(|admin| {
+        vec![sov_test_utils::runtime::sov_accounts::AccountData {
+            credential_id: admin.credential_id(),
+            address: delegated_address,
+        }]
+    })
+    .await
+    .expect("Failed to create rollup");
+
+    let response = submit_simple_json_tx(
+        test_rollup.api_client(),
+        create_transfer_tx_json(Amount(8_000), &delegated_address_str),
+        admin.private_key(),
+    )
+    .await;
+    assert!(
+        response.status().is_success(),
+        "Expected delegated funding tx to succeed. Response: {response:?}"
+    );
+
+    let delegated_balance_before = query_balance(&test_rollup.client, &delegated_address_str).await;
+    assert_eq!(
+        delegated_balance_before,
+        Some(Amount::new(8_000)),
+        "Expected delegated address to be funded before target-routed transfer"
+    );
+
+    let response = submit_simple_json_tx(
+        test_rollup.api_client(),
+        create_transfer_tx_json_with_target(
+            Amount(7_000),
+            RECIPIENT_ADDRESS,
+            Some(delegated_address),
+        ),
+        admin.private_key(),
+    )
+    .await;
+    assert!(
+        response.status().is_success(),
+        "Expected single-sig V0 target-routed tx to succeed. Response: {response:?}"
+    );
+
+    let recipient_balance = query_balance(&test_rollup.client, RECIPIENT_ADDRESS).await;
+    assert_eq!(
+        recipient_balance,
+        Some(Amount::new(7_000)),
+        "Expected recipient to receive 7,000 tokens via target-routed V0 tx"
+    );
+
+    let delegated_balance_after = query_balance(&test_rollup.client, &delegated_address_str).await;
+    assert_eq!(
+        delegated_balance_after,
+        Some(Amount::new(1_000)),
+        "Expected target-routed V0 tx to spend from delegated address"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_single_sig_with_unauthorized_target_address_fails() {
+    let (test_rollup, admin) = create_test_rollup().await.expect("Failed to create rollup");
+    let unowned_address = TestUser::<S>::generate_with_default_balance().address();
+
+    let response = submit_simple_json_tx(
+        test_rollup.api_client(),
+        create_transfer_tx_json_with_target(
+            Amount(1_000),
+            RECIPIENT_ADDRESS,
+            Some(unowned_address),
+        ),
+        admin.private_key(),
+    )
+    .await;
+
+    assert_eq!(
+        response.status(),
+        400,
+        "Expected 400 status for unauthorized target address"
+    );
+    let response_text = response.text().await.expect("Failed to read response body");
+    assert!(
+        response_text.contains("not authorized for target address"),
+        "Expected unauthorized target error, got: {response_text}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_single_sig_with_tampered_target_address_fails_signature() {
+    let delegated_user = TestUser::<S>::generate_with_default_balance();
+    let delegated_address = delegated_user.address();
+    let (test_rollup, admin) = create_test_rollup_with_extra_account_owners(|admin| {
+        vec![sov_test_utils::runtime::sov_accounts::AccountData {
+            credential_id: admin.credential_id(),
+            address: delegated_address,
+        }]
+    })
+    .await
+    .expect("Failed to create rollup");
+
+    let json = create_transfer_tx_json_with_target(
+        Amount(1_000),
+        RECIPIENT_ADDRESS,
+        Some(delegated_address),
+    );
+    let signature = admin.private_key().sign(json.as_bytes());
+    let mut payload: SolanaOffchainUnsignedTransactionV0<RT, S> =
+        serde_json::from_str(&json).expect("deserialize");
+    payload.target_address = Some(admin.address());
+    let tampered_json = serde_json::to_string(&payload).expect("serialize");
+    let message = SolanaOffchainSimpleMessage::<S> {
+        signed_message: tampered_json.into_bytes(),
+        chain_hash: RT::CHAIN_HASH,
+        pubkey: admin.private_key().pub_key(),
+        signature,
+    };
+
+    let response = submit_tx(test_rollup.api_client(), borsh::to_vec(&message).unwrap()).await;
+    assert_eq!(
+        response.status(),
+        400,
+        "Expected 400 status for tampered target address"
+    );
+    let response_text = response.text().await.expect("Failed to read response body");
+    assert!(
+        response_text.contains("Signature verification failed")
+            || response_text.contains("Verification equation was not satisfied"),
+        "Expected signature verification error, got: {response_text}"
+    );
+}
+
+fn build_v0_payload(
+    recipient: &str,
+    target_address: Option<<S as Spec>::Address>,
+) -> SolanaOffchainUnsignedTransactionV0<RT, S> {
+    let call: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
+        to: <S as Spec>::Address::from_str(recipient).unwrap(),
+        coins: Coins {
+            amount: Amount(1_000),
+            token_id: config_value!("GAS_TOKEN_ID"),
+        },
+    });
+    let unsigned_tx = UnsignedTransactionV0::<RT, S>::new(
+        call,
+        config_value!("CHAIN_ID"),
+        TEST_DEFAULT_MAX_PRIORITY_FEE,
+        TEST_DEFAULT_MAX_FEE,
+        UniquenessData::Nonce(0),
+        Some(TEST_DEFAULT_GAS_LIMIT.into()),
+    );
+    SolanaOffchainUnsignedTransactionV0::<RT, S> {
+        runtime_call: unsigned_tx.runtime_call,
+        uniqueness: unsigned_tx.uniqueness,
+        details: unsigned_tx.details,
+        chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
+        target_address,
+    }
+}
+
+#[test]
+fn test_v0_payload_omits_target_address_when_none() {
+    let payload = build_v0_payload(RECIPIENT_ADDRESS, None);
+
+    let json = serde_json::to_string(&payload).expect("serialize");
+    assert!(
+        !json.contains("target_address"),
+        "target_address must not appear in JSON when it is None; got: {json}"
+    );
+}
+
+#[test]
+fn test_v0_payload_without_target_address_field_deserializes_as_none() {
+    let expected = build_v0_payload(RECIPIENT_ADDRESS, None);
+    let canonical_json = serde_json::to_string(&expected).expect("serialize baseline");
+    assert!(
+        !canonical_json.contains("target_address"),
+        "guard: the canonical None-payload already omits target_address"
+    );
+
+    let parsed: SolanaOffchainUnsignedTransactionV0<RT, S> =
+        serde_json::from_str(&canonical_json).expect("deserialize");
+    assert_eq!(
+        parsed.target_address, None,
+        "missing target_address field must default to None"
+    );
+}
+
+#[test]
+fn test_v0_payload_with_target_address_round_trips() {
+    let target: <S as Spec>::Address =
+        <S as Spec>::Address::from_str(RECIPIENT_ADDRESS).expect("parse recipient");
+    let original = build_v0_payload(RECIPIENT_ADDRESS, Some(target));
+
+    let json = serde_json::to_string(&original).expect("serialize");
+    assert!(
+        json.contains("target_address"),
+        "target_address must appear in JSON when it is Some; got: {json}"
+    );
+
+    let parsed: SolanaOffchainUnsignedTransactionV0<RT, S> =
+        serde_json::from_str(&json).expect("deserialize");
+    assert_eq!(parsed.target_address, Some(target));
 }

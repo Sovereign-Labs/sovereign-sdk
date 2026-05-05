@@ -31,8 +31,8 @@ pub struct UnsignedTransactionV1<R: TransactionCallable, S: Spec> {
     /// and prevent credential malleability from reusing signed bytes in a different
     /// multisig envelope.
     pub credential_address: S::Address,
-    /// Signer-declared target address.
-    /// See [`crate::capabilities::AuthorizationData::address`] for routing semantics.
+    /// Signer-declared target address. See [`AuthorizationData::address`] for routing semantics.
+    #[serde(default)]
     pub target_address: Option<S::Address>,
 }
 

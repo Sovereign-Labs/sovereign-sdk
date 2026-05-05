@@ -527,8 +527,28 @@ fn make_v1_tx(
     .to_multisig_tx(multisig.clone(), target_address)
 }
 
+fn make_v0_tx(
+    sender: &TestUser<S>,
+    inner_credential: sov_modules_api::CredentialId,
+    target_address: Option<<S as Spec>::Address>,
+) -> Transaction<RT, S> {
+    let mut utx = UnsignedTransactionV0::<RT, S>::new_with_details(
+        TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
+        sov_modules_api::capabilities::UniquenessData::Generation(0),
+        default_test_tx_details::<S>(),
+    );
+    utx.target_address = target_address;
+    utx.sign(sender.private_key(), &<RT as Runtime<S>>::CHAIN_HASH)
+}
+
 fn sign_v1(tx: &mut Version1<RT, S>, key: &TestPrivateKey) {
     tx.sign(key, &<RT as Runtime<S>>::CHAIN_HASH).unwrap();
+}
+
+fn submit_v0(tx: Transaction<RT, S>) -> TransactionType<RT, S> {
+    TransactionType::<RT, S>::PreSigned(RawTx {
+        data: borsh::to_vec(&tx).unwrap(),
+    })
 }
 
 fn submit_v1(tx: Version1<RT, S>) -> TransactionType<RT, S> {
@@ -538,9 +558,9 @@ fn submit_v1(tx: Version1<RT, S>) -> TransactionType<RT, S> {
     })
 }
 
-/// V1 tx with `target_address = None` routes through `resolve_sender_address`
-/// and executes as the multisig's default address. Evidence: the `InsertCredentialId`
-/// call writes `(multisig_default, inner_credential)` to `account_owners`.
+/// V1 tx with `target_address = None` executes as the multisig's default
+/// address. Evidence: the `InsertCredentialId` call writes
+/// `(multisig_default, inner_credential)` to `account_owners`.
 #[test]
 fn test_v1_target_none_uses_default_resolver() {
     let MultisigEnv {
@@ -718,6 +738,158 @@ fn test_v1_target_tamper_breaks_signature() {
 
     runner.execute_transaction(TransactionTestCase {
         input: submit_v1(tx),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                let msg = error.to_string();
+                assert!(
+                    msg.contains("Verification equation was not satisfied"),
+                    "expected signature failure after target_address tamper, got: {msg}"
+                );
+            }
+            other => panic!("expected skipped tx, got {other:?}"),
+        }),
+    });
+}
+
+/// V0 tx with `target_address = None` executes as the signer's default address.
+#[test]
+fn test_v0_target_none_uses_default_resolver() {
+    let sender = TestUser::<S>::generate_with_default_balance();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![sender.clone()]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let inner_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let tx = make_v0_tx(&sender, inner_credential, None);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v0(tx),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(
+                accounts
+                    .is_explicitly_authorized(&sender.address(), &inner_credential, state)
+                    .unwrap(),
+                "target=None should route to the signer's default address"
+            );
+        }),
+    });
+}
+
+/// V0 tx with `target_address = Some(X)` where `(X, credential_id)` is
+/// authorized resolves context as `X`.
+#[test]
+fn test_v0_target_some_authorized_succeeds() {
+    let sender = TestUser::<S>::generate_with_default_balance();
+    let alice = TestUser::<S>::generate_with_default_balance();
+    let alice_address = alice.address();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![sender.clone(), alice]);
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: sender.credential_id(),
+        address: alice_address,
+    });
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let inner_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let tx = make_v0_tx(&sender, inner_credential, Some(alice_address));
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v0(tx),
+        assert: Box::new(move |result, state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "V0 target=Some(authorized) should succeed, got {:?}",
+                result.tx_receipt
+            );
+            let accounts = Accounts::<S>::default();
+            assert!(
+                accounts
+                    .is_explicitly_authorized(&alice_address, &inner_credential, state)
+                    .unwrap(),
+                "InsertCredentialId should write under target_address, not sender default"
+            );
+        }),
+    });
+}
+
+/// V0 tx with `target_address = Some(Y)` where `(Y, credential_id) ∉ account_owners`
+/// is skipped, not reverted.
+#[test]
+fn test_v0_target_some_unauthorized_skipped() {
+    let sender = TestUser::<S>::generate_with_default_balance();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![sender.clone()]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let unowned_address = TestUser::<S>::generate_with_default_balance().address();
+    let inner_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let tx = make_v0_tx(&sender, inner_credential, Some(unowned_address));
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v0(tx),
+        assert: Box::new(move |result, state| {
+            match result.tx_receipt {
+                TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                    let msg = error.to_string();
+                    assert!(
+                        msg.contains("not authorized for target address"),
+                        "unexpected skip reason: {msg}"
+                    );
+                }
+                other => panic!("expected skipped tx, got {other:?}"),
+            }
+            let accounts = Accounts::<S>::default();
+            assert!(
+                !accounts
+                    .is_explicitly_authorized(&unowned_address, &inner_credential, state)
+                    .unwrap(),
+                "unauthorized target path must not auto-register any tuple"
+            );
+        }),
+    });
+}
+
+/// `target_address` is part of the signed bytes for V0 as well: tampering with it
+/// after signing invalidates the signature.
+#[test]
+fn test_v0_target_tamper_breaks_signature() {
+    let sender = TestUser::<S>::generate_with_default_balance();
+    let alice = TestUser::<S>::generate_with_default_balance();
+    let alice_address = alice.address();
+    let tampered_address = TestUser::<S>::generate_with_default_balance().address();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![sender.clone(), alice]);
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: sender.credential_id(),
+        address: alice_address,
+    });
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: sender.credential_id(),
+        address: tampered_address,
+    });
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let inner_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut tx = make_v0_tx(&sender, inner_credential, Some(alice_address));
+    let Transaction::V0(inner) = &mut tx else {
+        panic!("expected v0 tx");
+    };
+    inner.target_address = Some(tampered_address);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v0(tx),
         assert: Box::new(move |result, _state| match result.tx_receipt {
             TxEffect::Skipped(SkippedTxContents { error, .. }) => {
                 let msg = error.to_string();

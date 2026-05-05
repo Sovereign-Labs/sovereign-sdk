@@ -112,6 +112,7 @@ pub struct TransactionBuilder<S: Spec, C: ChainHash, M: CallMessage + RuntimeDis
     priority_fee_bips: Option<PriorityFeeBips>,
     max_fee: Option<Amount>,
     gas_limit: Option<Option<S::Gas>>,
+    target_address: Option<S::Address>,
     _phantom: std::marker::PhantomData<C>,
 }
 
@@ -131,6 +132,7 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
             priority_fee_bips: None,
             max_fee: None,
             gas_limit: None,
+            target_address: None,
             _phantom: Default::default(),
         }
     }
@@ -188,6 +190,12 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
         self
     }
 
+    /// Sets the explicit target address for the transaction.
+    pub fn target_address(mut self, target_address: S::Address) -> Self {
+        self.target_address = Some(target_address);
+        self
+    }
+
     /// Builds an unsigned transaction with the configured parameters.
     ///
     /// Uses default values for any parameters that were not explicitly set:
@@ -210,14 +218,16 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
         let gas_limit = self.gas_limit.unwrap_or(None);
         let uniqueness = self.uniqueness.unwrap_or_else(default_uniqueness);
 
-        Ok(UnsignedTransactionV0::new(
+        let mut tx = UnsignedTransactionV0::new(
             self.call,
             config_chain_id(),
             priority_fee,
             max_fee,
             uniqueness,
             gas_limit,
-        ))
+        );
+        tx.target_address = self.target_address;
+        Ok(tx)
     }
 
     /// Builds and signs a transaction in one step.

@@ -59,6 +59,7 @@ describe("multisig", async () => {
       runtime_call,
       uniqueness: { nonce: 0 },
       details: { ...DEFAULT_TX_DETAILS, chain_id },
+      target_address: null,
     };
 
     const requiredSigners = 3;

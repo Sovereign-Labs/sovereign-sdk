@@ -33,6 +33,10 @@ pub struct SolanaOffchainUnsignedTransactionV0<R: TransactionCallable, S: Spec> 
     /// from malicious chains (if the chain name matches some other chain the use but didn't expect
     /// to be signing for right now).
     pub chain_name: SafeString,
+    /// Signer-declared target address. See [`AuthorizationData::address`] for routing semantics.
+    /// Skipped from JSON when `None` so pre-change signed messages stay byte-identical.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub target_address: Option<S::Address>,
 }
 
 impl<R, S> SolanaOffchainUnsignedTransactionV0<R, S>
@@ -46,6 +50,7 @@ where
             runtime_call: self.runtime_call,
             uniqueness: self.uniqueness,
             details: self.details,
+            target_address: self.target_address,
         })
     }
 
@@ -78,11 +83,8 @@ pub struct SolanaOffchainUnsignedTransactionV1<R: TransactionCallable, S: Spec> 
     /// This is the "multisig address" except if the credential is mapped to another address in
     /// `sov-accounts`.
     pub multisig_id: S::Address,
-    /// Signer-declared target address; routing semantics in
-    /// [`sov_modules_api::capabilities::AuthorizationData::address`].
-    ///
-    /// Omitted from the serialized JSON when `None`, so pre-change signed messages (which have no
-    /// `target_address` field) remain byte-identical and verify against the same signature.
+    /// Signer-declared target address. See [`AuthorizationData::address`] for routing semantics.
+    /// Skipped from JSON when `None` so pre-change signed messages stay byte-identical.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub target_address: Option<S::Address>,
     /// Message format version. Must be `1` for this struct.
