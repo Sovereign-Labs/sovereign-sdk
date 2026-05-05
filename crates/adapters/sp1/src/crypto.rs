@@ -161,14 +161,24 @@ pub mod private_key {
 }
 
 /// The public key of an ed25519 keypair. Wraps the optimized SP1 fork of the ed25519-consensus crate.
-#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, PartialOrd, Ord)]
 pub struct SP1PublicKey {
-    #[schemars(
-        flatten,
-        with = "String",
-        length(equal = "ed25519_consensus::VerificationKey::LENGTH * 2")
-    )]
     pub(crate) pub_key: VerificationKey,
+}
+
+impl JsonSchema for SP1PublicKey {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "SP1PublicKey".into()
+    }
+
+    fn json_schema(
+        _gen: &mut sov_rollup_interface::reexports::schemars::SchemaGenerator,
+    ) -> sov_rollup_interface::reexports::schemars::Schema {
+        sov_rollup_interface::reexports::schemars::json_schema!({
+            "type": "string",
+            "pattern": "^[a-fA-F0-9]{64}$",
+        })
+    }
 }
 
 impl SP1PublicKey {

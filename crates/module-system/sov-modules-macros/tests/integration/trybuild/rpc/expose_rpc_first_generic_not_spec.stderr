@@ -48,7 +48,7 @@ error[E0277]: the trait bound `T: sov_modules_api::Spec` is not satisfied
 112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]
     |                            ^^^^^^^^^^^^ the trait `sov_modules_api::Spec` is not implemented for `T`
     |
-note: required for `__generated_dispatch_call_impl::RuntimeCall<T, S>` to implement `Serialize`
+note: required for `__generated_dispatch_call_impl::RuntimeCall<T, S>` to implement `_::_serde::Serialize`
    --> tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs:112:28
     |
 112 | #[derive(Default, Genesis, DispatchCall, MessageCodec)]

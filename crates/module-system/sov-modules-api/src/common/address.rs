@@ -84,12 +84,11 @@ macro_rules! impl_bech32_conversion {
             }
 
             fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-                serde_json::from_value(serde_json::json!({
+                $crate::prelude::schemars::json_schema!({
                     "type": "string",
                     "pattern": format!("^{}1[a-zA-Z0-9]+$", __bech32_hrp()),
                     "description": "A bech32 string",
-                }))
-                .unwrap()
+                })
             }
         }
 
