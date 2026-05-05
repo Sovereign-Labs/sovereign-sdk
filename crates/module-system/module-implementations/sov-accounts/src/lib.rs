@@ -11,6 +11,10 @@ mod genesis;
 pub use genesis::*;
 #[cfg(feature = "native")]
 pub mod migrations;
+#[cfg(feature = "native")]
+mod query;
+#[cfg(feature = "native")]
+pub use query::*;
 #[cfg(test)]
 mod tests;
 pub use call::CallMessage;

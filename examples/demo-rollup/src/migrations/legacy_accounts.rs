@@ -22,10 +22,10 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::{Spec, StateCheckpoint};
+use sov_modules_api::{ModuleInfo, Spec, StateCheckpoint, StateWriter};
 use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_rollup_interface::common::SlotNumber;
-use sov_state::{NativeStorage, StateUpdate};
+use sov_state::{Kernel, NativeStorage, Prefix, SlotKey, StateUpdate};
 use sov_stf_runner::RollupConfig;
 
 use sov_demo_rollup::MockDemoRollup;
@@ -104,6 +104,28 @@ fn run() -> anyhow::Result<()> {
         sov_accounts::migrations::collect_legacy_account_entries(&runtime.accounts, &storage)
             .context("failed to collect legacy accounts entries")?;
 
+    // The historical-state DB enforces that any version touching the User
+    // namespace also touches the Kernel namespace (see
+    // `sov-db/src/historical_state.rs` "User namespace got updated without
+    // kernel namespace"). Our migration only writes User entries, so we
+    // round-trip the kernel `chain_state.true_slot_number` value to register
+    // a state-root-neutral kernel write. NOMT roots are pure functions of
+    // (key, value) pairs, so writing the same bytes back to the same key
+    // leaves the post-migration root identical to what the user-only diff
+    // would produce.
+    let true_slot_key = SlotKey::singleton(&Prefix::new(
+        runtime.chain_state.discriminant(),
+        sov_chain_state::ChainState::<RollupSpec>::TRUE_SLOT_NUMBER_ITEM_DISCRIMINANT,
+    ));
+    let true_slot_value = storage
+        .get_unbound::<Kernel>(true_slot_key.clone())
+        .ok_or_else(|| {
+            anyhow::anyhow!(
+                "kernel `chain_state.true_slot_number` is unset; \
+                 cannot perform no-op kernel write"
+            )
+        })?;
+
     let mut checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
     let report = sov_accounts::migrations::apply_legacy_account_migration(
         &mut runtime.accounts,
@@ -111,6 +133,8 @@ fn run() -> anyhow::Result<()> {
         &mut checkpoint,
     )
     .context("failed to apply legacy-accounts migration to checkpoint")?;
+    StateWriter::<Kernel>::set(&mut checkpoint, &true_slot_key, true_slot_value)
+        .context("failed to round-trip kernel value to satisfy historical-state invariant")?;
 
     let (next_state_root, mut state_update, accessory_delta, _witness, storage_after) =
         checkpoint.materialize_update(pre_state_root.clone());
