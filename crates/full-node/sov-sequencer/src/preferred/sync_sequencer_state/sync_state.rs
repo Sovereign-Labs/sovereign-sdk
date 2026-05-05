@@ -875,50 +875,118 @@ where
         inner.trigger_batch_production_if_convenient().await;
     }
 
-    // Takes the current rate limit (in bytes/sec) and returns the next rate limit (in bytes/sec) and the offer rate (in bytes/sec).
+    // Takes the current rate limits and returns the next byte and execution-time rates, along with the offered rates.
     // This implements the P and I parts of a PID controller; this function is responsible for both updating the P term (every tick interval) and combining
     // it with the I term to get the current rate. (The I term is updated on each batch close.)
-    fn tick_rate_limiter(&mut self) -> (f64, f64) {
+    fn tick_rate_limiter(&mut self) -> (f64, f64, f64, f64) {
         let minimum_tick_size = Duration::from_millis(10);
         let now = std::time::Instant::now();
         let time_since_last_tick = now.duration_since(self.inner.last_tick_time);
         if time_since_last_tick < minimum_tick_size {
-            return (self.inner.current_tx_accept_rate_bytes_per_second,  self.inner.bytes_offered_weighted_average as f64 / minimum_tick_size.as_secs_f64());
+            return (
+                self.inner.current_tx_accept_rate_bytes_per_second,
+                self.inner.bytes_offered_weighted_average.max(1) as f64
+                    / minimum_tick_size.as_secs_f64(),
+                self.inner
+                    .current_tx_accept_rate_execution_time_micros_per_second,
+                self.inner.execution_time_offered_weighted_average.max(1.0)
+                    / minimum_tick_size.as_secs_f64(),
+            );
         }
         let current_rate = self.inner.current_tx_accept_rate_bytes_per_second;
+        let current_execution_time_rate = self
+            .inner
+            .current_tx_accept_rate_execution_time_micros_per_second;
 
         // Normalize for the time window. If it's actually been 120 ms since the last tick, divide by 100 /120 to get the average bytes over the current window.
-        let normalized_bytes_since_last_tick = self.inner.bytes_offered_since_last_tick as f64 * (minimum_tick_size.as_secs_f64() / time_since_last_tick.as_secs_f64());
+        let normalized_bytes_since_last_tick = self.inner.bytes_offered_since_last_tick as f64
+            * (minimum_tick_size.as_secs_f64() / time_since_last_tick.as_secs_f64());
         self.inner.bytes_offered_since_last_tick = 0;
         self.inner.bytes_offered_weighted_average += normalized_bytes_since_last_tick as u64;
-        self.inner.bytes_offered_weighted_average = std::cmp::max(self.inner.bytes_offered_weighted_average /2, 1);
+        self.inner.bytes_offered_weighted_average =
+            std::cmp::max(self.inner.bytes_offered_weighted_average / 2, 1);
+
+        let normalized_execution_time_since_last_tick =
+            self.inner.execution_time_offered_since_last_tick
+                * (minimum_tick_size.as_secs_f64() / time_since_last_tick.as_secs_f64());
+        self.inner.execution_time_offered_since_last_tick = 0.0;
+        self.inner.execution_time_offered_weighted_average +=
+            normalized_execution_time_since_last_tick;
+        self.inner.execution_time_offered_weighted_average =
+            (self.inner.execution_time_offered_weighted_average / 2.0).max(1.0);
+
         self.inner.last_tick_time = now;
 
         let target_size = (self.inner.batch_size_tracker.max_batch_size as u64)
-        .checked_div(20)
-        .and_then(|x| x.checked_mul(19)).unwrap_or(0) as f64;
+            .checked_div(20)
+            .and_then(|x| x.checked_mul(19))
+            .unwrap_or(0) as f64;
+        let target_execution_time_micros = self
+            .inner
+            .batch_execution_time_limit_micros
+            .checked_div(20)
+            .and_then(|x| x.checked_mul(19))
+            .unwrap_or(0) as f64;
 
         let target_rate = target_size / self.inner.approximate_block_time.as_secs_f64();
+        let target_execution_time_rate =
+            target_execution_time_micros / self.inner.approximate_block_time.as_secs_f64();
         let elapsed = self.inner.batch_start_time.elapsed();
-        let remaining = if elapsed < self.inner.approximate_block_time { std::cmp::max(self.inner.approximate_block_time - elapsed, minimum_tick_size) } else { minimum_tick_size };
+        let remaining = if elapsed < self.inner.approximate_block_time {
+            std::cmp::max(
+                self.inner.approximate_block_time - elapsed,
+                minimum_tick_size,
+            )
+        } else {
+            minimum_tick_size
+        };
         // The ideal rate, if we weren't worried about over/under shedding. (This is just the rate in bytes-per-second if we split the remaining batch size evenly over the estimated remaining time.)
-        let goal_rate = (target_size - self.inner.batch_size_tracker.current_batch_size as f64).max(0.0) / remaining.as_secs_f64();
+        let goal_rate = (target_size - self.inner.batch_size_tracker.current_batch_size as f64)
+            .max(0.0)
+            / remaining.as_secs_f64();
+        let goal_execution_time_rate = (target_execution_time_micros
+            - self.inner.batch_size_tracker.batch_execution_time_micros as f64)
+            .max(0.0)
+            / remaining.as_secs_f64();
 
         // Slew limits (TODO, extract constants). We don't open the gates by more than 25% per of our total budget per second, and we don't close them by more than 100% per second.
-        let rate_up_per_sec = target_rate *  0.25;
+        let rate_up_per_sec = target_rate * 0.25;
         let rate_down_per_sec = target_rate * 1.0;
         let max_up = (rate_up_per_sec * time_since_last_tick.as_secs_f64()).min(rate_up_per_sec); // Cap the change
-        let max_down = (rate_down_per_sec * time_since_last_tick.as_secs_f64()).min(rate_down_per_sec);
+        let max_down =
+            (rate_down_per_sec * time_since_last_tick.as_secs_f64()).min(rate_down_per_sec);
 
+        let execution_time_rate_up_per_sec = target_execution_time_rate * 0.25;
+        let execution_time_rate_down_per_sec = target_execution_time_rate * 1.0;
+        let max_execution_time_up = (execution_time_rate_up_per_sec
+            * time_since_last_tick.as_secs_f64())
+        .min(execution_time_rate_up_per_sec);
+        let max_execution_time_down = (execution_time_rate_down_per_sec
+            * time_since_last_tick.as_secs_f64())
+        .min(execution_time_rate_down_per_sec);
 
         // The next rate, before we apply the slew limits. It's just the goal rate adjusted by the bias term (recall that the bias evolves over time based on our error). Essentially, we're implementing the PI part of a PID controller.
         let raw_next_rate = (goal_rate + self.inner.size_limit_bias).max(0.0);
         let actual_next_rate = raw_next_rate.clamp(current_rate - max_down, current_rate + max_up); // Clamp the next rate within our slew limits.
         self.inner.current_tx_accept_rate_bytes_per_second = actual_next_rate;
-        (actual_next_rate, (self.inner.bytes_offered_weighted_average as f64 / minimum_tick_size.as_secs_f64())) // the rate of txs to accept, in bytes per second
+
+        let raw_next_execution_time_rate =
+            (goal_execution_time_rate + self.inner.execution_time_limit_bias).max(0.0);
+        let actual_next_execution_time_rate = raw_next_execution_time_rate.clamp(
+            current_execution_time_rate - max_execution_time_down,
+            current_execution_time_rate + max_execution_time_up,
+        );
+        self.inner
+            .current_tx_accept_rate_execution_time_micros_per_second =
+            actual_next_execution_time_rate;
+
+        (
+            actual_next_rate,
+            self.inner.bytes_offered_weighted_average as f64 / minimum_tick_size.as_secs_f64(),
+            actual_next_execution_time_rate,
+            self.inner.execution_time_offered_weighted_average / minimum_tick_size.as_secs_f64(),
+        )
     }
-
-
 
     /// Get the acceptance probability for a given transaction based on...
     /// 2. the current batch size, target batch size and frequency, and the rate of offered transactions.
@@ -926,26 +994,43 @@ where
     fn get_acceptance_probability(&mut self, baked_tx: &FullyBakedTx) -> f64 {
         // 1. Probability based on batch size and offered rate.
         self.inner.bytes_offered_since_last_tick += baked_tx.len() as u64;
-        let (accept_bps, offered_bps) = self.tick_rate_limiter();
-        let accept_probability_batch_size = accept_bps / offered_bps as f64;
-        
+        self.inner.execution_time_offered_since_last_tick +=
+            self.inner.estimated_tx_execution_time_micros.max(1.0);
+        let (
+            accept_bps,
+            offered_bps,
+            accept_execution_time_micros_per_second,
+            offered_execution_time_micros_per_second,
+        ) = self.tick_rate_limiter();
+        let accept_probability_batch_size = (accept_bps / offered_bps).clamp(0.0, 1.0);
+        let accept_probability_execution_time = (accept_execution_time_micros_per_second
+            / offered_execution_time_micros_per_second)
+            .clamp(0.0, 1.0);
+
         // 2. Probability based on sync distance.
-        // 
+        //
         // We subtract 1 from both the sync distance and the max_allowed_node distance so that a distance of 0 or 1 results in a 0% chance of shedding load
-        let sync_distance = self.inner.latest_info.sync_status.distance().saturating_sub(1) as f64;
-        let max_allowed_node_distance_behind = self.inner
+        let sync_distance = self
+            .inner
+            .latest_info
+            .sync_status
+            .distance()
+            .saturating_sub(1) as f64;
+        let max_allowed_node_distance_behind = self
+            .inner
             .seq_config
             .max_allowed_node_distance_behind
             .saturating_sub(1)
             .max(1) as f64;
         let drop_with_probability = sync_distance / max_allowed_node_distance_behind;
-        let accept_probability_sync_distance = 1.0 - drop_with_probability;
-        let accept_probability = if accept_probability_batch_size < accept_probability_sync_distance {
-            accept_probability_batch_size
-        } else {
-            accept_probability_sync_distance
-        };
-        self.runtime.accept_tx_probability(self.runtime.get_transaction_priority(baked_tx), accept_probability)
+        let accept_probability_sync_distance = (1.0 - drop_with_probability).clamp(0.0, 1.0);
+        let accept_probability = accept_probability_batch_size
+            .min(accept_probability_execution_time)
+            .min(accept_probability_sync_distance);
+        self.runtime.accept_tx_probability(
+            self.runtime.get_transaction_priority(baked_tx),
+            accept_probability,
+        )
     }
 
     async fn process_accept_tx(
@@ -1018,6 +1103,11 @@ where
         // Do not use `?` or return early here. We must always call `rate_limiter.update`
         // to ensure the limits are updated even for unsuccessful transactions.
         let res = res.map_err(AcceptTxError::NewTxError);
+        if res.is_ok() {
+            inner.update_estimated_tx_execution_time_micros(
+                resource_used.inner.execution_time_micros,
+            );
+        }
         inner.rate_limiter.update(token, resource_used);
         let (rx, remaining_slot_gas) = res?;
 

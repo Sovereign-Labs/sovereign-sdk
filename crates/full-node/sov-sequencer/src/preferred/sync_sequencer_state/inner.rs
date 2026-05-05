@@ -106,10 +106,16 @@ where
     pub(crate) approximate_block_time: std::time::Duration,
     pub(crate) moving_average_batch_size: usize,
     pub(crate) size_limit_bias: f64,
+    pub(crate) execution_time_limit_bias: f64,
+    pub(crate) estimated_tx_execution_time_micros: f64,
+    pub(crate) has_estimated_tx_execution_time: bool,
     pub(crate) last_tick_time: std::time::Instant,
     pub(crate) bytes_offered_since_last_tick: u64,
     pub(crate) bytes_offered_weighted_average: u64,
     pub(crate) current_tx_accept_rate_bytes_per_second: f64,
+    pub(crate) execution_time_offered_since_last_tick: f64,
+    pub(crate) execution_time_offered_weighted_average: f64,
+    pub(crate) current_tx_accept_rate_execution_time_micros_per_second: f64,
 }
 
 // We submit metrics when this guard is dropped.
@@ -750,19 +756,61 @@ where
     }
 
     // Implements the I part of a PID controller; we track our error rate over each batch and tune the bias (does our controller over or under shoot the ideal rate?)
-    // We adjust our computed rate by this factor 
+    // We adjust our computed rate by this factor
     fn update_size_limit_bias_on_batch_close(&mut self) {
         let target_size = (self.batch_size_tracker.max_batch_size as u64)
-        .checked_div(20)
-        .and_then(|x| x.checked_mul(19)).unwrap_or(0) as f64;
+            .checked_div(20)
+            .and_then(|x| x.checked_mul(19))
+            .unwrap_or(0) as f64;
         let target_rate = target_size / self.approximate_block_time.as_secs_f64();
-        let err_frac = (target_size - self.batch_size_tracker.current_batch_size as f64) / target_size;
+        let err_frac =
+            (target_size - self.batch_size_tracker.current_batch_size as f64) / target_size;
         let k_i = 0.1; // Tune this constant to make the bias evolve faster or slower. Faster will oscillate more
         let next_bias = self.size_limit_bias + k_i * err_frac * target_rate;
         let bias_min = -0.5 * target_rate;
-        let bias_max =  0.5 * target_rate;
+        let bias_max = 0.5 * target_rate;
         self.size_limit_bias = next_bias.clamp(bias_min, bias_max);
+    }
 
+    // Implements the I part of a PID controller for the batch execution time limit.
+    fn update_execution_time_limit_bias_on_batch_close(&mut self) {
+        let Some(target_execution_time_micros) = self
+            .batch_execution_time_limit_micros
+            .checked_div(20)
+            .and_then(|x| x.checked_mul(19))
+        else {
+            return;
+        };
+        if target_execution_time_micros == 0 {
+            return;
+        }
+
+        let target_execution_time_micros = target_execution_time_micros as f64;
+        let target_rate = target_execution_time_micros / self.approximate_block_time.as_secs_f64();
+        let err_frac = (target_execution_time_micros
+            - self.batch_size_tracker.batch_execution_time_micros as f64)
+            / target_execution_time_micros;
+        let k_i = 0.1; // Tune this constant to make the bias evolve faster or slower. Faster will oscillate more
+        let next_bias = self.execution_time_limit_bias + k_i * err_frac * target_rate;
+        let bias_min = -0.5 * target_rate;
+        let bias_max = 0.5 * target_rate;
+        self.execution_time_limit_bias = next_bias.clamp(bias_min, bias_max);
+    }
+
+    pub(crate) fn update_estimated_tx_execution_time_micros(&mut self, execution_time_micros: u64) {
+        if execution_time_micros == 0 {
+            return;
+        }
+
+        let execution_time_micros = execution_time_micros as f64;
+        if !self.has_estimated_tx_execution_time {
+            self.estimated_tx_execution_time_micros = execution_time_micros;
+            self.has_estimated_tx_execution_time = true;
+            return;
+        }
+
+        self.estimated_tx_execution_time_micros =
+            self.estimated_tx_execution_time_micros * 0.75 + execution_time_micros * 0.25;
     }
 
     /// Closes the current batch.
@@ -776,9 +824,10 @@ where
     pub(crate) async fn close_current_batch(&mut self) {
         // Terminate the batch.
         let forced_txs = self.executor.end_rollup_block().await;
-        self.moving_average_batch_size += self.batch_size_tracker.current_batch_size; 
+        self.moving_average_batch_size += self.batch_size_tracker.current_batch_size;
         self.moving_average_batch_size /= 2;
         self.update_size_limit_bias_on_batch_close();
+        self.update_execution_time_limit_bias_on_batch_close();
         self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
         let checkpoint = self
             .executor
