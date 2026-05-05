@@ -75,6 +75,22 @@ The binary requires a stopped node (the storage manager opens the DB exclusively
 The reported `pre_state_root` and `post_state_root` are written in JSON; verify the
 post-root matches what the rollup loads on restart.
 
+### Behavior change: canonical-address authorization is no longer suppressed
+
+A pre-migration `accounts[C] = A` row was authoritative: `is_authorized_for(X, C)` returned strictly
+`A == X` and bypassed the canonical-address fallback. The refactored `is_authorized_for` returns
+`true` whenever `X == credential_id.into::<S::Address>()` or `account_owners[(X, C)] = true`, with
+no suppression.
+
+The migration converts each `accounts[C] = A` row into `account_owners[(A, C)] = true`. For any
+legacy row where `A != canonical(credential_id)`, the credential gains authorization to act as
+`canonical(credential_id)` after the migration, in addition to keeping authorization for `A`. The
+canonical fallback is computed, not stored, so it cannot be revoked through `account_owners`.
+
+Operators should treat each migrated entry as also implicitly authorizing
+`credential_id.into::<S::Address>()`. If that address holds assets or permissions whose security
+relied on the legacy exclusive semantic, retire the credential before deploying the new binary.
+
 The migration requires NOMT prefix iteration; JMT-backed deployments are not supported.
 
 For non-demo rollups, copy `examples/demo-rollup/src/migrations/legacy_accounts.rs`
