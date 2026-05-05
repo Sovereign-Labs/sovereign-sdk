@@ -213,9 +213,23 @@ fn prepare_core_deploy_data(data_path: &Path, anvil_port: u16, host_address: &st
 
 // Waits for some time while hyperlane-cli exit with status code 0
 async fn wait_till_container_exit(hyperlane_cli_image: ContainerRequest<GenericImage>) -> String {
-    pull_image_with_retries(GenericImage::new(IMAGE, TAG))
-        .await
-        .expect("Failed to pull hyperlane-cli image");
+    if let Err(err) = pull_image_with_retries(GenericImage::new(IMAGE, TAG)).await {
+        let err_text = err.to_string();
+        let auth_failure = err_text.contains("status code 401")
+            || err_text.contains("status code 403")
+            || err_text.contains("denied");
+
+        if auth_failure {
+            tracing::warn!(
+                %err,
+                image = IMAGE,
+                tag = TAG,
+                "Pre-pull failed with registry authorization response; deferring image resolution to Docker on container start"
+            );
+        } else {
+            panic!("Failed to pull hyperlane-cli image: {err}");
+        }
+    }
 
     let container: testcontainers::ContainerAsync<GenericImage> = hyperlane_cli_image
         .start()

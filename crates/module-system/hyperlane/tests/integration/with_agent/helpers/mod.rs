@@ -228,9 +228,23 @@ impl HyperlaneBuilder {
         // try to pull the image from registry before starting tests
         // but don't pull custom images, as they can be local and it would fail
         if !has_custom_image {
-            pull_image_with_retries(image.clone())
-                .await
-                .expect("failed to pull image");
+            if let Err(err) = pull_image_with_retries(image.clone()).await {
+                let err_text = err.to_string();
+                let auth_failure = err_text.contains("status code 401")
+                    || err_text.contains("status code 403")
+                    || err_text.contains("denied");
+
+                if auth_failure {
+                    tracing::warn!(
+                        %err,
+                        %name,
+                        %tag,
+                        "Pre-pull failed with registry authorization response; deferring image resolution to Docker on container start"
+                    );
+                } else {
+                    panic!("failed to pull image: {err}");
+                }
+            }
         }
 
         Self {

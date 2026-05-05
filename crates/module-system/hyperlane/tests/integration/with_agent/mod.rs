@@ -43,7 +43,6 @@ use sov_test_utils::docker::pull_image_with_retries;
 use sov_test_utils::{default_test_signed_transaction, TestSpec, TestUser};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::GenericImage;
-use testcontainers::ImageExt;
 use testcontainers_modules::anvil::AnvilNode;
 use tokio_stream::StreamExt;
 
