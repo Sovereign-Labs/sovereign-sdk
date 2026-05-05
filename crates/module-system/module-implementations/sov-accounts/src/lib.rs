@@ -1,4 +1,7 @@
 #![deny(missing_docs)]
+// Tombstone field `_accounts` makes the `ModuleInfo`-derived
+// `_prefix__accounts` accessor double-underscored.
+#![allow(non_snake_case)]
 #![doc = include_str!("../README.md")]
 mod call;
 mod capabilities;
@@ -91,10 +94,11 @@ pub struct Accounts<S: Spec> {
     /// removing it would shift the discriminants of every following field
     /// and corrupt their on-disk data). Existing entries are migrated to
     /// [`Self::account_owners`] by
-    /// [`crate::migrations::migrate_legacy_accounts_to_owners`] and the
-    /// source rows are deleted.
+    /// [`crate::migrations::apply_legacy_account_migration`] and the source
+    /// rows are deleted. The leading underscore signals to readers that this
+    /// field is intentionally unused.
     #[state]
-    pub(crate) accounts: StateMap<CredentialId, Account<S>>,
+    pub(crate) _accounts: StateMap<CredentialId, Account<S>>,
 
     /// If this field is false, configured genesis authorizations and
     /// `CallMessage::InsertCredentialId` messages will be rejected.

@@ -311,19 +311,13 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         auth_data: &AuthorizationData<S>,
         sequencer: &<S::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
-        state: &mut impl StateAccessor,
+        _state: &mut impl StateAccessor,
         sequencing_data: Option<Bytes>,
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>> {
-        // This should be resolved by the sequencer registry during blob selection
-        let sender = self.accounts.resolve_sender_address(
-            &auth_data.default_address,
-            &auth_data.credential_id,
-            state,
-        )?;
         Ok(Context::new(
-            sender,
+            auth_data.default_address,
             auth_data.credentials.clone(),
             sequencer_rollup_address,
             *sequencer,
@@ -337,19 +331,14 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         &mut self,
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
-        state: &mut impl StateAccessor,
+        _state: &mut impl StateAccessor,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
-        let sender = self.accounts.resolve_sender_address(
-            &auth_data.default_address,
-            &auth_data.credential_id,
-            state,
-        )?;
         // The tx sender & sequencer are the same entity
         Ok(Context::new(
-            sender,
+            auth_data.default_address,
             auth_data.credentials.clone(),
-            sender,
+            auth_data.default_address,
             *sequencer,
             None,
             execution_context,

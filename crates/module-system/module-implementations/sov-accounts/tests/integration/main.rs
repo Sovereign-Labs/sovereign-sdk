@@ -21,6 +21,9 @@ type RT = TestAccountsRuntime<S>;
 
 struct TestData<S: Spec> {
     account_1: TestUser<S>,
+    // `account_2` is intentionally kept in the fixture for the upcoming
+    // `target_address` PR. Until then it has no readers — silence the lint.
+    #[allow(dead_code)]
     account_2: TestUser<S>,
     non_registered_account: TestUser<S>,
 }
@@ -418,77 +421,10 @@ fn test_register_new_account() {
     });
 }
 
-#[test]
-fn test_resolve_sender_address_with_default_address_non_registered() {
-    let (
-        TestData {
-            non_registered_account,
-            ..
-        },
-        runner,
-    ) = setup();
-
-    runner.query_visible_state(|state| {
-        let mut accounts = Accounts::<S>::default();
-        assert_eq!(
-            accounts
-                .resolve_sender_address(
-                    &non_registered_account.address(),
-                    &non_registered_account.credential_id(),
-                    state
-                )
-                .unwrap(),
-            non_registered_account.address()
-        );
-        assert!(!accounts
-            .is_explicitly_authorized(
-                &non_registered_account.address(),
-                &non_registered_account.credential_id(),
-                state
-            )
-            .unwrap());
-    });
-}
-
-/// Genesis-authorized credentials have no `accounts` entry, so credential-only
-/// resolution falls back to the supplied address.
-#[test]
-fn test_resolve_sender_address_registered() {
-    let (
-        TestData {
-            account_1,
-            account_2,
-            ..
-        },
-        runner,
-    ) = setup();
-
-    runner.query_visible_state(|state| {
-        let mut accounts = Accounts::<S>::default();
-
-        assert_eq!(
-            accounts
-                .resolve_sender_address(&account_1.address(), &account_1.credential_id(), state)
-                .unwrap(),
-            account_1.address()
-        );
-        assert_eq!(
-            accounts
-                .resolve_sender_address(&account_2.address(), &account_1.credential_id(), state)
-                .unwrap(),
-            account_2.address()
-        );
-        assert!(accounts
-            .is_authorized_for(&account_1.address(), &account_1.credential_id(), state)
-            .unwrap());
-    });
-}
-
 /// After `InsertCredentialId` from a user, each inserted credential is
-/// authorized under that user's address without getting a credential-indexed
-/// account entry.
+/// authorized under that user's address.
 #[test]
-fn test_resolve_address_with_multi_credential_ownership() {
+fn test_authorize_multiple_credentials_for_same_address() {
     let (
         TestData {
             non_registered_account,
@@ -510,21 +446,8 @@ fn test_resolve_address_with_multi_credential_ownership() {
     );
 
     runner.query_visible_state(|state| {
-        let mut accounts = Accounts::<S>::default();
+        let accounts = Accounts::<S>::default();
         let addr = non_registered_account.address();
-
-        assert_eq!(
-            accounts
-                .resolve_sender_address(&addr, &credential_1, state)
-                .unwrap(),
-            addr
-        );
-        assert_eq!(
-            accounts
-                .resolve_sender_address(&addr, &credential_2, state)
-                .unwrap(),
-            addr
-        );
 
         assert!(accounts
             .is_explicitly_authorized(&addr, &credential_1, state)
@@ -537,29 +460,6 @@ fn test_resolve_address_with_multi_credential_ownership() {
             .unwrap());
         assert!(accounts
             .is_authorized_for(&addr, &credential_2, state)
-            .unwrap());
-    });
-}
-
-/// Resolving a credential with no legacy/custom mapping returns the supplied
-/// fallback without writing account state.
-#[test]
-fn test_resolve_with_different_default_address() {
-    let (TestData { account_1, .. }, runner) = setup();
-
-    let random_credential = TestPrivateKey::generate().pub_key().credential_id();
-
-    runner.query_visible_state(|state| {
-        let mut accounts = Accounts::<S>::default();
-
-        assert_eq!(
-            accounts
-                .resolve_sender_address(&account_1.address(), &random_credential, state)
-                .unwrap(),
-            account_1.address()
-        );
-        assert!(!accounts
-            .is_explicitly_authorized(&account_1.address(), &random_credential, state)
             .unwrap());
     });
 }

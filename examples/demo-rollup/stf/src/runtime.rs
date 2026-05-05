@@ -122,12 +122,10 @@ where
     fn resolve_address<ST: sov_modules_api::StateReader<sov_modules_api::User>>(
         &self,
         default_address: &S::Address,
-        credential_id: &sov_modules_api::CredentialId,
-        state: &mut ST,
+        _credential_id: &sov_modules_api::CredentialId,
+        _state: &mut ST,
     ) -> Result<S::Address, ST::Error> {
-        self.0
-            .accounts
-            .resolve_sender_address_read_only(default_address, credential_id, state)
+        Ok(*default_address)
     }
 
     #[cfg(feature = "native")]

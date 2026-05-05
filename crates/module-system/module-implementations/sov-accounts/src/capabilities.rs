@@ -18,31 +18,6 @@ impl<S: Spec> Accounts<S> {
         )
     }
 
-    /// Resolve the sender's credential to an address.
-    ///
-    /// Returns `default_address` unconditionally. The legacy `accounts` map is
-    /// no longer consulted; operators must run the legacy-accounts migration
-    /// (see [`crate::migrations`]) before deploying a binary that includes
-    /// this code on a chain with pre-upgrade entries.
-    pub fn resolve_sender_address<ST: StateReader<User>>(
-        &mut self,
-        default_address: &S::Address,
-        _credential_id: &CredentialId,
-        _state: &mut ST,
-    ) -> Result<S::Address, ST::Error> {
-        Ok(*default_address)
-    }
-
-    /// Read-only variant of [`Self::resolve_sender_address`].
-    pub fn resolve_sender_address_read_only<ST: StateReader<User>>(
-        &self,
-        default_address: &S::Address,
-        _credential_id: &CredentialId,
-        _state: &mut ST,
-    ) -> Result<S::Address, ST::Error> {
-        Ok(*default_address)
-    }
-
     /// Returns `true` only if `(address, credential_id)` has an explicit entry
     /// in `account_owners`. For the full authorization check including the
     /// canonical fallback, use [`Self::is_authorized_for`].

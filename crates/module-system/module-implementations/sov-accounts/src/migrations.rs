@@ -48,7 +48,7 @@ where
     Storage: NativeStorage,
 {
     let raw_entries: Vec<(CredentialId, Vec<u8>)> = accounts
-        .accounts
+        ._accounts
         .iter_raw(storage)
         .context("failed to start prefix iteration over legacy accounts map")?
         .ok_or_else(|| {
@@ -93,7 +93,7 @@ where
     for (credential_id, account) in entries {
         let owner_key = AccountOwnerKey::new(account.addr, *credential_id);
         accounts.account_owners.set(&owner_key, &true, writer)?;
-        accounts.accounts.delete(credential_id, writer)?;
+        accounts._accounts.delete(credential_id, writer)?;
     }
 
     Ok(MigrationReport {
@@ -146,20 +146,20 @@ mod tests {
             let mut accounts = Accounts::<S>::default();
 
             accounts
-                .accounts
+                ._accounts
                 .set(&cred_1, &Account { addr: addr_1 }, state)
                 .unwrap();
             accounts
-                .accounts
+                ._accounts
                 .set(&cred_2, &Account { addr: addr_2 }, state)
                 .unwrap();
 
             assert_eq!(
-                accounts.accounts.get(&cred_1, state).unwrap(),
+                accounts._accounts.get(&cred_1, state).unwrap(),
                 Some(Account { addr: addr_1 })
             );
             assert_eq!(
-                accounts.accounts.get(&cred_2, state).unwrap(),
+                accounts._accounts.get(&cred_2, state).unwrap(),
                 Some(Account { addr: addr_2 })
             );
 
@@ -170,8 +170,8 @@ mod tests {
             let report = apply_legacy_account_migration(&mut accounts, &entries, state).unwrap();
             assert_eq!(report.entries_migrated, 2);
 
-            assert!(accounts.accounts.get(&cred_1, state).unwrap().is_none());
-            assert!(accounts.accounts.get(&cred_2, state).unwrap().is_none());
+            assert!(accounts._accounts.get(&cred_1, state).unwrap().is_none());
+            assert!(accounts._accounts.get(&cred_2, state).unwrap().is_none());
             assert!(accounts
                 .is_explicitly_authorized(&addr_1, &cred_1, state)
                 .unwrap());
@@ -208,14 +208,14 @@ mod tests {
             let mut accounts = Accounts::<S>::default();
 
             accounts
-                .accounts
+                ._accounts
                 .set(&cred_1, &Account { addr: addr_1 }, state)
                 .unwrap();
 
             apply_legacy_account_migration(&mut accounts, &entries, state).unwrap();
             apply_legacy_account_migration(&mut accounts, &entries, state).unwrap();
 
-            assert!(accounts.accounts.get(&cred_1, state).unwrap().is_none());
+            assert!(accounts._accounts.get(&cred_1, state).unwrap().is_none());
             assert!(accounts
                 .is_explicitly_authorized(&addr_1, &cred_1, state)
                 .unwrap());
