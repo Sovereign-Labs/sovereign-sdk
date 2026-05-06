@@ -10,9 +10,7 @@ use sov_modules_api::OperatingMode;
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
-use sov_test_utils::{
-    TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
-};
+use sov_test_utils::{TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING};
 
 use crate::external_mock_da::{start_external_mock_da, ExternalDa};
 use crate::test_helpers::{test_genesis_paths, DemoRollupSpec};
