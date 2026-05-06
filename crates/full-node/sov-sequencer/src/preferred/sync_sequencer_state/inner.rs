@@ -452,7 +452,7 @@ where
             });
         }
 
-        let batch_status = self.batch_blob_sender_busy();
+        let batch_status = self.batch_blob_sender_status();
         if batch_status.is_busy() {
             return Err(SequencerNotReadyDetails::WaitingOnBlobSender {
                 max_concurrent_batch_blobs,
@@ -547,7 +547,7 @@ where
         )
     }
 
-    fn batch_blob_sender_busy(&self) -> BlobSenderStatus {
+    fn batch_blob_sender_status(&self) -> BlobSenderStatus {
         // Only batch blobs gate batch production.
         BlobSenderStatus {
             in_flight: self.nb_of_concurrent_batch_blob_submissions(),
@@ -599,7 +599,7 @@ where
             }
         }
 
-        if self.batch_blob_sender_busy().is_busy() {
+        if self.batch_blob_sender_status().is_busy() {
             warn!("The blob sender is busy, no batch could be started at this time.");
             return Err(BatchCreationError::BlobSenderBusy);
         }
