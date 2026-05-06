@@ -14,9 +14,6 @@ addresses and records which credentials may act for which addresses.
 
 ## Credential and Address Relations
 
-The module has two credential/address relations. They answer different
-questions and should not be treated as interchangeable.
-
 ### Stateless canonical address
 
 ```text
@@ -42,19 +39,11 @@ New `InsertCredentialId` calls write this relation.
 Callers that need to verify whether a known address may be used with a credential should use
 `is_authorized_for`, which checks the stateless canonical address and `account_owners`.
 
-## Legacy `accounts` map
-
-The module struct retains a tombstoned `accounts: StateMap<CredentialId, Account>` field
-purely to preserve the macro-derived `#[state]` discriminant ordering — it is the first
-state field, so removing it would shift the discriminants of every following field and
-corrupt their on-disk data. The field is `pub(crate)`, never read or written outside
-[`migrations`](src/migrations.rs), and empty after the legacy-accounts migration runs.
-
 ## Upgrade procedure for chains with legacy `accounts` entries
 
-Chains created before the layer-1 reads were dropped may have entries in `accounts`.
-Those entries need to be moved to `account_owners` before deploying the new binary,
-otherwise the credentials they encode will silently lose their authorization.
+The module used to have a separate `accounts` mapping with different semantics, now deprecated and unused.
+Chains whose genesis was before the `accounts` deprecation need to have a migration run at the upgrade height
+(including whenever resyncing from genesis).
 
 The migration ships as a CLI binary in `examples/demo-rollup`:
 
