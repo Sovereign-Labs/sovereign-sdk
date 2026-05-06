@@ -4,7 +4,7 @@
   "description": "Represents the available call messages for interacting with the sov-accounts module.",
   "oneOf": [
     {
-      "description": "Inserts a new credential id for the corresponding Account.",
+      "description": "Authorizes `credential_id` as a signer for the caller's address. Fails if the credential is already authorized for the caller's address.",
       "type": "object",
       "required": [
         "insert_credential_id"
