@@ -84,6 +84,13 @@ export function standardTypeBuilder<
 
 /**
  * The parameters for simulating a runtime call transaction.
+ *
+ * `address_override` is bolted on by hand here (and the corresponding cast
+ * in `simulate` below forces it through `RollupSimulateParams`) because the
+ * published `@sovereign-sdk/client` lags the OpenAPI spec by one Stainless
+ * publish cycle. Once the client is regenerated and the version bumped in
+ * `package.json`, drop both the extension and the cast — the regenerated
+ * `RollupSimulateParams` will carry the field natively.
  */
 export type SimulateParams = Omit<
   SovereignClient.RollupSimulateParams,
@@ -110,6 +117,7 @@ export class StandardRollup<RuntimeCall> extends Rollup<
     const sender = bytesToHex(publicKey);
     const call = runtimeMessage as { [key: string]: unknown };
 
+    // Cast bridges the `address_override` extension; see SimulateParams JSDoc.
     return this.rollup.simulate({
       ...params,
       sender,

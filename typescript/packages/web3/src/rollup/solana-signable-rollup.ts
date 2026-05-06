@@ -142,6 +142,39 @@ function compareByteArrays(left: Uint8Array, right: Uint8Array): number {
   return left.length - right.length;
 }
 
+function resolveMultisigAddressOverride<RuntimeCall>(
+  unsignedTx: UnsignedTransaction<RuntimeCall>,
+  addressOverride?: Uint8Array,
+): {
+  resolvedUnsignedTx: UnsignedTransaction<RuntimeCall>;
+  resolvedAddressOverride?: Uint8Array;
+} {
+  if (addressOverride !== undefined) {
+    return {
+      resolvedUnsignedTx: {
+        ...unsignedTx,
+        address_override: bs58.encode(addressOverride),
+      },
+      resolvedAddressOverride: addressOverride,
+    };
+  }
+
+  if (
+    unsignedTx.address_override !== null &&
+    unsignedTx.address_override !== undefined
+  ) {
+    return {
+      resolvedUnsignedTx: unsignedTx,
+      resolvedAddressOverride: bs58.decode(unsignedTx.address_override),
+    };
+  }
+
+  return {
+    resolvedUnsignedTx: unsignedTx,
+    resolvedAddressOverride: undefined,
+  };
+}
+
 function createSolanaPreamble(
   pubkeys: Uint8Array[],
   chainHash: Uint8Array,
@@ -590,6 +623,8 @@ export class SolanaSignableRollup<RuntimeCall> {
     multisigPubkeys: Uint8Array[],
     addressOverride?: Uint8Array,
   ): Promise<Transaction<RuntimeCall>> {
+    const { resolvedUnsignedTx, resolvedAddressOverride } =
+      resolveMultisigAddressOverride(unsignedTx, addressOverride);
     const pubkey = await signer.publicKey();
     const signerPubkeyHex = bytesToHex(pubkey);
     const multisigPubkeyHexes = multisigPubkeys.map(bytesToHex);
@@ -601,15 +636,15 @@ export class SolanaSignableRollup<RuntimeCall> {
     }
 
     const jsonBytes = await this.createMultisigJsonBytes(
-      unsignedTx,
+      resolvedUnsignedTx,
       multisigAddress,
-      addressOverride,
+      resolvedAddressOverride,
     );
 
     const signature = await signer.sign(jsonBytes);
 
     return this.typeBuilder.transaction({
-      unsignedTx,
+      unsignedTx: resolvedUnsignedTx,
       sender: pubkey,
       signature,
       rollup: this.inner,
@@ -626,6 +661,8 @@ export class SolanaSignableRollup<RuntimeCall> {
     multisigPubkeys: Uint8Array[],
     addressOverride?: Uint8Array,
   ): Promise<Transaction<RuntimeCall>> {
+    const { resolvedUnsignedTx, resolvedAddressOverride } =
+      resolveMultisigAddressOverride(unsignedTx, addressOverride);
     const pubkey = await signer.publicKey();
     const signerPubkeyHex = bytesToHex(pubkey);
     const multisigPubkeyHexes = multisigPubkeys.map(bytesToHex);
@@ -638,15 +675,15 @@ export class SolanaSignableRollup<RuntimeCall> {
 
     const signedMessageWithPreamble =
       await this.createSpecCompliantMultisigSignedMessage(
-        unsignedTx,
+        resolvedUnsignedTx,
         multisigAddress,
         multisigPubkeys,
-        addressOverride,
+        resolvedAddressOverride,
       );
     const signature = await signer.sign(signedMessageWithPreamble);
 
     return this.typeBuilder.transaction({
-      unsignedTx,
+      unsignedTx: resolvedUnsignedTx,
       sender: pubkey,
       signature,
       rollup: this.inner,

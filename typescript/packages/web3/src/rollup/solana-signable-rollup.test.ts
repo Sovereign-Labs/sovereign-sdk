@@ -933,6 +933,33 @@ describe("SolanaSignableRollup", () => {
       expect(parsed).not.toHaveProperty("address_override");
     });
 
+    it("includes tx.address_override in the signed JSON when params.addressOverride is omitted", async () => {
+      const { rollup, multisigAddress, multisigPubkeys, signers, unsignedTx } =
+        await setupMultisigContext();
+      const txAddressOverride = new Uint8Array(32);
+      txAddressOverride.fill(0x24);
+      const txAddressOverrideBs58 = bs58.encode(txAddressOverride);
+
+      const { mock, captured } = captureSignerInput(signers.signer1);
+      const signedTx = await rollup.signTransactionForMultisig(
+        {
+          ...unsignedTx,
+          address_override: txAddressOverrideBs58,
+        },
+        {
+          signer: mock,
+          authenticator: "solanaSimple",
+          multisigAddress,
+          multisigPubkeys,
+        },
+      );
+
+      expect(captured.bytes).toBeDefined();
+      const signedJson = new TextDecoder().decode(captured.bytes!);
+      expect(JSON.parse(signedJson).address_override).toBe(txAddressOverrideBs58);
+      expect((signedTx as any).V0.address_override).toBe(txAddressOverrideBs58);
+    });
+
     it("includes address_override in the signed JSON before version when addressOverride is provided", async () => {
       // Field order matches Rust's `SolanaOffchainUnsignedTransactionV1`: signers sign the raw
       // JSON bytes, so TS and Rust must emit fields in the same order or signatures produced
@@ -944,7 +971,7 @@ describe("SolanaSignableRollup", () => {
       addressOverride.fill(0x42);
 
       const { mock, captured } = captureSignerInput(signers.signer1);
-      await rollup.signTransactionForMultisig(unsignedTx, {
+      const signedTx = await rollup.signTransactionForMultisig(unsignedTx, {
         signer: mock,
         authenticator: "solanaSimple",
         multisigAddress,
@@ -954,13 +981,13 @@ describe("SolanaSignableRollup", () => {
 
       expect(captured.bytes).toBeDefined();
       const signedJson = new TextDecoder().decode(captured.bytes!);
-      expect(JSON.parse(signedJson).address_override).toBe(
-        bs58.encode(addressOverride),
-      );
+      const addressOverrideBs58 = bs58.encode(addressOverride);
+      expect(JSON.parse(signedJson).address_override).toBe(addressOverrideBs58);
       const overrideIdx = signedJson.indexOf('"address_override"');
       const versionIdx = signedJson.indexOf('"version"');
       expect(overrideIdx).toBeGreaterThanOrEqual(0);
       expect(overrideIdx).toBeLessThan(versionIdx);
+      expect((signedTx as any).V0.address_override).toBe(addressOverrideBs58);
     });
 
     it("forwards tx.address_override into the submitted JSON via submitMultisigTransaction", async () => {
