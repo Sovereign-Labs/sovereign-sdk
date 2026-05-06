@@ -5,7 +5,7 @@ use crate::with_agent::configs::{
 use crate::with_agent::helpers::{parse_eth_addr, DEPLOYER_ACCOUNT, EVM_MAILBOX, RELAYER_ACCOUNT};
 use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::HexHash;
-use sov_test_utils::docker::pull_image_with_retries;
+use sov_test_utils::docker::prepull_image_best_effort;
 use std::collections::HashMap;
 use std::path::Path;
 use std::str::FromStr;
@@ -213,9 +213,7 @@ fn prepare_core_deploy_data(data_path: &Path, anvil_port: u16, host_address: &st
 
 // Waits for some time while hyperlane-cli exit with status code 0
 async fn wait_till_container_exit(hyperlane_cli_image: ContainerRequest<GenericImage>) -> String {
-    pull_image_with_retries(GenericImage::new(IMAGE, TAG))
-        .await
-        .expect("Failed to pull hyperlane-cli image");
+    prepull_image_best_effort(GenericImage::new(IMAGE, TAG)).await;
 
     let container: testcontainers::ContainerAsync<GenericImage> = hyperlane_cli_image
         .start()
