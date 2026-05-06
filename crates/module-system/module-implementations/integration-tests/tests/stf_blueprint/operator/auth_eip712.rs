@@ -1,4 +1,3 @@
-use sov_accounts::{Accounts, CallMessage as AccountsCallMessage};
 use sov_address::{EthereumAddress, EvmCryptoSpec};
 use sov_eip712_auth::{
     Eip712Authenticator, Eip712AuthenticatorInput, Eip712AuthenticatorTrait, SchemaProvider,
@@ -22,7 +21,6 @@ use sov_rollup_interface::da::RelevantBlobs;
 use sov_rollup_interface::stf::{TxEffect, TxReceiptContents};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{TestRunner, ValueSetter};
-use sov_test_utils::TransactionTestCase;
 use sov_test_utils::{generate_runtime, EncodeCall, TestStorage, TestUser, TEST_DEFAULT_MAX_FEE};
 use sov_value_setter::CallMessage;
 
@@ -319,28 +317,34 @@ fn duplicate_tx_is_rejected() {
 
 #[test]
 fn test_multisig_signature_verification() {
-    use sov_test_utils::AsUser;
-    let (mut runner, admin) = setup();
-
-    // First, create and register a multisig
+    // Build the multisig first so we can seed genesis with its canonical address
+    // funded. After the accounts refactor, `resolve_sender_address` no longer
+    // writes an `accounts` entry, so the multisig must either be a canonical-
+    // address owner with gas, or be covered by a legacy mapping. Here we pick
+    // the canonical path.
     let multisig_keys = [
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),
     ];
-
-    // Create the multisig and register it
     let multisig = Multisig::new(2, multisig_keys.iter().map(|k| k.pub_key()).collect());
     let multisig_credential_id =
         multisig.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
-    runner.execute_transaction(TransactionTestCase {
-        input: admin.create_plain_message::<RT, Accounts<S>>(
-            AccountsCallMessage::InsertCredentialId(multisig_credential_id),
-        ),
-        assert: Box::new(move |result, _state| {
-            assert!(result.tx_receipt.is_successful());
-        }),
-    });
+    let multisig_user =
+        TestUser::generate_with_default_balance().add_credential_id(multisig_credential_id);
+
+    // The multisig is the sender of every `SetValue` tx below, so ValueSetter's
+    // admin must be the multisig canonical address for the successful-path
+    // assertions to actually reach ValueSetter.
+    let multisig_address = multisig_user.address();
+    let genesis_config = HighLevelOptimisticGenesisConfig::generate()
+        .add_accounts_with_default_balance(2)
+        .add_accounts(vec![multisig_user]);
+    let module_config = sov_value_setter::ValueSetterConfig {
+        admin: multisig_address,
+    };
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.clone().into(), module_config);
+    let mut runner = TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
 
     // Generate a signature from a random private key that's not part of the multisig. We'll use this in some of the test cases.
     let random_private_key = TestPrivateKey::generate();

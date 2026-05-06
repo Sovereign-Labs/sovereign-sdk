@@ -51,7 +51,7 @@ where
     <S::Da as DaSpec>::BlockHeader: Default,
     <S::CryptoSpec as CryptoSpec>::PublicKey: Arbitrary<'a>,
 {
-    /// Creates an arbitrary set of accounts and stores it under `state`.
+    /// Creates arbitrary genesis credential/address authorizations under `state`.
     pub fn arbitrary_workset(
         u: &mut Unstructured<'a>,
         state: &mut StateCheckpoint<S>,
