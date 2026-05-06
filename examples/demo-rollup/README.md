@@ -120,7 +120,7 @@ this case have the TokenCreated Event
 
 ```sh,test-ci,bashtestmd:compare-output
 $ sleep 5
-$ curl -sS http://127.0.0.1:12346/ledger/txs/0xbe16e6f31255f2f5f0a1e39530f91fd7f6480d73a3fbd3d3dcf7265962417db7/events | jq
+$ curl -sS http://127.0.0.1:12346/ledger/txs/0x050b4abd3bb8e3fe1ac2802c9dafc6374e6f2e4f35c0a4f2cd8533cf1d62bf80/events | jq
 [
   {
     "type": "event",
