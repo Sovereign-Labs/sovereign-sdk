@@ -340,6 +340,72 @@ impl LedgerRpcReader {
         self.get_data_range::<EventByNumber, _, _>(range).await
     }
 
+    async fn get_filtered_slot_events<E>(
+        &self,
+        slot_id: &SlotIdentifier,
+        event_key_prefix_filter: Option<Vec<u8>>,
+    ) -> anyhow::Result<Vec<E>>
+    where
+        E: for<'a> TryFrom<(u64, &'a StoredEvent), Error = anyhow::Error> + Send + Sync,
+    {
+        let slot_not_found_err = || anyhow::anyhow!("Slot `{:?}` not found", slot_id);
+
+        let slot_num = self
+            .resolve_slot_identifier(slot_id)
+            .await?
+            .ok_or_else(slot_not_found_err)?;
+        let slot = self
+            .db
+            .get_async::<SlotByNumber>(&slot_num)
+            .await?
+            .ok_or_else(slot_not_found_err)?;
+
+        if slot.batches.start >= slot.batches.end {
+            return Ok(vec![]);
+        }
+
+        let batches = self.get_batch_range(&slot.batches).await?;
+        let (Some(first_batch), Some(last_batch)) = (batches.first(), batches.last()) else {
+            return Ok(vec![]);
+        };
+
+        if first_batch.txs.start >= last_batch.txs.end {
+            return Ok(vec![]);
+        }
+
+        let txs = self
+            .get_tx_range(&(first_batch.txs.start..last_batch.txs.end))
+            .await?;
+        let (Some(first_tx), Some(last_tx)) = (txs.first(), txs.last()) else {
+            return Ok(vec![]);
+        };
+
+        if first_tx.events.start >= last_tx.events.end {
+            return Ok(vec![]);
+        }
+
+        let event_range = first_tx.events.start..last_tx.events.end;
+        let stored_events = self.get_event_range(&event_range).await?;
+        let mut events = Vec::with_capacity(stored_events.len());
+
+        for (offset, event) in stored_events.iter().enumerate() {
+            if let Some(prefix) = &event_key_prefix_filter {
+                if !event.key().inner().starts_with(prefix) {
+                    continue;
+                }
+            }
+
+            let event_number = event_range
+                .start
+                .0
+                .checked_add(offset as u64)
+                .expect("Event number overflow while iterating slot events");
+            events.push((event_number, event).try_into()?);
+        }
+
+        Ok(events)
+    }
+
     pub(crate) async fn get_data_range<T, K, V>(
         &self,
         range: &std::ops::Range<K>,
@@ -675,55 +741,10 @@ impl LedgerStateProvider for LedgerDb {
             + Sync
             + DeserializeOwned,
     {
-        let slot_not_found_err = || anyhow::anyhow!("Slot `{:?}` not found", slot_id);
-
-        let slot_num = self
-            .resolve_slot_identifier(slot_id)
+        self.get_rpc_reader()
             .await?
-            .ok_or_else(slot_not_found_err)?;
-        let slot: SlotResponse<B, T, E> = self
-            .get_slot_by_number(slot_num, QueryMode::Full)
-            .await?
-            .ok_or_else(slot_not_found_err)?;
-
-        let batches = slot
-            .batches
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|b| match b {
-                ItemOrHash::Full(b) => Some(b),
-                _ => None,
-            });
-        let txs = batches.flat_map(|b| {
-            b.txs
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|t| match t {
-                    ItemOrHash::Full(t) => Some(t),
-                    _ => None,
-                })
-        });
-        let event_nums = txs.flat_map(|t| t.event_range);
-
-        let mut events = vec![];
-
-        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
-        for event_num in event_nums {
-            let event = db
-                .get_async::<EventByNumber>(&EventNumber(event_num))
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("Event not found but should be present"))?;
-
-            if let Some(prefix) = &event_key_prefix_filter {
-                if !event.key().inner().starts_with(prefix) {
-                    continue;
-                }
-            }
-
-            events.push((event_num, &event).try_into()?);
-        }
-
-        Ok(events)
+            .get_filtered_slot_events(slot_id, event_key_prefix_filter)
+            .await
     }
 
     // Get X by hash
