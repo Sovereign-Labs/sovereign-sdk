@@ -8,3 +8,4 @@ mod restart;
 mod resync;
 mod test_helpers;
 mod wallet;
+mod zk_proving;
