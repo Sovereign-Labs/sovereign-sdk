@@ -13,7 +13,13 @@ async fn test_replica_receives_txs_from_da() {
     };
 
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
-    let (_, da_shutdown, addr) = create_da_service_periodic().await;
+    let ExternalDa {
+        shutdown: da_shutdown,
+        addr,
+        ..
+    } = start_external_mock_da(periodic_block_producing())
+        .await
+        .unwrap();
 
     let replica = postgres.clone().map(|pg| {
         (
@@ -73,7 +79,15 @@ async fn test_replica_receives_txs_from_postgres() {
     };
 
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
-    let (da_service, addr) = create_da_service_manual().await;
+    let ExternalDa {
+        service: da_service,
+        addr,
+        ..
+    } = start_external_mock_da(BlockProducingConfig::OnBatchSubmit {
+        block_wait_timeout_ms: None,
+    })
+    .await
+    .unwrap();
 
     let replica = postgres
         .clone()

@@ -7,6 +7,7 @@ mod root_hash_checker;
 mod start_stop;
 mod toxi_proxy_helper;
 
+pub use crate::external_mock_da::{start_external_mock_da, ExternalDa};
 use crate::test_helpers::build_transfer_token_tx;
 use crate::test_helpers::test_genesis_source;
 use futures::stream::BoxStream;
@@ -16,10 +17,9 @@ use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_demo_rollup::ExternalMockDemoRollup;
 use sov_full_node_configs::sequencer::SequencerKindConfig;
-use sov_mock_da::storable::rpc::start_server;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::storable::StorableMockDaService;
-use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig};
+use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::OperatingMode;
@@ -46,7 +46,6 @@ use tokio::sync::watch;
 use tokio::time::Duration;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
-const TEST_SEQ_DA_ADDRESS: MockAddress = MockAddress::new([0; 32]);
 const AMOUNT: u128 = 100;
 
 fn random_address() -> <S as Spec>::Address {
@@ -54,31 +53,10 @@ fn random_address() -> <S as Spec>::Address {
     pk.pub_key().credential_id().into()
 }
 
-// Actually creates DA service that produces block on batch submitted.
-async fn create_da_service_manual() -> (StorableMockDaService, SocketAddr) {
-    let da_service = StorableMockDaService::new_in_memory(TEST_SEQ_DA_ADDRESS, 0).await;
-
-    let addr = start_server(da_service.clone(), "127.0.0.1", 0)
-        .await
-        .unwrap();
-
-    (da_service, addr)
-}
-
-async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<()>, SocketAddr) {
-    let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
-    let mut da_config = MockDaConfig::instant_with_sender(TEST_SEQ_DA_ADDRESS);
-    da_config.block_producing = BlockProducingConfig::Periodic {
+fn periodic_block_producing() -> BlockProducingConfig {
+    BlockProducingConfig::Periodic {
         block_time_ms: TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 2,
-    };
-
-    let da_service = StorableMockDaService::from_config(da_config, shutdown_receiver).await;
-
-    let addr = start_server(da_service.clone(), "127.0.0.1", 0)
-        .await
-        .unwrap();
-
-    (da_service, shutdown_sender, addr)
+    }
 }
 
 async fn start_rollup_with_connection_string(
@@ -216,7 +194,13 @@ impl NodeDiscoveryTestSetup {
             }
         };
 
-        let (da_service, da_shutdown, da_addr) = create_da_service_periodic().await;
+        let ExternalDa {
+            service: da_service,
+            shutdown: da_shutdown,
+            addr: da_addr,
+        } = start_external_mock_da(periodic_block_producing())
+            .await
+            .unwrap();
 
         let cluster_info_service =
             ClusterInfoService::spawn(postgres.connection_string(), max_age, None)

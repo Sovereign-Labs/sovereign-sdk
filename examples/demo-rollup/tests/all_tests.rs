@@ -1,5 +1,6 @@
 mod bank;
 mod evm;
+mod external_mock_da;
 mod forced_sequencer_registration;
 mod prover;
 mod replica;
