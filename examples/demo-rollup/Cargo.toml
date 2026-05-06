@@ -23,6 +23,7 @@ sov-stf-runner = { workspace = true }
 sov-metrics = { workspace = true, features = ["native"] }
 
 # Sovereign crates
+sov-accounts = { workspace = true, features = ["native"], optional = true }
 sov-bank = { workspace = true, features = ["native"] }
 sov-blob-storage = { workspace = true, features = ["native"], optional = true }
 sov-chain-state = { workspace = true, features = ["native"], optional = true }
@@ -146,6 +147,7 @@ default = []
 # Used for using different encoding between host and guest
 bincode = ["risc0/bincode", "sov-risc0-adapter/bincode"]
 migration-script = [
+    "dep:sov-accounts",
     "dep:sov-blob-storage",
     "dep:rockbound",
     "dep:bincode",
@@ -171,6 +173,11 @@ path = "src/da_tester/demo_celestia_tester.rs"
 [[bin]]
 name = "mockda-to-celestia-migrate"
 path = "src/migrations/mockda_to_celestia.rs"
+required-features = ["migration-script"]
+
+[[bin]]
+name = "legacy-accounts-migrate"
+path = "src/migrations/legacy_accounts.rs"
 required-features = ["migration-script"]
 
 [[bin]]
