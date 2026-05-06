@@ -17,7 +17,7 @@ fn resume_proving() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn max_concurrent_proof() -> anyhow::Result<()> {
-    let test_rollup = start_test_rollup().await?;
+    let test_rollup = start_test_rollup(0).await?;
 
     let mut aggregated_proof_subscription = test_rollup
         .client

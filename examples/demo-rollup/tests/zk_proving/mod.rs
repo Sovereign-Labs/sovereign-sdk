@@ -1,24 +1,36 @@
 mod max_concurrent_proof_blobs;
 
+use demo_stf::genesis_config::create_genesis_config;
 use futures::StreamExt;
 use sov_demo_rollup::MockDemoRollup;
 use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::OperatingMode;
+use sov_modules_stf_blueprint::GenesisParams;
 use sov_stf_runner::processes::RollupProverConfig;
-use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
-use sov_test_utils::{
-    TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
-};
+use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
+use sov_test_utils::{TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING};
 
-use crate::test_helpers::test_genesis_source;
+use crate::test_helpers::{test_genesis_paths, DemoRollupSpec};
 
 /// Single place for configuring test rollup.
 /// Applies all necessary configuration changes to make it work with the tests.
 /// Starts it and ensures it is ready to accept transactions.
-pub async fn start_test_rollup() -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
+///
+/// `genesis_da_height` overrides the value found in `chain_state.json`.
+pub async fn start_test_rollup(
+    genesis_da_height: u64,
+) -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
+    let operating_mode = OperatingMode::Zk;
+    let mut runtime_config =
+        create_genesis_config::<DemoRollupSpec>(&test_genesis_paths(operating_mode))?;
+    runtime_config.chain_state.genesis_da_height = genesis_da_height;
+    let genesis = GenesisSource::CustomParams(GenesisParams {
+        runtime: runtime_config,
+    });
+
     let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(OperatingMode::Zk),
+        genesis,
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         0,
     )
