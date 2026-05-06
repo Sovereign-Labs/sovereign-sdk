@@ -22,7 +22,7 @@ use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::{CryptoSpec, HexHash, HexString, Spec};
 use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::SequencerKindConfig;
-use sov_test_utils::docker::pull_image_with_retries;
+use sov_test_utils::docker::pre_pull_image_with_auth_fallback;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConfig, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
@@ -228,23 +228,7 @@ impl HyperlaneBuilder {
         // try to pull the image from registry before starting tests
         // but don't pull custom images, as they can be local and it would fail
         if !has_custom_image {
-            if let Err(err) = pull_image_with_retries(image.clone()).await {
-                let err_text = err.to_string();
-                let auth_failure = err_text.contains("status code 401")
-                    || err_text.contains("status code 403")
-                    || err_text.contains("denied");
-
-                if auth_failure {
-                    tracing::warn!(
-                        %err,
-                        %name,
-                        %tag,
-                        "Pre-pull failed with registry authorization response; deferring image resolution to Docker on container start"
-                    );
-                } else {
-                    panic!("failed to pull image: {err}");
-                }
-            }
+            pre_pull_image_with_auth_fallback(image.clone()).await;
         }
 
         Self {

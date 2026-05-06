@@ -93,6 +93,39 @@ where
     unreachable!("loop always returns on Ok or final Err")
 }
 
+/// Pulls an image with retries, tolerating registry-auth failures by logging
+/// a warning instead of erroring. Panics on any other pull failure.
+///
+/// CI runs against `ghcr.io` regularly hit anonymous-rate-limit errors (401/403)
+/// even when the image is already cached locally. In that case Docker can still
+/// resolve it on container start, so a failed pre-pull is not fatal.
+pub async fn pre_pull_image_with_auth_fallback<I>(image: I)
+where
+    I: testcontainers::Image + Clone,
+{
+    let image_name = image.name().to_owned();
+    let image_tag = image.tag().to_owned();
+
+    if let Err(err) = pull_image_with_retries(image).await {
+        let err_text = err.to_string();
+        let auth_failure = err_text.contains("status code 401")
+            || err_text.contains("status code 403")
+            || err_text.contains("denied");
+
+        if auth_failure {
+            tracing::warn!(
+                %err,
+                image = image_name,
+                tag = image_tag,
+                "Pre-pull failed with registry authorization response; \
+                 deferring image resolution to Docker on container start"
+            );
+        } else {
+            panic!("{err}");
+        }
+    }
+}
+
 fn is_retryable_pull_error_message(message: &str) -> bool {
     let message = message.to_ascii_lowercase();
     let is_pull_error = message.contains("pullimage")
