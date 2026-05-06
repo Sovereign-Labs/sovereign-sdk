@@ -14,6 +14,8 @@ workspace = true
 
 [dependencies]
 clap = { workspace = true }
-tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time"] }
+tokio = { workspace = true, features = ["rt-multi-thread", "macros", "time", "net"] }
 reqwest = { workspace = true }
 anyhow = { workspace = true }
+futures = { workspace = true }
+tokio-tungstenite = { workspace = true, features = ["connect", "rustls-tls-native-roots"] }
