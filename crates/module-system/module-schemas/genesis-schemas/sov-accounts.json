@@ -5,33 +5,34 @@
   "type": "object",
   "properties": {
     "accounts": {
-      "description": "Accounts to initialize the rollup.",
+      "description": "Credential/address authorizations to initialize.",
       "type": "array",
       "items": {
         "$ref": "#/$defs/AccountData"
       }
     },
     "enable_custom_account_mappings": {
-      "description": "Enable custom `CredentailId` => `Account` mapping.",
-      "type": "boolean",
-      "default": true
+      "description": "Enable configured credential authorizations and `InsertCredentialId`.",
+      "default": true,
+      "type": "boolean"
     }
   },
   "additionalProperties": false,
-  "required": [
-    "accounts"
-  ],
-  "$defs": {
-    "AccountData": {
-      "description": "Account data for the genesis.",
+  "definitions": {
+    "AccountData_for_Address": {
+      "description": "Credential/address authorization data for genesis.",
       "type": "object",
       "properties": {
         "address": {
-          "description": "Address of the account.",
-          "$ref": "#/$defs/Address"
+          "description": "Address the credential may act as.",
+          "allOf": [
+            {
+              "$ref": "#/$defs/Address"
+            }
+          ]
         },
         "credential_id": {
-          "description": "Credential ID of the account.",
+          "description": "Credential ID to authorize.",
           "type": "string"
         }
       },
