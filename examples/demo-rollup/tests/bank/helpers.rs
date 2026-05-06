@@ -290,8 +290,8 @@ pub async fn start_test_rollup(
         c.max_concurrent_batch_blobs = 16777216;
         c.rollup_prover_config = prover_config;
         c.blob_processing_timeout_secs = 180;
-        c.aggregated_proof_block_jump = 2;
-        c.max_concurrent_proof_blobs = 2;
+        c.aggregated_proof_block_jump = test_case.aggregated_proof_block_jump;
+        c.max_concurrent_proof_blobs = test_case.max_concurrent_proof_blobs;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
             sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS
                 * std::cmp::max(1, test_case.finalization_blocks as u64);
