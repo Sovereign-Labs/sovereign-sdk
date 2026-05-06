@@ -17,7 +17,7 @@ use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::node::ledger_api::FinalityStatus;
 use sov_rollup_interface::zk::aggregated_proof::AggregateProofVerifier;
 use sov_stf_runner::processes::RollupProverConfig;
-use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
+use sov_test_utils::test_rollup::{read_private_key, GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction_with_nonce, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
     TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
@@ -271,6 +271,17 @@ pub async fn start_test_rollup(
     test_case: &TestCase,
     operating_mode: OperatingMode,
 ) -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
+    start_test_rollup_with_genesis(test_case, operating_mode, test_genesis_source(operating_mode))
+        .await
+}
+
+/// Like [`start_test_rollup`], but takes a caller-supplied [`GenesisSource`] so
+/// individual tests can override genesis values (e.g. `genesis_da_height`).
+pub async fn start_test_rollup_with_genesis(
+    test_case: &TestCase,
+    operating_mode: OperatingMode,
+    genesis: GenesisSource<TestSpec, Runtime<TestSpec>>,
+) -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
     let prover_config = match &operating_mode {
         OperatingMode::Operator => RollupProverConfig::Disabled,
         OperatingMode::Zk | OperatingMode::Optimistic => RollupProverConfig::Prove,
@@ -281,7 +292,7 @@ pub async fn start_test_rollup(
     };
 
     let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(operating_mode),
+        genesis,
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         test_case.finalization_blocks,
     )
