@@ -1,45 +1,54 @@
-use sov_modules_api::{CredentialId, Spec, StateAccessor, StateReader, StateWriter};
+use sov_modules_api::{CredentialId, Spec, StateReader, StateWriter};
 use sov_state::User;
 
-use crate::{Account, Accounts};
+use crate::{AccountOwnerKey, Accounts};
 
 impl<S: Spec> Accounts<S> {
-    /// Resolve the sender's public key to an address.
-    /// If the sender is not registered, but a fallback address if provided, immediately registers
-    /// the credential to the fallback and then returns it.
-    pub fn resolve_sender_address<ST: StateAccessor>(
+    /// Authorizes `credential_id` to sign as `address`.
+    pub fn authorize_credential<ST: StateWriter<User>>(
         &mut self,
-        default_address: &S::Address,
+        address: &S::Address,
         credential_id: &CredentialId,
         state: &mut ST,
-    ) -> Result<S::Address, <ST as StateWriter<User>>::Error> {
-        let maybe_address = self.accounts.get(credential_id, state)?.map(|a| a.addr);
-
-        match maybe_address {
-            Some(address) => Ok(address),
-            None => {
-                // 1. Add the credential -> account mapping
-                let new_account = Account {
-                    addr: *default_address,
-                };
-                self.accounts.set(credential_id, &new_account, state)?;
-
-                Ok(*default_address)
-            }
-        }
+    ) -> Result<(), <ST as StateWriter<User>>::Error> {
+        self.account_owners.set(
+            &AccountOwnerKey::new(*address, *credential_id),
+            &true,
+            state,
+        )
     }
 
-    /// Resolve the sender's public key to an address.
-    pub fn resolve_sender_address_read_only<ST: StateReader<User>>(
+    /// Returns `true` only if `(address, credential_id)` has an explicit entry
+    /// in `account_owners`. For the full authorization check including the
+    /// canonical fallback, use [`Self::is_authorized_for`].
+    pub fn is_explicitly_authorized<ST: StateReader<User>>(
         &self,
-        default_address: &S::Address,
+        address: &S::Address,
         credential_id: &CredentialId,
         state: &mut ST,
-    ) -> Result<S::Address, ST::Error> {
-        let maybe_address = self.accounts.get(credential_id, state)?.map(|a| a.addr);
-        match maybe_address {
-            Some(address) => Ok(address),
-            None => Ok(*default_address),
+    ) -> Result<bool, ST::Error> {
+        Ok(self
+            .account_owners
+            .get(&AccountOwnerKey::new(*address, *credential_id), state)?
+            .is_some())
+    }
+
+    /// Returns `true` if `credential_id` is authorized to act as `address`.
+    ///
+    /// Returns `true` when `address` is the canonical address of
+    /// `credential_id` (i.e. `credential_id.into() == address`) or when an
+    /// explicit `account_owners` authorization exists.
+    pub fn is_authorized_for<ST: StateReader<User>>(
+        &self,
+        address: &S::Address,
+        credential_id: &CredentialId,
+        state: &mut ST,
+    ) -> Result<bool, ST::Error> {
+        let canonical_address: S::Address = (*credential_id).into();
+        if canonical_address == *address {
+            return Ok(true);
         }
+
+        self.is_explicitly_authorized(address, credential_id, state)
     }
 }
