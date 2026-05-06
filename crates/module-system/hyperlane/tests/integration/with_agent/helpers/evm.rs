@@ -9,7 +9,7 @@ use sha3::{Digest, Keccak256};
 use sov_hyperlane_integration::{EthAddress, Message};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{Amount, HexHash, HexString};
-use sov_test_utils::docker::{pre_pull_image_with_auth_fallback, print_logs_from_container};
+use sov_test_utils::docker::{print_logs_from_container, pull_image_with_retries};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
@@ -32,7 +32,9 @@ pub struct AnvilRunner {
 impl AnvilRunner {
     pub async fn new() -> Self {
         tracing::info!("Starting anvil container...");
-        pre_pull_image_with_auth_fallback(GenericImage::new(ANVIL_IMAGE, TAG)).await;
+        pull_image_with_retries(GenericImage::new(ANVIL_IMAGE, TAG))
+            .await
+            .expect("failed to pull anvil image");
 
         // Hard code tag, so we don't accidental breakages
         let (container, loaded_state) = {
