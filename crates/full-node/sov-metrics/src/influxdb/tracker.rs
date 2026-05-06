@@ -6,8 +6,8 @@ use std::sync::OnceLock;
 
 use crate::influxdb::KnownMetric;
 use crate::influxdb::{
-    publisher, safe_telegraf_string, Metric, SubmittableMetric, SubmittableMetricKind,
-    DROPPED_METRICS_COUNT,
+    publisher, safe_telegraf_string, write_metadata_fields_for_telegraf, Metric, SubmittableMetric,
+    SubmittableMetricKind, DROPPED_METRICS_COUNT,
 };
 use crate::{MetricsTracker, MonitoringConfig};
 
@@ -40,6 +40,11 @@ pub fn init_metrics_tracker(
 
 impl MetricsTracker {
     /// Quick way to submit a string metric without dealing with [`Metric`].
+    ///
+    /// Prefer defining a dedicated struct that implements [`Metric`] and calling
+    /// [`MetricsTracker::submit`] — this keeps the wire format reviewable and avoids the
+    /// per-call allocation that `ToString` forces. `submit_inline` is retained for
+    /// external SDK users whose downstream code still depends on it.
     pub fn submit_inline(&self, measurement: &'static str, rest: impl ToString) {
         #[derive(Debug)]
         struct InlineMetric(&'static str, String);
@@ -619,9 +624,11 @@ impl KnownMetric for HttpMetrics {
 /// Representation of cycle count and free heap for a particular chunk of execution inside ZK VM guest.
 #[derive(Debug)]
 pub struct ZkVmExecutionChunk {
-    /// Name of the caller site, usually a function or method
+    /// Name of the caller site, usually a function or method. Emitted as the `name` tag.
     pub name: String,
-    /// Metadata associated with the metric. Usually input values collected from the caller function
+    /// Arbitrary key/value metadata captured from the caller's arguments.
+    /// Emitted as string **fields** (not tags) so unbounded values like hashes or heights
+    /// do not cause series-cardinality explosion in InfluxDB.
     pub metadata: Vec<(String, String)>,
     /// A number of ZKVM cycles have been spent on this call.
     pub cycles_count: u64,
@@ -658,32 +665,24 @@ impl Metric for ZkVmExecutionChunk {
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        // We are adding the metadata as measurmement tags in the influxdb line protocol.
-        let metadata = self
-            .metadata
-            .iter()
-            .map(|(key, value)| {
-                // Uses special telegraf formatting
-                let telegraf_formatted_key = safe_telegraf_string(key);
-
-                format!("{telegraf_formatted_key}={value}")
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-
+        // `name` is the only tag (bounded — one value per `#[cycle_tracker]`-annotated
+        // function identifier). `metadata` is emitted as string *fields* rather than tags
+        // because callers pass unbounded values (hashes, heights, tx ids) and using those
+        // as tags would explode InfluxDB series cardinality.
         write!(
             buffer,
-            "{},name={}{metadata} cycles_count={},free_heap_bytes={},memory_used={}",
+            "{},name={} cycles_count={},free_heap_bytes={},memory_used={}",
             self.measurement_name(),
             self.name,
             self.cycles_count,
             self.free_heap_bytes,
             self.memory_used
-        )
+        )?;
+        write_metadata_fields_for_telegraf(buffer, &self.metadata)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[allow(missing_docs)]
 pub enum ZkCircuit {
     Inner,

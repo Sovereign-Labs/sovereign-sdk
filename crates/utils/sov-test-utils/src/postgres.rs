@@ -1,4 +1,4 @@
-use crate::docker::pull_image_with_retries;
+use crate::docker::prepull_image_best_effort;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig};
 use testcontainers::runners::AsyncRunner;
 pub use testcontainers::{ContainerAsync, GenericImage, ImageExt};
@@ -25,9 +25,7 @@ pub async fn create_postgres_container() -> Result<ContainerAsync<Postgres>, Cre
         return Err(CreatePostgresError::DockerNotSupported);
     }
 
-    pull_image_with_retries(GenericImage::new(POSTGRES_IMAGE, POSTGRES_TAG))
-        .await
-        .map_err(CreatePostgresError::DockerError)?;
+    prepull_image_best_effort(GenericImage::new(POSTGRES_IMAGE, POSTGRES_TAG)).await;
 
     let img = Postgres::default()
         .with_tag(POSTGRES_TAG)

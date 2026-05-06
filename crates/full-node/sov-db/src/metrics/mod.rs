@@ -6,9 +6,23 @@ use crate::schema::types::slot_key::{SlotKey, SlotValue};
 
 pub mod nomt;
 
+/// Shape of the state writes performed during one slot's materialization, split into
+/// user-space (module state) and kernel-space (kernel state). Emitted as `sov_state_db_materialization`.
+///
+/// **What healthy looks like:** all fields scale roughly with transaction volume; `max_*` sizes
+/// are stable across slots.
+///
+/// **Diagnostic signals:**
+/// - `max_value_size` suddenly jumping → a module is writing a large blob to state (potential
+///   unbounded-growth bug; find the module via slot replay).
+/// - `cumulative_values_size` climbing without matching transaction volume → state bloat.
+/// - `kernel_items` spiking while user workload is flat → kernel-level anomaly worth tracing.
+///
+/// **Correlate with:** `sov_rollup_slot_execution_time_us` (large materializations slow slot
+/// processing) and `sov_nomt_commit_detailed` (downstream commit cost).
 #[derive(Debug)]
 pub struct StateMaterializationMetrics {
-    /// How many key-value items have been materialized for user space
+    /// How many key-value items have been materialized for user space.
     pub user_items: usize,
     /// How many key-value items have been materialized for kernel space.
     pub kernel_items: usize,
@@ -56,7 +70,7 @@ impl StateMaterializationMetrics {
 
 impl Metric for StateMaterializationMetrics {
     fn measurement_name(&self) -> &'static str {
-        "state_db_materialization"
+        "sov_state_db_materialization"
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {

@@ -1,5 +1,6 @@
 use crate::metrics::{
-    track_sequence_number, PreferredSequencerChannelMetrics, PreferredSequencerChannelMetricsBatch,
+    track_sequence_number, track_sequence_number_delta, PreferredSequencerChannelMetrics,
+    PreferredSequencerChannelMetricsBatch,
 };
 use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
@@ -228,15 +229,8 @@ where
         let next_sequence_number_according_to_node =
             get_next_sequence_number_according_to_node(latest_state_info, &mut runtime);
 
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit_inline(
-                "sov_rollup_sequence_number_delta",
-                format!(
-                    "delta={}i",
-                    (next_sequence_number as i64) - (next_sequence_number_according_to_node as i64)
-                ),
-            );
-        });
+        let delta = (next_sequence_number as i64) - (next_sequence_number_according_to_node as i64);
+        track_sequence_number_delta(delta);
 
         match latest_finalized_sequence_number(latest_state_info, &mut runtime) {
             Some(num) => {
