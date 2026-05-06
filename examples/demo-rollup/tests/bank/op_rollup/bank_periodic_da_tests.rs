@@ -19,6 +19,8 @@ async fn bank_tx_periodic_da_tests() -> anyhow::Result<()> {
     let test_case = TestCase {
         wait_for_aggregated_proof: true,
         finalization_blocks: 0,
+        aggregated_proof_block_jump: 2,
+        max_concurrent_proof_blobs: 1024,
     };
 
     let test_rollup = start_test_rollup(&test_case, OperatingMode::Optimistic).await?;

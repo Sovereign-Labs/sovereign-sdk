@@ -1151,6 +1151,7 @@
         "max_allowed_node_distance_behind",
         "max_batch_size_bytes",
         "max_concurrent_batch_blobs",
+        "max_concurrent_proof_blobs",
         "rollup_address"
       ],
       "properties": {
@@ -1204,6 +1205,12 @@
         },
         "max_concurrent_batch_blobs": {
           "description": "Maximum number of batch blobs sent in parallel before throttling new batch creation. Proof blobs are not counted against this limit.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0.0
+        },
+        "max_concurrent_proof_blobs": {
+          "description": "Maximum number of proof blobs sent in parallel. Batch blobs are not counted against this limit.",
           "type": "integer",
           "format": "uint",
           "minimum": 0.0

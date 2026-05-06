@@ -26,6 +26,7 @@ pub use rest_api::SequencerApis;
 use serde::Serialize;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::TxHash;
 pub use tx_status::TxStatusManager;
 
@@ -92,4 +93,9 @@ pub trait ProofBlobSender: Send + Sync + 'static {
         &self,
         proof_data: SerializedProofWithDetailsBytes,
     ) -> anyhow::Result<()>;
+
+    /// Returns a [`sov_rollup_interface::stf::BlobSenderStatus`] snapshot
+    /// of in-flight proof blobs against the configured
+    /// `max_concurrent_proof_blobs` cap.
+    async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus>;
 }

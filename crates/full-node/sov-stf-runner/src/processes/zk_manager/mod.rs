@@ -35,6 +35,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     genesis_state_root: Ps::StateRoot,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    shutdown_sender: tokio::sync::watch::Sender<()>,
 }
 
 impl<Ps: ProverService> ZkProofManager<Ps>
@@ -52,6 +53,7 @@ where
         genesis_state_root: Ps::StateRoot,
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        shutdown_sender: tokio::sync::watch::Sender<()>,
     ) -> Self {
         Self {
             prover_service: Arc::new(prover_service),
@@ -67,6 +69,7 @@ where
             genesis_state_root,
             stf_info_receiver,
             shutdown_receiver,
+            shutdown_sender,
         }
     }
 
@@ -94,6 +97,7 @@ where
                 metadata_rx,
                 cursor,
                 shutdown_receiver: self.shutdown_receiver.clone(),
+                shutdown_sender: self.shutdown_sender,
             };
             let aggregator_handle = tokio::spawn(async move {
                 if let Err(e) = aggregator.run().await {
@@ -251,6 +255,7 @@ struct AggregatorTask<Ps: ProverService> {
     metadata_rx: mpsc::Receiver<(AggregateProofMetadata<Ps>, u64)>,
     cursor: CursorHandle,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    shutdown_sender: tokio::sync::watch::Sender<()>,
 }
 
 impl<Ps: ProverService> AggregatorTask<Ps>
@@ -273,6 +278,19 @@ where
                     }
                     FutureOrShutdownOutput::Output(Some(item)) => item,
                 };
+
+            let status = self.proof_sender.proof_blob_sender_status().await?;
+            if status.is_busy() {
+                tracing::error!(
+                    in_flight = status.in_flight,
+                    max_concurrent_proof_blobs = status.max_concurrent,
+                    "The zk proof blob sender is busy, which means proofs are not being confirmed by the rollup on time. Triggering shutdown."
+                );
+                if self.shutdown_sender.send(()).is_err() {
+                    tracing::error!("Failed to send primary shutdown signal.");
+                }
+                break;
+            }
 
             let proving_start = std::time::Instant::now();
             let agg_proof = create_aggregate_proof_with_retries(

@@ -25,6 +25,7 @@ use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{AggregatedProofResponse, LedgerStateProvider};
 use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_sequencer::standard::StdSequencerConfig;
@@ -38,7 +39,8 @@ use sov_stf_runner::{
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::{
     TestSpec, TestStorage, TestStorageManager, TEST_BLOB_PROCESSING_TIMEOUT, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MOCK_DA_POLLING_INTERVAL,
+    TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MAX_CONCURRENT_PROOF_BLOBS,
+    TEST_MOCK_DA_POLLING_INTERVAL,
 };
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::Receiver;
@@ -140,6 +142,13 @@ impl ProofSender for MockProofSender {
         _slot_height: SlotNumber,
     ) -> anyhow::Result<()> {
         unimplemented!()
+    }
+
+    async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus> {
+        Ok(BlobSenderStatus {
+            in_flight: 0,
+            max_concurrent: usize::MAX,
+        })
     }
 }
 
@@ -317,6 +326,7 @@ pub async fn initialize_runner_with_stop_at(
             genesis_state_root,
             stf_info_receiver,
             shutdown_receiver.clone(),
+            shutdown_sender.clone(),
         )
         .await
         .unwrap();
@@ -456,6 +466,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             }),
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
+            max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
             blob_processing_timeout_secs: TEST_BLOB_PROCESSING_TIMEOUT,
             extension: None,
         },

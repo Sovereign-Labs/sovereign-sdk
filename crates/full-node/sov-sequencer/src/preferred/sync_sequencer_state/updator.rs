@@ -19,6 +19,7 @@ use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::Storage;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -122,6 +123,17 @@ where
             reason,
         })
         .await?;
+
+        self.recv(recv).await
+    }
+
+    pub(crate) async fn proof_blob_sender_status_msg(
+        &self,
+        reason: &'static str,
+    ) -> Result<BlobSenderStatus, SequencerStateUpdatorError> {
+        let (resp, recv) = oneshot::channel();
+        self.send(Message::BlobSenderStatus { resp, reason })
+            .await?;
 
         self.recv(recv).await
     }

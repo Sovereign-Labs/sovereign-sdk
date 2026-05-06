@@ -586,6 +586,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         genesis_state_root,
                         stf_info_receiver,
                         secondary_shutdown_receiver,
+                        main_shutdown_sender.clone(),
                     )
                     .await?
                 }
