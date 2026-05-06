@@ -12141,6 +12141,7 @@ dependencies = [
  "serde_yaml",
  "sov-api-spec",
  "sov-db",
+ "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
  "sov-rest-utils",

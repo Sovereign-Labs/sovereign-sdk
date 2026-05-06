@@ -18,6 +18,9 @@ use crate::common::{SequencerTxStream, SubscriptionStreamError};
 use crate::preferred::{AcceptedTx, Confirmation};
 use crate::rest_api::ApiAcceptedTx;
 
+const SEQUENCER_EVENTS_WS_ROUTE: &str = "/sequencer/events/ws";
+const SEQUENCER_TXS_WS_ROUTE: &str = "/sequencer/txs/ws";
+
 type TxStreamItem<S, Rt> = Result<ApiAcceptedTx<Confirmation<S, Rt>>, SubscriptionStreamError>;
 type GetNextChunkFuture<S, Rt> = Pin<
     Box<
@@ -285,15 +288,16 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
                     Ok(ApiAcceptedTx::from_accepted_tx::<Rt, S>(tx))
                 }
                 Err(BroadcastStreamRecvError::Lagged(skipped)) => {
-                    Err(SubscriptionStreamError::Lagged {
+                    Err(SubscriptionStreamError::lagged_with_identifiers_for_route(
                         skipped,
-                        disconnected_at: last_tx_number,
-                        resumed_at: last_tx_number.map(|id| {
+                        last_tx_number,
+                        last_tx_number.map(|id| {
                             id.checked_add(skipped)
                                 .and_then(|id| id.checked_add(1))
                                 .expect("Overflow when adding tx number and skipped count")
                         }),
-                    })
+                        SEQUENCER_TXS_WS_ROUTE,
+                    ))
                 }
             })
             .boxed()
@@ -319,11 +323,12 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
                     Err(BroadcastStreamRecvError::Lagged(skipped)) => {
                         // last_event_number is Copy, so this captures a copy
                         futures::stream::once(async move {
-                            Err(SubscriptionStreamError::Lagged {
+                            Err(SubscriptionStreamError::lagged_with_identifiers_for_route(
                                 skipped,
-                                disconnected_at: last_event_number,
-                                resumed_at: None, // Unknown until next event arrives
-                            })
+                                last_event_number,
+                                None, // Unknown until next event arrives
+                                SEQUENCER_EVENTS_WS_ROUTE,
+                            ))
                         })
                         .right_stream()
                     }
@@ -508,15 +513,16 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
                     result
                         .map(|tx| ApiAcceptedTx::from_accepted_tx::<Rt, S>(tx))
                         .map_err(|BroadcastStreamRecvError::Lagged(n)| {
-                            SubscriptionStreamError::Lagged {
-                                skipped: n,
-                                disconnected_at: last_sent_id,
-                                resumed_at: last_sent_id.map(|id| {
+                            SubscriptionStreamError::lagged_with_identifiers_for_route(
+                                n,
+                                last_sent_id,
+                                last_sent_id.map(|id| {
                                     id.checked_add(n)
                                         .and_then(|id| id.checked_add(1))
                                         .expect("Overflow when adding tx number and skipped count")
                                 }),
-                            }
+                                SEQUENCER_TXS_WS_ROUTE,
+                            )
                         })
                 })
             });

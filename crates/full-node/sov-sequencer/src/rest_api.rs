@@ -2,6 +2,8 @@
 
 use std::net::SocketAddr;
 use std::pin::Pin;
+use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
+use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use axum::extract::ws::WebSocket;
@@ -41,6 +43,42 @@ const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Maximum time to wait for a pong response before considering the connection dead.
 const PONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+const OUTBOUND_WS_RESPONSE_CHANNEL_CAPACITY: usize = 10;
+const SEQUENCER_EVENTS_WS_ROUTE: &str = "/sequencer/events/ws";
+const SEQUENCER_TXS_WS_ROUTE: &str = "/sequencer/txs/ws";
+const SEQUENCER_TX_STATUS_WS_ROUTE: &str = "/sequencer/txs/{tx_hash}/ws";
+const SEQUENCER_TX_SUBMIT_WS_ROUTE: &str = "/sequencer/txs/submit/ws";
+
+static SEQUENCER_EVENTS_WS_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
+static SEQUENCER_TXS_WS_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
+static SEQUENCER_TX_STATUS_WS_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
+static SEQUENCER_TX_SUBMIT_WS_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
+
+struct WsConnectionGuard {
+    route: &'static str,
+    counter: &'static AtomicU64,
+}
+
+impl WsConnectionGuard {
+    fn new(route: &'static str, counter: &'static AtomicU64) -> Self {
+        let active_connections = counter.fetch_add(1, Ordering::Relaxed) + 1;
+        crate::metrics::track_sequencer_ws_connections(route, active_connections);
+        Self { route, counter }
+    }
+}
+
+impl Drop for WsConnectionGuard {
+    fn drop(&mut self) {
+        let previous = self.counter.fetch_sub(1, Ordering::Relaxed);
+        let active_connections = previous.saturating_sub(1);
+        crate::metrics::track_sequencer_ws_connections(self.route, active_connections);
+    }
+}
+
+fn outbound_ws_queue_depth<T>(sender: &tokio::sync::mpsc::Sender<T>) -> usize {
+    sender.max_capacity().saturating_sub(sender.capacity())
+}
 
 /// Emits HTTP metrics for a WebSocket message.
 fn emit_ws_metrics(
@@ -238,9 +276,19 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         let ws = ws.max_message_size(config_value!("MAX_TX_SIZE") * 2);
 
         Ok(ws.on_upgrade(move |mut socket| async move {
+            let _connection_guard =
+                WsConnectionGuard::new(SEQUENCER_TX_SUBMIT_WS_ROUTE, &SEQUENCER_TX_SUBMIT_WS_CONNECTIONS);
             let mut shutdown_receiver = state.shutdown_receiver.clone();
             // Channel sends pre-serialized JSON strings to avoid double serialization
-            let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel::<String>(10);
+            let (outbound_tx, mut outbound_rx) =
+                tokio::sync::mpsc::channel::<String>(OUTBOUND_WS_RESPONSE_CHANNEL_CAPACITY);
+            let inflight_submit_tasks = Arc::new(AtomicUsize::new(0));
+            crate::metrics::track_submit_ws_pressure(
+                "connected",
+                0,
+                0,
+                outbound_tx.max_capacity(),
+            );
             // Use interval_at to delay the first ping until after a full interval of inactivity
             let mut ping_interval =
                 tokio::time::interval_at(tokio::time::Instant::now() + PING_INTERVAL, PING_INTERVAL);
@@ -265,6 +313,15 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                                     Ok(WsMessage { id, contents }) => {
                                         let sender = outbound_tx.clone();
                                         let state = state.clone();
+                                        let inflight_submit_tasks = inflight_submit_tasks.clone();
+                                        let current_inflight =
+                                            inflight_submit_tasks.fetch_add(1, Ordering::Relaxed) + 1;
+                                        crate::metrics::track_submit_ws_pressure(
+                                            "task_spawned",
+                                            current_inflight,
+                                            outbound_ws_queue_depth(&sender),
+                                            sender.max_capacity(),
+                                        );
                                         // Spawn a task to handle the transaction submission and forward the response back to the main handler loop for this subscription
                                         tokio::spawn(async move {
                                             let raw_tx = RawTx::new(contents.body.blob);
@@ -304,9 +361,26 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
 
                                             emit_ws_metrics(start.elapsed(), response_status, serialized.len() as u64);
 
+                                            if sender.capacity() == 0 {
+                                                crate::metrics::track_submit_ws_pressure(
+                                                    "queue_full_before_send",
+                                                    inflight_submit_tasks.load(Ordering::Relaxed),
+                                                    outbound_ws_queue_depth(&sender),
+                                                    sender.max_capacity(),
+                                                );
+                                            }
                                             if let Err(e) = sender.send(serialized).await {
                                                 tracing::warn!(?e, "Error sending response to client. Could not respond because outbound ws channel was dropped. This usually means the seqeuncer is shutting down.");
-                                            };
+                                            }
+                                            let remaining_inflight = inflight_submit_tasks
+                                                .fetch_sub(1, Ordering::Relaxed)
+                                                .saturating_sub(1);
+                                            crate::metrics::track_submit_ws_pressure(
+                                                "task_finished",
+                                                remaining_inflight,
+                                                outbound_ws_queue_depth(&sender),
+                                                sender.max_capacity(),
+                                            );
                                         });
                                     }
                                     Err(e) => {
@@ -387,6 +461,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 }
             }
 
+            crate::metrics::track_submit_ws_pressure(
+                "closing",
+                inflight_submit_tasks.load(Ordering::Relaxed),
+                outbound_ws_queue_depth(&outbound_tx),
+                outbound_tx.max_capacity(),
+            );
             // Drop the local handle to the channel for outbound messages.
             // This guarantees that the channel will be closed as soon as all in-flight tasks have resolved.
             drop(outbound_tx);
@@ -411,6 +491,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         let tx_status_manager = state.sequencer.tx_status_manager().clone();
 
         ws.on_upgrade(move |mut socket| async move {
+            let _connection_guard = WsConnectionGuard::new(
+                SEQUENCER_TX_STATUS_WS_ROUTE,
+                &SEQUENCER_TX_STATUS_WS_CONNECTIONS,
+            );
             let (_dropper, receiver) = tx_status_manager.subscribe(tx_hash.0);
 
             // After "terminal" tx status updates (i.e. after which
@@ -446,7 +530,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 })
                 // Tx status subscriptions don't have sequential identifiers
                 .map_err(|BroadcastStreamRecvError::Lagged(n)| {
-                    SubscriptionStreamError::lagged_without_identifiers(n)
+                    SubscriptionStreamError::lagged_without_identifiers_for_route(
+                        n,
+                        SEQUENCER_TX_STATUS_WS_ROUTE,
+                    )
                 })
             })
             .boxed();
@@ -549,6 +636,8 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         use futures::future;
         let config = compression.map(|q| q.0.to_config()).unwrap_or_default();
         ws.on_upgrade(move |socket| async move {
+            let _connection_guard =
+                WsConnectionGuard::new(SEQUENCER_EVENTS_WS_ROUTE, &SEQUENCER_EVENTS_WS_CONNECTIONS);
             let stream = state
                 .sequencer
                 .subscribe_events()
@@ -578,6 +667,8 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         let start_from = start_from.map(|start_from| start_from.0.start_from);
         let config = compression.map(|q| q.0.to_config()).unwrap_or_default();
         ws.on_upgrade(move |socket| async move {
+            let _connection_guard =
+                WsConnectionGuard::new(SEQUENCER_TXS_WS_ROUTE, &SEQUENCER_TXS_WS_CONNECTIONS);
             let stream =
                 Self::subscribe_txs_starting_from(start_from, state.sequencer.clone()).await;
             serve_generic_ws_subscription_with_config(
