@@ -4,17 +4,17 @@ use serde_with::{serde_as, DisplayFromStr};
 use sov_modules_api::prelude::*;
 use sov_modules_api::{CredentialId, GenesisState};
 
-use crate::{Account, Accounts};
+use crate::{AccountOwnerKey, Accounts};
 
-/// Account data for the genesis.
+/// Credential/address authorization data for genesis.
 #[serde_as]
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct AccountData<Address> {
-    /// Credential ID of the account.
+    /// Credential ID to authorize.
     #[serde_as(as = "DisplayFromStr")]
     pub credential_id: CredentialId,
-    /// Address of the account.
+    /// Address the credential may act as.
     pub address: Address,
 }
 
@@ -23,9 +23,9 @@ pub struct AccountData<Address> {
 #[serde(deny_unknown_fields)]
 #[schemars(bound = "S: ::sov_modules_api::Spec", rename = "AccountConfig")]
 pub struct AccountConfig<S: Spec> {
-    /// Accounts to initialize the rollup.
+    /// Credential/address authorizations to initialize.
     pub accounts: Vec<AccountData<S::Address>>,
-    /// Enable custom `CredentailId` => `Account` mapping.
+    /// Enable configured credential authorizations and `InsertCredentialId`.
     #[serde(default = "default_true")]
     pub enable_custom_account_mappings: bool,
 }
@@ -51,13 +51,15 @@ impl<S: Spec> Accounts<S> {
         }
 
         for acc in &config.accounts {
-            if self.accounts.get(&acc.credential_id, state)?.is_some() {
-                bail!("Account already exists")
+            let key = AccountOwnerKey::new(acc.address, acc.credential_id);
+            if self.account_owners.get(&key, state)?.is_some() {
+                bail!(
+                    "Authorization already exists for address {} and credential {}",
+                    acc.address,
+                    acc.credential_id
+                )
             }
-
-            let new_account = Account { addr: acc.address };
-
-            self.accounts.set(&acc.credential_id, &new_account, state)?;
+            self.authorize_credential(&acc.address, &acc.credential_id, state)?;
         }
 
         Ok(())
