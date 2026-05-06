@@ -956,7 +956,9 @@ describe("SolanaSignableRollup", () => {
 
       expect(captured.bytes).toBeDefined();
       const signedJson = new TextDecoder().decode(captured.bytes!);
-      expect(JSON.parse(signedJson).address_override).toBe(txAddressOverrideBs58);
+      expect(JSON.parse(signedJson).address_override).toBe(
+        txAddressOverrideBs58,
+      );
       expect((signedTx as any).V0.address_override).toBe(txAddressOverrideBs58);
     });
 
