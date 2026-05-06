@@ -31,6 +31,7 @@ use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use std::boxed::Box;
 use std::marker::PhantomData;
 use std::net::IpAddr;
@@ -778,6 +779,19 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
+    async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus> {
+        let in_flight = self
+            .inner
+            .lock()
+            .await
+            .blob_sender
+            .nb_of_concurrent_proof_blob_submissions();
+        Ok(BlobSenderStatus {
+            in_flight,
+            max_concurrent: self.config.max_concurrent_proof_blobs,
+        })
+    }
+
     async fn produce_and_publish_proof_blob(
         &self,
         proof_blob: SerializedProofWithDetailsBytes,

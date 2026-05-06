@@ -31,6 +31,8 @@ type TestSpec = DemoRollupSpec;
 pub(crate) struct TestCase {
     pub(crate) wait_for_aggregated_proof: bool,
     pub(crate) finalization_blocks: u32,
+    pub(crate) aggregated_proof_block_jump: usize,
+    pub(crate) max_concurrent_proof_blobs: usize,
 }
 
 impl TestCase {
@@ -288,7 +290,8 @@ pub async fn start_test_rollup(
         c.max_concurrent_batch_blobs = 16777216;
         c.rollup_prover_config = prover_config;
         c.blob_processing_timeout_secs = 180;
-        c.aggregated_proof_block_jump = 5;
+        c.aggregated_proof_block_jump = 2;
+        c.max_concurrent_proof_blobs = 2;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
             sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS
                 * std::cmp::max(1, test_case.finalization_blocks as u64);

@@ -123,7 +123,7 @@ pub const TEST_NUM_CACHE_WARMUP_WORKERS: usize = 3;
 pub const TEST_MAX_CONCURRENT_BATCH_BLOBS: usize = 16;
 
 /// The maximum number of concurrent proof blobs.
-pub const TEST_MAX_CONCURRENT_PROOF_BLOBS: usize = 8;
+pub const TEST_MAX_CONCURRENT_PROOF_BLOBS: usize = TEST_MAX_CONCURRENT_BATCH_BLOBS;
 
 /// The default max fee to set for a transaction. This should be enough to be able to execute most standard transactions for the test rollup.
 pub const TEST_DEFAULT_MAX_FEE: Amount = Amount::new(100_000_000_000);

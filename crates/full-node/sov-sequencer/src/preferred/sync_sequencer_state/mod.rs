@@ -31,6 +31,7 @@ use sov_modules_api::GasSpec;
 use sov_modules_api::VersionReader;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::Storage;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
@@ -67,6 +68,10 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
         resp: oneshot::Sender<Result<(), SequencerNotReadyDetails>>,
         max_concurrent_batch_blobs: usize,
         height_to_stop_at: Option<RollupHeight>,
+        reason: &'static str,
+    },
+    BlobSenderStatus {
+        resp: oneshot::Sender<BlobSenderStatus>,
         reason: &'static str,
     },
 
@@ -170,6 +175,7 @@ pub(crate) fn create<S, Rt>(
     executor_events_sender: ExecutorEventsSender<S, Rt>,
     sequence_number_of_next_blob: SequenceNumber,
     in_flight_batch_blobs: Arc<AtomicUsize>,
+    in_flight_proof_blobs: Arc<AtomicUsize>,
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
@@ -218,6 +224,7 @@ where
         sequence_number_of_open_batch: None,
         next_unassigned_sequence_number: sequence_number_of_next_blob,
         in_flight_batch_blobs,
+        in_flight_proof_blobs,
         has_finished_startup: false,
         metrics: Vec::with_capacity(128),
         is_ready,

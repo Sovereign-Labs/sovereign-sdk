@@ -129,6 +129,7 @@ where
             ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
 
         let in_flight_batch_blobs = blob_sender.nb_of_in_flight_batch_blobs();
+        let in_flight_proof_blobs = blob_sender.nb_of_in_flight_proof_blobs();
 
         let (forced_tx_batch_notifier, _) = broadcast::channel(1);
         let rollup_exec_config = RollupBlockExecutorConfig {
@@ -169,6 +170,7 @@ where
             executor_events_sender,
             next_sequence_number,
             in_flight_batch_blobs,
+            in_flight_proof_blobs,
             stop_at_rollup_height,
             rollup_exec_config.clone(),
             cached_txs.write_handle(),
