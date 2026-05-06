@@ -63,6 +63,25 @@ impl SubscriptionStreamError {
             resumed_at: None,
         }
     }
+
+    pub fn lagged_without_identifiers_for_route(skipped: u64, route: &'static str) -> Self {
+        crate::metrics::track_sequencer_ws_lag(route, skipped);
+        Self::lagged_without_identifiers(skipped)
+    }
+
+    pub fn lagged_with_identifiers_for_route(
+        skipped: u64,
+        disconnected_at: Option<u64>,
+        resumed_at: Option<u64>,
+        route: &'static str,
+    ) -> Self {
+        crate::metrics::track_sequencer_ws_lag(route, skipped);
+        Self::Lagged {
+            skipped,
+            disconnected_at,
+            resumed_at,
+        }
+    }
 }
 
 impl ReportableWsError for SubscriptionStreamError {
