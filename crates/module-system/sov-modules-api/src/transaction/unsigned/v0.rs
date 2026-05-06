@@ -29,7 +29,8 @@ pub struct UnsignedTransactionV0<R: TransactionCallable, S: Spec> {
     pub uniqueness: UniquenessData,
     /// Data related to fees and gas handling.
     pub details: TxDetails<S>,
-    /// Signer-declared address override. See [`AuthorizationData::address_override`] for routing semantics.
+    /// Signer-declared address override. This field is part of the signed bytes.
+    /// See [`crate::capabilities::AuthorizationData::address_override`] for routing semantics.
     #[serde(default)]
     pub address_override: Option<S::Address>,
 }
