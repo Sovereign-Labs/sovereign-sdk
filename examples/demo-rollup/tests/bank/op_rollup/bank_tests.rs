@@ -35,6 +35,8 @@ async fn test_chain_hash_override() -> anyhow::Result<()> {
         &TestCase {
             wait_for_aggregated_proof: false,
             finalization_blocks: 0,
+            aggregated_proof_block_jump: 5,
+            max_concurrent_proof_blobs: 1024,
         },
         OperatingMode::Operator,
     )
@@ -145,7 +147,6 @@ async fn test_chain_hash_override_grace_period() -> anyhow::Result<()> {
     let test_rollup = start_test_rollup(
         &TestCase {
             wait_for_aggregated_proof: false,
-            finalization_blocks: 0,
             finalization_blocks: 0,
             aggregated_proof_block_jump: 5,
             max_concurrent_proof_blobs: 1024,
