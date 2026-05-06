@@ -839,15 +839,8 @@ where
                             tracing::trace!(
                                 from = %old_last,
                                 up_to_inc = %incoming_slot_num,
-                                "Going to notify about finalized slots"
-                            );
-                            tracing::trace!(
-                                from = %old_last,
-                                up_to_inc = %incoming_slot_num,
                                 "Created lazy websocket notification stream for finalized slots"
                             );
-                            // Returning `Some(...)` yields items to the *downstream*;
-                            // returning `None` would end the stream.
                             Some(
                                 futures::stream::iter(old_last.range_inclusive(incoming_slot_num))
                                     .then(move |slot_number| {
