@@ -276,10 +276,9 @@ fn correct_signature_is_accepted() {
 
 #[test]
 fn test_multisig_signature_verification() {
-    // Build the multisig first so we can seed genesis with its canonical address
-    // funded. After the accounts refactor, the sender resolver no longer auto-
-    // creates an `accounts` entry, so the multisig must be funded at its
-    // canonical address. Here we pick the canonical path.
+    // Build the multisig first so we can seed genesis with its canonical address funded.
+    // After the accounts refactor, the sender resolver no longer auto-creates an `accounts` entry,
+    // so the multisig must be funded at its canonical address. Here we pick the canonical path.
     let multisig_keys = [
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),
