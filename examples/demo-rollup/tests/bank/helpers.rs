@@ -271,8 +271,12 @@ pub async fn start_test_rollup(
     test_case: &TestCase,
     operating_mode: OperatingMode,
 ) -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
-    start_test_rollup_with_genesis(test_case, operating_mode, test_genesis_source(operating_mode))
-        .await
+    start_test_rollup_with_genesis(
+        test_case,
+        operating_mode,
+        test_genesis_source(operating_mode),
+    )
+    .await
 }
 
 /// Like [`start_test_rollup`], but takes a caller-supplied [`GenesisSource`] so
