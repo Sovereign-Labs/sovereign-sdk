@@ -305,8 +305,8 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
         params: &SimulateParameters,
         state: &mut StateCheckpoint<S>,
     ) -> Result<AuthorizationData<S>, SimulateError> {
-        let credential_id = CredentialId::from_str(&params.sender).map_err(|_| {
-            SimulateError::InvalidInput("failed to parse sender credential id".to_owned())
+        let credential_id = CredentialId::from_str(&params.sender).map_err(|e| {
+            SimulateError::InvalidInput(format!("failed to parse sender credential id: {e:?}"))
         })?;
         let address_override = params
             .address_override

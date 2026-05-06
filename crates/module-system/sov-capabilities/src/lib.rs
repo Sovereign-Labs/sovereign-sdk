@@ -346,17 +346,32 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         &mut self,
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
-        _state: &mut impl StateAccessor,
+        state: &mut impl StateAccessor,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
-        // `address_override` is intentionally ignored: this path runs for sequencer
-        // self-registration before `account_owners` has any entries to authorize against,
-        // so the only meaningful sender is the credential's canonical address.
-        // The tx sender & sequencer are the same entity.
+        // The tx sender & sequencer are the same entity on this path. If the signer
+        // declared an `address_override`, the credential must be explicitly authorized
+        // for it (same invariant as `resolve_context`); otherwise we fall back to the
+        // credential's canonical address.
+        let address = match auth_data.address_override {
+            Some(address_override) => {
+                anyhow::ensure!(
+                    self.accounts.is_explicitly_authorized(
+                        &address_override,
+                        &auth_data.credential_id,
+                        state,
+                    )?,
+                    "not authorized for address override"
+                );
+                address_override
+            }
+            None => auth_data.default_address,
+        };
+
         Ok(Context::new(
-            auth_data.default_address,
+            address,
             auth_data.credentials.clone(),
-            auth_data.default_address,
+            address,
             *sequencer,
             None,
             execution_context,
