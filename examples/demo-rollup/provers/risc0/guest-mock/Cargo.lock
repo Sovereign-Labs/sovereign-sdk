@@ -4029,11 +4029,11 @@ dependencies = [
  "bech32",
  "borsh",
  "bs58",
- "convert_case 0.6.0",
  "darling",
  "hex",
  "proc-macro2",
  "quote",
+ "serde_derive_internals",
  "syn 2.0.114",
  "syn_derive",
 ]
