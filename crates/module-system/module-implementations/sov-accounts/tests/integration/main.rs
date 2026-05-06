@@ -21,16 +21,14 @@ type RT = TestAccountsRuntime<S>;
 
 struct TestData<S: Spec> {
     account_1: TestUser<S>,
-    // `account_2` is intentionally kept in the fixture for the upcoming
-    // `address_override` PR. Until then it has no readers — silence the lint.
-    #[allow(dead_code)]
     account_2: TestUser<S>,
     non_registered_account: TestUser<S>,
 }
 
 /// We set up genesis with three accounts, two of which have custom credentials
-/// authorized at genesis.
-fn setup() -> (TestData<S>, TestRunner<RT, S>) {
+/// authorized at genesis. Returns the genesis so callers can extend it
+/// (e.g. push extra `account_owners` mappings) before building the runner.
+fn setup_genesis() -> (TestData<S>, GenesisConfig<S>) {
     let genesis_config = HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![
         TestUser::generate_with_default_balance().add_credential_id([0u8; 32].into()),
         TestUser::generate_with_default_balance().add_credential_id([1u8; 32].into()),
@@ -43,16 +41,20 @@ fn setup() -> (TestData<S>, TestRunner<RT, S>) {
 
     let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
 
-    let runner = TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
-
     (
         TestData {
             account_1: user_1,
             account_2: user_2,
             non_registered_account: user_3,
         },
-        runner,
+        genesis,
     )
+}
+
+fn setup() -> (TestData<S>, TestRunner<RT, S>) {
+    let (data, genesis) = setup_genesis();
+    let runner = TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+    (data, runner)
 }
 
 fn setup_with_disable_custom_account_mappings() -> (TestUser<S>, TestRunner<RT, S>) {
@@ -846,22 +848,28 @@ fn test_v0_address_override_none_uses_default_resolver() {
 /// authorized resolves context as `X`.
 #[test]
 fn test_v0_address_override_some_authorized_succeeds() {
-    let sender = TestUser::<S>::generate_with_default_balance();
-    let alice = TestUser::<S>::generate_with_default_balance();
-    let alice_address = alice.address();
-
-    let genesis_config =
-        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![sender.clone(), alice]);
-    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let (
+        TestData {
+            account_2,
+            non_registered_account,
+            ..
+        },
+        mut genesis,
+    ) = setup_genesis();
+    let alice_address = account_2.address();
     genesis.accounts.accounts.push(AccountData {
-        credential_id: sender.credential_id(),
+        credential_id: non_registered_account.credential_id(),
         address: alice_address,
     });
     let mut runner: TestRunner<RT, S> =
         TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
 
     let inner_credential = TestPrivateKey::generate().pub_key().credential_id();
-    let tx = make_v0_tx(&sender, inner_credential, Some(alice_address));
+    let tx = make_v0_tx(
+        &non_registered_account,
+        inner_credential,
+        Some(alice_address),
+    );
 
     runner.execute_transaction(TransactionTestCase {
         input: submit_v0(tx),

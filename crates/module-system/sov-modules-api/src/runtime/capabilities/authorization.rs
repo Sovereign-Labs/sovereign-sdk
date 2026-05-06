@@ -105,8 +105,8 @@ pub struct AuthorizationData<S: Spec> {
 
     /// Signer-declared override of the default execution address.
     ///
-    /// `None` ⇒ resolve to the credential's default address.
-    /// `Some(X)` ⇒ requires an explicit `(X, credential_id)` entry in `account_owners`;
+    /// `None` => resolve to the credential's default address.
+    /// `Some(X)` => requires an explicit `(X, credential_id)` entry in `account_owners`;
     /// the transaction is skipped otherwise.
     ///
     /// Set by authenticators that carry a signed `address_override` (sov-tx V0/V1,
