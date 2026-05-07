@@ -2,9 +2,10 @@ use std::num::NonZero;
 use std::sync::Arc;
 
 use backon::{BackoffBuilder, ExponentialBuilder};
+use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput, SyncStatus};
 use sov_rollup_interface::stf::ProofSender;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use tokio::sync::mpsc;
@@ -33,8 +34,10 @@ pub struct ZkProofManager<Ps: ProverService> {
     proof_sender: Box<dyn ProofSender>,
     backoff_policy: ExponentialBuilder,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
+    da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
     shutdown_sender: tokio::sync::watch::Sender<()>,
+    replace_outer_proof_after_resync: bool,
 }
 
 impl<Ps: ProverService> ZkProofManager<Ps>
@@ -50,8 +53,10 @@ where
         max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
         proof_sender: Box<dyn ProofSender>,
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
+        da_sync_state: Arc<DaSyncState>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
         shutdown_sender: tokio::sync::watch::Sender<()>,
+        replace_outer_proof_after_resync: bool,
     ) -> Self {
         Self {
             prover_service: Arc::new(prover_service),
@@ -65,8 +70,10 @@ where
                 .with_max_delay(Duration::from_secs(BACKOFF_POLICY_MAX_DELAY))
                 .with_max_times(BACKOFF_POLICY_MAX_NUM_RETRIES),
             stf_info_receiver,
+            da_sync_state,
             shutdown_receiver,
             shutdown_sender,
+            replace_outer_proof_after_resync,
         }
     }
 
@@ -107,8 +114,10 @@ where
                 aggregated_proof_block_jump: self.aggregated_proof_block_jump,
                 eager_proof_submission: self.eager_proof_submission,
                 stf_info_receiver: self.stf_info_receiver,
+                da_sync_state: self.da_sync_state,
                 metadata_tx,
                 shutdown_receiver: self.shutdown_receiver,
+                replace_outer_proof_after_resync: self.replace_outer_proof_after_resync,
             };
             if let Err(e) = intake.run().await {
                 tracing::error!(error = ?e, "Intake task failed");
@@ -127,8 +136,10 @@ struct IntakeTask<Ps: ProverService> {
     aggregated_proof_block_jump: NonZero<usize>,
     eager_proof_submission: bool,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
+    da_sync_state: Arc<DaSyncState>,
     metadata_tx: mpsc::Sender<(AggregateProofMetadata<Ps>, u64)>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    replace_outer_proof_after_resync: bool,
 }
 
 impl<Ps: ProverService> IntakeTask<Ps>
@@ -136,6 +147,20 @@ where
     Ps::DaService: DaService<Error = anyhow::Error>,
 {
     async fn run(mut self) -> anyhow::Result<()> {
+        let synced_da_height = loop {
+            if !self.replace_outer_proof_after_resync {
+                break 0;
+            }
+
+            match self.da_sync_state.status() {
+                SyncStatus::Synced { synced_da_height } => break synced_da_height,
+                SyncStatus::Syncing { .. } => {
+                    sleep(Duration::from_millis(1000)).await;
+                    continue;
+                }
+            }
+        };
+
         loop {
             match future_or_shutdown(self.stf_info_receiver.read_next(), &self.shutdown_receiver)
                 .await
@@ -157,6 +182,10 @@ where
                         block_header = %stf_info.da_block_header().display(),
                         "Received STF info"
                     );
+
+                    if stf_info.da_block_header().height() < synced_da_height {
+                        continue;
+                    }
 
                     self.process_stf_info(stf_info).await?;
                 }

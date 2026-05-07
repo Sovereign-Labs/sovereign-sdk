@@ -157,6 +157,7 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
         ledger_db: &LedgerDb,
+        replace_outer_proof_after_resync: bool,
     ) -> (Self::ProverService, Option<SlotNumber>) {
         let previous_public_data: Option<
             AggregatedProofPublicData<
@@ -173,8 +174,14 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
         let latest_proof_final_slot = previous_public_data.as_ref().map(|p| p.final_slot_number);
 
         let inner_vm = MockZkvmHost::new_non_blocking();
-        let outer_vm =
-            MockZkvmHost::new_non_blocking_with_previous_anchor(previous_public_data.as_ref());
+
+        let previous = if replace_outer_proof_after_resync {
+            None
+        } else {
+            previous_public_data.as_ref()
+        };
+
+        let outer_vm = MockZkvmHost::new_non_blocking_with_previous_anchor(previous);
         let da_verifier = Default::default();
 
         let num_threads = rollup_config.proof_manager.prover_thread_count();

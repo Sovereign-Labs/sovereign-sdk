@@ -246,6 +246,9 @@ impl OuterZkvmHost for MockZkvmHost {
             .map(|(_, bp)| bp)
             .collect::<Vec<_>>();
 
+        // Mirror how the real aggregation circuit derives `origin_state_root`:
+        // carry it forward from the previous aggregation when one exists, otherwise
+        // take the initial state root of the first inner proof (the chain's genesis).
         let public_data = if let Some(prev) = previous.as_ref() {
             let origin_state_root = prev.deserialize_genesis_state_root();
             let public_data = AggregatedProofPublicData::from_block_proofs(

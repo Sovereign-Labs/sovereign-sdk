@@ -1,4 +1,5 @@
 mod max_concurrent_proof_blobs;
+mod skip_proving_on_resync;
 
 use demo_stf::genesis_config::create_genesis_config;
 use futures::StreamExt;
@@ -37,6 +38,7 @@ pub async fn start_test_rollup(
     genesis_da_height: u64,
     external_da: &ExternalDa,
     max_concurrent_proof_blobs: usize,
+    replace_outer_proof_after_resync: bool,
 ) -> anyhow::Result<TestRollup<ExternalMockDemoRollup<Native>>> {
     // Make sure the DA has produced the genesis block before the rollup tries
     // to read from it.
@@ -68,6 +70,7 @@ pub async fn start_test_rollup(
         c.blob_processing_timeout_secs = 180;
         c.aggregated_proof_block_jump = 2;
         c.max_concurrent_proof_blobs = max_concurrent_proof_blobs;
+        c.replace_outer_proof_after_resync = replace_outer_proof_after_resync;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
             sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
             sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
