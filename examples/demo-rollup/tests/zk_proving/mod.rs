@@ -25,6 +25,7 @@ use crate::test_helpers::{test_genesis_paths, DemoRollupSpec};
 pub async fn start_test_rollup(
     genesis_da_height: u64,
     external_da: &ExternalDa,
+    max_concurrent_proof_blobs: usize,
 ) -> anyhow::Result<TestRollup<ExternalMockDemoRollup<Native>>> {
     // Make sure the DA has produced the genesis block before the rollup tries
     // to read from it.
@@ -55,7 +56,7 @@ pub async fn start_test_rollup(
         c.rollup_prover_config = RollupProverConfig::Prove;
         c.blob_processing_timeout_secs = 180;
         c.aggregated_proof_block_jump = 2;
-        c.max_concurrent_proof_blobs = 2;
+        c.max_concurrent_proof_blobs = max_concurrent_proof_blobs;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
             sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
             sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
