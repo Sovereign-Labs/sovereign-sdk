@@ -2,9 +2,10 @@ use std::num::NonZero;
 use std::sync::Arc;
 
 use backon::{BackoffBuilder, ExponentialBuilder};
+use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput, SyncStatus};
 use sov_rollup_interface::stf::ProofSender;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use tokio::sync::mpsc;
@@ -34,6 +35,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     backoff_policy: ExponentialBuilder,
     genesis_state_root: Ps::StateRoot,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
+    da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
     shutdown_sender: tokio::sync::watch::Sender<()>,
 }
@@ -52,6 +54,7 @@ where
         proof_sender: Box<dyn ProofSender>,
         genesis_state_root: Ps::StateRoot,
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
+        da_sync_state: Arc<DaSyncState>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
         shutdown_sender: tokio::sync::watch::Sender<()>,
     ) -> Self {
@@ -68,6 +71,7 @@ where
                 .with_max_times(BACKOFF_POLICY_MAX_NUM_RETRIES),
             genesis_state_root,
             stf_info_receiver,
+            da_sync_state,
             shutdown_receiver,
             shutdown_sender,
         }
@@ -111,6 +115,7 @@ where
                 aggregated_proof_block_jump: self.aggregated_proof_block_jump,
                 eager_proof_submission: self.eager_proof_submission,
                 stf_info_receiver: self.stf_info_receiver,
+                da_sync_state: self.da_sync_state,
                 metadata_tx,
                 shutdown_receiver: self.shutdown_receiver,
             };
@@ -131,6 +136,7 @@ struct IntakeTask<Ps: ProverService> {
     aggregated_proof_block_jump: NonZero<usize>,
     eager_proof_submission: bool,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
+    da_sync_state: Arc<DaSyncState>,
     metadata_tx: mpsc::Sender<(AggregateProofMetadata<Ps>, u64)>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
 }
@@ -140,6 +146,18 @@ where
     Ps::DaService: DaService<Error = anyhow::Error>,
 {
     async fn run(mut self) -> anyhow::Result<()> {
+        let synced_da_height = loop {
+            match self.da_sync_state.status() {
+                SyncStatus::Synced { synced_da_height } => break synced_da_height,
+                SyncStatus::Syncing {
+                    synced_da_height,
+                    target_da_height,
+                } => {
+                    continue;
+                }
+            }
+        };
+
         loop {
             match future_or_shutdown(self.stf_info_receiver.read_next(), &self.shutdown_receiver)
                 .await
@@ -161,6 +179,12 @@ where
                         block_header = %stf_info.da_block_header().display(),
                         "Received STF info"
                     );
+
+                    let xxx = stf_info.da_block_header().height();
+                    if xxx < synced_da_height {
+                        println!("XXXXX {xxx} {synced_da_height}");
+                        continue;
+                    }
 
                     self.process_stf_info(stf_info).await?;
                 }

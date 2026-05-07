@@ -19,6 +19,10 @@ async fn skip_proving_on_resync() -> anyhow::Result<()> {
     let test_rollup = start_test_rollup(3, &external_da, 20).await?;
     let mut proof_sub = test_rollup.subscribe_aggregated_proof().await?;
 
+    for _ in 0..5 {
+        let _ = proof_sub.next().await.unwrap().unwrap();
+    }
+
     let h = test_rollup.height().await;
     println!("Start Height {}", h);
     let builder = test_rollup.shutdown().await?;
@@ -34,7 +38,15 @@ async fn skip_proving_on_resync() -> anyhow::Result<()> {
     let test_rollup = builder.start_test_rollup().await?;
     let h = test_rollup.height().await;
     println!("Start Height {}", h);
-    test_rollup.wait_for_rollup_height_advance_by(15).await;
+
+    let mut proof_sub = test_rollup.subscribe_aggregated_proof().await?;
+
+    for _ in 0..5 {
+        println!("WITING FOR PROOF");
+        let _ = proof_sub.next().await.unwrap().unwrap();
+    }
+
+    //test_rollup.wait_for_rollup_height_advance_by(15).await;
     let h = test_rollup.height().await;
     println!("End Height {}", h);
 

@@ -585,6 +585,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         proof_sender,
                         genesis_state_root,
                         stf_info_receiver,
+                        runner.da_sync_state(),
                         secondary_shutdown_receiver,
                         main_shutdown_sender.clone(),
                     )

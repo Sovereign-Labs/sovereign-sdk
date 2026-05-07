@@ -147,7 +147,7 @@ impl<S: Spec> ProverIncentives<S> {
             }
         };
 
-        println!("Sucess {:?}", public_outputs.final_slot_number);
+        println!("===Sucess {:?}", public_outputs.final_slot_number);
 
         #[cfg(feature = "native")]
         sov_metrics::track_metrics(|tracker| {

@@ -517,12 +517,6 @@ where
             .target_da_height
             .load(std::sync::atomic::Ordering::Acquire);
 
-        println!(
-            "SYNC  last_finalized_height: {} next_da_height: {next_da_height} target_da_height: {target_da_height} status: {:?} ",
-            self.sync_fetcher.last_finalized_height, self
-            .sync_state.status()
-        );
-
         let filtered_block = if next_da_height <= self.sync_fetcher.last_finalized_height {
             // no reorg will happen for this height; it is safe to just pull it from the fetcher,
             // which could have this block fetched already

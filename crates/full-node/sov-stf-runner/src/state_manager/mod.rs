@@ -442,6 +442,7 @@ where
             );
         }
 
+        //self.da_sync_state.is
         if let Some(stf_info_sender) = &self.stf_info_sender {
             tracing::trace!("Going to materialize StateTransitionInfo");
             let stf_info = StateTransitionInfo {

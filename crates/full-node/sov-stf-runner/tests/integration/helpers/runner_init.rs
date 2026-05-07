@@ -325,6 +325,7 @@ pub async fn initialize_runner_with_stop_at(
             }),
             genesis_state_root,
             stf_info_receiver,
+            runner.da_sync_state(),
             shutdown_receiver.clone(),
             shutdown_sender.clone(),
         )
