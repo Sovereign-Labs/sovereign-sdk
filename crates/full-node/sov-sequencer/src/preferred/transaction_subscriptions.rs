@@ -606,7 +606,6 @@ pub(crate) struct TransactionCacheInner<S: Spec, Rt: Runtime<S>> {
 
 #[cfg(test)]
 mod tests {
-    use sov_attester_incentives::Event as AttesterIncentivesEvent;
     use sov_db::ledger_db::SlotCommit;
     use sov_mock_da::{MockAddress, MockBlob, MockBlock};
     use sov_modules_api::{
@@ -614,6 +613,7 @@ mod tests {
         RuntimeEventResponse, SuccessfulTxContents, TransactionReceipt, TxEffect,
         TxReceiptContents,
     };
+    use sov_test_utils::runtime::sov_attester_incentives::Event as AttesterIncentivesEvent;
     use sov_test_utils::storage::SimpleLedgerStorageManager;
     use sov_test_utils::{generate_optimistic_runtime, TestSpec as S};
 
