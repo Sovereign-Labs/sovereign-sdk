@@ -107,7 +107,10 @@ async fn main() -> Result<()> {
     let args = Args::parse();
     ensure!(args.instances > 0, "--instances must be greater than zero");
     if let Some(cycles) = args.cycles {
-        ensure!(cycles > 0, "--cycles must be greater than zero when provided");
+        ensure!(
+            cycles > 0,
+            "--cycles must be greater than zero when provided"
+        );
     }
 
     if args.pause_secs >= SERVER_PING_INTERVAL_SECS {
@@ -212,7 +215,12 @@ async fn run_endpoint(endpoint: EndpointInstance, args: Args) -> Result<Endpoint
     })
 }
 
-async fn run_cycle(path: &str, label: &str, cycle_number: usize, args: &Args) -> Result<CycleSummary> {
+async fn run_cycle(
+    path: &str,
+    label: &str,
+    cycle_number: usize,
+    args: &Args,
+) -> Result<CycleSummary> {
     let cycle_label = format!("{label} cycle#{cycle_number}");
     let ws_url = build_ws_url(&args.base_url, path)?;
 
@@ -496,9 +504,6 @@ mod tests {
             instance_index: 3,
         };
 
-        assert_eq!(
-            endpoint.label(),
-            "ledger_slots_finalized_ws_children_1#03"
-        );
+        assert_eq!(endpoint.label(), "ledger_slots_finalized_ws_children_1#03");
     }
 }
