@@ -127,6 +127,7 @@ impl<S: Spec> ProverIncentives<S> {
             )
             .map_err(Into::<anyhow::Error>::into)?;
 
+        println!("Verification");
         // Don't return an error for invalid proofs - those are expected and shouldn't cause reverts.
         let verification_result =
             <<S as Spec>::OuterZkvm as Zkvm>::Verifier::verify_with_proof::<
@@ -145,6 +146,8 @@ impl<S: Spec> ProverIncentives<S> {
                 ));
             }
         };
+
+        println!("Sucess {:?}", public_outputs.final_slot_number);
 
         #[cfg(feature = "native")]
         sov_metrics::track_metrics(|tracker| {

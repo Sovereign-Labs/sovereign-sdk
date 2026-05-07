@@ -281,6 +281,7 @@ where
 
             let status = self.proof_sender.proof_blob_sender_status().await?;
             if status.is_busy() {
+                println!("BUSY error");
                 tracing::error!(
                     in_flight = status.in_flight,
                     max_concurrent_proof_blobs = status.max_concurrent,
