@@ -25,7 +25,7 @@ use sov_rest_utils::handle_bad_ws_request;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription,
     serve_generic_ws_subscription_with_config, ApiResult, FilterQuery, PageSelection,
-    PaginatedResponse, Pagination, Path, Query, WsSubscriptionConfig,
+    PaginatedResponse, Pagination, Path, Query, WsConnectionGauge, WsSubscriptionConfig,
 };
 use sov_rest_utils::{get_client_ip, WsMessage};
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
@@ -56,25 +56,13 @@ static SEQUENCER_TXS_WS_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
 static SEQUENCER_TX_STATUS_WS_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
 static SEQUENCER_TX_SUBMIT_WS_CONNECTIONS: AtomicU64 = AtomicU64::new(0);
 
-struct WsConnectionGuard {
+fn enter_sequencer_ws_guard(
     route: &'static str,
     counter: &'static AtomicU64,
-}
-
-impl WsConnectionGuard {
-    fn new(route: &'static str, counter: &'static AtomicU64) -> Self {
-        let active_connections = counter.fetch_add(1, Ordering::Relaxed) + 1;
-        crate::metrics::track_sequencer_ws_connections(route, active_connections);
-        Self { route, counter }
-    }
-}
-
-impl Drop for WsConnectionGuard {
-    fn drop(&mut self) {
-        let previous = self.counter.fetch_sub(1, Ordering::Relaxed);
-        let active_connections = previous.saturating_sub(1);
-        crate::metrics::track_sequencer_ws_connections(self.route, active_connections);
-    }
+) -> WsConnectionGauge<impl Fn(u64)> {
+    WsConnectionGauge::enter(counter, move |n| {
+        crate::metrics::track_sequencer_ws_connections(route, n);
+    })
 }
 
 fn outbound_ws_queue_depth<T>(sender: &tokio::sync::mpsc::Sender<T>) -> usize {
@@ -277,8 +265,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         let ws = ws.max_message_size(config_value!("MAX_TX_SIZE") * 2);
 
         Ok(ws.on_upgrade(move |mut socket| async move {
-            let _connection_guard =
-                WsConnectionGuard::new(SEQUENCER_TX_SUBMIT_WS_ROUTE, &SEQUENCER_TX_SUBMIT_WS_CONNECTIONS);
+            let _connection_guard = enter_sequencer_ws_guard(
+                SEQUENCER_TX_SUBMIT_WS_ROUTE,
+                &SEQUENCER_TX_SUBMIT_WS_CONNECTIONS,
+            );
             let mut shutdown_receiver = state.shutdown_receiver.clone();
             // Channel sends pre-serialized JSON strings to avoid double serialization
             let (outbound_tx, mut outbound_rx) =
@@ -492,7 +482,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         let tx_status_manager = state.sequencer.tx_status_manager().clone();
 
         ws.on_upgrade(move |mut socket| async move {
-            let _connection_guard = WsConnectionGuard::new(
+            let _connection_guard = enter_sequencer_ws_guard(
                 SEQUENCER_TX_STATUS_WS_ROUTE,
                 &SEQUENCER_TX_STATUS_WS_CONNECTIONS,
             );
@@ -637,8 +627,10 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         use futures::future;
         let config = compression.map(|q| q.0.to_config()).unwrap_or_default();
         ws.on_upgrade(move |socket| async move {
-            let _connection_guard =
-                WsConnectionGuard::new(SEQUENCER_EVENTS_WS_ROUTE, &SEQUENCER_EVENTS_WS_CONNECTIONS);
+            let _connection_guard = enter_sequencer_ws_guard(
+                SEQUENCER_EVENTS_WS_ROUTE,
+                &SEQUENCER_EVENTS_WS_CONNECTIONS,
+            );
             let stream = state
                 .sequencer
                 .subscribe_events()
@@ -669,7 +661,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         let config = compression.map(|q| q.0.to_config()).unwrap_or_default();
         ws.on_upgrade(move |socket| async move {
             let _connection_guard =
-                WsConnectionGuard::new(SEQUENCER_TXS_WS_ROUTE, &SEQUENCER_TXS_WS_CONNECTIONS);
+                enter_sequencer_ws_guard(SEQUENCER_TXS_WS_ROUTE, &SEQUENCER_TXS_WS_CONNECTIONS);
             let stream =
                 Self::subscribe_txs_starting_from(start_from, state.sequencer.clone()).await;
             serve_generic_ws_subscription_with_config(

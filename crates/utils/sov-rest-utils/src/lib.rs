@@ -49,6 +49,7 @@ pub use pagination::{PageSelection, PaginatedResponse, Pagination};
 use serde::Serialize;
 pub use sorting::{Sorting, SortingOrder};
 use std::fmt::Debug;
+use std::sync::atomic::{AtomicU64, Ordering};
 use tower_http::cors::CorsLayer;
 use tower_http::propagate_header::PropagateHeaderLayer;
 use tower_http::trace::TraceLayer;
@@ -185,6 +186,33 @@ const MAX_BATCH_SIZE: usize = 128;
 pub struct WsSubscriptionConfig {
     /// When true, messages are batched into arrays and gzip-compressed before sending.
     pub compress: bool,
+}
+
+/// RAII gauge backed by a static counter. Increments on construction and
+/// decrements on `Drop`, calling `on_change` with the new count both times.
+///
+/// Used for tracking active WebSocket connections per route while keeping
+/// `sov-rest-utils` agnostic of the metrics backend: the caller supplies a
+/// closure that emits whatever metric they want.
+pub struct WsConnectionGauge<F: Fn(u64)> {
+    counter: &'static AtomicU64,
+    on_change: F,
+}
+
+impl<F: Fn(u64)> WsConnectionGauge<F> {
+    /// Increments `counter` and calls `on_change` with the new count.
+    pub fn enter(counter: &'static AtomicU64, on_change: F) -> Self {
+        let active = counter.fetch_add(1, Ordering::Relaxed) + 1;
+        on_change(active);
+        Self { counter, on_change }
+    }
+}
+
+impl<F: Fn(u64)> Drop for WsConnectionGauge<F> {
+    fn drop(&mut self) {
+        let prev = self.counter.fetch_sub(1, Ordering::Relaxed);
+        (self.on_change)(prev.saturating_sub(1));
+    }
 }
 
 /// Interval between ping frames sent to the client for keepalive.

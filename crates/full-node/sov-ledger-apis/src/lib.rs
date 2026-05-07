@@ -37,9 +37,22 @@ use sov_rollup_interface::node::ledger_api::{
 use sov_rollup_interface::stf::TxReceiptContents;
 use tokio::sync::watch;
 
-use crate::metrics::{track_finalized_ws_replay, LedgerWsConnectionGuard};
+use crate::metrics::{
+    aggregated_proofs_ws_guard, finalized_ws_guard, head_ws_guard, slot_events_ws_guard,
+    track_finalized_ws_replay,
+};
 
 type PathMap = Path<HashMap<String, NumberOrHash>>;
+
+fn finalized_ws_replayed_slots(
+    last_notified_slot: SlotNumber,
+    incoming_slot_num: SlotNumber,
+) -> Option<u64> {
+    let replayed_slots = incoming_slot_num
+        .saturating_delta(last_notified_slot)
+        .saturating_add(1);
+    (replayed_slots > 1).then_some(replayed_slots)
+}
 
 /// Maximum value of `page[cursor]` accepted on the prefix path of `list_events`.
 /// Bounds per-request work since the current implementation re-reads everything
@@ -709,7 +722,7 @@ where
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         ws.on_upgrade(|socket| async move {
-            let _connection_guard = LedgerWsConnectionGuard::slot_events();
+            let _connection_guard = slot_events_ws_guard();
             let subscription = state
                 .ledger
                 .subscribe_slots()
@@ -748,7 +761,7 @@ where
         ws: WebSocketUpgrade,
     ) -> impl IntoResponse {
         ws.on_upgrade(|socket| async move {
-            let _connection_guard = LedgerWsConnectionGuard::aggregated_proofs();
+            let _connection_guard = aggregated_proofs_ws_guard();
             let subscription = state.ledger.subscribe_proof_saved().map(|data| {
                 AggregatedProof::try_from(data).map_err(|e| {
                     tracing::error!(
@@ -775,7 +788,7 @@ where
         let ledger = state.ledger;
 
         ws.on_upgrade(move |socket| async move {
-            let _connection_guard = LedgerWsConnectionGuard::head(query_mode);
+            let _connection_guard = head_ws_guard(query_mode);
             let subscription = ledger
                 .subscribe_slots()
                 .then(|slot_num| {
@@ -813,7 +826,7 @@ where
         let ledger = state.ledger;
 
         ws.on_upgrade(move |socket| async move {
-            let _connection_guard = LedgerWsConnectionGuard::finalized(query_mode);
+            let _connection_guard = finalized_ws_guard(query_mode);
             let initial_slot = match ledger.get_latest_finalized_slot_number().await {
                 Ok(s) => s,
                 Err(error) => {
@@ -841,9 +854,11 @@ where
                         // Not ideal, since slot results with an error won't get re-notified.
                         // An incoming slot is going to be included in the notification.
                         *last_notified_slot = incoming_slot_num.saturating_add(1);
-                        let replayed_slots =
-                            incoming_slot_num.saturating_delta(old_last).saturating_add(1);
-                        track_finalized_ws_replay(query_mode, replayed_slots);
+                        if let Some(replayed_slots) =
+                            finalized_ws_replayed_slots(old_last, incoming_slot_num)
+                        {
+                            track_finalized_ws_replay(query_mode, replayed_slots);
+                        }
 
                         let ledger = ledger.clone();
                         async move {
@@ -1120,6 +1135,26 @@ mod tests {
         assert_eq!(
             NumberOrHash::Hash(HexHash::new([0; 32])).to_string(),
             "0x0000000000000000000000000000000000000000000000000000000000000000",
+        );
+    }
+
+    #[test]
+    fn finalized_ws_replayed_slots_ignores_non_gap_updates() {
+        assert_eq!(
+            finalized_ws_replayed_slots(SlotNumber::new(5), SlotNumber::new(5)),
+            None
+        );
+        assert_eq!(
+            finalized_ws_replayed_slots(SlotNumber::new(6), SlotNumber::new(6)),
+            None
+        );
+    }
+
+    #[test]
+    fn finalized_ws_replayed_slots_counts_gap_inclusively() {
+        assert_eq!(
+            finalized_ws_replayed_slots(SlotNumber::new(6), SlotNumber::new(8)),
+            Some(3)
         );
     }
 }
