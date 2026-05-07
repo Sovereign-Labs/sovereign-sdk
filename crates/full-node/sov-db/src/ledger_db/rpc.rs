@@ -360,18 +360,10 @@ impl LedgerRpcReader {
             .await?
             .ok_or_else(slot_not_found_err)?;
 
-        if slot.batches.start >= slot.batches.end {
-            return Ok(vec![]);
-        }
-
         let batches = self.get_batch_range(&slot.batches).await?;
         let (Some(first_batch), Some(last_batch)) = (batches.first(), batches.last()) else {
             return Ok(vec![]);
         };
-
-        if first_batch.txs.start >= last_batch.txs.end {
-            return Ok(vec![]);
-        }
 
         let txs = self
             .get_tx_range(&(first_batch.txs.start..last_batch.txs.end))
@@ -379,10 +371,6 @@ impl LedgerRpcReader {
         let (Some(first_tx), Some(last_tx)) = (txs.first(), txs.last()) else {
             return Ok(vec![]);
         };
-
-        if first_tx.events.start >= last_tx.events.end {
-            return Ok(vec![]);
-        }
 
         let event_range = first_tx.events.start..last_tx.events.end;
         let stored_events = self.get_event_range(&event_range).await?;
@@ -395,11 +383,7 @@ impl LedgerRpcReader {
                 }
             }
 
-            let event_number = event_range
-                .start
-                .0
-                .checked_add(offset as u64)
-                .expect("Event number overflow while iterating slot events");
+            let event_number = event_range.start.0 + offset as u64;
             events.push((event_number, event).try_into()?);
         }
 

@@ -17,7 +17,7 @@ use sov_test_utils::ledger_db::{LedgerTestService, LedgerTestServiceData};
 use sov_test_utils::storage::SimpleLedgerStorageManager;
 use sov_test_utils::TestTxReceiptContents;
 
-#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[derive(Debug, serde::Deserialize)]
 struct TestEventKeyOnly {
     number: u64,
     key: String,
