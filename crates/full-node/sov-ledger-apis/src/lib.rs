@@ -85,7 +85,6 @@ impl Drop for LedgerWsConnectionGuard {
 struct FinalizedWsReplayMetrics {
     query_mode: &'static str,
     replayed_slots: u64,
-    missed_slots: u64,
 }
 
 impl Metric for FinalizedWsReplayMetrics {
@@ -96,11 +95,10 @@ impl Metric for FinalizedWsReplayMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},query_mode={} replayed_slots={},missed_slots={}",
+            "{},query_mode={} replayed_slots={}",
             self.measurement_name(),
             self.query_mode,
             self.replayed_slots,
-            self.missed_slots,
         )
     }
 }
@@ -118,7 +116,6 @@ fn track_finalized_ws_replay(query_mode: QueryMode, replayed_slots: u64) {
         tracker.submit(FinalizedWsReplayMetrics {
             query_mode: query_mode_label(query_mode),
             replayed_slots,
-            missed_slots: replayed_slots.saturating_sub(1),
         });
     });
 }

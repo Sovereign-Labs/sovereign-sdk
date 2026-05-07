@@ -35,7 +35,10 @@ use tokio::sync::watch::Receiver;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer, SubscriptionStreamError};
+use crate::common::{
+    error_not_fully_synced, AcceptedTx, Sequencer, SubscriptionStreamError,
+    SEQUENCER_EVENTS_WS_ROUTE, SEQUENCER_TXS_WS_ROUTE,
+};
 use crate::TxStatus;
 
 /// Interval between ping frames sent to the client for keepalive.
@@ -45,8 +48,6 @@ const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 const PONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 
 const OUTBOUND_WS_RESPONSE_CHANNEL_CAPACITY: usize = 10;
-const SEQUENCER_EVENTS_WS_ROUTE: &str = "/sequencer/events/ws";
-const SEQUENCER_TXS_WS_ROUTE: &str = "/sequencer/txs/ws";
 const SEQUENCER_TX_STATUS_WS_ROUTE: &str = "/sequencer/txs/{tx_hash}/ws";
 const SEQUENCER_TX_SUBMIT_WS_ROUTE: &str = "/sequencer/txs/submit/ws";
 

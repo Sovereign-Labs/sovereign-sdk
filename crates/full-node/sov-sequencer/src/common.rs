@@ -34,6 +34,9 @@ use tracing::{info, trace};
 use crate::rest_api::ApiAcceptedTx;
 use crate::{SequencerNotReadyDetails, SlotNumber, TxHash, TxStatus, TxStatusManager};
 
+pub(crate) const SEQUENCER_EVENTS_WS_ROUTE: &str = "/sequencer/events/ws";
+pub(crate) const SEQUENCER_TXS_WS_ROUTE: &str = "/sequencer/txs/ws";
+
 #[derive(Debug, Error, Clone, serde::Serialize, serde::Deserialize)]
 pub enum SubscriptionStreamError {
     /// The receiver fell behind and some messages were skipped.

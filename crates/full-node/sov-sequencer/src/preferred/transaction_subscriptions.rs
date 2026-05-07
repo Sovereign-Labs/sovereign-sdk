@@ -14,12 +14,11 @@ use tokio::sync::{broadcast, RwLock};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
-use crate::common::{SequencerTxStream, SubscriptionStreamError};
+use crate::common::{
+    SequencerTxStream, SubscriptionStreamError, SEQUENCER_EVENTS_WS_ROUTE, SEQUENCER_TXS_WS_ROUTE,
+};
 use crate::preferred::{AcceptedTx, Confirmation};
 use crate::rest_api::ApiAcceptedTx;
-
-const SEQUENCER_EVENTS_WS_ROUTE: &str = "/sequencer/events/ws";
-const SEQUENCER_TXS_WS_ROUTE: &str = "/sequencer/txs/ws";
 
 type TxStreamItem<S, Rt> = Result<ApiAcceptedTx<Confirmation<S, Rt>>, SubscriptionStreamError>;
 type GetNextChunkFuture<S, Rt> = Pin<
