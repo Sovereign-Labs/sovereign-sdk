@@ -17,7 +17,6 @@ pub const TEST_SEQ_DA_ADDRESS: MockAddress = MockAddress::new([0; 32]);
 
 /// Resources owned by [`start_external_mock_da`]. Dropping `shutdown` stops
 /// the DA service's background tasks.
-#[allow(dead_code)]
 pub struct ExternalDa {
     pub service: StorableMockDaService,
     pub shutdown: watch::Sender<()>,
