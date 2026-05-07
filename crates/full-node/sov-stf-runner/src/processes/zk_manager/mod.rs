@@ -38,6 +38,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
     shutdown_sender: tokio::sync::watch::Sender<()>,
+    replace_outer_proof_after_resync: bool,
 }
 
 impl<Ps: ProverService> ZkProofManager<Ps>
@@ -57,6 +58,7 @@ where
         da_sync_state: Arc<DaSyncState>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
         shutdown_sender: tokio::sync::watch::Sender<()>,
+        replace_outer_proof_after_resync: bool,
     ) -> Self {
         Self {
             prover_service: Arc::new(prover_service),
@@ -74,6 +76,7 @@ where
             da_sync_state,
             shutdown_receiver,
             shutdown_sender,
+            replace_outer_proof_after_resync,
         }
     }
 
@@ -118,6 +121,7 @@ where
                 da_sync_state: self.da_sync_state,
                 metadata_tx,
                 shutdown_receiver: self.shutdown_receiver,
+                replace_outer_proof_after_resync: self.replace_outer_proof_after_resync,
             };
             if let Err(e) = intake.run().await {
                 tracing::error!(error = ?e, "Intake task failed");
@@ -139,6 +143,8 @@ struct IntakeTask<Ps: ProverService> {
     da_sync_state: Arc<DaSyncState>,
     metadata_tx: mpsc::Sender<(AggregateProofMetadata<Ps>, u64)>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    #[allow(dead_code)]
+    replace_outer_proof_after_resync: bool,
 }
 
 impl<Ps: ProverService> IntakeTask<Ps>

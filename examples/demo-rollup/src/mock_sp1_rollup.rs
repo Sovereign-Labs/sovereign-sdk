@@ -147,6 +147,7 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
         ledger_db: &LedgerDb,
+        _replace_outer_proof_after_resync: bool,
     ) -> (Self::ProverService, Option<SlotNumber>) {
         let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
         let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;

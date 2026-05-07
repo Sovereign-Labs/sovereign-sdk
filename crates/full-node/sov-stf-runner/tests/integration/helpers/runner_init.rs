@@ -328,6 +328,7 @@ pub async fn initialize_runner_with_stop_at(
             runner.da_sync_state(),
             shutdown_receiver.clone(),
             shutdown_sender.clone(),
+            false,
         )
         .await
         .unwrap();

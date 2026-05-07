@@ -32,6 +32,7 @@ pub async fn start_zk_workflow_in_background<Ps>(
     da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
     shutdown_sender: tokio::sync::watch::Sender<()>,
+    replace_outer_proof_after_resync: bool,
 ) -> anyhow::Result<JoinHandle<()>>
 where
     Ps: ProverService,
@@ -48,6 +49,7 @@ where
         da_sync_state,
         shutdown_receiver,
         shutdown_sender,
+        replace_outer_proof_after_resync,
     )
     .post_aggregated_proof_to_da_in_background()
     .await)

@@ -137,12 +137,19 @@ where
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
         ledger_db: &sov_db::ledger_db::LedgerDb,
+        replace_outer_proof_after_resync: bool,
     ) -> (
         Self::ProverService,
         Option<sov_rollup_interface::common::SlotNumber>,
     ) {
         self.inner
-            .create_prover_service(prover_config, rollup_config, da_service, ledger_db)
+            .create_prover_service(
+                prover_config,
+                rollup_config,
+                da_service,
+                ledger_db,
+                replace_outer_proof_after_resync,
+            )
             .await
     }
 

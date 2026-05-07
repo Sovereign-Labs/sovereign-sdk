@@ -220,6 +220,7 @@ where
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
         _ledger_db: &LedgerDb,
+        _replace_outer_proof_after_resync: bool,
     ) -> (
         Self::ProverService,
         Option<sov_rollup_interface::common::SlotNumber>,
