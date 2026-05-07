@@ -8983,11 +8983,16 @@ name = "rest-api-load-testing"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "clap",
  "futures",
  "reqwest 0.12.23",
+ "serde",
+ "serde_json",
  "tokio",
  "tokio-tungstenite 0.29.0",
+ "tracing",
+ "tracing-subscriber 0.3.20",
 ]
 
 [[package]]
