@@ -556,8 +556,11 @@ where
     }
 
     pub(crate) fn proof_blob_sender_status(&self) -> BlobSenderStatus {
+        let in_flight = self.in_flight_proof_blobs.load(Ordering::Relaxed);
+        println!("in_flight proofs {}", in_flight);
+
         BlobSenderStatus {
-            in_flight: self.in_flight_proof_blobs.load(Ordering::Relaxed),
+            in_flight,
             max_concurrent: self.seq_config.max_concurrent_proof_blobs,
         }
     }
