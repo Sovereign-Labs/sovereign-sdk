@@ -148,6 +148,7 @@ impl<S: Spec> ProverIncentives<S> {
         };
 
         println!("===Sucess {:?}", public_outputs.final_slot_number);
+        println!("genesis {}", public_outputs.genesis_state_root);
 
         #[cfg(feature = "native")]
         sov_metrics::track_metrics(|tracker| {

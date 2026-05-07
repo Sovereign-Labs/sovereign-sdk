@@ -235,9 +235,17 @@ impl OuterZkvmHost for MockZkvmHost {
         Root: Serialize + DeserializeOwned + Clone + PartialEq + Debug,
     >(
         &self,
-        genesis_state_root: Root,
+        _genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<SerializedAggregatedProof> {
+        Self::maybe_mock_sleep("SOV_MOCK_AGGREGATION_SLEEP_MS");
+        Self::wait_while_stop_proving("SOV_MOCK_AGGREGATION_GATE");
+
+        let mut previous = self
+            .previous_anchor
+            .lock()
+            .expect("previous_anchor mutex was poisoned");
+
         // Mirror the checks performed by the real aggregation circuit
         // (`run_aggregation_program` in sov-rollup-interface).
         Self::check_inner_proof_chain(&headers_with_block_proofs);
@@ -247,18 +255,21 @@ impl OuterZkvmHost for MockZkvmHost {
             .map(|(_, bp)| bp)
             .collect::<Vec<_>>();
 
+        let genesis_state_root = if let Some(prev) = previous.as_ref() {
+            prev.deserialize_genesis_state_root()
+        } else {
+            block_proofs_data
+                .get(0)
+                .unwrap()
+                .st
+                .initial_state_root
+                .clone()
+        };
+
         let public_data = AggregatedProofPublicData::from_block_proofs(
             block_proofs_data.as_slice(),
             genesis_state_root,
         );
-
-        Self::maybe_mock_sleep("SOV_MOCK_AGGREGATION_SLEEP_MS");
-        Self::wait_while_stop_proving("SOV_MOCK_AGGREGATION_GATE");
-
-        let mut previous = self
-            .previous_anchor
-            .lock()
-            .expect("previous_anchor mutex was poisoned");
 
         if let Some(prev) = previous.as_ref() {
             assert_eq!(
