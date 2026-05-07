@@ -87,7 +87,7 @@ impl core::fmt::Display for CodeCommitmentHash {
 }
 
 /// Public data of an aggregated proof.
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone, BorshDeserialize, BorshSerialize)]
 pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {
     /// Initial rollup slot.
     pub initial_slot_number: SlotNumber,
