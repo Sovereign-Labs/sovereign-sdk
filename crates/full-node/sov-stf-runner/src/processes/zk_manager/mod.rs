@@ -153,6 +153,8 @@ where
                     synced_da_height,
                     target_da_height,
                 } => {
+                    println!("SYNCING");
+                    tokio::time::sleep(Duration::from_millis(1000)).await;
                     continue;
                 }
             }
@@ -181,8 +183,8 @@ where
                     );
 
                     let xxx = stf_info.da_block_header().height();
+                    println!("XXXXX {xxx} {synced_da_height}");
                     if xxx < synced_da_height {
-                        println!("XXXXX {xxx} {synced_da_height}");
                         continue;
                     }
 
@@ -237,6 +239,8 @@ where
 
         let num_proofs_to_create = self.proofs_to_create.current_proof_jump();
 
+        println!("num_proofs_to_create {num_proofs_to_create}");
+
         // If we've covered enough blocks for the aggregate proof, hand the
         // window off to the aggregator task.
         if num_proofs_to_create >= self.aggregated_proof_block_jump.get() {
@@ -288,6 +292,7 @@ where
 {
     async fn run(mut self) -> anyhow::Result<()> {
         loop {
+            println!("START PROVING AGG");
             let (metadata, window_size) =
                 match future_or_shutdown(self.metadata_rx.recv(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {

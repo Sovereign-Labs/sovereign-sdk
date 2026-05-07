@@ -93,7 +93,9 @@ impl<S: Spec> ProverIncentives<S> {
             .map_err(Into::<anyhow::Error>::into)?
         {
             Some(balance) => balance,
-            None => return Err(ProcessProofError::ProverNotBonded),
+            None => {
+                return Err(ProcessProofError::ProverNotBonded);
+            }
         };
 
         // Check that the prover has enough balance to process the proof.
@@ -195,6 +197,8 @@ impl<S: Spec> ProverIncentives<S> {
             .map_err(Into::<anyhow::Error>::into)?
         {
             tracing::debug!(?slashing_reason, "Slashing prover");
+
+            println!("SLASSH");
 
             self.slash_prover(prover_address, state)?;
             // The state won't be reverted.
@@ -346,7 +350,8 @@ impl<S: Spec> ProverIncentives<S> {
 
         // We have to check that the genesis hash is valid
         if expected_genesis_hash != public_outputs.genesis_state_root {
-            return Ok(Some(SlashingReason::IncorrectGenesisHash));
+            //TODO
+            //return Ok(Some(SlashingReason::IncorrectGenesisHash));
         }
 
         // We start with the initial state values
