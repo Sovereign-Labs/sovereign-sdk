@@ -1,4 +1,5 @@
 use super::*;
+use sov_mock_da::storable::rpc::start_server;
 use sov_test_utils::sov_toxi_proxi_image::ToxiProxySetup;
 
 pub(crate) struct NodeTestSetup {
@@ -22,8 +23,14 @@ impl NodeTestSetup {
             }
         };
 
-        let (da_service, da_shutdown, da_addr) = create_da_service_periodic().await;
-        // `create_da_service_periodic` binds DA RPC to loopback for host-side clients.
+        let ExternalDa {
+            service: da_service,
+            shutdown: da_shutdown,
+            addr: da_addr,
+        } = start_external_mock_da(periodic_block_producing())
+            .await
+            .unwrap();
+        // `start_external_mock_da` binds DA RPC to loopback for host-side clients.
         // Toxiproxy runs in a container and reaches the host through
         // `host.docker.internal`, which cannot reach loopback-only sockets on Linux.
         // Expose the same DA service on all interfaces for toxiproxy upstream.

@@ -18,6 +18,7 @@ use crate::{
 use anyhow::Context;
 use derivative::Derivative;
 use serde::Deserialize;
+use sov_api_spec::types;
 use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
@@ -1128,6 +1129,14 @@ where
     ) -> Result<TxInfoWithConfirmation, anyhow::Error> {
         let resp = self.client.client.send_tx_to_sequencer(&tx).await?;
         Ok(resp.into_inner())
+    }
+
+    pub async fn subscribe_finalized_slots(&self) -> WsSubscription<types::Slot> {
+        self.client.client.subscribe_finalized_slots().await
+    }
+
+    pub async fn subscribe_aggregated_proof(&self) -> WsSubscription<types::AggregatedProof> {
+        self.client.client.subscribe_aggregated_proof().await
     }
 }
 
