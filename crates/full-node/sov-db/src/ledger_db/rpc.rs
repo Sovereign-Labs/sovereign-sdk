@@ -360,21 +360,56 @@ impl LedgerRpcReader {
             .await?
             .ok_or_else(slot_not_found_err)?;
 
-        let batches = self.get_batch_range(&slot.batches).await?;
-        let (Some(first_batch), Some(last_batch)) = (batches.first(), batches.last()) else {
+        if slot.batches.is_empty() {
             return Ok(vec![]);
-        };
+        }
 
-        let txs = self
-            .get_tx_range(&(first_batch.txs.start..last_batch.txs.end))
-            .await?;
-        let (Some(first_tx), Some(last_tx)) = (txs.first(), txs.last()) else {
+        let first_batch = self
+            .db
+            .get_async::<BatchByNumber>(&slot.batches.start)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("First batch not found in slot `{:?}`", slot_id))?;
+        let txs_end = if slot.batches.start + 1 == slot.batches.end {
+            first_batch.txs.end
+        } else {
+            self.db
+                .get_async::<BatchByNumber>(&(slot.batches.end - 1))
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Last batch not found in slot `{:?}`", slot_id))?
+                .txs
+                .end
+        };
+        let txs_range = first_batch.txs.start..txs_end;
+        if txs_range.is_empty() {
             return Ok(vec![]);
-        };
+        }
 
-        let event_range = first_tx.events.start..last_tx.events.end;
+        let first_tx = self
+            .db
+            .get_async::<TxByNumber>(&txs_range.start)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("First tx not found in slot `{:?}`", slot_id))?;
+        let events_end = if txs_range.start + 1 == txs_range.end {
+            first_tx.events.end
+        } else {
+            self.db
+                .get_async::<TxByNumber>(&(txs_range.end - 1))
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Last tx not found in slot `{:?}`", slot_id))?
+                .events
+                .end
+        };
+        let event_range = first_tx.events.start..events_end;
+        if event_range.is_empty() {
+            return Ok(vec![]);
+        }
+
         let stored_events = self.get_event_range(&event_range).await?;
-        let mut events = Vec::with_capacity(stored_events.len());
+        let mut events = if event_key_prefix_filter.is_some() {
+            Vec::new()
+        } else {
+            Vec::with_capacity(stored_events.len())
+        };
 
         for (offset, event) in stored_events.iter().enumerate() {
             if let Some(prefix) = &event_key_prefix_filter {

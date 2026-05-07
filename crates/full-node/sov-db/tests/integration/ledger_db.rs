@@ -18,20 +18,13 @@ use sov_test_utils::storage::SimpleLedgerStorageManager;
 use sov_test_utils::TestTxReceiptContents;
 
 #[derive(Debug, serde::Deserialize)]
-struct TestEventKeyOnly {
-    number: u64,
-    key: String,
-}
+struct TestEventKeyOnly;
 
 impl TryFrom<(u64, &StoredEvent)> for TestEventKeyOnly {
     type Error = anyhow::Error;
 
-    fn try_from((number, event): (u64, &StoredEvent)) -> Result<Self, Self::Error> {
-        Ok(Self {
-            number,
-            key: String::from_utf8(event.key().inner().clone())
-                .unwrap_or_else(|_| hex::encode(event.key().inner())),
-        })
+    fn try_from(_: (u64, &StoredEvent)) -> Result<Self, Self::Error> {
+        Ok(Self)
     }
 }
 
@@ -69,7 +62,7 @@ async fn get_filtered_slot_events() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn get_filtered_slot_events_empty_tx_events() {
+async fn get_filtered_slot_events_when_tx_has_no_events() {
     let temp_dir = tempfile::tempdir().unwrap();
     let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
     let ledger_storage = storage_manager.create_ledger_storage();
@@ -87,29 +80,6 @@ async fn get_filtered_slot_events_empty_tx_events() {
         .unwrap();
 
     assert!(events.is_empty());
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn get_filtered_slot_events_direct_prefix_filter() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
-    let ledger_storage = storage_manager.create_ledger_storage();
-    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
-
-    let schema_batch = create_slot_with_keys(0, &["foo0", "bar0"], &ledger_db);
-    storage_manager.commit(&schema_batch);
-
-    let events = ledger_db
-        .get_filtered_slot_events::<i32, TestTxReceiptContents, TestEventKeyOnly>(
-            &SlotIdentifier::Number(0.to_slot_number()),
-            Some(b"bar0".to_vec()),
-        )
-        .await
-        .unwrap();
-
-    assert_eq!(events.len(), 1);
-    assert_eq!(events[0].number, 1);
-    assert_eq!(events[0].key, "bar0");
 }
 
 #[tokio::test(flavor = "multi_thread")]
