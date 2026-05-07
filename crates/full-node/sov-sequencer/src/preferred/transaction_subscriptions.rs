@@ -86,6 +86,7 @@ impl<S: Spec, Rt: Runtime<S>> TxResultWriter<S, Rt> {
             transaction_cache
                 .event_numbers_index
                 .insert(event.number, tx.confirmation.tx_number);
+            let _ = transaction_cache.event_response_sender.send(event.clone());
         }
         let _ = transaction_cache.tx_response_sender.send(tx); // We don't care if there are no listeners
     }
@@ -138,6 +139,7 @@ pub(crate) struct TransactionCache<S: Spec, Rt: Runtime<S>> {
     ledger_db: LedgerDb,
     // A receiver we can clone so that we don't have to acquire the lock to subscribe
     tx_response_receiver: broadcast::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
+    event_response_receiver: broadcast::Receiver<RuntimeEventResponse<Rt::RuntimeEvent>>,
 }
 
 impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
@@ -151,16 +153,20 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
 impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
     pub fn new(ledger_db: LedgerDb, next_tx_number: u64, broadcast_channel_size: usize) -> Self {
         let (tx_response_sender, tx_response_receiver) = broadcast::channel(broadcast_channel_size);
+        let (event_response_sender, event_response_receiver) =
+            broadcast::channel(broadcast_channel_size);
         Self {
             inner: Arc::new(RwLock::new(TransactionCacheInner {
                 cache: BTreeMap::new(),
                 tx_response_sender,
+                event_response_sender,
                 next_tx_number,
                 tx_hash_index: HashMap::new(),
                 event_numbers_index: BTreeMap::new(),
             })),
             ledger_db,
             tx_response_receiver,
+            event_response_receiver,
         }
     }
 
@@ -304,33 +310,26 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
 
     /// Subscribe to events with event number tracking for lag notifications.
     pub fn subscribe_events(&self) -> crate::common::SequencerEventStream<Rt> {
-        let broadcast_stream = BroadcastStream::new(self.tx_response_receiver.resubscribe());
-
-        // Track the last event number seen. Option<u64> is Copy, so it can be
-        // captured by the inner `async move` block without moving out of the closure.
+        let broadcast_stream = BroadcastStream::new(self.event_response_receiver.resubscribe());
         let mut last_event_number: Option<u64> = None;
 
         broadcast_stream
-            .flat_map(move |result| {
-                match result {
-                    Ok(tx) => {
-                        // Update last_event_number for each event as we collect them
-                        last_event_number = tx.confirmation.events.last().map(|e| e.number);
-                        let events = tx.confirmation.events.into_iter().map(Ok);
-                        futures::stream::iter(events).left_stream()
-                    }
-                    Err(BroadcastStreamRecvError::Lagged(skipped)) => {
-                        // last_event_number is Copy, so this captures a copy
-                        futures::stream::once(async move {
-                            Err(SubscriptionStreamError::lagged_with_identifiers_for_route(
-                                skipped,
-                                last_event_number,
-                                None, // Unknown until next event arrives
-                                SEQUENCER_EVENTS_WS_ROUTE,
-                            ))
-                        })
-                        .right_stream()
-                    }
+            .map(move |result| match result {
+                Ok(event) => {
+                    last_event_number = Some(event.number);
+                    Ok(event)
+                }
+                Err(BroadcastStreamRecvError::Lagged(skipped)) => {
+                    Err(SubscriptionStreamError::lagged_with_identifiers_for_route(
+                        skipped,
+                        last_event_number,
+                        last_event_number.map(|id| {
+                            id.checked_add(skipped)
+                                .and_then(|id| id.checked_add(1))
+                                .expect("Overflow when adding event number and skipped count")
+                        }),
+                        SEQUENCER_EVENTS_WS_ROUTE,
+                    ))
                 }
             })
             .boxed()
@@ -597,6 +596,7 @@ pub(crate) struct TransactionCacheInner<S: Spec, Rt: Runtime<S>> {
     // TODO: Arc the acceptedTxs
     cache: BTreeMap<u64, AcceptedTx<Confirmation<S, Rt>>>,
     tx_response_sender: broadcast::Sender<AcceptedTx<Confirmation<S, Rt>>>,
+    event_response_sender: broadcast::Sender<RuntimeEventResponse<Rt::RuntimeEvent>>,
     // The next tx number, needed in case the cache is empty
     next_tx_number: u64,
     // A map of tx hashes to tx numbers
@@ -606,11 +606,13 @@ pub(crate) struct TransactionCacheInner<S: Spec, Rt: Runtime<S>> {
 
 #[cfg(test)]
 mod tests {
+    use sov_attester_incentives::Event as AttesterIncentivesEvent;
     use sov_db::ledger_db::SlotCommit;
     use sov_mock_da::{MockAddress, MockBlob, MockBlock};
     use sov_modules_api::{
-        ApiTxEffect, BatchReceipt, FullyBakedTx, Gas, SuccessfulTxContents, TransactionReceipt,
-        TxEffect, TxReceiptContents,
+        Amount, ApiTxEffect, BatchReceipt, FullyBakedTx, Gas, HexHash, ModuleRef,
+        RuntimeEventResponse, SuccessfulTxContents, TransactionReceipt, TxEffect,
+        TxReceiptContents,
     };
     use sov_test_utils::storage::SimpleLedgerStorageManager;
     use sov_test_utils::{generate_optimistic_runtime, TestSpec as S};
@@ -625,6 +627,41 @@ mod tests {
             tx_hash: HexString([tx_number as u8; 32]),
             confirmation: Confirmation {
                 events: vec![],
+                receipt: ApiTxEffect::Successful {
+                    data: SuccessfulTxContents {
+                        gas_used: <<S as Spec>::Gas as Gas>::zero(),
+                    },
+                },
+                tx_number,
+                timestamp_nanos: None,
+            },
+        }
+    }
+
+    fn build_mock_confirmation_with_events(
+        tx_number: u64,
+        event_numbers: std::ops::Range<u64>,
+    ) -> AcceptedTx<Confirmation<S, TestRuntime<S>>> {
+        let tx_hash = [tx_number as u8; 32];
+        AcceptedTx {
+            tx: FullyBakedTx::new(vec![]),
+            tx_hash: HexString(tx_hash),
+            confirmation: Confirmation {
+                events: event_numbers
+                    .map(|event_number| RuntimeEventResponse {
+                        number: event_number,
+                        key: format!("attester-incentives/{event_number}"),
+                        value: TestRuntimeEvent::<S>::AttesterIncentives(
+                            AttesterIncentivesEvent::RegisteredAttester {
+                                amount: Amount::ZERO,
+                            },
+                        ),
+                        module: ModuleRef {
+                            name: "attester_incentives".to_string(),
+                        },
+                        tx_hash: HexHash::new(tx_hash),
+                    })
+                    .collect(),
                 receipt: ApiTxEffect::Successful {
                     data: SuccessfulTxContents {
                         gas_used: <<S as Spec>::Gas as Gas>::zero(),
@@ -775,6 +812,63 @@ mod tests {
             Ok(_) => panic!("Expected Lagged error, got Ok"),
             Err(other) => panic!("Expected Lagged error, got {other:?}"),
         }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_subscribe_events_reports_lag_in_event_units() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+        let ledger_db = LedgerDb::with_reader(storage_manager.create_ledger_storage()).unwrap();
+        let cache = TransactionCache::<S, TestRuntime<S>>::new(ledger_db, 0, 4);
+        let writer = cache.write_handle();
+
+        let mut stream = cache.subscribe_events();
+
+        writer
+            .insert(build_mock_confirmation_with_events(0, 0..2))
+            .await;
+        for expected_event_number in 0..2 {
+            let event = tokio::time::timeout(std::time::Duration::from_millis(100), stream.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+            assert_eq!(event.number, expected_event_number);
+        }
+
+        writer
+            .insert(build_mock_confirmation_with_events(1, 2..5))
+            .await;
+        writer
+            .insert(build_mock_confirmation_with_events(2, 5..8))
+            .await;
+
+        let item = tokio::time::timeout(std::time::Duration::from_millis(100), stream.next())
+            .await
+            .unwrap()
+            .unwrap();
+
+        match item {
+            Err(SubscriptionStreamError::Lagged {
+                disconnected_at,
+                resumed_at,
+                skipped,
+            }) => {
+                assert_eq!(skipped, 2, "lag should be counted in skipped events");
+                assert_eq!(disconnected_at, Some(1));
+                assert_eq!(resumed_at, Some(4));
+            }
+            Ok(_) => panic!("Expected Lagged error, got Ok"),
+            Err(other) => panic!("Expected Lagged error, got {other:?}"),
+        }
+
+        let event_after_lag =
+            tokio::time::timeout(std::time::Duration::from_millis(100), stream.next())
+                .await
+                .unwrap()
+                .unwrap()
+                .unwrap();
+        assert_eq!(event_after_lag.number, 4);
     }
 
     #[tokio::test(flavor = "multi_thread")]
