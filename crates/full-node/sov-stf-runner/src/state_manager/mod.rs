@@ -450,8 +450,6 @@ where
                 aggregated_proofs: all_aggregated_proofs,
             };
 
-            println!("STF_INFO: {}", stf_info.slot_number());
-
             let stf_info_schema = stf_info_sender
                 .materialize_stf_info(&stf_info, &self.ledger_db)
                 .await?;

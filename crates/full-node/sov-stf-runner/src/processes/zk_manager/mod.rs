@@ -192,7 +192,7 @@ where
                     );
 
                     let xxx = stf_info.da_block_header().height();
-                    println!("XXXXX {xxx} {synced_da_height}");
+
                     if xxx < synced_da_height {
                         continue;
                     }

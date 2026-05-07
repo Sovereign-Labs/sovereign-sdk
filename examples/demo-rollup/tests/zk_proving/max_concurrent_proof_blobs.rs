@@ -19,7 +19,7 @@ fn resume_proving() {
 #[tokio::test(flavor = "multi_thread")]
 async fn max_concurrent_proof() -> anyhow::Result<()> {
     let external_da = start_external_mock_da(TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING).await?;
-    let test_rollup = start_test_rollup(0, &external_da, 2).await?;
+    let test_rollup = start_test_rollup(0, &external_da, 2, false).await?;
 
     let mut aggregated_proof_subscription = test_rollup.subscribe_aggregated_proof().await?;
     let _ = aggregated_proof_subscription.next().await.unwrap().unwrap();
