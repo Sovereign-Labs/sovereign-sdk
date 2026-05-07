@@ -19,22 +19,11 @@ fn resume_proving() {
 async fn max_concurrent_proof() -> anyhow::Result<()> {
     let (test_rollup, _external_da) = start_test_rollup(0).await?;
 
-    let mut aggregated_proof_subscription = test_rollup
-        .client
-        .client
-        .subscribe_aggregated_proof()
-        .await
-        .context("Failed to subscribe to aggregated proof")?;
-
+    let mut aggregated_proof_subscription = test_rollup.subscribe_aggregated_proof().await?;
     let _ = aggregated_proof_subscription.next().await.unwrap().unwrap();
 
     stop_proving();
-    let mut finalized_slots = test_rollup
-        .client
-        .client
-        .subscribe_finalized_slots()
-        .await
-        .context("Failed to subscribe to aggregated proof")?;
+    let mut finalized_slots = test_rollup.subscribe_finalized_slots().await?;
 
     for _ in 0..20 {
         let _ = finalized_slots.next().await.unwrap()?;
