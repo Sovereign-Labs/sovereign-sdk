@@ -140,6 +140,13 @@ max_number_of_aggregated_proofs_in_memory = 5
 blob_processing_timeout_secs = 600
 max_batch_size_bytes = 1048576
 max_concurrent_batch_blobs = 128
+# Cap on the number of proof blobs in flight on the DA layer at any given time.
+# Keep this value LARGE. If the cap is reached the ZK aggregator interprets it
+# as "proofs are not being confirmed by the rollup on time" and triggers a full
+# rollup shutdown to avoid building an unbounded backlog. Set it high enough
+# that transient DA slowness or proving bursts cannot saturate the in-flight
+# count under normal operation.
+max_concurrent_proof_blobs = 1024
 max_allowed_node_distance_behind = 10
 rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
 [sequencer.preferred]

@@ -213,16 +213,6 @@ where
         self.nb_of_concurrent_proof_blob_submissions.clone()
     }
 
-    fn inc_nb_of_concurrent_batch_blob_submissions(&self) {
-        self.nb_of_concurrent_batch_blob_submissions
-            .fetch_add(1, Ordering::Relaxed);
-    }
-
-    fn inc_nb_of_concurrent_proof_blob_submissions(&self) {
-        self.nb_of_concurrent_proof_blob_submissions
-            .fetch_add(1, Ordering::Relaxed);
-    }
-
     /// Returns a reference to the [`BlobSenderHooks`] instance.
     pub fn hooks(&self) -> &H {
         &self.hooks
@@ -331,11 +321,7 @@ where
 
         let shutdown_receiver = self.shutdown_receiver.clone();
 
-        if is_batch {
-            self.inc_nb_of_concurrent_batch_blob_submissions();
-        } else {
-            self.inc_nb_of_concurrent_proof_blob_submissions();
-        }
+        task_state.inc_nb_of_concurrent_blob_submissions(is_batch);
         let handle = tokio::task::spawn({
             let state = task_state;
             let blob = blob.clone();
@@ -509,14 +495,22 @@ struct TaskState<Da: DaService, FM: FinalizationManager> {
 }
 
 impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
-    fn dec_nb_of_concurrent_blob_submissions(&self, is_batch: bool) {
-        if is_batch {
-            self.nb_of_concurrent_batch_blob_submissions
-                .fetch_sub(1, Ordering::Relaxed);
+    fn inc_nb_of_concurrent_blob_submissions(&self, is_batch: bool) {
+        let counter = if is_batch {
+            &self.nb_of_concurrent_batch_blob_submissions
         } else {
-            self.nb_of_concurrent_proof_blob_submissions
-                .fetch_sub(1, Ordering::Relaxed);
-        }
+            &self.nb_of_concurrent_proof_blob_submissions
+        };
+        counter.fetch_add(1, Ordering::Relaxed);
+    }
+
+    fn dec_nb_of_concurrent_blob_submissions(&self, is_batch: bool) {
+        let counter = if is_batch {
+            &self.nb_of_concurrent_batch_blob_submissions
+        } else {
+            &self.nb_of_concurrent_proof_blob_submissions
+        };
+        counter.fetch_sub(1, Ordering::Relaxed);
     }
 
     async fn remove_blob_or_err(&self, blob_id: BlobInternalId) -> anyhow::Result<()> {

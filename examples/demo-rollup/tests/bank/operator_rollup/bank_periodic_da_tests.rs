@@ -17,6 +17,8 @@ async fn flaky_bank_tx_tests_secured_by_operator() -> anyhow::Result<()> {
     let test_case = TestCase {
         wait_for_aggregated_proof: false,
         finalization_blocks: 0,
+        aggregated_proof_block_jump: 5,
+        max_concurrent_proof_blobs: 1024,
     };
 
     let test_rollup = start_test_rollup(&test_case, OperatingMode::Operator).await?;
@@ -35,6 +37,8 @@ async fn bank_events_test() -> anyhow::Result<()> {
     let test_case = TestCase {
         wait_for_aggregated_proof: false,
         finalization_blocks: 0,
+        aggregated_proof_block_jump: 5,
+        max_concurrent_proof_blobs: 1024,
     };
 
     let test_rollup = start_test_rollup(&test_case, OperatingMode::Operator).await?;

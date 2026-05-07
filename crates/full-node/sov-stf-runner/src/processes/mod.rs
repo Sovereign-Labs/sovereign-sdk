@@ -27,6 +27,7 @@ pub async fn start_zk_workflow_in_background<Ps>(
     genesis_state_root: Ps::StateRoot,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    shutdown_sender: tokio::sync::watch::Sender<()>,
 ) -> anyhow::Result<JoinHandle<()>>
 where
     Ps: ProverService,
@@ -41,6 +42,7 @@ where
         genesis_state_root,
         stf_info_receiver,
         shutdown_receiver,
+        shutdown_sender,
     )
     .post_aggregated_proof_to_da_in_background()
     .await)
