@@ -1,7 +1,10 @@
 use futures::StreamExt;
 use rockbound::SchemaBatch;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
-use sov_db::schema::types::StoredStfInfo;
+use sov_db::schema::types::{EventNumber, StoredStfInfo};
+use sov_db::{
+    define_table_with_seek_key_codec, define_table_without_codec, impl_borsh_value_codec,
+};
 use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockDaSpec, MockHash};
 use sov_mock_zkvm::MockZkvmHost;
 use sov_rollup_interface::common::{HexHash, IntoSlotNumber, SlotNumber};
@@ -16,6 +19,8 @@ use sov_test_utils::ledger_db::sov_api_spec::types::IntOrHash;
 use sov_test_utils::ledger_db::{LedgerTestService, LedgerTestServiceData};
 use sov_test_utils::storage::SimpleLedgerStorageManager;
 use sov_test_utils::TestTxReceiptContents;
+
+define_table_with_seek_key_codec!((EventByNumber) EventNumber => StoredEvent);
 
 #[derive(Debug, serde::Deserialize)]
 struct TestEventKeyOnly;
@@ -80,6 +85,37 @@ async fn get_filtered_slot_events_when_tx_has_no_events() {
         .unwrap();
 
     assert!(events.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_filtered_slot_events_fail_on_missing_event_row() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+    let ledger_storage = storage_manager.create_ledger_storage();
+    let db = storage_manager.get_db();
+    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
+
+    let schema_batch = create_slot_with_keys(0, &["foo0", "bar0", "baz0"], &ledger_db);
+    storage_manager.commit(&schema_batch);
+
+    let mut delete_batch = SchemaBatch::new();
+    delete_batch
+        .delete::<EventByNumber>(&EventNumber(1))
+        .unwrap();
+    db.write_schemas(&delete_batch).unwrap();
+
+    let err = ledger_db
+        .get_filtered_slot_events::<i32, TestTxReceiptContents, TestEventKeyOnly>(
+            &SlotIdentifier::Number(0.to_slot_number()),
+            None,
+        )
+        .await
+        .unwrap_err();
+
+    assert!(
+        err.to_string().contains("missing event"),
+        "unexpected error: {err:#}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

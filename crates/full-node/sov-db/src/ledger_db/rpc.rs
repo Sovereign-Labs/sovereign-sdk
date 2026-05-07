@@ -404,22 +404,51 @@ impl LedgerRpcReader {
             return Ok(vec![]);
         }
 
-        let stored_events = self.get_event_range(&event_range).await?;
+        let stored_events = self
+            .db
+            .collect_in_range_async::<EventByNumber, EventNumber>(event_range.clone())
+            .await?;
         let mut events = if event_key_prefix_filter.is_some() {
             Vec::new()
         } else {
             Vec::with_capacity(stored_events.len())
         };
+        let mut expected_event_number = event_range.start.0;
 
-        for (offset, event) in stored_events.iter().enumerate() {
+        for (event_number, event) in &stored_events {
+            if event_number.0 != expected_event_number {
+                bail!(
+                    "Ledger DB corruption: missing event {:?} in slot `{:?}` while scanning range {:?}..{:?}",
+                    EventNumber(expected_event_number),
+                    slot_id,
+                    event_range.start,
+                    event_range.end,
+                );
+            }
+
             if let Some(prefix) = &event_key_prefix_filter {
                 if !event.key().inner().starts_with(prefix) {
+                    expected_event_number = expected_event_number
+                        .checked_add(1)
+                        .expect("event number overflow while scanning slot events");
                     continue;
                 }
             }
 
-            let event_number = event_range.start.0 + offset as u64;
-            events.push((event_number, event).try_into()?);
+            events.push((event_number.0, event).try_into()?);
+            expected_event_number = expected_event_number
+                .checked_add(1)
+                .expect("event number overflow while scanning slot events");
+        }
+
+        if expected_event_number != event_range.end.0 {
+            bail!(
+                "Ledger DB corruption: missing event {:?} in slot `{:?}` while scanning range {:?}..{:?}",
+                EventNumber(expected_event_number),
+                slot_id,
+                event_range.start,
+                event_range.end,
+            );
         }
 
         Ok(events)
