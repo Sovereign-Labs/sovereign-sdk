@@ -134,7 +134,6 @@ pub trait ProverService: Send + Sync + 'static {
     async fn create_aggregated_proof(
         &self,
         block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
-        genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus>;
 }
 

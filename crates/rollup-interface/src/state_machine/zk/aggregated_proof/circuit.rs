@@ -75,18 +75,18 @@ where
         rewarded_addresses,
     } = verified_proof_data;
 
-    // Propagate the genesis state root forward through recursive aggregations.
-    // For the very first aggregation, the genesis root is the initial state root
+    // Propagate the origin state root forward through recursive aggregations.
+    // For the very first aggregation, the origin root is the initial state root
     // of the first inner proof (i.e. the state root at chain genesis).
-    let genesis_state_root = previous_public_data
+    let origin_state_root = previous_public_data
         .as_ref()
-        .map(|public_data| public_data.genesis_state_root.clone())
+        .map(|public_data| public_data.origin_state_root.clone())
         .unwrap_or_else(|| initial_boundary.state_root.clone());
 
     let aggregated_public_data = AggregatedProofPublicData::<Address, Da, Root> {
         initial_slot_number: initial_boundary.slot_number,
         final_slot_number: final_boundary.slot_number,
-        genesis_state_root,
+        origin_state_root,
         initial_state_root: initial_boundary.state_root,
         final_state_root: final_boundary.state_root,
         initial_slot_hash: initial_boundary.slot_hash,

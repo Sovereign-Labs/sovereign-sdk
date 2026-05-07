@@ -78,7 +78,7 @@ fn test_invalid_proof_slashed() {
 fn test_invalid_genesis_hash_slashed() {
     let (mut runner, prover, mut aggregated_proof) = prepare_for_slashing();
     aggregated_proof
-        .genesis_state_root
+        .origin_state_root
         .clone_from(&aggregated_proof.final_state_root);
 
     runner.execute_proof::<TestProverIncentives>(ProofTestCase {

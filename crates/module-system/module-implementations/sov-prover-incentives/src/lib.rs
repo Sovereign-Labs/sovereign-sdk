@@ -48,8 +48,9 @@ pub struct ProverIncentives<S: Spec> {
     #[state]
     pub last_claimed_reward: StateValue<SlotNumber>,
 
-    /// TODO
+    /// Public data from the most recently verified aggregated proof.
     #[state]
+    #[allow(clippy::type_complexity)]
     pub latest_proof_succesfully_verified:
         StateValue<AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>>,
 

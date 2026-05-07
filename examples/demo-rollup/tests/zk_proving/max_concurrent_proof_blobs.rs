@@ -4,7 +4,7 @@ use futures::StreamExt;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 
 use crate::external_mock_da::start_external_mock_da;
-use crate::zk_proving::start_test_rollup;
+use crate::zk_proving::{query_verified_proofs, start_test_rollup};
 
 const AGGREGATION_GATE_ENV: &str = "SOV_MOCK_AGGREGATION_GATE";
 
@@ -31,6 +31,10 @@ async fn max_concurrent_proof() -> anyhow::Result<()> {
         let _ = finalized_slots.next().await.unwrap()?;
     }
     resume_proving();
+
+    let agg_pub_data = query_verified_proofs(&test_rollup).await?;
+    assert!(agg_pub_data.final_slot_number.get() > 1);
+
     test_rollup
         .wait_for_rollup_to_shutdown(Duration::from_secs(10))
         .await;

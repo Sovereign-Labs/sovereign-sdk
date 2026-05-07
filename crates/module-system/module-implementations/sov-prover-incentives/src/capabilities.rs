@@ -345,7 +345,7 @@ impl<S: Spec> ProverIncentives<S> {
             .expect("The genesis hash should be set at genesis");
 
         // We have to check that the genesis hash is valid
-        if expected_genesis_hash != public_outputs.genesis_state_root {
+        if expected_genesis_hash != public_outputs.origin_state_root {
             return Ok(Some(SlashingReason::IncorrectGenesisHash));
         }
 
