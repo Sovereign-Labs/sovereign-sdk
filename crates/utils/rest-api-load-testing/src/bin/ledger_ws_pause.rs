@@ -27,7 +27,7 @@ const SERVER_PING_INTERVAL_SECS: u64 = 30;
 #[derive(Parser, Debug, Clone)]
 #[command(
     version,
-    about = "Open several ledger websocket subscriptions, pause reads, then resume and log frame sizes."
+    about = "Open ledger websocket subscriptions, pause reads, resume, and repeat the cycle for load testing."
 )]
 struct Args {
     /// Base HTTP or WS URL for the node.
@@ -37,6 +37,10 @@ struct Args {
     /// Relative websocket path to subscribe to. Repeat to override the built-in default list.
     #[arg(long = "path")]
     paths: Vec<String>,
+
+    /// Number of independent websocket clients to open per selected path.
+    #[arg(long, default_value_t = 1)]
+    instances: usize,
 
     /// How long to keep each websocket open without reading from it.
     #[arg(long, default_value_t = 20)]
@@ -58,6 +62,15 @@ struct Args {
     #[arg(long, default_value_t = 128)]
     max_frames: usize,
 
+    /// Number of connect/pause/read/close cycles to run per instance.
+    /// If omitted, each instance loops forever until interrupted.
+    #[arg(long)]
+    cycles: Option<usize>,
+
+    /// Delay between cycles to avoid tight reconnect storms.
+    #[arg(long, default_value_t = 1)]
+    cycle_delay_secs: u64,
+
     /// Optional TCP SO_RCVBUF size to reduce kernel-side buffering.
     #[arg(long)]
     tcp_recv_buffer_bytes: Option<u32>,
@@ -66,13 +79,36 @@ struct Args {
 #[derive(Debug)]
 struct EndpointSummary {
     label: String,
+    cycles_completed: usize,
     data_frames: usize,
     total_payload_bytes: usize,
+}
+
+#[derive(Debug, Default)]
+struct CycleSummary {
+    data_frames: usize,
+    total_payload_bytes: usize,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+struct EndpointInstance {
+    path: String,
+    instance_index: usize,
+}
+
+impl EndpointInstance {
+    fn label(&self) -> String {
+        format!("{}#{:02}", label_for_path(&self.path), self.instance_index)
+    }
 }
 
 #[tokio::main]
 async fn main() -> Result<()> {
     let args = Args::parse();
+    ensure!(args.instances > 0, "--instances must be greater than zero");
+    if let Some(cycles) = args.cycles {
+        ensure!(cycles > 0, "--cycles must be greater than zero when provided");
+    }
 
     if args.pause_secs >= SERVER_PING_INTERVAL_SECS {
         eprintln!(
@@ -82,19 +118,13 @@ async fn main() -> Result<()> {
         );
     }
 
-    let paths = if args.paths.is_empty() {
-        DEFAULT_WS_PATHS
-            .iter()
-            .map(|path| (*path).to_owned())
-            .collect::<Vec<_>>()
-    } else {
-        args.paths.clone()
-    };
+    let paths = resolved_paths(&args);
+    let endpoint_instances = build_endpoint_instances(&paths, args.instances);
 
     let mut join_set = tokio::task::JoinSet::new();
-    for path in paths {
+    for endpoint in endpoint_instances {
         let args = args.clone();
-        join_set.spawn(async move { run_endpoint(path, args).await });
+        join_set.spawn(async move { run_endpoint(endpoint, args).await });
     }
 
     let mut completed = 0usize;
@@ -105,8 +135,11 @@ async fn main() -> Result<()> {
             Ok(Ok(summary)) => {
                 completed += 1;
                 println!(
-                    "[{}] summary: data_frames={} total_payload_bytes={}",
-                    summary.label, summary.data_frames, summary.total_payload_bytes
+                    "[{}] summary: cycles_completed={} data_frames={} total_payload_bytes={}",
+                    summary.label,
+                    summary.cycles_completed,
+                    summary.data_frames,
+                    summary.total_payload_bytes
                 );
             }
             Ok(Err(error)) => {
@@ -132,27 +165,74 @@ async fn main() -> Result<()> {
     Ok(())
 }
 
-async fn run_endpoint(path: String, args: Args) -> Result<EndpointSummary> {
-    let label = label_for_path(&path);
-    let ws_url = build_ws_url(&args.base_url, &path)?;
+async fn run_endpoint(endpoint: EndpointInstance, args: Args) -> Result<EndpointSummary> {
+    let label = endpoint.label();
+    let mut cycles_completed = 0usize;
+    let mut total_data_frames = 0usize;
+    let mut total_payload_bytes = 0usize;
+    let mut cycle_number = 1usize;
 
-    println!("[{label}] connecting to {ws_url}");
+    loop {
+        match run_cycle(&endpoint.path, &label, cycle_number, &args).await {
+            Ok(summary) => {
+                cycles_completed += 1;
+                total_data_frames += summary.data_frames;
+                total_payload_bytes += summary.total_payload_bytes;
+                println!(
+                    "[{label}] cycle#{cycle_number} summary: data_frames={} total_payload_bytes={}",
+                    summary.data_frames, summary.total_payload_bytes
+                );
+            }
+            Err(error) => {
+                if args.cycles.is_some() {
+                    return Err(error)
+                        .with_context(|| format!("[{label}] cycle#{cycle_number} failed"));
+                }
+                eprintln!("[{label}] cycle#{cycle_number} failed: {error:#}");
+            }
+        }
+
+        if args.cycles.is_some_and(|target| cycles_completed >= target) {
+            break;
+        }
+
+        println!(
+            "[{label}] sleeping {}s before next cycle",
+            args.cycle_delay_secs
+        );
+        tokio::time::sleep(Duration::from_secs(args.cycle_delay_secs)).await;
+        cycle_number += 1;
+    }
+
+    Ok(EndpointSummary {
+        label,
+        cycles_completed,
+        data_frames: total_data_frames,
+        total_payload_bytes,
+    })
+}
+
+async fn run_cycle(path: &str, label: &str, cycle_number: usize, args: &Args) -> Result<CycleSummary> {
+    let cycle_label = format!("{label} cycle#{cycle_number}");
+    let ws_url = build_ws_url(&args.base_url, path)?;
+
+    println!("[{cycle_label}] connecting to {ws_url}");
     let connect_timeout = Duration::from_secs(args.connect_timeout_secs);
     let mut socket = tokio::time::timeout(
         connect_timeout,
         connect_ws(&ws_url, args.tcp_recv_buffer_bytes),
     )
     .await
-    .with_context(|| format!("[{label}] connect timed out after {connect_timeout:?}"))??;
+    .with_context(|| format!("[{cycle_label}] connect timed out after {connect_timeout:?}"))??;
 
     println!(
-        "[{label}] connected; pausing reads for {}s",
+        "[{cycle_label}] connected; pausing reads for {}s",
         args.pause_secs
     );
     tokio::time::sleep(Duration::from_secs(args.pause_secs)).await;
 
     println!(
-        "[{label}] resuming reads for up to {}s or {} data frames",
+        "[{cycle_label}] resuming reads for up to {}s or {} data frames",
         args.resume_secs, args.max_frames
     );
 
@@ -165,7 +245,7 @@ async fn run_endpoint(path: String, args: Args) -> Result<EndpointSummary> {
     while data_frames < args.max_frames {
         let remaining = resume_deadline.saturating_duration_since(Instant::now());
         if remaining.is_zero() {
-            println!("[{label}] resume window elapsed");
+            println!("[{cycle_label}] resume window elapsed");
             break;
         }
 
@@ -173,22 +253,22 @@ async fn run_endpoint(path: String, args: Args) -> Result<EndpointSummary> {
         match tokio::time::timeout(wait_for, socket.next()).await {
             Err(_) => {
                 println!(
-                    "[{label}] no websocket frame received within {:?}; stopping",
+                    "[{cycle_label}] no websocket frame received within {:?}; stopping",
                     wait_for
                 );
                 break;
             }
             Ok(None) => {
-                println!("[{label}] server closed the websocket");
+                println!("[{cycle_label}] server closed the websocket");
                 break;
             }
             Ok(Some(Err(error))) => {
-                println!("[{label}] websocket read error: {error}");
+                println!("[{cycle_label}] websocket read error: {error}");
                 break;
             }
             Ok(Some(Ok(message))) => {
                 if handle_message(
-                    &label,
+                    &cycle_label,
                     &mut socket,
                     message,
                     resume_started_at,
@@ -205,8 +285,7 @@ async fn run_endpoint(path: String, args: Args) -> Result<EndpointSummary> {
 
     socket.close(None).await.ok();
 
-    Ok(EndpointSummary {
-        label,
+    Ok(CycleSummary {
         data_frames,
         total_payload_bytes,
     })
@@ -352,4 +431,74 @@ fn build_ws_url(base_url: &str, path: &str) -> Result<String> {
 fn label_for_path(path: &str) -> String {
     path.trim_start_matches('/')
         .replace(['/', '?', '=', '&'], "_")
+}
+
+fn resolved_paths(args: &Args) -> Vec<String> {
+    if args.paths.is_empty() {
+        DEFAULT_WS_PATHS
+            .iter()
+            .map(|path| (*path).to_owned())
+            .collect()
+    } else {
+        args.paths.clone()
+    }
+}
+
+fn build_endpoint_instances(paths: &[String], instances: usize) -> Vec<EndpointInstance> {
+    let mut endpoints = Vec::with_capacity(paths.len().saturating_mul(instances));
+    for path in paths {
+        for instance_index in 1..=instances {
+            endpoints.push(EndpointInstance {
+                path: path.clone(),
+                instance_index,
+            });
+        }
+    }
+    endpoints
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn build_endpoint_instances_expands_each_path() {
+        let paths = vec!["/a".to_owned(), "/b".to_owned()];
+        let endpoints = build_endpoint_instances(&paths, 2);
+
+        assert_eq!(
+            endpoints,
+            vec![
+                EndpointInstance {
+                    path: "/a".to_owned(),
+                    instance_index: 1,
+                },
+                EndpointInstance {
+                    path: "/a".to_owned(),
+                    instance_index: 2,
+                },
+                EndpointInstance {
+                    path: "/b".to_owned(),
+                    instance_index: 1,
+                },
+                EndpointInstance {
+                    path: "/b".to_owned(),
+                    instance_index: 2,
+                },
+            ]
+        );
+    }
+
+    #[test]
+    fn endpoint_label_includes_instance_suffix() {
+        let endpoint = EndpointInstance {
+            path: "/ledger/slots/finalized/ws?children=1".to_owned(),
+            instance_index: 3,
+        };
+
+        assert_eq!(
+            endpoint.label(),
+            "ledger_slots_finalized_ws_children_1#03"
+        );
+    }
 }
