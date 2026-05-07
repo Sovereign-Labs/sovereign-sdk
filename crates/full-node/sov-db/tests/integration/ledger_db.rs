@@ -5,7 +5,7 @@ use sov_db::schema::types::StoredStfInfo;
 use sov_mock_da::{MockAddress, MockBlob, MockBlock, MockDaSpec, MockHash};
 use sov_mock_zkvm::MockZkvmHost;
 use sov_rollup_interface::common::{HexHash, IntoSlotNumber, SlotNumber};
-use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
+use sov_rollup_interface::node::ledger_api::{LedgerStateProvider, SlotIdentifier};
 use sov_rollup_interface::stf::{BatchReceipt, BlobDiscardReason, TransactionReceipt, TxEffect};
 use sov_rollup_interface::stf::{DiscardedBlob, StoredEvent};
 use sov_rollup_interface::zk::aggregated_proof::{
@@ -16,6 +16,24 @@ use sov_test_utils::ledger_db::sov_api_spec::types::IntOrHash;
 use sov_test_utils::ledger_db::{LedgerTestService, LedgerTestServiceData};
 use sov_test_utils::storage::SimpleLedgerStorageManager;
 use sov_test_utils::TestTxReceiptContents;
+
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+struct TestEventKeyOnly {
+    number: u64,
+    key: String,
+}
+
+impl TryFrom<(u64, &StoredEvent)> for TestEventKeyOnly {
+    type Error = anyhow::Error;
+
+    fn try_from((number, event): (u64, &StoredEvent)) -> Result<Self, Self::Error> {
+        Ok(Self {
+            number,
+            key: String::from_utf8(event.key().inner().clone())
+                .unwrap_or_else(|_| hex::encode(event.key().inner())),
+        })
+    }
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn get_filtered_slot_events() {
@@ -48,6 +66,50 @@ async fn get_filtered_slot_events() {
     assert_eq!(events.len(), 2);
     assert_eq!(events[0].key, "foo0");
     assert_eq!(events[1].key, "bar0");
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_filtered_slot_events_empty_tx_events() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+    let ledger_storage = storage_manager.create_ledger_storage();
+    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
+
+    let schema_batch = create_slot_with_keys(0, &[], &ledger_db);
+    storage_manager.commit(&schema_batch);
+
+    let events = ledger_db
+        .get_filtered_slot_events::<i32, TestTxReceiptContents, TestEventKeyOnly>(
+            &SlotIdentifier::Number(0.to_slot_number()),
+            None,
+        )
+        .await
+        .unwrap();
+
+    assert!(events.is_empty());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn get_filtered_slot_events_direct_prefix_filter() {
+    let temp_dir = tempfile::tempdir().unwrap();
+    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+    let ledger_storage = storage_manager.create_ledger_storage();
+    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
+
+    let schema_batch = create_slot_with_keys(0, &["foo0", "bar0"], &ledger_db);
+    storage_manager.commit(&schema_batch);
+
+    let events = ledger_db
+        .get_filtered_slot_events::<i32, TestTxReceiptContents, TestEventKeyOnly>(
+            &SlotIdentifier::Number(0.to_slot_number()),
+            Some(b"bar0".to_vec()),
+        )
+        .await
+        .unwrap();
+
+    assert_eq!(events.len(), 1);
+    assert_eq!(events[0].number, 1);
+    assert_eq!(events[0].key, "bar0");
 }
 
 #[tokio::test(flavor = "multi_thread")]

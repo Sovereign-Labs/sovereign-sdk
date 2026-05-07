@@ -8983,9 +8983,16 @@ name = "rest-api-load-testing"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "base64 0.22.1",
  "clap",
+ "futures",
  "reqwest 0.12.23",
+ "serde",
+ "serde_json",
  "tokio",
+ "tokio-tungstenite 0.29.0",
+ "tracing",
+ "tracing-subscriber 0.3.20",
 ]
 
 [[package]]
@@ -12141,6 +12148,7 @@ dependencies = [
  "serde_yaml",
  "sov-api-spec",
  "sov-db",
+ "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
  "sov-rest-utils",
@@ -14837,7 +14845,11 @@ checksum = "8f72a05e828585856dacd553fba484c242c46e391fb0e58917c942ee9202915c"
 dependencies = [
  "futures-util",
  "log",
+ "rustls 0.23.31",
+ "rustls-native-certs",
+ "rustls-pki-types",
  "tokio",
+ "tokio-rustls 0.26.2",
  "tungstenite 0.29.0",
 ]
 
@@ -15415,6 +15427,8 @@ dependencies = [
  "httparse",
  "log",
  "rand 0.9.2",
+ "rustls 0.23.31",
+ "rustls-pki-types",
  "sha1",
  "thiserror 2.0.17",
 ]
