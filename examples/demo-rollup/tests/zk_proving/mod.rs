@@ -11,21 +11,21 @@ use sov_modules_api::OperatingMode;
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
-use sov_test_utils::{TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING};
+use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 
-use crate::external_mock_da::{start_external_mock_da, ExternalDa};
+use crate::external_mock_da::ExternalDa;
 use crate::test_helpers::{test_genesis_paths, DemoRollupSpec};
 
 /// Single place for configuring test rollup.
 /// Applies all necessary configuration changes to make it work with the tests.
 /// Starts it and ensures it is ready to accept transactions.
 ///
-/// Spawns an external mock DA service (over RPC) that the rollup connects to.
+/// Connects the rollup to the provided external mock DA service.
 /// `genesis_da_height` overrides the value found in `chain_state.json`.
 pub async fn start_test_rollup(
     genesis_da_height: u64,
-) -> anyhow::Result<(TestRollup<ExternalMockDemoRollup<Native>>, ExternalDa)> {
-    let external_da = start_external_mock_da(TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING).await?;
+    external_da: &ExternalDa,
+) -> anyhow::Result<TestRollup<ExternalMockDemoRollup<Native>>> {
     // Make sure the DA has produced the genesis block before the rollup tries
     // to read from it.
     external_da
@@ -78,5 +78,5 @@ pub async fn start_test_rollup(
 
     test_rollup.wait_for_sequencer_ready().await?;
 
-    Ok((test_rollup, external_da))
+    Ok(test_rollup)
 }
