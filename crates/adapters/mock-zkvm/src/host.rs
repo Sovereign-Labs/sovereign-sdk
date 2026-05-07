@@ -247,10 +247,10 @@ impl OuterZkvmHost for MockZkvmHost {
             .collect::<Vec<_>>();
 
         let public_data = if let Some(prev) = previous.as_ref() {
-            let genesis_state_root = prev.deserialize_genesis_state_root();
+            let origin_state_root = prev.deserialize_genesis_state_root();
             let public_data = AggregatedProofPublicData::from_block_proofs(
                 block_proofs_data.as_slice(),
-                genesis_state_root,
+                origin_state_root,
             );
 
             assert_eq!(
@@ -275,11 +275,11 @@ impl OuterZkvmHost for MockZkvmHost {
 
             public_data
         } else {
-            let genesis_state_root = block_proofs_data[0].st.initial_state_root.clone();
+            let origin_state_root = block_proofs_data[0].st.initial_state_root.clone();
 
             let public_data = AggregatedProofPublicData::from_block_proofs(
                 block_proofs_data.as_slice(),
-                genesis_state_root,
+                origin_state_root,
             );
 
             assert_eq!(public_data.initial_slot_number, SlotNumber::ONE);

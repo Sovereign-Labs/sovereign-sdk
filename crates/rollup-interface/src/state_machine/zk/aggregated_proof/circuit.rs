@@ -45,7 +45,7 @@ where
     } = guest.read_from_host::<AggregatedProofWitness<Da>>();
 
     // Verify the previous aggregation proof if one exists. On the first aggregation
-    // after genesis, there is no predecessor, the chain starts here.
+    // after origin, there is no predecessor, the chain starts here.
     let previous_public_data = prev_outer_proof_witness.map(|prev_outer_proof_witness| {
         let public_data =
             V::verify_with_pub_values::<AggregatedProofPublicData<Address, Da, Root>>(
