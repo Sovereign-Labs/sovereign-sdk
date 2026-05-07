@@ -836,42 +836,49 @@ where
 
                         let ledger = ledger.clone();
                         async move {
-                            let capacity =
-                                incoming_slot_num.saturating_sub(old_last.get()).get() as usize;
-                            let mut slots = Vec::with_capacity(capacity);
                             tracing::trace!(
                                 from = %old_last,
                                 up_to_inc = %incoming_slot_num,
-                                "Going to notify about finalized slots"
+                                "Created lazy websocket notification stream for finalized slots"
                             );
-                            for slot_number in old_last.range_inclusive(incoming_slot_num) {
-                                let slot_result = match ledger
-                                    .get_slot_by_number::<B, TxReceipt, RuntimeEventResponse<E>>(
-                                        slot_number,
-                                        query_mode,
-                                    )
-                                    .await
-                                {
-                                    Ok(Some(slot)) => Ok(Slot::<B, TxReceipt, E>::new(slot)),
-                                    Ok(None) => Err(WsLedgerError::SlotNotFound { slot: slot_number.get() }),
-                                    Err(err) => {
-                                        tracing::error!(
-                                            error = %err,
-                                            "Database error while fetching slot by number"
-                                        );
-                                        Err(WsLedgerError::SlotFetchFailed { slot: slot_number.get() })},
-                                };
-                                tracing::trace!(%slot_number, "Preparing slot result for sending to websocket");
-                                slots.push(slot_result);
-                            }
-                            tracing::trace!(
-                                from = %old_last,
-                                up_to_inc = %incoming_slot_num,
-                                "Collected websocket notification about finalized slots"
-                            );
-                            // Returning `Some(...)` yields items to the *downstream*;
-                            // returning `None` would end the stream.
-                            Some(futures::stream::iter(slots))
+                            Some(
+                                futures::stream::iter(old_last.range_inclusive(incoming_slot_num))
+                                    .then(move |slot_number| {
+                                        let ledger = ledger.clone();
+                                        async move {
+                                            let slot_result = match ledger
+                                                .get_slot_by_number::<
+                                                    B,
+                                                    TxReceipt,
+                                                    RuntimeEventResponse<E>,
+                                                >(slot_number, query_mode)
+                                                .await
+                                            {
+                                                Ok(Some(slot)) => {
+                                                    Ok(Slot::<B, TxReceipt, E>::new(slot))
+                                                }
+                                                Ok(None) => Err(WsLedgerError::SlotNotFound {
+                                                    slot: slot_number.get(),
+                                                }),
+                                                Err(err) => {
+                                                    tracing::error!(
+                                                        error = %err,
+                                                        "Database error while fetching slot by number"
+                                                    );
+                                                    Err(WsLedgerError::SlotFetchFailed {
+                                                        slot: slot_number.get(),
+                                                    })
+                                                }
+                                            };
+                                            tracing::trace!(
+                                                %slot_number,
+                                                "Prepared slot result for sending to websocket"
+                                            );
+                                            slot_result
+                                        }
+                                    })
+                                    .boxed(),
+                            )
                         }
                     },
                 )
