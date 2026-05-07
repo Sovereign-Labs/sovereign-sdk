@@ -17,7 +17,7 @@ use sov_api_spec::types::{
     self as api_types, ApiError, SequencerListEventsPage, SequencerListEventsResponse,
     TxInfoWithConfirmation, TxReceiptResult,
 };
-use sov_api_spec::{types, Error, ResponseValue, WsSubscription};
+use sov_api_spec::{types, ClientInfo, Error, ResponseValue, WsSubscription};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
@@ -1585,7 +1585,11 @@ async fn test_sequencer_getters() {
     while i < all_events.len() {
         let response = test_rollup
             .api_client()
-            .sequencer_list_events(Some(page), page_cursor.as_deref(), Some(9)) // Use page size 9 because it's relatively prime to our number of events. This should trigger more edge cases
+            .sequencer_list_events(
+                Some(page),
+                page_cursor.as_deref(),
+                Some(std::num::NonZeroU32::new(9).unwrap()),
+            ) // Use page size 9 because it's relatively prime to our number of events. This should trigger more edge cases
             .await
             .unwrap()
             .into_inner();

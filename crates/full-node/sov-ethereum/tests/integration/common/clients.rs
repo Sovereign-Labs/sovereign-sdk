@@ -43,7 +43,9 @@ pub fn alloy_client(socket: SocketAddr) -> DynProvider {
 
 pub fn alloy_client_with_reqwest<B>(socket: SocketAddr, b: B, private_key: &str) -> DynProvider
 where
-    B: FnOnce(reqwest::ClientBuilder) -> reqwest::Client,
+    B: FnOnce(
+        alloy::transports::http::reqwest::ClientBuilder,
+    ) -> alloy::transports::http::reqwest::Client,
 {
     let signer: PrivateKeySigner = private_key.parse().unwrap();
     let url = Url::parse(&format!("http://{socket}/rpc")).unwrap();

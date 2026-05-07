@@ -177,7 +177,7 @@ async fn test_generate_mockda_dataset_for_resync() -> anyhow::Result<()> {
     let finalized_slot = test_rollup
         .client
         .client
-        .get_finalized_slot(Some(sov_api_spec::types::GetFinalizedSlotChildren::_0))
+        .get_finalized_slot(Some(sov_api_spec::types::GetFinalizedSlotChildren::X0))
         .await?;
     tracing::debug!("Finalized slot response: {finalized_slot:?}");
 

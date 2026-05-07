@@ -108,6 +108,7 @@ mod helpers {
     use anyhow::Context;
     use demo_stf::runtime::{Runtime, RuntimeCall};
     use sov_address::{EthereumAddress, FromVmAddress};
+    use sov_api_spec::ClientInfo;
     use sov_bank::types::TokenIdResponse;
     use sov_cli::wallet_state::PrivateKeyAndAddress;
     use sov_hyperlane_integration::HyperlaneAddress;

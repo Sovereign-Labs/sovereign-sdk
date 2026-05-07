@@ -6,6 +6,7 @@
 - #2196 *Internal*: `sov_rollup_zkvm` and `sov_rollup_gas_constant` now emit caller-supplied `metadata` as InfluxDB string fields rather than tags. Previously these tags could explode series cardinality when the `bench` / `gas-constant-estimation` features were enabled. The on-the-wire field keys are unchanged; if you were selecting them via `group by` (a tag operation) you'll need to switch to field-based filtering.
 # 2026-05-04
 - #2805 **Breaking config change**: Renames `sequencer.max_concurrent_blobs` to `sequencer.max_concurrent_batch_blobs` in rollup TOML configs. The setting now caps only batch blobs in flight; proof blobs no longer count against it. This fixes a stall where a saturated proof buffer blocked batch production. Operators must rename the field in their configs; the JSON schema and example configs have been updated.
+- #2809 Reqwest 0.12→0.13 and progenitor 0.8→0.14 crates upgrade. Reqwest 0.12 is still in the tree for EVM rollups.
 
 # 2026-04-30
 - #2798 (Non-breaking) Adds timelock support to the SDK. To use, add the `sov-timelock` module to the runtime, override the `timelock()` accessor on `HasCapabilities`, and then override `Runtime::timelock_for_callmessage` to match `CallMessage`s and return `TimelockPolicy` for those that should be timelocked. The module supports configurable cancellation policies, including delegating to a separate cancel address. See the `sov-timelock` module README for more details. Existing rollups do not need to do anything.

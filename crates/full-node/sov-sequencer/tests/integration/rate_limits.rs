@@ -2,6 +2,7 @@ use crate::utils::encode_call;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use sov_api_spec::types as api_types;
+use sov_api_spec::ClientInfo;
 use sov_full_node_configs::sequencer::Limits;
 use sov_full_node_configs::sequencer::SovRateLimiterConfig;
 use sov_mock_da::BlockProducingConfig;
