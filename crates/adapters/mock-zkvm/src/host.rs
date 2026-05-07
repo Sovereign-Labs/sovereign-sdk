@@ -99,13 +99,6 @@ impl MockZkvmHost {
         let previous_anchor =
             previous_public_data.map(PreviousAggregatedProofAnchor::from_public_data);
 
-        let previous_anchor = None;
-        println!("=================== ======");
-        println!(
-            "previous_public_data: {:?}",
-            previous_public_data.map(|x| x.final_slot_number)
-        );
-
         Self {
             wait_for_proof: false,
             notification_manager: Default::default(),

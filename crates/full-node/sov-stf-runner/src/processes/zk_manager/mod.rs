@@ -143,7 +143,6 @@ struct IntakeTask<Ps: ProverService> {
     da_sync_state: Arc<DaSyncState>,
     metadata_tx: mpsc::Sender<(AggregateProofMetadata<Ps>, u64)>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
-    #[allow(dead_code)]
     replace_outer_proof_after_resync: bool,
 }
 
@@ -153,6 +152,10 @@ where
 {
     async fn run(mut self) -> anyhow::Result<()> {
         let synced_da_height = loop {
+            if !self.replace_outer_proof_after_resync {
+                break 0;
+            }
+
             match self.da_sync_state.status() {
                 SyncStatus::Synced { synced_da_height } => break synced_da_height,
                 SyncStatus::Syncing {
