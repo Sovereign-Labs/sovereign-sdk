@@ -119,7 +119,7 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub start_at_rollup_height: Option<RollupHeight>,
     pub stop_at_rollup_height: Option<RollupHeight>,
     pub extension: Option<SeqConfigExtension>,
-    pub replace_outer_proof_after_resync: bool,
+    pub start_fresh_outer_proof_on_resync: bool,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -203,6 +203,12 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         self.disable_state_root_consistency_checks()
     }
 
+    /// Sets [`RollupBuilderConfig::start_fresh_outer_proof_on_resync`].
+    pub fn set_start_fresh_outer_proof_on_resync(mut self, start_fresh: bool) -> Self {
+        self.config.start_fresh_outer_proof_on_resync = start_fresh;
+        self
+    }
+
     /// Disable the state root consistency checks.
     pub fn disable_state_root_consistency_checks(mut self) -> Self {
         if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
@@ -280,7 +286,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
                         self.exec_config.clone(),
-                        self.config.replace_outer_proof_after_resync,
+                        self.config.start_fresh_outer_proof_on_resync,
                     )
                     .await?
             }
@@ -293,7 +299,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
                         self.exec_config.clone(),
-                        self.config.replace_outer_proof_after_resync,
+                        self.config.start_fresh_outer_proof_on_resync,
                     )
                     .await?
             }
@@ -435,7 +441,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_log_limit: 20000,
                 response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
             }),
-            replace_outer_proof_after_resync: false,
+            start_fresh_outer_proof_on_resync: false,
         }
     }
 }

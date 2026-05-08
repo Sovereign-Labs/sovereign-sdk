@@ -23,6 +23,10 @@ const BACKOFF_POLICY_MIN_DELAY: u64 = 1;
 const BACKOFF_POLICY_MAX_DELAY: u64 = 60;
 const BACKOFF_POLICY_MAX_NUM_RETRIES: usize = 5;
 
+/// Poll interval used by [`IntakeTask`] while waiting for the DA layer to
+/// finish resyncing before it starts ingesting STF info.
+const RESYNC_POLL_INTERVAL: Duration = Duration::from_millis(500);
+
 /// Manages the lifecycle of the `AggregatedProof`.
 #[allow(clippy::type_complexity)]
 pub struct ZkProofManager<Ps: ProverService> {
@@ -37,7 +41,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
     shutdown_sender: tokio::sync::watch::Sender<()>,
-    replace_outer_proof_after_resync: bool,
+    start_fresh_outer_proof_on_resync: bool,
 }
 
 impl<Ps: ProverService> ZkProofManager<Ps>
@@ -56,7 +60,7 @@ where
         da_sync_state: Arc<DaSyncState>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
         shutdown_sender: tokio::sync::watch::Sender<()>,
-        replace_outer_proof_after_resync: bool,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> Self {
         Self {
             prover_service: Arc::new(prover_service),
@@ -73,7 +77,7 @@ where
             da_sync_state,
             shutdown_receiver,
             shutdown_sender,
-            replace_outer_proof_after_resync,
+            start_fresh_outer_proof_on_resync,
         }
     }
 
@@ -89,8 +93,10 @@ where
                 self.max_number_of_aggregated_proofs_in_memory.get(),
             );
 
-            // Cursor handle goes to the aggregator so the cursor only
-            // advances after publish succeeds. See module-level docs.
+            // Cursor handle is shared: the aggregator advances it after a
+            // publish succeeds, and the intake advances it for slots that are
+            // intentionally skipped (e.g. the resync window). See module-level
+            // docs.
             let cursor = self.stf_info_receiver.cursor_handle();
 
             let aggregator = AggregatorTask {
@@ -98,7 +104,7 @@ where
                 proof_sender: self.proof_sender,
                 backoff_policy: self.backoff_policy,
                 metadata_rx,
-                cursor,
+                cursor: cursor.clone(),
                 shutdown_receiver: self.shutdown_receiver.clone(),
                 shutdown_sender: self.shutdown_sender,
             };
@@ -116,8 +122,9 @@ where
                 stf_info_receiver: self.stf_info_receiver,
                 da_sync_state: self.da_sync_state,
                 metadata_tx,
+                cursor,
                 shutdown_receiver: self.shutdown_receiver,
-                replace_outer_proof_after_resync: self.replace_outer_proof_after_resync,
+                start_fresh_outer_proof_on_resync: self.start_fresh_outer_proof_on_resync,
             };
             if let Err(e) = intake.run().await {
                 tracing::error!(error = ?e, "Intake task failed");
@@ -138,8 +145,9 @@ struct IntakeTask<Ps: ProverService> {
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
     metadata_tx: mpsc::Sender<(AggregateProofMetadata<Ps>, u64)>,
+    cursor: CursorHandle,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
-    replace_outer_proof_after_resync: bool,
+    start_fresh_outer_proof_on_resync: bool,
 }
 
 impl<Ps: ProverService> IntakeTask<Ps>
@@ -147,16 +155,28 @@ where
     Ps::DaService: DaService<Error = anyhow::Error>,
 {
     async fn run(mut self) -> anyhow::Result<()> {
-        let synced_da_height = loop {
-            if !self.replace_outer_proof_after_resync {
-                break 0;
-            }
-
-            match self.da_sync_state.status() {
-                SyncStatus::Synced { synced_da_height } => break synced_da_height,
-                SyncStatus::Syncing { .. } => {
-                    sleep(Duration::from_millis(1000)).await;
-                    continue;
+        let synced_da_height = if !self.start_fresh_outer_proof_on_resync {
+            None
+        } else {
+            loop {
+                match self.da_sync_state.status() {
+                    SyncStatus::Synced { synced_da_height } => break Some(synced_da_height),
+                    SyncStatus::Syncing { .. } => {
+                        match future_or_shutdown(
+                            sleep(RESYNC_POLL_INTERVAL),
+                            &self.shutdown_receiver,
+                        )
+                        .await
+                        {
+                            FutureOrShutdownOutput::Shutdown => {
+                                tracing::info!(
+                                    "Shutting down aggregated proof intake task while waiting for DA resync..."
+                                );
+                                return Ok(());
+                            }
+                            FutureOrShutdownOutput::Output(()) => continue,
+                        }
+                    }
                 }
             }
         };
@@ -183,8 +203,13 @@ where
                         "Received STF info"
                     );
 
-                    if stf_info.da_block_header().height() < synced_da_height {
-                        continue;
+                    if let Some(synced_da_height) = synced_da_height {
+                        if stf_info.da_block_header().height() < synced_da_height {
+                            // Skipped slots will never be proved, so advance
+                            // the cursor manually.
+                            self.cursor.inc_next_height_to_receive_by(1);
+                            continue;
+                        }
                     }
 
                     self.process_stf_info(stf_info).await?;

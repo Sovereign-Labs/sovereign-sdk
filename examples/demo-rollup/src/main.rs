@@ -63,7 +63,7 @@ struct Args {
     /// When true, the rollup skips proving unsynced blocks; once it catches up,
     /// it issues a fresh outer proof that replaces any previous one.
     #[arg(long, default_value_t = false)]
-    replace_outer_proof_after_resync: bool,
+    start_fresh_outer_proof_on_resync: bool,
 }
 
 #[derive(clap::ValueEnum, Clone, Debug)]
@@ -119,7 +119,7 @@ async fn run() -> anyhow::Result<()> {
                 start_at_rollup_height,
                 stop_at_rollup_height,
                 args.override_code_commitments,
-                args.replace_outer_proof_after_resync,
+                args.start_fresh_outer_proof_on_resync,
             )
             .await
             .context("Failed to initialize MockDa rollup")?;
@@ -133,7 +133,7 @@ async fn run() -> anyhow::Result<()> {
                 start_at_rollup_height,
                 stop_at_rollup_height,
                 args.override_code_commitments,
-                args.replace_outer_proof_after_resync,
+                args.start_fresh_outer_proof_on_resync,
             )
             .await
             .context("Failed to initialize SP1 MockDa rollup")?;
@@ -147,7 +147,7 @@ async fn run() -> anyhow::Result<()> {
                 start_at_rollup_height,
                 stop_at_rollup_height,
                 args.override_code_commitments,
-                args.replace_outer_proof_after_resync,
+                args.start_fresh_outer_proof_on_resync,
             )
             .await
             .context("Failed to initialize ExternalMockDa rollup")?;
@@ -161,7 +161,7 @@ async fn run() -> anyhow::Result<()> {
                 start_at_rollup_height,
                 stop_at_rollup_height,
                 args.override_code_commitments,
-                args.replace_outer_proof_after_resync,
+                args.start_fresh_outer_proof_on_resync,
             )
             .await
             .context("Failed to initialize Celestia rollup")?;
@@ -285,7 +285,7 @@ async fn new_rollup_with_celestia_da(
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
     override_code_commitments: bool,
-    replace_outer_proof_after_resync: bool,
+    start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<Rollup<CelestiaDemoRollup<Native>, Native>> {
     debug!(config_path = rollup_config_path, "Starting Celestia rollup");
 
@@ -309,7 +309,7 @@ async fn new_rollup_with_celestia_da(
             start_at_rollup_height,
             stop_at_rollup_height,
             None,
-            replace_outer_proof_after_resync,
+            start_fresh_outer_proof_on_resync,
         )
         .await
 }
@@ -321,7 +321,7 @@ async fn new_rollup_with_mock_da(
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
     override_code_commitments: bool,
-    replace_outer_proof_after_resync: bool,
+    start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<Rollup<MockDemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
@@ -348,7 +348,7 @@ async fn new_rollup_with_mock_da(
             start_at_rollup_height,
             stop_at_rollup_height,
             None,
-            replace_outer_proof_after_resync,
+            start_fresh_outer_proof_on_resync,
         )
         .await
 }
@@ -360,7 +360,7 @@ async fn new_rollup_with_sp1_mock_da(
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
     override_code_commitments: bool,
-    replace_outer_proof_after_resync: bool,
+    start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<Rollup<MockSp1DemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
@@ -387,7 +387,7 @@ async fn new_rollup_with_sp1_mock_da(
             start_at_rollup_height,
             stop_at_rollup_height,
             None,
-            replace_outer_proof_after_resync,
+            start_fresh_outer_proof_on_resync,
         )
         .await
 }
@@ -399,7 +399,7 @@ async fn new_rollup_with_external_mock_da(
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
     override_code_commitments: bool,
-    replace_outer_proof_after_resync: bool,
+    start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<Rollup<ExternalMockDemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
@@ -426,7 +426,7 @@ async fn new_rollup_with_external_mock_da(
             start_at_rollup_height,
             stop_at_rollup_height,
             None,
-            replace_outer_proof_after_resync,
+            start_fresh_outer_proof_on_resync,
         )
         .await
 }

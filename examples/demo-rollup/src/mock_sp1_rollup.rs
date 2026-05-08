@@ -147,7 +147,7 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
         ledger_db: &LedgerDb,
-        _replace_outer_proof_after_resync: bool,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> (Self::ProverService, Option<SlotNumber>) {
         let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
         let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
@@ -167,6 +167,12 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
             .expect("Failed to create SP1Host from guest ELF");
 
         let inner_verifying_key = inner_vm.verifying_key().clone();
+
+        if start_fresh_outer_proof_on_resync {
+            panic!(
+                "`start_fresh_outer_proof_on_resync` is not supported for the SP1 mock rollup: todo #2551"
+            );
+        }
 
         let previous_aggregated_proof = read_latest_aggregated_proof(ledger_db).await;
 

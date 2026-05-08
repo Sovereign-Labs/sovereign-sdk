@@ -439,10 +439,12 @@ where
 /// A clonable handle over the [`Receiver`]'s `next_height_to_receive` cursor.
 ///
 /// The cursor doubles as the prune cutoff for materialized STF infos
-/// (see `prune_entries`), so it MUST only be advanced over slots whose proofs
-/// have been durably published. Holding this handle in a non-receiver task
-/// lets the publish step do that advance without giving the task the rest of
-/// the [`Receiver`].
+/// (see `prune_entries`), so it MUST only be advanced over slots that the
+/// consumer has finished with — either because their proof has been durably
+/// published, or because they have been intentionally abandoned (e.g. slots
+/// inside a resync window that the prover has decided to skip). Holding this
+/// handle in a non-receiver task lets the consumer do that advance without
+/// giving the task the rest of the [`Receiver`].
 #[derive(Clone)]
 pub struct CursorHandle {
     next_height_to_receive: Arc<AtomicU64>,

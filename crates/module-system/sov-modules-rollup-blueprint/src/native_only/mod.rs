@@ -130,7 +130,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
         ledger_db: &LedgerDb,
-        replace_outer_proof_after_resync: bool,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> (Self::ProverService, Option<SlotNumber>);
 
     /// Creates an instance of [`Self::StorageManager`].
@@ -180,7 +180,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
-        replace_outer_proof_after_resync: bool,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> anyhow::Result<Rollup<Self, M>>
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
@@ -194,7 +194,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             start_at_rollup_height,
             stop_at_rollup_height,
             exec_config,
-            replace_outer_proof_after_resync,
+            start_fresh_outer_proof_on_resync,
         )
         .await
     }
@@ -323,7 +323,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
-        replace_outer_proof_after_resync: bool,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> anyhow::Result<Rollup<Self, M>>
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
@@ -512,7 +512,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     &rollup_config,
                     &da_service,
                     &ledger_db,
-                    replace_outer_proof_after_resync,
+                    start_fresh_outer_proof_on_resync,
                 )
                 .await;
             (Some(svc), slot)
@@ -597,7 +597,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         runner.da_sync_state(),
                         secondary_shutdown_receiver,
                         main_shutdown_sender.clone(),
-                        replace_outer_proof_after_resync,
+                        start_fresh_outer_proof_on_resync,
                     )
                     .await?
                 }

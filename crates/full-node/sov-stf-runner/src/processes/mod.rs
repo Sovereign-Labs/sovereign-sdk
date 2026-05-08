@@ -5,7 +5,6 @@ mod prover_service;
 mod stf_info_manager;
 mod zk_manager;
 use std::num::NonZero;
-
 use std::sync::Arc;
 
 use op_manager::attestations::AttestationsManager;
@@ -31,7 +30,7 @@ pub async fn start_zk_workflow_in_background<Ps>(
     da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
     shutdown_sender: tokio::sync::watch::Sender<()>,
-    replace_outer_proof_after_resync: bool,
+    start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<JoinHandle<()>>
 where
     Ps: ProverService,
@@ -47,7 +46,7 @@ where
         da_sync_state,
         shutdown_receiver,
         shutdown_sender,
-        replace_outer_proof_after_resync,
+        start_fresh_outer_proof_on_resync,
     )
     .post_aggregated_proof_to_da_in_background()
     .await)

@@ -32,6 +32,7 @@ pub struct MockZkvmHost {
 #[derive(Clone, Debug)]
 struct PreviousAggregatedProofAnchor {
     final_slot_number: SlotNumber,
+    origin_slot_number: SlotNumber,
     genesis_state_root: Vec<u8>,
     final_state_root: Vec<u8>,
 }
@@ -47,6 +48,7 @@ impl PreviousAggregatedProofAnchor {
     {
         Self {
             final_slot_number: public_data.final_slot_number,
+            origin_slot_number: public_data.origin_slot_number,
             genesis_state_root: bincode::serialize(&public_data.origin_state_root)
                 .expect("origin_state_root must be bincode-serializable"),
             final_state_root: bincode::serialize(&public_data.final_state_root)
@@ -246,13 +248,11 @@ impl OuterZkvmHost for MockZkvmHost {
             .map(|(_, bp)| bp)
             .collect::<Vec<_>>();
 
-        // Mirror how the real aggregation circuit derives `origin_state_root`:
-        // carry it forward from the previous aggregation when one exists, otherwise
-        // take the initial state root of the first inner proof (the chain's genesis).
         let public_data = if let Some(prev) = previous.as_ref() {
             let origin_state_root = prev.deserialize_genesis_state_root();
             let public_data = AggregatedProofPublicData::from_block_proofs(
                 block_proofs_data.as_slice(),
+                prev.origin_slot_number,
                 origin_state_root,
             );
 
@@ -279,13 +279,17 @@ impl OuterZkvmHost for MockZkvmHost {
             public_data
         } else {
             let origin_state_root = block_proofs_data[0].st.initial_state_root.clone();
+            // origin_slot_number must correspond to origin_state_root: it is the
+            // slot at the end of which that root was produced — i.e. the slot
+            // immediately before the first inner proof's slot.
+            let origin_slot_number = block_proofs_data[0].st.slot_number.prev();
 
             let public_data = AggregatedProofPublicData::from_block_proofs(
                 block_proofs_data.as_slice(),
+                origin_slot_number,
                 origin_state_root,
             );
 
-            assert_eq!(public_data.initial_slot_number, SlotNumber::ONE);
             public_data
         };
 

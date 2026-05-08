@@ -137,7 +137,7 @@ where
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
         ledger_db: &sov_db::ledger_db::LedgerDb,
-        replace_outer_proof_after_resync: bool,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> (
         Self::ProverService,
         Option<sov_rollup_interface::common::SlotNumber>,
@@ -148,7 +148,7 @@ where
                 rollup_config,
                 da_service,
                 ledger_db,
-                replace_outer_proof_after_resync,
+                start_fresh_outer_proof_on_resync,
             )
             .await
     }

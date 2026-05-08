@@ -102,6 +102,7 @@ pub(crate) fn build_proof(
         initial_slot_number: initial_slot,
         final_slot_number: end_slot,
         initial_state_root: genesis_hash,
+        origin_slot_number: SlotNumber::GENESIS,
         origin_state_root: genesis_hash,
         final_state_root: *end_transition.post_state_root(),
         initial_slot_hash: *initial_transition.slot_hash(),
