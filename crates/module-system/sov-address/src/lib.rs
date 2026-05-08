@@ -46,12 +46,9 @@ impl<VmAddress> From<sov_modules_api::AddressBech32> for MultiAddress<VmAddress>
     }
 }
 
-impl<VmAddress: TryDecodeCredentialId> From<CredentialId> for MultiAddress<VmAddress> {
+impl<VmAddress> From<CredentialId> for MultiAddress<VmAddress> {
     fn from(value: CredentialId) -> Self {
-        match VmAddress::try_decode_credential_id(value) {
-            Some(vm) => Self::Vm(vm),
-            None => Self::Standard(Address::from(value)),
-        }
+        Self::Standard(Address::from(value))
     }
 }
 
@@ -178,15 +175,4 @@ impl<VmAddress> FromVmAddress<VmAddress> for VmAddress {
 pub trait Not28Bytes {}
 pub trait FromVmAddress<VmAddress> {
     fn from_vm_address(value: VmAddress) -> Self;
-}
-
-/// Attempts to reconstruct a VM-specific address from a [`CredentialId`].
-/// Credentials that originate from a VM address carry the address bytes in a
-/// recoverable encoding (for example EVM credentials pack the 20-byte address
-/// into the low 20 bytes of the 32-byte credential); implementors check for
-/// that shape and decode back. Returning `None` means this credential does
-/// not encode an address in this VM's format and falls back to the standard
-/// hash-derived [`Address`].
-pub trait TryDecodeCredentialId: Sized {
-    fn try_decode_credential_id(credential_id: CredentialId) -> Option<Self>;
 }

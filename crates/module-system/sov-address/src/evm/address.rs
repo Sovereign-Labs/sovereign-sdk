@@ -1,5 +1,5 @@
 use crate::evm::public_key::EthereumPublicKey;
-use crate::{MultiAddress, Not28Bytes, TryDecodeCredentialId};
+use crate::{MultiAddress, Not28Bytes};
 use alloy_primitives::{Address, AddressError};
 use borsh::{BorshDeserialize, BorshSerialize};
 use k256::elliptic_curve::sec1::ToEncodedPoint;
@@ -145,21 +145,6 @@ pub type MultiAddressEvm = MultiAddress<EthereumAddress>;
 impl BasicAddress for EthereumAddress {}
 impl Not28Bytes for EthereumAddress {}
 
-impl TryDecodeCredentialId for EthereumAddress {
-    fn try_decode_credential_id(credential_id: CredentialId) -> Option<Self> {
-        // EVM credentials pack a 20-byte address into the low 20 bytes of
-        // the 32-byte credential (see `EthereumAddress::as_credential_id`).
-        // Credentials derived from native public-key hashes have essentially
-        // random bytes in that leading 12-byte slot.
-        let bytes: &[u8] = credential_id.0.as_ref();
-        if bytes[..12] == [0u8; 12] {
-            Some(Self::from(credential_id))
-        } else {
-            None
-        }
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use std::str::FromStr;
@@ -175,12 +160,15 @@ mod tests {
     type S = ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, MultiAddressEvm, Native>;
 
     #[test]
-    fn credential_from_evm_address_roundtrips_to_vm_multi_address() {
+    fn credential_from_evm_address_stays_standard() {
         let eth_addr =
             EthereumAddress::from_str("0x71334bf1710D12c9f689cC819476fA589F08C64C").unwrap();
         let cred = eth_addr.as_credential_id();
         let back: MultiAddressEvm = cred.into();
-        assert_eq!(back, MultiAddressEvm::Vm(eth_addr));
+        assert_eq!(
+            back,
+            MultiAddressEvm::Standard(sov_modules_api::Address::from(cred))
+        );
     }
 
     #[test]
