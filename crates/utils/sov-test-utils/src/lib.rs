@@ -259,6 +259,7 @@ pub fn test_signed_transaction<T: TransactionCallable, S: Spec>(
             tx_details.max_fee,
             uniqueness,
             tx_details.gas_limit,
+            None,
         ),
     )
 }

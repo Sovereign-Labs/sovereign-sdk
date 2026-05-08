@@ -256,6 +256,7 @@ mod helpers {
             Amount::new(200_000),
             UniquenessData::Nonce(nonce),
             None,
+            None,
         );
 
         let signer = TestUser::<S>::generate(Amount::ZERO);
@@ -289,6 +290,7 @@ mod helpers {
             max_priority_fee_bips,
             TEST_DEFAULT_MAX_FEE,
             UniquenessData::Nonce(nonce),
+            None,
             None,
         );
 

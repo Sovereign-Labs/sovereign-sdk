@@ -102,6 +102,7 @@ fn transaction_is_serialized_correctly() {
                 max_fee,
                 UniquenessData::Generation(initial_nonce + i as u64),
                 gas_limit,
+                None,
             ),
         );
 

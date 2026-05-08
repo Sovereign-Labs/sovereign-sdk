@@ -359,6 +359,8 @@ pub struct UnsignedTransactionV0 {
     pub uniqueness: UniquenessData,
     /// Transaction execution details including fees and gas limits.
     pub details: TxDetails,
+    /// Optional address override for execution; null uses default routing.
+    pub address_override: Option<String>,
 }
 
 /// A versioned unsigned transaction envelope.
@@ -392,6 +394,7 @@ impl UnsignedTransactionV0 {
             runtime_call: self.runtime_call.clone(),
             uniqueness: self.uniqueness,
             details: self.details.clone(),
+            address_override: self.address_override.clone(),
         })
     }
 }
@@ -417,6 +420,8 @@ pub struct TransactionV0 {
     pub uniqueness: UniquenessData,
     /// Transaction execution details including fees and gas limits.
     pub details: TxDetails,
+    /// Optional address override for execution; null uses default routing.
+    pub address_override: Option<String>,
 }
 
 /// A versioned transaction envelope supporting different transaction formats.
@@ -456,6 +461,7 @@ pub struct TransactionBuilder {
     max_fee: Option<u128>,
     gas_limit: Option<Option<Vec<u64>>>,
     chain_id: Option<u64>,
+    address_override: Option<String>,
 }
 
 impl TransactionBuilder {
@@ -476,6 +482,7 @@ impl TransactionBuilder {
             max_fee: None,
             gas_limit: None,
             chain_id: None,
+            address_override: None,
         }
     }
 
@@ -546,6 +553,12 @@ impl TransactionBuilder {
         self
     }
 
+    /// Sets the explicit address override for the transaction.
+    pub fn address_override(mut self, address_override: impl Into<String>) -> Self {
+        self.address_override = Some(address_override.into());
+        self
+    }
+
     /// Builds an unsigned transaction with the configured parameters.
     ///
     /// Uses default values for any parameters that were not explicitly set:
@@ -587,6 +600,7 @@ impl TransactionBuilder {
                 gas_limit,
                 chain_id,
             },
+            address_override: self.address_override,
         })
     }
 }

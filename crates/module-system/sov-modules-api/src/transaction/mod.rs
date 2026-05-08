@@ -23,7 +23,6 @@ pub use types::{
 };
 pub use unsigned::{UnsignedTransaction, UnsignedTransactionV0, UnsignedTransactionV1};
 
-use crate::capabilities::UniquenessData;
 use crate::{
     CryptoSpecExt, DispatchCall, Gas, GasMeter, GasMeteringError, GasSpec, MeteredBorshDeserialize,
     MeteredBorshDeserializeError, MeteredSigVerificationError, MeteredSignature, Spec,
@@ -217,23 +216,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
             Transaction::V0(inner) => inner.details.chain_id,
             Transaction::V1(inner) => inner.details.chain_id,
         }
-    }
-
-    /// Creates a new transaction with the provided metadata.
-    pub fn new_with_details_v0(
-        pub_key: C::PublicKey,
-        runtime_call: R::Call,
-        signature: C::Signature,
-        uniqueness: UniquenessData,
-        details: TxDetails<S>,
-    ) -> Self {
-        Self::V0(Version0 {
-            signature,
-            pub_key,
-            runtime_call,
-            uniqueness,
-            details,
-        })
     }
 
     /// Serialize the transaction, appending the runtime's chain_hash.

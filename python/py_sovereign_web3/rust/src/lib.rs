@@ -118,11 +118,12 @@ struct PyUnsignedTransactionV0 {
 #[pymethods]
 impl PyUnsignedTransactionV0 {
     #[new]
-    #[pyo3(signature = (runtime_call, details, uniqueness=None))]
+    #[pyo3(signature = (runtime_call, details, uniqueness=None, address_override=None))]
     fn new(
         runtime_call: &Bound<'_, PyDict>,
         details: &PyTxDetails,
         uniqueness: Option<&PyUniquenessData>,
+        address_override: Option<String>,
     ) -> PyResult<Self> {
         let call: serde_json::Value = pythonize::depythonize(runtime_call).map_err(|e| {
             PyValueError::new_err(format!("Failed to convert runtime_call dict to JSON: {e}"))
@@ -139,6 +140,7 @@ impl PyUnsignedTransactionV0 {
             runtime_call: call,
             uniqueness,
             details: details.inner.clone(),
+            address_override,
         };
 
         Ok(PyUnsignedTransactionV0 { inner: unsigned_tx })

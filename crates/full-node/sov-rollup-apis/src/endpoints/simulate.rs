@@ -304,8 +304,18 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
         &self,
         params: &SimulateParameters,
         state: &mut StateCheckpoint<S>,
-    ) -> AuthorizationData<S> {
-        let credential_id = CredentialId::from_str(&params.sender).unwrap();
+    ) -> Result<AuthorizationData<S>, SimulateError> {
+        let credential_id = CredentialId::from_str(&params.sender).map_err(|e| {
+            SimulateError::InvalidInput(format!("failed to parse sender credential id: {e:?}"))
+        })?;
+        let address_override = params
+            .address_override
+            .as_deref()
+            .map(S::Address::from_str)
+            .transpose()
+            .map_err(|e| {
+                SimulateError::InvalidInput(format!("failed to parse address override: {e:?}"))
+            })?;
         let uniqueness = params.uniqueness.unwrap_or_else(|| {
             let generation = Uniqueness::<S>::default()
                 .next_generation(&credential_id, state)
@@ -313,14 +323,15 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
             UniquenessData::Generation(generation)
         });
 
-        AuthorizationData {
+        Ok(AuthorizationData {
             tx_hash: NULL_TX_HASH,
             non_malleable_hash: NULL_TX_HASH,
             uniqueness,
             credential_id,
             default_address: credential_id.into(),
             credentials: Credentials::new(credential_id),
-        }
+            address_override,
+        })
     }
 
     fn outcome(&self, result: ApplyTxResult<S>) -> SimulateOutcome<R::RuntimeEvent> {
@@ -402,6 +413,8 @@ pub struct SimulateParameters {
     /// Optional uniqueness data for the transaction.
     /// If not provided a valid uniqueness will be used.
     pub uniqueness: Option<UniquenessData>,
+    /// Optional address override for execution; null uses default routing.
+    pub address_override: Option<String>,
 }
 
 impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
@@ -427,7 +440,7 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
             .chain_state()
             .base_fee_per_gas(&mut accessor)
             .ok_or(SimulateError::GasPriceRetrieval)?;
-        let auth_data = state.authorization_data(&params, &mut accessor);
+        let auth_data = state.authorization_data(&params, &mut accessor)?;
         let sequencer = state.sequencer(params.sequencer.unwrap_or_default())?;
         let auth_tx_data =
             AuthenticatedTransactionData(state.tx_details(params.tx_details.unwrap_or_default())?);

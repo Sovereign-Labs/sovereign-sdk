@@ -125,6 +125,7 @@ fn verify_signatures<S: Spec>(
 fn build_auth_data<S: Spec>(
     unpacked: &UnpackedSolanaMessage<S>,
     uniqueness: UniquenessData,
+    address_override: Option<S::Address>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
@@ -154,6 +155,7 @@ fn build_auth_data<S: Spec>(
                 credential_id,
                 credentials: Credentials::new(pub_key.clone()),
                 default_address: credential_id.into(),
+                address_override,
             })
         }
         UnpackedSolanaMessage::V1 {
@@ -182,6 +184,7 @@ fn build_auth_data<S: Spec>(
                 credential_id,
                 credentials: Credentials::new(multisig),
                 default_address: credential_id.into(),
+                address_override,
             })
         }
     }
@@ -278,11 +281,16 @@ where
             raw_tx_hash,
         )
     };
-    let (provided_chain_name, unsigned_tx) = match &unpacked_message {
+    let (provided_chain_name, address_override, unsigned_tx) = match &unpacked_message {
         UnpackedSolanaMessage::V0 { .. } => {
             let tx = SolanaOffchainUnsignedTransactionV0::<D, S>::unmetered_deserialize(json_slice)
                 .map_err(deser_err)?;
-            (tx.chain_name.to_string(), tx.into_unsigned_tx())
+            let address_override = tx.address_override;
+            (
+                tx.chain_name.to_string(),
+                address_override,
+                tx.into_unsigned_tx(),
+            )
         }
         UnpackedSolanaMessage::V1 {
             signatures,
@@ -299,7 +307,12 @@ where
                 *min_signers,
                 raw_tx_hash,
             )?;
-            (tx.chain_name.to_string(), tx.into_unsigned_tx())
+            let address_override = tx.address_override;
+            (
+                tx.chain_name.to_string(),
+                address_override,
+                tx.into_unsigned_tx(),
+            )
         }
     };
 
@@ -333,6 +346,7 @@ where
     let authorization_data = build_auth_data::<S>(
         &unpacked_message,
         unsigned_tx.uniqueness(),
+        address_override,
         raw_tx_hash,
         state,
     )?;

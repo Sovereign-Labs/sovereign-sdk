@@ -54,6 +54,7 @@ describe("standardTypeBuilder", () => {
           max_fee: "1000",
           chain_id: 1,
         },
+        address_override: null,
       });
     });
 
@@ -74,6 +75,7 @@ describe("standardTypeBuilder", () => {
           max_fee: "1000",
           chain_id: 1,
         },
+        address_override: null,
       });
     });
 
@@ -100,6 +102,7 @@ describe("standardTypeBuilder", () => {
           gas_limit: [1000000, 1000000],
           chain_id: 1,
         },
+        address_override: null,
       });
     });
   });
@@ -118,6 +121,7 @@ describe("standardTypeBuilder", () => {
             chain_id: 1,
             gas_limit: null,
           },
+          address_override: null,
         },
         sender: new Uint8Array([4, 5, 6]),
         signature: new Uint8Array([7, 8, 9]),
@@ -138,6 +142,7 @@ describe("standardTypeBuilder", () => {
             chain_id: 1,
             gas_limit: null,
           },
+          address_override: null,
         },
       });
     });
@@ -252,6 +257,44 @@ describe("createStandardRollup", () => {
         gas_limit: null,
         chain_id: 1,
       },
+    });
+  });
+
+  it("should pass optional simulation parameters to the client", async () => {
+    const client = new SovereignClient({ fetch: vi.fn() });
+    client.rollup.simulate = vi.fn().mockResolvedValue({ outcome: "success" });
+    const rollup = await createStandardRollup({
+      ...mockConfig,
+      client,
+    });
+    const signer = {
+      publicKey: vi.fn().mockResolvedValue(new Uint8Array([0xab, 0xcd])),
+    };
+    const runtimeCall = {
+      bank: {
+        transfer: {
+          to: "receiver",
+          coins: { amount: "1", token_id: "token" },
+        },
+      },
+    };
+    const txDetails = {
+      max_fee: "1234",
+    };
+
+    await rollup.simulate(runtimeCall, {
+      signer: signer as any,
+      address_override: "sov1target",
+      tx_details: txDetails,
+      uniqueness: { nonce: 7 },
+    });
+
+    expect(client.rollup.simulate).toHaveBeenCalledWith({
+      sender: "abcd",
+      call: runtimeCall,
+      address_override: "sov1target",
+      tx_details: txDetails,
+      uniqueness: { nonce: 7 },
     });
   });
 });

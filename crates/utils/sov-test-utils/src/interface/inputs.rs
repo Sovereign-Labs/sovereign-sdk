@@ -157,6 +157,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
                 details.max_fee,
                 UniquenessData::Nonce(nonce),
                 details.gas_limit,
+                None,
             ),
         )
     }
