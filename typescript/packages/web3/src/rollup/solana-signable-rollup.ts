@@ -31,9 +31,8 @@ export type SolanaOffchainUnsignedTransaction<RuntimeCall> = {
 export type SolanaOffchainUnsignedTransactionV0<RuntimeCall> =
   SolanaOffchainUnsignedTransaction<RuntimeCall> & {
     /**
-     * Signer-declared address override. Omitted from the serialized JSON when not set,
-     * preserving byte equivalence with pre-change signed messages so existing signatures
-     * continue to verify. See `AuthorizationData::address_override` (Rust) for routing semantics.
+     * Signer-declared address override.
+     * See `AuthorizationData::address_override` (Rust) for routing semantics.
      */
     address_override?: string;
   };
@@ -42,9 +41,8 @@ export type SolanaOffchainUnsignedTransactionV1<RuntimeCall> =
   SolanaOffchainUnsignedTransaction<RuntimeCall> & {
     multisig_id: string;
     /**
-     * Signer-declared address override. Omitted from the serialized JSON when not set,
-     * preserving byte equivalence with pre-change signed messages so existing signatures
-     * continue to verify. See `AuthorizationData::address_override` (Rust) for routing semantics.
+     * Signer-declared address override.
+     * See `AuthorizationData::address_override` (Rust) for routing semantics.
      */
     address_override?: string;
     version: number;
@@ -99,11 +97,7 @@ export type SolanaMultisigSubmitParams =
 
 export type SolanaMultisigSignParams = SolanaMultisigSubmitParams & {
   signer: Signer;
-  /**
-   * Optional address override to embed in the signed V1 payload. Omitted from the JSON when
-   * unset to preserve byte equivalence with pre-change signed messages. Unused by the
-   * `"standard"` authenticator. See `AuthorizationData::address_override` (Rust) for routing semantics.
-   */
+  /** Address override embedded in the V1 payload. Unused by the `"standard"` authenticator. */
   addressOverride?: Uint8Array;
 };
 
@@ -553,10 +547,6 @@ export class SolanaSignableRollup<RuntimeCall> {
   /**
    * Creates V1 JSON bytes for a multisig transaction, including multisig_id and version.
    * The resulting JSON is what each signer signs directly (no discriminator prefix).
-   *
-   * When `addressOverride` is omitted the JSON has no `address_override` key — this preserves
-   * byte equivalence with pre-change signed messages, so signatures produced by older clients
-   * keep verifying.
    */
   private async createMultisigJsonBytes(
     unsignedTx: UnsignedTransaction<RuntimeCall>,

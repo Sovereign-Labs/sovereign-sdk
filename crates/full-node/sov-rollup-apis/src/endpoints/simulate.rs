@@ -413,7 +413,7 @@ pub struct SimulateParameters {
     /// Optional uniqueness data for the transaction.
     /// If not provided a valid uniqueness will be used.
     pub uniqueness: Option<UniquenessData>,
-    /// Optional address override for execution. If not provided, default routing is used.
+    /// Optional address override for execution; null uses default routing.
     pub address_override: Option<String>,
 }
 

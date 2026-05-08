@@ -134,12 +134,13 @@ fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
 }
 
 pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransactionV0<RT, S> {
-    create_utx_with_generation::<S, RT>(message, 0)
+    create_utx_with_generation::<S, RT>(message, 0, None)
 }
 
 pub fn create_utx_with_generation<S: Spec, RT: Runtime<S>>(
     message: RT::Decodable,
     generation: u64,
+    address_override: Option<S::Address>,
 ) -> UnsignedTransactionV0<RT, S> {
     let details = TxDetails {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
@@ -151,6 +152,7 @@ pub fn create_utx_with_generation<S: Spec, RT: Runtime<S>>(
         message,
         UniquenessData::Generation(generation),
         details,
+        address_override,
     )
 }
 
@@ -177,8 +179,6 @@ pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
 
 /// Signs a V1 (multisig) unsigned transaction with the given private key using EIP712.
 /// The credential_address is computed from the provided multisig.
-/// `address_override` is forwarded into the signed `UnsignedTransactionV1`;
-/// pass `None` to match default routing or `Some(X)` to sign for a specific override account.
 pub fn sign_utx_v1_in_place<S: Spec, RT: Runtime<S>>(
     utx: &UnsignedTransactionV0<RT, S>,
     multisig: &Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
@@ -311,7 +311,11 @@ fn test_multisig_signature_verification() {
     let random_private_key = TestPrivateKey::generate();
     let address_override = Some(alice_address);
     let make_multisig_tx = |generation, value| {
-        let utx = create_utx_with_generation::<S, RT>(encode_message::<_, RT>(value), generation);
+        let utx = create_utx_with_generation::<S, RT>(
+            encode_message::<_, RT>(value),
+            generation,
+            address_override,
+        );
         let signatures = multisig_keys
             .iter()
             .map(|key| sign_utx_v1_in_place(&utx, &multisig, address_override, key))
@@ -320,7 +324,7 @@ fn test_multisig_signature_verification() {
             sign_utx_v1_in_place(&utx, &multisig, address_override, &random_private_key);
 
         (
-            utx.to_multisig_tx(multisig.clone(), address_override),
+            utx.to_multisig_tx(multisig.clone()),
             signatures,
             random_signature,
         )

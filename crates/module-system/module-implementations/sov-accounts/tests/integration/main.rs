@@ -198,8 +198,9 @@ fn test_setup_multisig_and_act() {
             )),
             sov_modules_api::capabilities::UniquenessData::Generation(0),
             default_test_tx_details::<S>(),
+            None,
         )
-        .to_multisig_tx(multisig.clone(), None)
+        .to_multisig_tx(multisig.clone())
     };
 
     let sign = |tx: &mut Version1<RT, S>, key: &TestPrivateKey| {
@@ -521,12 +522,17 @@ fn make_v1_tx(
     inner_credential: sov_modules_api::CredentialId,
     address_override: Option<<S as Spec>::Address>,
 ) -> Version1<RT, S> {
-    UnsignedTransactionV0::<RT, S>::new_with_details(
+    let details = default_test_tx_details::<S>();
+    UnsignedTransactionV0::<RT, S>::new(
         TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
+        details.chain_id,
+        details.max_priority_fee_bips,
+        details.max_fee,
         sov_modules_api::capabilities::UniquenessData::Generation(0),
-        default_test_tx_details::<S>(),
+        details.gas_limit,
+        address_override,
     )
-    .to_multisig_tx(multisig.clone(), address_override)
+    .to_multisig_tx(multisig.clone())
 }
 
 fn make_v0_tx(
@@ -534,12 +540,12 @@ fn make_v0_tx(
     inner_credential: sov_modules_api::CredentialId,
     address_override: Option<<S as Spec>::Address>,
 ) -> Transaction<RT, S> {
-    let mut utx = UnsignedTransactionV0::<RT, S>::new_with_details(
+    let utx = UnsignedTransactionV0::<RT, S>::new_with_details(
         TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
         sov_modules_api::capabilities::UniquenessData::Generation(0),
         default_test_tx_details::<S>(),
+        address_override,
     );
-    utx.address_override = address_override;
     utx.sign(sender.private_key(), &<RT as Runtime<S>>::CHAIN_HASH)
 }
 

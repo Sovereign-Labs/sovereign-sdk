@@ -349,10 +349,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         state: &mut impl StateAccessor,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
-        // The tx sender & sequencer are the same entity on this path. If the signer
-        // declared an `address_override`, the credential must be explicitly authorized
-        // for it (same invariant as `resolve_context`); otherwise we fall back to the
-        // credential's canonical address.
+        // The tx sender & sequencer are the same entity on this path.
         let address = match auth_data.address_override {
             Some(address_override) => {
                 anyhow::ensure!(

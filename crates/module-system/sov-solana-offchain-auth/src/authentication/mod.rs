@@ -122,8 +122,6 @@ fn verify_signatures<S: Spec>(
 }
 
 /// Builds authorization data for either single-sig or multisig transactions.
-/// `address_override` is forwarded from the signed payload — see
-/// [`sov_modules_api::capabilities::AuthorizationData::address_override`] for routing semantics.
 fn build_auth_data<S: Spec>(
     unpacked: &UnpackedSolanaMessage<S>,
     uniqueness: UniquenessData,

@@ -218,16 +218,15 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
         let gas_limit = self.gas_limit.unwrap_or(None);
         let uniqueness = self.uniqueness.unwrap_or_else(default_uniqueness);
 
-        let mut tx = UnsignedTransactionV0::new(
+        Ok(UnsignedTransactionV0::new(
             self.call,
             config_chain_id(),
             priority_fee,
             max_fee,
             uniqueness,
             gas_limit,
-        );
-        tx.address_override = self.address_override;
-        Ok(tx)
+            self.address_override,
+        ))
     }
 
     /// Builds and signs a transaction in one step.

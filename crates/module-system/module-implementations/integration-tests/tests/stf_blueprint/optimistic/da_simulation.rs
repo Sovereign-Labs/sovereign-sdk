@@ -87,6 +87,7 @@ pub fn simulate_da_with_bad_serialization(key: TestPrivateKey) -> Vec<FullyBaked
             ),
             UniquenessData::Generation(create_token_message.generation),
             create_token_message.details.clone(),
+            None,
         ),
     );
 

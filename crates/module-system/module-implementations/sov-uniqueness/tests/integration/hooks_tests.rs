@@ -160,8 +160,9 @@ fn send_tx_bad_generation_duplicate_with_malleated_v1_envelope() {
         runtime_msg,
         UniquenessData::Generation(0),
         default_test_tx_details::<S>(),
+        None,
     )
-    .to_multisig_tx(multisig, None);
+    .to_multisig_tx(multisig);
     original_tx
         .sign(&multisig_keys[0], &RT::CHAIN_HASH)
         .unwrap();

@@ -220,6 +220,7 @@ fn create_transfer_tx_json_with_address_override(
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Generation(0),
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
+        None,
     );
     let solana_unsigned_tx = SolanaOffchainUnsignedTransactionV0::<RT, S> {
         runtime_call: unsigned_tx.runtime_call,
@@ -507,6 +508,7 @@ fn create_multisig_transfer_tx_json(
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(0),
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
+        None,
     );
     let solana_unsigned_tx = SolanaOffchainUnsignedTransactionV1::<RT, S> {
         runtime_call: unsigned_tx.runtime_call,
@@ -1280,6 +1282,7 @@ fn build_v1_payload(
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(0),
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
+        None,
     );
     SolanaOffchainUnsignedTransactionV1::<RT, S> {
         runtime_call: unsigned_tx.runtime_call,
@@ -1501,6 +1504,7 @@ fn build_v0_payload(
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(0),
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
+        None,
     );
     SolanaOffchainUnsignedTransactionV0::<RT, S> {
         runtime_call: unsigned_tx.runtime_call,

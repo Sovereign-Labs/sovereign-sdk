@@ -1221,7 +1221,7 @@ components:
         address_override:
           type: string
           nullable: true
-          description: Optional address override for execution; null or omission uses default routing
+          description: Optional address override for execution; null uses default routing
       required:
         - sender
         - call

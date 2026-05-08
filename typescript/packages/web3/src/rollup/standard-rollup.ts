@@ -85,12 +85,8 @@ export function standardTypeBuilder<
 /**
  * The parameters for simulating a runtime call transaction.
  *
- * `address_override` is bolted on by hand here (and the corresponding cast
- * in `simulate` below forces it through `RollupSimulateParams`) because the
- * published `@sovereign-sdk/client` lags the OpenAPI spec by one Stainless
- * publish cycle. Once the client is regenerated and the version bumped in
- * `package.json`, drop both the extension and the cast — the regenerated
- * `RollupSimulateParams` will carry the field natively.
+ * Adds `address_override` until the regenerated `@sovereign-sdk/client` carries it natively;
+ * drop this extension and the cast in `simulate` once the client is republished.
  */
 export type SimulateParams = Omit<
   SovereignClient.RollupSimulateParams,

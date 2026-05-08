@@ -79,6 +79,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
         max_fee: Amount,
         uniqueness: UniquenessData,
         gas_limit: Option<S::Gas>,
+        address_override: Option<S::Address>,
     ) -> Self {
         Self {
             runtime_call,
@@ -89,7 +90,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
                 gas_limit,
                 chain_id,
             },
-            address_override: None,
+            address_override,
         }
     }
 
@@ -98,12 +99,13 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
         runtime_call: R::Call,
         uniqueness: UniquenessData,
         details: TxDetails<S>,
+        address_override: Option<S::Address>,
     ) -> Self {
         Self {
             runtime_call,
             uniqueness,
             details,
-            address_override: None,
+            address_override,
         }
     }
 
@@ -125,11 +127,9 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
     }
 
     /// Creates a new `V1` transaction from this unsigned transaction.
-    /// See [`crate::capabilities::AuthorizationData::address_override`] for routing semantics.
     pub fn to_multisig_tx(
         self,
         multisig: Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
-        address_override: Option<S::Address>,
     ) -> Version1<R, S> {
         Version1 {
             signatures: SafeVec::new(),
@@ -141,7 +141,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
             runtime_call: self.runtime_call,
             uniqueness: self.uniqueness,
             details: self.details,
-            address_override,
+            address_override: self.address_override,
         }
     }
 

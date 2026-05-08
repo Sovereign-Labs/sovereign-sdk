@@ -243,6 +243,7 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(nonce),
         None,
+        None,
     );
 
     let signed_tx = Transaction::<RT, S>::new_signed_tx(&signer.private_key, &RT::CHAIN_HASH, utx);
@@ -284,6 +285,7 @@ pub fn create_tx_bad_sender<RT: Runtime<S>>(
         Amount::new(200_000),
         UniquenessData::Nonce(nonce),
         None,
+        None,
     );
 
     let signer = TestUser::<S>::generate(Amount::ZERO);
@@ -303,6 +305,7 @@ pub fn create_tx_valid<RT: Runtime<S>>(
         max_priority_fee_bips,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Generation(generation),
+        None,
         None,
     );
 
@@ -324,6 +327,7 @@ pub fn create_tx_out_of_gas<RT: Runtime<S>>(
         Amount::new(200_000),
         UniquenessData::Nonce(nonce),
         Some(<<S as Spec>::Gas as Gas>::zero()),
+        None,
     );
 
     Transaction::<RT, S>::new_signed_tx(signer.private_key(), &RT::CHAIN_HASH, utx)
