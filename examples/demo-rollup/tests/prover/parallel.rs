@@ -67,7 +67,7 @@ async fn test_parallel_proof_generation() {
         3,
     );
 
-    let (genesis_state_root, witnesses) = super::generate_witnesses().await;
+    let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
 
     // Submit all blocks to the parallel prover.
     let mut block_headers = Vec::new();
@@ -97,10 +97,7 @@ async fn test_parallel_proof_generation() {
 
     // Poll until the aggregated proof is ready.
     let status = loop {
-        match prover_service
-            .create_aggregated_proof(&block_headers, &genesis_state_root)
-            .await
-        {
+        match prover_service.create_aggregated_proof(&block_headers).await {
             Ok(ProofAggregationStatus::Success(proof)) => break proof,
             Ok(ProofAggregationStatus::ProofGenerationInProgress) => {
                 tracing::info!("Inner proofs still in progress, polling again in 5s...");

@@ -2,18 +2,30 @@ mod max_concurrent_proof_blobs;
 
 use demo_stf::genesis_config::create_genesis_config;
 use futures::StreamExt;
+use serde::Deserialize;
 use sov_demo_rollup::ExternalMockDemoRollup;
 use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_modules_api::execution_mode::Native;
+use sov_modules_api::AggregatedProofPublicData;
 use sov_modules_api::OperatingMode;
+use sov_modules_api::Spec;
+use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_blueprint::GenesisParams;
+use sov_state::Storage;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 
 use crate::external_mock_da::ExternalDa;
 use crate::test_helpers::{test_genesis_paths, DemoRollupSpec};
+
+type RollupSpec = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
+type ProofPublicData = AggregatedProofPublicData<
+    <RollupSpec as Spec>::Address,
+    <RollupSpec as Spec>::Da,
+    <<RollupSpec as Spec>::Storage as Storage>::Root,
+>;
 
 /// Single place for configuring test rollup.
 /// Applies all necessary configuration changes to make it work with the tests.
@@ -79,4 +91,22 @@ pub async fn start_test_rollup(
     test_rollup.wait_for_sequencer_ready().await?;
 
     Ok(test_rollup)
+}
+
+#[derive(Debug, Deserialize)]
+struct ValueResponse {
+    value: ProofPublicData,
+}
+
+pub async fn query_verified_proofs(
+    test_rollup: &TestRollup<ExternalMockDemoRollup<Native>>,
+) -> anyhow::Result<ProofPublicData> {
+    let value = test_rollup
+        .client
+        .query_rest_endpoint::<ValueResponse>(
+            "/modules/prover-incentives/state/latest-proof-succesfully-verified",
+        )
+        .await?;
+
+    Ok(value.value)
 }

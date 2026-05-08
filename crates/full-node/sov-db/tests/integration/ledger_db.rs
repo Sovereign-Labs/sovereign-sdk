@@ -157,7 +157,7 @@ async fn test_save_aggregated_proof() {
         let public_data = AggregatedProofPublicData::<MockAddress, MockDaSpec, Vec<u8>> {
             initial_slot_number: i.to_slot_number(),
             final_slot_number: i.to_slot_number(),
-            genesis_state_root: vec![1],
+            origin_state_root: vec![1],
             initial_state_root: vec![i],
             final_state_root: vec![i + 1],
             initial_slot_hash: MockHash([i + 2; 32]),

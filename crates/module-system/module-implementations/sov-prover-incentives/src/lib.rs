@@ -13,10 +13,11 @@ pub use genesis::*;
 use sov_bank::Amount;
 use sov_modules_api::runtime::OperatingMode;
 use sov_modules_api::{
-    Context, DaSpec, Gas, GenesisState, GetGasPrice, ModuleId, ModuleInfo, ModuleRestApi, Spec,
-    StateMap, StateReader, StateValue, TxState,
+    AggregatedProofPublicData, Context, DaSpec, Gas, GenesisState, GetGasPrice, ModuleId,
+    ModuleInfo, ModuleRestApi, Spec, StateMap, StateReader, StateValue, TxState,
 };
 use sov_rollup_interface::common::SlotNumber;
+use sov_state::Storage;
 use sov_state::User;
 
 pub use crate::event::Event;
@@ -46,6 +47,12 @@ pub struct ProverIncentives<S: Spec> {
     /// The highest slot height for which the reward has been claimed. The next proofs should claim the next slot height.
     #[state]
     pub last_claimed_reward: StateValue<SlotNumber>,
+
+    /// Public data from the most recently verified aggregated proof.
+    #[state]
+    #[allow(clippy::type_complexity)]
+    pub latest_proof_succesfully_verified:
+        StateValue<AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>>,
 
     /// A penalty for provers who submit a proof for transitions that were already proven
     ///

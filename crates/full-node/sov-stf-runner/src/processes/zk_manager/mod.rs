@@ -32,7 +32,6 @@ pub struct ZkProofManager<Ps: ProverService> {
     max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
     proof_sender: Box<dyn ProofSender>,
     backoff_policy: ExponentialBuilder,
-    genesis_state_root: Ps::StateRoot,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
     shutdown_sender: tokio::sync::watch::Sender<()>,
@@ -50,7 +49,6 @@ where
         eager_proof_submission: bool,
         max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
         proof_sender: Box<dyn ProofSender>,
-        genesis_state_root: Ps::StateRoot,
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
         shutdown_sender: tokio::sync::watch::Sender<()>,
@@ -66,7 +64,6 @@ where
                 .with_min_delay(Duration::from_secs(BACKOFF_POLICY_MIN_DELAY))
                 .with_max_delay(Duration::from_secs(BACKOFF_POLICY_MAX_DELAY))
                 .with_max_times(BACKOFF_POLICY_MAX_NUM_RETRIES),
-            genesis_state_root,
             stf_info_receiver,
             shutdown_receiver,
             shutdown_sender,
@@ -93,7 +90,6 @@ where
                 prover_service: self.prover_service.clone(),
                 proof_sender: self.proof_sender,
                 backoff_policy: self.backoff_policy,
-                genesis_state_root: self.genesis_state_root.clone(),
                 metadata_rx,
                 cursor,
                 shutdown_receiver: self.shutdown_receiver.clone(),
@@ -251,7 +247,6 @@ struct AggregatorTask<Ps: ProverService> {
     prover_service: Arc<Ps>,
     proof_sender: Box<dyn ProofSender>,
     backoff_policy: ExponentialBuilder,
-    genesis_state_root: Ps::StateRoot,
     metadata_rx: mpsc::Receiver<(AggregateProofMetadata<Ps>, u64)>,
     cursor: CursorHandle,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
@@ -296,7 +291,6 @@ where
             let agg_proof = create_aggregate_proof_with_retries(
                 metadata,
                 &*self.prover_service,
-                &self.genesis_state_root,
                 &self.backoff_policy,
             )
             .await?;
@@ -327,7 +321,6 @@ where
 async fn create_aggregate_proof_with_retries<Ps: ProverService>(
     mut metadata: AggregateProofMetadata<Ps>,
     prover_service: &Ps,
-    genesis_state_root: &Ps::StateRoot,
     backoff_policy: &ExponentialBuilder,
 ) -> anyhow::Result<SerializedAggregatedProof> {
     let mut attempt_num = 1u32;
@@ -336,7 +329,7 @@ async fn create_aggregate_proof_with_retries<Ps: ProverService>(
     loop {
         let maybe_backoff_duration = backoff_iter.next();
 
-        match metadata.prove(prover_service, genesis_state_root).await {
+        match metadata.prove(prover_service).await {
             Ok(proof) => return Ok(proof),
             Err((returned_metadata, error)) => {
                 let error_message = format!("Failed to generate aggregate proof: {error}");
