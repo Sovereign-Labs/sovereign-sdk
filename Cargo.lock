@@ -3550,7 +3550,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -3661,7 +3661,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-uniqueness",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -5769,7 +5769,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tracing",
 ]
@@ -6819,7 +6819,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
 ]
 
@@ -10079,7 +10079,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
 ]
 
@@ -10097,7 +10097,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
 ]
 
@@ -11317,7 +11317,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
 ]
 
@@ -11411,7 +11411,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -11436,7 +11436,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -11480,7 +11480,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-transaction-generator",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tokio",
  "tracing",
@@ -11534,7 +11534,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tracing",
 ]
@@ -11631,7 +11631,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -11697,7 +11697,7 @@ dependencies = [
  "sov-mock-zkvm",
  "sov-rollup-interface",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "test-log",
  "test-strategy",
@@ -11799,7 +11799,7 @@ dependencies = [
  "sov-test-utils",
  "sov-zkvm-utils",
  "sp1",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "testcontainers",
  "tokio",
@@ -11951,7 +11951,7 @@ dependencies = [
  "sov-stf-runner",
  "sov-test-utils",
  "sov-uniqueness",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "test-strategy",
  "thiserror 2.0.18",
@@ -12009,7 +12009,7 @@ dependencies = [
  "sov-test-utils",
  "sov-uniqueness",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -12105,7 +12105,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "testcontainers",
  "testcontainers-modules",
@@ -12133,7 +12133,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
 ]
 
@@ -12202,7 +12202,7 @@ dependencies = [
  "serde",
  "sov-metrics",
  "sp1-lib",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tokio",
  "tokio-metrics",
  "toml 0.8.23",
@@ -12337,7 +12337,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tokio",
  "toml 0.8.23",
@@ -12377,7 +12377,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-universal-wallet-macro-helpers",
- "strum 0.26.3",
+ "strum 0.28.0",
  "syn 2.0.117",
  "tokio",
  "toml 0.8.23",
@@ -12474,7 +12474,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -12500,7 +12500,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tracing",
 ]
@@ -12527,7 +12527,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -12598,7 +12598,7 @@ dependencies = [
  "sov-sequencer-registry",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
 ]
 
@@ -12663,7 +12663,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-uniqueness",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -12788,7 +12788,7 @@ dependencies = [
  "sov-uniqueness",
  "sov-value-setter",
  "sqlx",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "test-strategy",
  "thiserror 2.0.18",
@@ -12820,7 +12820,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -12865,7 +12865,7 @@ dependencies = [
  "sov-transaction-generator",
  "sov-value-setter",
  "sp1",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tokio",
 ]
 
@@ -12927,7 +12927,7 @@ dependencies = [
  "sov-stf-runner",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tokio",
  "tokio-stream",
@@ -13035,7 +13035,7 @@ dependencies = [
  "sov-sequencer",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -13061,7 +13061,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -13083,7 +13083,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -13101,7 +13101,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -13153,7 +13153,7 @@ dependencies = [
  "sov-uniqueness",
  "sov-universal-wallet",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "testcontainers",
  "testcontainers-modules",
@@ -13179,7 +13179,7 @@ dependencies = [
  "sov-test-utils",
  "sov-timelock",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
 ]
 
@@ -13219,7 +13219,7 @@ dependencies = [
  "sov-test-state-consistency",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -13248,7 +13248,7 @@ dependencies = [
  "sov-test-utils",
  "sov-uniqueness",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
 ]
 
@@ -13315,7 +13315,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
 ]
@@ -14251,9 +14251,6 @@ name = "strum"
 version = "0.26.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
-dependencies = [
- "strum_macros 0.26.4",
-]
 
 [[package]]
 name = "strum"
@@ -14265,16 +14262,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "strum_macros"
-version = "0.26.4"
+name = "strum"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
 dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 2.0.117",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -14282,6 +14275,18 @@ name = "strum_macros"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
