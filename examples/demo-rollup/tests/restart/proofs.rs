@@ -4,9 +4,8 @@ use std::time::Duration;
 use futures::StreamExt;
 use sov_demo_rollup::ExternalMockDemoRollup;
 use sov_full_node_configs::sequencer::SequencerKindConfig;
-use sov_mock_da::storable::rpc::{start_server, MockDaClientConfig};
-use sov_mock_da::storable::StorableMockDaService;
-use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig};
+use sov_mock_da::storable::rpc::MockDaClientConfig;
+use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::OperatingMode;
 use sov_rollup_interface::da::BlockHeaderTrait;
@@ -15,30 +14,13 @@ use sov_sequencer::preferred::RecoveryStrategy;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
-use tokio::sync::watch;
 
+use crate::external_mock_da::{start_external_mock_da, ExternalDa};
 use crate::test_helpers::test_genesis_source;
 
-const TEST_SEQ_DA_ADDRESS: MockAddress = MockAddress::new([0; 32]);
 const AGGREGATED_PROOF_BLOCK_JUMP: usize = 3;
 const PROOF_WAIT_TIMEOUT: Duration = Duration::from_secs(120);
 const OFFLINE_DA_BLOCKS: u32 = 3;
-
-async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<()>, SocketAddr) {
-    let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
-    let mut da_config = MockDaConfig::instant_with_sender(TEST_SEQ_DA_ADDRESS);
-    da_config.block_producing = BlockProducingConfig::Periodic {
-        block_time_ms: TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 2,
-    };
-
-    let da_service = StorableMockDaService::from_config(da_config, shutdown_receiver).await;
-
-    let addr = start_server(da_service.clone(), "127.0.0.1", 0)
-        .await
-        .unwrap();
-
-    (da_service, shutdown_sender, addr)
-}
 
 async fn build_rollup_with_prover(
     addr: SocketAddr,
@@ -89,7 +71,15 @@ async fn wait_for_aggregated_proofs(
 async fn test_aggregated_proofs_after_restart_external_da() {
     //sov_test_utils::logging::initialize_or_change_logging_with_filter("info,tower=off");
 
-    let (da_service, da_shutdown, addr) = create_da_service_periodic().await;
+    let ExternalDa {
+        service: da_service,
+        shutdown: da_shutdown,
+        addr,
+    } = start_external_mock_da(BlockProducingConfig::Periodic {
+        block_time_ms: TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 2,
+    })
+    .await
+    .unwrap();
     // Give the DA layer some headroom so the rollup doesn't immediately starve on startup.
     da_service.wait_for_height(10).await.unwrap();
 
