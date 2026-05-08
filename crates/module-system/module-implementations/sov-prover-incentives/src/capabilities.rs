@@ -146,6 +146,10 @@ impl<S: Spec> ProverIncentives<S> {
             }
         };
 
+        self.latest_proof_succesfully_verified
+            .set(&public_outputs, state)
+            .map_err(Into::<anyhow::Error>::into)?;
+
         #[cfg(feature = "native")]
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(crate::metrics::LatestVerifiedProofMetric {
@@ -341,7 +345,7 @@ impl<S: Spec> ProverIncentives<S> {
             .expect("The genesis hash should be set at genesis");
 
         // We have to check that the genesis hash is valid
-        if expected_genesis_hash != public_outputs.genesis_state_root {
+        if expected_genesis_hash != public_outputs.origin_state_root {
             return Ok(Some(SlashingReason::IncorrectGenesisHash));
         }
 

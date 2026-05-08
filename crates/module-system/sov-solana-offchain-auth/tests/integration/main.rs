@@ -1,4 +1,5 @@
 #![allow(unused_imports)]
+use sov_api_spec::ClientInfo;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_node_client::NodeClient;
 use std::str::FromStr;

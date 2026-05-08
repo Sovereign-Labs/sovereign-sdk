@@ -583,9 +583,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                             .proof_manager
                             .max_number_of_aggregated_proofs_in_memory,
                         proof_sender,
-                        genesis_state_root,
                         stf_info_receiver,
                         secondary_shutdown_receiver,
+                        main_shutdown_sender.clone(),
                     )
                     .await?
                 }

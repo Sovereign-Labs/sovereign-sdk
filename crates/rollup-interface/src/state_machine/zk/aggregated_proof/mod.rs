@@ -25,7 +25,6 @@ pub trait OuterZkvmHost: Clone + Send + Sync + 'static {
         Root: Serialize + DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
     >(
         &self,
-        genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<SerializedAggregatedProof>;
 }
@@ -87,14 +86,16 @@ impl core::fmt::Display for CodeCommitmentHash {
 }
 
 /// Public data of an aggregated proof.
-#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone)]
+#[derive(Debug, Eq, PartialEq, Serialize, Deserialize, Clone, BorshDeserialize, BorshSerialize)]
 pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {
     /// Initial rollup slot.
     pub initial_slot_number: SlotNumber,
     /// Final rollup slot.
     pub final_slot_number: SlotNumber,
-    /// The genesis state root of the aggregated proof.
-    pub genesis_state_root: Root,
+    /// The origin state root of the aggregated proof: the initial state root of the
+    /// first inner proof in this aggregation's chain. When the chain extends unbroken
+    /// from the rollup's genesis, this equals the rollup's genesis state root.
+    pub origin_state_root: Root,
     /// The initial state root of the aggregated proof.
     pub initial_state_root: Root,
     /// The final state root of the aggregated proof.
@@ -119,7 +120,7 @@ where
     /// deriving initial/final fields from the first and last entries.
     pub fn from_block_proofs(
         block_proofs: &[&BlockProof<Address, Da, Root>],
-        genesis_state_root: Root,
+        origin_state_root: Root,
     ) -> Self {
         let initial = block_proofs
             .first()
@@ -133,7 +134,7 @@ where
             rewarded_addresses,
             initial_slot_number: initial.st.slot_number,
             final_slot_number: final_bp.st.slot_number,
-            genesis_state_root,
+            origin_state_root,
             initial_state_root: initial.st.initial_state_root.clone(),
             final_state_root: final_bp.st.final_state_root.clone(),
             initial_slot_hash: initial.st.slot_hash.clone(),
@@ -151,10 +152,10 @@ impl<Address, Da: DaSpec, Root: AsRef<[u8]>> core::fmt::Display
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "AggregatedProofPublicData(initial_slot_number: {}, final_slot_number: {}, genesis_state_root: {}, initial_state_root: 0x{}, final_state_root: 0x{}, initial_slot_hash: 0x{}, final_slot_hash: 0x{}, inner_vkey_hash: {}, outer_vk_hash: {})",
+            "AggregatedProofPublicData(initial_slot_number: {}, final_slot_number: {}, origin_state_root: {}, initial_state_root: 0x{}, final_state_root: 0x{}, initial_slot_hash: 0x{}, final_slot_hash: 0x{}, inner_vkey_hash: {}, outer_vk_hash: {})",
             self.initial_slot_number,
             self.final_slot_number,
-            hex::encode(self.genesis_state_root.as_ref()),
+            hex::encode(self.origin_state_root.as_ref()),
             hex::encode(self.initial_state_root.as_ref()),
             hex::encode(self.final_state_root.as_ref()),
             hex::encode(self.initial_slot_hash.as_ref()),

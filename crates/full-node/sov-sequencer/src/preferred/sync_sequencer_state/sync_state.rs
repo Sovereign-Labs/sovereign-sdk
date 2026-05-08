@@ -234,6 +234,14 @@ where
 
                 self.send_response(resp, ret, "check_readiness").await;
             }
+            Message::BlobSenderStatus { resp, reason } => {
+                let ret = {
+                    let inner = self.get_inner_with_timing(reason).await;
+                    inner.proof_blob_sender_status()
+                };
+                self.send_response(resp, ret, "proof_blob_sender_status")
+                    .await;
+            }
             Message::AcceptTx {
                 resp,
                 baked_tx,

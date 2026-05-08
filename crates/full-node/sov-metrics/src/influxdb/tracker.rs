@@ -682,7 +682,7 @@ impl Metric for ZkVmExecutionChunk {
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[allow(missing_docs)]
 pub enum ZkCircuit {
     Inner,

@@ -13,11 +13,12 @@ use crate::postgres::CreatePostgresError;
 use crate::{Transaction, TEST_MOCK_DA_POLLING_INTERVAL};
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BATCH_BLOBS,
+    TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MAX_CONCURRENT_PROOF_BLOBS,
 };
 use anyhow::Context;
 use derivative::Derivative;
 use serde::Deserialize;
+use sov_api_spec::types;
 use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
@@ -113,6 +114,7 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub axum_port: u16,
     pub max_batch_size_bytes: usize,
     pub max_concurrent_batch_blobs: usize,
+    pub max_concurrent_proof_blobs: usize,
     pub blob_processing_timeout_secs: u64,
     pub start_at_rollup_height: Option<RollupHeight>,
     pub stop_at_rollup_height: Option<RollupHeight>,
@@ -384,6 +386,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 sequencer_kind_config: self.config.sequencer_config.clone(),
                 max_batch_size_bytes: self.config.max_batch_size_bytes,
                 max_concurrent_batch_blobs: self.config.max_concurrent_batch_blobs,
+                max_concurrent_proof_blobs: self.config.max_concurrent_proof_blobs,
                 blob_processing_timeout_secs: self.config.blob_processing_timeout_secs,
                 extension: self.config.extension,
             },
@@ -406,6 +409,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             max_allowed_node_distance_behind: 10,
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
+            max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
             max_channel_size: 60,
             max_infos_in_db: 250 + finalization_blocks as u64,
             automatic_batch_production: true,
@@ -1125,6 +1129,14 @@ where
     ) -> Result<TxInfoWithConfirmation, anyhow::Error> {
         let resp = self.client.client.send_tx_to_sequencer(&tx).await?;
         Ok(resp.into_inner())
+    }
+
+    pub async fn subscribe_finalized_slots(&self) -> WsSubscription<types::Slot> {
+        self.client.client.subscribe_finalized_slots().await
+    }
+
+    pub async fn subscribe_aggregated_proof(&self) -> WsSubscription<types::AggregatedProof> {
+        self.client.client.subscribe_aggregated_proof().await
     }
 }
 

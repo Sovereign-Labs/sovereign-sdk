@@ -15,6 +15,7 @@ use serde::{Deserialize, Serialize};
 use serde_with::serde_as;
 use sov_db::schema::types::{BatchNumber, EventNumber, TxNumber};
 use sov_modules_api::da::Time;
+use sov_modules_api::rpc::LedgerStateProviderExt;
 pub use sov_modules_api::ApiTxEffect as TxEffect;
 use sov_modules_api::{EventModuleName, FullyBakedTx, RuntimeEventResponse};
 use sov_rest_utils::errors::ReportableWsError;
@@ -35,6 +36,12 @@ use sov_rollup_interface::stf::TxReceiptContents;
 use tokio::sync::watch;
 
 type PathMap = Path<HashMap<String, NumberOrHash>>;
+
+/// Maximum value of `page[cursor]` accepted on the prefix path of `list_events`.
+/// Bounds per-request work since the current implementation re-reads everything
+/// from event 0 on every page. Until prefix iteration is pushed down into the
+/// storage layer, deeper cursors are rejected with 400.
+const PREFIX_MAX_START: u64 = 10_000;
 
 /// Error to be returned when our bespoke path captures parser fails.
 fn bad_path_error(key: &str) -> Response {
@@ -86,7 +93,7 @@ pub struct LedgerState<T: LedgerStateProvider + Clone + Send + Sync + 'static> {
 
 impl<T, B, TxReceipt, E> LedgerRoutes<T, B, TxReceipt, E>
 where
-    T: LedgerStateProvider + Clone + Send + Sync + 'static,
+    T: LedgerStateProviderExt + Clone + Send + Sync + 'static,
     B: serde::Serialize + DeserializeOwned + Clone + Send + Sync + 'static,
     TxReceipt: TxReceiptContents,
     E: EventModuleName
@@ -363,8 +370,32 @@ where
             PageSelection::First => 0,
             PageSelection::Last => return Err(errors::not_implemented_501()),
         };
-        let end = start.saturating_add(pagination.size as u64);
-        let nums = (start..=end)
+        let limit = pagination.size as usize;
+
+        if let Some(prefix) = event_key_prefix_opt
+            .as_ref()
+            .map(|q| q.0.prefix.as_str())
+            .filter(|p| !p.is_empty())
+        {
+            // Bound the per-request work on the prefix path. Cost scales with
+            // `start + limit` per matching key (see list_events_by_prefix), so an
+            // unbounded cursor lets a client force the node to read and sort
+            // arbitrarily large windows. Reject deep cursors until the prefix
+            // iteration is pushed down into the storage layer.
+            if start > PREFIX_MAX_START {
+                return Err(errors::bad_request_400(
+                    "prefix queries cannot paginate past this offset",
+                    format!("page[cursor] must be <= {PREFIX_MAX_START} when prefix is set; use a more selective prefix to narrow results"),
+                ));
+            }
+            let events = Self::list_events_by_prefix(&state.ledger, prefix, start, limit)
+                .await
+                .map_err(errors::database_error_response_500)?;
+            return Ok(events.into());
+        }
+
+        let end = start.saturating_add(limit as u64);
+        let nums = (start..end)
             .map(EventIdentifier::Number)
             .collect::<Vec<_>>();
         let events = state
@@ -374,15 +405,46 @@ where
             .map_err(errors::database_error_response_500)?
             .into_iter()
             .flatten()
-            .filter(|event| {
-                if let Some(prefix) = &event_key_prefix_opt {
-                    event.key.starts_with(&prefix.prefix)
-                } else {
-                    true
-                }
-            })
             .collect::<Vec<_>>();
         Ok(events.into())
+    }
+
+    // Assumes the prefix selects a small number of distinct event keys (typically
+    // 1-5). Cost per page is O(M * (start + limit)) event reads where M is the
+    // number of matching keys, so deep pagination over a broad prefix gets
+    // expensive. If that ever becomes a real workload, push prefix iteration into
+    // LedgerStateProviderExt with an opaque cursor backed by a RocksDB prefix scan
+    // so the cost becomes proportional to the answer size.
+    async fn list_events_by_prefix(
+        ledger: &T,
+        prefix: &str,
+        start: u64,
+        limit: usize,
+    ) -> Result<Vec<RuntimeEventResponse<E>>, T::Error> {
+        let matching_keys = ledger
+            .get_event_key_counts()
+            .await?
+            .into_iter()
+            .map(|(key, _)| key)
+            .filter(|key| key.starts_with(prefix))
+            .collect::<Vec<_>>();
+
+        let per_key_fetch = (start as usize).saturating_add(limit);
+
+        let mut events = Vec::new();
+        for event_key in matching_keys {
+            let mut response = ledger
+                .get_events_by_key::<RuntimeEventResponse<E>>(&event_key, None, per_key_fetch, None)
+                .await?
+                .events_response;
+            events.append(&mut response);
+        }
+
+        events.sort_by_key(|event| event.number);
+        let cut = events.partition_point(|event| event.number < start);
+        events.drain(..cut);
+        events.truncate(limit);
+        Ok(events)
     }
 
     async fn get_latest_event(
@@ -774,42 +836,49 @@ where
 
                         let ledger = ledger.clone();
                         async move {
-                            let capacity =
-                                incoming_slot_num.saturating_sub(old_last.get()).get() as usize;
-                            let mut slots = Vec::with_capacity(capacity);
                             tracing::trace!(
                                 from = %old_last,
                                 up_to_inc = %incoming_slot_num,
-                                "Going to notify about finalized slots"
+                                "Created lazy websocket notification stream for finalized slots"
                             );
-                            for slot_number in old_last.range_inclusive(incoming_slot_num) {
-                                let slot_result = match ledger
-                                    .get_slot_by_number::<B, TxReceipt, RuntimeEventResponse<E>>(
-                                        slot_number,
-                                        query_mode,
-                                    )
-                                    .await
-                                {
-                                    Ok(Some(slot)) => Ok(Slot::<B, TxReceipt, E>::new(slot)),
-                                    Ok(None) => Err(WsLedgerError::SlotNotFound { slot: slot_number.get() }),
-                                    Err(err) => {
-                                        tracing::error!(
-                                            error = %err,
-                                            "Database error while fetching slot by number"
-                                        );
-                                        Err(WsLedgerError::SlotFetchFailed { slot: slot_number.get() })},
-                                };
-                                tracing::trace!(%slot_number, "Preparing slot result for sending to websocket");
-                                slots.push(slot_result);
-                            }
-                            tracing::trace!(
-                                from = %old_last,
-                                up_to_inc = %incoming_slot_num,
-                                "Collected websocket notification about finalized slots"
-                            );
-                            // Returning `Some(...)` yields items to the *downstream*;
-                            // returning `None` would end the stream.
-                            Some(futures::stream::iter(slots))
+                            Some(
+                                futures::stream::iter(old_last.range_inclusive(incoming_slot_num))
+                                    .then(move |slot_number| {
+                                        let ledger = ledger.clone();
+                                        async move {
+                                            let slot_result = match ledger
+                                                .get_slot_by_number::<
+                                                    B,
+                                                    TxReceipt,
+                                                    RuntimeEventResponse<E>,
+                                                >(slot_number, query_mode)
+                                                .await
+                                            {
+                                                Ok(Some(slot)) => {
+                                                    Ok(Slot::<B, TxReceipt, E>::new(slot))
+                                                }
+                                                Ok(None) => Err(WsLedgerError::SlotNotFound {
+                                                    slot: slot_number.get(),
+                                                }),
+                                                Err(err) => {
+                                                    tracing::error!(
+                                                        error = %err,
+                                                        "Database error while fetching slot by number"
+                                                    );
+                                                    Err(WsLedgerError::SlotFetchFailed {
+                                                        slot: slot_number.get(),
+                                                    })
+                                                }
+                                            };
+                                            tracing::trace!(
+                                                %slot_number,
+                                                "Prepared slot result for sending to websocket"
+                                            );
+                                            slot_result
+                                        }
+                                    })
+                                    .boxed(),
+                            )
                         }
                     },
                 )

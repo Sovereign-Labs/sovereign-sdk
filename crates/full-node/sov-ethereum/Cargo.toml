@@ -65,7 +65,7 @@ sov-accounts = { workspace = true }
 sov-paymaster = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true }
 
-alloy = { workspace = true, features = ["signers"] }
+alloy = { workspace = true, features = ["signers", "transport-http"] }
 alloy-provider = { workspace = true, features = ["debug-api", "reqwest", "ws"] }
 alloy-pubsub = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }

@@ -24,9 +24,9 @@ pub async fn start_zk_workflow_in_background<Ps>(
     eager_proof_submission: bool,
     max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
     proof_sender: Box<dyn ProofSender>,
-    genesis_state_root: Ps::StateRoot,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    shutdown_sender: tokio::sync::watch::Sender<()>,
 ) -> anyhow::Result<JoinHandle<()>>
 where
     Ps: ProverService,
@@ -38,9 +38,9 @@ where
         eager_proof_submission,
         max_number_of_aggregated_proofs_in_memory,
         proof_sender,
-        genesis_state_root,
         stf_info_receiver,
         shutdown_receiver,
+        shutdown_sender,
     )
     .post_aggregated_proof_to_da_in_background()
     .await)
