@@ -49,6 +49,6 @@ impl JsonSchema for NotInstantiable {
     }
 
     fn json_schema(_: &mut SchemaGenerator) -> Schema {
-        serde_json::from_value(serde_json::json!({"type": "null"})).unwrap()
+        schemars::json_schema!({"type": "null"})
     }
 }

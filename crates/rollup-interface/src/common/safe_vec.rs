@@ -70,13 +70,12 @@ impl<T: JsonSchema, const MAX_SIZE: usize> JsonSchema for SafeVec<T, MAX_SIZE> {
     }
 
     fn json_schema(generator: &mut SchemaGenerator) -> schemars::Schema {
-        serde_json::from_value(serde_json::json!({
+        schemars::json_schema!({
             "type": "array",
             "items": generator.subschema_for::<T>(),
             "minItems": 0,
             "maxItems": MAX_SIZE,
-        }))
-        .unwrap()
+        })
     }
 }
 

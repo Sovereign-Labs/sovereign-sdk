@@ -97,12 +97,11 @@ impl schemars::JsonSchema for CelestiaAddress {
     }
 
     fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        serde_json::from_value(serde_json::json!({
+        schemars::json_schema!({
             "type": "string",
             "pattern": "^celestia[a-z0-9]+$",
             "description": "A Celestia address",
-        }))
-        .expect("Invalid schema; this is a bug, please report it")
+        })
     }
 }
 

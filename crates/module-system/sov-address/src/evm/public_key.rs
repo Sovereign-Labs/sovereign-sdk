@@ -1,7 +1,7 @@
 use crate::EthereumAddress;
 use borsh::{BorshDeserialize, BorshSerialize};
 use k256::EncodedPoint;
-use schemars::{JsonSchema, SchemaGenerator};
+use schemars::JsonSchema;
 use sov_modules_api::sov_universal_wallet::schema::OverrideSchema;
 use sov_rollup_interface::crypto::PublicKeyHex;
 
@@ -83,7 +83,7 @@ impl JsonSchema for EthereumPublicKey {
         "EthereumPublicKey".into()
     }
 
-    fn json_schema(_gen: &mut SchemaGenerator) -> schemars::Schema {
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
             "type": "string",
             "pattern": format!("^[a-fA-F0-9]{{{}}}$", PUBLIC_KEY_SIZE * 2),

@@ -375,12 +375,11 @@ impl schemars::JsonSchema for Address {
     fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         let address_prefix = config_value_private!("ADDRESS_PREFIX");
 
-        serde_json::from_value(serde_json::json!({
+        schemars::json_schema!({
             "type": "string",
             "pattern": format!("^{address_prefix}1[a-zA-Z0-9]+$"),
             "description": "Address",
-        }))
-        .unwrap()
+        })
     }
 }
 
@@ -491,12 +490,11 @@ impl schemars::JsonSchema for Base58Address {
     }
 
     fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        serde_json::from_value(serde_json::json!({
+        schemars::json_schema!({
             "type": "string",
             "pattern": "^[a-zA-Z0-9]{36,44}$",
             "description": "Address",
-        }))
-        .unwrap()
+        })
     }
 }
 

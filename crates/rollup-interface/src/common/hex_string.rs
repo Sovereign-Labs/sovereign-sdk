@@ -31,12 +31,11 @@ impl schemars::JsonSchema for HexString {
     }
 
     fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        serde_json::from_value(serde_json::json!({
+        schemars::json_schema!({
             "type": "string",
             "pattern": "^0x(?:[a-fA-F0-9]{2})+$",
             "description": "A `0x`-prefixed hexadecimal string (uppercase or lowercase) of variable length, with an even number of hex digits.",
-        }))
-        .unwrap()
+        })
     }
 }
 
@@ -47,12 +46,11 @@ impl<const N: usize> schemars::JsonSchema for HexString<[u8; N]> {
     }
 
     fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        serde_json::from_value(serde_json::json!({
+        schemars::json_schema!({
             "type": "string",
             "pattern": format!("^0x[a-fA-F0-9]{{{}}}$", N * 2),
             "description": format!("{} bytes in hexadecimal format, with `0x` prefix.", N),
-        }))
-        .unwrap()
+        })
     }
 }
 
@@ -62,12 +60,11 @@ impl<const N: usize> schemars::JsonSchema for HexString<SafeVec<u8, N>> {
     }
 
     fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-        serde_json::from_value(serde_json::json!({
+        schemars::json_schema!({
             "type": "string",
             "pattern": format!("^0x(?:[a-fA-F0-9]{{2}}){{0,{}}}$", N),
             "description": format!("At most {} bytes in hexadecimal format, with `0x` prefix.", N),
-        }))
-        .unwrap()
+        })
     }
 }
 
