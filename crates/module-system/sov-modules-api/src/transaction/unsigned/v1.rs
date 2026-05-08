@@ -31,7 +31,7 @@ pub struct UnsignedTransactionV1<R: TransactionCallable, S: Spec> {
     /// and prevent credential malleability from reusing signed bytes in a different
     /// multisig envelope.
     pub credential_address: S::Address,
-    /// Signer-declared address override. This field is part of the signed bytes.
+    /// Signer-declared address override.
     /// See [`crate::capabilities::AuthorizationData::address_override`] for routing semantics.
     #[serde(default)]
     pub address_override: Option<S::Address>,
