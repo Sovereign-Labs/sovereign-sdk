@@ -3,7 +3,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use demo_stf_json_client::types::{RuntimeAnyJsonValue, RuntimeError};
+use demo_stf_json_client::types::RuntimeError;
 use demo_stf_json_client::Error;
 use futures::StreamExt;
 use serde::Deserialize;
@@ -185,7 +185,7 @@ async fn check_state_value(client: &demo_stf_json_client::Client) -> anyhow::Res
     let finality_period = client
         .attester_incentives_rollup_finality_period_get_state_value(None, None)
         .await?;
-    let finality_period = if let RuntimeAnyJsonValue::Object(inner) = &**finality_period {
+    let finality_period = if let serde_json::Value::Object(inner) = &**finality_period {
         let value = inner
             .get("value")
             .cloned()

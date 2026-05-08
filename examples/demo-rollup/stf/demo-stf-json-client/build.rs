@@ -60,7 +60,13 @@ fn main() {
     downconvert_to_3_0(&mut serialized);
     // crate: openapiv3
     let spec: openapiv3::OpenAPI = serde_json::from_value(serialized).unwrap();
-    let mut generator = progenitor::Generator::default();
+    let mut settings = progenitor::GenerationSettings::default();
+    // typify (via progenitor) emits a wrapper struct and inner enum sharing the
+    // same name when it sees `oneOf` + `nullable: true`, which fails to compile.
+    // Since `RuntimeAnyJsonValue` represents arbitrary JSON, map it to
+    // `serde_json::Value` directly to sidestep the issue.
+    settings.with_replacement("RuntimeAnyJsonValue", "::serde_json::Value", [].into_iter());
+    let mut generator = progenitor::Generator::new(&settings);
 
     let tokens = generator.generate_tokens(&spec).unwrap();
     let ast = syn::parse2(tokens).unwrap();

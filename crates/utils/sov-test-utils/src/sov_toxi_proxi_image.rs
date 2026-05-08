@@ -1,4 +1,4 @@
-use crate::docker::pull_image_with_retries;
+use crate::docker::prepull_image_best_effort;
 use serde_json::json;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
@@ -68,9 +68,7 @@ impl ToxiProxySetup {
         postgres_connection_string: &str,
         da_upstream_port: u16,
     ) -> Self {
-        pull_image_with_retries(SovToxiProxiImage)
-            .await
-            .expect("Failed to pull toxiproxy image");
+        prepull_image_best_effort(SovToxiProxiImage).await;
 
         let toxiproxy = SovToxiProxiImage
             .with_host("host.docker.internal", Host::HostGateway)

@@ -13,7 +13,7 @@ use crate::{CelestiaConfig, CelestiaService};
 use anyhow::{anyhow, Context};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_test_utils::docker::pull_image_with_retries;
+use sov_test_utils::docker::prepull_image_best_effort;
 use testcontainers::core::{ExecCommand, Host, Mount, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, Image, ImageExt};
@@ -91,12 +91,8 @@ impl CelestiaDevNode {
     pub async fn start() -> anyhow::Result<Self> {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let start = std::time::Instant::now();
-        pull_image_with_retries(CelestiaValidator)
-            .await
-            .context("failed to pull celestia validator image")?;
-        pull_image_with_retries(CelestiaBridge)
-            .await
-            .context("failed to pull celestia bridge image")?;
+        prepull_image_best_effort(CelestiaValidator).await;
+        prepull_image_best_effort(CelestiaBridge).await;
         let suffix = Uuid::new_v4().to_string();
 
         let network = format!("celestia-test-{suffix}");

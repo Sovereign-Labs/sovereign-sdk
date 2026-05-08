@@ -59,6 +59,7 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootTask;
 use std::boxed::Box;
@@ -986,6 +987,13 @@ where
             .map_err(|e| e.into_state_update_error())?;
 
         Ok(())
+    }
+
+    async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus> {
+        self.synchronized_state_updator
+            .proof_blob_sender_status_msg("proof_blob_sender_status")
+            .await
+            .map_err(|e| e.into_state_update_error())
     }
 }
 

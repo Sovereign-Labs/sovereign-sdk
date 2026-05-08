@@ -186,6 +186,14 @@ impl MockZkvmHost {
         };
         std::thread::sleep(std::time::Duration::from_millis(ms));
     }
+
+    /// Polls `env_var` every 10ms and blocks while it is set to
+    /// `"STOP_PROVING"`. Returns immediately once the var is unset.
+    fn wait_while_stop_proving(env_var: &str) {
+        while std::env::var(env_var).as_deref() == Ok("STOP_PROVING") {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
 }
 
 impl Default for MockZkvmHost {
@@ -237,6 +245,7 @@ impl OuterZkvmHost for MockZkvmHost {
         );
 
         Self::maybe_mock_sleep("SOV_MOCK_AGGREGATION_SLEEP_MS");
+        Self::wait_while_stop_proving("SOV_MOCK_AGGREGATION_GATE");
 
         let mut previous = self
             .previous_anchor
