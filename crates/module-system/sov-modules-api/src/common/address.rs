@@ -78,12 +78,14 @@ macro_rules! impl_bech32_conversion {
             $human_readable_prefix
         }
 
-        impl schemars::JsonSchema for $bech32_version {
-            fn schema_name() -> std::borrow::Cow<'static, str> {
+        impl $crate::prelude::schemars::JsonSchema for $bech32_version {
+            fn schema_name() -> ::std::borrow::Cow<'static, str> {
                 stringify!($bech32_version).into()
             }
 
-            fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+            fn json_schema(
+                _gen: &mut $crate::prelude::schemars::SchemaGenerator,
+            ) -> $crate::prelude::schemars::Schema {
                 $crate::prelude::schemars::json_schema!({
                     "type": "string",
                     "pattern": format!("^{}1[a-zA-Z0-9]+$", __bech32_hrp()),
@@ -318,13 +320,15 @@ macro_rules! impl_hash32_type {
             }
         }
 
-        impl schemars::JsonSchema for $id {
-            fn schema_name() -> std::borrow::Cow<'static, str> {
+        impl $crate::prelude::schemars::JsonSchema for $id {
+            fn schema_name() -> ::std::borrow::Cow<'static, str> {
                 stringify!($id).into()
             }
 
-            fn json_schema(gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
-                <$bech32_version as schemars::JsonSchema>::json_schema(gen)
+            fn json_schema(
+                gen: &mut $crate::prelude::schemars::SchemaGenerator,
+            ) -> $crate::prelude::schemars::Schema {
+                <$bech32_version as $crate::prelude::schemars::JsonSchema>::json_schema(gen)
             }
         }
 
