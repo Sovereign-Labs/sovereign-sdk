@@ -84,7 +84,6 @@ pub struct SolanaOffchainUnsignedTransactionV1<R: TransactionCallable, S: Spec> 
     /// `sov-accounts`.
     pub multisig_id: S::Address,
     /// Signer-declared address override.
-    /// This field is part of the signed bytes.
     /// See [`sov_modules_api::capabilities::AuthorizationData::address_override`] for routing semantics.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address_override: Option<S::Address>,
