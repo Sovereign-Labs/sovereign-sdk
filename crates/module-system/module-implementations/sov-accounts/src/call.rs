@@ -1,4 +1,4 @@
-use anyhow::{anyhow, bail, Context as _};
+use anyhow::{bail, Context as _};
 use schemars::JsonSchema;
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{Context, CredentialId, Spec, StateReader, TxState};
@@ -101,7 +101,7 @@ impl<S: Spec> Accounts<S> {
 
         anyhow::ensure!(
             self.is_authorized_for(&address, &credential, state)
-                .map_err(|err| anyhow!("Error raised while checking authorization: {err:?}"))?,
+                .context("Failed to check credential authorization")?,
             "CredentialId is not authorized for this address"
         );
 
@@ -122,7 +122,7 @@ impl<S: Spec> Accounts<S> {
 
         anyhow::ensure!(
             self.is_authorized_for(&address, &old_credential, state)
-                .map_err(|err| anyhow!("Error raised while checking authorization: {err:?}"))?,
+                .context("Failed to check credential authorization")?,
             "CredentialId is not authorized for this address"
         );
         self.ensure_credential_not_authorized(&address, &new_credential, state)?;
@@ -152,7 +152,7 @@ impl<S: Spec> Accounts<S> {
         if !self
             .enable_custom_account_mappings
             .get(state)
-            .map_err(|err| anyhow!("Error reading enable_custom_account_mappings: {err:?}"))?
+            .context("Failed to read enable_custom_account_mappings")?
             .expect(
                 "`enable_custom_account_mappings` should not be None; it must be set at genesis.",
             )

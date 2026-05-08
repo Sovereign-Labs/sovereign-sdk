@@ -167,8 +167,12 @@ mod tests {
     use borsh::{BorshDeserialize, BorshSerialize};
     use sov_modules_api::configurable_spec::ConfigurableSpec;
     use sov_modules_api::execution_mode::Native;
+    use sov_modules_api::Spec;
+    use sov_test_utils::{MockDaSpec, MockZkvm};
 
     use super::*;
+
+    type S = ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, MultiAddressEvm, Native>;
 
     #[test]
     fn credential_from_evm_address_roundtrips_to_vm_multi_address() {
@@ -188,10 +192,6 @@ mod tests {
             MultiAddressEvm::Vm(_) => panic!("non-zero-prefix credential must not decode to Vm"),
         }
     }
-
-    use sov_modules_api::Spec;
-    use sov_test_utils::{MockDaSpec, MockZkvm};
-    type S = ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, MultiAddressEvm, Native>;
 
     #[test]
     fn test_serde_json_multi_address_evm_vm() {

@@ -52,10 +52,6 @@ impl<S: Spec> Accounts<S> {
         }
 
         let canonical_address: S::Address = (*credential_id).into();
-        if canonical_address == *address {
-            return Ok(true);
-        }
-
-        self.is_explicitly_authorized(address, credential_id, state)
+        Ok(canonical_address == *address)
     }
 }
