@@ -41,7 +41,7 @@ pub struct Version0<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Sp
     pub uniqueness: UniquenessData,
     /// The transaction metadata. Contains gas parameters and the chain ID.
     pub details: TxDetails<S>,
-    /// Signer-declared address override. This field is part of the signed bytes.
+    /// Signer-declared address override.
     /// See [`crate::capabilities::AuthorizationData::address_override`] for routing semantics.
     #[serde(default)]
     pub address_override: Option<S::Address>,
