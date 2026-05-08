@@ -2,7 +2,7 @@ use std::rc::Rc;
 
 use sov_bank::Bank;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
-use sov_modules_api::transaction::{Transaction, UnsignedTransactionV0};
+use sov_modules_api::transaction::{Transaction, UnsignedTransactionV0, Version0};
 use sov_modules_api::{Amount, EncodeCall, FullyBakedTx, PrivateKey, RawTx, Runtime};
 use sov_test_utils::generators::bank::BankMessageGenerator;
 use sov_test_utils::generators::sequencer_registry::SequencerRegistryMessageGenerator;
@@ -45,15 +45,16 @@ pub fn simulate_da_with_revert_msg(admin: TestPrivateKey) -> Vec<FullyBakedTx> {
 pub fn simulate_da_with_bad_sig(key: TestPrivateKey) -> Vec<FullyBakedTx> {
     let bank_generator: BankMessageGenerator<S> = BankMessageGenerator::with_minter(key.clone());
     let create_token_message = bank_generator.create_default_messages().remove(0);
-    let tx = Transaction::<IntegTestRuntime<S>, S>::new_with_details_v0(
-        create_token_message.sender_key.pub_key(),
-        <IntegTestRuntime<S> as EncodeCall<Bank<S>>>::to_decodable(create_token_message.content),
-        // Use the signature of an empty message
-        key.sign(&[]),
-        UniquenessData::Generation(create_token_message.generation),
-        create_token_message.details,
-    );
-    // Overwrite the signature with the signature of the empty message
+    let tx = Transaction::<IntegTestRuntime<S>, S>::V0(Version0 {
+        signature: key.sign(&[]),
+        pub_key: create_token_message.sender_key.pub_key(),
+        runtime_call: <IntegTestRuntime<S> as EncodeCall<Bank<S>>>::to_decodable(
+            create_token_message.content,
+        ),
+        uniqueness: UniquenessData::Generation(create_token_message.generation),
+        details: create_token_message.details,
+        address_override: None,
+    });
 
     vec![encode_with_auth(tx)]
 }
@@ -86,6 +87,7 @@ pub fn simulate_da_with_bad_serialization(key: TestPrivateKey) -> Vec<FullyBaked
             ),
             UniquenessData::Generation(create_token_message.generation),
             create_token_message.details.clone(),
+            None,
         ),
     );
 
