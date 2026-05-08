@@ -236,7 +236,7 @@ describe("Rollup", () => {
       transaction: vi.fn().mockResolvedValue(mockTransaction),
     };
 
-    const unsignedTx = { foo: "bar" };
+    const unsignedTx = { V0: { foo: "bar" } };
 
     beforeEach(() => {
       vi.clearAllMocks();
@@ -252,9 +252,9 @@ describe("Rollup", () => {
       expect(mockSigner.sign).toHaveBeenCalledWith(
         new Uint8Array([7, 8, 9, 1, 2, 3, 4]),
       );
-      expect(mockSerializer.serializeUnsignedTx).toHaveBeenCalledWith({
-        V0: unsignedTx,
-      });
+      expect(mockSerializer.serializeUnsignedTx).toHaveBeenCalledWith(
+        unsignedTx,
+      );
     });
 
     it("should pass options to submitTransaction", async () => {

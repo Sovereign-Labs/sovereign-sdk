@@ -825,13 +825,8 @@ describe("SolanaSignableRollup", () => {
     });
 
     it("forwards tx.address_override into submitted multisig JSON", async () => {
-      const {
-        rollup,
-        capturedPayloadRef,
-        multisig,
-        signers,
-        unsignedTx,
-      } = await setupMultisigContext();
+      const { rollup, capturedPayloadRef, multisig, signers, unsignedTx } =
+        await setupMultisigContext();
       const addressOverride = new Uint8Array(32).fill(0x99);
       const addressOverrideBs58 = bs58.encode(addressOverride);
       const txWithOverride = {
@@ -839,18 +834,8 @@ describe("SolanaSignableRollup", () => {
         address_override: addressOverrideBs58,
       };
 
-      await signMultisig(
-        rollup,
-        txWithOverride,
-        multisig,
-        signers.signer3,
-      );
-      await signMultisig(
-        rollup,
-        txWithOverride,
-        multisig,
-        signers.signer1,
-      );
+      await signMultisig(rollup, txWithOverride, multisig, signers.signer3);
+      await signMultisig(rollup, txWithOverride, multisig, signers.signer1);
 
       await rollup.submitTransaction(
         multisig.toTransaction(txWithOverride),

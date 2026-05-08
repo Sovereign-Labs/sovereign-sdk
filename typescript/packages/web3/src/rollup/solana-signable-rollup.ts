@@ -25,23 +25,22 @@ import {
   standardTypeBuilder,
 } from "./standard-rollup";
 
-export type SolanaOffchainUnsignedTransaction<RuntimeCall> =
-  Omit<UnsignedTransactionV0<RuntimeCall>, "address_override"> & {
-    chain_name: string;
-    /**
-     * Signer-declared address override.
-     * See `AuthorizationData::address_override` (Rust) for routing semantics.
-     */
-    address_override?: string;
-  };
+export type SolanaOffchainUnsignedTransaction<RuntimeCall> = Omit<
+  UnsignedTransactionV0<RuntimeCall>,
+  "address_override"
+> & {
+  chain_name: string;
+  /**
+   * Signer-declared address override.
+   * See `AuthorizationData::address_override` (Rust) for routing semantics.
+   */
+  address_override?: string;
+};
 
 export type SolanaOffchainUnsignedTransactionV1<
   RuntimeCall,
   MultisigId = unknown,
-> = Omit<
-  SolanaOffchainUnsignedTransaction<RuntimeCall>,
-  "address_override"
-> & {
+> = Omit<SolanaOffchainUnsignedTransaction<RuntimeCall>, "address_override"> & {
   multisig_id: MultisigId;
   /**
    * Signer-declared address override.
