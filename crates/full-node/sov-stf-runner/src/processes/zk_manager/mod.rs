@@ -155,7 +155,7 @@ where
     Ps::DaService: DaService<Error = anyhow::Error>,
 {
     async fn run(mut self) -> anyhow::Result<()> {
-        let synced_da_height = if !self.start_fresh_outer_proof_on_resync {
+        let skip_proofs_till_da_height = if !self.start_fresh_outer_proof_on_resync {
             None
         } else {
             loop {
@@ -203,8 +203,8 @@ where
                         "Received STF info"
                     );
 
-                    if let Some(synced_da_height) = synced_da_height {
-                        if stf_info.da_block_header().height() < synced_da_height {
+                    if let Some(skip_height) = skip_proofs_till_da_height {
+                        if stf_info.da_block_header().height() < skip_height {
                             // Skipped slots will never be proved, so advance
                             // the cursor manually.
                             self.cursor.inc_next_height_to_receive_by(1);
