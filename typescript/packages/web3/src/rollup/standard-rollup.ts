@@ -63,6 +63,7 @@ export function standardTypeBuilder<
         runtime_call: runtimeCall,
         uniqueness,
         details,
+        address_override: overrides.address_override ?? null,
       } as S["UnsignedTransaction"];
     },
     async transaction({
@@ -83,12 +84,15 @@ export function standardTypeBuilder<
 
 /**
  * The parameters for simulating a runtime call transaction.
+ *
+ * Adds `address_override` until the regenerated `@sovereign-sdk/client` carries it natively;
+ * drop this extension and the cast in `simulate` once the client is republished.
  */
 export type SimulateParams = Omit<
   SovereignClient.RollupSimulateParams,
   "call" | "sender"
 > &
-  SignerParams;
+  SignerParams & { address_override?: string | null };
 
 export class StandardRollup<RuntimeCall> extends Rollup<
   StandardRollupSpec<RuntimeCall>,
@@ -103,13 +107,18 @@ export class StandardRollup<RuntimeCall> extends Rollup<
    */
   async simulate(
     runtimeMessage: StandardRollupSpec<RuntimeCall>["RuntimeCall"],
-    { signer }: SimulateParams,
+    { signer, ...params }: SimulateParams,
   ): Promise<SovereignClient.Rollup.RollupSimulateResponse> {
     const publicKey = await signer.publicKey();
     const sender = bytesToHex(publicKey);
     const call = runtimeMessage as { [key: string]: unknown };
 
-    return this.rollup.simulate({ sender, call });
+    // Cast bridges the `address_override` extension; see SimulateParams JSDoc.
+    return this.rollup.simulate({
+      ...params,
+      sender,
+      call,
+    } as SovereignClient.RollupSimulateParams);
   }
 }
 

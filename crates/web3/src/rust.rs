@@ -112,6 +112,7 @@ pub struct TransactionBuilder<S: Spec, C: ChainHash, M: CallMessage + RuntimeDis
     priority_fee_bips: Option<PriorityFeeBips>,
     max_fee: Option<Amount>,
     gas_limit: Option<Option<S::Gas>>,
+    address_override: Option<S::Address>,
     _phantom: std::marker::PhantomData<C>,
 }
 
@@ -131,6 +132,7 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
             priority_fee_bips: None,
             max_fee: None,
             gas_limit: None,
+            address_override: None,
             _phantom: Default::default(),
         }
     }
@@ -188,6 +190,12 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
         self
     }
 
+    /// Sets the explicit address override for the transaction.
+    pub fn address_override(mut self, address_override: S::Address) -> Self {
+        self.address_override = Some(address_override);
+        self
+    }
+
     /// Builds an unsigned transaction with the configured parameters.
     ///
     /// Uses default values for any parameters that were not explicitly set:
@@ -217,6 +225,7 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
             max_fee,
             uniqueness,
             gas_limit,
+            self.address_override,
         ))
     }
 

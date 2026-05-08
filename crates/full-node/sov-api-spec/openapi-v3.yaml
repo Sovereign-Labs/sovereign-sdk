@@ -1224,6 +1224,10 @@ components:
           type: object
           description: Optional uniqueness data for the transaction
           additionalProperties: true
+        address_override:
+          type: string
+          nullable: true
+          description: Optional address override for execution; null uses default routing
       required:
         - sender
         - call

@@ -106,4 +106,11 @@ pub struct AuthorizationData<S: Spec> {
 
     /// The default address.
     pub default_address: S::Address,
+
+    /// Signer-declared override of the default execution address.
+    ///
+    /// `None` => resolve to the credential's default address.
+    /// `Some(X)` => requires an explicit `(X, credential_id)` entry in `account_owners`;
+    /// the transaction is skipped otherwise.
+    pub address_override: Option<S::Address>,
 }

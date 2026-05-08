@@ -117,6 +117,7 @@ fn build_register_sequencer_tx(
             max_fee,
             UniquenessData::Nonce(nonce),
             gas_limit,
+            None,
         ),
     )
 }
@@ -498,6 +499,7 @@ fn build_state_heavy_tx(
             max_priority_fee_bips,
             max_fee,
             UniquenessData::Nonce(nonce),
+            None,
             None,
         ),
     )

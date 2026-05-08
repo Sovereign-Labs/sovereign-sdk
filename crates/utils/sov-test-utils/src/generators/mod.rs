@@ -74,6 +74,7 @@ impl<S: Spec, Mod: Module> Message<S, Mod> {
                 self.details.max_fee,
                 UniquenessData::Generation(self.generation),
                 self.details.gas_limit,
+                None,
             ),
         )
     }
