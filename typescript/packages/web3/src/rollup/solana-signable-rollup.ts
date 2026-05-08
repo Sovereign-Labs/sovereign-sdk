@@ -3,6 +3,8 @@ import { type Signer, isLedgerSolanaSigner } from "@sovereign-sdk/signers";
 import type {
   Transaction,
   TransactionV1,
+  TxDetails,
+  Uniqueness,
   UnsignedTransaction,
 } from "@sovereign-sdk/types";
 import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
@@ -19,14 +21,30 @@ import {
   standardTypeBuilder,
 } from "./standard-rollup";
 
-export type SolanaOffchainUnsignedTransaction<RuntimeCall> =
-  UnsignedTransaction<RuntimeCall> & {
-    chain_name: string;
+export type SolanaOffchainUnsignedTransaction<RuntimeCall> = {
+  runtime_call: RuntimeCall;
+  uniqueness: Uniqueness;
+  details: TxDetails;
+  chain_name: string;
+};
+
+export type SolanaOffchainUnsignedTransactionV0<RuntimeCall> =
+  SolanaOffchainUnsignedTransaction<RuntimeCall> & {
+    /**
+     * Signer-declared address override.
+     * See `AuthorizationData::address_override` (Rust) for routing semantics.
+     */
+    address_override?: string;
   };
 
 export type SolanaOffchainUnsignedTransactionV1<RuntimeCall> =
   SolanaOffchainUnsignedTransaction<RuntimeCall> & {
     multisig_id: string;
+    /**
+     * Signer-declared address override.
+     * See `AuthorizationData::address_override` (Rust) for routing semantics.
+     */
+    address_override?: string;
     version: number;
   };
 
@@ -79,6 +97,8 @@ export type SolanaMultisigSubmitParams =
 
 export type SolanaMultisigSignParams = SolanaMultisigSubmitParams & {
   signer: Signer;
+  /** Address override embedded in the V1 payload. Unused by the `"standard"` authenticator. */
+  addressOverride?: Uint8Array;
 };
 
 /**
@@ -114,6 +134,39 @@ function compareByteArrays(left: Uint8Array, right: Uint8Array): number {
   }
 
   return left.length - right.length;
+}
+
+function resolveMultisigAddressOverride<RuntimeCall>(
+  unsignedTx: UnsignedTransaction<RuntimeCall>,
+  addressOverride?: Uint8Array,
+): {
+  resolvedUnsignedTx: UnsignedTransaction<RuntimeCall>;
+  resolvedAddressOverride?: Uint8Array;
+} {
+  if (addressOverride !== undefined) {
+    return {
+      resolvedUnsignedTx: {
+        ...unsignedTx,
+        address_override: bs58.encode(addressOverride),
+      },
+      resolvedAddressOverride: addressOverride,
+    };
+  }
+
+  if (
+    unsignedTx.address_override !== null &&
+    unsignedTx.address_override !== undefined
+  ) {
+    return {
+      resolvedUnsignedTx: unsignedTx,
+      resolvedAddressOverride: bs58.decode(unsignedTx.address_override),
+    };
+  }
+
+  return {
+    resolvedUnsignedTx: unsignedTx,
+    resolvedAddressOverride: undefined,
+  };
 }
 
 function createSolanaPreamble(
@@ -326,11 +379,15 @@ export class SolanaSignableRollup<RuntimeCall> {
     const schema = serializer.schema;
     const chainName = schema.chain_data.chain_name || "";
 
-    const solanaUnsignedTx: SolanaOffchainUnsignedTransaction<RuntimeCall> = {
+    const solanaUnsignedTx: SolanaOffchainUnsignedTransactionV0<RuntimeCall> = {
       runtime_call: unsignedTx.runtime_call,
       uniqueness: unsignedTx.uniqueness,
       details: unsignedTx.details,
       chain_name: chainName,
+      ...(unsignedTx.address_override !== null &&
+        unsignedTx.address_override !== undefined && {
+          address_override: unsignedTx.address_override,
+        }),
     };
 
     // JSON serialize the Solana unsigned transaction
@@ -494,11 +551,16 @@ export class SolanaSignableRollup<RuntimeCall> {
   private async createMultisigJsonBytes(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisigAddress: Uint8Array,
+    addressOverride?: Uint8Array,
   ): Promise<Uint8Array> {
     const serializer = await this.inner.serializer();
     const schema = serializer.schema;
     const chainName = schema.chain_data.chain_name || "";
 
+    // Field order matches the Rust `SolanaOffchainUnsignedTransactionV1` struct
+    // (`crates/module-system/sov-solana-offchain-auth/src/authentication/payload.rs`):
+    // `address_override` must sit between `multisig_id` and `version` so TS- and Rust-generated
+    // JSON bytes are byte-identical — the multisig signatures cover these bytes directly.
     const solanaUnsignedTx: SolanaOffchainUnsignedTransactionV1<RuntimeCall> = {
       runtime_call: unsignedTx.runtime_call,
       uniqueness: unsignedTx.uniqueness,
@@ -508,6 +570,9 @@ export class SolanaSignableRollup<RuntimeCall> {
       // primary address type. Will be replaced with rollup-aware address formatting once the
       // SDK supports flexible address encoding (see #2673).
       multisig_id: bs58.encode(multisigAddress),
+      ...(addressOverride !== undefined && {
+        address_override: bs58.encode(addressOverride),
+      }),
       version: 1,
     };
 
@@ -521,10 +586,12 @@ export class SolanaSignableRollup<RuntimeCall> {
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisigAddress: Uint8Array,
     multisigPubkeys: Uint8Array[],
+    addressOverride?: Uint8Array,
   ): Promise<Uint8Array> {
     const jsonBytes = await this.createMultisigJsonBytes(
       unsignedTx,
       multisigAddress,
+      addressOverride,
     );
     const chainHash = await this.inner.chainHash();
     const preamble = createSolanaPreamble(
@@ -544,7 +611,10 @@ export class SolanaSignableRollup<RuntimeCall> {
     signer: Signer,
     multisigAddress: Uint8Array,
     multisigPubkeys: Uint8Array[],
+    addressOverride?: Uint8Array,
   ): Promise<Transaction<RuntimeCall>> {
+    const { resolvedUnsignedTx, resolvedAddressOverride } =
+      resolveMultisigAddressOverride(unsignedTx, addressOverride);
     const pubkey = await signer.publicKey();
     const signerPubkeyHex = bytesToHex(pubkey);
     const multisigPubkeyHexes = multisigPubkeys.map(bytesToHex);
@@ -556,14 +626,15 @@ export class SolanaSignableRollup<RuntimeCall> {
     }
 
     const jsonBytes = await this.createMultisigJsonBytes(
-      unsignedTx,
+      resolvedUnsignedTx,
       multisigAddress,
+      resolvedAddressOverride,
     );
 
     const signature = await signer.sign(jsonBytes);
 
     return this.typeBuilder.transaction({
-      unsignedTx,
+      unsignedTx: resolvedUnsignedTx,
       sender: pubkey,
       signature,
       rollup: this.inner,
@@ -578,7 +649,10 @@ export class SolanaSignableRollup<RuntimeCall> {
     signer: Signer,
     multisigAddress: Uint8Array,
     multisigPubkeys: Uint8Array[],
+    addressOverride?: Uint8Array,
   ): Promise<Transaction<RuntimeCall>> {
+    const { resolvedUnsignedTx, resolvedAddressOverride } =
+      resolveMultisigAddressOverride(unsignedTx, addressOverride);
     const pubkey = await signer.publicKey();
     const signerPubkeyHex = bytesToHex(pubkey);
     const multisigPubkeyHexes = multisigPubkeys.map(bytesToHex);
@@ -591,14 +665,15 @@ export class SolanaSignableRollup<RuntimeCall> {
 
     const signedMessageWithPreamble =
       await this.createSpecCompliantMultisigSignedMessage(
-        unsignedTx,
+        resolvedUnsignedTx,
         multisigAddress,
         multisigPubkeys,
+        resolvedAddressOverride,
       );
     const signature = await signer.sign(signedMessageWithPreamble);
 
     return this.typeBuilder.transaction({
-      unsignedTx,
+      unsignedTx: resolvedUnsignedTx,
       sender: pubkey,
       signature,
       rollup: this.inner,
@@ -627,6 +702,7 @@ export class SolanaSignableRollup<RuntimeCall> {
           params.signer,
           params.multisigAddress,
           this.canonicalizeMultisigPubkeys(params.multisigPubkeys),
+          params.addressOverride,
         );
       case "solana":
         return this.signForSolanaSpecMultisig(
@@ -634,6 +710,7 @@ export class SolanaSignableRollup<RuntimeCall> {
           params.signer,
           params.multisigAddress,
           this.canonicalizeMultisigPubkeys(params.multisigPubkeys),
+          params.addressOverride,
         );
     }
   }
@@ -726,7 +803,16 @@ export class SolanaSignableRollup<RuntimeCall> {
       runtime_call: tx.runtime_call,
       uniqueness: tx.uniqueness,
       details: tx.details,
+      address_override: tx.address_override,
     };
+
+    // Decode the signed `address_override` back to bytes so we can pass it through the same
+    // `createMultisigJsonBytes` path used by signers. Re-encoding is idempotent under base58, so
+    // the produced JSON bytes match what the signer signed over.
+    const addressOverride: Uint8Array | undefined =
+      tx.address_override !== null && tx.address_override !== undefined
+        ? bs58.decode(tx.address_override)
+        : undefined;
 
     switch (params.authenticator) {
       case "standard":
@@ -739,6 +825,7 @@ export class SolanaSignableRollup<RuntimeCall> {
         const jsonBytes = await this.createMultisigJsonBytes(
           unsignedTx,
           params.multisigAddress,
+          addressOverride,
         );
         const wireBytes = new Uint8Array(1 + jsonBytes.length);
         wireBytes[0] = MULTISIG_SIMPLE_DISCRIMINATOR;
@@ -767,6 +854,7 @@ export class SolanaSignableRollup<RuntimeCall> {
             unsignedTx,
             params.multisigAddress,
             multisigPubkeys,
+            addressOverride,
           );
         const message = this.buildSpecCompliantMultisigEnvelope(
           tx,

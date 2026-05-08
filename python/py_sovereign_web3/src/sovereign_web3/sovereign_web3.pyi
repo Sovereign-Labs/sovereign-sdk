@@ -179,6 +179,7 @@ class UnsignedTransactionV0:
         runtime_call: Dict[str, Any],
         details: TxDetails,
         uniqueness: Optional[UniquenessData] = None,
+        address_override: Optional[str] = None,
     ) -> None:
         """Create V0 unsigned transaction.
 
@@ -186,6 +187,7 @@ class UnsignedTransactionV0:
             runtime_call: Runtime call data as dictionary
             details: Transaction details
             uniqueness: Optional uniqueness data (defaults to default uniqueness)
+            address_override: Optional explicit address override
 
         Raises:
             ValueError: If runtime_call cannot be converted to JSON or uniqueness creation fails

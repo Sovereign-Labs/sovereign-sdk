@@ -215,9 +215,10 @@ impl HyperlaneBuilder {
         let docker_image = env::var("CUSTOM_HLP_DOCKER_IMAGE");
         let has_custom_image = !matches!(docker_image, Err(env::VarError::NotPresent));
 
-        // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/sovereign-lander-integration
-        let docker_image = docker_image
-            .unwrap_or_else(|_| "ghcr.io/theodorebugnet/hyperlane-agent:multisig_upgrade".into());
+        // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/sovereign-lander-integration-for-multisig
+        let docker_image = docker_image.unwrap_or_else(|_| {
+            "ghcr.io/citizen-stig/hyperlane-agent:multisig-upgrade-address-override-2".into()
+        });
         let (name, tag) = docker_image
             .split_once(':')
             .unwrap_or((&docker_image, "latest"));

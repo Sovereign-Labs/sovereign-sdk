@@ -309,13 +309,28 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         auth_data: &AuthorizationData<S>,
         sequencer: &<S::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
-        _state: &mut impl StateAccessor,
+        state: &mut impl StateAccessor,
         sequencing_data: Option<Bytes>,
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>> {
+        let sender = match auth_data.address_override {
+            Some(address_override) => {
+                anyhow::ensure!(
+                    self.accounts.is_explicitly_authorized(
+                        &address_override,
+                        &auth_data.credential_id,
+                        state,
+                    )?,
+                    "not authorized for address override"
+                );
+                address_override
+            }
+            None => auth_data.default_address,
+        };
+
         Ok(Context::new(
-            auth_data.default_address,
+            sender,
             auth_data.credentials.clone(),
             sequencer_rollup_address,
             *sequencer,
@@ -329,14 +344,29 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         &mut self,
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
-        _state: &mut impl StateAccessor,
+        state: &mut impl StateAccessor,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
-        // The tx sender & sequencer are the same entity
+        // The tx sender & sequencer are the same entity on this path.
+        let address = match auth_data.address_override {
+            Some(address_override) => {
+                anyhow::ensure!(
+                    self.accounts.is_explicitly_authorized(
+                        &address_override,
+                        &auth_data.credential_id,
+                        state,
+                    )?,
+                    "not authorized for address override"
+                );
+                address_override
+            }
+            None => auth_data.default_address,
+        };
+
         Ok(Context::new(
-            auth_data.default_address,
+            address,
             auth_data.credentials.clone(),
-            auth_data.default_address,
+            address,
             *sequencer,
             None,
             execution_context,
