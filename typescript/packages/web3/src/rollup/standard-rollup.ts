@@ -57,7 +57,9 @@ export function standardTypeBuilder<
       context: UnsignedTransactionContext<S, StandardRollupContext>,
     ) {
       const { rollup, runtimeCall } = context;
-      const { uniqueness: _, ...overrides } = context.overrides;
+      const overrides = context.overrides as DeepPartial<
+        UnsignedTransactionV0<unknown>
+      > & { address_override?: string | null };
       const uniqueness = await useOrFetchUniqueness(context);
       const details: TxDetails = {
         ...rollup.context.defaultTxDetails,

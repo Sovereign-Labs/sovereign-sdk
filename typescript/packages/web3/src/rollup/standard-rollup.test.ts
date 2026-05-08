@@ -57,6 +57,7 @@ describe("standardTypeBuilder", () => {
           max_fee: "1000",
           chain_id: 1,
         },
+        address_override: null,
       });
     });
 
@@ -77,6 +78,7 @@ describe("standardTypeBuilder", () => {
           max_fee: "1000",
           chain_id: 1,
         },
+        address_override: null,
       });
     });
 
@@ -103,6 +105,7 @@ describe("standardTypeBuilder", () => {
           gas_limit: [1000000, 1000000],
           chain_id: 1,
         },
+        address_override: null,
       });
     });
   });
@@ -121,6 +124,7 @@ describe("standardTypeBuilder", () => {
             chain_id: 1,
             gas_limit: null,
           },
+          address_override: null,
         },
         sender: new Uint8Array([4, 5, 6]),
         signature: new Uint8Array([7, 8, 9]),
@@ -141,6 +145,7 @@ describe("standardTypeBuilder", () => {
             chain_id: 1,
             gas_limit: null,
           },
+          address_override: null,
         },
       });
     });
@@ -278,6 +283,44 @@ describe("createStandardRollup", () => {
     });
   });
 
+  it("should pass optional simulation parameters to the client", async () => {
+    const client = new SovereignClient({ fetch: vi.fn() });
+    client.rollup.simulate = vi.fn().mockResolvedValue({ outcome: "success" });
+    const rollup = await createStandardRollup({
+      ...mockConfig,
+      client,
+    });
+    const signer = {
+      publicKey: vi.fn().mockResolvedValue(new Uint8Array([0xab, 0xcd])),
+    };
+    const runtimeCall = {
+      bank: {
+        transfer: {
+          to: "receiver",
+          coins: { amount: "1", token_id: "token" },
+        },
+      },
+    };
+    const txDetails = {
+      max_fee: "1234",
+    };
+
+    await rollup.simulate(runtimeCall, {
+      signer: signer as any,
+      address_override: "sov1target",
+      tx_details: txDetails,
+      uniqueness: { nonce: 7 },
+    });
+
+    expect(client.rollup.simulate).toHaveBeenCalledWith({
+      sender: "abcd",
+      call: runtimeCall,
+      address_override: "sov1target",
+      tx_details: txDetails,
+      uniqueness: { nonce: 7 },
+    });
+  });
+
   it("should serialize V0 unsigned transactions as versioned envelopes when signing", async () => {
     const client = createMockStandardClient();
     const serializer = {
@@ -297,6 +340,7 @@ describe("createStandardRollup", () => {
       runtime_call: { test: "call" },
       uniqueness: { nonce: 1 },
       details: mockConfig.context.defaultTxDetails,
+      address_override: null,
     };
 
     await rollup.signTransaction(unsignedTx, signer as any);
@@ -347,6 +391,7 @@ describe("createStandardRollup", () => {
       runtime_call: { test: "call" },
       uniqueness: { nonce: 1 },
       details: mockConfig.context.defaultTxDetails,
+      address_override: null,
     };
 
     const signingBytes = await rollup.multisigSigningBytes(
@@ -396,6 +441,7 @@ describe("createStandardRollup", () => {
       runtime_call: { test: "call" },
       uniqueness: { nonce: 1 },
       details: mockConfig.context.defaultTxDetails,
+      address_override: null,
     };
 
     expect(() => multisig.toTransaction(unsignedTx)).toThrow(

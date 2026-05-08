@@ -26,15 +26,28 @@ import {
 } from "./standard-rollup";
 
 export type SolanaOffchainUnsignedTransaction<RuntimeCall> =
-  UnsignedTransactionV0<RuntimeCall> & {
+  Omit<UnsignedTransactionV0<RuntimeCall>, "address_override"> & {
     chain_name: string;
+    /**
+     * Signer-declared address override.
+     * See `AuthorizationData::address_override` (Rust) for routing semantics.
+     */
+    address_override?: string;
   };
 
 export type SolanaOffchainUnsignedTransactionV1<
   RuntimeCall,
   MultisigId = unknown,
-> = SolanaOffchainUnsignedTransaction<RuntimeCall> & {
+> = Omit<
+  SolanaOffchainUnsignedTransaction<RuntimeCall>,
+  "address_override"
+> & {
   multisig_id: MultisigId;
+  /**
+   * Signer-declared address override.
+   * See `AuthorizationData::address_override` (Rust) for routing semantics.
+   */
+  address_override?: string;
   version: number;
 };
 
@@ -310,6 +323,10 @@ export class SolanaSignableRollup<RuntimeCall> {
       uniqueness: unsignedTx.uniqueness,
       details: unsignedTx.details,
       chain_name: chainName,
+      ...(unsignedTx.address_override !== null &&
+        unsignedTx.address_override !== undefined && {
+          address_override: unsignedTx.address_override,
+        }),
     };
 
     // JSON serialize the Solana unsigned transaction
@@ -507,12 +524,20 @@ export class SolanaSignableRollup<RuntimeCall> {
     const schema = serializer.schema;
     const chainName = schema.chain_data.chain_name || "";
 
+    // Field order matches the Rust `SolanaOffchainUnsignedTransactionV1` struct
+    // (`crates/module-system/sov-solana-offchain-auth/src/authentication/payload.rs`):
+    // `address_override` must sit between `multisig_id` and `version` so TS- and Rust-generated
+    // JSON bytes are byte-identical; multisig signatures cover these bytes directly.
     const solanaUnsignedTx: SolanaOffchainUnsignedTransactionV1<RuntimeCall> = {
       runtime_call: unsignedTx.runtime_call,
       uniqueness: unsignedTx.uniqueness,
       details: unsignedTx.details,
       chain_name: chainName,
       multisig_id: multisigId,
+      ...(unsignedTx.address_override !== null &&
+        unsignedTx.address_override !== undefined && {
+          address_override: unsignedTx.address_override,
+        }),
       version: 1,
     };
 
@@ -572,6 +597,7 @@ export class SolanaSignableRollup<RuntimeCall> {
       runtime_call: tx.runtime_call,
       uniqueness: tx.uniqueness,
       details: tx.details,
+      address_override: tx.address_override,
     };
   }
 
@@ -770,6 +796,7 @@ export class SolanaSignableRollup<RuntimeCall> {
       runtime_call: transaction.runtime_call,
       uniqueness: transaction.uniqueness,
       details: transaction.details,
+      address_override: transaction.address_override,
     };
     const pubkey = hexToBytes(normalizeHexString(transaction.pub_key));
     const signature = hexToBytes(normalizeHexString(transaction.signature));

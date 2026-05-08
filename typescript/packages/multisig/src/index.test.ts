@@ -162,6 +162,7 @@ describe("Multisig", () => {
         gas_limit: null,
         chain_id: 1,
       },
+      address_override: null,
     };
 
     it("should reject incomplete multisig transactions", () => {
@@ -189,6 +190,22 @@ describe("Multisig", () => {
           min_signers: 2,
         },
       });
+    });
+
+    it("should preserve address overrides", () => {
+      const multisig = new Multisig(createParams());
+      const addressOverride =
+        "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4";
+
+      multisig.addSignature("aa", pubkey1);
+      multisig.addSignature("bb", pubkey2);
+
+      expect(
+        multisig.toTransaction({
+          ...unsignedTx,
+          address_override: addressOverride,
+        }).V1.address_override,
+      ).toBe(addressOverride);
     });
   });
 

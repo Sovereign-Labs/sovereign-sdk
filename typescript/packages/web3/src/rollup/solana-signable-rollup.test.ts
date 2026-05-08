@@ -3,6 +3,7 @@ import { Multisig } from "@sovereign-sdk/multisig";
 import { JsSerializer } from "@sovereign-sdk/serializers";
 import { Ed25519Signer } from "@sovereign-sdk/signers";
 import { bytesToHex } from "@sovereign-sdk/utils";
+import bs58 from "bs58";
 import { describe, expect, it, vi } from "vitest";
 import demoRollupSchema from "../../../__fixtures__/demo-rollup-schema.json";
 import {
@@ -231,6 +232,52 @@ describe("SolanaSignableRollup", () => {
     expect(message.chain_name).toBe(demoRollupSchema.chain_data.chain_name);
   });
 
+  it("should include address_override in Solana signed JSON when present", async () => {
+    const mockClient = createMockClient({ chainName: "TestChain" });
+    let capturedPayload: any;
+    mockClient.post = vi
+      .fn()
+      .mockImplementation((_path: string, options: any) => {
+        capturedPayload = options;
+        return Promise.resolve({ id: "test-tx-hash" });
+      });
+
+    const rollup = await createSolanaSignableRollup({
+      client: mockClient,
+      getSerializer: (schema: any) => ({ schema }) as any,
+    });
+
+    await rollup.signAndSubmitTransaction(
+      {
+        runtime_call: { test: "call" },
+        uniqueness: { generation: 123 },
+        details: {
+          max_priority_fee_bips: 0,
+          max_fee: "1000",
+          gas_limit: null,
+          chain_id: 1,
+        },
+        address_override: "sov1target",
+      },
+      {
+        signer: createMockSigner(),
+        authenticator: "solanaSimple",
+      },
+    );
+
+    const decodedBody = Buffer.from(capturedPayload.body.body, "base64");
+    const view = new DataView(
+      decodedBody.buffer,
+      decodedBody.byteOffset,
+      decodedBody.byteLength,
+    );
+    const messageLength = view.getUint32(0, true);
+    const jsonBytes = decodedBody.slice(4, 4 + messageLength);
+    const message = JSON.parse(new TextDecoder().decode(jsonBytes));
+
+    expect(message.address_override).toBe("sov1target");
+  });
+
   describe("byte-level compatibility with Rust implementation", () => {
     it("should generate identical bytes to Rust test_submit_raw_signed_message_transaction", async () => {
       // This test verifies that our TypeScript implementation generates the exact same bytes
@@ -292,6 +339,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: [1000000000, 1000000000],
           chain_id: 4321,
         },
+        address_override: null,
       };
 
       await rollup.signAndSubmitTransaction(unsignedTx, {
@@ -378,6 +426,7 @@ describe("SolanaSignableRollup", () => {
           gas_limit: [1000000000, 1000000000],
           chain_id: 4321,
         },
+        address_override: null,
       };
 
       await rollup.signAndSubmitTransaction(unsignedTx, {
@@ -465,6 +514,7 @@ describe("SolanaSignableRollup", () => {
         gas_limit: [1000000000, 1000000000],
         chain_id: 4321,
       },
+      address_override: null,
     };
 
     const signer3Bytes = await rollup.multisigSigningBytes(
@@ -522,6 +572,7 @@ describe("SolanaSignableRollup", () => {
         gas_limit: null,
         chain_id: 1,
       },
+      address_override: null,
     };
 
     const pubKeyHex = bytesToHex(await signer.publicKey());
@@ -617,6 +668,7 @@ describe("SolanaSignableRollup", () => {
         gas_limit: [1000000000, 1000000000],
         chain_id: 4321,
       },
+      address_override: null,
     };
 
     const signer3Bytes = await rollup.multisigSigningBytes(
@@ -643,6 +695,176 @@ describe("SolanaSignableRollup", () => {
 
     const actualJson = JSON.stringify(capturedPayload.body);
     expect(actualJson).toBe(expectedJson);
+  });
+
+  describe("V1 address_override", () => {
+    async function setupMultisigContext(): Promise<{
+      rollup: SolanaSignableRollup<unknown>;
+      capturedPayloadRef: { current: any };
+      multisig: Multisig;
+      signers: {
+        signer1: Ed25519Signer;
+        signer2: Ed25519Signer;
+        signer3: Ed25519Signer;
+      };
+      unsignedTx: any;
+    }> {
+      const key1PrivHex =
+        "09817894bf1e858df8d9bb3b931646c558ec4cacb9e4f9c05e91d0d788ec1142";
+      const key2PrivHex =
+        "71d81253990513758c7014bec174b4405988c133fc616d6f3d633170858f3dc9";
+      const key3PrivHex =
+        "90f1cca556a78435468bb17f116a923c8eb5c6074619a9bf39f28eb673a22a50";
+      const mockClient = createMockClient({
+        chainId: 4321,
+        chainName: "TestChain",
+        chainHash:
+          "0x0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      });
+      const capturedPayloadRef: { current: any } = { current: undefined };
+      mockClient.post = vi
+        .fn()
+        .mockImplementation((_path: string, options: any) => {
+          capturedPayloadRef.current = options;
+          return Promise.resolve({ id: "test-tx-hash" });
+        });
+
+      const rollup = await createSolanaSignableRollup({
+        client: mockClient,
+        getSerializer: (schema: any) => ({ schema }) as any,
+      });
+      const signer1 = new Ed25519Signer(key1PrivHex);
+      const signer2 = new Ed25519Signer(key2PrivHex);
+      const signer3 = new Ed25519Signer(key3PrivHex);
+      const multisig = Multisig.fromPubKeys(
+        [
+          bytesToHex(await signer1.publicKey()),
+          bytesToHex(await signer2.publicKey()),
+          bytesToHex(await signer3.publicKey()),
+        ],
+        2,
+      );
+      const unsignedTx = {
+        runtime_call: {
+          bank: {
+            transfer: {
+              to: "4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL",
+              coins: {
+                amount: "7000",
+                token_id:
+                  "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7",
+              },
+            },
+          },
+        },
+        uniqueness: { nonce: 0 },
+        details: {
+          max_priority_fee_bips: 0,
+          max_fee: "100000000000",
+          gas_limit: [1000000000, 1000000000],
+          chain_id: 4321,
+        },
+        address_override: null,
+      };
+
+      return {
+        rollup,
+        capturedPayloadRef,
+        multisig,
+        signers: { signer1, signer2, signer3 },
+        unsignedTx,
+      };
+    }
+
+    async function signMultisig(
+      rollup: SolanaSignableRollup<unknown>,
+      unsignedTx: any,
+      multisig: Multisig,
+      signer: Ed25519Signer,
+    ): Promise<void> {
+      const signingBytes = await rollup.multisigSigningBytes(
+        unsignedTx,
+        multisig,
+        "solanaSimple",
+      );
+      multisig.addSignature(
+        bytesToHex(await signer.sign(signingBytes)),
+        bytesToHex(await signer.publicKey()),
+      );
+    }
+
+    it("omits address_override from multisig signing bytes when it is null", async () => {
+      const { rollup, multisig, unsignedTx } = await setupMultisigContext();
+
+      const signingBytes = await rollup.multisigSigningBytes(
+        unsignedTx,
+        multisig,
+        "solanaSimple",
+      );
+      const signedJson = new TextDecoder().decode(signingBytes);
+
+      expect(JSON.parse(signedJson)).not.toHaveProperty("address_override");
+    });
+
+    it("includes tx.address_override in multisig signing bytes before version", async () => {
+      const { rollup, multisig, unsignedTx } = await setupMultisigContext();
+      const addressOverride = new Uint8Array(32).fill(0x42);
+      const addressOverrideBs58 = bs58.encode(addressOverride);
+
+      const signingBytes = await rollup.multisigSigningBytes(
+        { ...unsignedTx, address_override: addressOverrideBs58 },
+        multisig,
+        "solanaSimple",
+      );
+      const signedJson = new TextDecoder().decode(signingBytes);
+
+      expect(JSON.parse(signedJson).address_override).toBe(addressOverrideBs58);
+      expect(signedJson.indexOf('"address_override"')).toBeLessThan(
+        signedJson.indexOf('"version"'),
+      );
+    });
+
+    it("forwards tx.address_override into submitted multisig JSON", async () => {
+      const {
+        rollup,
+        capturedPayloadRef,
+        multisig,
+        signers,
+        unsignedTx,
+      } = await setupMultisigContext();
+      const addressOverride = new Uint8Array(32).fill(0x99);
+      const addressOverrideBs58 = bs58.encode(addressOverride);
+      const txWithOverride = {
+        ...unsignedTx,
+        address_override: addressOverrideBs58,
+      };
+
+      await signMultisig(
+        rollup,
+        txWithOverride,
+        multisig,
+        signers.signer3,
+      );
+      await signMultisig(
+        rollup,
+        txWithOverride,
+        multisig,
+        signers.signer1,
+      );
+
+      await rollup.submitTransaction(
+        multisig.toTransaction(txWithOverride),
+        "solanaSimple",
+      );
+
+      const submittedBody = capturedPayloadRef.current.body.body as string;
+      const submittedText = new TextDecoder().decode(
+        Buffer.from(submittedBody, "base64"),
+      );
+      expect(submittedText).toContain(
+        `"address_override":"${addressOverrideBs58}"`,
+      );
+    });
   });
 
   describe("solanaAuto authenticator", () => {
