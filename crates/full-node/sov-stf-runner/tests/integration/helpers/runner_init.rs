@@ -324,8 +324,10 @@ pub async fn initialize_runner_with_stop_at(
                 da: da_service.clone(),
             }),
             stf_info_receiver,
+            runner.da_sync_state(),
             shutdown_receiver.clone(),
             shutdown_sender.clone(),
+            false,
         )
         .await
         .unwrap();
