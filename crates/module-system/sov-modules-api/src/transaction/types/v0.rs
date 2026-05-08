@@ -41,16 +41,21 @@ pub struct Version0<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Sp
     pub uniqueness: UniquenessData,
     /// The transaction metadata. Contains gas parameters and the chain ID.
     pub details: TxDetails<S>,
+    /// Signer-declared address override.
+    /// See [`crate::capabilities::AuthorizationData::address_override`] for routing semantics.
+    #[serde(default)]
+    pub address_override: Option<S::Address>,
 }
 
 impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
     /// Extracts the versioned unsigned transaction data from this signed envelope.
     pub fn as_unsigned(&self) -> UnsignedTransaction<R, S> {
-        UnsignedTransaction::V0(UnsignedTransactionV0::new_with_details(
-            self.runtime_call.clone(),
-            self.uniqueness,
-            self.details.clone(),
-        ))
+        UnsignedTransaction::V0(UnsignedTransactionV0 {
+            runtime_call: self.runtime_call.clone(),
+            uniqueness: self.uniqueness,
+            details: self.details.clone(),
+            address_override: self.address_override,
+        })
     }
 
     /// Extracts authorization data from this transaction.
@@ -71,6 +76,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
             credential_id,
             credentials: Credentials::new(pub_key),
             default_address: credential_id.into(),
+            address_override: self.address_override,
         })
     }
 }

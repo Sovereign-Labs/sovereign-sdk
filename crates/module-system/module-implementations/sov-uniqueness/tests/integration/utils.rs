@@ -109,6 +109,7 @@ pub(crate) fn generate_value_setter_uniqueness_tx(
         TEST_DEFAULT_MAX_FEE,
         uniqueness,
         None,
+        None,
     );
 
     let transaction = Transaction::<RT, S>::new_signed_tx(
