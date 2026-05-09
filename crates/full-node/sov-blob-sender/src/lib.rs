@@ -645,6 +645,14 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                 ?blob_status,
                                 "BlobSender: unable to send blob. Shutting down."
                             );
+                            self.send_notification(BlobExecutionStatus {
+                                blob_submission_status: BlobSubmissionStatus::Failed {
+                                    error: BlobSubmissionError::Submission(format!("{err:?}")),
+                                    will_retry: false,
+                                },
+                                blob_selector_status: None,
+                            })
+                            .await;
                             let _ = self.shutdown_sender.send(());
                             return;
                         }
@@ -686,6 +694,16 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                     %blob_hash,
                                     "Shutting down the rollup. Blob processing wasn't completed on time."
                                 );
+                                self.send_notification(BlobExecutionStatus {
+                                    blob_submission_status: BlobSubmissionStatus::Failed {
+                                        error: BlobSubmissionError::MaxRetriesExhausted {
+                                            retries_attempted: nb_of_retries_attempted as u32,
+                                        },
+                                        will_retry: false,
+                                    },
+                                    blob_selector_status: None,
+                                })
+                                .await;
                                 let _ = self.shutdown_sender.send(());
                                 return;
                             }
@@ -696,6 +714,16 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                 attempted = nb_of_retries_attempted,
                                 max_attempts = MAX_NB_OF_BLOB_SUBMISSION_RETRIES,
                                 "Processing timeout: Blob status set from Published to MustSubmit.");
+                            self.send_notification(BlobExecutionStatus {
+                                blob_submission_status: BlobSubmissionStatus::Failed {
+                                    error: BlobSubmissionError::PublishTimeout {
+                                        retries_attempted: nb_of_retries_attempted as u32,
+                                    },
+                                    will_retry: true,
+                                },
+                                blob_selector_status: None,
+                            })
+                            .await;
                             blob_status = BlobExecutionStatus {
                                 blob_submission_status: BlobSubmissionStatus::MustSubmit,
                                 blob_selector_status: None,
@@ -709,8 +737,15 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                             .await
                         {
                             Ok(finality_status) => finality_status,
-                            // Error is logged inside the method
-                            Err(_) => {
+                            Err(e) => {
+                                self.send_notification(BlobExecutionStatus {
+                                    blob_submission_status: BlobSubmissionStatus::Failed {
+                                        error: BlobSubmissionError::FinalityCheck(format!("{e:?}")),
+                                        will_retry: false,
+                                    },
+                                    blob_selector_status: None,
+                                })
+                                .await;
                                 // If we can't check the finality status, we shut down.
                                 let _ = self.shutdown_sender.send(());
                                 return;
@@ -761,7 +796,15 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                             .await
                         {
                             Ok(finality_status) => finality_status,
-                            Err(_) => {
+                            Err(e) => {
+                                self.send_notification(BlobExecutionStatus {
+                                    blob_submission_status: BlobSubmissionStatus::Failed {
+                                        error: BlobSubmissionError::FinalityCheck(format!("{e:?}")),
+                                        will_retry: false,
+                                    },
+                                    blob_selector_status: None,
+                                })
+                                .await;
                                 // If we can't check the finality status, we shut down.
                                 let _ = self.shutdown_sender.send(());
                                 return;
@@ -792,6 +835,14 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                     "Re-org detected; resubmitting blob"
                                 );
 
+                                self.send_notification(BlobExecutionStatus {
+                                    blob_submission_status: BlobSubmissionStatus::Failed {
+                                        error: BlobSubmissionError::Reorg,
+                                        will_retry: true,
+                                    },
+                                    blob_selector_status: None,
+                                })
+                                .await;
                                 trace!(%blob_id, %receipt, "Blob status set from Processed to MustSubmit.");
                                 blob_status = BlobExecutionStatus {
                                     blob_submission_status: BlobSubmissionStatus::MustSubmit,
@@ -801,6 +852,20 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                             }
                         }
                     }
+                }
+                BlobSubmissionStatus::Failed { error, will_retry } => {
+                    // Failed is a transient notification, not an entry state.
+                    // If it lands here, fall back to MustSubmit and warn.
+                    tracing::warn!(
+                        ?blob_id,
+                        ?error,
+                        will_retry,
+                        "BlobSubmissionStatus::Failed observed as loop entry state",
+                    );
+                    blob_status = BlobExecutionStatus {
+                        blob_submission_status: BlobSubmissionStatus::MustSubmit,
+                        blob_selector_status: None,
+                    };
                 }
                 BlobSubmissionStatus::Finalized { receipt, .. } => {
                     match blob_status.blob_selector_status {
@@ -880,6 +945,43 @@ pub enum BlobSelectorStatus {
     Accepted,
 }
 
+/// Categorised failure paired with a [`BlobSubmissionStatus::Failed`].
+#[derive(derive_more::Debug, Clone, serde::Serialize, serde::Deserialize)]
+pub enum BlobSubmissionError {
+    /// DA submission RPC returned an error.
+    Submission(String),
+    /// Inclusion not seen within the publish deadline.
+    PublishTimeout { retries_attempted: u32 },
+    /// DA re-organised away from the published blob.
+    Reorg,
+    /// Querying DA for finality status failed.
+    FinalityCheck(String),
+    /// [`MAX_NB_OF_BLOB_SUBMISSION_RETRIES`] reached; rollup shutdown.
+    MaxRetriesExhausted { retries_attempted: u32 },
+}
+
+impl std::fmt::Display for BlobSubmissionError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BlobSubmissionError::Submission(msg) => write!(f, "submission failed: {msg}"),
+            BlobSubmissionError::PublishTimeout { retries_attempted } => {
+                write!(
+                    f,
+                    "publish timeout (retries attempted: {retries_attempted})"
+                )
+            }
+            BlobSubmissionError::Reorg => write!(f, "DA re-org detected"),
+            BlobSubmissionError::FinalityCheck(msg) => {
+                write!(f, "finality check failed: {msg}")
+            }
+            BlobSubmissionError::MaxRetriesExhausted { retries_attempted } => write!(
+                f,
+                "max retries exhausted ({retries_attempted}); rollup shutting down"
+            ),
+        }
+    }
+}
+
 #[derive(derive_more::Debug, Clone, serde::Serialize, serde::Deserialize)]
 #[debug(bounds())]
 #[serde(bound = "Da: DaSpec")]
@@ -893,6 +995,12 @@ pub enum BlobSubmissionStatus<Da: DaSpec> {
     },
     Finalized {
         receipt: SubmitBlobReceipt<Da::TransactionId>,
+    },
+    /// Submission attempt failed. `will_retry = true` means the blob will be
+    /// resubmitted; `false` means the rollup is shutting down.
+    Failed {
+        error: BlobSubmissionError,
+        will_retry: bool,
     },
 }
 
