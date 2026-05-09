@@ -669,6 +669,10 @@ where
         self.api_state.clone()
     }
 
+    async fn pending_tx_count(&self) -> usize {
+        self.inner.lock().await.mempool.len()
+    }
+
     async fn update_state(
         &self,
         state_update_info: StateUpdateInfo<S::Storage>,

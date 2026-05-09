@@ -249,6 +249,12 @@ pub trait Sequencer: Clone + Send + Sync + 'static {
 
     /// Returns the current sequencer role.
     async fn sequencer_role(&self) -> crate::SequencerRole;
+
+    /// Returns the number of transactions currently sitting in the
+    /// mempool. Default `0` for [`Sequencer`] impls without one.
+    async fn pending_tx_count(&self) -> usize {
+        0
+    }
 }
 
 /// A transaction that has been accepted by the batch builder.
