@@ -1,3 +1,6 @@
+# 2026-05-09
+- #2839 (Minor breaking change, code) Adds a typed `Failed { error: BlobSubmissionError, will_retry: bool }` variant to `BlobSubmissionStatus`, plus a new `BlobSubmissionError` enum (`Submission`, `PublishTimeout`, `Reorg`, `FinalityCheck`, `MaxRetriesExhausted`). Internal blob-sender failure sites now emit `Failed` on the broadcast channel before retrying or shutting down, so observers can label retry / shutdown counts by cause. Downstream consumers that match on `BlobSubmissionStatus` exhaustively need to add a `Failed` arm.
+
 # 2026-05-05
 - #2808 **Breaking config change**: Adds a required `sequencer.max_concurrent_proof_blobs` field to rollup TOML configs, capping the number of proof blobs in flight on the DA layer. When the cap is reached, the ZK aggregator triggers a rollup shutdown.
 # 2026-04-20
