@@ -4,8 +4,8 @@ use anyhow::Context;
 use clap::Args;
 use sp1_sdk::blocking::{Prover, ProverClient, SP1Stdin};
 
-use crate::fit::{fit_prover_gas_per_byte, fit_region_cycles_per_byte};
-use crate::reports::{write_markdown, ReportContext};
+use crate::fit::{fit_prover_gas_per_byte, fit_region_cycles_per_byte, LinearFit};
+use crate::reports::{render_markdown, BenchOutput, ReportContent, ReportContext};
 use crate::{git_short_sha, load_guest_elf, BenchResult, SP1_SDK_VERSION};
 
 const GUEST_ELF_PATH: &str = concat!(
@@ -16,8 +16,38 @@ const GUEST_ELF_PATH: &str = concat!(
 const DEFAULT_ITERATIONS: u32 = 1000;
 const SIZES: &[u32] = &[0, 1, 32, 64, 128, 256, 512, 1024, 4096, 16384, 65536];
 
-const ALGORITHM_DESCRIPTION: &str =
-    "SHA-256 via MeteredHasher + UnlimitedGasMeter (S::CryptoSpec::Hasher = sha2::Sha256, sp1-patches precompile)";
+pub struct Sha256Bench;
+
+impl ReportContent for Sha256Bench {
+    fn algorithm(&self) -> &str {
+        "SHA-256 via MeteredHasher + UnlimitedGasMeter (S::CryptoSpec::Hasher = sha2::Sha256, sp1-patches precompile)"
+    }
+
+    fn scope(&self) -> &str {
+        "These constants are charged by `MeteredHasher::digest` and therefore apply only to API-level hashing — transaction-hash calculation, credential-id derivation, and similar call sites. Jellyfish-Merkle-Tree internal-node hashing uses the **raw** `S::Hasher` and is **not** governed by these constants; its proving-time cost is absorbed by the storage-access gas constants instead."
+    }
+
+    fn suggested_constants(&self, gas_fit: &LinearFit) -> String {
+        format!(
+            "- `GAS_TO_CHARGE_HASH_UPDATE[1]` ≈ **{}**\n- `GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE[1]` ≈ **{}**",
+            gas_fit.bias.round() as i64,
+            gas_fit.per_byte.round() as i64,
+        )
+    }
+
+    fn extra_glossary(&self) -> &'static [(&'static str, &'static str)] {
+        &[
+            (
+                "call",
+                "One invocation of `MeteredHasher::digest(&data, &mut meter)` in the guest's hot loop. Each call internally invokes `MeteredHasher::update` exactly once, which is where the rollup's gas charges are applied (one bias charge plus one linear-per-byte charge).",
+            ),
+            (
+                "`MeteredHasher`",
+                "SDK wrapper at `crates/module-system/sov-modules-api/src/gas/metered_utils.rs` that charges gas before delegating to the underlying `Digest` impl. The production call site is `calculate_hash_metered` in `crates/module-system/sov-modules-api/src/runtime/capabilities/authentication.rs`, which is what this microbench mirrors.",
+            ),
+        ]
+    }
+}
 
 #[derive(Args, Debug)]
 pub struct Sha256Args {
@@ -29,8 +59,8 @@ pub struct Sha256Args {
     pub iterations: u32,
 }
 
-pub fn run(args: Sha256Args) -> anyhow::Result<()> {
-    let Sha256Args { out, iterations } = args;
+pub fn run(args: Sha256Args) -> anyhow::Result<BenchOutput> {
+    let Sha256Args { out: _, iterations } = args;
     let elf = load_guest_elf(GUEST_ELF_PATH)?;
     let client = ProverClient::from_env();
 
@@ -70,31 +100,28 @@ pub fn run(args: Sha256Args) -> anyhow::Result<()> {
     let cycles_fit = fit_region_cycles_per_byte(&results)?;
 
     let date = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let out_path = out.unwrap_or_else(|| {
-        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("reports")
-            .join(format!("sha256-{}.md", date))
-    });
     let git_commit = git_short_sha().unwrap_or_else(|| "unknown".to_string());
 
     let ctx = ReportContext {
-        algorithm: ALGORITHM_DESCRIPTION,
         sp1_version: SP1_SDK_VERSION,
         git_commit: &git_commit,
         date: &date,
     };
-    write_markdown(&ctx, &results, &gas_fit, &cycles_fit, &out_path)?;
+    let markdown = render_markdown(&ctx, &Sha256Bench, &results, &gas_fit, &cycles_fit);
 
-    println!("\n=== summary ===");
-    println!(
-        "prover gas / call: bias={:.2}, per_byte={:.4}, R²={:.4}",
-        gas_fit.bias, gas_fit.per_byte, gas_fit.r_squared
+    let summary = format!(
+        "\n=== summary ===\nprover gas / call: bias={:.2}, per_byte={:.4}, R²={:.4}\nregion cycles / call: bias={:.2}, per_byte={:.4}, R²={:.4}",
+        gas_fit.bias,
+        gas_fit.per_byte,
+        gas_fit.r_squared,
+        cycles_fit.bias,
+        cycles_fit.per_byte,
+        cycles_fit.r_squared,
     );
-    println!(
-        "region cycles / call: bias={:.2}, per_byte={:.4}, R²={:.4}",
-        cycles_fit.bias, cycles_fit.per_byte, cycles_fit.r_squared
-    );
-    println!("report written to: {}", out_path.display());
 
-    Ok(())
+    Ok(BenchOutput {
+        markdown,
+        default_filename: format!("sha256-{}.md", date),
+        summary,
+    })
 }

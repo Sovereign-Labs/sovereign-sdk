@@ -39,7 +39,7 @@ pub fn fit_region_cycles_per_byte(results: &[BenchResult]) -> anyhow::Result<Lin
 /// "Best" means ordinary least squares: pick the line that minimises the sum of the squared
 /// vertical distances from each data point to the line.
 ///
-/// Implemented in-tree rather than pulled from `linregress` or `linfa`: single-regressor OLS
+/// Implemented ourselves rather than pulled from `linregress` or `linfa`: single-regressor OLS
 /// is a few lines of closed-form arithmetic, we don't need confidence intervals or p-values,
 /// and avoiding the dependency keeps `ndarray` and friends out of the build graph.
 fn fit_linear(inputs: &[f64], measurements: &[f64]) -> anyhow::Result<LinearFit> {
