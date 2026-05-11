@@ -75,15 +75,10 @@ impl<'a> Risc0Host<'a> {
             .reserve(std::mem::size_of::<T>() / std::mem::size_of::<u32>());
 
         #[cfg(not(feature = "bincode"))]
-        {
-            let mut serializer = risc0_zkvm::serde::Serializer::new(&mut self.env);
-            item.serialize(&mut serializer)
-                .expect("Risc0 hint serialization is infallible");
-        }
+        crate::guest::hint_serde::write_risc0_serde_hint(&mut self.env, item);
 
         #[cfg(feature = "bincode")]
-        bincode::serialize_into(&mut self.env, item)
-            .expect("Risc0 hint serialization is infallible");
+        crate::guest::hint_serde::write_bincode_hint(&mut self.env, item);
     }
 
     /// Generate a Risc0Guest with provided hints
