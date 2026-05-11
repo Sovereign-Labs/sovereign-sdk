@@ -46,9 +46,6 @@ runs:
     - uses: taiki-e/install-action@nextest
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
-    - uses: taiki-e/install-action@machete
-      env:
-        GITHUB_TOKEN: ${{ inputs.github_token }}
     - uses: taiki-e/install-action@cargo-llvm-cov
       env:
         GITHUB_TOKEN: ${{ inputs.github_token }}
