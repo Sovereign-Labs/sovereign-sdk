@@ -14,14 +14,16 @@ addresses and records which credentials may act for which addresses.
 
 5. It is possible to explicitly authorize a credential for the caller's own
    address with `CallMessage::AddCredentialToAddress { address, credential }`,
-   and revoke such an authorization with
-   `CallMessage::RemoveCredentialFromAddress { address, credential }`. Both
-   calls require `message.address == context.sender()`: callers can only modify
-   credentials on the address they are currently signing as. The V1 signing
-   path's `target_address` field lets a caller signing with a credential
-   authorized for multiple addresses select which one to act as. There is no
-   orphan guard on remove — revoking the last credential leaves the address
-   unspendable via `account_owners`.
+   revoke such an authorization with
+   `CallMessage::RemoveCredentialFromAddress { address, credential }`, and
+   atomically swap one credential for another with
+   `CallMessage::RotateCredentialOnAddress { address, old_credential, new_credential }`.
+   All three calls require `message.address == context.sender()`: callers can
+   only modify credentials on the address they are currently signing as. The
+   V1 signing path's `target_address` field lets a caller signing with a
+   credential authorized for multiple addresses select which one to act as.
+   There is no orphan guard on remove — revoking the last credential leaves
+   the address unspendable via `account_owners`.
 
 
 ## Credential and Address Relations
@@ -38,12 +40,14 @@ If a credential has no explicit authorization, this canonical address is the nat
 ### Account-credential authorization map
 
 ```text
-account_owners[(address, credential_id)] = true
+account_owners[(address, credential_id)] = true | false
 ```
 
-This state map records authorization.
-A present entry means the credential is authorized to sign transactions that execute as the given address.
-The key is the exact `(address, credential_id)` pair, so this relation does not provide a credential-only lookup by itself.
+This state map records authorization overrides. `true` means the credential is authorized to sign transactions that execute as the given address.
+`false`
+explicitly revokes fallback authorization for that pair, including stateless
+canonical fallback. The key is the exact `(address, credential_id)` pair, so
+this relation does not provide a credential-only lookup by itself.
 
 This relation answers "may this credential act as this address?" once the target address is known.
 New `InsertCredentialId` calls write this relation.

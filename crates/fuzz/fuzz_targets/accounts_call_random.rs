@@ -9,9 +9,10 @@ use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::TestStorageSpec;
 
 type S = sov_test_utils::TestSpec;
+type FuzzInput<'a> = (&'a [u8], Vec<(Context<S>, CallMessage<S>)>);
 
 // Check arbitrary, random calls
-fuzz_target!(|input: (&[u8], Vec<(Context<S>, CallMessage<S>)>)| {
+fuzz_target!(|input: FuzzInput| {
     let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
     let storage = storage_manager.create_storage();
     let mut state = StateCheckpoint::new(storage, &MockKernel::<S>::default(), None);

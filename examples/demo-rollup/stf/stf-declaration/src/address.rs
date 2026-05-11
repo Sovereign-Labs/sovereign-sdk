@@ -10,7 +10,7 @@ use std::str::FromStr;
 use borsh::{BorshDeserialize, BorshSerialize};
 use schemars::JsonSchema;
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
-use sov_address::{EthereumAddress, FromVmAddress};
+use sov_address::{EthereumAddress, FromVmAddress, TryDecodeCredentialId};
 use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::macros::UniversalWallet;
 use sov_modules_api::{
@@ -54,6 +54,14 @@ impl From<AddressBech32> for MultiAddressEvmSolana {
 
 impl From<CredentialId> for MultiAddressEvmSolana {
     fn from(value: CredentialId) -> Self {
+        // EVM credentials pack the 20-byte address into the low 20 bytes of
+        // the 32-byte credential (12 zero bytes of padding); recover the
+        // `Evm` variant so the canonical-address relationship round-trips
+        // for EVM signers. Native and Solana credentials are hashes with
+        // no such structural marker, so they fall back to `Standard`.
+        if let Some(eth_addr) = EthereumAddress::try_decode_credential_id(value) {
+            return Self::Evm(eth_addr);
+        }
         Self::Standard(Address::from(value))
     }
 }

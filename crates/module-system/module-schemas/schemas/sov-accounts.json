@@ -17,7 +17,7 @@
       "additionalProperties": false
     },
     {
-      "description": "Authorizes `credential` to sign transactions that execute as `address`. The caller must currently be signing as `address` (i.e. `context.sender() == address`); this is naturally true after PR 2's resolver for V1 `target_address = Some(address)` and for V0/target=None where the signer's credential resolves into `address`. Fails if the tuple is already authorized.",
+      "description": "Authorizes `credential` to sign transactions that execute as `address`. The caller must currently be signing as `address`. Fails if the tuple is already authorized.",
       "type": "object",
       "required": [
         "add_credential_to_address"
@@ -75,6 +75,50 @@
             },
             "credential": {
               "description": "The credential being revoked from `address`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CredentialId"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Atomically swaps `old_credential` for `new_credential` on `address`. Functionally equivalent to a `RemoveCredentialFromAddress` followed by an `AddCredentialToAddress`, collapsed into a single call so the caller does not have to authorize two transactions during a rotation. The caller must currently be signing as `address`.",
+      "type": "object",
+      "required": [
+        "rotate_credential_on_address"
+      ],
+      "properties": {
+        "rotate_credential_on_address": {
+          "type": "object",
+          "required": [
+            "address",
+            "new_credential",
+            "old_credential"
+          ],
+          "properties": {
+            "address": {
+              "description": "The address whose credential set is being rotated. Must equal `context.sender()`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Address"
+                }
+              ]
+            },
+            "new_credential": {
+              "description": "The credential being authorized for `address`. Must not already be authorized.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CredentialId"
+                }
+              ]
+            },
+            "old_credential": {
+              "description": "The credential being revoked from `address`. Must be currently authorized.",
               "allOf": [
                 {
                   "$ref": "#/definitions/CredentialId"

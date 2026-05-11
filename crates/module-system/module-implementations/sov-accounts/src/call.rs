@@ -1,4 +1,4 @@
-use anyhow::{bail, Context as _};
+use anyhow::{anyhow, bail, Context as _};
 use schemars::JsonSchema;
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{Context, CredentialId, Spec, StateReader, TxState};
@@ -20,11 +20,8 @@ pub enum CallMessage<S: Spec> {
     ),
 
     /// Authorizes `credential` to sign transactions that execute as `address`.
-    /// The caller must currently be signing as `address` (i.e.
-    /// `context.sender() == address`); this is naturally true after PR 2's
-    /// resolver for V1 `target_address = Some(address)` and for V0/target=None
-    /// where the signer's credential resolves into `address`. Fails if the
-    /// tuple is already authorized.
+    /// The caller must currently be signing as `address`. Fails if the tuple
+    /// is already authorized.
     AddCredentialToAddress {
         /// The address whose credential set is being extended. Must equal
         /// `context.sender()`.
@@ -43,6 +40,23 @@ pub enum CallMessage<S: Spec> {
         /// The credential being revoked from `address`.
         credential: CredentialId,
     },
+
+    /// Atomically swaps `old_credential` for `new_credential` on `address`.
+    /// Functionally equivalent to a `RemoveCredentialFromAddress` followed by
+    /// an `AddCredentialToAddress`, collapsed into a single call so the
+    /// caller does not have to authorize two transactions during a rotation.
+    /// The caller must currently be signing as `address`.
+    RotateCredentialOnAddress {
+        /// The address whose credential set is being rotated. Must equal
+        /// `context.sender()`.
+        address: S::Address,
+        /// The credential being revoked from `address`. Must be currently
+        /// authorized.
+        old_credential: CredentialId,
+        /// The credential being authorized for `address`. Must not already
+        /// be authorized.
+        new_credential: CredentialId,
+    },
 }
 
 impl<S: Spec> Accounts<S> {
@@ -54,7 +68,7 @@ impl<S: Spec> Accounts<S> {
     ) -> anyhow::Result<()> {
         self.ensure_custom_account_mappings_enabled(state)?;
 
-        self.exit_if_credential_exists(&new_credential_id, context.sender(), state)?;
+        self.ensure_credential_not_authorized(context.sender(), &new_credential_id, state)?;
 
         self.authorize_credential(context.sender(), &new_credential_id, state)?;
         Ok(())
@@ -66,18 +80,10 @@ impl<S: Spec> Accounts<S> {
         credential: CredentialId,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         self.ensure_custom_account_mappings_enabled(state)?;
         self.ensure_caller_owns(&address, context)?;
-
-        let key = AccountOwnerKey::new(address, credential);
-        anyhow::ensure!(
-            self.account_owners
-                .get(&key, state)
-                .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
-                .is_none(),
-            "CredentialId already authorized for this address"
-        );
+        self.ensure_credential_not_authorized(&address, &credential, state)?;
 
         self.authorize_credential(&address, &credential, state)?;
         Ok(())
@@ -89,27 +95,60 @@ impl<S: Spec> Accounts<S> {
         credential: CredentialId,
         context: &Context<S>,
         state: &mut impl TxState<S>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         self.ensure_custom_account_mappings_enabled(state)?;
         self.ensure_caller_owns(&address, context)?;
 
-        let key = AccountOwnerKey::new(address, credential);
         anyhow::ensure!(
-            self.account_owners
-                .get(&key, state)
-                .map_err(|err| anyhow!("Error raised while getting account owner: {err:?}"))?
-                .is_some(),
+            self.is_authorized_for(&address, &credential, state)
+                .map_err(|err| anyhow!("Error raised while checking authorization: {err:?}"))?,
             "CredentialId is not authorized for this address"
         );
 
-        self.account_owners.delete(&key, state)?;
+        self.revoke_credential(&address, &credential, state)?;
+        Ok(())
+    }
+
+    pub(crate) fn rotate_credential_on_address(
+        &mut self,
+        address: S::Address,
+        old_credential: CredentialId,
+        new_credential: CredentialId,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        self.ensure_custom_account_mappings_enabled(state)?;
+        self.ensure_caller_owns(&address, context)?;
+
+        anyhow::ensure!(
+            self.is_authorized_for(&address, &old_credential, state)
+                .map_err(|err| anyhow!("Error raised while checking authorization: {err:?}"))?,
+            "CredentialId is not authorized for this address"
+        );
+        self.ensure_credential_not_authorized(&address, &new_credential, state)?;
+
+        self.revoke_credential(&address, &old_credential, state)?;
+        self.authorize_credential(&address, &new_credential, state)?;
+        Ok(())
+    }
+
+    fn revoke_credential(
+        &mut self,
+        address: &S::Address,
+        credential: &CredentialId,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        let key = AccountOwnerKey::new(*address, *credential);
+        // Write `false` explicitly so the canonical-address fallback in
+        // `is_authorized_for` cannot re-authorize the tuple.
+        self.account_owners.set(&key, &false, state)?;
         Ok(())
     }
 
     fn ensure_custom_account_mappings_enabled(
         &self,
         state: &mut impl StateReader<User>,
-    ) -> Result<()> {
+    ) -> anyhow::Result<()> {
         if !self
             .enable_custom_account_mappings
             .get(state)
@@ -123,12 +162,10 @@ impl<S: Spec> Accounts<S> {
         Ok(())
     }
 
-    /// Enforces that the caller is currently signing as `address`, i.e.
-    /// `context.sender() == address`. PR 2's authorizer has already proven
-    /// the caller controls a credential authorized for `context.sender()`
-    /// (either via `is_authorized` on the V1 target path, or via the
-    /// credential's natural resolution to `sender` on V0/target=None).
-    fn ensure_caller_owns(&self, address: &S::Address, context: &Context<S>) -> Result<()> {
+    /// Enforces that the caller is signing as `address`. The upstream
+    /// authorization path has already verified the caller controls a
+    /// credential authorized for `context.sender()`.
+    fn ensure_caller_owns(&self, address: &S::Address, context: &Context<S>) -> anyhow::Result<()> {
         anyhow::ensure!(
             context.sender() == address,
             "Caller is not authorized to modify credentials for this address"
@@ -136,17 +173,16 @@ impl<S: Spec> Accounts<S> {
         Ok(())
     }
 
-    fn exit_if_credential_exists(
+    fn ensure_credential_not_authorized(
         &self,
-        new_credential_id: &CredentialId,
         address: &S::Address,
+        credential: &CredentialId,
         state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
         anyhow::ensure!(
-            self.account_owners
-                .get(&AccountOwnerKey::new(*address, *new_credential_id), state)
-                .context("Failed to read account owner")?
-                .is_none(),
+            !self
+                .is_explicitly_authorized(address, credential, state)
+                .context("Failed to read account owner")?,
             "CredentialId already authorized for this address"
         );
         Ok(())

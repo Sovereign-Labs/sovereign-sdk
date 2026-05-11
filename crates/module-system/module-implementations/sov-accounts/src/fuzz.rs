@@ -9,15 +9,20 @@ where
     S::Address: Arbitrary<'a>,
 {
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
-        match u.int_in_range(0..=2)? {
+        match u.int_in_range(0..=3)? {
             0 => Ok(Self::InsertCredentialId(u.arbitrary()?)),
             1 => Ok(Self::AddCredentialToAddress {
                 address: u.arbitrary()?,
                 credential: u.arbitrary()?,
             }),
-            _ => Ok(Self::RemoveCredentialFromAddress {
+            2 => Ok(Self::RemoveCredentialFromAddress {
                 address: u.arbitrary()?,
                 credential: u.arbitrary()?,
+            }),
+            _ => Ok(Self::RotateCredentialOnAddress {
+                address: u.arbitrary()?,
+                old_credential: u.arbitrary()?,
+                new_credential: u.arbitrary()?,
             }),
         }
     }

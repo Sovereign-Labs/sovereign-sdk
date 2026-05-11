@@ -30,7 +30,7 @@ impl<S: Spec> Accounts<S> {
         Ok(self
             .account_owners
             .get(&AccountOwnerKey::new(*address, *credential_id), state)?
-            .is_some())
+            .unwrap_or(false))
     }
 
     /// Returns `true` if `credential_id` is authorized to act as `address`.
@@ -44,6 +44,13 @@ impl<S: Spec> Accounts<S> {
         credential_id: &CredentialId,
         state: &mut ST,
     ) -> Result<bool, ST::Error> {
+        if let Some(is_authorized) = self
+            .account_owners
+            .get(&AccountOwnerKey::new(*address, *credential_id), state)?
+        {
+            return Ok(is_authorized);
+        }
+
         let canonical_address: S::Address = (*credential_id).into();
         if canonical_address == *address {
             return Ok(true);

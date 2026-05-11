@@ -1,10 +1,14 @@
 use sov_modules_api::prelude::*;
 use sov_modules_api::sov_universal_wallet::schema::Schema;
+use sov_modules_api::Spec;
+use sov_test_utils::TestSpec;
 
 use crate::CallMessage;
 
 #[test]
 fn test_display_accounts_call() {
+    type S = TestSpec;
+
     #[derive(Debug, Clone, PartialEq, borsh::BorshSerialize, UniversalWallet)]
     enum RuntimeCall {
         Accounts(CallMessage<S>),
@@ -52,5 +56,26 @@ fn test_display_accounts_call() {
     assert!(
         rendered.contains("0x0303030303030303030303030303030303030303030303030303030303030303"),
         "render missing credential: {rendered}"
+    );
+
+    let rotate_msg = RuntimeCall::Accounts(CallMessage::RotateCredentialOnAddress {
+        address,
+        old_credential: [4; 32].into(),
+        new_credential: [5; 32].into(),
+    });
+    let rendered = schema
+        .display(0, &borsh::to_vec(&rotate_msg).unwrap())
+        .unwrap();
+    assert!(
+        rendered.starts_with("Accounts.RotateCredentialOnAddress"),
+        "unexpected render: {rendered}"
+    );
+    assert!(
+        rendered.contains("0x0404040404040404040404040404040404040404040404040404040404040404"),
+        "render missing old_credential: {rendered}"
+    );
+    assert!(
+        rendered.contains("0x0505050505050505050505050505050505050505050505050505050505050505"),
+        "render missing new_credential: {rendered}"
     );
 }

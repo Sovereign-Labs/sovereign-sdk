@@ -1,5 +1,88 @@
 import { describe, expect, it } from "vitest";
-import { convertUint8ArraysToArrays } from "./serializer";
+import { Serializer, convertUint8ArraysToArrays } from "./serializer";
+
+class TestSerializer extends Serializer {
+  public lastInput: unknown;
+  public lastIndex?: number;
+
+  protected jsonToBorsh(input: unknown, index: number): Uint8Array {
+    this.lastInput = input;
+    this.lastIndex = index;
+    return new Uint8Array([1, 2, 3]);
+  }
+}
+
+describe("Serializer", () => {
+  it("should wrap plain unsigned transactions as V0", () => {
+    const serializer = new TestSerializer({ root_type_indices: [0, 177, 3] });
+    const unsignedTx = {
+      runtime_call: { bank: "transfer" },
+      uniqueness: { generation: 1 },
+      details: { max_fee: "1000" },
+    };
+
+    const result = serializer.serializeUnsignedTx(unsignedTx);
+
+    expect(result).toEqual(new Uint8Array([1, 2, 3]));
+    expect(serializer.lastIndex).toBe(177);
+    expect(serializer.lastInput).toEqual({ V0: unsignedTx });
+  });
+
+  it("should not double-wrap versioned unsigned transactions", () => {
+    const serializer = new TestSerializer({ root_type_indices: [0, 177, 3] });
+    const v0UnsignedTx = {
+      V0: {
+        runtime_call: { bank: "transfer" },
+        uniqueness: { generation: 1 },
+        details: { max_fee: "1000" },
+      },
+    };
+    const v1UnsignedTx = {
+      V1: {
+        runtime_call: { bank: "transfer" },
+        uniqueness: { nonce: 1 },
+        details: { max_fee: "1000" },
+      },
+    };
+
+    serializer.serializeUnsignedTx(v0UnsignedTx);
+    expect(serializer.lastInput).toEqual(v0UnsignedTx);
+
+    serializer.serializeUnsignedTx(v1UnsignedTx);
+    expect(serializer.lastInput).toEqual(v1UnsignedTx);
+  });
+
+  it("should convert Uint8Arrays when wrapping plain unsigned transactions", () => {
+    const serializer = new TestSerializer({ root_type_indices: [0, 177, 3] });
+    const unsignedTx = {
+      runtime_call: {
+        bank: {
+          transfer: {
+            to: new Uint8Array([1, 2, 3]),
+          },
+        },
+      },
+      uniqueness: { generation: 1 },
+      details: { max_fee: "1000" },
+    };
+
+    serializer.serializeUnsignedTx(unsignedTx);
+
+    expect(serializer.lastInput).toEqual({
+      V0: {
+        runtime_call: {
+          bank: {
+            transfer: {
+              to: [1, 2, 3],
+            },
+          },
+        },
+        uniqueness: { generation: 1 },
+        details: { max_fee: "1000" },
+      },
+    });
+  });
+});
 
 describe("convertUint8ArraysToArrays", () => {
   it("should convert a simple Uint8Array to a regular array", () => {
