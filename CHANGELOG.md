@@ -1,3 +1,6 @@
+# 2026-05-11
+- #2847 Removes bincode support from `sov-risc0-adapter`
+
 # 2026-05-05
 - #2808 **Breaking config change**: Adds a required `sequencer.max_concurrent_proof_blobs` field to rollup TOML configs, capping the number of proof blobs in flight on the DA layer. When the cap is reached, the ZK aggregator triggers a rollup shutdown.
 # 2026-04-20
