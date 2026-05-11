@@ -5,8 +5,8 @@ use clap::Args;
 use sp1_sdk::blocking::{Prover, ProverClient, SP1Stdin};
 
 use crate::fit::{fit_prover_gas_per_byte, fit_region_cycles_per_byte, LinearFit};
-use crate::reports::{render_markdown, BenchOutput, ReportContent, ReportContext};
-use crate::{git_short_sha, load_guest_elf, BenchResult, SP1_SDK_VERSION};
+use crate::reports::{render_markdown, BenchOutput, ReportContent};
+use crate::{load_guest_elf, today, BenchResult};
 
 const GUEST_ELF_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -99,15 +99,7 @@ pub fn run(args: Sha256Args) -> anyhow::Result<BenchOutput> {
     let gas_fit = fit_prover_gas_per_byte(&results)?;
     let cycles_fit = fit_region_cycles_per_byte(&results)?;
 
-    let date = chrono::Local::now().format("%Y-%m-%d").to_string();
-    let git_commit = git_short_sha().unwrap_or_else(|| "unknown".to_string());
-
-    let ctx = ReportContext {
-        sp1_version: SP1_SDK_VERSION,
-        git_commit: &git_commit,
-        date: &date,
-    };
-    let markdown = render_markdown(&ctx, &Sha256Bench, &results, &gas_fit, &cycles_fit);
+    let markdown = render_markdown(&Sha256Bench, &results, &gas_fit, &cycles_fit);
 
     let summary = format!(
         "\n=== summary ===\nprover gas / call: bias={:.2}, per_byte={:.4}, R²={:.4}\nregion cycles / call: bias={:.2}, per_byte={:.4}, R²={:.4}",
@@ -121,7 +113,7 @@ pub fn run(args: Sha256Args) -> anyhow::Result<BenchOutput> {
 
     Ok(BenchOutput {
         markdown,
-        default_filename: format!("sha256-{}.md", date),
+        default_filename: format!("sha256-{}.md", today()),
         summary,
     })
 }

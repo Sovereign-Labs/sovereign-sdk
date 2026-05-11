@@ -1,11 +1,5 @@
 use crate::fit::LinearFit;
-use crate::BenchResult;
-
-pub struct ReportContext<'a> {
-    pub sp1_version: &'a str,
-    pub git_commit: &'a str,
-    pub date: &'a str,
-}
+use crate::{today, BenchResult, SP1_SDK_VERSION};
 
 /// Everything a bench's `run` returns for the dispatcher to handle.
 pub struct BenchOutput {
@@ -78,7 +72,6 @@ const CORE_GLOSSARY: &[(&str, &str)] = &[
 ];
 
 pub fn render_markdown(
-    ctx: &ReportContext,
     content: &impl ReportContent,
     results: &[BenchResult],
     gas_fit: &LinearFit,
@@ -89,9 +82,8 @@ pub fn render_markdown(
         "# {} prover-gas microbench\n\n",
         content.algorithm()
     ));
-    s.push_str(&format!("- Date: {}\n", ctx.date));
-    s.push_str(&format!("- SP1 SDK: {}\n", ctx.sp1_version));
-    s.push_str(&format!("- Git commit: {}\n", ctx.git_commit));
+    s.push_str(&format!("- Date: {}\n", today()));
+    s.push_str(&format!("- SP1 SDK: {}\n", SP1_SDK_VERSION));
     s.push_str("- Method: `ProverClient::execute()` (no proving).\n");
     s.push_str("- Iterations per run: see table.\n");
     s.push_str(

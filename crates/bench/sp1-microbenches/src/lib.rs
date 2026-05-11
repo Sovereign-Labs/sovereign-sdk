@@ -4,8 +4,6 @@ pub mod cmd;
 pub mod fit;
 pub mod reports;
 
-use std::process::Command;
-
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use sp1_sdk::blocking::Elf;
@@ -41,13 +39,6 @@ pub fn load_guest_elf(path: &str) -> anyhow::Result<Elf> {
     Ok(Elf::from(bytes))
 }
 
-pub fn git_short_sha() -> Option<String> {
-    let output = Command::new("git")
-        .args(["rev-parse", "--short", "HEAD"])
-        .output()
-        .ok()?;
-    if !output.status.success() {
-        return None;
-    }
-    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+pub fn today() -> String {
+    chrono::Local::now().format("%Y-%m-%d").to_string()
 }
