@@ -482,7 +482,7 @@ impl MaybeSealedBlock {
     }
 }
 
-/// TODO: Can we replace this with Reth type?
+
 #[serde_as]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, Deref, DerefMut)]
 /// Receipt
