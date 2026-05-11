@@ -4,7 +4,7 @@ use std::time::Duration;
 use async_trait::async_trait;
 use sov_blob_sender::{
     BlobExecutionStatus, BlobInternalId, BlobSelectorStatus, BlobSender, BlobSenderHooks,
-    BlobSubmissionStatus, FinalizationManager,
+    BlobSubmissionError, BlobSubmissionStatus, FinalizationManager,
 };
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
@@ -316,6 +316,72 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
         log.contains(pattern),
         "Pattern '{pattern}' not found in '{log}'"
     );
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn blob_sender_emits_failed_status_before_max_retries_shutdown() -> anyhow::Result<()> {
+    let deps = create_deps().await;
+    let (status_sender, mut status_receiver) = broadcast::channel(100);
+    let mut shutdown_receiver = deps.shutdown_sender.subscribe();
+
+    let (mut blob_sender, _blob_sender_handle) = create_blob_sender(
+        Duration::from_secs(1),
+        &deps,
+        Some(status_sender),
+        BlobSelectorStatus::Accepted,
+    )
+    .await;
+
+    let blob_id = 21u8;
+    let data = Arc::new([blob_id, 2, 3, 4, 5]);
+    blob_sender
+        .publish_batch_blob(data, blob_id as BlobInternalId)
+        .await?;
+
+    let observed_failed = tokio::select! {
+        _ = shutdown_receiver.changed() => {
+            let mut found = false;
+            while let Ok(status) = status_receiver.try_recv() {
+                if matches!(
+                    status.blob_submission_status,
+                    BlobSubmissionStatus::Failed {
+                        error: BlobSubmissionError::MaxRetriesExhausted { .. },
+                        will_retry: false,
+                    }
+                ) {
+                    found = true;
+                    break;
+                }
+            }
+            found
+        }
+        result = async {
+            loop {
+                match status_receiver.recv().await {
+                    Ok(status) => {
+                        if matches!(
+                            status.blob_submission_status,
+                            BlobSubmissionStatus::Failed {
+                                error: BlobSubmissionError::MaxRetriesExhausted { .. },
+                                will_retry: false,
+                            }
+                        ) {
+                            return true;
+                        }
+                    }
+                    Err(_) => return false,
+                }
+            }
+        } => result,
+    };
+
+    assert!(
+        observed_failed,
+        "expected a Failed{{ MaxRetriesExhausted, will_retry: false }} status \
+         on the broadcast before shutdown"
+    );
+
     Ok(())
 }
 
