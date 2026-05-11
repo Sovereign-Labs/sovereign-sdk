@@ -123,7 +123,7 @@ pub fn render_markdown(
     s.push_str("\n\n");
 
     s.push_str("## Suggested ZK gas constants\n\n");
-    s.push_str("Raw values (rounded). Apply a global scaling factor when wiring into `constants.toml` so that all metered primitives share a coherent unit.\n\n");
+    s.push_str("Raw SP1 prover-gas units (rounded), wired into the ZK gas dimension of `constants.toml` 1:1 — no scaling multiplier.\n\n");
     s.push_str(&content.suggested_constants(gas_fit));
     s.push_str("\n");
 

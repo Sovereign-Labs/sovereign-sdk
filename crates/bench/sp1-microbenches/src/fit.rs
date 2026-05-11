@@ -104,7 +104,11 @@ mod tests {
 
         assert!(close(fit.per_byte, 2.0), "slope: {}", fit.per_byte);
         assert!(close(fit.bias, 0.2), "bias: {}", fit.bias);
-        assert!(close(fit.max_residual, 0.8), "max_residual: {}", fit.max_residual);
+        assert!(
+            close(fit.max_residual, 0.8),
+            "max_residual: {}",
+            fit.max_residual
+        );
         assert!(
             fit.r_squared > 0.95 && fit.r_squared < 1.0,
             "R² should be high but not perfect, got {}",
@@ -116,8 +120,16 @@ mod tests {
     fn constant_y_uses_zero_variance_branch() {
         // total_sum_of_squares == 0; the implementation special-cases this to R²=1 instead of NaN.
         let fit = fit_linear(&[0.0, 1.0, 2.0], &[5.0, 5.0, 5.0]).unwrap();
-        assert!(close(fit.r_squared, 1.0), "R² on constant y: {}", fit.r_squared);
-        assert!(close(fit.per_byte, 0.0), "slope on constant y: {}", fit.per_byte);
+        assert!(
+            close(fit.r_squared, 1.0),
+            "R² on constant y: {}",
+            fit.r_squared
+        );
+        assert!(
+            close(fit.per_byte, 0.0),
+            "slope on constant y: {}",
+            fit.per_byte
+        );
         assert!(close(fit.bias, 5.0), "bias on constant y: {}", fit.bias);
     }
 
@@ -132,4 +144,3 @@ mod tests {
         assert!(fit_linear(&[3.0, 3.0, 3.0], &[1.0, 2.0, 3.0]).is_err());
     }
 }
-

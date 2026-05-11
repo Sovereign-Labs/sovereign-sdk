@@ -24,7 +24,7 @@ impl ReportContent for Sha256Bench {
     }
 
     fn scope(&self) -> &str {
-        "These constants are charged by `MeteredHasher::digest` and therefore apply only to API-level hashing — transaction-hash calculation, credential-id derivation, and similar call sites. Jellyfish-Merkle-Tree internal-node hashing uses the **raw** `S::Hasher` and is **not** governed by these constants; its proving-time cost is absorbed by the storage-access gas constants instead."
+        "These constants are charged by `MeteredHasher::digest` and therefore apply only to API-level hashing — transaction-hash calculation, credential-id derivation, and similar call sites."
     }
 
     fn suggested_constants(&self, gas_fit: &LinearFit) -> String {
