@@ -21,13 +21,6 @@ pub fn fit_prover_gas_per_byte(results: &[BenchResult]) -> anyhow::Result<Linear
     fit_linear(&input_sizes, &prover_gas)
 }
 
-/// Fit `region_cycles_per_call = bias + per_byte * input_size` over the bench results.
-pub fn fit_region_cycles_per_byte(results: &[BenchResult]) -> anyhow::Result<LinearFit> {
-    let input_sizes: Vec<f64> = results.iter().map(|r| r.input_size as f64).collect();
-    let region_cycles: Vec<f64> = results.iter().map(|r| r.per_iter_region_cycles()).collect();
-    fit_linear(&input_sizes, &region_cycles)
-}
-
 /// Given a list of `(input_size, measured_cost)` points, find the straight line that best
 /// describes their relationship.
 ///

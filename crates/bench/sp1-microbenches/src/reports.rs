@@ -75,7 +75,6 @@ pub fn render_markdown(
     content: &impl ReportContent,
     results: &[BenchResult],
     gas_fit: &LinearFit,
-    cycles_fit: &LinearFit,
 ) -> String {
     let mut s = String::new();
     s.push_str(&format!(
@@ -117,18 +116,6 @@ pub fn render_markdown(
     s.push_str(&format!(
         "- max residual: {:.2} gas\n\n",
         gas_fit.max_residual
-    ));
-
-    s.push_str("## Linear fit: RISC-V cycles per call (sanity check)\n\n");
-    s.push_str(&format!("- bias (cycles / call): {:.2}\n", cycles_fit.bias));
-    s.push_str(&format!(
-        "- per_byte (cycles / byte): {:.4}\n",
-        cycles_fit.per_byte
-    ));
-    s.push_str(&format!("- R²: {:.6}\n", cycles_fit.r_squared));
-    s.push_str(&format!(
-        "- max residual: {:.2} cycles\n\n",
-        cycles_fit.max_residual
     ));
 
     s.push_str("## Scope\n\n");

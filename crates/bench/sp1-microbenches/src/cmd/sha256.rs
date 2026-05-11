@@ -4,7 +4,7 @@ use anyhow::Context;
 use clap::Args;
 use sp1_sdk::blocking::{Prover, ProverClient, SP1Stdin};
 
-use crate::fit::{fit_prover_gas_per_byte, fit_region_cycles_per_byte, LinearFit};
+use crate::fit::{fit_prover_gas_per_byte, LinearFit};
 use crate::reports::{render_markdown, BenchOutput, ReportContent};
 use crate::{load_guest_elf, today, BenchResult};
 
@@ -97,18 +97,10 @@ pub fn run(args: Sha256Args) -> anyhow::Result<BenchOutput> {
     }
 
     let gas_fit = fit_prover_gas_per_byte(&results)?;
-    let cycles_fit = fit_region_cycles_per_byte(&results)?;
-
-    let markdown = render_markdown(&Sha256Bench, &results, &gas_fit, &cycles_fit);
-
+    let markdown = render_markdown(&Sha256Bench, &results, &gas_fit);
     let summary = format!(
-        "\n=== summary ===\nprover gas / call: bias={:.2}, per_byte={:.4}, R²={:.4}\nregion cycles / call: bias={:.2}, per_byte={:.4}, R²={:.4}",
-        gas_fit.bias,
-        gas_fit.per_byte,
-        gas_fit.r_squared,
-        cycles_fit.bias,
-        cycles_fit.per_byte,
-        cycles_fit.r_squared,
+        "\n=== summary ===\nprover gas / call: bias={:.2}, per_byte={:.4}, R²={:.4}",
+        gas_fit.bias, gas_fit.per_byte, gas_fit.r_squared,
     );
 
     Ok(BenchOutput {
