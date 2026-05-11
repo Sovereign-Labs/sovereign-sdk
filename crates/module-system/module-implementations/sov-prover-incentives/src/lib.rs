@@ -48,12 +48,6 @@ pub struct ProverIncentives<S: Spec> {
     #[state]
     pub last_claimed_reward: StateValue<SlotNumber>,
 
-    /// Public data from the most recently verified aggregated proof.
-    #[state]
-    #[allow(clippy::type_complexity)]
-    pub latest_proof_succesfully_verified:
-        StateValue<AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>>,
-
     /// A penalty for provers who submit a proof for transitions that were already proven
     ///
     /// This quantity is expressed in gas units. When provers are penalized proofs, they will
@@ -68,6 +62,12 @@ pub struct ProverIncentives<S: Spec> {
     /// Reference to the Chain state module. Used to check the proof inputs
     #[module]
     pub(crate) chain_state: sov_chain_state::ChainState<S>,
+
+    /// Public data from the most recently verified aggregated proof.
+    #[state]
+    #[allow(clippy::type_complexity)]
+    pub latest_proof_succesfully_verified:
+        StateValue<AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>>,
 }
 
 impl<S: Spec> sov_modules_api::Module for ProverIncentives<S> {

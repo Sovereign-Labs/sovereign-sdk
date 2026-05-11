@@ -92,6 +92,11 @@ pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {
     pub initial_slot_number: SlotNumber,
     /// Final rollup slot.
     pub final_slot_number: SlotNumber,
+    /// The slot number that [`Self::origin_state_root`] corresponds to: the slot
+    /// at the end of which the chain's origin state root was produced. When the
+    /// chain extends unbroken from the rollup's genesis, this equals
+    /// [`SlotNumber::GENESIS`].
+    pub origin_slot_number: SlotNumber,
     /// The origin state root of the aggregated proof: the initial state root of the
     /// first inner proof in this aggregation's chain. When the chain extends unbroken
     /// from the rollup's genesis, this equals the rollup's genesis state root.
@@ -120,6 +125,7 @@ where
     /// deriving initial/final fields from the first and last entries.
     pub fn from_block_proofs(
         block_proofs: &[&BlockProof<Address, Da, Root>],
+        origin_slot_number: SlotNumber,
         origin_state_root: Root,
     ) -> Self {
         let initial = block_proofs
@@ -134,6 +140,7 @@ where
             rewarded_addresses,
             initial_slot_number: initial.st.slot_number,
             final_slot_number: final_bp.st.slot_number,
+            origin_slot_number,
             origin_state_root,
             initial_state_root: initial.st.initial_state_root.clone(),
             final_state_root: final_bp.st.final_state_root.clone(),
@@ -152,9 +159,10 @@ impl<Address, Da: DaSpec, Root: AsRef<[u8]>> core::fmt::Display
     fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
         write!(
             f,
-            "AggregatedProofPublicData(initial_slot_number: {}, final_slot_number: {}, origin_state_root: {}, initial_state_root: 0x{}, final_state_root: 0x{}, initial_slot_hash: 0x{}, final_slot_hash: 0x{}, inner_vkey_hash: {}, outer_vk_hash: {})",
+            "AggregatedProofPublicData(initial_slot_number: {}, final_slot_number: {}, origin_slot_number: {}, origin_state_root: {}, initial_state_root: 0x{}, final_state_root: 0x{}, initial_slot_hash: 0x{}, final_slot_hash: 0x{}, inner_vkey_hash: {}, outer_vk_hash: {})",
             self.initial_slot_number,
             self.final_slot_number,
+            self.origin_slot_number,
             hex::encode(self.origin_state_root.as_ref()),
             hex::encode(self.initial_state_root.as_ref()),
             hex::encode(self.final_state_root.as_ref()),

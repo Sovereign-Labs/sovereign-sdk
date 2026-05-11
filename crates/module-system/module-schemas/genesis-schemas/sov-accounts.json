@@ -1,49 +1,45 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "AccountConfig",
   "description": "Initial configuration for sov-accounts module.",
   "type": "object",
-  "required": [
-    "accounts"
-  ],
   "properties": {
     "accounts": {
       "description": "Accounts to initialize the rollup.",
       "type": "array",
       "items": {
-        "$ref": "#/definitions/AccountData_for_Address"
+        "$ref": "#/$defs/AccountData"
       }
     },
     "enable_custom_account_mappings": {
       "description": "Enable custom `CredentailId` => `Account` mapping.",
-      "default": true,
-      "type": "boolean"
+      "type": "boolean",
+      "default": true
     }
   },
   "additionalProperties": false,
-  "definitions": {
-    "AccountData_for_Address": {
+  "required": [
+    "accounts"
+  ],
+  "$defs": {
+    "AccountData": {
       "description": "Account data for the genesis.",
       "type": "object",
-      "required": [
-        "address",
-        "credential_id"
-      ],
       "properties": {
         "address": {
           "description": "Address of the account.",
-          "allOf": [
-            {
-              "$ref": "#/definitions/Address"
-            }
-          ]
+          "$ref": "#/$defs/Address"
         },
         "credential_id": {
           "description": "Credential ID of the account.",
           "type": "string"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "required": [
+        "credential_id",
+        "address"
+      ]
     },
     "Address": {
       "description": "Address",

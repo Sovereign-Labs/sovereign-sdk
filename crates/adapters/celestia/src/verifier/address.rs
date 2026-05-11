@@ -92,17 +92,16 @@ fn deserialize_celestia_address(
 }
 
 impl schemars::JsonSchema for CelestiaAddress {
-    fn schema_name() -> String {
-        "CelestiaAddress".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "CelestiaAddress".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        serde_json::from_value(serde_json::json!({
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
             "type": "string",
             "pattern": "^celestia[a-z0-9]+$",
             "description": "A Celestia address",
-        }))
-        .expect("Invalid schema; this is a bug, please report it")
+        })
     }
 }
 

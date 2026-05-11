@@ -1,26 +1,20 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "CallMessage",
   "description": "This enumeration represents the available call messages for interacting with the `sov-value-setter` module.",
   "oneOf": [
     {
       "description": "Single value to set.",
       "type": "object",
-      "required": [
-        "set_value"
-      ],
       "properties": {
         "set_value": {
           "type": "object",
-          "required": [
-            "value"
-          ],
           "properties": {
             "gas": {
               "description": "Gas to charge. Don't charge gas if None.",
               "anyOf": [
                 {
-                  "$ref": "#/definitions/GasUnit(2)"
+                  "$ref": "#/$defs/GasUnit(2)"
                 },
                 {
                   "type": "null"
@@ -31,95 +25,101 @@
               "description": "Singe new value.",
               "type": "integer",
               "format": "uint32",
-              "minimum": 0.0
+              "minimum": 0
             }
-          }
+          },
+          "required": [
+            "value"
+          ]
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "required": [
+        "set_value"
+      ]
     },
     {
       "description": "Many values to set.",
       "type": "object",
-      "required": [
-        "set_many_values"
-      ],
       "properties": {
         "set_many_values": {
+          "description": "Many new values.",
           "type": "array",
           "items": {
             "type": "integer",
             "format": "uint8",
-            "minimum": 0.0
+            "maximum": 255,
+            "minimum": 0
           }
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "required": [
+        "set_many_values"
+      ]
     },
     {
       "description": "Assert the visible slot number is as expected.",
       "type": "object",
-      "required": [
-        "assert_visible_slot_number"
-      ],
       "properties": {
         "assert_visible_slot_number": {
           "type": "object",
-          "required": [
-            "expected_visible_slot_number"
-          ],
           "properties": {
             "expected_visible_slot_number": {
               "description": "The expected visible slot number.",
               "type": "integer",
               "format": "uint64",
-              "minimum": 0.0
+              "minimum": 0
             }
-          }
+          },
+          "required": [
+            "expected_visible_slot_number"
+          ]
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "required": [
+        "assert_visible_slot_number"
+      ]
     },
     {
       "description": "SetValue and sleep for a while.",
       "type": "object",
-      "required": [
-        "set_value_and_sleep"
-      ],
       "properties": {
         "set_value_and_sleep": {
           "type": "object",
-          "required": [
-            "sleep_millis",
-            "value"
-          ],
           "properties": {
             "sleep_millis": {
               "description": "The number of milliseconds to sleep.",
               "type": "integer",
               "format": "uint64",
-              "minimum": 0.0
+              "minimum": 0
             },
             "value": {
               "description": "Singe new value.",
               "type": "integer",
               "format": "uint32",
-              "minimum": 0.0
+              "minimum": 0
             }
-          }
+          },
+          "required": [
+            "value",
+            "sleep_millis"
+          ]
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "required": [
+        "set_value_and_sleep"
+      ]
     },
     {
       "description": "Trigger a panic.",
       "type": "string",
-      "enum": [
-        "panic"
-      ]
+      "const": "panic"
     }
   ],
-  "definitions": {
+  "$defs": {
     "GasUnit(2)": {
       "description": "GasUnit is an array of size 2",
       "type": "array",

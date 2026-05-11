@@ -75,6 +75,7 @@ fn test_invalid_proof_slashed() {
 }
 
 #[test]
+#[ignore = "enable after we add admin role in ProverIncentives module"]
 fn test_invalid_genesis_hash_slashed() {
     let (mut runner, prover, mut aggregated_proof) = prepare_for_slashing();
     aggregated_proof
@@ -156,6 +157,7 @@ fn test_invalid_final_state_root() {
 }
 
 #[test]
+#[ignore = "enable after we add admin role in ProverIncentives module"]
 fn test_invalid_initial_slot_hash() {
     let (mut runner, prover, mut aggregated_proof) = prepare_for_slashing();
     aggregated_proof

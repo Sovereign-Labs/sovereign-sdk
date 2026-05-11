@@ -83,9 +83,19 @@ where
         .map(|public_data| public_data.origin_state_root.clone())
         .unwrap_or_else(|| initial_boundary.state_root.clone());
 
+    // Slot number that origin_state_root corresponds to. Propagated from the
+    // predecessor; for the first aggregation it is the slot before the first
+    // inner proof — i.e. the rollup genesis (SlotNumber::GENESIS), since the
+    // first inner proof must cover slot 1.
+    let origin_slot_number = previous_public_data
+        .as_ref()
+        .map(|public_data| public_data.origin_slot_number)
+        .unwrap_or(SlotNumber::GENESIS);
+
     let aggregated_public_data = AggregatedProofPublicData::<Address, Da, Root> {
         initial_slot_number: initial_boundary.slot_number,
         final_slot_number: final_boundary.slot_number,
+        origin_slot_number,
         origin_state_root,
         initial_state_root: initial_boundary.state_root,
         final_state_root: final_boundary.state_root,

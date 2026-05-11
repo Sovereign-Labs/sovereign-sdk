@@ -3407,6 +3407,19 @@ dependencies = [
 ]
 
 [[package]]
+name = "darling_core"
+version = "0.23.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9865a50f7c335f53564bb694ef660825eb8610e0a53d3e11bf1b0d3df31e03b0"
+dependencies = [
+ "ident_case",
+ "proc-macro2",
+ "quote",
+ "strsim",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "darling_macro"
 version = "0.20.11"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3609,7 +3622,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "demo-stf-declaration",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sov-accounts",
@@ -3652,7 +3665,7 @@ dependencies = [
  "borsh",
  "clap",
  "jsonrpsee",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-accounts",
  "sov-address",
@@ -5764,7 +5777,7 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "rockbound",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sov-accounts",
@@ -6838,7 +6851,7 @@ dependencies = [
  "module-template",
  "proptest",
  "proptest-derive 0.5.1",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-bank",
  "sov-modules-api",
@@ -10084,7 +10097,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-address",
  "sov-modules-api",
@@ -10100,7 +10113,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-address",
  "sov-bank",
@@ -10162,7 +10175,7 @@ checksum = "3fbf2ae1b8bc8e02df939598064d22402220cd5bbcca1c76f7d6a310974d5615"
 dependencies = [
  "chrono",
  "dyn-clone",
- "schemars_derive",
+ "schemars_derive 0.8.22",
  "serde",
  "serde_json",
  "uuid",
@@ -10182,12 +10195,13 @@ dependencies = [
 
 [[package]]
 name = "schemars"
-version = "1.0.4"
+version = "1.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "82d20c4491bc164fa2f6c5d44565947a52ad80b9505d8e36f8d54c27c739fcd0"
+checksum = "a2b42f36aa1cd011945615b92222f6bf73c599a102a300334cd7f8dbeec726cc"
 dependencies = [
  "dyn-clone",
  "ref-cast",
+ "schemars_derive 1.2.1",
  "serde",
  "serde_json",
 ]
@@ -10197,6 +10211,18 @@ name = "schemars_derive"
 version = "0.8.22"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "32e265784ad618884abaea0600a9adf15393368d840e0222d101a072f3f7534d"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "serde_derive_internals",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "schemars_derive"
+version = "1.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7d115b50f4aaeea07e79c1912f645c7513d81715d0420f8bc77a18c6260b307f"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -10593,18 +10619,17 @@ dependencies = [
 
 [[package]]
 name = "serde_with"
-version = "3.15.1"
+version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "aa66c845eee442168b2c8134fec70ac50dc20e760769c8ba0ad1319ca1959b04"
+checksum = "f05839ce67618e14a09b286535c0d9c94e85ef25469b0e13cb4f844e5593eb19"
 dependencies = [
  "base64 0.22.1",
  "chrono",
  "hex",
  "indexmap 1.9.3",
  "indexmap 2.14.0",
- "schemars 0.8.22",
  "schemars 0.9.0",
- "schemars 1.0.4",
+ "schemars 1.2.1",
  "serde_core",
  "serde_json",
  "serde_with_macros",
@@ -10613,11 +10638,11 @@ dependencies = [
 
 [[package]]
 name = "serde_with_macros"
-version = "3.15.1"
+version = "3.19.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b91a903660542fced4e99881aa481bdbaec1634568ee02e0b8bd57c64cb38955"
+checksum = "cf2ebbe86054f9b45bc3881e865683ccfaccce97b9b4cb53f3039d67f355a334"
 dependencies = [
- "darling 0.21.3",
+ "darling 0.23.0",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -11321,7 +11346,7 @@ dependencies = [
  "anyhow",
  "arbitrary",
  "borsh",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_with",
  "sov-accounts",
@@ -11346,7 +11371,7 @@ dependencies = [
  "k256",
  "proptest",
  "rand 0.8.5",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "secp256k1 0.30.0",
  "serde",
  "serde_json",
@@ -11408,7 +11433,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "derivative",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-address",
  "sov-attester-incentives",
@@ -11437,7 +11462,7 @@ dependencies = [
  "derive_more 2.0.1",
  "proptest",
  "proptest-derive 0.5.1",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sov-bank",
@@ -11531,7 +11556,7 @@ dependencies = [
  "borsh",
  "derive_more 2.0.1",
  "hex",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-bank",
  "sov-blob-storage",
@@ -11605,7 +11630,7 @@ dependencies = [
  "risc0-zkvm",
  "risc0-zkvm-platform",
  "rustls 0.23.31",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sov-celestia-adapter",
@@ -11631,7 +11656,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-bank",
  "sov-chain-state",
@@ -11696,7 +11721,7 @@ dependencies = [
  "proptest-derive 0.5.1",
  "rand 0.8.5",
  "rockbound",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "serde_with",
@@ -11765,7 +11790,7 @@ dependencies = [
  "risc0",
  "rockbound",
  "rustls 0.23.31",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "secp256k1 0.30.0",
  "serde",
  "serde_json",
@@ -11933,7 +11958,7 @@ dependencies = [
  "jsonrpsee",
  "proptest",
  "reqwest 0.13.3",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "secp256k1 0.30.0",
  "serde",
  "serde_json",
@@ -11999,7 +12024,7 @@ dependencies = [
  "revm",
  "revm-database-interface",
  "revm-inspectors",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "secp256k1 0.30.0",
  "serde",
  "serde_json",
@@ -12070,7 +12095,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "insta",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-db",
  "sov-metrics",
@@ -12099,7 +12124,7 @@ dependencies = [
  "proptest-derive 0.5.1",
  "reqwest 0.13.3",
  "ruint",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "secp256k1 0.30.0",
  "serde",
  "serde_json",
@@ -12132,7 +12157,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "bs58",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sov-accounts",
@@ -12209,7 +12234,7 @@ dependencies = [
  "insta",
  "risc0-zkvm",
  "risc0-zkvm-platform",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-metrics",
  "sp1-lib",
@@ -12243,7 +12268,7 @@ dependencies = [
  "rand 0.8.5",
  "rand_chacha 0.3.1",
  "reqwest 0.13.3",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "sea-orm",
  "serde",
  "serde_json",
@@ -12274,7 +12299,7 @@ dependencies = [
  "ed25519-dalek",
  "hex",
  "rand 0.8.5",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -12289,7 +12314,7 @@ dependencies = [
 name = "sov-module-schemas"
 version = "0.3.0"
 dependencies = [
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde_json",
  "sov-accounts",
  "sov-bank",
@@ -12330,7 +12355,7 @@ dependencies = [
  "proptest-derive 0.5.1",
  "quick_cache",
  "reqwest 0.13.3",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "serde_yaml",
@@ -12376,7 +12401,7 @@ dependencies = [
  "prettier-please",
  "proc-macro2",
  "quote",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-address",
  "sov-bank",
@@ -12443,7 +12468,7 @@ dependencies = [
  "borsh",
  "hex",
  "jsonrpsee",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-metrics",
  "sov-modules-api",
@@ -12479,7 +12504,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "derive_more 2.0.1",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-modules-api",
  "sov-rollup-interface",
@@ -12502,7 +12527,7 @@ dependencies = [
  "derive_more 2.0.1",
  "proptest",
  "proptest-derive 0.5.1",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-bank",
  "sov-kernels",
@@ -12523,7 +12548,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "derive_more 2.0.1",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-bank",
  "sov-chain-state",
@@ -12594,7 +12619,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -12631,7 +12656,7 @@ dependencies = [
  "rand 0.8.5",
  "risc0-zkvm",
  "risc0-zkvm-platform",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -12710,7 +12735,7 @@ dependencies = [
  "jsonschema",
  "proptest",
  "proptest-derive 0.5.1",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "serde_with",
@@ -12767,7 +12792,7 @@ dependencies = [
  "proptest-derive 0.5.1",
  "reltester",
  "rockbound",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "serde_with",
@@ -12819,7 +12844,7 @@ dependencies = [
  "borsh",
  "proptest",
  "proptest-derive 0.5.1",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-bank",
  "sov-chain-state",
@@ -12846,7 +12871,7 @@ dependencies = [
  "derivative",
  "rand 0.8.5",
  "reqwest 0.13.3",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-address",
  "sov-api-spec",
@@ -12886,7 +12911,7 @@ dependencies = [
  "borsh",
  "clap",
  "rand 0.8.5",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-api-spec",
  "sov-bank",
@@ -12912,7 +12937,7 @@ dependencies = [
  "hex",
  "jsonrpsee",
  "reqwest 0.13.3",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "serde_with",
@@ -12956,7 +12981,7 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "reltester",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -13063,7 +13088,7 @@ dependencies = [
  "borsh",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-address",
  "sov-metrics",
@@ -13082,7 +13107,7 @@ dependencies = [
  "chrono",
  "derivative",
  "hex",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sha2 0.10.9",
  "sov-address",
@@ -13105,7 +13130,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "hex",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-modules-api",
  "sov-state",
@@ -13127,7 +13152,7 @@ dependencies = [
  "num_cpus",
  "reqwest 0.13.3",
  "rockbound",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -13179,7 +13204,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_json",
  "sov-chain-state",
@@ -13208,7 +13233,7 @@ dependencies = [
  "progenitor-client 0.8.0",
  "rand 0.8.5",
  "rand_chacha 0.3.1",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sha2 0.10.9",
  "sov-bank",
@@ -13242,7 +13267,7 @@ dependencies = [
  "alloy-primitives",
  "anyhow",
  "borsh",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "secp256k1 0.30.0",
  "serde",
  "sov-address",
@@ -13274,7 +13299,7 @@ dependencies = [
  "hex",
  "nmt-rs",
  "once_cell",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "serde_arrays 0.1.0",
  "serde_json",
@@ -13316,7 +13341,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "schemars 0.8.22",
+ "schemars 1.2.1",
  "serde",
  "sov-address",
  "sov-modules-api",
