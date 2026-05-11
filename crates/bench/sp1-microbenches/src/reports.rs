@@ -30,22 +30,22 @@ pub fn write_markdown(
     s.push_str("- Term definitions: see [Appendix: Glossary](#appendix-glossary) at the bottom.\n\n");
 
     s.push_str("## Raw measurements\n\n");
-    s.push_str("| bytes | iters | prover gas (total) | gas/iter | total cycles | hash_loop cycles | hash cycles/iter |\n");
-    s.push_str("|------:|------:|------------------:|--------:|-------------:|-----------------:|----------------:|\n");
+    s.push_str("| bytes | iters | prover gas (total) | gas/iter | total cycles | region cycles | region cycles/iter |\n");
+    s.push_str("|------:|------:|------------------:|--------:|-------------:|--------------:|------------------:|\n");
     for r in results {
         s.push_str(&format!(
             "| {} | {} | {} | {:.2} | {} | {} | {:.2} |\n",
-            r.byte_len,
+            r.input_size,
             r.iterations,
             r.prover_gas,
             r.per_iter_prover_gas(),
             r.total_cycles,
-            r.hash_loop_cycles,
-            r.per_iter_hash_cycles(),
+            r.region_cycles,
+            r.per_iter_region_cycles(),
         ));
     }
 
-    s.push_str("\n## Linear fit: prover gas per hash call\n\n");
+    s.push_str("\n## Linear fit: prover gas per call\n\n");
     s.push_str("Model: `gas_per_call = bias + per_byte * input_size`.\n\n");
     s.push_str(&format!("- bias (gas / call): **{:.2}**\n", gas_fit.bias));
     s.push_str(&format!(
@@ -55,7 +55,7 @@ pub fn write_markdown(
     s.push_str(&format!("- R²: {:.6}\n", gas_fit.r_squared));
     s.push_str(&format!("- max residual: {:.2} gas\n\n", gas_fit.max_residual));
 
-    s.push_str("## Linear fit: RISC-V cycles per hash call (sanity check)\n\n");
+    s.push_str("## Linear fit: RISC-V cycles per call (sanity check)\n\n");
     s.push_str(&format!("- bias (cycles / call): {:.2}\n", cycles_fit.bias));
     s.push_str(&format!(
         "- per_byte (cycles / byte): {:.4}\n",
@@ -90,8 +90,8 @@ pub fn write_markdown(
     s.push_str("**per_byte** — The slope of the linear fit, in *prover gas per byte of input*. The marginal cost of one additional input byte. Maps directly to `GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE[1]`.\n\n");
     s.push_str("**R²** — Coefficient of determination for the linear fit. 1.0 means the linear model perfectly explains the variance in the measurements; 0.0 means no relationship. Anything below ~0.99 across an input-size sweep means the operation is not well-modeled as `bias + per_byte × size` and needs a richer cost function.\n\n");
     s.push_str("**max residual** — The largest single-point deviation between measured cost and the linear-fit prediction, in the fit's units. With R² near 1 this is the worst-case error of using the linear model — useful for spotting step-function structure (SHA-256 processes 64-byte blocks, so residuals oscillate at small sizes and shrink as inputs grow).\n\n");
-    s.push_str("**hash_loop cycles** — Cycles measured inside the `cycle-tracker-report-{start,end}: hash_loop` markers in the guest. Captures only the inner hash loop, excluding program startup and input reading. Available because SP1 exposes per-region cycles via `ExecutionReport.cycle_tracker`. No equivalent exists for prover gas, which is whole-execution-only — hence the isolated microbench design.\n\n");
-    s.push_str("**total cycles** — Whole-program cycle count (`ExecutionReport.total_instruction_count()`). Includes startup, input reading, loop overhead, commit, and the hash work itself. Always larger than `hash_loop cycles`.\n\n");
+    s.push_str("**region cycles** — Cycles measured inside the labeled `cycle-tracker-report-{start,end}` markers in the guest (for SHA-256 the label is `hash_loop`). Captures only the inner work loop, excluding program startup and input reading. Available because SP1 exposes per-region cycles via `ExecutionReport.cycle_tracker`. No equivalent exists for prover gas, which is whole-execution-only — hence the isolated microbench design.\n\n");
+    s.push_str("**total cycles** — Whole-program cycle count (`ExecutionReport.total_instruction_count()`). Includes startup, input reading, loop overhead, commit, and the work itself. Always larger than `region cycles`.\n\n");
     s.push_str("**`MeteredHasher`** — SDK wrapper at `crates/module-system/sov-modules-api/src/gas/metered_utils.rs` that charges gas before delegating to the underlying `Digest` impl. The production call site is `calculate_hash_metered` in `crates/module-system/sov-modules-api/src/runtime/capabilities/authentication.rs`, which is what this microbench mirrors.\n\n");
     s.push_str("**`UnlimitedGasMeter`** — Stateless gas meter (`PhantomData<S>`) whose `charge_gas` and `charge_linear_gas` are no-ops via the `GasMeter` trait's default impls. Used here so the metering wrapper compiles in but inlines to zero work — we measure the hash, not the meter arithmetic.\n\n");
 

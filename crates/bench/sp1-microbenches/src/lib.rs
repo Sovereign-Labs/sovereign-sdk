@@ -1,18 +1,24 @@
 #![allow(missing_docs)]
 
+pub mod cmd;
 pub mod fit;
 pub mod reports;
 
-use serde::{Deserialize, Serialize};
+use std::process::Command;
 
-/// Single bench data point: outcome of executing the guest with a given input shape.
+use anyhow::Context;
+use serde::{Deserialize, Serialize};
+use sp1_sdk::blocking::Elf;
+
+pub const SP1_SDK_VERSION: &str = "6.1.0";
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchResult {
-    pub byte_len: u32,
+    pub input_size: u32,
     pub iterations: u32,
     pub prover_gas: u64,
     pub total_cycles: u64,
-    pub hash_loop_cycles: u64,
+    pub region_cycles: u64,
     pub invocations: u64,
 }
 
@@ -20,7 +26,36 @@ impl BenchResult {
     pub fn per_iter_prover_gas(&self) -> f64 {
         self.prover_gas as f64 / self.iterations.max(1) as f64
     }
-    pub fn per_iter_hash_cycles(&self) -> f64 {
-        self.hash_loop_cycles as f64 / self.iterations.max(1) as f64
+    pub fn per_iter_region_cycles(&self) -> f64 {
+        self.region_cycles as f64 / self.iterations.max(1) as f64
     }
+}
+
+pub fn load_guest_elf(path: &str) -> anyhow::Result<Elf> {
+    let bytes = std::fs::read(path)
+        .with_context(|| format!("guest ELF not found at {path}; did the build script run?"))?;
+    if bytes.is_empty() {
+        anyhow::bail!("guest ELF at {path} is empty");
+    }
+    Ok(Elf::from(bytes))
+}
+
+pub fn git_short_sha() -> Option<String> {
+    let output = Command::new("git")
+        .args(["rev-parse", "--short", "HEAD"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
+}
+
+pub fn host_machine_descriptor() -> String {
+    let os = std::env::consts::OS;
+    let arch = std::env::consts::ARCH;
+    let cpus = std::thread::available_parallelism()
+        .map(|n| n.get().to_string())
+        .unwrap_or_else(|_| "?".to_string());
+    format!("{os}/{arch}, {cpus} logical CPUs")
 }
