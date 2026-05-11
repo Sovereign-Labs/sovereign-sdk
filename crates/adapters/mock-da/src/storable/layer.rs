@@ -314,7 +314,12 @@ impl StorableMockDaLayer {
             "Submitting batch is received"
         );
         let start = std::time::Instant::now();
-        let (blob, hash) = db::build_batch_blob(self.next_height as i32, batch_data, sender);
+        let (blob, hash) = db::build_blob(
+            self.next_height as i32,
+            batch_data,
+            sender,
+            db::BATCH_NAMESPACE,
+        );
         db::insert_blob(&self.conn, &blob)
             .await
             .context("insert batch blob")?;
@@ -344,7 +349,12 @@ impl StorableMockDaLayer {
             "Submitting proof is received"
         );
         let start = std::time::Instant::now();
-        let (blob, hash) = db::build_proof_blob(self.next_height as i32, proof_data, sender);
+        let (blob, hash) = db::build_blob(
+            self.next_height as i32,
+            proof_data,
+            sender,
+            db::PROOF_NAMESPACE,
+        );
         db::insert_blob(&self.conn, &blob)
             .await
             .context("insert proof blob")?;
