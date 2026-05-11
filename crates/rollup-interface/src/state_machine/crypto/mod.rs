@@ -42,11 +42,11 @@ impl CredentialId {
 }
 
 impl schemars::JsonSchema for CredentialId {
-    fn schema_name() -> String {
-        "CredentialId".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "CredentialId".into()
     }
 
-    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         HexHash::json_schema(gen)
     }
 }

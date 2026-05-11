@@ -133,10 +133,9 @@ where
     async fn create_aggregated_proof(
         &self,
         block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
-        genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
         self.prover_state
-            .create_aggregated_proof(self.outer_vm.clone(), block_headers, genesis_state_root)
+            .create_aggregated_proof(self.outer_vm.clone(), block_headers)
             .await
     }
 }

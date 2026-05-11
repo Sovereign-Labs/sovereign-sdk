@@ -45,7 +45,7 @@ where
     } = guest.read_from_host::<AggregatedProofWitness<Da>>();
 
     // Verify the previous aggregation proof if one exists. On the first aggregation
-    // after genesis, there is no predecessor, the chain starts here.
+    // after origin, there is no predecessor, the chain starts here.
     let previous_public_data = prev_outer_proof_witness.map(|prev_outer_proof_witness| {
         let public_data =
             V::verify_with_pub_values::<AggregatedProofPublicData<Address, Da, Root>>(
@@ -75,18 +75,28 @@ where
         rewarded_addresses,
     } = verified_proof_data;
 
-    // Propagate the genesis state root forward through recursive aggregations.
-    // For the very first aggregation, the genesis root is the initial state root
+    // Propagate the origin state root forward through recursive aggregations.
+    // For the very first aggregation, the origin root is the initial state root
     // of the first inner proof (i.e. the state root at chain genesis).
-    let genesis_state_root = previous_public_data
+    let origin_state_root = previous_public_data
         .as_ref()
-        .map(|public_data| public_data.genesis_state_root.clone())
+        .map(|public_data| public_data.origin_state_root.clone())
         .unwrap_or_else(|| initial_boundary.state_root.clone());
+
+    // Slot number that origin_state_root corresponds to. Propagated from the
+    // predecessor; for the first aggregation it is the slot before the first
+    // inner proof — i.e. the rollup genesis (SlotNumber::GENESIS), since the
+    // first inner proof must cover slot 1.
+    let origin_slot_number = previous_public_data
+        .as_ref()
+        .map(|public_data| public_data.origin_slot_number)
+        .unwrap_or(SlotNumber::GENESIS);
 
     let aggregated_public_data = AggregatedProofPublicData::<Address, Da, Root> {
         initial_slot_number: initial_boundary.slot_number,
         final_slot_number: final_boundary.slot_number,
-        genesis_state_root,
+        origin_slot_number,
+        origin_state_root,
         initial_state_root: initial_boundary.state_root,
         final_state_root: final_boundary.state_root,
         initial_slot_hash: initial_boundary.slot_hash,

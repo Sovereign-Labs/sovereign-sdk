@@ -18,6 +18,7 @@ use crate::{
 use anyhow::Context;
 use derivative::Derivative;
 use serde::Deserialize;
+use sov_api_spec::types;
 use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
@@ -118,6 +119,7 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub start_at_rollup_height: Option<RollupHeight>,
     pub stop_at_rollup_height: Option<RollupHeight>,
     pub extension: Option<SeqConfigExtension>,
+    pub start_fresh_outer_proof_on_resync: bool,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -201,6 +203,12 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         self.disable_state_root_consistency_checks()
     }
 
+    /// Sets [`RollupBuilderConfig::start_fresh_outer_proof_on_resync`].
+    pub fn set_start_fresh_outer_proof_on_resync(mut self, start_fresh: bool) -> Self {
+        self.config.start_fresh_outer_proof_on_resync = start_fresh;
+        self
+    }
+
     /// Disable the state root consistency checks.
     pub fn disable_state_root_consistency_checks(mut self) -> Self {
         if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
@@ -278,6 +286,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
                         self.exec_config.clone(),
+                        self.config.start_fresh_outer_proof_on_resync,
                     )
                     .await?
             }
@@ -290,6 +299,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                         self.config.start_at_rollup_height,
                         self.config.stop_at_rollup_height,
                         self.exec_config.clone(),
+                        self.config.start_fresh_outer_proof_on_resync,
                     )
                     .await?
             }
@@ -431,6 +441,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_log_limit: 20000,
                 response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
             }),
+            start_fresh_outer_proof_on_resync: false,
         }
     }
 }
@@ -1128,6 +1139,14 @@ where
     ) -> Result<TxInfoWithConfirmation, anyhow::Error> {
         let resp = self.client.client.send_tx_to_sequencer(&tx).await?;
         Ok(resp.into_inner())
+    }
+
+    pub async fn subscribe_finalized_slots(&self) -> WsSubscription<types::Slot> {
+        self.client.client.subscribe_finalized_slots().await
+    }
+
+    pub async fn subscribe_aggregated_proof(&self) -> WsSubscription<types::AggregatedProof> {
+        self.client.client.subscribe_aggregated_proof().await
     }
 }
 

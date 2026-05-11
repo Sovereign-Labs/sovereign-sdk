@@ -32,7 +32,7 @@ sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-stf-runner = { workspace = true }
 
 demo-stf = { workspace = true, features = ["test-utils", "arbitrary"] }
-reqwest = { workspace = true, features = ["rustls-tls", "stream"], default-features = false }
+reqwest = { workspace = true, features = ["stream"] }
 
 sov-risc0-adapter = { workspace = true, features = ["arbitrary", "bench", "native"] }
 sov-sp1-adapter = { workspace = true, features = ["arbitrary", "native"] }

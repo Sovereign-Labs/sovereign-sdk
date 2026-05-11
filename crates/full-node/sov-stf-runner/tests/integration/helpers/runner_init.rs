@@ -247,7 +247,7 @@ pub async fn initialize_runner_with_stop_at(
     );
     let state_update_recv = state_channel.subscribe_state_update();
 
-    let (prev_state_root, genesis_state_root) = init_variant
+    let (prev_state_root, _genesis_state_root) = init_variant
         .initialize(&stf, &mut storage_manager)
         .await
         .unwrap();
@@ -323,10 +323,11 @@ pub async fn initialize_runner_with_stop_at(
             Box::new(MockProofSender {
                 da: da_service.clone(),
             }),
-            genesis_state_root,
             stf_info_receiver,
+            runner.da_sync_state(),
             shutdown_receiver.clone(),
             shutdown_sender.clone(),
+            false,
         )
         .await
         .unwrap();

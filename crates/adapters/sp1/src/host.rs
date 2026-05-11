@@ -379,7 +379,6 @@ impl OuterZkvmHost for SP1AggregationHost {
         Root: Serialize + serde::de::DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
     >(
         &self,
-        _genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<SerializedAggregatedProof> {
         let proofs_and_headers: Vec<BlockHeaderWithProof<Da>> = headers_with_block_proofs

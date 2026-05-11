@@ -130,6 +130,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
         ledger_db: &LedgerDb,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> (Self::ProverService, Option<SlotNumber>);
 
     /// Creates an instance of [`Self::StorageManager`].
@@ -179,6 +180,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> anyhow::Result<Rollup<Self, M>>
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
@@ -192,6 +194,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             start_at_rollup_height,
             stop_at_rollup_height,
             exec_config,
+            start_fresh_outer_proof_on_resync,
         )
         .await
     }
@@ -320,6 +323,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         exec_config: Option<<<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::Input>,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> anyhow::Result<Rollup<Self, M>>
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
@@ -503,7 +507,13 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         // into the runner so the STF-info stream resumes at `final_slot + 1`.
         let (prover_service, latest_proof_final_slot) = if prover_config.is_enabled() {
             let (svc, slot) = self
-                .create_prover_service(prover_config, &rollup_config, &da_service, &ledger_db)
+                .create_prover_service(
+                    prover_config,
+                    &rollup_config,
+                    &da_service,
+                    &ledger_db,
+                    start_fresh_outer_proof_on_resync,
+                )
                 .await;
             (Some(svc), slot)
         } else {
@@ -583,10 +593,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                             .proof_manager
                             .max_number_of_aggregated_proofs_in_memory,
                         proof_sender,
-                        genesis_state_root,
                         stf_info_receiver,
+                        runner.da_sync_state(),
                         secondary_shutdown_receiver,
                         main_shutdown_sender.clone(),
+                        start_fresh_outer_proof_on_resync,
                     )
                     .await?
                 }

@@ -106,22 +106,21 @@ macro_rules! impl_gas_array {
 macro_rules! impl_gas_dimensions {
     ($t: ty, $t_name: literal, $n: expr, $u: ty) => {
         impl schemars::JsonSchema for $t {
-            fn schema_name() -> String {
-                $t_name.to_owned() + "(" + &format!("{}", $n) + ")"
+            fn schema_name() -> std::borrow::Cow<'static, str> {
+                format!("{}({})", $t_name, $n).into()
             }
 
-            fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-                serde_json::from_value(serde_json::json!({
+            fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+                // This description assumes that `serializer` uses a human-readable format.
+                schemars::json_schema!({
                     "type": "array",
                     "minItems": $n,
                     "maxItems": $n,
                     "items": {
                         "type": "number"
                     },
-                    // This description assumes that `serializer` uses a human-readable format.
-                    "description": $t_name.to_owned() + " is an array of size " + &format!("{}", $n),
-                }))
-                .unwrap()
+                    "description": format!("{} is an array of size {}", $t_name, $n),
+                })
             }
         }
 

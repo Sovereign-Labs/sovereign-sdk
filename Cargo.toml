@@ -78,6 +78,8 @@ members = [
     "crates/utils/sov-eth-client",
     "crates/utils/sov-evm-soak-testing",
     "crates/utils/workspace-hack",
+    "crates/utils/sov-soak-testing-lib",
+    "crates/utils/sov-evm-test-utils",
     # Hyperlane
     "crates/module-system/hyperlane",
     # Examples
@@ -90,7 +92,6 @@ members = [
     "examples/demo-rollup/stf/demo-stf-json-client",
     "examples/demo-rollup/sov-soak-testing",
     "examples/demo-rollup/tests/prover/sov-aggregated-proof",
-    "crates/utils/sov-soak-testing-lib",
     # Adapters
     # TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/498
     # "crates/adapters/avail",
@@ -98,8 +99,8 @@ members = [
     "crates/adapters/risc0",
     "crates/adapters/sp1",
     "crates/web3",
-    "python/py_sovereign_web3/rust"
-    , "crates/utils/sov-evm-test-utils"]
+    "python/py_sovereign_web3/rust",
+]
 default-members = ["crates/rollup-interface", "crates/adapters/mock-da", "crates/adapters/mock-zkvm", "crates/full-node/sov-blob-sender", "crates/full-node/sov-db", "crates/full-node/sov-sequencer", "crates/full-node/sov-ledger-apis", "crates/full-node/sov-rollup-apis", "crates/full-node/sov-rollup-full-node-interface", "crates/full-node/sov-stf-runner", "crates/full-node/sov-metrics", "crates/full-node/sov-api-spec", "crates/full-node/full-node-configs", "crates/utils/sov-rest-utils", "crates/utils/nearly-linear", "crates/utils/sov-zkvm-utils", "crates/utils/sov-build", "crates/module-system/hyperlane", "crates/module-system/sov-cli", "crates/module-system/sov-modules-stf-blueprint", "crates/module-system/sov-modules-rollup-blueprint", "crates/module-system/sov-modules-macros", "crates/module-system/sov-kernels", "crates/module-system/sov-state", "crates/module-system/sov-modules-api", "crates/module-system/sov-address", "crates/utils/sov-test-utils", "crates/utils/sov-evm-test-utils", "crates/module-system/module-implementations/sov-accounts", "crates/module-system/module-implementations/sov-bank", "crates/module-system/module-implementations/sov-chain-state", "crates/module-system/module-implementations/sov-blob-storage", "crates/module-system/module-implementations/sov-evm", "crates/module-system/module-implementations/sov-paymaster", "crates/module-system/module-implementations/sov-prover-incentives", "crates/module-system/module-implementations/sov-attester-incentives", "crates/module-system/module-implementations/sov-sequencer-registry", "crates/module-system/module-implementations/sov-value-setter", "crates/module-system/module-implementations/sov-revenue-share", "crates/module-system/module-implementations/sov-synthetic-load", "crates/module-system/module-implementations/module-template", "crates/module-system/module-implementations/integration-tests", "crates/module-system/sov-capabilities", "crates/module-system/module-implementations/sov-uniqueness", "crates/module-system/module-implementations/sov-timelock", "crates/utils/sov-node-client", "crates/universal-wallet/schema", "crates/universal-wallet/macros", "crates/universal-wallet/macro-helpers", "crates/utils/workspace-hack", "crates/web3", "python/py_sovereign_web3/rust", "crates/module-system/module-implementations/extern/hyperlane-solana-register"]
 [workspace.package]
 version = "0.3.0"
@@ -253,9 +254,7 @@ quote = "1.0"
 rand = "0.8"
 rand_chacha = "0.3.1"
 rayon = "1.10.0"
-reqwest = { version = "0.12", features = [
-    "rustls-tls",
-], default-features = false }
+reqwest = { version = "0.13", features = ["default-tls"], default-features = false }
 rustls = { version = "0.23", default-features = false }
 serde = { version = "1.0.208", default-features = false, features = [
     "alloc",
@@ -264,7 +263,7 @@ serde = { version = "1.0.208", default-features = false, features = [
 serde_arrays = "0.1"
 serde_json = { version = "1.0", default-features = false, features = ["alloc"] }
 serde_yaml = { version = "0.9", default-features = false }
-serde_with = { version = "=3.15", features = ["schemars_0_8", "base64"] }
+serde_with = { version = "3.19", features = ["schemars_1", "base64"] }
 # Pinned version because zkvm-guests rely on patches. Upgrade `examples/demo-rollup/provers/* to use same patch as this one.
 sha2 = { version = "=0.10.9", default-features = false }
 sha3 = { version = "0.10.8", default-features = false }
@@ -290,7 +289,7 @@ toml = { version = "0.8.19", features = ["parse"] }
 jsonrpsee = { version = "0.26.0", default-features = false }
 jsonrpsee-types = { version = "0.26.0", default-features = false }
 jsonrpsee-core = { version = "0.26.0", default-features = false }
-schemars = { version = "0.8.21", features = ["derive"] }
+schemars = { version = "1.2", features = ["derive"] }
 tempfile = "3.20.0"
 testcontainers = "0.27.0"
 testcontainers-modules = "0.15.0"

@@ -122,7 +122,6 @@ impl OuterZkvmHost for Risc0Host<'static> {
         Root: Serialize + serde::de::DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
     >(
         &self,
-        _genesis_state_root: Root,
         _headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<SerializedAggregatedProof> {
         unimplemented!("Proof aggregation not supported for Risc0")
