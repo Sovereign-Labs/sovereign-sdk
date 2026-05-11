@@ -33,6 +33,27 @@ impl<S: Spec> Accounts<S> {
             .unwrap_or(false))
     }
 
+    /// Returns `true` if the authenticator-selected default address may be used
+    /// with `credential_id`.
+    ///
+    /// Lookup order:
+    /// 1. If `account_owners[(address, credential_id)]` has an explicit
+    ///    entry, that value is authoritative — including `false`, which
+    ///    is how `revoke_credential` denies the default path.
+    /// 2. Otherwise, returns `true`: the authenticator's declared default
+    ///    address is trusted for the `address_override = None` path.
+    pub fn is_default_address_authorized<ST: StateReader<User>>(
+        &self,
+        address: &S::Address,
+        credential_id: &CredentialId,
+        state: &mut ST,
+    ) -> Result<bool, ST::Error> {
+        Ok(self
+            .account_owners
+            .get(&AccountOwnerKey::new(*address, *credential_id), state)?
+            .unwrap_or(true))
+    }
+
     /// Returns `true` if `credential_id` is authorized to act as `address`.
     ///
     /// Lookup order:

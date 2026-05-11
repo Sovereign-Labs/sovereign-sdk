@@ -122,8 +122,8 @@ impl<S: Spec> Accounts<S> {
 
         anyhow::ensure!(
             self.is_authorized_for(&address, &old_credential, state)
-                .context("Failed to check credential authorization")?,
-            "CredentialId is not authorized for this address"
+                .context("Failed to check old credential authorization")?,
+            "old_credential is not authorized for this address"
         );
         self.ensure_credential_not_authorized(&address, &new_credential, state)?;
 

@@ -1654,7 +1654,7 @@ fn test_rotate_credential_old_not_authorized_rejected() {
                 TxEffect::Reverted(contents) => {
                     assert_eq!(
                         contents.reason.to_string(),
-                        "CredentialId is not authorized for this address"
+                        "old_credential is not authorized for this address"
                     );
                 }
                 other => panic!("Expected reverted transaction, got {other:?}"),

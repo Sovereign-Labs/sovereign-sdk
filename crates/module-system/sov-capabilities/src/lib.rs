@@ -314,33 +314,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>> {
-        // `Some` requires an explicit `(addr, cred)` entry — overriding the default
-        // is opt-in. `None` allows the canonical-address fallback but still rejects
-        // when an explicit `false` (e.g. from `revoke_credential`) is recorded.
-        let sender = match auth_data.address_override {
-            Some(address_override) => {
-                anyhow::ensure!(
-                    self.accounts.is_explicitly_authorized(
-                        &address_override,
-                        &auth_data.credential_id,
-                        state,
-                    )?,
-                    "not authorized for address override"
-                );
-                address_override
-            }
-            None => {
-                anyhow::ensure!(
-                    self.accounts.is_authorized_for(
-                        &auth_data.default_address,
-                        &auth_data.credential_id,
-                        state,
-                    )?,
-                    "not authorized for resolved address"
-                );
-                auth_data.default_address
-            }
-        };
+        let sender = self.resolve_authorized_sender(auth_data, state)?;
 
         Ok(Context::new(
             sender,
@@ -360,31 +334,9 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         state: &mut impl StateAccessor,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
-        // The tx sender & sequencer are the same entity on this path.
-        let address = match auth_data.address_override {
-            Some(address_override) => {
-                anyhow::ensure!(
-                    self.accounts.is_explicitly_authorized(
-                        &address_override,
-                        &auth_data.credential_id,
-                        state,
-                    )?,
-                    "not authorized for address override"
-                );
-                address_override
-            }
-            None => {
-                anyhow::ensure!(
-                    self.accounts.is_authorized_for(
-                        &auth_data.default_address,
-                        &auth_data.credential_id,
-                        state,
-                    )?,
-                    "not authorized for resolved address"
-                );
-                auth_data.default_address
-            }
-        };
+        // On the unregistered path the sender pays its own sequencing, so the
+        // resolved address doubles as `sequencer_rollup_address`.
+        let address = self.resolve_authorized_sender(auth_data, state)?;
 
         Ok(Context::new(
             address,
@@ -395,6 +347,43 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
             execution_context,
             SequencerType::NonPreferred,
         ))
+    }
+}
+
+impl<S: Spec, T> StandardProvenRollupCapabilities<'_, S, T> {
+    /// Picks the sender address for a transaction:
+    /// - `address_override = Some(_)` requires an explicit `(addr, cred)` entry — overriding the default is opt-in.
+    /// - `address_override = None` uses the authenticator-selected default address unless that
+    ///   exact `(addr, cred)` pair is explicitly denied (e.g. by `revoke_credential`).
+    fn resolve_authorized_sender(
+        &mut self,
+        auth_data: &AuthorizationData<S>,
+        state: &mut impl StateAccessor,
+    ) -> anyhow::Result<S::Address> {
+        match auth_data.address_override {
+            Some(address_override) => {
+                anyhow::ensure!(
+                    self.accounts.is_explicitly_authorized(
+                        &address_override,
+                        &auth_data.credential_id,
+                        state,
+                    )?,
+                    "not authorized for address override"
+                );
+                Ok(address_override)
+            }
+            None => {
+                anyhow::ensure!(
+                    self.accounts.is_default_address_authorized(
+                        &auth_data.default_address,
+                        &auth_data.credential_id,
+                        state,
+                    )?,
+                    "not authorized for resolved address"
+                );
+                Ok(auth_data.default_address)
+            }
+        }
     }
 }
 

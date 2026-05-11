@@ -175,10 +175,10 @@ mod tests {
     fn credential_from_native_hash_stays_standard() {
         let cred = CredentialId::from_bytes([0x42; 32]);
         let back: MultiAddressEvm = cred.into();
-        match back {
-            MultiAddressEvm::Standard(_) => {}
-            MultiAddressEvm::Vm(_) => panic!("non-zero-prefix credential must not decode to Vm"),
-        }
+        assert_eq!(
+            back,
+            MultiAddressEvm::Standard(sov_modules_api::Address::from(cred))
+        );
     }
 
     #[test]
