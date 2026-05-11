@@ -11555,7 +11555,6 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "sov-rollup-interface",
  "sov-universal-wallet",
 ]
 
@@ -12784,7 +12783,6 @@ dependencies = [
  "hex",
  "insta",
  "jsonrpsee",
- "num_cpus",
  "proptest",
  "rand 0.8.5",
  "rayon",

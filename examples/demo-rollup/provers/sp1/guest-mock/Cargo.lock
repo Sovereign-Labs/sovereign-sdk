@@ -5921,7 +5921,6 @@ dependencies = [
  "hex",
  "serde",
  "serde_with",
- "sov-rollup-interface",
  "sov-universal-wallet",
 ]
 
@@ -5933,7 +5932,6 @@ dependencies = [
  "sha2 0.10.9",
  "sov-metrics",
  "sov-mock-da",
- "sov-mock-zkvm",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-sp1-adapter",
