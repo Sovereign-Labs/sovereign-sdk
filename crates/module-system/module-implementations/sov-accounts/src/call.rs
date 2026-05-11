@@ -1,10 +1,19 @@
-use anyhow::{bail, Context as _};
+use anyhow::{anyhow, bail, Context as _};
 use schemars::JsonSchema;
+use sov_modules_api::digest::Digest;
 use sov_modules_api::macros::{serialize, UniversalWallet};
-use sov_modules_api::{Context, CredentialId, Spec, StateReader, TxState};
+use sov_modules_api::{
+    Context, CredentialId, CryptoSpec, EventEmitter, Multisig, PublicKey, Spec, StateReader,
+    TxState,
+};
 use sov_state::namespaces::User;
 
-use crate::{AccountOwnerKey, Accounts};
+use crate::{AccountOwnerKey, Accounts, Event};
+
+/// Domain separation prefix for the [`CallMessage::CreateUnknownAddress`]
+/// address derivation. Bumping the version invalidates all previously
+/// derived unknown addresses, so do not change without a chain upgrade.
+const UNKNOWN_ADDRESS_DOMAIN: &[u8] = b"sov_accounts::unknown_address::v1";
 
 /// Represents the available call messages for interacting with the sov-accounts module.
 #[derive(Debug, PartialEq, Eq, Clone, JsonSchema, UniversalWallet)]
@@ -56,6 +65,23 @@ pub enum CallMessage<S: Spec> {
         /// The credential being authorized for `address`. Must not already
         /// be authorized.
         new_credential: CredentialId,
+    },
+
+    /// Creates a new "unknown" address — an address whose authorization
+    /// lives purely in `account_owners` and which has no
+    /// naturally-corresponding private key — and auto-authorizes the
+    /// caller's current credential for it.
+    ///
+    /// The new address is derived deterministically as
+    /// `sha256(domain || visible_slot_hash || sender_addr || sender_credential || salt)`,
+    /// converted to `S::Address` via the canonical `CredentialId.into()`.
+    /// Different callers, salts, and visible slots produce different
+    /// addresses; replaying the same tuple in the same slot is an
+    /// idempotent no-op.
+    CreateUnknownAddress {
+        /// Caller-supplied salt that allows the same caller to derive
+        /// multiple distinct unknown addresses in the same slot.
+        salt: [u8; 32],
     },
 }
 
@@ -130,6 +156,63 @@ impl<S: Spec> Accounts<S> {
         self.revoke_credential(&address, &old_credential, state)?;
         self.authorize_credential(&address, &new_credential, state)?;
         Ok(())
+    }
+
+    pub(crate) fn create_unknown_address(
+        &mut self,
+        salt: [u8; 32],
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        self.ensure_custom_account_mappings_enabled(state)?;
+
+        let caller_credential = self.caller_credential_id(context)?;
+        let visible_slot = self
+            .chain_state
+            .latest_visible_slot(state)
+            .map_err(|err| anyhow!("Failed to read the visible DA slot: {err:?}"))?
+            .ok_or_else(|| anyhow!("Visible DA slot hash is unavailable"))?;
+
+        let mut hasher = <S::CryptoSpec as CryptoSpec>::Hasher::new();
+        hasher.update(UNKNOWN_ADDRESS_DOMAIN);
+        hasher.update(visible_slot.slot_hash().as_ref());
+        hasher.update(context.sender().as_ref());
+        let caller_credential_bytes: &[u8] = caller_credential.0.as_ref();
+        hasher.update(caller_credential_bytes);
+        hasher.update(salt);
+        let unknown_credential = CredentialId::from_bytes(hasher.finalize().into());
+        let new_address: S::Address = unknown_credential.into();
+
+        self.authorize_credential(&new_address, &caller_credential, state)?;
+        self.emit_event(
+            state,
+            Event::UnknownAddressCreated {
+                address: new_address,
+                creator: *context.sender(),
+                credential: caller_credential,
+            },
+        );
+        Ok(())
+    }
+
+    /// Resolves the credential id of the current caller. Supports the V0
+    /// (single-signer) and V1 multisig paths; any other credential type
+    /// (e.g. EVM `Address`, Solana `pub_key`) cannot create an unknown
+    /// address through this call.
+    fn caller_credential_id(&self, context: &Context<S>) -> anyhow::Result<CredentialId> {
+        if let Some(public_key) =
+            context.get_sender_credential::<<S::CryptoSpec as CryptoSpec>::PublicKey>()
+        {
+            return Ok(public_key.credential_id());
+        }
+
+        if let Some(multisig) =
+            context.get_sender_credential::<Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>>()
+        {
+            return Ok(multisig.credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>());
+        }
+
+        bail!("Unsupported credential type for unknown address creation")
     }
 
     fn revoke_credential(

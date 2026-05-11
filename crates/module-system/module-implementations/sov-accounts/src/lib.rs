@@ -18,6 +18,7 @@ pub use query::*;
 #[cfg(test)]
 mod tests;
 pub use call::CallMessage;
+use sov_modules_api::macros::serialize;
 use sov_modules_api::{
     Context, CredentialId, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
     StateMap, StateValue, TxState,
@@ -37,6 +38,26 @@ use sov_modules_api::{
 pub struct Account<S: Spec> {
     /// The mapped address.
     pub addr: S::Address,
+}
+
+/// Events emitted by the [`Accounts`] module.
+#[derive(Debug, PartialEq, Eq, Clone, schemars::JsonSchema)]
+#[serialize(Borsh, Serde)]
+#[serde(bound = "S: Spec", rename_all = "snake_case")]
+#[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "Event")]
+pub enum Event<S: Spec> {
+    /// Emitted by [`CallMessage::CreateUnknownAddress`] when a new
+    /// "unknown" address — an address with no naturally-corresponding
+    /// private key — is created and the caller's credential is
+    /// auto-authorized for it.
+    UnknownAddressCreated {
+        /// The newly created address.
+        address: S::Address,
+        /// The address that submitted the creation transaction.
+        creator: S::Address,
+        /// The credential authorized to control the new address.
+        credential: CredentialId,
+    },
 }
 
 /// Composite key for [`Accounts::account_owners`].
@@ -125,7 +146,7 @@ impl<S: Spec> Module for Accounts<S> {
 
     type CallMessage = call::CallMessage<S>;
 
-    type Event = ();
+    type Event = Event<S>;
 
     type Error = anyhow::Error;
 
@@ -167,6 +188,9 @@ impl<S: Spec> Module for Accounts<S> {
                 context,
                 state,
             ),
+            call::CallMessage::CreateUnknownAddress { salt } => {
+                self.create_unknown_address(salt, context, state)
+            }
         }
     }
 }

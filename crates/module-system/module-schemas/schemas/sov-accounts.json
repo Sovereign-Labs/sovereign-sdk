@@ -129,6 +129,35 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "description": "Creates a new \"unknown\" address — an address whose authorization lives purely in `account_owners` and which has no naturally-corresponding private key — and auto-authorizes the caller's current credential for it.\n\nThe new address is derived deterministically as `sha256(domain || visible_slot_hash || sender_addr || sender_credential || salt)`, converted to `S::Address` via the canonical `CredentialId.into()`. Different callers, salts, and visible slots produce different addresses; replaying the same tuple in the same slot is an idempotent no-op.",
+      "type": "object",
+      "required": [
+        "create_unknown_address"
+      ],
+      "properties": {
+        "create_unknown_address": {
+          "type": "object",
+          "required": [
+            "salt"
+          ],
+          "properties": {
+            "salt": {
+              "description": "Caller-supplied salt that allows the same caller to derive multiple distinct unknown addresses in the same slot.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              },
+              "maxItems": 32,
+              "minItems": 32
+            }
+          }
+        }
+      },
+      "additionalProperties": false
     }
   ],
   "definitions": {
