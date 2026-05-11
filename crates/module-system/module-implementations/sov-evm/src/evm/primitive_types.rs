@@ -482,7 +482,6 @@ impl MaybeSealedBlock {
     }
 }
 
-
 #[serde_as]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, Deref, DerefMut)]
 /// Receipt
