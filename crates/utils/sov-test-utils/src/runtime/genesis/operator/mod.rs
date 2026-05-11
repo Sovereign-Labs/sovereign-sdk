@@ -147,6 +147,7 @@ impl<S: Spec> MinimalOperatorGenesisConfig<S> {
                 prover_incentives: ProverIncentivesConfig {
                     minimum_bond: default_user_stake,
                     proving_penalty: { default_user_stake.scalar_division(2) },
+                    admin: placeholder.address(),
                     initial_provers: vec![(placeholder.address(), placeholder.balance())],
                 },
 

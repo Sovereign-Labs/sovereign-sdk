@@ -26,6 +26,8 @@ pub struct ProverIncentivesConfig<S: Spec> {
     pub proving_penalty: S::Gas,
     /// The minimum bond for a prover.
     pub minimum_bond: S::Gas,
+    /// The admin prover address.
+    pub admin: S::Address,
     /// A list of initial provers and their bonded amount.
     pub initial_provers: Vec<(S::Address, Amount)>,
 }
@@ -61,6 +63,7 @@ impl<S: Spec> ProverIncentives<S> {
             self.register_staker(prover, prover, *bond, state)?;
         }
         self.minimum_bond.set(&config.minimum_bond, state)?;
+        self.admin.set(&config.admin, state)?;
 
         Ok(())
     }

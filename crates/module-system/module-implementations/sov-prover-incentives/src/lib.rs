@@ -68,6 +68,10 @@ pub struct ProverIncentives<S: Spec> {
     #[allow(clippy::type_complexity)]
     pub latest_proof_succesfully_verified:
         StateValue<AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>>,
+
+    /// The admin prover address.
+    #[state]
+    pub admin: StateValue<S::Address>,
 }
 
 impl<S: Spec> sov_modules_api::Module for ProverIncentives<S> {
