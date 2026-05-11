@@ -4,16 +4,6 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::{macros::config_value, CredentialId, Spec, StateAccessor, StateReader};
 use sov_state::User;
 
-// #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Default)]
-// pub struct Window {
-//     highest_seen_nonce: u64,
-//     /// A bitmap representing PAST_TRANSACTION_WINDOW nonces below the highest seen nonce.
-//     /// Each entry contains a 1 if that nonce has been seen, 0 otherwise.
-//     ///
-//     /// For example, if the highest seen nonce is 10 and PAST_TRANSACTION_WINDOW is 5, then index `4` in the bitmap represents nonce `9`
-//     /// and index `0` represents nonce `5`.
-//     bits: BitMap,
-// }
 
 const PAST_TRANSACTION_WINDOW: u64 = {
     let window = config_value!("PAST_TRANSACTION_WINDOW");
@@ -53,6 +43,8 @@ impl Window {
 // nonce = 8, start = 0, PAST_TRANSACTION_WINDOW = 8; unaligned = 0. Stay the same
 impl Window {
     /// Adds a nonce to the set of seen nonces, adjusting the window if necessary.
+    ///
+    /// Safety: will panic if `nonce` < `self.start_nonce`.
     fn add_nonce(&mut self, nonce: u64) {
         let old_start_nonce = self.start_nonce;
 

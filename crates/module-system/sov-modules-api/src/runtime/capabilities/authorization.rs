@@ -78,8 +78,7 @@ pub enum UniquenessData {
     Generation(u64),
     /// Window-based uniqueness: each transaction of an account must have a unique but not
     /// necessarily consecutive nonce. Older unique nonces upto `PAST_TRANSACTION_WINDOW` are still
-    /// accepted. Note that `PAST_TRANSACTION_WINDOW` will be rounded down to the next multiple of
-    /// eight to simplify the code.
+    /// accepted.
     Window(u64),
 }
 
