@@ -1,12 +1,9 @@
-use std::path::PathBuf;
-
 use anyhow::Context;
 use clap::Args;
 use sp1_sdk::blocking::{Prover, ProverClient, SP1Stdin};
 
-use crate::fit::{fit_prover_gas_per_byte, LinearFit};
-use crate::reports::{render_markdown, BenchOutput, ReportContent};
-use crate::{load_guest_elf, today, BenchResult};
+use crate::fit::fit_prover_gas_per_byte;
+use crate::{load_guest_elf, BenchResult};
 
 const GUEST_ELF_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -16,51 +13,15 @@ const GUEST_ELF_PATH: &str = concat!(
 const DEFAULT_ITERATIONS: u32 = 1000;
 const SIZES: &[u32] = &[0, 1, 32, 64, 128, 256, 512, 1024, 4096, 16384, 65536];
 
-pub struct Sha256Bench;
-
-impl ReportContent for Sha256Bench {
-    fn algorithm(&self) -> &str {
-        "SHA-256 via MeteredHasher + UnlimitedGasMeter (S::CryptoSpec::Hasher = sha2::Sha256, sp1-patches precompile)"
-    }
-
-    fn scope(&self) -> &str {
-        "These constants are charged by `MeteredHasher::digest` and therefore apply only to API-level hashing — transaction-hash calculation, credential-id derivation, and similar call sites."
-    }
-
-    fn suggested_constants(&self, gas_fit: &LinearFit) -> String {
-        format!(
-            "- `GAS_TO_CHARGE_HASH_UPDATE[1]` ≈ **{}**\n- `GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE[1]` ≈ **{}**",
-            gas_fit.bias.round() as i64,
-            gas_fit.per_byte.round() as i64,
-        )
-    }
-
-    fn extra_glossary(&self) -> &'static [(&'static str, &'static str)] {
-        &[
-            (
-                "call",
-                "One invocation of `MeteredHasher::digest(&data, &mut meter)` in the guest's hot loop. Each call internally invokes `MeteredHasher::update` exactly once, which is where the rollup's gas charges are applied (one bias charge plus one linear-per-byte charge).",
-            ),
-            (
-                "`MeteredHasher`",
-                "SDK wrapper at `crates/module-system/sov-modules-api/src/gas/metered_utils.rs` that charges gas before delegating to the underlying `Digest` impl. The production call site is `calculate_hash_metered` in `crates/module-system/sov-modules-api/src/runtime/capabilities/authentication.rs`, which is what this microbench mirrors.",
-            ),
-        ]
-    }
-}
-
 #[derive(Args, Debug)]
 pub struct Sha256Args {
-    /// Output report path. Defaults to `reports/sha256-{today}.md` next to this crate.
-    #[arg(long)]
-    pub out: Option<PathBuf>,
     /// Iterations per execution.
     #[arg(long, default_value_t = DEFAULT_ITERATIONS)]
     pub iterations: u32,
 }
 
-pub fn run(args: Sha256Args) -> anyhow::Result<BenchOutput> {
-    let Sha256Args { out: _, iterations } = args;
+pub fn run(args: Sha256Args) -> anyhow::Result<()> {
+    let Sha256Args { iterations } = args;
     let elf = load_guest_elf(GUEST_ELF_PATH)?;
     let client = ProverClient::from_env();
 
@@ -97,15 +58,41 @@ pub fn run(args: Sha256Args) -> anyhow::Result<BenchOutput> {
     }
 
     let gas_fit = fit_prover_gas_per_byte(&results)?;
-    let markdown = render_markdown(&Sha256Bench, &results, &gas_fit);
-    let summary = format!(
-        "\n=== summary ===\nprover gas / call: bias={:.2}, per_byte={:.4}, R²={:.4}",
-        gas_fit.bias, gas_fit.per_byte, gas_fit.r_squared,
+
+    println!("\n=== raw measurements ===");
+    println!(
+        "{:>6}  {:>6}  {:>18}  {:>10}  {:>14}  {:>14}  {:>14}",
+        "bytes", "iters", "prover gas (total)", "gas/iter", "total cycles", "region cycles", "region/iter",
+    );
+    for r in &results {
+        println!(
+            "{:>6}  {:>6}  {:>18}  {:>10.2}  {:>14}  {:>14}  {:>14.2}",
+            r.input_size,
+            r.iterations,
+            r.prover_gas,
+            r.per_iter_prover_gas(),
+            r.total_cycles,
+            r.region_cycles,
+            r.per_iter_region_cycles(),
+        );
+    }
+
+    println!("\n=== linear fit (prover gas per call) ===");
+    println!("Model: gas_per_call = bias + per_byte * input_size");
+    println!("  bias         = {:.2} prover gas / call", gas_fit.bias);
+    println!("  per_byte     = {:.4} prover gas / byte", gas_fit.per_byte);
+    println!("  R²           = {:.6}", gas_fit.r_squared);
+    println!("  max residual = {:.2} prover gas", gas_fit.max_residual);
+
+    println!("\n=== suggested constants.toml values (raw SP1 prover gas, 1:1) ===");
+    println!(
+        "  GAS_TO_CHARGE_HASH_UPDATE[1]          ≈ {}",
+        gas_fit.bias.round() as i64
+    );
+    println!(
+        "  GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE[1] ≈ {}",
+        gas_fit.per_byte.round() as i64
     );
 
-    Ok(BenchOutput {
-        markdown,
-        default_filename: format!("sha256-{}.md", today()),
-        summary,
-    })
+    Ok(())
 }

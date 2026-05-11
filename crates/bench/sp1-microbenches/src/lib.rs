@@ -1,12 +1,9 @@
 pub mod cmd;
 pub mod fit;
-pub mod reports;
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use sp1_sdk::blocking::Elf;
-
-pub const SP1_SDK_VERSION: &str = "6.1.0";
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchResult {
@@ -35,8 +32,4 @@ pub fn load_guest_elf(path: &str) -> anyhow::Result<Elf> {
         anyhow::bail!("guest ELF at {path} is empty");
     }
     Ok(Elf::from(bytes))
-}
-
-pub fn today() -> String {
-    chrono::Local::now().format("%Y-%m-%d").to_string()
 }

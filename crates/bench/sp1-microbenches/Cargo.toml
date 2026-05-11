@@ -15,7 +15,6 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-chrono = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sp1-sdk = { version = "6.1.0", default-features = false, features = ["blocking", "profiling"] }
 

@@ -13401,7 +13401,6 @@ name = "sp1-microbenches"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "chrono",
  "clap",
  "serde",
  "sov-zkvm-utils",

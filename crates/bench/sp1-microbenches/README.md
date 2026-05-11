@@ -18,9 +18,9 @@ precompile-heavy operations and overcharge ordinary-instruction operations.
 
 `ExecutionReport.gas()` is SP1's own model of proving cost, trained against
 real GPU proving times. It looks at trace shape across every chip and
-correlates with the resource we actually want to charge for. We display raw
-per-row cycle counts in the report as an eyeball sanity check (you can see at
-a glance whether the precompile is active by the cycles/byte rate), but the
+correlates with the resource we actually want to charge for. The harness
+prints raw per-row cycle counts as an eyeball sanity check (you can see at a
+glance whether the precompile is active by the cycles/byte rate), but the
 fitted constants come from prover gas.
 
 [SP1 docs on prover gas.](https://docs.succinct.xyz/docs/sp1/optimizing-programs/prover-gas)
@@ -41,12 +41,10 @@ Results therefore calibrate the constants the SDK actually consults
 cargo run --release -p sp1-microbenches -- sha256
 ```
 
-Optional overrides:
+Optional override:
 
 ```sh
-cargo run --release -p sp1-microbenches -- sha256 \
-    --iterations 2000 \
-    --out reports/sha256-custom.md
+cargo run --release -p sp1-microbenches -- sha256 --iterations 2000
 ```
 
 To skip the SP1 guest build (CI without the SP1 toolchain installed):
@@ -57,39 +55,33 @@ SKIP_GUEST_BUILD=1 cargo build --release -p sp1-microbenches
 
 ## Output
 
-A markdown report under `reports/` containing:
+Results are printed to stdout in three blocks:
 
-1. Methodology + environment (date, SP1 SDK version).
-2. Raw measurements per input size (prover gas, cycles, both per-iter and
-   total).
-3. Linear fit `cost = bias + per_byte × input_size` with R² and max residual.
-4. Bench-specific scope statement (what these constants do and don't cover).
-5. Suggested raw values for the relevant `constants.toml` entries.
-6. Glossary defining every term used in the report.
+1. **Raw measurements** — one row per swept input size, with prover gas
+   (total and per-iter), total cycles, region cycles (per-iter and total).
+2. **Linear fit** — `bias`, `per_byte`, R², max residual.
+3. **Suggested `constants.toml` values** — the fit values rounded to integers.
 
-Values are reported in **raw SP1 prover-gas units**. We wire them into the ZK
-gas dimension of `constants.toml` 1:1, without a scaling multiplier — prover
-gas is already calibrated to be comparable across primitives and sits in a
-comfortable numeric range for `u64` block-gas-limit arithmetic. We'd revisit
+Values are in **raw SP1 prover-gas units**, intended to be wired into the ZK
+gas dimension of `constants.toml` 1:1 — no scaling multiplier. We'd revisit
 that decision only if a concrete reason to renormalise comes up (sub-unit
 costs, numeric-range conflict with EIP-1559 math, etc.).
+
+If we eventually want structured output (markdown report, CSV, JSON, etc.),
+add it then — for now stdout is enough.
 
 ## Architecture
 
 Each bench is a module under `src/cmd/`:
 
-- `cmd/<name>.rs` defines its own `<Name>Args` (the CLI flags), a zero-sized
-  `<Name>Bench` struct implementing the `ReportContent` trait (algorithm name,
-  scope text, suggested-constants section, bench-specific glossary entries),
-  and a `run(args) -> anyhow::Result<BenchOutput>` function.
+- `cmd/<name>.rs` defines `<Name>Args` (the CLI flags) and a
+  `run(args) -> anyhow::Result<()>` function that runs the sweep, fits the
+  data, and prints results.
 - `cmd/mod.rs` enumerates the available benches in `BenchCmd` and dispatches
-  them. The dispatcher also owns output-path resolution and file writing — the
-  per-bench `run` function just produces a `BenchOutput { markdown,
-  default_filename, summary }` and hands it back.
+  them.
 
-Shared infrastructure lives in `lib.rs` (`BenchResult`, `load_guest_elf`,
-`today`), `fit.rs` (OLS fit), and `reports.rs` (markdown rendering + shared
-glossary core).
+Shared infrastructure lives in `lib.rs` (`BenchResult`, `load_guest_elf`) and
+`fit.rs` (OLS fit).
 
 ## Adding a new microbench
 
@@ -98,7 +90,8 @@ glossary core).
    results in the hot loop to keep the optimiser from hoisting loop-invariant
    work (cheap insurance — see `guest-sha256/src/main.rs`).
 2. Add a `build_program_with_args` call in `build.rs`.
-3. Create `src/cmd/{name}.rs` with `{Name}Args`, `{Name}Bench` (impl
-   `ReportContent`), and `pub fn run(args: {Name}Args) -> anyhow::Result<BenchOutput>`.
+3. Create `src/cmd/{name}.rs` with `{Name}Args` and
+   `pub fn run(args: {Name}Args) -> anyhow::Result<()>`. Inside, run the
+   sweep, call `fit_prover_gas_per_byte`, and `println!` the results.
 4. Add the variant to `BenchCmd` in `src/cmd/mod.rs` and route it in
-   `BenchCmd::run` and `BenchCmd::out`.
+   `BenchCmd::run`.
