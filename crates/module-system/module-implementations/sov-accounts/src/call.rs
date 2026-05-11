@@ -183,15 +183,24 @@ impl<S: Spec> Accounts<S> {
         let unknown_credential = CredentialId::from_bytes(hasher.finalize().into());
         let new_address: S::Address = unknown_credential.into();
 
-        self.authorize_credential(&new_address, &caller_credential, state)?;
-        self.emit_event(
-            state,
-            Event::UnknownAddressCreated {
-                address: new_address,
-                creator: *context.sender(),
-                credential: caller_credential,
-            },
-        );
+        // Replays in the same visible slot must stay a no-op even if the
+        // creator explicitly revoked or rotated this credential away.
+        if self
+            .account_owners
+            .get(&AccountOwnerKey::new(new_address, caller_credential), state)
+            .context("Failed to read unknown-address authorization state")?
+            .is_none()
+        {
+            self.authorize_credential(&new_address, &caller_credential, state)?;
+            self.emit_event(
+                state,
+                Event::UnknownAddressCreated {
+                    address: new_address,
+                    creator: *context.sender(),
+                    credential: caller_credential,
+                },
+            );
+        }
         Ok(())
     }
 
