@@ -21,12 +21,14 @@ serde = { workspace = true }
 serde_with = { workspace = true }
 
 sov-modules-api = { workspace = true }
+sov-chain-state = { workspace = true }
 sov-state = { workspace = true }
 
 arbitrary = { workspace = true, optional = true }
 
 [dev-dependencies]
 sov-accounts = { path = ".", features = ["native"] }
+sov-bank = { workspace = true }
 tempfile = { workspace = true }
 strum = { workspace = true }
 sov-modules-api = { workspace = true, features = ["test-utils"] }
@@ -43,6 +45,7 @@ arbitrary = [
 ]
 native = [
 	"sov-accounts/native",
+	"sov-chain-state/native",
 	"sov-modules-api/native",
 	"sov-state/native",
 ]

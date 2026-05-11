@@ -82,11 +82,15 @@ impl<S: Spec> std::str::FromStr for AccountOwnerKey<S> {
 /// A module responsible for resolving credentials to addresses and recording
 /// credential authorizations.
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
-#[cfg_attr(feature = "arbitrary", derive(Debug))]
 pub struct Accounts<S: Spec> {
     /// The ID of the sov-accounts module.
     #[id]
     pub id: ModuleId,
+
+    /// Chain-state module, used to read the visible DA slot hash when
+    /// deriving unknown addresses.
+    #[module]
+    pub(crate) chain_state: sov_chain_state::ChainState<S>,
 
     /// Tombstone for the legacy `credential_id -> address` routing index.
     ///
