@@ -3,9 +3,23 @@ use sov_modules_api::{CryptoSpec, DaSpec, Module, Spec, StateCheckpoint};
 
 use crate::{Account, AccountConfig, AccountData, Accounts, CallMessage};
 
-impl<'a> Arbitrary<'a> for CallMessage {
+impl<'a, S> Arbitrary<'a> for CallMessage<S>
+where
+    S: Spec,
+    S::Address: Arbitrary<'a>,
+{
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
-        Ok(Self::InsertCredentialId(u.arbitrary()?))
+        match u.int_in_range(0..=2)? {
+            0 => Ok(Self::InsertCredentialId(u.arbitrary()?)),
+            1 => Ok(Self::AddCredentialToAddress {
+                address: u.arbitrary()?,
+                credential: u.arbitrary()?,
+            }),
+            _ => Ok(Self::RemoveCredentialFromAddress {
+                address: u.arbitrary()?,
+                credential: u.arbitrary()?,
+            }),
+        }
     }
 }
 

@@ -120,7 +120,7 @@ impl<S: Spec> Module for Accounts<S> {
 
     type Config = AccountConfig<S>;
 
-    type CallMessage = call::CallMessage;
+    type CallMessage = call::CallMessage<S>;
 
     type Event = ();
 
@@ -143,8 +143,16 @@ impl<S: Spec> Module for Accounts<S> {
     ) -> Result<(), Self::Error> {
         match msg {
             call::CallMessage::InsertCredentialId(new_credential_id) => {
-                Ok(self.insert_credential_id(new_credential_id, context, state)?)
+                self.insert_credential_id(new_credential_id, context, state)
             }
+            call::CallMessage::AddCredentialToAddress {
+                address,
+                credential,
+            } => self.add_credential_to_address(address, credential, context, state),
+            call::CallMessage::RemoveCredentialFromAddress {
+                address,
+                credential,
+            } => self.remove_credential_from_address(address, credential, context, state),
         }
     }
 }
