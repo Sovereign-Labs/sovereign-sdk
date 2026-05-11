@@ -256,6 +256,12 @@ pub struct ChainState<S: Spec> {
     /// The current time in nanoseconds, as reported by the timing oracle.
     #[state]
     oracle_time_nanos: StateValue<u128>,
+
+    /// The global on-chain state schema version.
+    ///
+    /// This value is appended to preserve the discriminants of existing chain-state items.
+    #[state]
+    state_version: StateValue<u64>,
 }
 
 impl<S: Spec> ChainState<S> {
@@ -463,6 +469,16 @@ impl<S: Spec> ChainState<S> {
         state: &mut Accessor,
     ) -> Result<Option<u64>, <Accessor as StateReader<User>>::Error> {
         self.genesis_da_height.get(state)
+    }
+
+    /// Return the global on-chain state schema version.
+    ///
+    /// Existing state created before this field was introduced defaults to version 0.
+    pub fn state_version<Accessor: StateReader<User>>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<u64, Accessor::Error> {
+        Ok(self.state_version.get(state)?.unwrap_or(0))
     }
 
     /// Returns the last visible slot processed by the module.

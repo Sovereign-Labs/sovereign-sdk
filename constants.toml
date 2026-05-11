@@ -10,6 +10,9 @@ freeze = [1, 1]
 # We use the ID 4321 for demo purposes. Change this value before deploying!
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
+# The global on-chain state schema version expected by this binary.
+# Increment this whenever an SDK upgrade requires an out-of-band state migration.
+STATE_VERSION = 1
 
 # Chain hash overrides by rollup block height range.
 # When the rollup schema changes (e.g., adding a new transaction type), the CHAIN_HASH changes.

@@ -224,6 +224,13 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for BasicKernel<'_, S> {
         self.chain_state.operating_mode(state).unwrap_infallible()
     }
 
+    fn state_version<Reader: StateReader<User, Error = Infallible>>(
+        &self,
+        state: &mut Reader,
+    ) -> u64 {
+        self.chain_state.state_version(state).unwrap_infallible()
+    }
+
     #[cfg(feature = "native")]
     fn test_only_set_rollup_height_for_genesis(
         &mut self,

@@ -1,4 +1,5 @@
 use sov_modules_api::da::Time;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::serde_json;
 use sov_test_utils::TestSpec;
 
@@ -11,6 +12,7 @@ fn test_config_serialization() {
         current_time: time,
         operating_mode: OperatingMode::Zk,
         genesis_da_height: 0,
+        state_version: config_value!("STATE_VERSION"),
         inner_code_commitment: Default::default(),
         outer_code_commitment: Default::default(),
         admin: None,
