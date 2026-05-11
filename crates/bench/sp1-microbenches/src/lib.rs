@@ -1,5 +1,3 @@
-#![allow(missing_docs)]
-
 pub mod cmd;
 pub mod fit;
 pub mod reports;
