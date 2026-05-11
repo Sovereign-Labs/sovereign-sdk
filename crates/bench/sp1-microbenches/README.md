@@ -77,8 +77,10 @@ Each bench is a module under `src/cmd/`:
 - `cmd/<name>.rs` defines `<Name>Args` (the CLI flags) and a
   `run(args) -> anyhow::Result<()>` function that runs the sweep, fits the
   data, and prints results.
-- `cmd/mod.rs` enumerates the available benches in `BenchCmd` and dispatches
-  them.
+- `cmd/mod.rs` is just a list of `pub mod <name>;` declarations.
+
+The CLI parser and `BenchCmd` subcommand enum live in `src/main.rs` (the
+binary) — they're pure clap-derive glue with no library role.
 
 Shared infrastructure lives in `lib.rs` (`BenchResult`, `load_guest_elf`) and
 `fit.rs` (OLS fit).
@@ -93,5 +95,6 @@ Shared infrastructure lives in `lib.rs` (`BenchResult`, `load_guest_elf`) and
 3. Create `src/cmd/{name}.rs` with `{Name}Args` and
    `pub fn run(args: {Name}Args) -> anyhow::Result<()>`. Inside, run the
    sweep, call `fit_prover_gas_per_byte`, and `println!` the results.
-4. Add the variant to `BenchCmd` in `src/cmd/mod.rs` and route it in
+4. Add `pub mod {name};` to `src/cmd/mod.rs`.
+5. Add the variant to `BenchCmd` in `src/main.rs` and route it in
    `BenchCmd::run`.

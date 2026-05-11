@@ -62,7 +62,13 @@ pub fn run(args: Sha256Args) -> anyhow::Result<()> {
     println!("\n=== raw measurements ===");
     println!(
         "{:>6}  {:>6}  {:>18}  {:>10}  {:>14}  {:>14}  {:>14}",
-        "bytes", "iters", "prover gas (total)", "gas/iter", "total cycles", "region cycles", "region/iter",
+        "bytes",
+        "iters",
+        "prover gas (total)",
+        "gas/iter",
+        "total cycles",
+        "region cycles",
+        "region/iter",
     );
     for r in &results {
         println!(

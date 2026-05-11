@@ -2,7 +2,10 @@ use clap::{Parser, Subcommand};
 use sp1_microbenches::cmd::sha256;
 
 #[derive(Parser, Debug)]
-#[command(name = "sp1-microbenches", about = "ZK gas calibration microbenchmarks")]
+#[command(
+    name = "sp1-microbenches",
+    about = "ZK gas calibration microbenchmarks"
+)]
 struct Cli {
     #[command(subcommand)]
     cmd: BenchCmd,
