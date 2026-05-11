@@ -52,4 +52,3 @@ bench = [
     "sov-risc0-adapter/bench",
     "sov-metrics/risc0",
 ]
-bincode = ["sov-risc0-adapter/bincode"]

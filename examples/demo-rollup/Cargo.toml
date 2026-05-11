@@ -143,8 +143,6 @@ sov-zkvm-utils = { workspace = true }
 
 [features]
 default = []
-# Used for using different encoding between host and guest
-bincode = ["risc0/bincode", "sov-risc0-adapter/bincode"]
 migration-script = [
     "dep:sov-blob-storage",
     "dep:rockbound",

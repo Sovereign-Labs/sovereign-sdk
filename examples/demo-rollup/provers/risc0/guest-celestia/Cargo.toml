@@ -45,7 +45,6 @@ lto = true
 opt-level = 3
 
 [features]
-bincode = ["sov-risc0-adapter/bincode"]
 bench = [
     "sov-modules-api/bench",
     "sov-state/bench",

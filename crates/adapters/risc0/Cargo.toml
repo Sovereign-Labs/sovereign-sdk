@@ -72,7 +72,6 @@ arbitrary = [
     "sov-rollup-interface/arbitrary",
     "sov-risc0-adapter/arbitrary"
 ]
-bincode = []
 
 [[test]]
 name = "native"
