@@ -169,14 +169,24 @@ pub mod private_key {
 }
 
 /// The public key of an ed25519 keypair. Wraps the optimized Risc0 fork of the ed25519-dalek crate.
-#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug)]
 pub struct Risc0PublicKey {
-    #[schemars(
-        flatten,
-        with = "String",
-        length(equal = "ed25519_dalek::PUBLIC_KEY_LENGTH * 2")
-    )]
     pub(crate) pub_key: DalekPublicKey,
+}
+
+impl JsonSchema for Risc0PublicKey {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Risc0PublicKey".into()
+    }
+
+    fn json_schema(
+        _gen: &mut sov_rollup_interface::reexports::schemars::SchemaGenerator,
+    ) -> sov_rollup_interface::reexports::schemars::Schema {
+        sov_rollup_interface::reexports::schemars::json_schema!({
+            "type": "string",
+            "pattern": format!("^[a-fA-F0-9]{{{}}}$", ed25519_dalek::PUBLIC_KEY_LENGTH * 2),
+        })
+    }
 }
 
 impl PartialOrd for Risc0PublicKey {
