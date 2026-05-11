@@ -182,8 +182,8 @@ impl<S: Spec> Accounts<S> {
     ) -> anyhow::Result<()> {
         anyhow::ensure!(
             !self
-                .is_explicitly_authorized(address, credential, state)
-                .context("Failed to read account owner")?,
+                .is_authorized_for(address, credential, state)
+                .context("Failed to check credential authorization")?,
             "CredentialId already authorized for this address"
         );
         Ok(())

@@ -157,6 +157,44 @@ fn test_insert_existing_credential_fails() {
     });
 }
 
+/// A credential already authorized canonically for the sender's address cannot
+/// be inserted through `InsertCredentialId`.
+#[test]
+fn test_insert_canonical_credential_rejected() {
+    let (
+        TestData {
+            non_registered_account: sender,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let canonical_credential = sender.credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: sender.create_plain_message::<RT, Accounts<S>>(CallMessage::InsertCredentialId(
+            canonical_credential,
+        )),
+        assert: Box::new(move |result, state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                assert_eq!(
+                    contents.reason.to_string(),
+                    "CredentialId already authorized for this address"
+                );
+                let accounts = Accounts::<S>::default();
+                assert!(
+                    !accounts
+                        .is_explicitly_authorized(&sender.address(), &canonical_credential, state)
+                        .unwrap(),
+                    "canonical duplicate rejection must not materialize an explicit entry"
+                );
+            }
+            other => {
+                panic!("Expected reverted transaction for canonical credential, got {other:?}")
+            }
+        }),
+    });
+}
+
 /// Tests the multisig functionality of the Accounts module.
 ///
 /// Seeds genesis with a `TestUser` whose custom `credential_id` matches the
@@ -1147,6 +1185,44 @@ fn test_add_credential_duplicate_rejected() {
     });
 }
 
+/// Adding a credential that is already authorized canonically for the owner's
+/// address fails cleanly.
+#[test]
+fn test_add_credential_canonical_duplicate_rejected() {
+    let (
+        TestData {
+            non_registered_account: owner,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let owner_address = owner.address();
+    let canonical_credential = owner.credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: owner.create_plain_message::<RT, Accounts<S>>(CallMessage::AddCredentialToAddress {
+            address: owner_address,
+            credential: canonical_credential,
+        }),
+        assert: Box::new(move |result, state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                assert_eq!(
+                    contents.reason.to_string(),
+                    "CredentialId already authorized for this address"
+                );
+                let accounts = Accounts::<S>::default();
+                assert!(
+                    !accounts
+                        .is_explicitly_authorized(&owner_address, &canonical_credential, state)
+                        .unwrap(),
+                    "canonical duplicate rejection must not materialize an explicit entry"
+                );
+            }
+            other => panic!("Expected reverted transaction, got {other:?}"),
+        }),
+    });
+}
+
 /// The owner can revoke a credential from their own address.
 #[test]
 fn test_remove_credential_from_address_by_owner() {
@@ -1723,6 +1799,63 @@ fn test_rotate_credential_new_already_authorized_rejected() {
             assert!(accounts
                 .is_authorized_for(&owner_address, &new_credential, state)
                 .unwrap());
+        }),
+    });
+}
+
+/// Attempting to rotate in the owner's canonical credential fails without
+/// revoking the old credential or materializing a duplicate explicit entry.
+#[test]
+fn test_rotate_credential_new_canonical_already_authorized_rejected() {
+    let (
+        TestData {
+            non_registered_account: owner,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let owner_address = owner.address();
+    let old_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let canonical_credential = owner.credential_id();
+
+    runner.execute(owner.create_plain_message::<RT, Accounts<S>>(
+        CallMessage::AddCredentialToAddress {
+            address: owner_address,
+            credential: old_credential,
+        },
+    ));
+
+    runner.execute_transaction(TransactionTestCase {
+        input: owner.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::RotateCredentialOnAddress {
+                address: owner_address,
+                old_credential,
+                new_credential: canonical_credential,
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            match result.tx_receipt {
+                TxEffect::Reverted(contents) => {
+                    assert_eq!(
+                        contents.reason.to_string(),
+                        "CredentialId already authorized for this address"
+                    );
+                }
+                other => panic!("Expected reverted transaction, got {other:?}"),
+            }
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_authorized_for(&owner_address, &old_credential, state)
+                .unwrap());
+            assert!(accounts
+                .is_authorized_for(&owner_address, &canonical_credential, state)
+                .unwrap());
+            assert!(
+                !accounts
+                    .is_explicitly_authorized(&owner_address, &canonical_credential, state)
+                    .unwrap(),
+                "canonical duplicate rejection must not materialize an explicit entry"
+            );
         }),
     });
 }
