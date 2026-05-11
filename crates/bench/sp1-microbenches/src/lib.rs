@@ -26,6 +26,7 @@ impl BenchResult {
     pub fn per_iter_prover_gas(&self) -> f64 {
         self.prover_gas as f64 / self.iterations.max(1) as f64
     }
+
     pub fn per_iter_region_cycles(&self) -> f64 {
         self.region_cycles as f64 / self.iterations.max(1) as f64
     }
@@ -49,13 +50,4 @@ pub fn git_short_sha() -> Option<String> {
         return None;
     }
     Some(String::from_utf8_lossy(&output.stdout).trim().to_string())
-}
-
-pub fn host_machine_descriptor() -> String {
-    let os = std::env::consts::OS;
-    let arch = std::env::consts::ARCH;
-    let cpus = std::thread::available_parallelism()
-        .map(|n| n.get().to_string())
-        .unwrap_or_else(|_| "?".to_string());
-    format!("{os}/{arch}, {cpus} logical CPUs")
 }

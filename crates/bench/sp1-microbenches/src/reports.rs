@@ -8,7 +8,6 @@ pub struct ReportContext<'a> {
     pub algorithm: &'a str,
     pub sp1_version: &'a str,
     pub git_commit: &'a str,
-    pub host_machine: &'a str,
     pub date: &'a str,
 }
 
@@ -24,10 +23,11 @@ pub fn write_markdown(
     s.push_str(&format!("- Date: {}\n", ctx.date));
     s.push_str(&format!("- SP1 SDK: {}\n", ctx.sp1_version));
     s.push_str(&format!("- Git commit: {}\n", ctx.git_commit));
-    s.push_str(&format!("- Host: {}\n", ctx.host_machine));
     s.push_str("- Method: `ProverClient::execute()` (no proving).\n");
     s.push_str("- Iterations per run: see table.\n");
-    s.push_str("- Term definitions: see [Appendix: Glossary](#appendix-glossary) at the bottom.\n\n");
+    s.push_str(
+        "- Term definitions: see [Appendix: Glossary](#appendix-glossary) at the bottom.\n\n",
+    );
 
     s.push_str("## Raw measurements\n\n");
     s.push_str("| bytes | iters | prover gas (total) | gas/iter | total cycles | region cycles | region cycles/iter |\n");
@@ -53,7 +53,10 @@ pub fn write_markdown(
         gas_fit.per_byte
     ));
     s.push_str(&format!("- R²: {:.6}\n", gas_fit.r_squared));
-    s.push_str(&format!("- max residual: {:.2} gas\n\n", gas_fit.max_residual));
+    s.push_str(&format!(
+        "- max residual: {:.2} gas\n\n",
+        gas_fit.max_residual
+    ));
 
     s.push_str("## Linear fit: RISC-V cycles per call (sanity check)\n\n");
     s.push_str(&format!("- bias (cycles / call): {:.2}\n", cycles_fit.bias));

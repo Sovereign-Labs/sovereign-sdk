@@ -6,9 +6,7 @@ use sp1_sdk::blocking::{Prover, ProverClient, SP1Stdin};
 
 use crate::fit::{fit_prover_gas_per_byte, fit_region_cycles_per_byte};
 use crate::reports::{write_markdown, ReportContext};
-use crate::{
-    git_short_sha, host_machine_descriptor, load_guest_elf, BenchResult, SP1_SDK_VERSION,
-};
+use crate::{git_short_sha, load_guest_elf, BenchResult, SP1_SDK_VERSION};
 
 const GUEST_ELF_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -78,13 +76,11 @@ pub fn run(args: Sha256Args) -> anyhow::Result<()> {
             .join(format!("sha256-{}.md", date))
     });
     let git_commit = git_short_sha().unwrap_or_else(|| "unknown".to_string());
-    let host = host_machine_descriptor();
 
     let ctx = ReportContext {
         algorithm: ALGORITHM_DESCRIPTION,
         sp1_version: SP1_SDK_VERSION,
         git_commit: &git_commit,
-        host_machine: &host,
         date: &date,
     };
     write_markdown(&ctx, &results, &gas_fit, &cycles_fit, &out_path)?;
