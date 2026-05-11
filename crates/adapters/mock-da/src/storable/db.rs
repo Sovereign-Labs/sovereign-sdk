@@ -1,11 +1,12 @@
 use std::str::FromStr;
+use std::time::Duration;
 
 use anyhow::{anyhow, Context};
 use chrono::{DateTime, Utc};
 use sov_rollup_interface::da::Time;
 #[cfg(feature = "postgres")]
 use sqlx::postgres::{PgConnectOptions, PgPool, PgPoolOptions};
-use sqlx::sqlite::{SqliteConnectOptions, SqlitePool, SqlitePoolOptions};
+use sqlx::sqlite::{SqliteConnectOptions, SqliteJournalMode, SqlitePool, SqlitePoolOptions};
 #[cfg(feature = "postgres")]
 use sqlx::Postgres;
 use sqlx::{ConnectOptions, Executor, QueryBuilder, Sqlite};
@@ -59,7 +60,7 @@ pub(crate) struct NewBlob {
     block_height: i32,
     hash: Vec<u8>,
     data: Vec<u8>,
-    namespace: String,
+    namespace: &'static str,
     sender: Vec<u8>,
 }
 
@@ -85,6 +86,9 @@ impl DbTx<'_> {
 
 impl From<DbBlob> for MockBlob {
     fn from(value: DbBlob) -> Self {
+        // Panics here indicate storage corruption: every row we wrote went through
+        // typed inserts with fixed widths, so reading back malformed bytes means
+        // the database file is no longer trustworthy.
         let address = MockAddress::try_from(value.sender.as_slice())
             .expect("Malformed sender stored in database");
         let hash: [u8; 32] = value
@@ -98,6 +102,8 @@ impl From<DbBlob> for MockBlob {
 pub(crate) async fn connect(connection_string: &str) -> anyhow::Result<DbPool> {
     if connection_string.starts_with("sqlite:") {
         let options = SqliteConnectOptions::from_str(connection_string)?
+            .journal_mode(SqliteJournalMode::Wal)
+            .busy_timeout(Duration::from_secs(5))
             .log_statements(tracing::log::LevelFilter::Trace);
         let pool = SqlitePoolOptions::new()
             .max_connections(5)
@@ -106,23 +112,20 @@ pub(crate) async fn connect(connection_string: &str) -> anyhow::Result<DbPool> {
         return Ok(DbPool::Sqlite(pool));
     }
 
-    #[cfg(feature = "postgres")]
     if connection_string.starts_with("postgres://")
         || connection_string.starts_with("postgresql://")
     {
-        let options = PgConnectOptions::from_str(connection_string)?
-            .log_statements(tracing::log::LevelFilter::Trace);
-        let pool = PgPoolOptions::new()
-            .max_connections(5)
-            .connect_with(options)
-            .await?;
-        return Ok(DbPool::Postgres(pool));
-    }
-
-    #[cfg(not(feature = "postgres"))]
-    if connection_string.starts_with("postgres://")
-        || connection_string.starts_with("postgresql://")
-    {
+        #[cfg(feature = "postgres")]
+        {
+            let options = PgConnectOptions::from_str(connection_string)?
+                .log_statements(tracing::log::LevelFilter::Trace);
+            let pool = PgPoolOptions::new()
+                .max_connections(5)
+                .connect_with(options)
+                .await?;
+            return Ok(DbPool::Postgres(pool));
+        }
+        #[cfg(not(feature = "postgres"))]
         anyhow::bail!("PostgreSQL support for mock-da requires the `postgres` feature");
     }
 
@@ -317,7 +320,7 @@ pub(crate) fn build_batch_blob(
     data: &[u8],
     sender: &MockAddress,
 ) -> (NewBlob, MockHash) {
-    build_blob(height, data, sender, BATCH_NAMESPACE.to_string())
+    build_blob(height, data, sender, BATCH_NAMESPACE)
 }
 
 pub(crate) fn build_proof_blob(
@@ -325,14 +328,14 @@ pub(crate) fn build_proof_blob(
     data: &[u8],
     sender: &MockAddress,
 ) -> (NewBlob, MockHash) {
-    build_blob(height, data, sender, PROOF_NAMESPACE.to_string())
+    build_blob(height, data, sender, PROOF_NAMESPACE)
 }
 
 fn build_blob(
     height: i32,
     data: &[u8],
     sender: &MockAddress,
-    namespace: String,
+    namespace: &'static str,
 ) -> (NewBlob, MockHash) {
     let blob_hash = hash_to_array(data);
     (
@@ -406,12 +409,6 @@ mod sqlite {
         .execute(pool)
         .await?;
         sqlx::query("CREATE INDEX IF NOT EXISTS idx_blobs_block_height ON blobs (block_height)")
-            .execute(pool)
-            .await?;
-        sqlx::query("PRAGMA journal_mode = WAL")
-            .execute(pool)
-            .await?;
-        sqlx::query("PRAGMA busy_timeout = 5000")
             .execute(pool)
             .await?;
         Ok(())
@@ -511,14 +508,14 @@ mod sqlite {
         E: Executor<'e, Database = Sqlite>,
     {
         let created_at = DateTime::from_timestamp_millis(header.time.as_millis())
-            .expect("valid block timestamp");
+            .ok_or_else(|| anyhow!("block timestamp out of valid DateTime range"))?;
         sqlx::query(
             "INSERT INTO block_headers (height, prev_hash, hash, created_at)
              VALUES (?, ?, ?, ?)",
         )
         .bind(i32::try_from(header.height).context("block height exceeds i32::MAX")?)
-        .bind(header.prev_hash.0.to_vec())
-        .bind(header.hash.0.to_vec())
+        .bind(header.prev_hash.0.as_slice())
+        .bind(header.hash.0.as_slice())
         .bind(created_at)
         .execute(executor)
         .await?;
@@ -555,7 +552,7 @@ mod sqlite {
         .bind(blob.block_height)
         .bind(&blob.hash)
         .bind(&blob.data)
-        .bind(&blob.namespace)
+        .bind(blob.namespace)
         .bind(&blob.sender)
         .execute(executor)
         .await?;
@@ -726,8 +723,8 @@ mod sqlite {
              SET hash = ?, prev_hash = ?
              WHERE height = ?",
         )
-        .bind(hash.to_vec())
-        .bind(prev_hash.to_vec())
+        .bind(hash.as_slice())
+        .bind(prev_hash.as_slice())
         .bind(to_db_height(height)?)
         .execute(executor)
         .await?;
@@ -871,14 +868,14 @@ mod postgres {
         E: Executor<'e, Database = Postgres>,
     {
         let created_at = DateTime::from_timestamp_millis(header.time.as_millis())
-            .expect("valid block timestamp");
+            .ok_or_else(|| anyhow!("block timestamp out of valid DateTime range"))?;
         sqlx::query(
             "INSERT INTO block_headers (height, prev_hash, hash, created_at)
              VALUES ($1, $2, $3, $4)",
         )
         .bind(i32::try_from(header.height).context("block height exceeds i32::MAX")?)
-        .bind(header.prev_hash.0.to_vec())
-        .bind(header.hash.0.to_vec())
+        .bind(header.prev_hash.0.as_slice())
+        .bind(header.hash.0.as_slice())
         .bind(created_at)
         .execute(executor)
         .await?;
@@ -915,7 +912,7 @@ mod postgres {
         .bind(blob.block_height)
         .bind(&blob.hash)
         .bind(&blob.data)
-        .bind(&blob.namespace)
+        .bind(blob.namespace)
         .bind(&blob.sender)
         .execute(executor)
         .await?;
@@ -1086,8 +1083,8 @@ mod postgres {
              SET hash = $1, prev_hash = $2
              WHERE height = $3",
         )
-        .bind(hash.to_vec())
-        .bind(prev_hash.to_vec())
+        .bind(hash.as_slice())
+        .bind(prev_hash.as_slice())
         .bind(to_db_height(height)?)
         .execute(executor)
         .await?;
