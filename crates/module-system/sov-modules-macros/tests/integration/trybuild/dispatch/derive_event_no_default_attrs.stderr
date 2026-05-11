@@ -37,17 +37,6 @@ help: the trait `VariantNames` is not implemented for `RuntimeEvent<S>`
   |
 6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
   |                                          ^^^^^
-note: there are multiple different versions of crate `strum` in the dependency graph
- --> $CARGO/strum-0.28.0/src/lib.rs
-  |
-  | pub trait VariantNames {
-  | ^^^^^^^^^^^^^^^^^^^^^^ this is the expected trait
-  |
- ::: $CARGO/strum-0.26.3/src/lib.rs
-  |
-  | pub trait VariantNames {
-  | ---------------------- this is the trait that was imported
-  = help: you can use `cargo tree` to explore your dependency tree
   = help: the following other types implement trait `VariantNames`:
             RuntimeCallDiscriminants
             __generated_dispatch_call_impl::RuntimeCall<S>
