@@ -326,14 +326,14 @@ pub fn new_test_gas_meter_with_price<S: Spec>(
 /// Serializes a value to JSON and validates it based on its
 /// [`schemars::JsonSchema`] rules.
 #[allow(clippy::result_large_err)]
-pub fn validate_schema<T>(item: &T) -> Result<(), jsonschema::error::ValidationErrorKind>
+pub fn validate_schema<T>(item: &T) -> Result<(), jsonschema::error::ValidationError<'static>>
 where
     T: schemars::JsonSchema + serde::Serialize,
 {
     let schema = serde_json::to_value(schemars::schema_for!(T)).unwrap();
     let json = serde_json::to_value(item).unwrap();
 
-    jsonschema::validate(&schema, &json).map_err(|e| e.kind)
+    jsonschema::validate(&schema, &json).map_err(|e| e.to_owned())
 }
 
 /// Validate all the storage accesses in a particular cache log,
