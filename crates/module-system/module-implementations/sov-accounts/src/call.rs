@@ -166,9 +166,10 @@ impl<S: Spec> Accounts<S> {
     /// authorization path has already verified the caller controls a
     /// credential authorized for `context.sender()`.
     fn ensure_caller_owns(&self, address: &S::Address, context: &Context<S>) -> anyhow::Result<()> {
+        let sender = context.sender();
         anyhow::ensure!(
-            context.sender() == address,
-            "Caller is not authorized to modify credentials for this address"
+            sender == address,
+            "Caller {sender} is not authorized to modify credentials for address {address}"
         );
         Ok(())
     }

@@ -35,9 +35,12 @@ impl<S: Spec> Accounts<S> {
 
     /// Returns `true` if `credential_id` is authorized to act as `address`.
     ///
-    /// Returns `true` when `address` is the canonical address of
-    /// `credential_id` (i.e. `credential_id.into() == address`) or when an
-    /// explicit `account_owners` authorization exists.
+    /// Lookup order:
+    /// 1. If `account_owners[(address, credential_id)]` has an explicit
+    ///    entry, that value is authoritative — including `false`, which
+    ///    is how `revoke_credential` denies the canonical fallback.
+    /// 2. Otherwise, returns `true` iff `address` is the canonical address
+    ///    of `credential_id` (i.e. `credential_id.into() == address`).
     pub fn is_authorized_for<ST: StateReader<User>>(
         &self,
         address: &S::Address,

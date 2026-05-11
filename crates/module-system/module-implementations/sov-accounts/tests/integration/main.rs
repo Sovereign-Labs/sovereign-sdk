@@ -1072,6 +1072,7 @@ fn test_add_credential_to_address_non_owner_rejected() {
     let attacker = TestUser::<S>::generate_with_default_balance();
     let victim = TestUser::<S>::generate_with_default_balance();
     let victim_address = victim.address();
+    let attacker_address = attacker.address();
 
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![attacker.clone(), victim]);
@@ -1093,7 +1094,9 @@ fn test_add_credential_to_address_non_owner_rejected() {
                 TxEffect::Reverted(contents) => {
                     assert_eq!(
                         contents.reason.to_string(),
-                        "Caller is not authorized to modify credentials for this address"
+                        format!(
+                            "Caller {attacker_address} is not authorized to modify credentials for address {victim_address}"
+                        )
                     );
                 }
                 other => panic!("Expected reverted transaction, got {other:?}"),
@@ -1235,6 +1238,7 @@ fn test_remove_credential_non_owner_rejected() {
     let victim = TestUser::<S>::generate_with_default_balance();
     let victim_address = victim.address();
     let victim_credential = victim.credential_id();
+    let attacker_address = attacker.address();
 
     // Seed victim's `(address, credential)` so the attacker's revoke attempt
     // targets a real tuple. Otherwise the handler would fail on the tuple
@@ -1261,7 +1265,9 @@ fn test_remove_credential_non_owner_rejected() {
                 TxEffect::Reverted(contents) => {
                     assert_eq!(
                         contents.reason.to_string(),
-                        "Caller is not authorized to modify credentials for this address"
+                        format!(
+                            "Caller {attacker_address} is not authorized to modify credentials for address {victim_address}"
+                        )
                     );
                 }
                 other => panic!("Expected reverted transaction, got {other:?}"),
@@ -1728,6 +1734,7 @@ fn test_rotate_credential_non_owner_rejected() {
     let victim = TestUser::<S>::generate_with_default_balance();
     let victim_address = victim.address();
     let victim_credential = victim.credential_id();
+    let attacker_address = attacker.address();
 
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![attacker.clone(), victim]);
@@ -1754,7 +1761,9 @@ fn test_rotate_credential_non_owner_rejected() {
                 TxEffect::Reverted(contents) => {
                     assert_eq!(
                         contents.reason.to_string(),
-                        "Caller is not authorized to modify credentials for this address"
+                        format!(
+                            "Caller {attacker_address} is not authorized to modify credentials for address {victim_address}"
+                        )
                     );
                 }
                 other => panic!("Expected reverted transaction, got {other:?}"),
