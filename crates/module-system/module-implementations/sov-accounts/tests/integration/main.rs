@@ -1,11 +1,15 @@
-use sov_accounts::{AccountData, Accounts, CallMessage};
+use std::cell::RefCell;
+use std::rc::Rc;
+
+use sov_accounts::{AccountData, Accounts, CallMessage, Event};
 use sov_modules_api::transaction::{UnsignedTransactionV0, Version1};
 use sov_modules_api::{
-    CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
+    Amount, CredentialId, CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents,
+    Spec, TxEffect,
 };
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
-use sov_test_utils::{default_test_tx_details, TransactionType};
+use sov_test_utils::{default_test_tx_details, BatchTestCase, BatchType, TransactionType};
 use sov_test_utils::{
     generate_optimistic_runtime, AsUser, TestPrivateKey, TestUser, TransactionTestCase,
 };
@@ -618,6 +622,60 @@ fn submit_v1(tx: Version1<RT, S>) -> TransactionType<RT, S> {
     TransactionType::<RT, S>::PreSigned(RawTx {
         data: borsh::to_vec(&tx).unwrap(),
     })
+}
+
+/// Destructures the single expected `UnknownAddressCreated` event from a
+/// receipt's event list.
+fn unknown_address_created_event(
+    events: &[TestAccountsRuntimeEvent<S>],
+) -> (<S as Spec>::Address, <S as Spec>::Address, CredentialId) {
+    match events {
+        [TestAccountsRuntimeEvent::Accounts(Event::UnknownAddressCreated {
+            address,
+            creator,
+            credential,
+        })] => (*address, *creator, *credential),
+        other => panic!("expected one unknown-address event, got {other:?}"),
+    }
+}
+
+/// Executes a `CreateUnknownAddress` transaction, asserts it succeeded and
+/// emitted a matching event, and returns the newly created address.
+fn execute_create_unknown_address(
+    runner: &mut TestRunner<RT, S>,
+    input: TransactionType<RT, S>,
+    expected_creator: <S as Spec>::Address,
+    expected_credential: CredentialId,
+) -> <S as Spec>::Address {
+    let captured = Rc::new(RefCell::new(None));
+    let captured_for_assert = Rc::clone(&captured);
+
+    runner.execute_transaction(TransactionTestCase {
+        input,
+        assert: Box::new(move |result, state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "CreateUnknownAddress should succeed, got {:?}",
+                result.tx_receipt
+            );
+            let (address, creator, credential) =
+                unknown_address_created_event(&result.events);
+            assert_eq!(creator, expected_creator);
+            assert_eq!(credential, expected_credential);
+
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_explicitly_authorized(&address, &expected_credential, state)
+                .unwrap());
+
+            *captured_for_assert.borrow_mut() = Some(address);
+        }),
+    });
+
+    Rc::try_unwrap(captured)
+        .expect("capture should have no outstanding references")
+        .into_inner()
+        .expect("CreateUnknownAddress event should have been captured")
 }
 
 /// V1 tx with `address_override = None` executes as the multisig's default
@@ -2067,6 +2125,394 @@ fn test_multisig_key_rotation_atomic() {
                 );
             }
             other => panic!("expected skipped tx after rotation, got {other:?}"),
+        }),
+    });
+}
+
+/// V0 single-signer happy path: the new address is created, the caller's
+/// credential is auto-authorized for it, and exactly one matching event is
+/// emitted.
+#[test]
+fn test_create_unknown_address_happy_path() {
+    let user = TestUser::<S>::generate_with_default_balance();
+    let user_address = user.address();
+    let user_credential = user.credential_id();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![user.clone()]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let new_address = execute_create_unknown_address(
+        &mut runner,
+        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress {
+            salt: [7; 32],
+        }),
+        user_address,
+        user_credential,
+    );
+
+    // The new address is not the caller's own address, nor the canonical
+    // address of any unrelated credential we can sample.
+    assert_ne!(new_address, user_address);
+    assert_ne!(new_address, <S as Spec>::Address::from(user_credential));
+    assert_ne!(
+        new_address,
+        <S as Spec>::Address::from(CredentialId::from([99u8; 32]))
+    );
+}
+
+/// Re-issuing the same `(caller, salt)` in the same slot is an idempotent
+/// no-op: both transactions succeed, and the `account_owners` entry remains
+/// authorized.
+#[test]
+fn test_create_unknown_address_is_idempotent_in_same_slot() {
+    let user = TestUser::<S>::generate_with_default_balance();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![user.clone()]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+    let salt = [22; 32];
+
+    let tx_1 =
+        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress { salt });
+    let tx_2 =
+        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress { salt });
+
+    runner.execute_batch(BatchTestCase {
+        input: BatchType::from(vec![tx_1, tx_2]),
+        assert: Box::new(move |result, _state| {
+            let batch = result.batch_receipt.expect("batch should be accepted");
+            assert_eq!(batch.tx_receipts.len(), 2);
+            assert!(
+                batch.tx_receipts[0].receipt.is_successful(),
+                "first CreateUnknownAddress should succeed, got {:?}",
+                batch.tx_receipts[0].receipt
+            );
+            assert!(
+                batch.tx_receipts[1].receipt.is_successful(),
+                "duplicate CreateUnknownAddress in same slot should be idempotent, got {:?}",
+                batch.tx_receipts[1].receipt
+            );
+        }),
+    });
+}
+
+/// Different salts from the same caller produce distinct unknown addresses.
+#[test]
+fn test_create_unknown_address_different_salt_produces_different_address() {
+    let user = TestUser::<S>::generate_with_default_balance();
+    let user_address = user.address();
+    let user_credential = user.credential_id();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![user.clone()]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let address_a = execute_create_unknown_address(
+        &mut runner,
+        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress {
+            salt: [1; 32],
+        }),
+        user_address,
+        user_credential,
+    );
+    let address_b = execute_create_unknown_address(
+        &mut runner,
+        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress {
+            salt: [2; 32],
+        }),
+        user_address,
+        user_credential,
+    );
+    assert_ne!(address_a, address_b);
+}
+
+/// Two different callers using the same salt produce distinct addresses, and
+/// neither caller can `AddCredentialToAddress` to the other's unknown
+/// address — the standard `ensure_caller_owns` guard applies.
+#[test]
+fn test_create_unknown_address_is_creator_scoped() {
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(2);
+    let users = genesis_config.additional_accounts();
+    let creator_1 = users[0].clone();
+    let creator_2 = users[1].clone();
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let salt = [33; 32];
+    let address_1 = execute_create_unknown_address(
+        &mut runner,
+        creator_1
+            .create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress { salt }),
+        creator_1.address(),
+        creator_1.credential_id(),
+    );
+    let address_2 = execute_create_unknown_address(
+        &mut runner,
+        creator_2
+            .create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress { salt }),
+        creator_2.address(),
+        creator_2.credential_id(),
+    );
+    assert_ne!(address_1, address_2);
+
+    // creator_2 cannot mutate creator_1's unknown address.
+    let attacker_credential = TestPrivateKey::generate().pub_key().credential_id();
+    runner.execute_transaction(TransactionTestCase {
+        input: creator_2.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::AddCredentialToAddress {
+                address: address_1,
+                credential: attacker_credential,
+            },
+        ),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                let msg = contents.reason.to_string();
+                assert!(
+                    msg.contains("not authorized to modify credentials"),
+                    "expected ensure_caller_owns rejection; got: {msg}"
+                );
+            }
+            other => panic!("expected non-owner add to revert, got {other:?}"),
+        }),
+    });
+}
+
+/// Long-form: a multisig creates an unknown address, funds it via bank
+/// transfer, inserts a follow-up credential, adds a rotated multisig
+/// credential, removes the incumbent credential, then verifies the rotated
+/// multisig can act as the unknown address while the old multisig can no
+/// longer reach it.
+#[test]
+fn test_create_unknown_address_can_be_used_and_rotated() {
+    use sov_modules_api::Multisig;
+
+    let keys_1 = [
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+    ];
+    let keys_2 = [
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+    ];
+    let multisig_1 = Multisig::new(2, keys_1.iter().map(|k| k.pub_key()).collect());
+    let multisig_2 = Multisig::new(2, keys_2.iter().map(|k| k.pub_key()).collect());
+    let credential_id_1 =
+        multisig_1.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
+    let credential_id_2 =
+        multisig_2.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
+
+    let multisig_user =
+        TestUser::generate_with_default_balance().add_credential_id(credential_id_1);
+    let creator = multisig_user.address();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    // Create the unknown address with multisig_1.
+    let mut create_tx = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::CreateUnknownAddress { salt: [11; 32] },
+        None,
+        0,
+    );
+    sign_v1(&mut create_tx, &keys_1[0]);
+    sign_v1(&mut create_tx, &keys_1[1]);
+    let unknown_address = execute_create_unknown_address(
+        &mut runner,
+        submit_v1(create_tx),
+        creator,
+        credential_id_1,
+    );
+
+    // Sanity: the new address is not the canonical address of any sampled
+    // pre-existing credential.
+    for sampled_credential in [credential_id_1, credential_id_2, CredentialId::from([99u8; 32])] {
+        assert_ne!(
+            unknown_address,
+            <S as Spec>::Address::from(sampled_credential)
+        );
+    }
+
+    // Fund the unknown address from the multisig user via a bank transfer.
+    let mut fund_unknown_address = UnsignedTransactionV0::<RT, S>::new_with_details(
+        TestAccountsRuntimeCall::Bank(sov_bank::CallMessage::Transfer {
+            to: unknown_address,
+            coins: sov_bank::Coins {
+                amount: Amount::new(1_000_000_000_000),
+                token_id: sov_bank::config_gas_token_id(),
+            },
+        }),
+        sov_modules_api::capabilities::UniquenessData::Generation(1),
+        default_test_tx_details::<S>(),
+        None,
+    )
+    .to_multisig_tx(multisig_1.clone());
+    sign_v1(&mut fund_unknown_address, &keys_1[0]);
+    sign_v1(&mut fund_unknown_address, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(fund_unknown_address),
+        assert: Box::new(move |result, _state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "funding unknown address should succeed, got {:?}",
+                result.tx_receipt
+            );
+        }),
+    });
+
+    // Insert a follow-up credential on the unknown address, signing as it.
+    let follow_up_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut m1_follow_up = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::InsertCredentialId(follow_up_credential),
+        Some(unknown_address),
+        2,
+    );
+    sign_v1(&mut m1_follow_up, &keys_1[0]);
+    sign_v1(&mut m1_follow_up, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(m1_follow_up),
+        assert: Box::new(move |result, state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "incumbent credential should control unknown address, got {:?}",
+                result.tx_receipt
+            );
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_explicitly_authorized(&unknown_address, &follow_up_credential, state)
+                .unwrap());
+        }),
+    });
+
+    // Add the rotated multisig credential to the unknown address.
+    let mut add_rotated = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::AddCredentialToAddress {
+            address: unknown_address,
+            credential: credential_id_2,
+        },
+        Some(unknown_address),
+        3,
+    );
+    sign_v1(&mut add_rotated, &keys_1[0]);
+    sign_v1(&mut add_rotated, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(add_rotated),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_explicitly_authorized(&unknown_address, &credential_id_2, state)
+                .unwrap());
+        }),
+    });
+
+    // Remove the incumbent multisig_1 credential.
+    let mut remove_incumbent = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::RemoveCredentialFromAddress {
+            address: unknown_address,
+            credential: credential_id_1,
+        },
+        Some(unknown_address),
+        4,
+    );
+    sign_v1(&mut remove_incumbent, &keys_1[0]);
+    sign_v1(&mut remove_incumbent, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(remove_incumbent),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(!accounts
+                .is_authorized_for(&unknown_address, &credential_id_1, state)
+                .unwrap());
+            assert!(accounts
+                .is_explicitly_authorized(&unknown_address, &credential_id_2, state)
+                .unwrap());
+        }),
+    });
+
+    // After revocation, multisig_1 attempting to sign as the unknown address
+    // is skipped by the resolver.
+    let stale_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut stale_tx = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::InsertCredentialId(stale_credential),
+        Some(unknown_address),
+        5,
+    );
+    sign_v1(&mut stale_tx, &keys_1[0]);
+    sign_v1(&mut stale_tx, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(stale_tx),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                let msg = error.to_string();
+                assert!(
+                    msg.contains("not authorized for address override"),
+                    "expected resolver skip after unknown-address rotation; got: {msg}"
+                );
+            }
+            other => panic!("expected skipped tx, got {other:?}"),
+        }),
+    });
+
+    // The rotated multisig_2 can now act as the unknown address.
+    let rotated_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut rotated_tx = make_v1_tx_with_call(
+        &multisig_2,
+        CallMessage::InsertCredentialId(rotated_credential),
+        Some(unknown_address),
+        0,
+    );
+    sign_v1(&mut rotated_tx, &keys_2[0]);
+    sign_v1(&mut rotated_tx, &keys_2[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(rotated_tx),
+        assert: Box::new(move |result, state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "rotated credential should control unknown address, got {:?}",
+                result.tx_receipt
+            );
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_explicitly_authorized(&unknown_address, &rotated_credential, state)
+                .unwrap());
+        }),
+    });
+}
+
+/// `enable_custom_account_mappings = false` rejects `CreateUnknownAddress`
+/// just like the other custom-mapping call messages.
+#[test]
+fn test_create_unknown_address_rejected_when_custom_account_mappings_disabled() {
+    let (user, mut runner) = setup_with_disable_custom_account_mappings();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress {
+            salt: [0; 32],
+        }),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                assert_eq!(
+                    contents.reason.to_string(),
+                    "Custom account mappings are disabled"
+                );
+            }
+            _ => panic!("Expected reverted transaction"),
         }),
     });
 }
