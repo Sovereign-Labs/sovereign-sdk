@@ -1,12 +1,29 @@
 use std::net::ToSocketAddrs;
+use std::path::{Path, PathBuf};
 use std::time::Duration;
 
 use anyhow::{anyhow, bail, ensure, Context, Result};
 use base64::engine::general_purpose::STANDARD as BASE64;
 use base64::Engine;
+use borsh::to_vec;
 use clap::Parser;
+use demo_stf::runtime::{Runtime, RuntimeCall, CHAIN_HASH};
+use demo_stf::MultiAddressEvmSolana;
 use futures::{SinkExt, StreamExt};
 use serde::{Deserialize, Serialize};
+use serde_json::Value;
+use sov_bank::{config_gas_token_id, Coins, TokenId};
+use sov_cli::wallet_state::PrivateKeyAndAddress;
+use sov_mock_da::MockDaSpec;
+use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
+use sov_modules_api::configurable_spec::ConfigurableSpec;
+use sov_modules_api::execution_mode::Native;
+use sov_modules_api::{CryptoSpec, PrivateKey as _, Spec};
+use sov_node_client::NodeClient;
+use sov_rollup_interface::da::DaSpec;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::DefaultStorageSpec;
+use sov_test_utils::default_test_signed_transaction_with_nonce;
 use tokio::net::TcpSocket;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
@@ -17,10 +34,24 @@ use tokio_tungstenite::{client_async_with_config, connect_async, MaybeTlsStream,
 
 const CONNECT_TIMEOUT: Duration = Duration::from_secs(10);
 
+type DemoStorage = NomtProverStorage<
+    DefaultStorageSpec<<MockZkvmCryptoSpec as CryptoSpec>::Hasher>,
+    <MockDaSpec as DaSpec>::SlotHash,
+>;
+type DemoRollupSpec = ConfigurableSpec<
+    MockDaSpec,
+    MockZkvm,
+    MockZkvm,
+    MultiAddressEvmSolana,
+    Native,
+    MockZkvmCryptoSpec,
+    DemoStorage,
+>;
+
 #[derive(Parser, Debug, Clone)]
 #[command(
     version,
-    about = "Cycle submit-ws clients through pause/drain phases to reproduce sequencer reply backpressure."
+    about = "Cycle submit-ws clients through pause/drain phases to reproduce sequencer reply backpressure with real demo-rollup bank transfers."
 )]
 struct Args {
     /// WebSocket URL of the sequencer submit endpoint.
@@ -60,9 +91,21 @@ struct Args {
     #[arg(long)]
     tcp_recv_buffer_bytes: Option<u32>,
 
-    /// Number of bytes per generated tx body.
-    #[arg(long, default_value_t = 128)]
-    tx_body_bytes: usize,
+    /// Private key file for the funded bank-transfer signer.
+    #[arg(long, default_value_os_t = default_signer_key_file())]
+    signer_key_file: PathBuf,
+
+    /// Optional private key file whose address receives the bank transfers.
+    #[arg(long)]
+    recipient_key_file: Option<PathBuf>,
+
+    /// Transfer amount used for each submitted bank transfer.
+    #[arg(long, default_value_t = 1)]
+    transfer_amount: u128,
+
+    /// Token ID to transfer. Defaults to the configured gas token when omitted.
+    #[arg(long)]
+    token_id: Option<TokenId>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -82,9 +125,29 @@ struct AcceptTx {
     body: String,
 }
 
+#[derive(Deserialize)]
+struct SubmitWsResponseEnvelope {
+    contents: Value,
+}
+
+#[derive(Clone)]
+struct SubmitTxConfig {
+    signer: PrivateKeyAndAddress<DemoRollupSpec>,
+    recipient: <DemoRollupSpec as Spec>::Address,
+    token_id: TokenId,
+    transfer_amount: u128,
+    nonce_stride: u64,
+}
+
+struct HarnessSetup {
+    submit_tx: SubmitTxConfig,
+    starting_nonce: u64,
+}
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct SubmitWsInstance {
     instance_index: usize,
+    starting_nonce: u64,
 }
 
 impl SubmitWsInstance {
@@ -192,6 +255,7 @@ async fn main() -> Result<()> {
 
     let args = Args::parse();
     let transport = validate_args(&args)?;
+    let harness_setup = prepare_harness(&args).await?;
 
     if args.tcp_recv_buffer_bytes.is_none() {
         tracing::warn!(
@@ -213,17 +277,25 @@ async fn main() -> Result<()> {
         cycles = ?args.cycles,
         cycle_delay_ms = args.cycle_delay_ms,
         tcp_recv_buffer_bytes = ?args.tcp_recv_buffer_bytes,
+        signer_key_file = %args.signer_key_file.display(),
+        recipient_key_file = ?args.recipient_key_file.as_ref().map(|path| path.display().to_string()),
+        signer_address = %harness_setup.submit_tx.signer.address,
+        recipient_address = %harness_setup.submit_tx.recipient,
+        transfer_amount = harness_setup.submit_tx.transfer_amount,
+        token_id = %harness_setup.submit_tx.token_id,
+        starting_nonce = harness_setup.starting_nonce,
         "starting submit-ws pressure harness",
     );
 
-    let instances = build_instances(args.instances);
+    let instances = build_instances(args.instances, harness_setup.starting_nonce)?;
     let (shutdown_tx, shutdown_rx) = watch::channel(false);
     let mut join_set = JoinSet::new();
 
     for instance in instances {
         let args = args.clone();
         let shutdown = shutdown_rx.clone();
-        join_set.spawn(async move { run_instance(instance, args, shutdown).await });
+        let submit_tx = harness_setup.submit_tx.clone();
+        join_set.spawn(async move { run_instance(instance, submit_tx, args, shutdown).await });
     }
 
     let mut join_failures = 0usize;
@@ -255,7 +327,11 @@ async fn main() -> Result<()> {
     for report in &reports {
         log_instance_summary(&report.summary);
         if let Some(error) = &report.error {
-            tracing::error!(label = %report.summary.label, error = %error, "submit-ws instance failed");
+            tracing::error!(
+                label = %report.summary.label,
+                error = %error,
+                "submit-ws instance failed"
+            );
         }
         aggregate.record(report);
     }
@@ -284,10 +360,12 @@ async fn main() -> Result<()> {
 
 async fn run_instance(
     instance: SubmitWsInstance,
+    submit_tx: SubmitTxConfig,
     args: Args,
     mut shutdown: watch::Receiver<bool>,
 ) -> InstanceReport {
     let label = instance.label();
+    let mut next_nonce = instance.starting_nonce;
     let mut summary = InstanceSummary {
         label: label.clone(),
         cycles_completed: 0,
@@ -298,7 +376,10 @@ async fn run_instance(
 
     loop {
         if *shutdown.borrow() {
-            tracing::info!(label = %label, "shutdown requested before starting the next cycle");
+            tracing::info!(
+                label = %label,
+                "shutdown requested before starting the next cycle"
+            );
             break;
         }
 
@@ -306,6 +387,8 @@ async fn run_instance(
             &label,
             cycle_number,
             &args,
+            &submit_tx,
+            &mut next_nonce,
             &mut summary.counters,
             &mut shutdown,
         )
@@ -353,10 +436,18 @@ async fn run_cycle(
     label: &str,
     cycle_number: usize,
     args: &Args,
+    submit_tx: &SubmitTxConfig,
+    next_nonce: &mut u64,
     counters: &mut Counters,
     shutdown: &mut watch::Receiver<bool>,
 ) -> Result<CycleExit> {
-    tracing::info!(label = %label, cycle_number, url = %args.url, "cycle connect phase");
+    tracing::info!(
+        label = %label,
+        cycle_number,
+        url = %args.url,
+        next_nonce = *next_nonce,
+        "cycle connect phase"
+    );
     let mut ws = match timeout(
         CONNECT_TIMEOUT,
         connect_ws(&args.url, args.tcp_recv_buffer_bytes),
@@ -400,7 +491,8 @@ async fn run_cycle(
         &mut ws,
         &mut send_tick,
         &mut stats_tick,
-        args,
+        submit_tx,
+        next_nonce,
         counters,
         shutdown,
     )
@@ -430,7 +522,8 @@ async fn run_cycle(
         &mut ws,
         &mut send_tick,
         &mut stats_tick,
-        args,
+        submit_tx,
+        next_nonce,
         counters,
         shutdown,
     )
@@ -458,6 +551,7 @@ async fn run_cycle(
     tracing::info!(
         label = %label,
         cycle_number,
+        next_nonce = *next_nonce,
         sent = counters.sent,
         received = counters.received,
         pings = counters.pings,
@@ -476,7 +570,8 @@ async fn run_pause_phase(
     ws: &mut WsStream,
     send_tick: &mut Interval,
     stats_tick: &mut Interval,
-    args: &Args,
+    submit_tx: &SubmitTxConfig,
+    next_nonce: &mut u64,
     counters: &mut Counters,
     shutdown: &mut watch::Receiver<bool>,
 ) -> Result<PhaseExit> {
@@ -495,7 +590,7 @@ async fn run_pause_phase(
             }
             _ = &mut deadline_sleep => return Ok(PhaseExit::Continue),
             _ = send_tick.tick() => {
-                send_submit_tx(label, ws, args.tx_body_bytes, counters).await
+                send_submit_tx(label, ws, submit_tx, next_nonce, counters).await
                     .with_context(|| format!("[{label}] cycle#{cycle_number} pause send failed"))?;
             }
             _ = stats_tick.tick() => {
@@ -512,7 +607,8 @@ async fn run_drain_phase(
     ws: &mut WsStream,
     send_tick: &mut Interval,
     stats_tick: &mut Interval,
-    args: &Args,
+    submit_tx: &SubmitTxConfig,
+    next_nonce: &mut u64,
     counters: &mut Counters,
     shutdown: &mut watch::Receiver<bool>,
 ) -> Result<PhaseExit> {
@@ -531,7 +627,7 @@ async fn run_drain_phase(
             }
             _ = &mut deadline_sleep => return Ok(PhaseExit::Continue),
             _ = send_tick.tick() => {
-                send_submit_tx(label, ws, args.tx_body_bytes, counters).await
+                send_submit_tx(label, ws, submit_tx, next_nonce, counters).await
                     .with_context(|| format!("[{label}] cycle#{cycle_number} drain send failed"))?;
             }
             _ = stats_tick.tick() => {
@@ -545,7 +641,8 @@ async fn run_drain_phase(
                     ws,
                     send_tick,
                     stats_tick,
-                    args,
+                    submit_tx,
+                    next_nonce,
                     counters,
                     shutdown,
                 )
@@ -564,7 +661,8 @@ async fn drain_ready_messages(
     ws: &mut WsStream,
     send_tick: &mut Interval,
     stats_tick: &mut Interval,
-    args: &Args,
+    submit_tx: &SubmitTxConfig,
+    next_nonce: &mut u64,
     counters: &mut Counters,
     shutdown: &watch::Receiver<bool>,
 ) -> Result<PhaseExit> {
@@ -579,7 +677,8 @@ async fn drain_ready_messages(
             ws,
             send_tick,
             stats_tick,
-            args,
+            submit_tx,
+            next_nonce,
             counters,
         )
         .await?
@@ -602,11 +701,12 @@ async fn service_ready_drain_timers(
     ws: &mut WsStream,
     send_tick: &mut Interval,
     stats_tick: &mut Interval,
-    args: &Args,
+    submit_tx: &SubmitTxConfig,
+    next_nonce: &mut u64,
     counters: &mut Counters,
 ) -> Result<bool> {
     if timeout(Duration::ZERO, send_tick.tick()).await.is_ok() {
-        send_submit_tx(label, ws, args.tx_body_bytes, counters)
+        send_submit_tx(label, ws, submit_tx, next_nonce, counters)
             .await
             .with_context(|| format!("[{label}] cycle#{cycle_number} drain send failed"))?;
         return Ok(true);
@@ -628,7 +728,20 @@ async fn handle_inbound_message(
     counters: &mut Counters,
 ) -> Result<()> {
     match next_message {
-        Some(Ok(Message::Text(_))) | Some(Ok(Message::Binary(_))) => {
+        Some(Ok(Message::Text(text))) => {
+            counters.record_receive();
+            if submit_ws_text_is_error(text.as_ref()) {
+                counters.record_error();
+                tracing::warn!(
+                    label = %label,
+                    cycle_number,
+                    response = %text,
+                    "submit-ws transaction was rejected by the node",
+                );
+            }
+            Ok(())
+        }
+        Some(Ok(Message::Binary(_))) => {
             counters.record_receive();
             Ok(())
         }
@@ -665,15 +778,24 @@ async fn handle_inbound_message(
 async fn send_submit_tx(
     label: &str,
     ws: &mut WsStream,
-    tx_body_bytes: usize,
+    submit_tx: &SubmitTxConfig,
+    next_nonce: &mut u64,
     counters: &mut Counters,
 ) -> Result<()> {
-    let body = build_body(tx_body_bytes, counters.sent);
+    let nonce = *next_nonce;
+    let body = build_signed_bank_transfer(submit_tx, nonce).map_err(|error| {
+        counters.record_error();
+        error
+    })?;
     let json = serde_json::to_string(&WsMessage {
         id: format!("{label}-submit-{}", counters.sent),
         contents: AcceptTx {
             body: BASE64.encode(&body),
         },
+    })
+    .map_err(|error| {
+        counters.record_error();
+        anyhow!("failed to serialize submit-ws transaction envelope: {error}")
     })?;
 
     ws.send(Message::Text(json.into())).await.map_err(|error| {
@@ -681,6 +803,9 @@ async fn send_submit_tx(
         anyhow!("failed to send submit-ws message: {error}")
     })?;
     counters.record_send();
+    *next_nonce = next_nonce
+        .checked_add(submit_tx.nonce_stride)
+        .context("next nonce overflowed u64")?;
     Ok(())
 }
 
@@ -778,6 +903,112 @@ async fn connect_ws(ws_url: &str, tcp_recv_buffer_bytes: Option<u32>) -> Result<
     Ok(ws)
 }
 
+async fn prepare_harness(args: &Args) -> Result<HarnessSetup> {
+    let signer = load_key_file(&args.signer_key_file).with_context(|| {
+        format!(
+            "failed to load signer key from {}",
+            args.signer_key_file.display()
+        )
+    })?;
+    let recipient = match &args.recipient_key_file {
+        Some(path) => {
+            load_key_file(path)
+                .with_context(|| format!("failed to load recipient key from {}", path.display()))?
+                .address
+        }
+        None => PrivateKeyAndAddress::<DemoRollupSpec>::generate().address,
+    };
+    let token_id = resolved_token_id(&args.token_id);
+    let http_base_url = http_base_url_from_ws_url(&args.url)?;
+    let node_client = NodeClient::new_unchecked(&http_base_url);
+    let starting_nonce = node_client
+        .get_nonce_for_public_key::<DemoRollupSpec>(&signer.private_key.pub_key())
+        .await
+        .with_context(|| {
+            format!(
+                "failed to fetch starting nonce from {http_base_url} for signer {}",
+                signer.address
+            )
+        })?;
+    let nonce_stride =
+        u64::try_from(args.instances).context("--instances does not fit into u64")?;
+
+    Ok(HarnessSetup {
+        submit_tx: SubmitTxConfig {
+            signer,
+            recipient,
+            token_id,
+            transfer_amount: args.transfer_amount,
+            nonce_stride,
+        },
+        starting_nonce,
+    })
+}
+
+fn load_key_file(path: &Path) -> Result<PrivateKeyAndAddress<DemoRollupSpec>> {
+    PrivateKeyAndAddress::from_json_file(path, true)
+        .with_context(|| format!("failed to parse key file {}", path.display()))
+}
+
+fn default_signer_key_file() -> PathBuf {
+    Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../../examples/test-data/keys/tx_signer_private_key.json")
+}
+
+fn resolved_token_id(token_id: &Option<TokenId>) -> TokenId {
+    token_id.clone().unwrap_or_else(config_gas_token_id)
+}
+
+fn http_base_url_from_ws_url(ws_url: &str) -> Result<String> {
+    let request = ws_url.into_client_request()?;
+    let uri = request.uri();
+    let authority = uri
+        .authority()
+        .context("websocket URL is missing an authority")?;
+    let scheme = match uri
+        .scheme_str()
+        .context("websocket URL is missing a scheme")?
+    {
+        "ws" => "http",
+        "wss" => "https",
+        other => bail!("unsupported websocket URL scheme: {other}"),
+    };
+
+    Ok(format!("{scheme}://{authority}"))
+}
+
+fn build_signed_bank_transfer(submit_tx: &SubmitTxConfig, nonce: u64) -> Result<Vec<u8>> {
+    let message =
+        RuntimeCall::<DemoRollupSpec>::Bank(sov_bank::CallMessage::<DemoRollupSpec>::Transfer {
+            to: submit_tx.recipient.clone(),
+            coins: Coins {
+                amount: submit_tx.transfer_amount.into(),
+                token_id: submit_tx.token_id.clone(),
+            },
+        });
+    let transaction = default_test_signed_transaction_with_nonce::<
+        Runtime<DemoRollupSpec>,
+        DemoRollupSpec,
+    >(&submit_tx.signer.private_key, &message, nonce, &CHAIN_HASH);
+
+    to_vec(&transaction).context("failed to serialize signed bank transfer")
+}
+
+fn submit_ws_text_is_error(text: &str) -> bool {
+    let Ok(response) = serde_json::from_str::<SubmitWsResponseEnvelope>(text) else {
+        return false;
+    };
+
+    response
+        .contents
+        .get("status")
+        .is_some_and(Value::is_number)
+        && response
+            .contents
+            .get("message")
+            .is_some_and(Value::is_string)
+}
+
 fn validate_args(args: &Args) -> Result<WsTransport> {
     ensure!(args.instances > 0, "--instances must be greater than zero");
     ensure!(
@@ -787,6 +1018,10 @@ fn validate_args(args: &Args) -> Result<WsTransport> {
     ensure!(
         args.stats_interval_ms > 0,
         "--stats-interval-ms must be greater than zero"
+    );
+    ensure!(
+        args.transfer_amount > 0,
+        "--transfer-amount must be greater than zero"
     );
     if let Some(cycles) = args.cycles {
         ensure!(
@@ -817,10 +1052,19 @@ fn websocket_transport(ws_url: &str) -> Result<WsTransport> {
     }
 }
 
-fn build_instances(instances: usize) -> Vec<SubmitWsInstance> {
-    (1..=instances)
-        .map(|instance_index| SubmitWsInstance { instance_index })
-        .collect()
+fn build_instances(instances: usize, starting_nonce: u64) -> Result<Vec<SubmitWsInstance>> {
+    let mut output = Vec::with_capacity(instances);
+    for offset in 0..instances {
+        let nonce_offset = u64::try_from(offset).context("instance index does not fit into u64")?;
+        output.push(SubmitWsInstance {
+            instance_index: offset + 1,
+            starting_nonce: starting_nonce
+                .checked_add(nonce_offset)
+                .context("starting nonce overflowed u64")?,
+        });
+    }
+
+    Ok(output)
 }
 
 fn shutdown_triggered(
@@ -859,37 +1103,37 @@ fn log_instance_summary(summary: &InstanceSummary) {
     );
 }
 
-/// Builds a `tx_body_bytes`-long buffer with the sequence number embedded in
-/// the leading bytes so consecutive bodies are distinct on the wire.
-///
-/// The contents do not need to be a valid transaction: the sequencer spawns a
-/// per-message task as soon as the JSON envelope parses, and that task is what
-/// blocks on the bounded reply channel when the client stops reading.
-fn build_body(size: usize, seq: u64) -> Vec<u8> {
-    let mut body = vec![0u8; size.max(8)];
-    body[..8].copy_from_slice(&seq.to_le_bytes());
-    body
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
 
     #[test]
-    fn build_instances_expands_requested_fanout() {
+    fn build_instances_expands_requested_fanout_with_nonce_offsets() {
         assert_eq!(
-            build_instances(3),
+            build_instances(3, 42).unwrap(),
             vec![
-                SubmitWsInstance { instance_index: 1 },
-                SubmitWsInstance { instance_index: 2 },
-                SubmitWsInstance { instance_index: 3 },
+                SubmitWsInstance {
+                    instance_index: 1,
+                    starting_nonce: 42,
+                },
+                SubmitWsInstance {
+                    instance_index: 2,
+                    starting_nonce: 43,
+                },
+                SubmitWsInstance {
+                    instance_index: 3,
+                    starting_nonce: 44,
+                },
             ]
         );
     }
 
     #[test]
     fn submit_ws_instance_label_has_zero_padded_suffix() {
-        let instance = SubmitWsInstance { instance_index: 3 };
+        let instance = SubmitWsInstance {
+            instance_index: 3,
+            starting_nonce: 7,
+        };
 
         assert_eq!(instance.label(), "submit_ws#03");
     }
@@ -899,6 +1143,44 @@ mod tests {
         let args = Args::try_parse_from(["sequencer_ws_submit_pause"]).unwrap();
 
         assert_eq!(args.cycles, None);
+    }
+
+    #[test]
+    fn cli_defaults_to_repo_test_signer_key() {
+        let args = Args::try_parse_from(["sequencer_ws_submit_pause"]).unwrap();
+
+        assert!(args
+            .signer_key_file
+            .ends_with("examples/test-data/keys/tx_signer_private_key.json"));
+        assert_eq!(args.transfer_amount, 1);
+    }
+
+    #[test]
+    fn resolved_token_id_defaults_to_gas_token() {
+        assert_eq!(resolved_token_id(&None), config_gas_token_id());
+    }
+
+    #[test]
+    fn cli_parses_explicit_token_id() {
+        let token_id = config_gas_token_id().to_string();
+        let args = Args::try_parse_from([
+            "sequencer_ws_submit_pause".to_owned(),
+            "--token-id".to_owned(),
+            token_id.clone(),
+        ])
+        .unwrap();
+
+        assert_eq!(args.token_id.unwrap().to_string(), token_id);
+    }
+
+    #[test]
+    fn submit_ws_error_detection_distinguishes_error_and_success_replies() {
+        assert!(submit_ws_text_is_error(
+            r#"{"id":"submit_ws#01-submit-1","contents":{"status":400,"message":"bad tx","details":{}}}"#
+        ));
+        assert!(!submit_ws_text_is_error(
+            r#"{"id":"submit_ws#01-submit-1","contents":{"id":"0x01","status":"submitted"}}"#
+        ));
     }
 
     #[test]
@@ -913,12 +1195,41 @@ mod tests {
             cycles: None,
             cycle_delay_ms: 250,
             tcp_recv_buffer_bytes: Some(256),
-            tx_body_bytes: 128,
+            signer_key_file: default_signer_key_file(),
+            recipient_key_file: None,
+            transfer_amount: 1,
+            token_id: Some(config_gas_token_id()),
         })
         .unwrap_err();
 
         assert!(err
             .to_string()
             .contains("--tcp-recv-buffer-bytes is only supported for ws:// URLs"));
+    }
+
+    #[tokio::test]
+    async fn prepare_harness_fails_fast_when_nonce_fetch_fails() {
+        let args = Args {
+            url: "ws://127.0.0.1:1/sequencer/txs/submit/ws".to_owned(),
+            instances: 1,
+            send_interval_ms: 100,
+            pause_recv_ms: 20_000,
+            drain_recv_ms: 2_000,
+            stats_interval_ms: 5_000,
+            cycles: Some(1),
+            cycle_delay_ms: 250,
+            tcp_recv_buffer_bytes: None,
+            signer_key_file: default_signer_key_file(),
+            recipient_key_file: None,
+            transfer_amount: 1,
+            token_id: None,
+        };
+
+        let err = prepare_harness(&args)
+            .await
+            .err()
+            .expect("nonce fetch should fail before any cycles start");
+
+        assert!(err.to_string().contains("failed to fetch starting nonce"));
     }
 }
