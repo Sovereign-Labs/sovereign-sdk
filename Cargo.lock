@@ -59,12 +59,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "aliasable"
-version = "0.1.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "250f629c0161ad8107cf89319e990051fae62832fd343083bea452d93e2205fd"
-
-[[package]]
 name = "allocator-api2"
 version = "0.2.21"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3695,7 +3689,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-uniqueness",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -5739,17 +5733,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "inherent"
-version = "1.0.12"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6c38228f24186d9cc68c729accb4d413be9eaed6ad07ff79e0270d9e56f3de13"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
 name = "insta"
 version = "1.43.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -5803,7 +5786,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tracing",
 ]
@@ -6853,7 +6836,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
 ]
 
@@ -7408,39 +7391,6 @@ name = "option-ext"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "04744f49eae99ab78e0d5c0b603ab218f515ea8cfe5a456d7629ad883a3b6e7d"
-
-[[package]]
-name = "ordered-float"
-version = "4.6.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7bb71e1b3fa6ca1c61f383464aaf2bb0e2f8e772a1f01d486832464de363b951"
-dependencies = [
- "num-traits",
-]
-
-[[package]]
-name = "ouroboros"
-version = "0.18.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1e0f050db9c44b97a94723127e6be766ac5c340c48f2c4bb3ffa11713744be59"
-dependencies = [
- "aliasable",
- "ouroboros_macro",
- "static_assertions",
-]
-
-[[package]]
-name = "ouroboros_macro"
-version = "0.18.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3c7028bdd3d43083f6d8d4d5187680d0d3560d54df4cc9d752005268b41e64d0"
-dependencies = [
- "heck 0.4.1",
- "proc-macro2",
- "proc-macro2-diagnostics",
- "quote",
- "syn 2.0.117",
-]
 
 [[package]]
 name = "outref"
@@ -8187,19 +8137,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8fd00f0bb2e90d81d1044c2b32617f68fcb9fa3bb7640c23e9c748e53fb30934"
 dependencies = [
  "unicode-ident",
-]
-
-[[package]]
-name = "proc-macro2-diagnostics"
-version = "0.10.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "af066a9c399a26e020ada66a034357a868728e72cd426f3adcd35f80d88d88c8"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.117",
- "version_check",
- "yansi",
 ]
 
 [[package]]
@@ -10098,7 +10035,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
 ]
 
@@ -10116,7 +10053,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
 ]
 
@@ -10252,78 +10189,6 @@ name = "sdd"
 version = "3.0.10"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "490dcfcbfef26be6800d11870ff2df8774fa6e86d047e3e8c8a76b25655e41ca"
-
-[[package]]
-name = "sea-bae"
-version = "0.2.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "f694a6ab48f14bc063cfadff30ab551d3c7e46d8f81836c51989d548f44a2a25"
-dependencies = [
- "heck 0.4.1",
- "proc-macro-error2",
- "proc-macro2",
- "quote",
- "syn 2.0.117",
-]
-
-[[package]]
-name = "sea-orm"
-version = "1.1.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "335d87ec8e5c6eb4b2afb866dc53ed57a5cba314af63ce288db83047aa0fed4d"
-dependencies = [
- "async-stream",
- "async-trait",
- "chrono",
- "futures-util",
- "log",
- "ouroboros",
- "sea-orm-macros",
- "sea-query",
- "sea-query-binder",
- "serde",
- "sqlx",
- "strum 0.26.3",
- "thiserror 2.0.18",
- "tracing",
- "url",
-]
-
-[[package]]
-name = "sea-orm-macros"
-version = "1.1.16"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "68de7a2258410fd5e6ba319a4fe6c4af7811507fc714bbd76534ae6caa60f95f"
-dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "sea-bae",
- "syn 2.0.117",
- "unicode-ident",
-]
-
-[[package]]
-name = "sea-query"
-version = "0.32.7"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8a5d1c518eaf5eda38e5773f902b26ab6d5e9e9e2bb2349ca6c64cf96f80448c"
-dependencies = [
- "chrono",
- "inherent",
- "ordered-float",
-]
-
-[[package]]
-name = "sea-query-binder"
-version = "0.7.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b0019f47430f7995af63deda77e238c17323359af241233ec768aba1faea7608"
-dependencies = [
- "chrono",
- "sea-query",
- "sqlx",
-]
 
 [[package]]
 name = "sec1"
@@ -11348,7 +11213,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
 ]
 
@@ -11442,7 +11307,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tokio",
  "tracing",
@@ -11467,7 +11332,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -11511,7 +11376,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-transaction-generator",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tokio",
  "tracing",
@@ -11565,7 +11430,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tracing",
 ]
@@ -11662,7 +11527,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -11728,7 +11593,7 @@ dependencies = [
  "sov-mock-zkvm",
  "sov-rollup-interface",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "test-log",
  "test-strategy",
@@ -11830,7 +11695,7 @@ dependencies = [
  "sov-test-utils",
  "sov-zkvm-utils",
  "sp1",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "testcontainers",
  "tokio",
@@ -11982,7 +11847,7 @@ dependencies = [
  "sov-stf-runner",
  "sov-test-utils",
  "sov-uniqueness",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "test-strategy",
  "thiserror 2.0.18",
@@ -12040,7 +11905,7 @@ dependencies = [
  "sov-test-utils",
  "sov-uniqueness",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -12136,7 +12001,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "testcontainers",
  "testcontainers-modules",
@@ -12164,7 +12029,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
 ]
 
@@ -12233,7 +12098,7 @@ dependencies = [
  "serde",
  "sov-metrics",
  "sp1-lib",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tokio",
  "tokio-metrics",
  "toml 0.8.23",
@@ -12264,7 +12129,6 @@ dependencies = [
  "rand_chacha 0.3.1",
  "reqwest 0.13.3",
  "schemars 1.2.1",
- "sea-orm",
  "serde",
  "serde_json",
  "sha2 0.10.9",
@@ -12272,6 +12136,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-test-utils",
  "sov-universal-wallet",
+ "sqlx",
  "tempfile",
  "testcontainers",
  "testcontainers-modules",
@@ -12368,7 +12233,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tokio",
  "toml 0.8.23",
@@ -12408,7 +12273,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-universal-wallet-macro-helpers",
- "strum 0.26.3",
+ "strum 0.28.0",
  "syn 2.0.117",
  "tokio",
  "toml 0.8.23",
@@ -12505,7 +12370,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -12531,7 +12396,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tracing",
 ]
@@ -12558,7 +12423,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -12629,7 +12494,7 @@ dependencies = [
  "sov-sequencer-registry",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
 ]
 
@@ -12694,7 +12559,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-uniqueness",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -12819,7 +12684,7 @@ dependencies = [
  "sov-uniqueness",
  "sov-value-setter",
  "sqlx",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "test-strategy",
  "thiserror 2.0.18",
@@ -12851,7 +12716,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -12896,7 +12761,7 @@ dependencies = [
  "sov-transaction-generator",
  "sov-value-setter",
  "sp1",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tokio",
 ]
 
@@ -12958,7 +12823,7 @@ dependencies = [
  "sov-stf-runner",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "tokio",
  "tokio-stream",
@@ -13066,7 +12931,7 @@ dependencies = [
  "sov-sequencer",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tokio",
@@ -13092,7 +12957,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -13114,7 +12979,7 @@ dependencies = [
  "sov-test-modules",
  "sov-test-utils",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
  "tracing",
@@ -13132,7 +12997,7 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -13184,7 +13049,7 @@ dependencies = [
  "sov-uniqueness",
  "sov-universal-wallet",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "testcontainers",
  "testcontainers-modules",
@@ -13210,7 +13075,7 @@ dependencies = [
  "sov-test-utils",
  "sov-timelock",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
 ]
 
@@ -13249,7 +13114,7 @@ dependencies = [
  "sov-test-state-consistency",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -13278,7 +13143,7 @@ dependencies = [
  "sov-test-utils",
  "sov-uniqueness",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
 ]
 
@@ -13345,7 +13210,7 @@ dependencies = [
  "sov-state",
  "sov-test-utils",
  "sov-value-setter",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tempfile",
  "thiserror 2.0.18",
 ]
@@ -14278,15 +14143,6 @@ dependencies = [
 
 [[package]]
 name = "strum"
-version = "0.26.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
-dependencies = [
- "strum_macros 0.26.4",
-]
-
-[[package]]
-name = "strum"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
@@ -14295,16 +14151,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "strum_macros"
-version = "0.26.4"
+name = "strum"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
 dependencies = [
- "heck 0.5.0",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 2.0.117",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -14312,6 +14164,18 @@ name = "strum_macros"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
+dependencies = [
+ "heck 0.5.0",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
 dependencies = [
  "heck 0.5.0",
  "proc-macro2",
@@ -16850,12 +16714,6 @@ dependencies = [
  "encoding_rs",
  "hashlink",
 ]
-
-[[package]]
-name = "yansi"
-version = "1.0.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cfe53a6657fd280eaa890a3bc59152892ffa3e30101319d168b781ed6529b049"
 
 [[package]]
 name = "yoke"
