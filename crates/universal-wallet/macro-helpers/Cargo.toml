@@ -10,11 +10,9 @@ repository = { workspace = true }
 
 [dependencies]
 syn = { features = ["parsing", "derive"], workspace = true }
-syn_derive = "0.2.0"
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 darling = { workspace = true }
-hex = { workspace = true }
 borsh = { workspace = true }
 bs58 = { workspace = true }
 bech32 = { workspace = true }

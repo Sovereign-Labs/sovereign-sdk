@@ -9,6 +9,9 @@ license = { workspace = true }
 repository = { workspace = true }
 publish = true
 
+[package.metadata.cargo-machete]
+ignored = ["proptest"]
+
 [dependencies]
 anyhow = { workspace = true }
 client-ip = "0.1.1"

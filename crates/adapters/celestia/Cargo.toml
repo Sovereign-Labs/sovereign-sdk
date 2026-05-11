@@ -44,7 +44,6 @@ serde_json = { workspace = true, features = ["alloc"] }
 
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["sync"] }
-tower = { workspace = true, optional = true }
 tracing = { workspace = true }
 # Used by the checker.
 rand = { workspace = true, optional = true }
@@ -72,7 +71,7 @@ risc0-zkvm-platform = { workspace = true }
 bincode = { workspace = true }
 rand = { workspace = true, features = ["small_rng"] }
 testcontainers = { workspace = true }
-uuid = { workspace = true, features = ["v4"] }
+uuid = { workspace = true, features = ["v4", "arbitrary"] }
 
 [features]
 default = []
@@ -86,7 +85,6 @@ native = [
     "sov-rollup-interface/native",
     "dep:sov-metrics",
     "sov-metrics/native",
-    "dep:tower",
     "sov-modules-macros?/native",
     "dep:rand",
 ]

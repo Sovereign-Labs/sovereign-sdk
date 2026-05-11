@@ -19,7 +19,6 @@ alloy-rpc-types  = { workspace = true }
 alloy-provider = { workspace = true }
 alloy-pubsub = { workspace = true }
 alloy-signer = { workspace = true }
-reqwest = { workspace = true }
 async-trait = { workspace = true }
 derive_more = { workspace = true }
 futures = { workspace = true }

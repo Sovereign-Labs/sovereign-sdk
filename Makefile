@@ -94,7 +94,7 @@ install-dev-tools: install-cargo-tools install-risc0-toolchain install-sp1-toolc
 	cp .vscode/settings.default.json .vscode/settings.json
 	cargo install cargo-llvm-cov
 	cargo install cargo-hack
-	cargo install cargo-udeps
+	cargo install cargo-machete
 	cargo install cargo-deny
 	cargo install flaky-finder
 	cargo install cargo-insta
@@ -106,7 +106,7 @@ install-dev-tools: install-cargo-tools install-risc0-toolchain install-sp1-toolc
 install-cargo-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-llvm-cov
 	cargo install cargo-hack
-	cargo install cargo-udeps
+	cargo install cargo-machete
 	cargo install cargo-deny
 	cargo install flaky-finder
 	cargo install cargo-insta

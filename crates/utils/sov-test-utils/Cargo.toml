@@ -22,6 +22,7 @@ borsh = { workspace = true }
 derivative = { workspace = true }
 derive_more = { workspace = true }
 jsonschema = { workspace = true }
+strum = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 serde = { workspace = true }
 schemars = { workspace = true }
@@ -33,7 +34,6 @@ num_cpus = { workspace = true }
 tokio-stream = { workspace = true }
 
 sha2 = { workspace = true }
-sov-address = { workspace = true }
 sov-cli = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-rollup-full-node-interface = { workspace = true }
@@ -64,7 +64,6 @@ sov-db = { workspace = true, features = ["test-utils"] }
 sov-state = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
-strum = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 rockbound = { workspace = true }
@@ -79,10 +78,12 @@ arbitrary = [
 	"sov-sequencer-registry/arbitrary",
 	"sov-state/arbitrary",
 	"rockbound/arbitrary",
-	"sov-address/arbitrary",
 	"sov-accounts/arbitrary",
 	"sov-uniqueness/arbitrary",
 	"sov-mock-da/arbitrary",
 	"sov-bank/arbitrary",
 	"sov-paymaster/arbitrary",
 ]
+
+[package.metadata.cargo-machete]
+ignored = ["strum"]

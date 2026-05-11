@@ -607,7 +607,6 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 dependencies = [
- "borsh",
  "serde",
 ]
 
@@ -1592,13 +1591,11 @@ dependencies = [
  "anyhow",
  "borsh",
  "demo-stf-declaration",
- "schemars 1.2.0",
  "serde",
  "sov-accounts",
  "sov-address",
  "sov-attester-incentives",
  "sov-bank",
- "sov-blob-storage",
  "sov-build",
  "sov-capabilities",
  "sov-chain-state",
@@ -1612,14 +1609,12 @@ dependencies = [
  "sov-operator-incentives",
  "sov-paymaster",
  "sov-prover-incentives",
- "sov-revenue-share",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-solana-offchain-auth",
  "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
- "sov-uniqueness",
  "tracing",
 ]
 
@@ -1636,20 +1631,16 @@ dependencies = [
  "sov-attester-incentives",
  "sov-bank",
  "sov-blob-storage",
- "sov-capabilities",
  "sov-chain-state",
  "sov-evm",
  "sov-hyperlane-integration",
- "sov-kernels",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-operator-incentives",
  "sov-paymaster",
  "sov-prover-incentives",
  "sov-revenue-share",
- "sov-rollup-interface",
  "sov-sequencer-registry",
- "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
  "sov-uniqueness",
@@ -5831,7 +5822,6 @@ dependencies = [
  "derivative",
  "schemars 1.2.0",
  "serde",
- "sov-address",
  "sov-bank",
  "sov-chain-state",
  "sov-modules-api",
@@ -5867,7 +5857,6 @@ dependencies = [
  "borsh",
  "derive_more 2.1.1",
  "hex",
- "schemars 1.2.0",
  "serde",
  "sov-bank",
  "sov-chain-state",
@@ -5884,7 +5873,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "serde",
  "serde_json",
  "sov-modules-api",
 ]
@@ -5933,7 +5921,6 @@ dependencies = [
  "hex",
  "serde",
  "serde_with",
- "sov-rollup-interface",
  "sov-universal-wallet",
 ]
 
@@ -5941,14 +5928,10 @@ dependencies = [
 name = "sov-demo-prover-guest-mock-sp1"
 version = "0.3.0"
 dependencies = [
- "anyhow",
  "demo-stf",
  "sha2 0.10.9",
- "sov-address",
- "sov-kernels",
  "sov-metrics",
  "sov-mock-da",
- "sov-mock-zkvm",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-sp1-adapter",
@@ -6062,7 +6045,6 @@ dependencies = [
  "anyhow",
  "bincode",
  "borsh",
- "digest 0.10.7",
  "ed25519-dalek",
  "hex",
  "schemars 1.2.0",
@@ -6130,7 +6112,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "hex",
- "schemars 1.2.0",
  "serde",
  "sov-metrics",
  "sov-modules-api",
@@ -6146,15 +6127,10 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derive_more 2.1.1",
  "schemars 1.2.0",
  "serde",
  "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
  "strum 0.28.0",
- "thiserror 2.0.18",
- "tracing",
 ]
 
 [[package]]
@@ -6162,7 +6138,6 @@ name = "sov-paymaster"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "bcs",
  "borsh",
  "derivative",
  "derive_more 2.1.1",
@@ -6171,7 +6146,6 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-state",
- "sov-universal-wallet",
  "tracing",
 ]
 
@@ -6249,7 +6223,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "hex",
- "schemars 1.2.0",
  "serde",
  "serde_json",
  "serde_with",
@@ -6271,6 +6244,7 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "slop-algebra",
+ "sov-metrics",
  "sov-rollup-interface",
  "sov-universal-wallet",
  "sov-zkvm-utils",
@@ -6296,7 +6270,6 @@ dependencies = [
  "nomt-core",
  "serde",
  "serde-big-array",
- "serde_with",
  "sov-db-types",
  "sov-metrics",
  "sov-modules-macros",
@@ -6316,8 +6289,6 @@ dependencies = [
  "serde",
  "sov-metrics",
  "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
  "strum 0.28.0",
 ]
 
@@ -6335,7 +6306,6 @@ dependencies = [
  "sov-modules-api",
  "sov-state",
  "strum 0.28.0",
- "thiserror 2.0.18",
  "tracing",
 ]
 
@@ -6345,8 +6315,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "schemars 1.2.0",
- "serde",
  "sov-modules-api",
  "sov-state",
 ]
@@ -6379,19 +6347,16 @@ dependencies = [
  "borsh",
  "bs58",
  "darling 0.21.3",
- "hex",
  "proc-macro2",
  "quote",
  "serde_derive_internals",
  "syn 2.0.114",
- "syn_derive",
 ]
 
 [[package]]
 name = "sov-universal-wallet-macros"
 version = "0.3.0"
 dependencies = [
- "proc-macro2",
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.114",
 ]
@@ -7131,18 +7096,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "syn_derive"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdb066a04799e45f5d582e8fc6ec8e6d6896040d00898eb4e6a835196815b219"
-dependencies = [
- "proc-macro-error2",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
 ]
 
 [[package]]
