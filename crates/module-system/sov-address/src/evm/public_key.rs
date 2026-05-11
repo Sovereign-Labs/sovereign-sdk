@@ -72,11 +72,23 @@ mod serde_array {
 }
 
 /// The public key of a secp256k1 keypair.
-#[derive(PartialEq, Eq, Clone, Debug, JsonSchema, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Clone, Debug, PartialOrd, Ord)]
 pub struct EthereumPublicKey {
-    #[schemars(flatten, with = "String", length(equal = "PUBLIC_KEY_SIZE * 2"))]
     pub(crate) pub_key: k256::PublicKey,
     pub(crate) key_bytes: Vec<u8>,
+}
+
+impl JsonSchema for EthereumPublicKey {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "EthereumPublicKey".into()
+    }
+
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
+            "type": "string",
+            "pattern": format!("^[a-fA-F0-9]{{{}}}$", PUBLIC_KEY_SIZE * 2),
+        })
+    }
 }
 
 impl TryFrom<Vec<u8>> for EthereumPublicKey {

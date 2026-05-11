@@ -5,9 +5,11 @@ mod prover_service;
 mod stf_info_manager;
 mod zk_manager;
 use std::num::NonZero;
+use std::sync::Arc;
 
 use op_manager::attestations::AttestationsManager;
 pub use prover_service::*;
+use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::optimistic::BondingProofService;
 use sov_rollup_interface::stf::ProofSender;
@@ -24,10 +26,11 @@ pub async fn start_zk_workflow_in_background<Ps>(
     eager_proof_submission: bool,
     max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
     proof_sender: Box<dyn ProofSender>,
-    genesis_state_root: Ps::StateRoot,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
+    da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
     shutdown_sender: tokio::sync::watch::Sender<()>,
+    start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<JoinHandle<()>>
 where
     Ps: ProverService,
@@ -39,10 +42,11 @@ where
         eager_proof_submission,
         max_number_of_aggregated_proofs_in_memory,
         proof_sender,
-        genesis_state_root,
         stf_info_receiver,
+        da_sync_state,
         shutdown_receiver,
         shutdown_sender,
+        start_fresh_outer_proof_on_resync,
     )
     .post_aggregated_proof_to_da_in_background()
     .await)

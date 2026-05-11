@@ -13,10 +13,11 @@ pub use genesis::*;
 use sov_bank::Amount;
 use sov_modules_api::runtime::OperatingMode;
 use sov_modules_api::{
-    Context, DaSpec, Gas, GenesisState, GetGasPrice, ModuleId, ModuleInfo, ModuleRestApi, Spec,
-    StateMap, StateReader, StateValue, TxState,
+    AggregatedProofPublicData, Context, DaSpec, Gas, GenesisState, GetGasPrice, ModuleId,
+    ModuleInfo, ModuleRestApi, Spec, StateMap, StateReader, StateValue, TxState,
 };
 use sov_rollup_interface::common::SlotNumber;
+use sov_state::Storage;
 use sov_state::User;
 
 pub use crate::event::Event;
@@ -61,6 +62,12 @@ pub struct ProverIncentives<S: Spec> {
     /// Reference to the Chain state module. Used to check the proof inputs
     #[module]
     pub(crate) chain_state: sov_chain_state::ChainState<S>,
+
+    /// Public data from the most recently verified aggregated proof.
+    #[state]
+    #[allow(clippy::type_complexity)]
+    pub latest_proof_succesfully_verified:
+        StateValue<AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>>,
 }
 
 impl<S: Spec> sov_modules_api::Module for ProverIncentives<S> {

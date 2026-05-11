@@ -176,7 +176,6 @@ where
         &self,
         outer_vm: OuterVm,
         block_headers: &[<Da::Spec as DaSpec>::BlockHeader],
-        genesis_state_root: &StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
         assert!(!block_headers.is_empty());
 
@@ -205,13 +204,10 @@ where
             headers_with_block_proofs
         };
 
-        let genesis_state_root = genesis_state_root.clone();
-
         let (tx, rx) = oneshot::channel();
         self.pool.spawn(move || {
             let proving_start = std::time::Instant::now();
-            let result =
-                outer_vm.run_proof_aggregation(genesis_state_root, headers_with_block_proofs);
+            let result = outer_vm.run_proof_aggregation(headers_with_block_proofs);
 
             sov_metrics::track_metrics(|tracker| {
                 let proving_time = proving_start.elapsed();

@@ -12,6 +12,21 @@ use sov_modules_api::macros::config_value;
 mod aggregated_proof;
 pub use aggregated_proof::read_latest_aggregated_proof;
 
+/// Returns `previous` unless a fresh outer-proof chain is requested via
+/// `start_fresh_outer_proof_on_resync`, in which case it returns `None`.
+/// Used by `create_prover_service` impls to drop the persisted outer-proof
+/// anchor when the rollup is configured to skip the resync window.
+pub fn previous_outer_anchor<T>(
+    previous: Option<T>,
+    start_fresh_outer_proof_on_resync: bool,
+) -> Option<T> {
+    if start_fresh_outer_proof_on_resync {
+        None
+    } else {
+        previous
+    }
+}
+
 mod mock_rollup;
 
 pub use mock_rollup::*;
