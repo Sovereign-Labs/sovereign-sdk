@@ -10,9 +10,17 @@ resolver = "2"
 [dependencies]
 sp1-zkvm = { version = "6.1.0" }
 sha2 = { version = "0.10", default-features = false }
+sov-modules-api = { path = "../../../module-system/sov-modules-api", default-features = false }
+sov-rollup-interface = { path = "../../../rollup-interface", default-features = false }
+sov-mock-da = { path = "../../../adapters/mock-da", default-features = false }
+sov-mock-zkvm = { path = "../../../adapters/mock-zkvm", default-features = false }
 
 [patch.crates-io]
 sha2-v0-10-9 = { git = "https://github.com/sp1-patches/RustCrypto-hashes", package = "sha2", tag = "patch-sha2-0.10.9-sp1-6.0.0" }
+curve25519-dalek = { git = "https://github.com/sp1-patches/curve25519-dalek", tag = "patch-4.1.3-sp1-6.0.0" }
+curve25519-dalek-ng = { git = "https://github.com/sp1-patches/curve25519-dalek-ng", tag = "patch-4.1.1-sp1-6.0.0" }
+ed25519-consensus = { git = "https://github.com/sp1-patches/ed25519-consensus", rev = "78f83b21767077f602f30148e513a52e844abbb6" }
+tiny-keccak = { git = "https://github.com/sp1-patches/tiny-keccak", tag = "patch-2.0.2-sp1-6.0.0" }
 
 [profile.release]
 debug = 1

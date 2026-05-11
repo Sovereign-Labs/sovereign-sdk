@@ -12,6 +12,17 @@ keccak256 with 5.6M cycles can prove faster than ECDSA recovery at 4.4M cycles
 because of differing precompile shard shapes. Prover gas is whole-execution-
 only, so each microbench's program does one operation many times in isolation.
 
+## What's being measured
+
+Each guest mirrors the production charging call site rather than the raw primitive.
+For SHA-256 the guest invokes `MeteredHasher::<UnlimitedGasMeter<S>, S::CryptoSpec::Hasher>::digest`
+— same code path as `calculate_hash_metered` in
+`crates/module-system/sov-modules-api/src/runtime/capabilities/authentication.rs`. The
+results therefore calibrate the constants that the SDK actually consults
+(`GAS_TO_CHARGE_HASH_UPDATE`, `GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE`), and apply only to
+API-level hashing — JMT internal-node hashing uses the raw `S::Hasher` and is not
+governed by these constants.
+
 ## Run
 
 ```sh

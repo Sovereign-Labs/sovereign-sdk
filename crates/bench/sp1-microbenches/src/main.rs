@@ -98,7 +98,7 @@ fn run_sha256(out_path: Option<PathBuf>, iterations: u32) -> anyhow::Result<()> 
     let host = host_machine_descriptor();
 
     let ctx = ReportContext {
-        algorithm: "SHA-256 (sp1-patches precompile)",
+        algorithm: "SHA-256 via MeteredHasher + UnlimitedGasMeter (S::CryptoSpec::Hasher = sha2::Sha256, sp1-patches precompile)",
         sp1_version: SP1_SDK_VERSION,
         git_commit: &git_commit,
         host_machine: &host,
