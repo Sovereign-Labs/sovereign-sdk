@@ -23,6 +23,8 @@ per-row cycle counts in the report as an eyeball sanity check (you can see at
 a glance whether the precompile is active by the cycles/byte rate), but the
 fitted constants come from prover gas.
 
+[SP1 docs on prover gas.](https://docs.succinct.xyz/docs/sp1/optimizing-programs/prover-gas)
+
 ## What's being measured
 
 Each guest mirrors the production charging call site rather than the raw
@@ -32,10 +34,6 @@ code path as `calculate_hash_metered` in
 `crates/module-system/sov-modules-api/src/runtime/capabilities/authentication.rs`.
 Results therefore calibrate the constants the SDK actually consults
 (`GAS_TO_CHARGE_HASH_UPDATE`, `GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE`).
-
-These constants apply only to API-level hashing — JMT internal-node hashing
-uses the raw `S::Hasher` and is not governed by them; its cost is absorbed by
-the storage-access gas constants instead.
 
 ## Run
 
