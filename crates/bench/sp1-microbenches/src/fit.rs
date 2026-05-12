@@ -1,4 +1,10 @@
 //! Ordinary least squares fit of the cost model `cost = bias + per_byte * input_size`.
+//!
+//! Host-only post-processing of benchmark results — never compiled into the zkVM guest, so
+//! the workspace `clippy::float_arithmetic` deny (which exists to prevent native/zkVM
+//! divergence) doesn't apply here.
+
+#![allow(clippy::float_arithmetic)]
 
 use crate::BenchResult;
 
@@ -82,7 +88,6 @@ fn fit_linear(inputs: &[f64], measurements: &[f64]) -> anyhow::Result<LinearFit>
 }
 
 #[cfg(test)]
-#[allow(clippy::float_arithmetic)]
 mod tests {
     use super::*;
 

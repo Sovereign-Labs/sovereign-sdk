@@ -1,3 +1,7 @@
+// Host-only benchmark harness; the workspace `clippy::float_arithmetic` deny exists to prevent
+// native/zkVM divergence, which doesn't apply here.
+#![allow(clippy::float_arithmetic)]
+
 pub mod cmd;
 pub mod fit;
 
