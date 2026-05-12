@@ -34,7 +34,7 @@ const sampleUnsignedTx = {
       },
     },
   },
-  generation: "12345",
+  uniqueness: { generation: "12345" },
   details: {
     max_priority_fee_bips: "1000",
     max_fee: "10000",
@@ -50,7 +50,7 @@ const sampleUnsignedTx = {
 function createTestMessage(): Uint8Array {
   const unsignedTxBorsh = schema.jsonToBorsh(
     schema.knownTypeIndex(KnownTypeId.UnsignedTransaction),
-    JSON.stringify(sampleUnsignedTx),
+    JSON.stringify({ V0: sampleUnsignedTx }),
   );
   return new Uint8Array([...unsignedTxBorsh, ...schema.chainHash]);
 }

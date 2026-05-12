@@ -15,9 +15,128 @@
         }
       },
       "additionalProperties": false
+    },
+    {
+      "description": "Authorizes `credential` to sign transactions that execute as `address`. The caller must currently be signing as `address`. Fails if the tuple is already authorized.",
+      "type": "object",
+      "required": [
+        "add_credential_to_address"
+      ],
+      "properties": {
+        "add_credential_to_address": {
+          "type": "object",
+          "required": [
+            "address",
+            "credential"
+          ],
+          "properties": {
+            "address": {
+              "description": "The address whose credential set is being extended. Must equal `context.sender()`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Address"
+                }
+              ]
+            },
+            "credential": {
+              "description": "The credential being authorized for `address`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CredentialId"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Revokes `credential` from `address`. The caller must currently be signing as `address`. No orphan guard: revoking the last credential succeeds and leaves `address` unspendable via this map.",
+      "type": "object",
+      "required": [
+        "remove_credential_from_address"
+      ],
+      "properties": {
+        "remove_credential_from_address": {
+          "type": "object",
+          "required": [
+            "address",
+            "credential"
+          ],
+          "properties": {
+            "address": {
+              "description": "The address whose credential set is being reduced. Must equal `context.sender()`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Address"
+                }
+              ]
+            },
+            "credential": {
+              "description": "The credential being revoked from `address`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CredentialId"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
+    },
+    {
+      "description": "Atomically swaps `old_credential` for `new_credential` on `address`. Functionally equivalent to a `RemoveCredentialFromAddress` followed by an `AddCredentialToAddress`, collapsed into a single call so the caller does not have to authorize two transactions during a rotation. The caller must currently be signing as `address`.",
+      "type": "object",
+      "required": [
+        "rotate_credential_on_address"
+      ],
+      "properties": {
+        "rotate_credential_on_address": {
+          "type": "object",
+          "required": [
+            "address",
+            "new_credential",
+            "old_credential"
+          ],
+          "properties": {
+            "address": {
+              "description": "The address whose credential set is being rotated. Must equal `context.sender()`.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/Address"
+                }
+              ]
+            },
+            "new_credential": {
+              "description": "The credential being authorized for `address`. Must not already be authorized.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CredentialId"
+                }
+              ]
+            },
+            "old_credential": {
+              "description": "The credential being revoked from `address`. Must be currently authorized.",
+              "allOf": [
+                {
+                  "$ref": "#/definitions/CredentialId"
+                }
+              ]
+            }
+          }
+        }
+      },
+      "additionalProperties": false
     }
   ],
   "definitions": {
+    "Address": {
+      "description": "Address",
+      "type": "string",
+      "pattern": "^sov1[a-zA-Z0-9]+$"
+    },
     "CredentialId": {
       "description": "32 bytes in hexadecimal format, with `0x` prefix.",
       "type": "string",
