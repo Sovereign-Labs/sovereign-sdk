@@ -61,6 +61,40 @@ pub enum Event<S: Spec> {
         /// The credential authorized to control the new address.
         credential: CredentialId,
     },
+    /// Emitted by [`CallMessage::InsertCredentialId`] when the caller
+    /// authorizes a new credential for their own address.
+    CredentialInserted {
+        /// The address whose credential set was extended.
+        address: S::Address,
+        /// The newly authorized credential.
+        credential: CredentialId,
+    },
+    /// Emitted by [`CallMessage::AddCredentialToAddress`] when a credential
+    /// is authorized for an explicit address (which must be the caller).
+    CredentialAdded {
+        /// The address whose credential set was extended.
+        address: S::Address,
+        /// The newly authorized credential.
+        credential: CredentialId,
+    },
+    /// Emitted by [`CallMessage::RemoveCredentialFromAddress`] when a
+    /// credential is revoked from an address.
+    CredentialRemoved {
+        /// The address whose credential set was reduced.
+        address: S::Address,
+        /// The revoked credential.
+        credential: CredentialId,
+    },
+    /// Emitted by [`CallMessage::RotateCredentialOnAddress`] when a
+    /// credential is atomically swapped for another on an address.
+    CredentialRotated {
+        /// The address whose credential set was rotated.
+        address: S::Address,
+        /// The revoked credential.
+        old_credential: CredentialId,
+        /// The newly authorized credential.
+        new_credential: CredentialId,
+    },
 }
 
 /// Composite key for [`Accounts::account_owners`].
