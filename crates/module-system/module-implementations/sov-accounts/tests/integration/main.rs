@@ -1588,6 +1588,60 @@ fn test_remove_last_credential_orphans_address() {
     });
 }
 
+/// Regression test: `is_explicitly_authorized` must return `false` once
+/// `revoke_credential` has written `Some(false)`. An earlier version used
+/// `.is_some()`, which collapsed `Some(false)` and `Some(true)` into `true`
+/// and silently neutered revocation for the `address_override` path.
+#[test]
+fn test_is_explicitly_authorized_honors_revoked_false() {
+    let MultisigEnv {
+        keys,
+        multisig,
+        credential_id: multisig_credential_id,
+        user: multisig_user,
+    } = make_multisig_env();
+    let alice = TestUser::<S>::generate_with_default_balance();
+    let alice_address = alice.address();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user, alice]);
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    // Seed `(alice_address, multisig_credential_id) = true` so the
+    // post-revoke entry is `Some(false)`, not `None`.
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: multisig_credential_id,
+        address: alice_address,
+    });
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let mut revoke_tx = make_v1_tx_with_call(
+        &multisig,
+        CallMessage::RemoveCredentialFromAddress {
+            address: alice_address,
+            credential: multisig_credential_id,
+        },
+        Some(alice_address),
+        0,
+    );
+    sign_v1(&mut revoke_tx, &keys[0]);
+    sign_v1(&mut revoke_tx, &keys[1]);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(revoke_tx),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(
+                !accounts
+                    .is_explicitly_authorized(&alice_address, &multisig_credential_id, state)
+                    .unwrap(),
+                "is_explicitly_authorized must honor a stored Some(false) and report not-authorized"
+            );
+        }),
+    });
+}
+
 /// End-to-end multisig rotation M1 → M2 while preserving the original
 /// address. Exercises `AddCredentialToAddress` + `RemoveCredentialFromAddress`
 /// via V1 + `target_address`.
