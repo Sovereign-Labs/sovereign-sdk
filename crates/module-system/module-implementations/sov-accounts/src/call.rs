@@ -101,6 +101,13 @@ impl<S: Spec> Accounts<S> {
         self.ensure_credential_not_authorized(context.sender(), &new_credential_id, state)?;
 
         self.authorize_credential(context.sender(), &new_credential_id, state)?;
+        self.emit_event(
+            state,
+            Event::CredentialInserted {
+                address: *context.sender(),
+                credential: new_credential_id,
+            },
+        );
         Ok(())
     }
 
@@ -116,6 +123,13 @@ impl<S: Spec> Accounts<S> {
         self.ensure_credential_not_authorized(&address, &credential, state)?;
 
         self.authorize_credential(&address, &credential, state)?;
+        self.emit_event(
+            state,
+            Event::CredentialAdded {
+                address,
+                credential,
+            },
+        );
         Ok(())
     }
 
@@ -136,6 +150,13 @@ impl<S: Spec> Accounts<S> {
         );
 
         self.revoke_credential(&address, &credential, state)?;
+        self.emit_event(
+            state,
+            Event::CredentialRemoved {
+                address,
+                credential,
+            },
+        );
         Ok(())
     }
 
@@ -159,6 +180,14 @@ impl<S: Spec> Accounts<S> {
 
         self.revoke_credential(&address, &old_credential, state)?;
         self.authorize_credential(&address, &new_credential, state)?;
+        self.emit_event(
+            state,
+            Event::CredentialRotated {
+                address,
+                old_credential,
+                new_credential,
+            },
+        );
         Ok(())
     }
 
