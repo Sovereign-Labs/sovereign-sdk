@@ -28,10 +28,6 @@ struct Args {
     /// Compute the post-migration state root but do not commit changes.
     #[arg(long, default_value_t = false)]
     dry_run: bool,
-
-    /// Optional path to write the JSON migration report.
-    #[arg(long)]
-    report_out: Option<PathBuf>,
 }
 
 type RollupSpec = <MockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
@@ -48,16 +44,14 @@ fn run() -> anyhow::Result<()> {
     let args = Args::parse();
     let mut runtime = Runtime::<RollupSpec>::default();
     let runtime_inner = &mut *runtime;
-    let json = sov_migrations::v1::run_and_write_report::<RollupSpec, Hasher, StorableMockDaService>(
+    sov_migrations::v1::run::<RollupSpec, Hasher, StorableMockDaService>(
         sov_migrations::MigrationArgs {
             rollup_config_path: args.rollup_config_path,
             db_path: args.db_path,
             dry_run: args.dry_run,
-            report_out: args.report_out,
         },
         &mut runtime_inner.accounts,
         &mut runtime_inner.chain_state,
     )?;
-    println!("{json}");
     Ok(())
 }

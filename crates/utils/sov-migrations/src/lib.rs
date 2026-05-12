@@ -1,6 +1,5 @@
 //! Reusable offline state migrations for Sovereign SDK rollups.
 
-use std::fs;
 use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
@@ -20,6 +19,8 @@ use sov_rollup_interface::node::da::DaService;
 use sov_state::NativeStorage;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 
+pub mod v1;
+
 /// CLI-shaped inputs for running a migration against a rollup database.
 #[derive(Debug, Clone)]
 pub struct MigrationArgs {
@@ -29,8 +30,6 @@ pub struct MigrationArgs {
     pub db_path: Option<PathBuf>,
     /// Compute the post-migration state root but do not commit changes.
     pub dry_run: bool,
-    /// Optional path to write the JSON migration report.
-    pub report_out: Option<PathBuf>,
 }
 
 /// NOMT storage operations needed to rewrite an existing head version.
@@ -87,8 +86,6 @@ impl<S: Spec> KernelTrait<S> for MigrationKernel<'_, S> {
     }
 }
 
-pub mod v1;
-
 /// Inputs for a migration that rewrites the current head state.
 pub struct MigrationOptions {
     /// Database configuration for the rollup state to migrate.
@@ -137,22 +134,6 @@ where
         storage.path = db_path_override.to_path_buf();
     }
     Ok(storage)
-}
-
-/// Serializes a migration report and optionally writes it to a file.
-pub fn write_report<Report: Serialize>(
-    report: &MigrationOutcome<Report>,
-    report_out: Option<&Path>,
-) -> anyhow::Result<String> {
-    let json = serde_json::to_string_pretty(report)
-        .context("failed to serialize migration report JSON")?;
-
-    if let Some(path) = report_out {
-        fs::write(path, &json)
-            .with_context(|| format!("failed to write migration report to {}", path.display()))?;
-    }
-
-    Ok(json)
 }
 
 fn assert_storage_latest_version_matches_ledger_head<S: NativeStorage>(

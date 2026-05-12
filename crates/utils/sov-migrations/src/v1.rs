@@ -99,12 +99,12 @@ where
     })
 }
 
-/// Runs the v1 migration and returns the migration report.
+/// Runs the v1 migration and writes the JSON report to stdout.
 pub fn run<S, H, Da>(
     args: crate::MigrationArgs,
     accounts: &mut Accounts<S>,
     chain_state: &mut ChainState<S>,
-) -> anyhow::Result<crate::MigrationOutcome<MigrationReport>>
+) -> anyhow::Result<()>
 where
     S: Spec,
     H: sov_rollup_interface::reexports::digest::Digest<
@@ -120,38 +120,18 @@ where
 {
     let storage =
         crate::load_storage_config::<S, Da>(&args.rollup_config_path, args.db_path.as_deref())?;
-    run_with_options::<S, H>(
+    let report = run_with_options::<S, H>(
         crate::MigrationOptions {
             storage,
             dry_run: args.dry_run,
         },
         accounts,
         chain_state,
-    )
-}
-
-/// Runs the v1 migration, writes the report if requested, and returns the JSON report.
-pub fn run_and_write_report<S, H, Da>(
-    args: crate::MigrationArgs,
-    accounts: &mut Accounts<S>,
-    chain_state: &mut ChainState<S>,
-) -> anyhow::Result<String>
-where
-    S: Spec,
-    H: sov_rollup_interface::reexports::digest::Digest<
-            OutputSize = sov_rollup_interface::reexports::digest::typenum::U32,
-        > + Send
-        + Sync,
-    Da: sov_rollup_interface::node::da::DaService<Spec = S::Da>,
-    sov_stf_runner::RollupConfig<S::Address, Da>: serde::de::DeserializeOwned,
-    S::Storage: sov_db::storage_manager::InitializableNativeNomtStorage<
-            H,
-            <S::Da as sov_rollup_interface::da::DaSpec>::SlotHash,
-        > + crate::MigrationStorage,
-{
-    let report_out = args.report_out.clone();
-    let report = run::<S, H, Da>(args, accounts, chain_state)?;
-    crate::write_report(&report, report_out.as_deref())
+    )?;
+    let json = serde_json::to_string_pretty(&report)
+        .context("failed to serialize migration report JSON")?;
+    println!("{json}");
+    Ok(())
 }
 
 /// Runs the v1 migration with an already-loaded storage config.
