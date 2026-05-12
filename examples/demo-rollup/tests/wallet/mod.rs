@@ -151,6 +151,9 @@ fn test_display_signed_tx() {
 #[ignore = "Ignored for rapid schema iteration, re-enable when CI timebomb goes off"]
 #[test]
 fn detect_schema_has_breaking_change() {
-    let current_hash = [0u8; 32];
+    let current_hash: [u8; 32] = [
+        9, 37, 157, 243, 186, 163, 249, 113, 29, 16, 119, 226, 250, 179, 97, 226, 106, 173, 123,
+        221, 51, 42, 85, 86, 217, 24, 175, 255, 219, 25, 50, 72,
+    ];
     assert_eq!(CHAIN_HASH, current_hash, "The chain hash changed. Update the \"current_hash\" value in this test but be aware: this is a breaking change for any production rollups.");
 }
