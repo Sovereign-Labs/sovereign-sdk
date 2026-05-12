@@ -2,7 +2,6 @@ use anyhow::Result;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::da::{BlockHeaderTrait, Time};
-use sov_modules_api::macros::config_value;
 use sov_modules_api::{
     CodeCommitmentFor, DaSpec, Gas, GasSpec, GenesisState, Module, OperatingMode, Spec,
 };
@@ -43,7 +42,7 @@ pub struct ChainStateConfig<S: Spec> {
 }
 
 fn default_state_version() -> u64 {
-    config_value!("STATE_VERSION")
+    0
 }
 
 impl<S: Spec> ChainState<S> {
