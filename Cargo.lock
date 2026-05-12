@@ -13402,6 +13402,8 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
+ "ed25519-consensus",
+ "rand 0.8.5",
  "serde",
  "sov-zkvm-utils",
  "sp1-build",
