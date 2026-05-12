@@ -107,6 +107,7 @@ RUN . /home/runner/.cargo/env \
     && cargo install cargo-llvm-cov@0.6.18 --locked \
     && cargo install cargo-deny@0.18.3 --locked \
     && cargo install cargo-insta@1.43.1 --locked \
+    && cargo install cargo-machete@0.9.2 --locked \
     && cargo install zepter@1.78.2 --locked \
     && cargo install bashtestmd@0.5.0 --locked \
     && rm -rf /home/runner/.cargo/registry /home/runner/.cargo/git /tmp/cargo-*
