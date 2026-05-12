@@ -101,14 +101,6 @@ fn test_metered_signature() {
                 .unwrap(),
         )
         .unwrap()
-        .checked_combine(S::gas_to_charge_hash_update())
-        .unwrap()
-        .checked_combine(
-            S::gas_to_charge_per_byte_hash_update()
-                .checked_scalar_product(TEST_DATA.len() as u64)
-                .unwrap(),
-        )
-        .unwrap()
         .value(TEST_GAS_PRICE);
 
     let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
