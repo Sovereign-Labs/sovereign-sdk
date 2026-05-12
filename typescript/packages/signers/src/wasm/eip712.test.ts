@@ -50,7 +50,7 @@ const sampleUnsignedTx = {
 function createTestMessage(): Uint8Array {
   const unsignedTxBorsh = schema.jsonToBorsh(
     schema.knownTypeIndex(KnownTypeId.UnsignedTransaction),
-    JSON.stringify(sampleUnsignedTx),
+    JSON.stringify({ V0: sampleUnsignedTx }),
   );
   return new Uint8Array([...unsignedTxBorsh, ...schema.chainHash]);
 }

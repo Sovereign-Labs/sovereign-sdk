@@ -13,23 +13,22 @@
     },
     "enable_custom_account_mappings": {
       "description": "Enable configured credential authorizations and `InsertCredentialId`.",
-      "default": true,
-      "type": "boolean"
+      "type": "boolean",
+      "default": true
     }
   },
   "additionalProperties": false,
-  "definitions": {
-    "AccountData_for_Address": {
+  "required": [
+    "accounts"
+  ],
+  "$defs": {
+    "AccountData": {
       "description": "Credential/address authorization data for genesis.",
       "type": "object",
       "properties": {
         "address": {
           "description": "Address the credential may act as.",
-          "allOf": [
-            {
-              "$ref": "#/$defs/Address"
-            }
-          ]
+          "$ref": "#/$defs/Address"
         },
         "credential_id": {
           "description": "Credential ID to authorize.",

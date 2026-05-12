@@ -282,7 +282,9 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
     signer: Signer,
   ): Promise<S["Transaction"]> {
     const serializer = await this.serializer();
-    const serializedUnsignedTx = serializer.serializeUnsignedTx(unsignedTx);
+    const serializedUnsignedTx = serializer.serializeUnsignedTx({
+      V0: unsignedTx,
+    });
     const chainHash = await this.chainHash();
     const signature = await signer.sign(
       new Uint8Array([...serializedUnsignedTx, ...chainHash]),
