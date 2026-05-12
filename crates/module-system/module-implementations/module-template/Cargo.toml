@@ -50,3 +50,6 @@ native = [
 	"sov-modules-api/native",
 	"sov-state/native",
 ]
+
+[package.metadata.cargo-machete]
+ignored = ["proptest"]
