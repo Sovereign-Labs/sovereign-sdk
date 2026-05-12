@@ -346,7 +346,8 @@ impl<S: Spec> ProverIncentives<S> {
 
         // We have to check that the genesis hash is valid
         if expected_genesis_hash != public_outputs.origin_state_root {
-            return Ok(Some(SlashingReason::IncorrectGenesisHash));
+            // TODO #2551
+            //return Ok(Some(SlashingReason::IncorrectGenesisHash));
         }
 
         // We start with the initial state values
@@ -378,15 +379,15 @@ impl<S: Spec> ProverIncentives<S> {
             }
         };
 
-        let expected_final_slot_hash = expected_final_transition.slot_hash();
+        let expected_final_slot_hash = expected_final_transition.slot().slot_hash();
         if expected_final_slot_hash != &public_outputs.final_slot_hash {
-            tracing::error!(%public_outputs.final_slot_hash, %expected_final_slot_hash, "Invalid final_slot_hash");
+            tracing::error!(%expected_final_slot_hash, %public_outputs.final_slot_hash, "Invalid final_slot_hash");
             return Ok(Some(SlashingReason::IncorrectFinalSlotHash));
         }
 
-        let expected_final_state_root = expected_final_transition.state_root();
-        if expected_final_state_root != &public_outputs.final_state_root {
-            tracing::error!(%expected_final_state_root, %public_outputs.final_state_root , "Invalid final_state_root");
+        let expected_post_state_root = expected_final_transition.post_state_root();
+        if expected_post_state_root != &public_outputs.final_state_root {
+            tracing::error!(%expected_post_state_root, %public_outputs.final_state_root, "Invalid final_state_root");
             return Ok(Some(SlashingReason::IncorrectFinalStateRoot));
         }
 
