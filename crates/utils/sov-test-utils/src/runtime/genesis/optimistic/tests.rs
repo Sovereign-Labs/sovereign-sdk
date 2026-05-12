@@ -160,7 +160,7 @@ fn create_test_rt_genesis_config<S: Spec>(
         prover_incentives: ProverIncentivesConfig {
             minimum_bond: user_stake,
             proving_penalty: { user_stake.scalar_division(2) },
-            admin: prover_placeholder.address(),
+            admin: Some(prover_placeholder.address()),
             initial_provers: vec![(prover_placeholder.address(), prover_placeholder.balance())],
         },
         bank: BankConfig {

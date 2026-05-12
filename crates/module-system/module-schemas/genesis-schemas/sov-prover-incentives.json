@@ -5,8 +5,16 @@
   "type": "object",
   "properties": {
     "admin": {
-      "description": "The admin prover address.",
-      "$ref": "#/$defs/Address"
+      "description": "The admin prover address. When `None`, no admin role is configured for this\ndeployment and admin-only paths (e.g. genesis-hash bypass, rollup upgrades) are\ninaccessible.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Address"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
     },
     "initial_provers": {
       "description": "A list of initial provers and their bonded amount.",
@@ -38,7 +46,6 @@
   "required": [
     "proving_penalty",
     "minimum_bond",
-    "admin",
     "initial_provers"
   ],
   "$defs": {

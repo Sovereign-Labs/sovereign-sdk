@@ -23,10 +23,6 @@ const BACKOFF_POLICY_MIN_DELAY: u64 = 1;
 const BACKOFF_POLICY_MAX_DELAY: u64 = 60;
 const BACKOFF_POLICY_MAX_NUM_RETRIES: usize = 5;
 
-/// Poll interval used by [`IntakeTask`] while waiting for the DA layer to
-/// finish resyncing before it starts ingesting STF info.
-const RESYNC_POLL_INTERVAL: Duration = Duration::from_millis(500);
-
 /// Manages the lifecycle of the `AggregatedProof`.
 #[allow(clippy::type_complexity)]
 pub struct ZkProofManager<Ps: ProverService> {
@@ -135,6 +131,18 @@ where
     }
 }
 
+/// Tracks the resync skip-window state machine for the proof intake.
+enum ResyncState {
+    /// `start_fresh_outer_proof_on_resync` is disabled; always prove.
+    Disabled,
+    /// Flag enabled, DA still `Syncing`. Skip-advance every slot so the runner
+    /// can keep pushing transitions and sync can complete. Cutoff not yet captured.
+    AwaitingSync,
+    /// Flag enabled, first `Synced` observed at this DA height. Skip slots below
+    /// this height (they were drained but never proved); prove slots at or above.
+    SkipBelow(u64),
+}
+
 /// Per-slot intake side of [`ZkProofManager`]. See the type-level docs for
 /// how it cooperates with [`AggregatorTask`].
 struct IntakeTask<Ps: ProverService> {
@@ -155,30 +163,10 @@ where
     Ps::DaService: DaService<Error = anyhow::Error>,
 {
     async fn run(mut self) -> anyhow::Result<()> {
-        let skip_proofs_till_da_height = if !self.start_fresh_outer_proof_on_resync {
-            None
+        let mut resync_state = if self.start_fresh_outer_proof_on_resync {
+            ResyncState::AwaitingSync
         } else {
-            loop {
-                match self.da_sync_state.status() {
-                    SyncStatus::Synced { synced_da_height } => break Some(synced_da_height),
-                    SyncStatus::Syncing { .. } => {
-                        match future_or_shutdown(
-                            sleep(RESYNC_POLL_INTERVAL),
-                            &self.shutdown_receiver,
-                        )
-                        .await
-                        {
-                            FutureOrShutdownOutput::Shutdown => {
-                                tracing::info!(
-                                    "Shutting down aggregated proof intake task while waiting for DA resync..."
-                                );
-                                return Ok(());
-                            }
-                            FutureOrShutdownOutput::Output(()) => continue,
-                        }
-                    }
-                }
-            }
+            ResyncState::Disabled
         };
 
         loop {
@@ -203,7 +191,28 @@ where
                         "Received STF info"
                     );
 
-                    if let Some(skip_height) = skip_proofs_till_da_height {
+                    // If still observing resync, try to capture the cutoff. Until the DA
+                    // layer reports `Synced` at least once, skip-advance the current slot
+                    // unconditionally — this drains the channel so the runner can keep
+                    // producing.
+                    if matches!(resync_state, ResyncState::AwaitingSync) {
+                        match self.da_sync_state.status() {
+                            SyncStatus::Syncing { .. } => {
+                                self.cursor.inc_next_height_to_receive_by(1);
+                                continue;
+                            }
+                            SyncStatus::Synced { synced_da_height } => {
+                                tracing::info!(
+                                    %synced_da_height,
+                                    "DA resync complete; recording skip cutoff for proof intake"
+                                );
+                                resync_state = ResyncState::SkipBelow(synced_da_height);
+                                // fall through; this slot may still be below the cutoff.
+                            }
+                        }
+                    }
+
+                    if let ResyncState::SkipBelow(skip_height) = resync_state {
                         if stf_info.da_block_header().height() < skip_height {
                             // Skipped slots will never be proved, so advance
                             // the cursor manually.
