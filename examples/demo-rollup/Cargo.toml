@@ -92,6 +92,7 @@ sov-risc0-adapter = { workspace = true, features = ["native"] }
 sov-celestia-adapter = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true }
+sov-blob-sender = { workspace = true }
 sov-migrations = { workspace = true }
 sov-modules-api = { workspace = true, features = [
     "native",

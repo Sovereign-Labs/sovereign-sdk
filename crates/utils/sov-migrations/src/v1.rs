@@ -4,8 +4,8 @@ use anyhow::Context;
 use serde::Serialize;
 use sov_accounts::{Account, Accounts};
 use sov_chain_state::ChainState;
-use sov_modules_api::{CredentialId, ModuleInfo, Spec, StateReader, StateWriter};
-use sov_state::{Kernel, NativeStorage, Prefix, SlotKey, SlotValue, StateUpdate, User};
+use sov_modules_api::{CredentialId, ModuleInfo, Spec, StateReader, StateValue, StateWriter};
+use sov_state::{BorshCodec, Kernel, NativeStorage, Prefix, SlotKey, SlotValue, StateUpdate, User};
 
 use crate::MigrationStorage as _;
 
@@ -82,8 +82,8 @@ where
         state,
     )
     .context("failed to apply legacy-accounts migration")?;
-    chain_state
-        .set_state_version(TARGET_STATE_VERSION, state)
+    state_version_value(chain_state)
+        .set(&TARGET_STATE_VERSION, state)
         .context("failed to update chain-state state_version")?;
     StateWriter::<Kernel>::set(
         state,
@@ -259,4 +259,14 @@ where
     })?;
 
     Ok(KernelRoundtrip { key, value })
+}
+
+fn state_version_value<S: Spec>(chain_state: &ChainState<S>) -> StateValue<u64> {
+    StateValue::with_codec(
+        Prefix::new(
+            chain_state.discriminant(),
+            ChainState::<S>::STATE_VERSION_ITEM_DISCRIMINANT,
+        ),
+        BorshCodec,
+    )
 }
