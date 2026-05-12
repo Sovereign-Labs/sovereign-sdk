@@ -34,6 +34,7 @@ members = [
     "crates/utils/sov-test-utils",
     "crates/utils/sov-evm-test-utils",
     "crates/utils/sov-proxy-utils",
+    "crates/utils/sov-migrations",
     # Module System
     "crates/module-system/sov-cli",
     "crates/module-system/sov-modules-stf-blueprint",
@@ -188,6 +189,7 @@ sov-modules-macros = { path = "crates/module-system/sov-modules-macros", default
 sov-modules-stf-blueprint = { path = "crates/module-system/sov-modules-stf-blueprint", default-features = false, version = "0.3" }
 sov-test-utils = { path = "crates/utils/sov-test-utils", default-features = false, version = "0.3" }
 sov-evm-test-utils = { path = "crates/utils/sov-evm-test-utils", default-features = false, version = "0.3" }
+sov-migrations = { path = "crates/utils/sov-migrations", default-features = false, version = "0.3" }
 sov-rpc-eth-types = { path = "crates/utils/sov-rpc-eth-types", default-features = false, version = "0.3" }
 sov-db = { path = "crates/full-node/sov-db", default-features = false, version = "0.3" }
 sov-db-types = { path = "crates/full-node/sov-db-types", version = "0.3" }

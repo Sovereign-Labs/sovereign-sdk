@@ -482,6 +482,15 @@ impl<S: Spec> ChainState<S> {
         Ok(self.state_version.get(state)?.unwrap_or(0))
     }
 
+    /// Set the global on-chain state schema version.
+    pub fn set_state_version<Accessor: sov_modules_api::StateWriter<User>>(
+        &mut self,
+        state_version: u64,
+        state: &mut Accessor,
+    ) -> Result<(), Accessor::Error> {
+        self.state_version.set(&state_version, state)
+    }
+
     /// Returns the last visible slot processed by the module.
     pub fn latest_visible_slot<Reader: VersionReader + StateReader<Kernel>>(
         &self,

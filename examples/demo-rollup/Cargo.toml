@@ -33,6 +33,7 @@ sov-cli = { workspace = true }
 sov-db = { workspace = true }
 sov-ethereum = { workspace = true, features = ["local"] }
 sov-kernels = { workspace = true, features = ["native"] }
+sov-migrations = { workspace = true, optional = true }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-modules-rollup-blueprint = { workspace = true, features = ["native"] }
@@ -153,6 +154,7 @@ migration-script = [
     "dep:bincode",
     "dep:hex",
     "dep:sov-chain-state",
+    "dep:sov-migrations",
     "dep:sov-paymaster",
     "dep:sov-sequencer-registry",
     "sov-db/migration-script",
@@ -176,7 +178,7 @@ path = "src/migrations/mockda_to_celestia.rs"
 required-features = ["migration-script"]
 
 [[bin]]
-name = "legacy-accounts-migrate"
+name = "migrate_to_v1"
 path = "src/migrations/legacy_accounts.rs"
 required-features = ["migration-script"]
 
