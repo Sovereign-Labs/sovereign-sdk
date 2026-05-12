@@ -379,11 +379,15 @@ impl<S: Spec> ProverIncentives<S> {
             }
         };
 
-        if expected_final_transition.slot().slot_hash() != &public_outputs.final_slot_hash {
+        let expected_final_slot_hash = expected_final_transition.slot_hash();
+        if expected_final_slot_hash != &public_outputs.final_slot_hash {
+            tracing::error!(%public_outputs.final_slot_hash, %expected_final_slot_hash, "Invalid final_slot_hash");
             return Ok(Some(SlashingReason::IncorrectFinalSlotHash));
         }
 
-        if expected_final_transition.post_state_root() != &public_outputs.final_state_root {
+        let expected_final_state_root = expected_final_transition.state_root();
+        if expected_final_state_root != &public_outputs.final_state_root {
+            tracing::error!(%expected_final_state_root, %public_outputs.final_state_root , "Invalid final_state_root");
             return Ok(Some(SlashingReason::IncorrectFinalStateRoot));
         }
 
