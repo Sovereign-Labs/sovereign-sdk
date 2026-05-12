@@ -1,12 +1,13 @@
 use std::cell::RefCell;
 use std::rc::Rc;
 
+use borsh::BorshDeserialize;
 use sov_accounts::{AccountData, Accounts, CallMessage, Event};
 use sov_modules_api::digest::Digest;
 use sov_modules_api::transaction::{UnsignedTransactionV0, Version1};
 use sov_modules_api::{
     Amount, CredentialId, CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents,
-    Spec, TxEffect,
+    Spec, StoredEvent, TxEffect,
 };
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
@@ -654,6 +655,22 @@ fn unknown_address_created_event(
             creator,
             credential,
         })] => (*address, *creator, *credential),
+        other => panic!("expected one unknown-address event, got {other:?}"),
+    }
+}
+
+fn stored_unknown_address_created_event(
+    events: &[StoredEvent],
+) -> (<S as Spec>::Address, <S as Spec>::Address, CredentialId) {
+    match events {
+        [stored_event] => {
+            let event = TestAccountsRuntimeEvent::<S>::deserialize(
+                &mut stored_event.value().inner().as_slice(),
+            )
+            .expect("stored batch event should deserialize into runtime event");
+
+            unknown_address_created_event(std::slice::from_ref(&event))
+        }
         other => panic!("expected one unknown-address event, got {other:?}"),
     }
 }
@@ -2340,23 +2357,44 @@ fn test_create_unknown_address_different_salt_produces_different_address() {
     let mut runner: TestRunner<RT, S> =
         TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
 
-    let address_a = execute_create_unknown_address(
-        &mut runner,
-        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress {
-            salt: [1; 32],
-        }),
-        user_address,
-        user_credential,
-    );
-    let address_b = execute_create_unknown_address(
-        &mut runner,
-        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress {
-            salt: [2; 32],
-        }),
-        user_address,
-        user_credential,
-    );
+    let address_a = derive_unknown_address(&runner, user_address, user_credential, [1; 32]);
+    let address_b = derive_unknown_address(&runner, user_address, user_credential, [2; 32]);
     assert_ne!(address_a, address_b);
+
+    runner.execute_batch(BatchTestCase {
+        input: BatchType::from(vec![
+            user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress {
+                salt: [1; 32],
+            }),
+            user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress {
+                salt: [2; 32],
+            }),
+        ]),
+        assert: Box::new(move |result, state| {
+            let batch = result.batch_receipt.expect("batch should be accepted");
+            let accounts = Accounts::<S>::default();
+            assert_eq!(batch.tx_receipts.len(), 2);
+
+            for (tx_receipt, expected_address) in
+                batch.tx_receipts.iter().zip([address_a, address_b])
+            {
+                assert!(
+                    tx_receipt.receipt.is_successful(),
+                    "CreateUnknownAddress should succeed, got {:?}",
+                    tx_receipt.receipt
+                );
+
+                let (address, creator, credential) =
+                    stored_unknown_address_created_event(&tx_receipt.events);
+                assert_eq!(address, expected_address);
+                assert_eq!(creator, user_address);
+                assert_eq!(credential, user_credential);
+                assert!(accounts
+                    .is_explicitly_authorized(&address, &user_credential, state)
+                    .unwrap());
+            }
+        }),
+    });
 }
 
 /// Two different callers using the same salt produce distinct addresses, and
@@ -2374,21 +2412,51 @@ fn test_create_unknown_address_is_creator_scoped() {
         TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
 
     let salt = [33; 32];
-    let address_1 = execute_create_unknown_address(
-        &mut runner,
-        creator_1
-            .create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress { salt }),
-        creator_1.address(),
-        creator_1.credential_id(),
-    );
-    let address_2 = execute_create_unknown_address(
-        &mut runner,
-        creator_2
-            .create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress { salt }),
-        creator_2.address(),
-        creator_2.credential_id(),
-    );
+    let creator_1_address = creator_1.address();
+    let creator_1_credential = creator_1.credential_id();
+    let creator_2_address = creator_2.address();
+    let creator_2_credential = creator_2.credential_id();
+    let address_1 = derive_unknown_address(&runner, creator_1_address, creator_1_credential, salt);
+    let address_2 = derive_unknown_address(&runner, creator_2_address, creator_2_credential, salt);
     assert_ne!(address_1, address_2);
+
+    runner.execute_batch(BatchTestCase {
+        input: BatchType::from(vec![
+            creator_1.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress {
+                salt,
+            }),
+            creator_2.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateUnknownAddress {
+                salt,
+            }),
+        ]),
+        assert: Box::new(move |result, state| {
+            let batch = result.batch_receipt.expect("batch should be accepted");
+            assert_eq!(batch.tx_receipts.len(), 2);
+
+            let accounts = Accounts::<S>::default();
+            for (tx_receipt, (expected_address, expected_creator, expected_credential)) in
+                batch.tx_receipts.iter().zip([
+                    (address_1, creator_1_address, creator_1_credential),
+                    (address_2, creator_2_address, creator_2_credential),
+                ])
+            {
+                assert!(
+                    tx_receipt.receipt.is_successful(),
+                    "CreateUnknownAddress should succeed, got {:?}",
+                    tx_receipt.receipt
+                );
+
+                let (address, creator, credential) =
+                    stored_unknown_address_created_event(&tx_receipt.events);
+                assert_eq!(address, expected_address);
+                assert_eq!(creator, expected_creator);
+                assert_eq!(credential, expected_credential);
+                assert!(accounts
+                    .is_explicitly_authorized(&address, &expected_credential, state)
+                    .unwrap());
+            }
+        }),
+    });
 
     // creator_2 cannot mutate creator_1's unknown address.
     let attacker_credential = TestPrivateKey::generate().pub_key().credential_id();
