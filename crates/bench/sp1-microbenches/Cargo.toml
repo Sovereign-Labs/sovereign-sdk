@@ -1,0 +1,24 @@
+[package]
+name = "sp1-microbenches"
+version = "0.3.0"
+edition = "2021"
+license = "MIT OR Apache-2.0"
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "sp1-microbenches"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+sp1-sdk = { version = "6.1.0", default-features = false, features = ["blocking", "profiling"] }
+
+[build-dependencies]
+anyhow = { workspace = true }
+sov-zkvm-utils = { workspace = true }
+sp1-build = { version = "6.1.0", default-features = false }

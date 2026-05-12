@@ -12,6 +12,9 @@ repository.workspace = true
 [lints]
 workspace = true
 
+[package.metadata.cargo-machete]
+ignored = ["chrono", "regress", "reqwest"]
+
 [dependencies]
 openapiv3 = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }

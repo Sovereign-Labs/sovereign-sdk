@@ -607,7 +607,6 @@ version = "0.7.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7c02d123df017efcdfbd739ef81735b36c5ba83ec3c59c80a9d7ecc718f92e50"
 dependencies = [
- "borsh",
  "serde",
 ]
 
@@ -1741,13 +1740,11 @@ dependencies = [
  "anyhow",
  "borsh",
  "demo-stf-declaration",
- "schemars 1.2.0",
  "serde",
  "sov-accounts",
  "sov-address",
  "sov-attester-incentives",
  "sov-bank",
- "sov-blob-storage",
  "sov-build",
  "sov-capabilities",
  "sov-chain-state",
@@ -1761,14 +1758,12 @@ dependencies = [
  "sov-operator-incentives",
  "sov-paymaster",
  "sov-prover-incentives",
- "sov-revenue-share",
  "sov-rollup-interface",
  "sov-sequencer-registry",
  "sov-solana-offchain-auth",
  "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
- "sov-uniqueness",
  "tracing",
 ]
 
@@ -1785,24 +1780,20 @@ dependencies = [
  "sov-attester-incentives",
  "sov-bank",
  "sov-blob-storage",
- "sov-capabilities",
  "sov-chain-state",
  "sov-evm",
  "sov-hyperlane-integration",
- "sov-kernels",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
  "sov-operator-incentives",
  "sov-paymaster",
  "sov-prover-incentives",
  "sov-revenue-share",
- "sov-rollup-interface",
  "sov-sequencer-registry",
- "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
  "sov-uniqueness",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -6180,7 +6171,6 @@ dependencies = [
  "derivative",
  "schemars 1.2.0",
  "serde",
- "sov-address",
  "sov-bank",
  "sov-chain-state",
  "sov-modules-api",
@@ -6203,7 +6193,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "tracing",
 ]
@@ -6216,7 +6206,6 @@ dependencies = [
  "borsh",
  "derive_more 2.1.1",
  "hex",
- "schemars 1.2.0",
  "serde",
  "sov-bank",
  "sov-chain-state",
@@ -6233,7 +6222,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "serde",
  "serde_json",
  "sov-modules-api",
 ]
@@ -6308,7 +6296,6 @@ dependencies = [
  "hex",
  "serde",
  "serde_with",
- "sov-rollup-interface",
  "sov-universal-wallet",
 ]
 
@@ -6318,10 +6305,7 @@ version = "0.3.0"
 dependencies = [
  "demo-stf",
  "sha2 0.10.9",
- "sov-address",
  "sov-celestia-adapter",
- "sov-kernels",
- "sov-metrics",
  "sov-mock-zkvm",
  "sov-modules-api",
  "sov-modules-stf-blueprint",
@@ -6382,7 +6366,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-state",
- "strum 0.26.3",
+ "strum 0.28.0",
  "tracing",
 ]
 
@@ -6437,7 +6421,6 @@ dependencies = [
  "anyhow",
  "bincode",
  "borsh",
- "digest 0.10.7",
  "ed25519-dalek",
  "hex",
  "schemars 1.2.0",
@@ -6470,7 +6453,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "sov-universal-wallet",
- "strum 0.26.3",
+ "strum 0.28.0",
  "thiserror 2.0.18",
  "toml",
  "tracing",
@@ -6505,7 +6488,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "hex",
- "schemars 1.2.0",
  "serde",
  "sov-metrics",
  "sov-modules-api",
@@ -6521,15 +6503,10 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "derive_more 2.1.1",
  "schemars 1.2.0",
  "serde",
  "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
- "strum 0.26.3",
- "thiserror 2.0.18",
- "tracing",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -6537,7 +6514,6 @@ name = "sov-paymaster"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "bcs",
  "borsh",
  "derivative",
  "derive_more 2.1.1",
@@ -6546,7 +6522,6 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-state",
- "sov-universal-wallet",
  "tracing",
 ]
 
@@ -6624,7 +6599,6 @@ dependencies = [
  "anyhow",
  "borsh",
  "hex",
- "schemars 1.2.0",
  "serde",
  "serde_json",
  "serde_with",
@@ -6646,6 +6620,7 @@ dependencies = [
  "serde",
  "sha2 0.10.9",
  "slop-algebra",
+ "sov-metrics",
  "sov-rollup-interface",
  "sov-universal-wallet",
  "sov-zkvm-utils",
@@ -6671,7 +6646,6 @@ dependencies = [
  "nomt-core",
  "serde",
  "serde-big-array",
- "serde_with",
  "sov-db-types",
  "sov-metrics",
  "sov-modules-macros",
@@ -6691,9 +6665,7 @@ dependencies = [
  "serde",
  "sov-metrics",
  "sov-modules-api",
- "sov-rollup-interface",
- "sov-state",
- "strum 0.26.3",
+ "strum 0.28.0",
 ]
 
 [[package]]
@@ -6709,8 +6681,7 @@ dependencies = [
  "serde",
  "sov-modules-api",
  "sov-state",
- "strum 0.26.3",
- "thiserror 2.0.18",
+ "strum 0.28.0",
  "tracing",
 ]
 
@@ -6720,8 +6691,6 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
- "schemars 1.2.0",
- "serde",
  "sov-modules-api",
  "sov-state",
 ]
@@ -6754,19 +6723,16 @@ dependencies = [
  "borsh",
  "bs58",
  "darling 0.21.3",
- "hex",
  "proc-macro2",
  "quote",
  "serde_derive_internals",
  "syn 2.0.114",
- "syn_derive",
 ]
 
 [[package]]
 name = "sov-universal-wallet-macros"
 version = "0.3.0"
 dependencies = [
- "proc-macro2",
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.114",
 ]
@@ -7393,15 +7359,6 @@ checksum = "7da8b5736845d9f2fcb837ea5d9e2628564b3b043a70948a3f0b778838c5fb4f"
 
 [[package]]
 name = "strum"
-version = "0.26.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8fec0f0aef304996cf250b31b5a10dee7980c85da9d759361292b8bca5a18f06"
-dependencies = [
- "strum_macros 0.26.4",
-]
-
-[[package]]
-name = "strum"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "af23d6f6c1a224baef9d3f61e287d2761385a5b88fdab4eb4c6f11aeb54c4bcf"
@@ -7410,16 +7367,12 @@ dependencies = [
 ]
 
 [[package]]
-name = "strum_macros"
-version = "0.26.4"
+name = "strum"
+version = "0.28.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4c6bee85a5a24955dc440386795aa378cd9cf82acd5f764469152d2270e581be"
+checksum = "9628de9b8791db39ceda2b119bbe13134770b56c138ec1d3af810d045c04f9bd"
 dependencies = [
- "heck",
- "proc-macro2",
- "quote",
- "rustversion",
- "syn 2.0.114",
+ "strum_macros 0.28.0",
 ]
 
 [[package]]
@@ -7427,6 +7380,18 @@ name = "strum_macros"
 version = "0.27.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "7695ce3845ea4b33927c055a39dc438a45b059f7c1b3d91d38d10355fb8cbca7"
+dependencies = [
+ "heck",
+ "proc-macro2",
+ "quote",
+ "syn 2.0.114",
+]
+
+[[package]]
+name = "strum_macros"
+version = "0.28.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "ab85eea0270ee17587ed4156089e10b9e6880ee688791d45a905f5b1ca36f664"
 dependencies = [
  "heck",
  "proc-macro2",
@@ -7516,18 +7481,6 @@ dependencies = [
  "proc-macro2",
  "quote",
  "unicode-ident",
-]
-
-[[package]]
-name = "syn_derive"
-version = "0.2.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "cdb066a04799e45f5d582e8fc6ec8e6d6896040d00898eb4e6a835196815b219"
-dependencies = [
- "proc-macro-error2",
- "proc-macro2",
- "quote",
- "syn 2.0.114",
 ]
 
 [[package]]

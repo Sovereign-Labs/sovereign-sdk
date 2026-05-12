@@ -92,6 +92,8 @@ members = [
     "examples/demo-rollup/stf/demo-stf-json-client",
     "examples/demo-rollup/sov-soak-testing",
     "examples/demo-rollup/tests/prover/sov-aggregated-proof",
+    # Bench
+    "crates/bench/sp1-microbenches",
     # Adapters
     # TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/498
     # "crates/adapters/avail",
@@ -213,7 +215,7 @@ concread = { version = "0.5.7" }
 
 anyhow = { version = "1.0.95" }
 async-trait = "0.1.81"
-arrayvec = { version = "0.7.6", features = ["serde", "borsh"] }
+arrayvec = "0.7.6"
 console-subscriber = "0.5"
 
 axum = { version = "0.8.8", default-features = false }
@@ -232,12 +234,9 @@ bytes = { version = "1.10", default-features = false }
 convert_case = { version = "0.6", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["now"] }
 darling = "0.21"
-dashmap = "6.1.0"
-delegate = "0.13.4"
 derive-new = "0.7.0"
 derivative = { version = "2.2", features = ["use_core"] }
 digest = { version = "0.10.7", default-features = false, features = ["alloc"] }
-derive-getters = { version = "0.5.0" }
 # Don't forget to upgrade zkVM patches if changing this one.
 ed25519-dalek = { version = "=2.1.1", default-features = false }
 futures = { version = "0.3", default-features = false }
@@ -246,7 +245,6 @@ insta = { version = "1.39", features = ["json"] }
 jsonschema = "0.26.1"
 once_cell = "1.19"
 openapiv3 = "2.0.0"
-prometheus = { version = "0.14", default-features = false }
 proc-macro2 = { version = "1.0" }
 proptest = { version = "1.5", default-features = false, features = ["std", "alloc"] }
 proptest-derive = "0.5.0"
@@ -267,7 +265,7 @@ serde_with = { version = "3.19", features = ["schemars_1", "base64"] }
 # Pinned version because zkvm-guests rely on patches. Upgrade `examples/demo-rollup/provers/* to use same patch as this one.
 sha2 = { version = "=0.10.9", default-features = false }
 sha3 = { version = "0.10.8", default-features = false }
-strum = { version = "0.26.3", features = ["derive"] }
+strum = { version = "0.28", features = ["derive"] }
 syn = { version = "2.0" }
 itertools = { version = "0.14.0" }
 thiserror = "2"
@@ -313,12 +311,10 @@ ethereum-types = { version = "0.14.1", default-features = false }
 alloy = { version = "1.0.41", default-features = false, features = ["std", "essentials"] }
 alloy-serde = { version = "1.1.3", default-features = false }
 alloy-pubsub = { version = "1.0.41", default-features = false }
-alloy-chains = { version = "0.2.14", default-features = false }
 alloy-primitives = { version = "1.4.1", default-features = false }
 alloy-sol-types = { version = "1.4.1", default-features = false }
 alloy-dyn-abi = { version = "1.4.1", default-features = false }
 alloy-eips = { version = "1.1.0", default-features = false }
-alloy-evm = { version = "0.23.1", default-features = false }
 alloy-consensus = { version = "1.1.0", default-features = false }
 alloy-contract = { version = "1.0.41", default-features = false }
 alloy-transport = { version = "1.0.41", default-features = false }
@@ -335,10 +331,6 @@ alloy-rlp = { version = "0.3.12", default-features = false }
 reth-primitives-traits = { git = "https://github.com/paradigmxyz/reth", tag = "v1.9.0", default-features = false }
 revm = { version = "31.0.0", features = ["serde"], default-features = false }
 revm-database-interface = { version = "8.0.4", default-features = false }
-revm-context = { version = "11.0.0", default-features = false }
-revm-handler = { version = "12.0.0", default-features = false }
-revm-context-interface = { version = "12.0.0", default-features = false }
-revm-inspector = { version = "12.0.0", default-features = false }
 revm-inspectors = { version = "0.32.0", default-features = false }
 secp256k1 = { version = "=0.30.0", default-features = false, features = [
     "global-context",

@@ -8,20 +8,14 @@ resolver = "2"
 [workspace]
 
 [dependencies]
-anyhow = { version = "1.0.95" }
 sp1-zkvm = { version = "6.1.0" }
 sov-mock-da = { path = "../../../../../crates/adapters/mock-da" }
 demo-stf = { path = "../../../stf" }
+sov-metrics = { path = "../../../../../crates/full-node/sov-metrics", optional = true }
 sov-sp1-adapter = { path = "../../../../../crates/adapters/sp1" }
-sov-mock-zkvm = { path = "../../../../../crates/adapters/mock-zkvm" }
 sov-modules-api = { path = "../../../../../crates/module-system/sov-modules-api" }
-sov-address = { path = "../../../../../crates/module-system/sov-address" }
 sov-state = { path = "../../../../../crates/module-system/sov-state" }
 sov-modules-stf-blueprint = { path = "../../../../../crates/module-system/sov-modules-stf-blueprint" }
-sov-kernels = { path = "../../../../../crates/module-system/sov-kernels" }
-sov-metrics = { path = "../../../../../crates/full-node/sov-metrics", optional = true, features = [
-    "sp1",
-] }
 sha2 = { version = "0.10", default-features = false }
 
 [patch.crates-io]
@@ -50,8 +44,12 @@ opt-level = 3
 [features]
 default = []
 bench = [
+    "sov-metrics/sp1",
     "sov-modules-api/bench",
     "sov-state/bench",
     "sov-modules-stf-blueprint/bench",
-    "sov-metrics",
+    "sov-sp1-adapter/bench",
 ]
+
+[package.metadata.cargo-machete]
+ignored = ["sov-metrics"]

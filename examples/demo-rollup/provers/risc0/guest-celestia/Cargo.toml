@@ -9,18 +9,14 @@ resolver = "2"
 
 [dependencies]
 risc0-zkvm = { version = "3.0", default-features = false, features = ["std"] }
-risc0-zkvm-platform = { version = "2.2", features = ["sys-getenv", "heap-embedded-alloc"] }
 demo-stf = { path = "../../../stf" }
 sov-risc0-adapter = { path = "../../../../../crates/adapters/risc0" }
 sov-rollup-interface = { path = "../../../../../crates/rollup-interface" }
 sov-mock-zkvm = { path = "../../../../../crates/adapters/mock-zkvm" }
 sov-celestia-adapter = { path = "../../../../../crates/adapters/celestia" }
 sov-modules-api = { path = "../../../../../crates/module-system/sov-modules-api" }
-sov-address = { path = "../../../../../crates/module-system/sov-address" }
 sov-state = { path = "../../../../../crates/module-system/sov-state" }
 sov-modules-stf-blueprint = { path = "../../../../../crates/module-system/sov-modules-stf-blueprint" }
-sov-kernels = { path = "../../../../../crates/module-system/sov-kernels" }
-sov-metrics = { path = "../../../../../crates/full-node/sov-metrics", optional = true }
 sha2 = { version = "0.10", default-features = false }
 
 [patch.crates-io]
@@ -51,5 +47,4 @@ bench = [
     "sov-modules-stf-blueprint/bench",
     "sov-risc0-adapter/bench",
     "sov-celestia-adapter/bench",
-    "sov-metrics/risc0",
 ]
