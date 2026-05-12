@@ -1,9 +1,7 @@
 use anyhow::Context;
 use demo_stf::runtime::Runtime as DemoRuntime;
-use futures::StreamExt;
 use sov_accounts::{Account, Accounts};
 use sov_bank::config_gas_token_id;
-use sov_blob_sender::BlobSubmissionStatus;
 use sov_chain_state::ChainState;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
@@ -65,11 +63,9 @@ async fn v1_migration_rewrites_live_demo_state() -> anyhow::Result<()> {
         0,
     );
     test_rollup.send_tx_to_sequencer(&tx).await?;
-    let mut blob_subscription = test_rollup.subscribe_to_blobs_from_blob_sender().await?;
     let initial_height = test_rollup.height().await.get();
     test_rollup.force_close_batch().await?;
-    wait_for_batch_blob_published(&mut blob_subscription).await?;
-    test_rollup.da_service.produce_block_now().await?;
+    test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_height(initial_height + 1).await;
     test_rollup.wait_for_node_synced().await?;
 
@@ -259,26 +255,4 @@ fn credential_id(byte: u8) -> CredentialId {
 
 fn account_address(byte: u8) -> <DemoRollupSpec as Spec>::Address {
     credential_id(byte).into()
-}
-
-async fn wait_for_batch_blob_published(
-    blob_subscription: &mut futures::stream::BoxStream<
-        'static,
-        anyhow::Result<sov_blob_sender::BlobExecutionStatus<sov_mock_da::MockDaSpec>>,
-    >,
-) -> anyhow::Result<()> {
-    tokio::time::timeout(std::time::Duration::from_secs(10), async {
-        while let Some(status) = blob_subscription.next().await {
-            if matches!(
-                status?.blob_submission_status,
-                BlobSubmissionStatus::Published { .. }
-            ) {
-                return Ok(());
-            }
-        }
-
-        anyhow::bail!("blob sender subscription ended before batch blob was published")
-    })
-    .await
-    .context("timed out waiting for batch blob publication")?
 }

@@ -11765,7 +11765,6 @@ dependencies = [
  "sov-address",
  "sov-api-spec",
  "sov-bank",
- "sov-blob-sender",
  "sov-blob-storage",
  "sov-celestia-adapter",
  "sov-chain-state",
