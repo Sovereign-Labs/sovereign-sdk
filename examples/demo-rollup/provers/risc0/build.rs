@@ -33,7 +33,7 @@ fn main() {
 
 fn get_guest_options() -> HashMap<&'static str, risc0_build::GuestOptions> {
     let mut guest_pkg_to_options = HashMap::new();
-    let features = sov_zkvm_utils::collect_features(&["bench", "bincode"], &["native"]);
+    let features = sov_zkvm_utils::collect_features(&["bench"], &["native"]);
     let guest_options = risc0_build::GuestOptionsBuilder::default()
         .features(features)
         .build()

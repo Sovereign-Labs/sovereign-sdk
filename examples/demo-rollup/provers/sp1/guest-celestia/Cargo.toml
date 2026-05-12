@@ -15,13 +15,8 @@ sov-celestia-adapter = { path = "../../../../../crates/adapters/celestia" }
 sov-mock-zkvm = { path = "../../../../../crates/adapters/mock-zkvm" }
 sov-rollup-interface = { path = "../../../../../crates/rollup-interface" }
 sov-modules-api = { path = "../../../../../crates/module-system/sov-modules-api" }
-sov-address = { path = "../../../../../crates/module-system/sov-address" }
 sov-state = { path = "../../../../../crates/module-system/sov-state" }
 sov-modules-stf-blueprint = { path = "../../../../../crates/module-system/sov-modules-stf-blueprint" }
-sov-kernels = { path = "../../../../../crates/module-system/sov-kernels" }
-sov-metrics = { path = "../../../../../crates/full-node/sov-metrics", optional = true, features = [
-    "sp1",
-] }
 sha2 = { version = "0.10", default-features = false }
 
 [patch.crates-io]
@@ -53,4 +48,5 @@ bench = [
     "sov-state/bench",
     "sov-modules-stf-blueprint/bench",
     "sov-celestia-adapter/bench",
+    "sov-sp1-adapter/bench",
 ]

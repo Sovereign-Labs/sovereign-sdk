@@ -67,13 +67,10 @@ macro_rules! impl_bech32_conversion {
             PartialEq,
             Clone,
             Eq,
-            schemars::JsonSchema,
         )]
         #[serde(try_from = "String", into = "String")]
-        #[schemars(description = "A bech32 string")]
         pub struct $bech32_version (
             /// A validated bech32 string
-            #[schemars(regex = "__bech32_conversion_impls::RegexValidator")]
             String,
         );
 
@@ -81,6 +78,21 @@ macro_rules! impl_bech32_conversion {
             $human_readable_prefix
         }
 
+        impl $crate::prelude::schemars::JsonSchema for $bech32_version {
+            fn schema_name() -> ::std::borrow::Cow<'static, str> {
+                stringify!($bech32_version).into()
+            }
+
+            fn json_schema(
+                _gen: &mut $crate::prelude::schemars::SchemaGenerator,
+            ) -> $crate::prelude::schemars::Schema {
+                $crate::prelude::schemars::json_schema!({
+                    "type": "string",
+                    "pattern": format!("^{}1[a-zA-Z0-9]+$", __bech32_hrp()),
+                    "description": "A bech32 string",
+                })
+            }
+        }
 
         mod __bech32_conversion_impls {
             use super:: $id;
@@ -91,19 +103,6 @@ macro_rules! impl_bech32_conversion {
             use $crate::prelude::{bech32, serde, anyhow};
             use bech32::primitives::decode::{UncheckedHrpstring, CheckedHrpstring};
             use bech32::{Bech32m, Hrp};
-
-            /// A regex validator for the bech32 string
-            ///
-            /// Schemars allows any type which has a `to_string` method to provide the regex pattern, so
-            /// we generate a unit type that yields regex with the correct HRP.
-            pub struct RegexValidator;
-            impl core::fmt::Display for RegexValidator {
-                fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-                    write!(f, "{}1[a-zA-Z0-9]+$", super::__bech32_hrp())
-                }
-            }
-
-
 
             impl From<$bech32_version> for String {
                 fn from(bech: $bech32_version) -> Self {
@@ -321,13 +320,15 @@ macro_rules! impl_hash32_type {
             }
         }
 
-        impl schemars::JsonSchema for $id {
-            fn schema_name() -> String {
-                stringify!($id).to_string()
+        impl $crate::prelude::schemars::JsonSchema for $id {
+            fn schema_name() -> ::std::borrow::Cow<'static, str> {
+                stringify!($id).into()
             }
 
-            fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-                <$bech32_version as schemars::JsonSchema>::json_schema(gen)
+            fn json_schema(
+                gen: &mut $crate::prelude::schemars::SchemaGenerator,
+            ) -> $crate::prelude::schemars::Schema {
+                <$bech32_version as $crate::prelude::schemars::JsonSchema>::json_schema(gen)
             }
         }
 
@@ -371,19 +372,18 @@ pub const fn address_prefix() -> &'static str {
 pub struct AddressSchema(#[sov_wallet(display(bech32m(prefix = "address_prefix()")))] [u8; 28]);
 
 impl schemars::JsonSchema for Address {
-    fn schema_name() -> String {
-        "Address".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Address".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         let address_prefix = config_value_private!("ADDRESS_PREFIX");
 
-        serde_json::from_value(serde_json::json!({
+        schemars::json_schema!({
             "type": "string",
             "pattern": format!("^{address_prefix}1[a-zA-Z0-9]+$"),
             "description": "Address",
-        }))
-        .unwrap()
+        })
     }
 }
 
@@ -489,17 +489,16 @@ impl From<CredentialId> for Base58Address {
 }
 
 impl schemars::JsonSchema for Base58Address {
-    fn schema_name() -> String {
-        "Address".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "Address".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        serde_json::from_value(serde_json::json!({
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
             "type": "string",
             "pattern": "^[a-zA-Z0-9]{36,44}$",
             "description": "Address",
-        }))
-        .unwrap()
+        })
     }
 }
 

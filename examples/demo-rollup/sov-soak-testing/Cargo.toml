@@ -11,20 +11,17 @@ default-run = "main"
 
 [dependencies]
 tokio = { workspace = true, default-features = false }
+anyhow = { workspace = true }
+async-trait = { workspace = true }
 borsh = { workspace = true, features = ["derive"] }
-
+clap = { workspace = true }
+reqwest = { workspace = true }
 schemars = { workspace = true, features = ["derive"] }
 serde = { workspace = true, default-features = false, features = [
     "alloc",
     "derive",
 ] }
-anyhow = { workspace = true }
-async-trait = { workspace = true }
-derivative = { workspace = true }
 strum = { workspace = true, features = ["derive"] }
-rand = { workspace = true }
-clap = { workspace = true }
-reqwest = { workspace = true }
 
 sov-api-spec = { workspace = true }
 sov-metrics = { workspace = true }
@@ -33,21 +30,17 @@ sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-transaction-generator = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
-sov-evm-test-utils = { workspace = true, features = ["arbitrary"] }
 sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["arbitrary"] }
-sov-node-client = { workspace = true }
 sov-sequencer = { workspace = true, default-features = false }
 sov-kernels = { workspace = true, features = ["native"] }
 sov-state = { workspace = true, features = ["arbitrary"] }
 # modules
-sov-value-setter = { workspace = true }
 sov-synthetic-load = { workspace = true }
 sov-bank = { workspace = true, features = ["native", "arbitrary"] }
 sov-paymaster = { workspace = true, features = ["native"] }
 sov-celestia-adapter = { workspace = true, features = ["native", "arbitrary"] }
-sov-address = { workspace = true }
 demo-stf = { workspace = true, features = ["native", "arbitrary"] }
 sov-soak-testing-lib = { workspace = true }
 sov-db = { workspace = true }
@@ -62,3 +55,6 @@ path = "src/bin/main.rs"
 [[bin]]
 name = "generator"
 path = "src/bin/generator.rs"
+
+[package.metadata.cargo-machete]
+ignored = ["borsh", "schemars", "serde", "strum"]

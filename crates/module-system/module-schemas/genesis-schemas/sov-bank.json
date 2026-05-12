@@ -1,34 +1,34 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "BankConfig",
   "description": "Initial configuration for sov-bank module.",
   "type": "object",
-  "required": [
-    "tokens"
-  ],
   "properties": {
     "gas_token_config": {
       "description": "Configuration for the gas token",
-      "default": null,
       "anyOf": [
         {
-          "$ref": "#/definitions/GasTokenConfig"
+          "$ref": "#/$defs/GasTokenConfig"
         },
         {
           "type": "null"
         }
-      ]
+      ],
+      "default": null
     },
     "tokens": {
       "description": "A list of configurations for any other tokens to create at genesis",
       "type": "array",
       "items": {
-        "$ref": "#/definitions/TokenConfig"
+        "$ref": "#/$defs/TokenConfig"
       }
     }
   },
   "additionalProperties": false,
-  "definitions": {
+  "required": [
+    "tokens"
+  ],
+  "$defs": {
     "Address": {
       "description": "Address",
       "type": "string",
@@ -36,48 +36,42 @@
     },
     "Amount": {
       "description": "A token amount.",
-      "type": "integer",
-      "format": "uint128",
-      "minimum": 0.0
+      "type": "string",
+      "pattern": "^[0-9]+$"
     },
     "GasTokenConfig": {
       "description": "[`GasTokenConfig`] specifies a configuration for the rollup's gas token.",
       "type": "object",
-      "required": [
-        "address_and_balances",
-        "admins",
-        "token_name"
-      ],
       "properties": {
         "address_and_balances": {
           "description": "A vector of tuples containing the initial addresses and balances (as u128)",
           "type": "array",
           "items": {
             "type": "array",
-            "items": [
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
               {
-                "$ref": "#/definitions/Address"
+                "$ref": "#/$defs/Address"
               },
               {
-                "$ref": "#/definitions/Amount"
+                "$ref": "#/$defs/Amount"
               }
-            ],
-            "maxItems": 2,
-            "minItems": 2
+            ]
           }
         },
         "admins": {
           "description": "The addresses that are authorized to mint the token.",
           "type": "array",
           "items": {
-            "$ref": "#/definitions/Address"
+            "$ref": "#/$defs/Address"
           }
         },
         "supply_cap": {
           "description": "Supply cap of the token. If None, the value falls back to Amount::MAX.",
           "anyOf": [
             {
-              "$ref": "#/definitions/Amount"
+              "$ref": "#/$defs/Amount"
             },
             {
               "type": "null"
@@ -91,54 +85,54 @@
             "null"
           ],
           "format": "uint8",
-          "minimum": 0.0
+          "maximum": 255,
+          "minimum": 0
         },
         "token_name": {
           "description": "The name of the token.",
           "type": "string"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "required": [
+        "token_name",
+        "address_and_balances",
+        "admins"
+      ]
     },
     "TokenConfig": {
-      "description": "[`TokenConfig`] specifies a configuration used when generating a token for the bank module.",
+      "description": "[`TokenConfig`] specifies a configuration used when generating a token for the bank\nmodule.",
       "type": "object",
-      "required": [
-        "address_and_balances",
-        "admins",
-        "token_id",
-        "token_name"
-      ],
       "properties": {
         "address_and_balances": {
           "description": "A vector of tuples containing the initial addresses and balances (as u128)",
           "type": "array",
           "items": {
             "type": "array",
-            "items": [
+            "maxItems": 2,
+            "minItems": 2,
+            "prefixItems": [
               {
-                "$ref": "#/definitions/Address"
+                "$ref": "#/$defs/Address"
               },
               {
-                "$ref": "#/definitions/Amount"
+                "$ref": "#/$defs/Amount"
               }
-            ],
-            "maxItems": 2,
-            "minItems": 2
+            ]
           }
         },
         "admins": {
           "description": "The addresses that are authorized to mint the token.",
           "type": "array",
           "items": {
-            "$ref": "#/definitions/Address"
+            "$ref": "#/$defs/Address"
           }
         },
         "supply_cap": {
           "description": "Supply cap of the token. If None, the value falls back to Amount::MAX.",
           "anyOf": [
             {
-              "$ref": "#/definitions/Amount"
+              "$ref": "#/$defs/Amount"
             },
             {
               "type": "null"
@@ -152,27 +146,30 @@
             "null"
           ],
           "format": "uint8",
-          "minimum": 0.0
+          "maximum": 255,
+          "minimum": 0
         },
         "token_id": {
           "description": "Predetermined ID of the token. Allowed only for genesis tokens.",
-          "allOf": [
-            {
-              "$ref": "#/definitions/TokenId"
-            }
-          ]
+          "$ref": "#/$defs/TokenId"
         },
         "token_name": {
           "description": "The name of the token.",
           "type": "string"
         }
       },
-      "additionalProperties": false
+      "additionalProperties": false,
+      "required": [
+        "token_name",
+        "token_id",
+        "address_and_balances",
+        "admins"
+      ]
     },
     "TokenId": {
       "description": "A bech32 string",
       "type": "string",
-      "pattern": "token_1[a-zA-Z0-9]+$"
+      "pattern": "^token_1[a-zA-Z0-9]+$"
     }
   }
 }

@@ -10,13 +10,6 @@ publish = false
 
 [dependencies]
 tokio = { workspace = true, default-features = false }
-borsh = { workspace = true, features = ["derive"] }
-
-schemars = { workspace = true, features = ["derive"] }
-serde = { workspace = true, default-features = false, features = [
-    "alloc",
-    "derive",
-] }
 anyhow = { workspace = true }
 rand = { workspace = true }
 clap = { workspace = true }
@@ -26,7 +19,6 @@ sov-transaction-generator = { workspace = true }
 sov-modules-api = { workspace = true }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 # modules
-sov-value-setter = { workspace = true }
 sov-bank = { workspace = true, features = ["native", "arbitrary"] }
 sov-synthetic-load = { workspace = true }
 sov-test-state-consistency = { workspace = true }
