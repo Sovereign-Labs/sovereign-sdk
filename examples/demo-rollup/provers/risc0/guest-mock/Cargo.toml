@@ -49,7 +49,6 @@ bench = [
     "sov-modules-stf-blueprint/bench",
     "sov-risc0-adapter/bench",
 ]
-bincode = ["sov-risc0-adapter/bincode"]
 
 [package.metadata.cargo-machete]
 ignored = ["sov-metrics"]
