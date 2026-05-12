@@ -131,20 +131,20 @@
       "additionalProperties": false
     },
     {
-      "description": "Creates a new \"unknown\" address — an address whose authorization lives purely in `account_owners` and which has no naturally-corresponding private key — and auto-authorizes the caller's current credential for it.\n\nThe new address is derived deterministically as `sha256(domain || visible_slot_hash || sender_addr || sender_credential || salt)`, converted to `S::Address` via the canonical `CredentialId.into()`. Different callers, salts, and visible slots produce different addresses; replaying the same tuple in the same slot is an idempotent no-op.",
+      "description": "Creates a new *synthetic* address — an address whose authorization lives purely in `account_owners` and which has no naturally-corresponding private key — and auto-authorizes the caller's current credential for it. This is the same construct other ecosystems call a *counterfactual* address (cf. ERC-4337, CREATE2): the address is deterministically derivable from public inputs and can receive funds before any controller exists for it on-chain.\n\nThe new address is derived deterministically by hashing `(domain || visible_slot_hash || sender_addr || sender_credential || salt)` with `S::CryptoSpec::Hasher`, then converting the resulting 32 bytes to `S::Address` via `CredentialId.into()`. Different callers, salts, and visible slots produce different addresses; replaying the same tuple in the same slot is an idempotent no-op.",
       "type": "object",
       "required": [
-        "create_unknown_address"
+        "create_synthetic_address"
       ],
       "properties": {
-        "create_unknown_address": {
+        "create_synthetic_address": {
           "type": "object",
           "required": [
             "salt"
           ],
           "properties": {
             "salt": {
-              "description": "Caller-supplied salt that allows the same caller to derive multiple distinct unknown addresses in the same slot.",
+              "description": "Caller-supplied salt that allows the same caller to derive multiple distinct synthetic addresses in the same slot.",
               "type": "array",
               "items": {
                 "type": "integer",

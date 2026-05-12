@@ -10,10 +10,10 @@ use sov_state::namespaces::User;
 
 use crate::{AccountOwnerKey, Accounts, Event};
 
-/// Domain separation prefix for the [`CallMessage::CreateUnknownAddress`]
+/// Domain separation prefix for the [`CallMessage::CreateSyntheticAddress`]
 /// address derivation. Bumping the version invalidates all previously
-/// derived unknown addresses, so do not change without a chain upgrade.
-const UNKNOWN_ADDRESS_DOMAIN: &[u8] = b"sov_accounts::unknown_address::v1";
+/// derived synthetic addresses, so do not change without a chain upgrade.
+const SYNTHETIC_ADDRESS_DOMAIN: &[u8] = b"sov_accounts::synthetic_address::v1";
 
 /// Represents the available call messages for interacting with the sov-accounts module.
 #[derive(Debug, PartialEq, Eq, Clone, JsonSchema, UniversalWallet)]
@@ -67,20 +67,24 @@ pub enum CallMessage<S: Spec> {
         new_credential: CredentialId,
     },
 
-    /// Creates a new "unknown" address — an address whose authorization
+    /// Creates a new *synthetic* address — an address whose authorization
     /// lives purely in `account_owners` and which has no
     /// naturally-corresponding private key — and auto-authorizes the
-    /// caller's current credential for it.
+    /// caller's current credential for it. This is the same construct other
+    /// ecosystems call a *counterfactual* address (cf. ERC-4337, CREATE2):
+    /// the address is deterministically derivable from public inputs and
+    /// can receive funds before any controller exists for it on-chain.
     ///
-    /// The new address is derived deterministically as
-    /// `sha256(domain || visible_slot_hash || sender_addr || sender_credential || salt)`,
-    /// converted to `S::Address` via the canonical `CredentialId.into()`.
+    /// The new address is derived deterministically by hashing
+    /// `(domain || visible_slot_hash || sender_addr || sender_credential || salt)`
+    /// with `S::CryptoSpec::Hasher`, then converting the resulting 32 bytes
+    /// to `S::Address` via `CredentialId.into()`.
     /// Different callers, salts, and visible slots produce different
     /// addresses; replaying the same tuple in the same slot is an
     /// idempotent no-op.
-    CreateUnknownAddress {
+    CreateSyntheticAddress {
         /// Caller-supplied salt that allows the same caller to derive
-        /// multiple distinct unknown addresses in the same slot.
+        /// multiple distinct synthetic addresses in the same slot.
         salt: [u8; 32],
     },
 }
@@ -158,7 +162,7 @@ impl<S: Spec> Accounts<S> {
         Ok(())
     }
 
-    pub(crate) fn create_unknown_address(
+    pub(crate) fn create_synthetic_address(
         &mut self,
         salt: [u8; 32],
         context: &Context<S>,
@@ -167,6 +171,12 @@ impl<S: Spec> Accounts<S> {
         self.ensure_custom_account_mappings_enabled(state)?;
 
         let caller_credential = self.caller_credential_id(context)?;
+        // `chain_state` writes the genesis slot in its `genesis` step and updates
+        // `slots` at the start of every slot via `synchronize_chain`. By the time
+        // a user transaction executes there is always a visible slot, so the
+        // `None` branch below would indicate that `chain_state` was not wired
+        // into the runtime — we surface that as a tx-level error rather than
+        // panicking so a misconfigured runtime cannot crash the batch.
         let visible_slot = self
             .chain_state
             .latest_visible_slot(state)
@@ -174,27 +184,27 @@ impl<S: Spec> Accounts<S> {
             .ok_or_else(|| anyhow!("Visible DA slot hash is unavailable"))?;
 
         let mut hasher = <S::CryptoSpec as CryptoSpec>::Hasher::new();
-        hasher.update(UNKNOWN_ADDRESS_DOMAIN);
+        hasher.update(SYNTHETIC_ADDRESS_DOMAIN);
         hasher.update(visible_slot.slot_hash().as_ref());
         hasher.update(context.sender().as_ref());
         let caller_credential_bytes: &[u8] = caller_credential.0.as_ref();
         hasher.update(caller_credential_bytes);
         hasher.update(salt);
-        let unknown_credential = CredentialId::from_bytes(hasher.finalize().into());
-        let new_address: S::Address = unknown_credential.into();
+        let synthetic_credential = CredentialId::from_bytes(hasher.finalize().into());
+        let new_address: S::Address = synthetic_credential.into();
 
         // Replays in the same visible slot must stay a no-op even if the
         // creator explicitly revoked or rotated this credential away.
         if self
             .account_owners
             .get(&AccountOwnerKey::new(new_address, caller_credential), state)
-            .context("Failed to read unknown-address authorization state")?
+            .context("Failed to read synthetic-address authorization state")?
             .is_none()
         {
             self.authorize_credential(&new_address, &caller_credential, state)?;
             self.emit_event(
                 state,
-                Event::UnknownAddressCreated {
+                Event::SyntheticAddressCreated {
                     address: new_address,
                     creator: *context.sender(),
                     credential: caller_credential,
@@ -204,11 +214,19 @@ impl<S: Spec> Accounts<S> {
         Ok(())
     }
 
-    /// Resolves the credential id of the current caller. Supports the V0
+    /// Resolves the credential id of the current caller. Supports callers that
+    /// already carry a pre-authenticated `CredentialId`, plus the V0
     /// (single-signer) and V1 multisig paths; any other credential type
-    /// (e.g. EVM `Address`, Solana `pub_key`) cannot create an unknown
-    /// address through this call.
-    fn caller_credential_id(&self, context: &Context<S>) -> anyhow::Result<CredentialId> {
+    /// (e.g. EVM `Address`, Solana `pub_key`) cannot create a synthetic address
+    /// through this call.
+    pub(crate) fn caller_credential_id(
+        &self,
+        context: &Context<S>,
+    ) -> anyhow::Result<CredentialId> {
+        if let Some(credential_id) = context.get_sender_credential::<CredentialId>() {
+            return Ok(*credential_id);
+        }
+
         if let Some(public_key) =
             context.get_sender_credential::<<S::CryptoSpec as CryptoSpec>::PublicKey>()
         {
@@ -221,7 +239,10 @@ impl<S: Spec> Accounts<S> {
             return Ok(multisig.credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>());
         }
 
-        bail!("Unsupported credential type for unknown address creation")
+        bail!(
+            "CreateSyntheticAddress: caller credential is neither a CryptoSpec::PublicKey nor a \
+             Multisig, which are the only credential types supported by this call"
+        )
     }
 
     fn revoke_credential(

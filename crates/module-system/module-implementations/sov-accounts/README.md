@@ -25,15 +25,20 @@ addresses and records which credentials may act for which addresses.
    There is no orphan guard on remove — revoking the last credential leaves
    the address unspendable via `account_owners`.
 
-6. It is possible to create a new "unknown" address — an address whose
+6. It is possible to create a new *synthetic* address — an address whose
    authorization lives purely in `account_owners` and which has no
    naturally-corresponding private key — with
-   `CallMessage::CreateUnknownAddress { salt }`. The new address is derived
-   as `sha256(domain || visible_slot_hash || sender_addr || sender_credential || salt).into::<S::Address>()`,
-   and the caller's current credential is auto-authorized for it. Different
-   callers, salts, and visible slots produce different addresses; replaying
-   the same tuple in the same slot is an idempotent no-op. The
-   resulting unknown address is operated on through the same
+   `CallMessage::CreateSyntheticAddress { salt }`. This is the same construct
+   other ecosystems call a *counterfactual* address (cf. ERC-4337, CREATE2):
+   the address is deterministically derivable from public inputs and can
+   receive funds before any controller exists for it on-chain. The new
+   address is derived by hashing `(domain || visible_slot_hash ||
+   sender_addr || sender_credential || salt)` with `S::CryptoSpec::Hasher`,
+   converting the resulting 32 bytes to `CredentialId`, and then to
+   `S::Address`. The caller's current credential is auto-authorized for it.
+   Different callers, salts, and visible slots produce different addresses;
+   replaying the same tuple in the same slot is an idempotent no-op. The
+   resulting synthetic address is operated on through the same
    `AddCredentialToAddress` / `RemoveCredentialFromAddress` /
    `RotateCredentialOnAddress` calls as any other address.
 

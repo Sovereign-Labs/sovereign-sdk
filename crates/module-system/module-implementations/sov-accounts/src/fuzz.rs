@@ -24,7 +24,7 @@ where
                 old_credential: u.arbitrary()?,
                 new_credential: u.arbitrary()?,
             }),
-            _ => Ok(Self::CreateUnknownAddress {
+            _ => Ok(Self::CreateSyntheticAddress {
                 salt: u.arbitrary()?,
             }),
         }

@@ -46,11 +46,12 @@ pub struct Account<S: Spec> {
 #[serde(bound = "S: Spec", rename_all = "snake_case")]
 #[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "Event")]
 pub enum Event<S: Spec> {
-    /// Emitted by [`CallMessage::CreateUnknownAddress`] when a new
-    /// "unknown" address — an address with no naturally-corresponding
-    /// private key — is created and the caller's credential is
+    /// Emitted by [`CallMessage::CreateSyntheticAddress`] when a new
+    /// synthetic address — an address with no naturally-corresponding
+    /// private key, sometimes called a *counterfactual* address (cf.
+    /// ERC-4337, CREATE2) — is created and the caller's credential is
     /// auto-authorized for it.
-    UnknownAddressCreated {
+    SyntheticAddressCreated {
         /// The newly created address.
         address: S::Address,
         /// The address that submitted the creation transaction.
@@ -109,7 +110,7 @@ pub struct Accounts<S: Spec> {
     pub id: ModuleId,
 
     /// Chain-state module, used to read the visible DA slot hash when
-    /// deriving unknown addresses.
+    /// deriving synthetic addresses.
     #[module]
     pub(crate) chain_state: sov_chain_state::ChainState<S>,
 
@@ -135,6 +136,14 @@ pub struct Accounts<S: Spec> {
     /// Authorization overrides. `Some(true)` means `credential_id` may sign as
     /// `address`; `Some(false)` explicitly revokes fallback authorization for
     /// the pair.
+    ///
+    /// **Invariant:** entries are written *only* by [`Self::authorize_credential`]
+    /// (writing `true`) and by [`crate::call::Accounts::revoke_credential`]
+    /// (writing `false`). The absence of an entry — `None` — therefore reliably
+    /// means "no call has ever touched this `(address, credential)` pair", which
+    /// is what [`crate::call::Accounts::create_synthetic_address`] relies on to
+    /// keep replay-after-revoke a no-op. Adding a new writer that does not
+    /// preserve this convention breaks that guarantee.
     #[state]
     pub(crate) account_owners: StateMap<AccountOwnerKey<S>, bool>,
 }
@@ -188,8 +197,8 @@ impl<S: Spec> Module for Accounts<S> {
                 context,
                 state,
             ),
-            call::CallMessage::CreateUnknownAddress { salt } => {
-                self.create_unknown_address(salt, context, state)
+            call::CallMessage::CreateSyntheticAddress { salt } => {
+                self.create_synthetic_address(salt, context, state)
             }
         }
     }
