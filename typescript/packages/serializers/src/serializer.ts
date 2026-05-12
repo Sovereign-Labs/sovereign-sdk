@@ -81,10 +81,8 @@ export abstract class Serializer {
    * @returns The serialized Borsh bytes.
    */
   serializeUnsignedTx(input: unknown): Uint8Array {
-    const unsignedTx = isVersionedUnsignedTx(input) ? input : { V0: input };
-
     return this.serialize(
-      unsignedTx,
+      input,
       this.lookupKnownTypeIndex(KnownTypeId.UnsignedTransaction),
     );
   }
@@ -140,14 +138,4 @@ export function convertUint8ArraysToArrays<T>(obj: T): T {
   }
 
   return obj;
-}
-
-function isVersionedUnsignedTx(
-  input: unknown,
-): input is { V0?: unknown; V1?: unknown } {
-  return (
-    typeof input === "object" &&
-    input !== null &&
-    ("V0" in input || "V1" in input)
-  );
 }

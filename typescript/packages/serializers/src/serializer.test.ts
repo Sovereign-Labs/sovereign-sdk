@@ -13,22 +13,7 @@ class TestSerializer extends Serializer {
 }
 
 describe("Serializer", () => {
-  it("should wrap plain unsigned transactions as V0", () => {
-    const serializer = new TestSerializer({ root_type_indices: [0, 177, 3] });
-    const unsignedTx = {
-      runtime_call: { bank: "transfer" },
-      uniqueness: { generation: 1 },
-      details: { max_fee: "1000" },
-    };
-
-    const result = serializer.serializeUnsignedTx(unsignedTx);
-
-    expect(result).toEqual(new Uint8Array([1, 2, 3]));
-    expect(serializer.lastIndex).toBe(177);
-    expect(serializer.lastInput).toEqual({ V0: unsignedTx });
-  });
-
-  it("should not double-wrap versioned unsigned transactions", () => {
+  it("should pass versioned unsigned transactions through unchanged", () => {
     const serializer = new TestSerializer({ root_type_indices: [0, 177, 3] });
     const v0UnsignedTx = {
       V0: {
@@ -52,18 +37,20 @@ describe("Serializer", () => {
     expect(serializer.lastInput).toEqual(v1UnsignedTx);
   });
 
-  it("should convert Uint8Arrays when wrapping plain unsigned transactions", () => {
+  it("should convert Uint8Arrays nested in unsigned transactions", () => {
     const serializer = new TestSerializer({ root_type_indices: [0, 177, 3] });
     const unsignedTx = {
-      runtime_call: {
-        bank: {
-          transfer: {
-            to: new Uint8Array([1, 2, 3]),
+      V0: {
+        runtime_call: {
+          bank: {
+            transfer: {
+              to: new Uint8Array([1, 2, 3]),
+            },
           },
         },
+        uniqueness: { generation: 1 },
+        details: { max_fee: "1000" },
       },
-      uniqueness: { generation: 1 },
-      details: { max_fee: "1000" },
     };
 
     serializer.serializeUnsignedTx(unsignedTx);
