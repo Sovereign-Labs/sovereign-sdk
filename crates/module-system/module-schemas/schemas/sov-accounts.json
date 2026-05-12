@@ -4,11 +4,11 @@
   "description": "Represents the available call messages for interacting with the sov-accounts module.",
   "oneOf": [
     {
-      "description": "Authorizes `credential_id` as a signer for the caller's address. Fails if the credential is already authorized for the caller's address.",
+      "description": "Authorizes `credential_id` as a signer for the caller's address.\nFails if the credential is already authorized for the caller's address.",
       "type": "object",
       "properties": {
         "insert_credential_id": {
-          "description": "The new credential id.",
+          "description": "The credential id being authorized.",
           "$ref": "#/$defs/CredentialId"
         }
       },
@@ -16,9 +16,100 @@
       "required": [
         "insert_credential_id"
       ]
+    },
+    {
+      "description": "Authorizes `credential` to sign transactions that execute as `address`.\nThe caller must currently be signing as `address`. Fails if the tuple\nis already authorized.",
+      "type": "object",
+      "properties": {
+        "add_credential_to_address": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "description": "The address whose credential set is being extended. Must equal\n`context.sender()`.",
+              "$ref": "#/$defs/Address"
+            },
+            "credential": {
+              "description": "The credential being authorized for `address`.",
+              "$ref": "#/$defs/CredentialId"
+            }
+          },
+          "required": [
+            "address",
+            "credential"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "add_credential_to_address"
+      ]
+    },
+    {
+      "description": "Revokes `credential` from `address`. The caller must currently be\nsigning as `address`. No orphan guard: revoking the last credential\nsucceeds and leaves `address` unspendable via this map.",
+      "type": "object",
+      "properties": {
+        "remove_credential_from_address": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "description": "The address whose credential set is being reduced. Must equal\n`context.sender()`.",
+              "$ref": "#/$defs/Address"
+            },
+            "credential": {
+              "description": "The credential being revoked from `address`.",
+              "$ref": "#/$defs/CredentialId"
+            }
+          },
+          "required": [
+            "address",
+            "credential"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "remove_credential_from_address"
+      ]
+    },
+    {
+      "description": "Atomically swaps `old_credential` for `new_credential` on `address`.\nFunctionally equivalent to a `RemoveCredentialFromAddress` followed by\nan `AddCredentialToAddress`, collapsed into a single call so the\ncaller does not have to authorize two transactions during a rotation.\nThe caller must currently be signing as `address`.",
+      "type": "object",
+      "properties": {
+        "rotate_credential_on_address": {
+          "type": "object",
+          "properties": {
+            "address": {
+              "description": "The address whose credential set is being rotated. Must equal\n`context.sender()`.",
+              "$ref": "#/$defs/Address"
+            },
+            "new_credential": {
+              "description": "The credential being authorized for `address`. Must not already\nbe authorized.",
+              "$ref": "#/$defs/CredentialId"
+            },
+            "old_credential": {
+              "description": "The credential being revoked from `address`. Must be currently\nauthorized.",
+              "$ref": "#/$defs/CredentialId"
+            }
+          },
+          "required": [
+            "address",
+            "old_credential",
+            "new_credential"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "rotate_credential_on_address"
+      ]
     }
   ],
   "$defs": {
+    "Address": {
+      "description": "Address",
+      "type": "string",
+      "pattern": "^sov1[a-zA-Z0-9]+$"
+    },
     "CredentialId": {
       "description": "32 bytes in hexadecimal format, with `0x` prefix.",
       "type": "string",
