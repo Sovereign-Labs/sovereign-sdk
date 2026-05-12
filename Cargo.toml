@@ -209,8 +209,10 @@ reltester = { git = "https://github.com/sovereign-labs/reltester.git", rev = "d6
 rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "d8b270d399d0d355a19fbeedf9af009baee8ae66" }
 nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
 # External dependencies
-nomt-core = { version = "1.0.3", default-features = false, features = ["borsh", "serde"] }
-nomt = { version = "1.0.3", default-features = false, features = ["borsh", "serde"] }
+#nomt-core = { version = "1.0.3", default-features = false, features = ["borsh", "serde"] }
+nomt-core = { git = "https://github.com/citizen-stig/nomt.git", rev = "4c676b12679a8f2101de8024f109d42188c5dc5d", default-features = false, features = ["borsh", "serde"] }
+#nomt = { version = "1.0.3", default-features = false, features = ["borsh", "serde"] }
+nomt = { git = "https://github.com/citizen-stig/nomt.git", rev = "4c676b12679a8f2101de8024f109d42188c5dc5d", default-features = false, features = ["borsh", "serde"] }
 concread = { version = "0.5.7" }
 
 anyhow = { version = "1.0.95" }
