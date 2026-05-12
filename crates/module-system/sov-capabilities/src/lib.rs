@@ -44,10 +44,10 @@ pub struct StandardProvenRollupCapabilities<'a, S: Spec, GasPayer = ()> {
 impl<'a, S: Spec, T> StandardProvenRollupCapabilities<'a, S, T> {
     fn get_prover_token_holder(
         &'a self,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         state: &mut impl InfallibleStateAccessor,
     ) -> TokenHolder<S> {
-        let rewarded_token_holder = match oprating_mode {
+        let rewarded_token_holder = match operating_mode {
             OperatingMode::Zk => self.prover_incentives.id().to_payable().into(),
             OperatingMode::Optimistic => self.attester_incentives.id().to_payable().into(),
             OperatingMode::Operator => {
@@ -139,10 +139,10 @@ where
     fn reward_prover(
         &mut self,
         prover_rewards: &ProverReward,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         state: &mut impl InfallibleStateAccessor,
     ) {
-        let rewarded_module = self.get_prover_token_holder(oprating_mode, state);
+        let rewarded_module = self.get_prover_token_holder(operating_mode, state);
 
         self.bank
             .transfer_from(
@@ -181,10 +181,10 @@ where
         &mut self,
         amount: Amount,
         _sequencer: &S::Address,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         state: &mut impl InfallibleStateAccessor,
     ) -> anyhow::Result<()> {
-        let rewarded_prover_module = self.get_prover_token_holder(oprating_mode, state);
+        let rewarded_prover_module = self.get_prover_token_holder(operating_mode, state);
         // Transfer the penalty from the sequencer bank to the sequencer
         Ok(self.bank.transfer_from(
             self.bank.id.clone().to_payable(),
