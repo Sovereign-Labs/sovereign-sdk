@@ -65,9 +65,8 @@ async fn test_proof_generation() {
         let proof_public_data = verify(&proof.proof, method_id.clone()).await;
 
         assert_eq!(proof_public_data.slot_hash, proof.da_block_header.hash());
-        // TODO: Uncomment after NOmt bug is solved: https://github.com/Sovereign-Labs/sovereign-sdk/pull/2739
-        //assert_eq!(proof_public_data.initial_state_root, initial_state_root);
-        //assert_eq!(proof_public_data.final_state_root, final_state_root);
+        assert_eq!(proof_public_data.initial_state_root, initial_state_root);
+        assert_eq!(proof_public_data.final_state_root, final_state_root);
         assert_eq!(proof_public_data.prover_address, prover_address);
     }
 }

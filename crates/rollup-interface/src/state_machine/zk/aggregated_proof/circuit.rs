@@ -197,12 +197,11 @@ where
         // the predecessor's final_state_root, ensuring no gaps in the state
         // transition.
         {
-            if let Some(_expected_prev_state_root) = &expected_prev_state_root {
-                // TODO Fix NOMT bug.
-                // assert_eq!(
-                //     expected_prev_state_root, &stf_public_data.initial_state_root,
-                //     "State root discontinuity at index {index}: previous final_state_root != current initial_state_root"
-                // );
+            if let Some(expected_prev_state_root) = &expected_prev_state_root {
+                assert_eq!(
+                     expected_prev_state_root, &stf_public_data.initial_state_root,
+                     "State root discontinuity at index {index}: previous final_state_root != current initial_state_root"
+                 );
             }
 
             expected_prev_state_root = Some(stf_public_data.final_state_root.clone());
