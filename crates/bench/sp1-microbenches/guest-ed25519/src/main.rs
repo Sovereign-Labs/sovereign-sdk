@@ -25,6 +25,4 @@ pub fn main() {
         black_box(result.expect("verification should succeed"));
     }
     println!("cycle-tracker-report-end: verify_loop");
-
-    sp1_zkvm::io::commit(&[0u8; 32]);
 }
