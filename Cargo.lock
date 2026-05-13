@@ -12223,10 +12223,10 @@ dependencies = [
  "sov-accounts",
  "sov-chain-state",
  "sov-db",
+ "sov-full-node-configs",
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "sov-stf-runner",
 ]
 
 [[package]]

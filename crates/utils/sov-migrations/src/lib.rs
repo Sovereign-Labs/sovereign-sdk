@@ -4,22 +4,26 @@ use std::path::{Path, PathBuf};
 
 use anyhow::{bail, Context};
 use rockbound::SchemaBatch;
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use sov_chain_state::ChainState;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::tables::SlotByNumber;
 use sov_db::storage_manager::NomtChangeSet;
+use sov_full_node_configs::runner::from_toml_path;
 use sov_modules_api::capabilities::{BlockGasInfo, RollupHeight};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::runtime::capabilities::Kernel as KernelTrait;
 use sov_modules_api::{BootstrapWorkingSet, Spec, StateCheckpoint};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
-use sov_rollup_interface::node::da::DaService;
 use sov_state::NativeStorage;
-use sov_stf_runner::{from_toml_path, RollupConfig};
 
 pub mod v1;
+
+#[derive(Deserialize)]
+struct StorageOnlyRollupConfig {
+    storage: RollupDbConfig,
+}
 
 /// CLI-shaped inputs for running a migration against a rollup database.
 #[derive(Debug, Clone)]
@@ -112,17 +116,12 @@ pub struct MigrationOutcome<Report> {
 }
 
 /// Loads the storage config from a rollup TOML config and applies an optional DB path override.
-pub fn load_storage_config<S, Da>(
+pub fn load_storage_config(
     rollup_config_path: impl AsRef<Path>,
     db_path_override: Option<&Path>,
-) -> anyhow::Result<RollupDbConfig>
-where
-    S: Spec,
-    Da: DaService<Spec = S::Da>,
-    RollupConfig<S::Address, Da>: serde::de::DeserializeOwned,
-{
-    let rollup_config: RollupConfig<S::Address, Da> = from_toml_path(&rollup_config_path)
-        .with_context(|| {
+) -> anyhow::Result<RollupDbConfig> {
+    let rollup_config: StorageOnlyRollupConfig =
+        from_toml_path(&rollup_config_path).with_context(|| {
             format!(
                 "failed to read rollup config from {}",
                 rollup_config_path.as_ref().display()

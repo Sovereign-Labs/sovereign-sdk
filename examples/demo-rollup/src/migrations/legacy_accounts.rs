@@ -5,7 +5,6 @@ use std::path::PathBuf;
 use clap::Parser;
 use demo_stf::runtime::Runtime;
 use sov_demo_rollup::MockDemoRollup;
-use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{CryptoSpec, Spec};
 use sov_modules_rollup_blueprint::RollupBlueprint;
@@ -44,7 +43,7 @@ fn run() -> anyhow::Result<()> {
     let args = Args::parse();
     let mut runtime = Runtime::<RollupSpec>::default();
     let runtime_inner = &mut *runtime;
-    sov_migrations::v1::run::<RollupSpec, Hasher, StorableMockDaService>(
+    sov_migrations::v1::run::<RollupSpec, Hasher>(
         sov_migrations::MigrationArgs {
             rollup_config_path: args.rollup_config_path,
             db_path: args.db_path,

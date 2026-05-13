@@ -13,8 +13,8 @@ use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{
-    CredentialId, CryptoSpec, ModuleInfo, OperatingMode, Spec, StateCheckpoint, StateMap,
-    StateValue, StateWriter,
+    AccessoryStateValue, CredentialId, CryptoSpec, ModuleInfo, OperatingMode, Spec,
+    StateCheckpoint, StateMap, StateWriter,
 };
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::{
@@ -139,7 +139,7 @@ fn assert_migrated_state(
 
     let state_version = runtime
         .chain_state
-        .state_version(&mut checkpoint)
+        .state_version(&mut checkpoint.accessory_state())
         .context("failed to read migrated state_version")?;
     assert_eq!(state_version, sov_migrations::v1::TARGET_STATE_VERSION);
     assert!(runtime.accounts.is_explicitly_authorized(
@@ -224,8 +224,10 @@ fn legacy_accounts_map(
     )
 }
 
-fn chain_state_state_version_value(chain_state: &ChainState<DemoRollupSpec>) -> StateValue<u64> {
-    StateValue::with_codec(
+fn chain_state_state_version_value(
+    chain_state: &ChainState<DemoRollupSpec>,
+) -> AccessoryStateValue<u64> {
+    AccessoryStateValue::with_codec(
         Prefix::new(
             chain_state.discriminant(),
             ChainState::<DemoRollupSpec>::STATE_VERSION_ITEM_DISCRIMINANT,

@@ -4,8 +4,10 @@ use anyhow::Context;
 use serde::Serialize;
 use sov_accounts::{Account, Accounts};
 use sov_chain_state::ChainState;
-use sov_modules_api::{CredentialId, ModuleInfo, Spec, StateReader, StateValue, StateWriter};
-use sov_state::{BorshCodec, Kernel, NativeStorage, Prefix, SlotKey, SlotValue, StateUpdate, User};
+use sov_modules_api::{
+    AccessoryStateValue, CredentialId, ModuleInfo, Spec, StateCheckpoint, StateWriter,
+};
+use sov_state::{BorshCodec, Kernel, NativeStorage, Prefix, SlotKey, SlotValue, StateUpdate};
 
 use crate::MigrationStorage as _;
 
@@ -58,19 +60,21 @@ where
 }
 
 /// Applies the v1 migration to a checkpoint.
-pub fn apply<S, Writer>(
+pub fn apply<S>(
     accounts: &mut Accounts<S>,
     chain_state: &mut ChainState<S>,
     data: MigrationData<S>,
-    state: &mut Writer,
+    state: &mut StateCheckpoint<S>,
 ) -> anyhow::Result<MigrationReport>
 where
     S: Spec,
-    Writer: StateReader<User> + StateWriter<User> + StateWriter<Kernel>,
 {
-    let from_state_version = chain_state
-        .state_version(state)
-        .context("failed to read chain-state state_version")?;
+    let from_state_version = {
+        let mut accessory_state = state.accessory_state();
+        chain_state
+            .state_version(&mut accessory_state)
+            .context("failed to read chain-state state_version")?
+    };
     anyhow::ensure!(
         from_state_version == SOURCE_STATE_VERSION,
         "cannot apply v1 migration: on-disk state_version is {from_state_version}, expected {SOURCE_STATE_VERSION}"
@@ -82,9 +86,12 @@ where
         state,
     )
     .context("failed to apply legacy-accounts migration")?;
-    state_version_value(chain_state)
-        .set(&TARGET_STATE_VERSION, state)
-        .context("failed to update chain-state state_version")?;
+    {
+        let mut accessory_state = state.accessory_state();
+        state_version_value(chain_state)
+            .set(&TARGET_STATE_VERSION, &mut accessory_state)
+            .context("failed to update chain-state state_version")?;
+    }
     StateWriter::<Kernel>::set(
         state,
         &data.kernel_roundtrip.key,
@@ -100,7 +107,7 @@ where
 }
 
 /// Runs the v1 migration and writes the JSON report to stdout.
-pub fn run<S, H, Da>(
+pub fn run<S, H>(
     args: crate::MigrationArgs,
     accounts: &mut Accounts<S>,
     chain_state: &mut ChainState<S>,
@@ -111,15 +118,12 @@ where
             OutputSize = sov_rollup_interface::reexports::digest::typenum::U32,
         > + Send
         + Sync,
-    Da: sov_rollup_interface::node::da::DaService<Spec = S::Da>,
-    sov_stf_runner::RollupConfig<S::Address, Da>: serde::de::DeserializeOwned,
     S::Storage: sov_db::storage_manager::InitializableNativeNomtStorage<
             H,
             <S::Da as sov_rollup_interface::da::DaSpec>::SlotHash,
         > + crate::MigrationStorage,
 {
-    let storage =
-        crate::load_storage_config::<S, Da>(&args.rollup_config_path, args.db_path.as_deref())?;
+    let storage = crate::load_storage_config(&args.rollup_config_path, args.db_path.as_deref())?;
     let report = run_with_options::<S, H>(
         crate::MigrationOptions {
             storage,
@@ -215,9 +219,7 @@ where
         )?;
         if post_head_slot_number != head_slot_number {
             anyhow::bail!(
-                "post-migration head slot changed unexpectedly: expected {}, found {}",
-                head_slot_number,
-                post_head_slot_number
+                "post-migration head slot changed unexpectedly: expected {head_slot_number}, found {post_head_slot_number}"
             );
         }
         crate::assert_ledger_head_state_root_matches_storage_root(
@@ -261,8 +263,8 @@ where
     Ok(KernelRoundtrip { key, value })
 }
 
-fn state_version_value<S: Spec>(chain_state: &ChainState<S>) -> StateValue<u64> {
-    StateValue::with_codec(
+fn state_version_value<S: Spec>(chain_state: &ChainState<S>) -> AccessoryStateValue<u64> {
+    AccessoryStateValue::with_codec(
         Prefix::new(
             chain_state.discriminant(),
             ChainState::<S>::STATE_VERSION_ITEM_DISCRIMINANT,

@@ -7,7 +7,7 @@ homepage = { workspace = true }
 license = { workspace = true }
 repository = { workspace = true }
 version = { workspace = true }
-publish = false
+publish = { workspace = true }
 
 [lints]
 workspace = true
@@ -23,4 +23,4 @@ sov-db = { workspace = true, features = ["migration-script"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-state = { workspace = true, features = ["native"] }
-sov-stf-runner = { workspace = true }
+sov-full-node-configs = { workspace = true }
