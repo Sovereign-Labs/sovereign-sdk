@@ -10,12 +10,16 @@ repository = { workspace = true }
 
 [dependencies]
 syn = { features = ["parsing", "derive"], workspace = true }
-syn_derive = "0.2.0"
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
-convert_case = { workspace = true }
 darling = { workspace = true }
-hex = { workspace = true }
 borsh = { workspace = true }
 bs58 = { workspace = true }
 bech32 = { workspace = true }
+# Pinned exactly: serde_derive_internals is officially private API
+# ("not subject to semver"). We use it to match serde's `rename_all`
+# algorithm exactly, since `convert_case` produces different output for
+# variants ending in digits (e.g. `DelegateUserV2` → `delegate_user_v_2`
+# vs serde's `delegate_user_v2`). On serde upgrades, bump this pin to
+# match the version that the workspace's `serde_derive` resolves to.
+serde_derive_internals = "=0.29.1"

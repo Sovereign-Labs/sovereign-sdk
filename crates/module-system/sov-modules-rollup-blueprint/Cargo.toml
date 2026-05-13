@@ -15,7 +15,6 @@ workspace = true
 
 [dependencies]
 console-subscriber = { workspace = true, optional = true }
-derivative = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-stf-runner = { workspace = true, optional = true }
 sov-state = { workspace = true }
@@ -55,7 +54,6 @@ native = [
 	"async-trait",
 	"futures",
 	"console-subscriber",
-	"derivative",
 	"serde_json",
 	"sov-cli",
 	"sov-db",

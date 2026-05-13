@@ -108,6 +108,13 @@ impl ZkVerifier for Risc0Verifier {
         receipt.verify(code_commitment.0)?;
         Ok(bincode::deserialize(&receipt.journal.bytes)?)
     }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error> {
+        let receipt: Receipt = bincode::deserialize(&serialized_proof.raw_proof)?;
+        Ok(bincode::deserialize(&receipt.journal.bytes)?)
+    }
 }
 
 /// The Risc0 Zkvm.
@@ -144,6 +151,13 @@ impl ZkVerifier for Risc0Verifier {
     fn verify_with_proof<T: DeserializeOwned>(
         _serialized_proof: &SerializedZkProof,
         _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // Implement this method once risc0 supports recursion: issue #633
+        todo!("Implement once risc0 supports recursion: https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
+    }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        _serialized_proof: &SerializedZkProof,
     ) -> Result<T, Self::Error> {
         // Implement this method once risc0 supports recursion: issue #633
         todo!("Implement once risc0 supports recursion: https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")

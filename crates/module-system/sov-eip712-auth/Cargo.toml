@@ -14,17 +14,17 @@ publish = false
 [lints]
 workspace = true
 
+[package.metadata.cargo-machete]
+ignored = ["sov-universal-wallet"]
+
 [dependencies]
 sov-address = { workspace = true, features = ["evm"] } # to implement the compatibility marker on EvmCryptoSpec
 sov-modules-api = { workspace = true }
+sov-universal-wallet = { workspace = true, features = ["eip712"] } # enables Schema::eip712_signing_digest on the re-export used below
 sov-state = { workspace = true }
-sov-universal-wallet = { workspace = true, features = ["eip712"] }
 anyhow = { workspace = true }
 borsh = { workspace = true }
-derive_more = { workspace = true, default-features = true, features = [ "debug" ] }
 jsonrpsee = { workspace = true, features = ["jsonrpsee-types"] }
-serde = { workspace = true }
-tracing = { workspace = true }
 # For the stub RPC for chains not using EVM. Not needed for those using EVM,
 # but in that case the dependency is almost certainly already present:
 serde_json = { workspace = true } 

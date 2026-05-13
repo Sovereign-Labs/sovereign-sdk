@@ -20,6 +20,4 @@ sov-transaction-generator = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-consensus = { workspace = true }
 secp256k1 = { workspace = true }
-sha2 = { workspace = true }
-rand_chacha = { workspace = true }
 arbitrary = { workspace = true }

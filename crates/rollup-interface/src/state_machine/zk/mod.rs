@@ -156,6 +156,18 @@ pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
         serialized_proof: &SerializedZkProof,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error>;
+
+    /// Deserialize the claimed public outputs from a serialized proof WITHOUT performing
+    /// cryptographic verification.
+    ///
+    /// The returned value reflects only what the prover *claims* the outputs are. It must
+    /// be treated as untrusted until a corresponding [`Self::verify_with_proof`] call
+    /// succeeds against an appropriate code commitment. Useful when the caller needs the
+    /// claimed outputs to decide which code commitment to verify against (e.g. admin-
+    /// initiated rollup upgrades where the verification key itself is being rotated).
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error>;
 }
 
 /// A trait which is accessible from within a zkVM program.

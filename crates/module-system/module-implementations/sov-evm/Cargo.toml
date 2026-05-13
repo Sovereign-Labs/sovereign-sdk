@@ -70,8 +70,6 @@ revm = { workspace = true, features = [
 revm-database-interface = { workspace = true }
 revm-inspectors = { workspace = true, default-features = false, optional = true }
 sov-rpc-eth-types = { workspace = true, optional = true }
-rand = { workspace = true, optional = true }
-proptest = { workspace = true, optional = true }
 
 [dev-dependencies]
 alloy-primitives = { workspace = true, features = ["getrandom"] }
@@ -96,8 +94,6 @@ sov-modules-api = { workspace = true, features = ["test-utils"] }
 [features]
 arbitrary = [
 	"dep:arbitrary",
-	"dep:rand",
-	"dep:proptest",
 	"alloy-eips/arbitrary",
 	"alloy-primitives/arbitrary",
 	"alloy-rpc-types?/arbitrary",
@@ -111,14 +107,12 @@ arbitrary = [
 	"sov-test-utils/arbitrary",
 	"sov-bank/arbitrary",
 	"sov-uniqueness/arbitrary",
-	"alloy-consensus/arbitrary",
-	"sov-evm-test-utils/arbitrary"
+	"alloy-consensus/arbitrary"
 ]
 native = [
 	"alloy-rpc-types",
 	"alloy-rpc-types-trace",
 	"jsonrpsee",
-	"dep:rand",
 	"revm-inspectors",
 	"alloy-primitives/std",
 	"dep:sov-rpc-eth-types",

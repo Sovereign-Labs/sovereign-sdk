@@ -22,7 +22,6 @@ sov-state = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native", "arbitrary"] }
 
 async-trait = { workspace = true }
-schemars = { workspace = true }
 serde = { workspace = true }
 backon = { workspace = true }
 anyhow = { workspace = true }
@@ -58,8 +57,12 @@ sov-test-utils = { workspace = true, features = ["arbitrary"] }
 
 futures = { workspace = true }
 borsh = { workspace = true }
-progenitor-client = { version = "0.8" }
+progenitor-client = { version = "0.14" }
+schemars = { workspace = true }
 serde = { workspace = true }
 
 [lints]
 workspace = true
+
+[package.metadata.cargo-machete]
+ignored = ["schemars"]

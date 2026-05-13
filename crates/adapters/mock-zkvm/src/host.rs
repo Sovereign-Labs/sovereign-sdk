@@ -32,6 +32,7 @@ pub struct MockZkvmHost {
 #[derive(Clone, Debug)]
 struct PreviousAggregatedProofAnchor {
     final_slot_number: SlotNumber,
+    origin_slot_number: SlotNumber,
     genesis_state_root: Vec<u8>,
     final_state_root: Vec<u8>,
 }
@@ -47,8 +48,9 @@ impl PreviousAggregatedProofAnchor {
     {
         Self {
             final_slot_number: public_data.final_slot_number,
-            genesis_state_root: bincode::serialize(&public_data.genesis_state_root)
-                .expect("genesis_state_root must be bincode-serializable"),
+            origin_slot_number: public_data.origin_slot_number,
+            genesis_state_root: bincode::serialize(&public_data.origin_state_root)
+                .expect("origin_state_root must be bincode-serializable"),
             final_state_root: bincode::serialize(&public_data.final_state_root)
                 .expect("final_state_root must be bincode-serializable"),
         }
@@ -186,6 +188,14 @@ impl MockZkvmHost {
         };
         std::thread::sleep(std::time::Duration::from_millis(ms));
     }
+
+    /// Polls `env_var` every 10ms and blocks while it is set to
+    /// `"STOP_PROVING"`. Returns immediately once the var is unset.
+    fn wait_while_stop_proving(env_var: &str) {
+        while std::env::var(env_var).as_deref() == Ok("STOP_PROVING") {
+            std::thread::sleep(std::time::Duration::from_millis(10));
+        }
+    }
 }
 
 impl Default for MockZkvmHost {
@@ -219,9 +229,16 @@ impl OuterZkvmHost for MockZkvmHost {
         Root: Serialize + DeserializeOwned + Clone + PartialEq + Debug,
     >(
         &self,
-        genesis_state_root: Root,
         headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<SerializedAggregatedProof> {
+        Self::maybe_mock_sleep("SOV_MOCK_AGGREGATION_SLEEP_MS");
+        Self::wait_while_stop_proving("SOV_MOCK_AGGREGATION_GATE");
+
+        let mut previous = self
+            .previous_anchor
+            .lock()
+            .expect("previous_anchor mutex was poisoned");
+
         // Mirror the checks performed by the real aggregation circuit
         // (`run_aggregation_program` in sov-rollup-interface).
         Self::check_inner_proof_chain(&headers_with_block_proofs);
@@ -231,19 +248,14 @@ impl OuterZkvmHost for MockZkvmHost {
             .map(|(_, bp)| bp)
             .collect::<Vec<_>>();
 
-        let public_data = AggregatedProofPublicData::from_block_proofs(
-            block_proofs_data.as_slice(),
-            genesis_state_root,
-        );
+        let public_data = if let Some(prev) = previous.as_ref() {
+            let origin_state_root = prev.deserialize_genesis_state_root();
+            let public_data = AggregatedProofPublicData::from_block_proofs(
+                block_proofs_data.as_slice(),
+                prev.origin_slot_number,
+                origin_state_root,
+            );
 
-        Self::maybe_mock_sleep("SOV_MOCK_AGGREGATION_SLEEP_MS");
-
-        let mut previous = self
-            .previous_anchor
-            .lock()
-            .expect("previous_anchor mutex was poisoned");
-
-        if let Some(prev) = previous.as_ref() {
             assert_eq!(
                 public_data.initial_slot_number,
                 prev.final_slot_number.next(),
@@ -256,16 +268,30 @@ impl OuterZkvmHost for MockZkvmHost {
             let prev_final_state_root: Root = prev.deserialize_final_state_root();
 
             assert_eq!(
-                public_data.genesis_state_root, prev_genesis_state_root,
-                "Aggregated proof continuity violated: genesis_state_root differs from previous aggregation",
+                public_data.origin_state_root, prev_genesis_state_root,
+                "Aggregated proof continuity violated: origin_state_root differs from previous aggregation",
             );
             assert_eq!(
                 public_data.initial_state_root, prev_final_state_root,
                 "Aggregated proof continuity violated: new initial_state_root does not match previous final_state_root",
             );
+
+            public_data
         } else {
-            assert_eq!(public_data.initial_slot_number, SlotNumber::ONE);
-        }
+            let origin_state_root = block_proofs_data[0].st.initial_state_root.clone();
+            // origin_slot_number must correspond to origin_state_root: it is the
+            // slot at the end of which that root was produced — i.e. the slot
+            // immediately before the first inner proof's slot.
+            let origin_slot_number = block_proofs_data[0].st.slot_number.prev();
+
+            let public_data = AggregatedProofPublicData::from_block_proofs(
+                block_proofs_data.as_slice(),
+                origin_slot_number,
+                origin_state_root,
+            );
+
+            public_data
+        };
 
         let serialized = self
             .add_hint_and_run_inner(&public_data)

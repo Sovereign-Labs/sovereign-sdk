@@ -49,18 +49,17 @@ impl MockAddress {
 }
 
 impl schemars::JsonSchema for MockAddress {
-    fn schema_name() -> String {
-        "MockAddress".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "MockAddress".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        serde_json::from_value(serde_json::json!({
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        // This description assumes that `serializer` uses a human-readable format.
+        schemars::json_schema!({
             "type": "string",
             "pattern": "^[a-fA-F0-9]{64}$",
-            // This description assumes that `serializer` uses a human-readable format.
             "description": "Mock address; 32 bytes in hex-encoded format",
-        }))
-        .unwrap()
+        })
     }
 }
 

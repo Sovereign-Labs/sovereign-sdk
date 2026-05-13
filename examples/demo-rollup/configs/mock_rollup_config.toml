@@ -88,6 +88,7 @@ max_number_of_aggregated_proofs_in_memory = 5
 blob_processing_timeout_secs = 3000
 max_batch_size_bytes = 1048576
 max_concurrent_batch_blobs = 128
+max_concurrent_proof_blobs = 1024
 max_allowed_node_distance_behind = 10
 rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
 # automatic_batch_production = true # Whether to automatically produce batches

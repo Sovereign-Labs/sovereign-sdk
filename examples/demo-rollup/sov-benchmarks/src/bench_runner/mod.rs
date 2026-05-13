@@ -30,6 +30,7 @@ use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
 use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
+use sov_test_utils::ledger_db::sov_api_spec::ClientInfo;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{MockDaSpec, ProverFactory, RtAgnosticBlueprint};
 use sov_transaction_generator::generators::basic::{BasicChangeLogEntry, BasicClientConfig};
@@ -287,7 +288,7 @@ async fn runner(
         assert_logs_against_state(
             log_accumulator,
             Arc::new(BasicClientConfig {
-                url: rollup.api_client().baseurl().clone(),
+                url: rollup.api_client().baseurl().to_string(),
                 rollup_height: None,
             }),
             assert_logs,

@@ -17,7 +17,6 @@ sov-modules-api = { workspace = true, features = ["native"] }
 thiserror = { workspace = true }
 revm = { workspace = true }
 alloy-eips = { workspace = true }
-alloy-evm = { workspace = true }
 alloy-sol-types = { workspace = true }
 alloy-transport = { workspace = true }
 reth-primitives-traits = { workspace = true }

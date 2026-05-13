@@ -122,6 +122,9 @@ pub const TEST_NUM_CACHE_WARMUP_WORKERS: usize = 3;
 /// The maximum number of concurrent blobs.
 pub const TEST_MAX_CONCURRENT_BATCH_BLOBS: usize = 16;
 
+/// The maximum number of concurrent proof blobs.
+pub const TEST_MAX_CONCURRENT_PROOF_BLOBS: usize = TEST_MAX_CONCURRENT_BATCH_BLOBS;
+
 /// The default max fee to set for a transaction. This should be enough to be able to execute most standard transactions for the test rollup.
 pub const TEST_DEFAULT_MAX_FEE: Amount = Amount::new(100_000_000_000);
 /// The default gas limit to set for a transaction. This is an optional parameter.
@@ -323,14 +326,14 @@ pub fn new_test_gas_meter_with_price<S: Spec>(
 /// Serializes a value to JSON and validates it based on its
 /// [`schemars::JsonSchema`] rules.
 #[allow(clippy::result_large_err)]
-pub fn validate_schema<T>(item: &T) -> Result<(), jsonschema::error::ValidationErrorKind>
+pub fn validate_schema<T>(item: &T) -> Result<(), jsonschema::error::ValidationError<'static>>
 where
     T: schemars::JsonSchema + serde::Serialize,
 {
     let schema = serde_json::to_value(schemars::schema_for!(T)).unwrap();
     let json = serde_json::to_value(item).unwrap();
 
-    jsonschema::validate(&schema, &json).map_err(|e| e.kind)
+    jsonschema::validate(&schema, &json).map_err(|e| e.to_owned())
 }
 
 /// Validate all the storage accesses in a particular cache log,

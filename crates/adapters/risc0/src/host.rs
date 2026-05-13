@@ -15,9 +15,6 @@ use sov_rollup_interface::zk::ZkvmHost;
 /// provided to its execution.
 #[derive(Clone)]
 pub struct Risc0Host<'a> {
-    #[cfg(feature = "bincode")]
-    env: Vec<u8>,
-    #[cfg(not(feature = "bincode"))]
     env: Vec<u32>,
     elf: &'a [u8],
 }
@@ -50,8 +47,6 @@ impl<'a> Risc0Host<'a> {
     /// This creates the "Session" trace without invoking the heavy cryptographic machinery.
     fn run_without_proving(&mut self) -> anyhow::Result<Session> {
         let mut env = add_benchmarking_callbacks(ExecutorEnvBuilder::default());
-        #[cfg(feature = "bincode")]
-        env.write_slice(&[self.env.len() as u32]);
         let env = env.write_slice(&self.env).build().unwrap();
         self.env.clear();
         let mut executor = ExecutorImpl::from_elf(env, self.elf)?;
@@ -74,15 +69,8 @@ impl<'a> Risc0Host<'a> {
         self.env
             .reserve(std::mem::size_of::<T>() / std::mem::size_of::<u32>());
 
-        #[cfg(not(feature = "bincode"))]
-        {
-            let mut serializer = risc0_zkvm::serde::Serializer::new(&mut self.env);
-            item.serialize(&mut serializer)
-                .expect("Risc0 hint serialization is infallible");
-        }
-
-        #[cfg(feature = "bincode")]
-        bincode::serialize_into(&mut self.env, item)
+        let mut serializer = risc0_zkvm::serde::Serializer::new(&mut self.env);
+        item.serialize(&mut serializer)
             .expect("Risc0 hint serialization is infallible");
     }
 
@@ -122,7 +110,6 @@ impl OuterZkvmHost for Risc0Host<'static> {
         Root: Serialize + serde::de::DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
     >(
         &self,
-        _genesis_state_root: Root,
         _headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
     ) -> anyhow::Result<SerializedAggregatedProof> {
         unimplemented!("Proof aggregation not supported for Risc0")

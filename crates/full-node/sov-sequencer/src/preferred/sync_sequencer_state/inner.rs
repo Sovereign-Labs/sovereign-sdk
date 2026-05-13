@@ -34,6 +34,7 @@ use sov_modules_api::{
     VisibleSlotNumber,
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::pinned_cache::PinnedCache;
 use sov_state::{NativeStorage, Storage};
 use std::num::NonZero;
@@ -88,6 +89,9 @@ where
     /// cannot block new batches from being created (which is the only path
     /// that drains queued proofs via `proofs_for_replay`).
     pub(crate) in_flight_batch_blobs: Arc<AtomicUsize>,
+    /// Counts proof blobs only. Used to gate new proof submissions when too
+    /// many proofs are already in flight.
+    pub(crate) in_flight_proof_blobs: Arc<AtomicUsize>,
     pub(crate) executor_events_sender: ExecutorEventsSender<S, Rt>,
     // We track two sequence numbers: the sequence number of the current open batch, and the next unassigned sequence number.
     // This is because we might need to assign a sequence number to some proofs while a batch is in progress,
@@ -448,10 +452,11 @@ where
             });
         }
 
-        if let Some(nb_of_batch_blobs_in_flight) = self.blob_sender_busy() {
+        let batch_status = self.batch_blob_sender_status();
+        if batch_status.is_busy() {
             return Err(SequencerNotReadyDetails::WaitingOnBlobSender {
                 max_concurrent_batch_blobs,
-                nb_of_batch_blobs_in_flight,
+                nb_of_batch_blobs_in_flight: batch_status.in_flight,
             });
         }
 
@@ -542,17 +547,18 @@ where
         )
     }
 
-    fn blob_sender_busy(&self) -> Option<usize> {
-        // Only batch blobs gate batch production. Proof blobs in flight must
-        // not block new batch creation, otherwise a saturated proof buffer
-        // would prevent the very thing that drains queued proofs (a new batch
-        // start consumes them via `proofs_for_replay`).
-        let num_current_in_flight_batches = self.nb_of_concurrent_batch_blob_submissions();
+    fn batch_blob_sender_status(&self) -> BlobSenderStatus {
+        // Only batch blobs gate batch production.
+        BlobSenderStatus {
+            in_flight: self.nb_of_concurrent_batch_blob_submissions(),
+            max_concurrent: self.seq_config.max_concurrent_batch_blobs,
+        }
+    }
 
-        if num_current_in_flight_batches > self.seq_config.max_concurrent_batch_blobs {
-            Some(num_current_in_flight_batches)
-        } else {
-            None
+    pub(crate) fn proof_blob_sender_status(&self) -> BlobSenderStatus {
+        BlobSenderStatus {
+            in_flight: self.in_flight_proof_blobs.load(Ordering::Relaxed),
+            max_concurrent: self.seq_config.max_concurrent_proof_blobs,
         }
     }
 
@@ -593,7 +599,7 @@ where
             }
         }
 
-        if self.blob_sender_busy().is_some() {
+        if self.batch_blob_sender_status().is_busy() {
             warn!("The blob sender is busy, no batch could be started at this time.");
             return Err(BatchCreationError::BlobSenderBusy);
         }
