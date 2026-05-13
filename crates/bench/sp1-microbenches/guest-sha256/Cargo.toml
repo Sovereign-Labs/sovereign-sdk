@@ -9,9 +9,7 @@ resolver = "2"
 
 [dependencies]
 sp1-zkvm = { version = "6.1.0" }
-sha2 = { version = "0.10", default-features = false }
 sov-modules-api = { path = "../../../module-system/sov-modules-api", default-features = false }
-sov-rollup-interface = { path = "../../../rollup-interface", default-features = false }
 sov-mock-da = { path = "../../../adapters/mock-da", default-features = false }
 sov-mock-zkvm = { path = "../../../adapters/mock-zkvm", default-features = false }
 

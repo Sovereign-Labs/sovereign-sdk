@@ -2239,11 +2239,9 @@ dependencies = [
 name = "sov-microbench-guest-sha256"
 version = "0.3.0"
 dependencies = [
- "sha2",
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
- "sov-rollup-interface",
  "sp1-zkvm",
 ]
 

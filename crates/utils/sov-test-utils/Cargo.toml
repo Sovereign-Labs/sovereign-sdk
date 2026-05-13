@@ -34,6 +34,7 @@ num_cpus = { workspace = true }
 tokio-stream = { workspace = true }
 
 sha2 = { workspace = true }
+sov-address = { workspace = true }
 sov-cli = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-rollup-full-node-interface = { workspace = true }
@@ -78,6 +79,7 @@ arbitrary = [
 	"sov-sequencer-registry/arbitrary",
 	"sov-state/arbitrary",
 	"rockbound/arbitrary",
+	"sov-address/arbitrary",
 	"sov-accounts/arbitrary",
 	"sov-uniqueness/arbitrary",
 	"sov-mock-da/arbitrary",
@@ -86,4 +88,7 @@ arbitrary = [
 ]
 
 [package.metadata.cargo-machete]
-ignored = ["strum"]
+# sov-address is not used in sov-test-utils' own code, but its `arbitrary`
+# feature must propagate to satisfy the `BasicAddress: MaybeArbitrary` trait
+# bound for downstream consumers that enable `sov-test-utils/arbitrary`.
+ignored = ["strum", "sov-address"]

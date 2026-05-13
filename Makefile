@@ -138,6 +138,7 @@ lint:  ## cargo fmt, check and clippy.
 	zepter
 	zepter
 	zepter
+	cargo machete
 	if which cargo-dylint > /dev/null; then \
 		cargo dylint --all; \
 	else \
