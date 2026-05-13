@@ -37,6 +37,11 @@ pub enum SlashingReason {
     /// The inner verification key hash committed in the proof does not match the
     /// chain's expected inner code commitment.
     IncorrectInnerVkeyHash,
+
+    /// An admin-submitted upgrade proof targets a slot that is not strictly newer
+    /// than the most recent recorded admin upgrade. Accepting it would rewind the
+    /// canonical commitments.
+    StaleAdminUpgrade,
 }
 
 #[derive(Debug, PartialEq, Clone, schemars::JsonSchema)]

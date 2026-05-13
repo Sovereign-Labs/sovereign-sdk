@@ -51,6 +51,13 @@ impl Default for CodeCommitmentHash {
 }
 
 impl CodeCommitmentHash {
+    /// Canonical byte length expected by every [`crate::zk::CodeCommitmentTrait`]
+    /// implementation. Concrete adapters (Risc0, SP1) panic in [`Self::to_u32_array`]
+    /// when this invariant is violated, so callers reading hashes from untrusted
+    /// sources should reject mismatched lengths before invoking
+    /// [`crate::zk::CodeCommitmentTrait::from_hash`].
+    pub const HASH_LEN: usize = 32;
+
     /// Creates a [`CodeCommitmentHash`] from a `[u32; 8]` array using big-endian byte order.
     /// This matches the representation used by SP1's `HashableKey::hash_bytes`.
     pub fn from_u32_array(arr: [u32; 8]) -> Self {

@@ -4,6 +4,18 @@
   "description": "Configuration of the prover incentives module. Specifies the minimum bond, the commitment to\nthe allowed verifier method and a set of initial provers with their\nbonding amount.",
   "type": "object",
   "properties": {
+    "admin": {
+      "description": "The admin prover address. When `None`, no admin role is configured for this\ndeployment and admin-only paths (e.g. genesis-hash bypass, rollup upgrades) are\ninaccessible.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Address"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "initial_provers": {
       "description": "A list of initial provers and their bonded amount.",
       "type": "array",
