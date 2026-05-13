@@ -398,9 +398,6 @@ fn test_admin_upgrade_at_same_slot_is_slashed() {
     };
     let prover_address = prover.user_info.address();
 
-    // Stamp the mutated commitment into the proof bytes so the admin-path
-    // verifier (which rebuilds its commitment from `outer_vk_hash`) accepts
-    // the proof and execution reaches the stale-upgrade check.
     runner.execute_proof::<TestProverIncentives>(ProofTestCase {
         input: ProofInput(serialize_proof_with_commitment(
             second_proof,

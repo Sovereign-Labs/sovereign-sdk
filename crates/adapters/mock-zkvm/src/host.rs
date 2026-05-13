@@ -26,10 +26,7 @@ pub struct MockZkvmHost {
     /// [`OuterZkvmHost::run_proof_aggregation`] hold across the whole prover
     /// service.
     previous_anchor: Arc<Mutex<Option<PreviousAggregatedProofAnchor>>>,
-    /// Commitment this host stamps into proofs it produces and reports via
-    /// [`sov_rollup_interface::zk::ZkvmHost::code_commitment`]. Defaults to
-    /// [`MockCodeCommitment::default`]; override with
-    /// [`Self::with_code_commitment`] to simulate a guest-binary upgrade.
+    /// Commitment this host stamps into proofs.
     code_commitment: MockCodeCommitment,
 }
 
