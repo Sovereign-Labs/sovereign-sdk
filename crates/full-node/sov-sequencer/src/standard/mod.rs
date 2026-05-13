@@ -376,7 +376,7 @@ where
                     Err(add_tx_error) => match add_tx_error {
                         AddTxToBatchError::PreExecCheck(pre_exec_error) => match pre_exec_error {
                             // If authentication is fatally broken, we can
-                            // never submit it succesfully so drop it from the mempool
+                            // never submit it successfully so drop it from the mempool
                             PreExecError::AuthError(AuthenticationError::FatalError(_, _)) => {
                                 tracing::info!(hash= %mempool_tx.hash, error = %pre_exec_error, "Invalid tx detected in mempool; dropping tx",);
                                 mempool.drop_and_notify(
