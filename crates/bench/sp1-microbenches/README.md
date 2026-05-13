@@ -27,24 +27,36 @@ fitted constants come from prover gas.
 
 ## What's being measured
 
-Each guest mirrors the production charging call site rather than the raw
-primitive. For SHA-256 the guest invokes
+Each guest mirrors the production verify call site rather than the raw
+primitive.
+
+**SHA-256** — the guest invokes
 `MeteredHasher::<UnlimitedGasMeter<S>, S::CryptoSpec::Hasher>::digest` — same
 code path as `calculate_hash_metered` in
 `crates/module-system/sov-modules-api/src/runtime/capabilities/authentication.rs`.
-Results therefore calibrate the constants the SDK actually consults
-(`GAS_TO_CHARGE_HASH_UPDATE`, `GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE`).
+Results calibrate `GAS_TO_CHARGE_HASH_UPDATE` and
+`GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE`.
+
+**Ed25519** — the guest invokes `SP1Signature::verify` directly (uses
+`ed25519_consensus`, SP1-patched, routes through the curve precompile). This
+matches `verify_signature_unmetered` in
+`crates/module-system/sov-modules-api/src/transaction/mod.rs:285` — the same
+primitive call that the metered path eventually makes. Results calibrate
+`DEFAULT_FIXED_GAS_TO_CHARGE_PER_SIGNATURE_VERIFICATION` and
+`DEFAULT_GAS_TO_CHARGE_PER_BYTE_SIGNATURE_VERIFICATION`.
 
 ## Run
 
 ```sh
 cargo run --release -p sp1-microbenches -- sha256
+cargo run --release -p sp1-microbenches -- ed25519
 ```
 
 Optional override:
 
 ```sh
 cargo run --release -p sp1-microbenches -- sha256 --iterations 2000
+cargo run --release -p sp1-microbenches -- ed25519 --iterations 500
 ```
 
 To skip the SP1 guest build (CI without the SP1 toolchain installed):

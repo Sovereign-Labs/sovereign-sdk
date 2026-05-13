@@ -13416,6 +13416,8 @@ dependencies = [
  "anyhow",
  "clap",
  "serde",
+ "sov-rollup-interface",
+ "sov-sp1-adapter",
  "sov-zkvm-utils",
  "sp1-build",
  "sp1-sdk",

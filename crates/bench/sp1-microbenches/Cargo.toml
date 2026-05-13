@@ -16,6 +16,8 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-sp1-adapter = { workspace = true, features = ["native"] }
 sp1-sdk = { version = "6.1.0", default-features = false, features = ["blocking", "profiling"] }
 
 [build-dependencies]

@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use sp1_microbenches::cmd::sha256;
+use sp1_microbenches::cmd::{ed25519, sha256};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -15,12 +15,15 @@ struct Cli {
 enum BenchCmd {
     /// Run the SHA-256 prover-gas sweep.
     Sha256(sha256::Sha256Args),
+    /// Run the ed25519 signature-verification prover-gas sweep.
+    Ed25519(ed25519::Ed25519Args),
 }
 
 impl BenchCmd {
     fn run(self) -> anyhow::Result<()> {
         match self {
             BenchCmd::Sha256(args) => sha256::run(args),
+            BenchCmd::Ed25519(args) => ed25519::run(args),
         }
     }
 }

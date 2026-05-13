@@ -19,5 +19,12 @@ fn main() -> anyhow::Result<()> {
         },
     );
 
+    build_program_with_args(
+        "./guest-ed25519",
+        BuildArgs {
+            ..Default::default()
+        },
+    );
+
     Ok(())
 }
