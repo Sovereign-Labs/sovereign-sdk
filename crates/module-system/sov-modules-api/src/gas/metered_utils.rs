@@ -199,6 +199,21 @@ fn charge_gas_for_sig_inner<GU: Gas, Meter: GasMeter<Spec: Spec<Gas = GU>>>(
         )
         .map_err(MeteredSigVerificationError::GasError)?;
 
+    meter
+        .charge_gas(<Meter::Spec as GasSpec>::gas_to_charge_hash_update())
+        .map_err(MeteredSigVerificationError::GasError)?;
+
+    meter
+        .charge_linear_gas(
+            <Meter::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+            msg_len.try_into().map_err(|e: TryFromIntError| {
+                MeteredSigVerificationError::GasError(MeteringError::<Meter>::Overflow(
+                    e.to_string(),
+                ))
+            })?,
+        )
+        .map_err(MeteredSigVerificationError::GasError)?;
+
     Ok(())
 }
 
