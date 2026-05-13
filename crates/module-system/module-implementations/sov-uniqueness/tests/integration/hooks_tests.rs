@@ -239,7 +239,7 @@ fn send_tx_works_window() {
             );
         }),
     });
-    let window = config_value!("PAST_TRANSACTION_WINDOW");
+    let window = config_value!("PAST_TRANSACTIONS_WINDOW");
     runner.execute_transaction(TransactionTestCase {
         input: generate_default_tx(
             UniquenessData::Window(40 + window - 1),
@@ -282,7 +282,7 @@ fn send_tx_works_window() {
 fn send_tx_bad_window_duplicate() {
     let (admin, mut runner, evm_account) = setup();
 
-    let nonce = config_value!("PAST_TRANSACTION_WINDOW") * 4 + 42;
+    let nonce = config_value!("PAST_TRANSACTIONS_WINDOW") * 4 + 42;
     // initialise generation
     runner.execute_transaction(TransactionTestCase {
         input: generate_default_tx(UniquenessData::Window(nonce), &admin, &evm_account),
@@ -313,7 +313,7 @@ fn send_tx_bad_window_duplicate() {
 fn send_tx_bad_window_nonce_too_old() {
     let (admin, mut runner, evm_account) = setup();
     let admin_credential_id: CredentialId = admin.credential_id();
-    let window = config_value!("PAST_TRANSACTION_WINDOW");
+    let window = config_value!("PAST_TRANSACTIONS_WINDOW");
 
     let mut dst = vec![0; window as usize / 8];
     dst[window as usize / 8 - 1] = 1;

@@ -4,13 +4,15 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::{macros::config_value, CredentialId, Spec, StateAccessor, StateReader};
 use sov_state::User;
 
-
-const PAST_TRANSACTION_WINDOW: u64 = {
-    let window = config_value!("PAST_TRANSACTION_WINDOW");
-    assert!(window > 7u64, "PAST_TRANSACTION_WINDOW must be at least  8");
+const PAST_TRANSACTIONS_WINDOW: u64 = {
+    let window = config_value!("PAST_TRANSACTIONS_WINDOW");
+    assert!(
+        window > 7u64,
+        "PAST_TRANSACTIONS_WINDOW must be at least  8"
+    );
     assert!(
         window < 2u64.pow(16),
-        "PAST_TRANSACTION_WINDOW must be less than 65536"
+        "PAST_TRANSACTIONS_WINDOW must be less than 65536"
     );
     window
 };
@@ -21,7 +23,7 @@ pub struct Window {
     /// The nonce at which the window starts. Always a multiple of 8 so that entries in the bits array stay aligned.
     /// (Otherwise, we would have to iterate the array and shift each entry when we adjust the window)
     start_nonce: u64,
-    /// A bitmap representing PAST_TRANSACTION_WINDOW nonces above (and including) the start nonce.
+    /// A bitmap representing PAST_TRANSACTIONS_WINDOW nonces above (and including) the start nonce.
     /// Each entry contains a 1 if that nonce has been seen, 0 otherwise.
     ///
     /// For example, if the start nonce is 10 then index `0` represents nonce `10`.
@@ -39,8 +41,8 @@ impl Window {
 }
 
 // Cases:
-// nonce = 8, start = 0, PAST_TRANSACTION_WINDOW = 7; unaligned = r. Round up to 8
-// nonce = 8, start = 0, PAST_TRANSACTION_WINDOW = 8; unaligned = 0. Stay the same
+// nonce = 8, start = 0, PAST_TRANSACTIONS_WINDOW = 7; unaligned = r. Round up to 8
+// nonce = 8, start = 0, PAST_TRANSACTIONS_WINDOW = 8; unaligned = 0. Stay the same
 impl Window {
     /// Adds a nonce to the set of seen nonces, adjusting the window if necessary.
     ///
@@ -48,23 +50,23 @@ impl Window {
     fn add_nonce(&mut self, nonce: u64) {
         let old_start_nonce = self.start_nonce;
 
-        // The current window is start_nonce..(start_nonce + PAST_TRANSACTION_WINDOW);
-        // That means the max offset we can have without adjusting the window is PAST_TRANSACTION_WINDOW - 1.
-        let new_start_nonce =
-            if nonce >= self.start_nonce.saturating_add(PAST_TRANSACTION_WINDOW - 1) {
-                // In this branch, we're adjusting the window.
-                let unaligned_start_nonce = nonce - (PAST_TRANSACTION_WINDOW - 1);
-                // Safety: PAST_TRANSACTION_WINDOW is greater than 7, so unaligned_start_nonce + 7 <= u64::MAX
-                let new_start_nonce = (unaligned_start_nonce + 7) & 0xFFFF_FFFF_FFFF_FFF8; // round up to multiple of 8
+        // The current window is start_nonce..(start_nonce + PAST_TRANSACTIONS_WINDOW);
+        // That means the max offset we can have without adjusting the window is PAST_TRANSACTIONS_WINDOW - 1.
+        let new_start_nonce = if nonce >= self.start_nonce.saturating_add(PAST_TRANSACTIONS_WINDOW)
+        {
+            // In this branch, we're adjusting the window.
+            let unaligned_start_nonce = nonce - (PAST_TRANSACTIONS_WINDOW - 1);
+            // Safety: PAST_TRANSACTIONS_WINDOW is greater than 7, so unaligned_start_nonce + 7 <= u64::MAX
+            let new_start_nonce = (unaligned_start_nonce + 7) & 0xFFFF_FFFF_FFFF_FFF8; // round up to multiple of 8
 
-                // Drop the bytes that are no longer in the window.
-                let bytes_to_drop = (new_start_nonce - old_start_nonce) / 8;
-                let bytes_to_drop = std::cmp::min(self.bits.0.len() as u64, bytes_to_drop);
-                self.bits.0.drain(0..bytes_to_drop as usize);
-                new_start_nonce
-            } else {
-                old_start_nonce
-            };
+            // Drop the bytes that are no longer in the window.
+            let bytes_to_drop = (new_start_nonce - old_start_nonce) / 8;
+            let bytes_to_drop = std::cmp::min(self.bits.0.len() as u64, bytes_to_drop);
+            self.bits.0.drain(0..bytes_to_drop as usize);
+            new_start_nonce
+        } else {
+            old_start_nonce
+        };
 
         // Safety: new_start_nonce is always less than or equal to nonce, so nonce - new_start_nonce is non-negative.
         let offset = nonce
@@ -111,8 +113,8 @@ impl BitMap {
     /// Sets the bit at the given offset.
     fn set_bit(&mut self, index: usize) {
         assert!(
-            index < PAST_TRANSACTION_WINDOW as usize,
-            "Index out of bounds: {index} > {PAST_TRANSACTION_WINDOW}"
+            index < PAST_TRANSACTIONS_WINDOW as usize,
+            "Index out of bounds: {index} > {PAST_TRANSACTIONS_WINDOW}"
         );
         // Resize if necessessary. This is only required if the index is currently out of bounds.
         if index >= self.0.len() * 8 {
@@ -155,7 +157,6 @@ impl<S: Spec> Uniqueness<S> {
     ) -> anyhow::Result<()> {
         let mut window = self.window.get(credential_id, state)?.unwrap_or_default();
 
-        // this assertion ensures that `check_window_uniqueness()` was executed beforehand
         assert!(nonce >= window.start_nonce, "Tx is being marked as attempted despite having a consumed nonce {nonce}. This is a bug.");
 
         window.add_nonce(nonce);
@@ -169,7 +170,7 @@ impl<S: Spec> Uniqueness<S> {
 mod tests {
     use std::collections::VecDeque;
 
-    use crate::window::{BitMap, Window, PAST_TRANSACTION_WINDOW};
+    use crate::window::{BitMap, Window, PAST_TRANSACTIONS_WINDOW};
 
     #[test]
     fn test_get_bit() {
@@ -220,27 +221,27 @@ mod tests {
         assert!(window.has_seen_nonce(0));
         assert!(!window.has_seen_nonce(1));
 
-        window.add_nonce(PAST_TRANSACTION_WINDOW - 1);
+        window.add_nonce(PAST_TRANSACTIONS_WINDOW - 1);
         assert_eq!(window.start_nonce, 0);
-        assert!(window.has_seen_nonce(PAST_TRANSACTION_WINDOW - 1));
+        assert!(window.has_seen_nonce(PAST_TRANSACTIONS_WINDOW - 1));
         assert!(!window.has_seen_nonce(1));
         assert!(window.has_seen_nonce(0));
-        assert!(!window.has_seen_nonce(PAST_TRANSACTION_WINDOW));
+        assert!(!window.has_seen_nonce(PAST_TRANSACTIONS_WINDOW));
 
-        window.add_nonce(PAST_TRANSACTION_WINDOW);
+        window.add_nonce(PAST_TRANSACTIONS_WINDOW);
         assert_eq!(window.start_nonce, 8);
         assert!(window.has_seen_nonce(1)); // Below the window, so we've "seen" it
         assert!(window.has_seen_nonce(7)); // Below the window, so we've "seen" it
         assert!(!window.has_seen_nonce(8)); // In the window and unseen.
-        assert!(window.has_seen_nonce(PAST_TRANSACTION_WINDOW - 1)); // Ir the window and see
-        assert!(window.has_seen_nonce(PAST_TRANSACTION_WINDOW)); // In the window and see
+        assert!(window.has_seen_nonce(PAST_TRANSACTIONS_WINDOW - 1)); // Ir the window and see
+        assert!(window.has_seen_nonce(PAST_TRANSACTIONS_WINDOW)); // In the window and see
 
         window.add_nonce(43);
 
-        window.add_nonce(PAST_TRANSACTION_WINDOW + 32);
+        window.add_nonce(PAST_TRANSACTIONS_WINDOW + 32);
 
         assert!(window.has_seen_nonce(43));
-        assert!(window.has_seen_nonce(PAST_TRANSACTION_WINDOW + 32));
+        assert!(window.has_seen_nonce(PAST_TRANSACTIONS_WINDOW + 32));
         assert!(!window.has_seen_nonce(44));
 
         window.add_nonce(u64::MAX - 1);
