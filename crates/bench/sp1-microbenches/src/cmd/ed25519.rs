@@ -52,7 +52,11 @@ pub fn run(args: Ed25519Args) -> anyhow::Result<()> {
             .gas()
             .context("prover gas not available; ProverClient may have disabled gas calculation")?;
         let total_cycles = report.total_instruction_count();
-        let region_cycles = report.cycle_tracker.get("verify_loop").copied().unwrap_or(0);
+        let region_cycles = report
+            .cycle_tracker
+            .get("verify_loop")
+            .copied()
+            .unwrap_or(0);
         let invocations = report
             .invocation_tracker
             .get("verify_loop")
