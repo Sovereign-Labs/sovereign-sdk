@@ -12,7 +12,7 @@ const GUEST_ELF_PATH: &str = concat!(
     "/guest-ed25519/target/elf-compilation/riscv64im-succinct-zkvm-elf/release/sov-microbench-guest-ed25519",
 );
 
-const DEFAULT_ITERATIONS: u32 = 1000;
+const DEFAULT_ITERATIONS: u32 = 100;
 const SIZES: &[u32] = &[0, 1, 32, 64, 128, 256, 512, 1024, 4096, 16384, 65536];
 
 #[derive(Args, Debug)]
