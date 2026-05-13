@@ -134,6 +134,8 @@ where
         block_proofs: &[&BlockProof<Address, Da, Root>],
         origin_slot_number: SlotNumber,
         origin_state_root: Root,
+        inner_vkey_hash: CodeCommitmentHash,
+        outer_vk_hash: CodeCommitmentHash,
     ) -> Self {
         let initial = block_proofs
             .first()
@@ -153,9 +155,8 @@ where
             final_state_root: final_bp.st.final_state_root.clone(),
             initial_slot_hash: initial.st.slot_hash.clone(),
             final_slot_hash: final_bp.st.slot_hash.clone(),
-            // This is used only for mock proving and matches the values in the chain_state genesis.
-            inner_vkey_hash: CodeCommitmentHash::default(),
-            outer_vk_hash: CodeCommitmentHash::default(),
+            inner_vkey_hash,
+            outer_vk_hash,
         }
     }
 }

@@ -9,7 +9,8 @@ use sov_test_utils::runtime::TestRunner;
 use sov_test_utils::{assert_matches, ProofInput, ProofTestCase, TestProver, TestSpec};
 
 use crate::helpers::{
-    build_proof, consume_gas_tx_for_signer, serialize_proof, setup, TestProverIncentives, RT,
+    build_proof, consume_gas_tx_for_signer, serialize_proof, serialize_proof_with_commitment,
+    setup, TestProverIncentives, RT,
 };
 
 type S = TestSpec;
@@ -92,6 +93,7 @@ fn test_admin_bypass_outer_vk_hash_records_upgrade() {
     let (mut runner, _prover, mut aggregated_proof) = prepare_admin_proof();
     // MockCodeCommitment is 8 bytes wide and zero-pads to 32 in `to_hash`, so we use a
     // value that round-trips losslessly under from_hash/to_hash.
+    let new_outer_commitment = sov_mock_zkvm::MockCodeCommitment([0xcd; 8]);
     let new_outer_vk_hash = {
         let mut bytes = vec![0u8; 32];
         bytes[..8].copy_from_slice(&[0xcd; 8]);
@@ -100,8 +102,13 @@ fn test_admin_bypass_outer_vk_hash_records_upgrade() {
     aggregated_proof.outer_vk_hash = new_outer_vk_hash.clone();
     let expected_slot = aggregated_proof.final_slot_number;
 
+    // Stamp the new commitment into the proof bytes so the admin-path verifier
+    // (which rebuilds its commitment from `outer_vk_hash`) accepts the proof.
     runner.execute_proof::<TestProverIncentives>(ProofTestCase {
-        input: ProofInput(serialize_proof(aggregated_proof)),
+        input: ProofInput(serialize_proof_with_commitment(
+            aggregated_proof,
+            new_outer_commitment,
+        )),
         assert: Box::new(move |result, state| {
             assert_matches!(
                 result.proof_receipt.unwrap().outcome,
@@ -383,6 +390,7 @@ fn test_admin_upgrade_at_same_slot_is_slashed() {
             )
         })
         .unwrap();
+    let new_outer_commitment = sov_mock_zkvm::MockCodeCommitment([0xef; 8]);
     second_proof.outer_vk_hash = {
         let mut bytes = vec![0u8; 32];
         bytes[..8].copy_from_slice(&[0xef; 8]);
@@ -390,8 +398,14 @@ fn test_admin_upgrade_at_same_slot_is_slashed() {
     };
     let prover_address = prover.user_info.address();
 
+    // Stamp the mutated commitment into the proof bytes so the admin-path
+    // verifier (which rebuilds its commitment from `outer_vk_hash`) accepts
+    // the proof and execution reaches the stale-upgrade check.
     runner.execute_proof::<TestProverIncentives>(ProofTestCase {
-        input: ProofInput(serialize_proof(second_proof)),
+        input: ProofInput(serialize_proof_with_commitment(
+            second_proof,
+            new_outer_commitment,
+        )),
         assert: Box::new(move |result, state| {
             assert_matches!(
                 &result.proof_receipt.unwrap().outcome,

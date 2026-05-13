@@ -3,52 +3,31 @@
 //! See the README for more information.
 // TODO: #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
-
-use std::str::FromStr;
-
 use sov_celestia_adapter::types::Namespace;
 use sov_modules_api::macros::config_value;
-
+use std::str::FromStr;
 mod aggregated_proof;
 pub use aggregated_proof::read_latest_aggregated_proof;
-
-/// Returns `previous` unless a fresh outer-proof chain is requested via
-/// `start_fresh_outer_proof_on_resync`, in which case it returns `None`.
-/// Used by `create_prover_service` impls to drop the persisted outer-proof
-/// anchor when the rollup is configured to skip the resync window.
-pub fn previous_outer_anchor<T>(
-    previous: Option<T>,
-    start_fresh_outer_proof_on_resync: bool,
-) -> Option<T> {
-    if start_fresh_outer_proof_on_resync {
-        None
-    } else {
-        previous
-    }
-}
-
+mod mock_helper;
+pub use mock_helper::{
+    create_mock_prover_service, read_mock_code_commitments_from_env, set_inner_code_commitment_env,
+    set_outer_code_commitment_env, Hasher, MockAggregatedProofPublicData, NativeStorage,
+};
 mod mock_rollup;
-
 pub use mock_rollup::*;
-
 mod mock_sp1_rollup;
 pub use mock_sp1_rollup::*;
-
 mod chain_state_override;
 pub use chain_state_override::override_code_commitments_in_chain_state;
-
 mod celestia_rollup;
 pub use celestia_rollup::*;
-
 mod external_mock_rollup;
 pub use external_mock_rollup::*;
-
 mod solana_offchain_endpoint;
 
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant by modifying BATCH_NAMESPACE in constants.toml
 pub const ROLLUP_BATCH_NAMESPACE: Namespace = Namespace::const_v0(config_value!("BATCH_NAMESPACE"));
-
 /// The rollup stores the zk proofs in the namespace b"sov-test-p" on Celestia.
 /// You can change this constant by modifying PROOF_NAMESPACE in constants.toml
 pub const ROLLUP_PROOF_NAMESPACE: Namespace = Namespace::const_v0(config_value!("PROOF_NAMESPACE"));

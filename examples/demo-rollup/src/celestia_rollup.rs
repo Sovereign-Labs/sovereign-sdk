@@ -162,10 +162,10 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
         _da_service: &Self::DaService,
         _ledger_db: &LedgerDb,
         _start_fresh_outer_proof_on_resync: bool,
-    ) -> (
+    ) -> anyhow::Result<(
         Self::ProverService,
         Option<sov_rollup_interface::common::SlotNumber>,
-    ) {
+    )> {
         let inner_vm = Risc0Host::new(risc0::ROLLUP_ELF);
 
         let outer_vm = MockZkvmHost::new_non_blocking();
@@ -187,7 +187,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             num_threads,
         );
 
-        (prover, None)
+        Ok((prover, None))
     }
 
     fn create_storage_manager(

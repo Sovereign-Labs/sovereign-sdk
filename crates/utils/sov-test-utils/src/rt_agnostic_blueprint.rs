@@ -221,11 +221,11 @@ where
         _da_service: &Self::DaService,
         _ledger_db: &LedgerDb,
         _start_fresh_outer_proof_on_resync: bool,
-    ) -> (
+    ) -> anyhow::Result<(
         Self::ProverService,
         Option<sov_rollup_interface::common::SlotNumber>,
-    ) {
-        (Prover::create(prover_config, rollup_config).await, None)
+    )> {
+        Ok((Prover::create(prover_config, rollup_config).await, None))
     }
 
     fn create_storage_manager(

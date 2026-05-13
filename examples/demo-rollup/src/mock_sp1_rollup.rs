@@ -148,7 +148,7 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         _da_service: &Self::DaService,
         ledger_db: &LedgerDb,
         start_fresh_outer_proof_on_resync: bool,
-    ) -> (Self::ProverService, Option<SlotNumber>) {
+    ) -> anyhow::Result<(Self::ProverService, Option<SlotNumber>)> {
         let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
         let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
 
@@ -212,7 +212,7 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
             num_threads,
         );
 
-        (prover, latest_proof_final_slot)
+        Ok((prover, latest_proof_final_slot))
     }
 
     fn create_storage_manager(
