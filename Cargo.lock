@@ -13402,9 +13402,9 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
- "ed25519-consensus",
- "rand 0.8.5",
  "serde",
+ "sov-rollup-interface",
+ "sov-sp1-adapter",
  "sov-zkvm-utils",
  "sp1-build",
  "sp1-sdk",

@@ -1,7 +1,7 @@
 use anyhow::Context;
 use clap::Args;
-use ed25519_consensus::SigningKey;
-use rand::rngs::OsRng;
+use sov_rollup_interface::crypto::PrivateKey;
+use sov_sp1_adapter::crypto::private_key::SP1PrivateKey;
 use sp1_sdk::blocking::{Prover, ProverClient, SP1Stdin};
 
 use crate::fit::fit_prover_gas_per_byte;
@@ -27,19 +27,19 @@ pub fn run(args: Ed25519Args) -> anyhow::Result<()> {
     let elf = load_guest_elf(GUEST_ELF_PATH)?;
     let client = ProverClient::from_env();
 
-    let signing_key = SigningKey::new(OsRng);
-    let pubkey_bytes: [u8; 32] = signing_key.verification_key().to_bytes();
+    let private_key = SP1PrivateKey::generate();
+    let pubkey_bytes: Vec<u8> = private_key.pub_key().bytes().to_vec();
 
     let mut results = Vec::with_capacity(SIZES.len());
     for &size in SIZES {
         println!("[run] ed25519 byte_len={size} iterations={iterations}");
 
         let msg: Vec<u8> = (0..size).map(|i| (i as u8).wrapping_mul(0xAB)).collect();
-        let sig_bytes: [u8; 64] = signing_key.sign(&msg).to_bytes();
+        let sig_bytes: Vec<u8> = private_key.sign(&msg).as_ref().to_vec();
 
         let mut stdin = SP1Stdin::new();
-        stdin.write_vec(pubkey_bytes.to_vec());
-        stdin.write_vec(sig_bytes.to_vec());
+        stdin.write_vec(pubkey_bytes.clone());
+        stdin.write_vec(sig_bytes);
         stdin.write_vec(msg);
         stdin.write(&iterations);
 
