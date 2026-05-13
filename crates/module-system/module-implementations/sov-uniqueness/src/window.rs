@@ -139,11 +139,6 @@ impl<S: Spec> Uniqueness<S> {
 	    nonce >= start,
 	    "Tx outdated for credential id: {credential_id}, expected at least: {start}, but found: {nonce}");
 
-        // The offset into the bits array that represents the nonce. This is (nonce - start - 1). For example,
-        // if nonce is 11 and start is 10, then offset is 0.
-        //
-        // If the nonce is very large the outcome could be larger than usize::MAX; that's fine, `get_bit` will return false in that case.
-        // Safety: Nonce > start, so nonce - start is positive, and that quantity minus 1 is non-negative.
         anyhow::ensure!(
             !window.has_seen_nonce(nonce),
             "Tx duplicate for credential id: {credential_id}, with nonce: {nonce}"
