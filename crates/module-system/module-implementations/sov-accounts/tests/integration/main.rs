@@ -2853,3 +2853,115 @@ fn test_create_synthetic_address_rejected_when_custom_account_mappings_disabled(
         }),
     });
 }
+
+/// Documents the design contract that the on-chain admit-path
+/// (`is_default_address_authorized`) and the canonical-fallback view
+/// (`is_authorized_for`) diverge for `(address, credential_id)` pairs with no
+/// `account_owners` entry whose address is not the credential's canonical
+/// address. This mirrors what the EVM authenticator does in production:
+/// `default_address` is set to a `MultiAddress::Vm` variant while
+/// `canonical(credential_id)` is `MultiAddress::Standard`. Tests on `TestSpec`
+/// (single-variant Address) simulate the divergence by using a foreign user's
+/// address with a different user's credential — the address-credential
+/// relationship is non-canonical regardless of address variant.
+#[test]
+fn test_admit_path_diverges_from_canonical_for_non_canonical_default_address() {
+    let (
+        TestData {
+            account_1,
+            account_2,
+            ..
+        },
+        runner,
+    ) = setup();
+
+    let credential = account_1.credential_id();
+    let non_canonical_address = account_2.address();
+    let canonical_for_credential =
+        <S as Spec>::Address::from(account_1.credential_id());
+    assert_ne!(
+        non_canonical_address, canonical_for_credential,
+        "test scaffold: account_2's address must differ from canonical(account_1.credential)"
+    );
+
+    runner.query_visible_state(|state| {
+        let accounts = Accounts::<S>::default();
+
+        let explicit = accounts
+            .is_explicitly_authorized(&non_canonical_address, &credential, state)
+            .unwrap();
+        let default_path = accounts
+            .is_default_address_authorized(&non_canonical_address, &credential, state)
+            .unwrap();
+        let canonical_view = accounts
+            .is_authorized_for(&non_canonical_address, &credential, state)
+            .unwrap();
+
+        assert!(
+            !explicit,
+            "no explicit account_owners entry exists: is_explicitly_authorized must be false"
+        );
+        assert!(
+            default_path,
+            "no explicit account_owners entry exists: is_default_address_authorized must be true (chain trusts authenticator default)"
+        );
+        assert!(
+            !canonical_view,
+            "no explicit account_owners entry AND non-canonical address: is_authorized_for must be false"
+        );
+    });
+}
+
+/// Verifies the inverse: an explicit `account_owners[(addr, cred)] = false`
+/// entry (written by `RemoveCredentialFromAddress`) denies all three
+/// predicates. This is the design invariant that lets revocation block the
+/// admit-path even when the authenticator would otherwise have admitted the
+/// transaction via the default-trust fallback.
+#[test]
+fn test_explicit_revoke_denies_all_three_authorization_predicates() {
+    let (
+        TestData {
+            non_registered_account: owner,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let address = owner.address();
+    let credential = owner.credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: owner.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::RemoveCredentialFromAddress {
+                address,
+                credential,
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+
+            let explicit = accounts
+                .is_explicitly_authorized(&address, &credential, state)
+                .unwrap();
+            let default_path = accounts
+                .is_default_address_authorized(&address, &credential, state)
+                .unwrap();
+            let canonical_view = accounts
+                .is_authorized_for(&address, &credential, state)
+                .unwrap();
+
+            assert!(
+                !explicit,
+                "explicit `false` entry: is_explicitly_authorized must be false"
+            );
+            assert!(
+                !default_path,
+                "explicit `false` entry blocks the admit-path default-trust fallback"
+            );
+            assert!(
+                !canonical_view,
+                "explicit `false` entry overrides the canonical fallback"
+            );
+        }),
+    });
+}

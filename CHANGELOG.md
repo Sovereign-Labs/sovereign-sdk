@@ -1,3 +1,6 @@
+# 2026-05-13
+- #PR_NUMBER Accounts: `AuthorizationResponse` (REST `GET /authorizations/{address}/{credential_id}`) gains `admit_as_override` and `admit_as_default` fields that mirror the on-chain admit-path predicates directly. The existing `authorized` field is deprecated — it uses the canonical-fallback semantic, which can disagree with the chain for authenticators whose `default_address` is not the credential's canonical address (notably EVM, where `default_address` is a `MultiAddress::Vm` variant while `canonical(credential_id)` is `MultiAddress::Standard`). REST consumers should read `admit_as_default` for the equivalent of the chain's admit-path. Additive change; existing callers continue to work.
+
 # 2026-05-05
 - #2808 **Breaking config change**: Adds a required `sequencer.max_concurrent_proof_blobs` field to rollup TOML configs, capping the number of proof blobs in flight on the DA layer. When the cap is reached, the ZK aggregator triggers a rollup shutdown.
 # 2026-04-20

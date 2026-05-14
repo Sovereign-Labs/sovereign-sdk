@@ -70,7 +70,15 @@ pub enum CallMessage<S: Spec> {
     /// Creates a new *synthetic* address — an address whose authorization
     /// lives purely in `account_owners` and which has no
     /// naturally-corresponding private key — and auto-authorizes the
-    /// caller's current credential for it.
+    /// caller's current credential for it. This is the same construct other
+    /// ecosystems call a *counterfactual* address (cf. ERC-4337, CREATE2):
+    /// the address is deterministically derivable from public inputs and
+    /// can receive funds before any controller exists for it on-chain.
+    /// Determinism is the load-bearing property here: because anyone can
+    /// recompute the address from the public inputs without consulting state,
+    /// the address is usable (e.g. as a funding destination) strictly before
+    /// any rollup state is written for it — the on-chain `CreateSyntheticAddress`
+    /// call simply ratifies an address that already existed as a derivation.
     ///
     /// The address is derived deterministically by hashing
     /// `(domain || visible_slot_hash || sender_addr || sender_credential || salt)`
