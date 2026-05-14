@@ -106,14 +106,6 @@ impl MockZkvmHost {
         SerializedZkProof { raw_proof }
     }
 
-    fn add_hint_and_run_inner<T: Serialize>(&self, item: &T) -> anyhow::Result<Vec<u8>> {
-        let pub_data = bincode::serialize(item)?;
-        if self.wait_for_proof {
-            self.notification_manager.wait();
-        }
-        Self::valid_mock_proof_bytes(pub_data, self.code_commitment.clone())
-    }
-
     /// Bincode-encodes a [`MockProof`] with `is_valid: true` and the given public-data bytes and commitment.
     fn valid_mock_proof_bytes(
         pub_data: Vec<u8>,
@@ -177,8 +169,12 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
         _agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
         Self::maybe_mock_sleep("SOV_MOCK_PROVE_SLEEP_MS");
-        self.add_hint_and_run_inner(item)
-            .map(|raw_proof| SerializedZkProof { raw_proof })
+        let pub_data = bincode::serialize(item)?;
+        if self.wait_for_proof {
+            self.notification_manager.wait();
+        }
+        let raw_proof = Self::valid_mock_proof_bytes(pub_data, self.code_commitment.clone())?;
+        Ok(SerializedZkProof { raw_proof })
     }
 }
 
