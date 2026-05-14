@@ -205,10 +205,8 @@ impl OuterZkvmHost for MockZkvmHost {
         for (header, bp) in headers_with_block_proofs {
             let recovered = MockProof::deserialize(&bp.proof.raw_proof)
                 .expect("inner proof must be a bincode-encoded MockProof");
-            let pub_values = Self::valid_mock_proof_bytes(
-                bincode::serialize(&bp.st)?,
-                recovered.code_commitment,
-            )?;
+            let pub_values =
+                Self::valid_mock_proof_bytes(bp.st.serialize()?, recovered.code_commitment)?;
             proof_inputs.push(DeferredProofInput::<Da> {
                 public_values: SerializedPubValues { pub_values },
                 da_block_header: header,

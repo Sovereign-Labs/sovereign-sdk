@@ -220,6 +220,18 @@ pub struct StateTransitionPublicData<Address, Da: DaSpec, Root> {
     pub prover_address: Address,
 }
 
+impl<Address, Da: DaSpec, Root> StateTransitionPublicData<Address, Da, Root> {
+    /// Bincode-encodes this public data.
+    pub fn serialize(&self) -> bincode::Result<Vec<u8>>
+    where
+        Address: Serialize,
+        Root: Serialize,
+        Da::SlotHash: Serialize,
+    {
+        bincode::serialize(self)
+    }
+}
+
 #[derive(Serialize, Deserialize, UniversalWallet)]
 // Prevent serde from generating spurious trait bounds. The correct serde bounds are already enforced by the
 // StateTransitionFunction, DA, and Zkvm traits.
