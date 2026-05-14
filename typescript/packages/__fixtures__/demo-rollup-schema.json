@@ -17,7 +17,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 172
+              "ByIndex": 173
             }
           }
         ],
@@ -83,7 +83,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 167
+              "ByIndex": 168
             },
             "doc": ""
           },
@@ -91,7 +91,15 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 170
+              "ByIndex": 171
+            },
+            "doc": ""
+          },
+          {
+            "display_name": "address_override",
+            "silent": false,
+            "value": {
+              "ByIndex": 25
             },
             "doc": ""
           }
@@ -155,7 +163,7 @@
             "discriminant": 6,
             "template": null,
             "value": {
-              "ByIndex": 54
+              "ByIndex": 55
             }
           },
           {
@@ -163,7 +171,7 @@
             "discriminant": 7,
             "template": null,
             "value": {
-              "ByIndex": 56
+              "ByIndex": 57
             }
           },
           {
@@ -171,7 +179,7 @@
             "discriminant": 8,
             "template": null,
             "value": {
-              "ByIndex": 59
+              "ByIndex": 60
             }
           },
           {
@@ -179,7 +187,7 @@
             "discriminant": 9,
             "template": null,
             "value": {
-              "ByIndex": 60
+              "ByIndex": 61
             }
           },
           {
@@ -187,7 +195,7 @@
             "discriminant": 10,
             "template": null,
             "value": {
-              "ByIndex": 89
+              "ByIndex": 90
             }
           },
           {
@@ -195,7 +203,7 @@
             "discriminant": 11,
             "template": null,
             "value": {
-              "ByIndex": 94
+              "ByIndex": 95
             }
           },
           {
@@ -203,7 +211,7 @@
             "discriminant": 12,
             "template": null,
             "value": {
-              "ByIndex": 103
+              "ByIndex": 104
             }
           },
           {
@@ -211,7 +219,7 @@
             "discriminant": 13,
             "template": null,
             "value": {
-              "ByIndex": 113
+              "ByIndex": 114
             }
           },
           {
@@ -219,7 +227,7 @@
             "discriminant": 14,
             "template": null,
             "value": {
-              "ByIndex": 114
+              "ByIndex": 115
             }
           },
           {
@@ -227,7 +235,7 @@
             "discriminant": 15,
             "template": null,
             "value": {
-              "ByIndex": 134
+              "ByIndex": 135
             }
           },
           {
@@ -235,7 +243,7 @@
             "discriminant": 16,
             "template": null,
             "value": {
-              "ByIndex": 148
+              "ByIndex": 149
             }
           },
           {
@@ -243,7 +251,7 @@
             "discriminant": 17,
             "template": null,
             "value": {
-              "ByIndex": 162
+              "ByIndex": 163
             }
           }
         ],
@@ -1225,6 +1233,14 @@
             "value": {
               "ByIndex": 53
             }
+          },
+          {
+            "name": "CreateSyntheticAddress",
+            "discriminant": 4,
+            "template": null,
+            "value": {
+              "ByIndex": 54
+            }
           }
         ],
         "hide_tag": false
@@ -1364,13 +1380,35 @@
       }
     },
     {
+      "Struct": {
+        "type_name": "__SovVirtualWallet_CallMessage_CreateSyntheticAddress",
+        "template": null,
+        "peekable": false,
+        "fields": [
+          {
+            "display_name": "salt",
+            "silent": false,
+            "value": {
+              "Immediate": {
+                "ByteArray": {
+                  "len": 32,
+                  "display": "Hex"
+                }
+              }
+            },
+            "doc": ""
+          }
+        ]
+      }
+    },
+    {
       "Tuple": {
         "template": null,
         "peekable": false,
         "fields": [
           {
             "value": {
-              "ByIndex": 55
+              "ByIndex": 56
             },
             "silent": false,
             "doc": ""
@@ -1392,7 +1430,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 57
+              "ByIndex": 58
             },
             "silent": false,
             "doc": ""
@@ -1415,7 +1453,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 58
+              "ByIndex": 59
             }
           }
         ],
@@ -1451,7 +1489,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 55
+              "ByIndex": 56
             },
             "silent": false,
             "doc": ""
@@ -1466,7 +1504,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 61
+              "ByIndex": 62
             },
             "silent": false,
             "doc": ""
@@ -1483,7 +1521,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 62
+              "ByIndex": 63
             }
           },
           {
@@ -1491,7 +1529,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 78
+              "ByIndex": 79
             }
           },
           {
@@ -1499,7 +1537,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 79
+              "ByIndex": 80
             }
           }
         ],
@@ -1516,7 +1554,7 @@
             "display_name": "policy",
             "silent": false,
             "value": {
-              "ByIndex": 63
+              "ByIndex": 64
             },
             "doc": ""
           }
@@ -1533,7 +1571,7 @@
             "display_name": "default_payee_policy",
             "silent": false,
             "value": {
-              "ByIndex": 64
+              "ByIndex": 65
             },
             "doc": ""
           },
@@ -1541,7 +1579,7 @@
             "display_name": "payees",
             "silent": false,
             "value": {
-              "ByIndex": 73
+              "ByIndex": 74
             },
             "doc": ""
           },
@@ -1557,7 +1595,7 @@
             "display_name": "authorized_sequencers",
             "silent": false,
             "value": {
-              "ByIndex": 75
+              "ByIndex": 76
             },
             "doc": ""
           }
@@ -1573,7 +1611,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 65
+              "ByIndex": 66
             }
           },
           {
@@ -1604,7 +1642,7 @@
             "display_name": "gas_limit",
             "silent": false,
             "value": {
-              "ByIndex": 66
+              "ByIndex": 67
             },
             "doc": ""
           },
@@ -1612,7 +1650,7 @@
             "display_name": "max_gas_price",
             "silent": false,
             "value": {
-              "ByIndex": 69
+              "ByIndex": 70
             },
             "doc": ""
           },
@@ -1620,7 +1658,7 @@
             "display_name": "transaction_limit",
             "silent": false,
             "value": {
-              "ByIndex": 72
+              "ByIndex": 73
             },
             "doc": ""
           }
@@ -1630,7 +1668,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 67
+          "ByIndex": 68
         }
       }
     },
@@ -1641,7 +1679,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 68
+              "ByIndex": 69
             },
             "silent": false,
             "doc": ""
@@ -1665,7 +1703,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 70
+          "ByIndex": 71
         }
       }
     },
@@ -1679,7 +1717,7 @@
             "display_name": "value",
             "silent": false,
             "value": {
-              "ByIndex": 71
+              "ByIndex": 72
             },
             "doc": ""
           }
@@ -1709,7 +1747,7 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 74
+          "ByIndex": 75
         }
       }
     },
@@ -1727,7 +1765,7 @@
           },
           {
             "value": {
-              "ByIndex": 64
+              "ByIndex": 65
             },
             "silent": false,
             "doc": ""
@@ -1750,7 +1788,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 76
+              "ByIndex": 77
             }
           }
         ],
@@ -1764,7 +1802,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 77
+              "ByIndex": 78
             },
             "silent": false,
             "doc": ""
@@ -1814,7 +1852,7 @@
             "display_name": "update",
             "silent": false,
             "value": {
-              "ByIndex": 80
+              "ByIndex": 81
             },
             "doc": ""
           }
@@ -1831,7 +1869,7 @@
             "display_name": "sequencer_update",
             "silent": false,
             "value": {
-              "ByIndex": 81
+              "ByIndex": 82
             },
             "doc": ""
           },
@@ -1839,7 +1877,7 @@
             "display_name": "updaters_to_add",
             "silent": false,
             "value": {
-              "ByIndex": 86
+              "ByIndex": 87
             },
             "doc": ""
           },
@@ -1847,7 +1885,7 @@
             "display_name": "updaters_to_remove",
             "silent": false,
             "value": {
-              "ByIndex": 86
+              "ByIndex": 87
             },
             "doc": ""
           },
@@ -1855,7 +1893,7 @@
             "display_name": "payee_policies_to_set",
             "silent": false,
             "value": {
-              "ByIndex": 87
+              "ByIndex": 88
             },
             "doc": ""
           },
@@ -1863,7 +1901,7 @@
             "display_name": "payee_policies_to_delete",
             "silent": false,
             "value": {
-              "ByIndex": 86
+              "ByIndex": 87
             },
             "doc": ""
           },
@@ -1871,7 +1909,7 @@
             "display_name": "default_policy",
             "silent": false,
             "value": {
-              "ByIndex": 88
+              "ByIndex": 89
             },
             "doc": ""
           }
@@ -1881,7 +1919,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 82
+          "ByIndex": 83
         }
       }
     },
@@ -1900,7 +1938,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 83
+              "ByIndex": 84
             }
           }
         ],
@@ -1914,7 +1952,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 84
+              "ByIndex": 85
             },
             "silent": false,
             "doc": ""
@@ -1932,7 +1970,7 @@
             "display_name": "to_add",
             "silent": false,
             "value": {
-              "ByIndex": 85
+              "ByIndex": 86
             },
             "doc": ""
           },
@@ -1940,7 +1978,7 @@
             "display_name": "to_remove",
             "silent": false,
             "value": {
-              "ByIndex": 85
+              "ByIndex": 86
             },
             "doc": ""
           }
@@ -1950,7 +1988,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 77
+          "ByIndex": 78
         }
       }
     },
@@ -1964,14 +2002,14 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 73
+          "ByIndex": 74
         }
       }
     },
     {
       "Option": {
         "value": {
-          "ByIndex": 64
+          "ByIndex": 65
         }
       }
     },
@@ -1982,7 +2020,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 90
+              "ByIndex": 91
             },
             "silent": false,
             "doc": ""
@@ -2011,7 +2049,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 91
+              "ByIndex": 92
             }
           },
           {
@@ -2019,7 +2057,7 @@
             "discriminant": 3,
             "template": null,
             "value": {
-              "ByIndex": 92
+              "ByIndex": 93
             }
           },
           {
@@ -2027,7 +2065,7 @@
             "discriminant": 4,
             "template": null,
             "value": {
-              "ByIndex": 93
+              "ByIndex": 94
             }
           }
         ],
@@ -2097,7 +2135,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 95
+              "ByIndex": 96
             },
             "silent": false,
             "doc": ""
@@ -2114,7 +2152,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 96
+              "ByIndex": 97
             }
           },
           {
@@ -2122,7 +2160,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 99
+              "ByIndex": 100
             }
           },
           {
@@ -2130,7 +2168,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 100
+              "ByIndex": 101
             }
           }
         ],
@@ -2168,7 +2206,7 @@
             "display_name": "body",
             "silent": false,
             "value": {
-              "ByIndex": 97
+              "ByIndex": 98
             },
             "doc": ""
           },
@@ -2176,7 +2214,7 @@
             "display_name": "metadata",
             "silent": false,
             "value": {
-              "ByIndex": 98
+              "ByIndex": 99
             },
             "doc": ""
           },
@@ -2221,7 +2259,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 97
+          "ByIndex": 98
         }
       }
     },
@@ -2235,7 +2273,7 @@
             "display_name": "metadata",
             "silent": false,
             "value": {
-              "ByIndex": 97
+              "ByIndex": 98
             },
             "doc": ""
           },
@@ -2243,7 +2281,7 @@
             "display_name": "message",
             "silent": false,
             "value": {
-              "ByIndex": 97
+              "ByIndex": 98
             },
             "doc": ""
           }
@@ -2260,7 +2298,7 @@
             "display_name": "validator_address",
             "silent": false,
             "value": {
-              "ByIndex": 101
+              "ByIndex": 102
             },
             "doc": ""
           },
@@ -2276,7 +2314,7 @@
             "display_name": "signature",
             "silent": false,
             "value": {
-              "ByIndex": 102
+              "ByIndex": 103
             },
             "doc": ""
           }
@@ -2330,7 +2368,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 104
+              "ByIndex": 105
             },
             "silent": false,
             "doc": ""
@@ -2347,7 +2385,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 105
+              "ByIndex": 106
             }
           },
           {
@@ -2355,7 +2393,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 111
+              "ByIndex": 112
             }
           },
           {
@@ -2363,7 +2401,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 112
+              "ByIndex": 113
             }
           }
         ],
@@ -2380,7 +2418,7 @@
             "display_name": "domain_oracle_data",
             "silent": false,
             "value": {
-              "ByIndex": 106
+              "ByIndex": 107
             },
             "doc": ""
           },
@@ -2388,7 +2426,7 @@
             "display_name": "domain_default_gas",
             "silent": false,
             "value": {
-              "ByIndex": 109
+              "ByIndex": 110
             },
             "doc": ""
           },
@@ -2414,7 +2452,7 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 107
+          "ByIndex": 108
         }
       }
     },
@@ -2441,7 +2479,7 @@
             "display_name": "data_value",
             "silent": false,
             "value": {
-              "ByIndex": 108
+              "ByIndex": 109
             },
             "doc": ""
           }
@@ -2481,7 +2519,7 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 110
+          "ByIndex": 111
         }
       }
     },
@@ -2538,7 +2576,7 @@
             "display_name": "oracle_data",
             "silent": false,
             "value": {
-              "ByIndex": 108
+              "ByIndex": 109
             },
             "doc": ""
           }
@@ -2588,7 +2626,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 115
+              "ByIndex": 116
             },
             "silent": false,
             "doc": ""
@@ -2605,7 +2643,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 116
+              "ByIndex": 117
             }
           },
           {
@@ -2613,7 +2651,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 128
+              "ByIndex": 129
             }
           },
           {
@@ -2621,7 +2659,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 131
+              "ByIndex": 132
             }
           },
           {
@@ -2629,7 +2667,7 @@
             "discriminant": 3,
             "template": null,
             "value": {
-              "ByIndex": 132
+              "ByIndex": 133
             }
           },
           {
@@ -2637,7 +2675,7 @@
             "discriminant": 4,
             "template": null,
             "value": {
-              "ByIndex": 133
+              "ByIndex": 134
             }
           }
         ],
@@ -2654,7 +2692,7 @@
             "display_name": "admin",
             "silent": false,
             "value": {
-              "ByIndex": 117
+              "ByIndex": 118
             },
             "doc": ""
           },
@@ -2662,7 +2700,7 @@
             "display_name": "token_source",
             "silent": false,
             "value": {
-              "ByIndex": 119
+              "ByIndex": 120
             },
             "doc": ""
           },
@@ -2670,7 +2708,7 @@
             "display_name": "ism",
             "silent": false,
             "value": {
-              "ByIndex": 122
+              "ByIndex": 123
             },
             "doc": ""
           },
@@ -2678,7 +2716,7 @@
             "display_name": "remote_routers",
             "silent": false,
             "value": {
-              "ByIndex": 126
+              "ByIndex": 127
             },
             "doc": ""
           },
@@ -2732,7 +2770,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 118
+              "ByIndex": 119
             }
           }
         ],
@@ -2763,7 +2801,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 120
+              "ByIndex": 121
             }
           },
           {
@@ -2771,7 +2809,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 121
+              "ByIndex": 122
             }
           },
           {
@@ -2854,7 +2892,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 123
+              "ByIndex": 124
             }
           },
           {
@@ -2862,7 +2900,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 124
+              "ByIndex": 125
             }
           }
         ],
@@ -2896,7 +2934,7 @@
             "display_name": "validators",
             "silent": false,
             "value": {
-              "ByIndex": 125
+              "ByIndex": 126
             },
             "doc": ""
           },
@@ -2919,14 +2957,14 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 101
+          "ByIndex": 102
         }
       }
     },
     {
       "Vec": {
         "value": {
-          "ByIndex": 127
+          "ByIndex": 128
         }
       }
     },
@@ -2975,7 +3013,7 @@
             "display_name": "admin",
             "silent": false,
             "value": {
-              "ByIndex": 129
+              "ByIndex": 130
             },
             "doc": ""
           },
@@ -2983,7 +3021,7 @@
             "display_name": "ism",
             "silent": false,
             "value": {
-              "ByIndex": 130
+              "ByIndex": 131
             },
             "doc": ""
           },
@@ -3025,14 +3063,14 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 117
+          "ByIndex": 118
         }
       }
     },
     {
       "Option": {
         "value": {
-          "ByIndex": 122
+          "ByIndex": 123
         }
       }
     },
@@ -3173,7 +3211,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 135
+              "ByIndex": 136
             },
             "silent": false,
             "doc": ""
@@ -3190,7 +3228,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 136
+              "ByIndex": 137
             }
           },
           {
@@ -3198,7 +3236,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 138
+              "ByIndex": 139
             }
           }
         ],
@@ -3212,7 +3250,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 137
+              "ByIndex": 138
             },
             "silent": false,
             "doc": ""
@@ -3248,7 +3286,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 139
+              "ByIndex": 140
             },
             "silent": false,
             "doc": ""
@@ -3266,7 +3304,7 @@
             "display_name": "new_hardfork",
             "silent": false,
             "value": {
-              "ByIndex": 140
+              "ByIndex": 141
             },
             "doc": ""
           },
@@ -3274,7 +3312,7 @@
             "display_name": "new_contract_creation_policy",
             "silent": false,
             "value": {
-              "ByIndex": 142
+              "ByIndex": 143
             },
             "doc": ""
           },
@@ -3282,7 +3320,7 @@
             "display_name": "chain_spec_update",
             "silent": false,
             "value": {
-              "ByIndex": 145
+              "ByIndex": 146
             },
             "doc": ""
           },
@@ -3300,7 +3338,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 141
+          "ByIndex": 142
         }
       }
     },
@@ -3339,7 +3377,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 143
+          "ByIndex": 144
         }
       }
     },
@@ -3358,7 +3396,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 144
+              "ByIndex": 145
             }
           }
         ],
@@ -3375,7 +3413,7 @@
             "display_name": "add",
             "silent": false,
             "value": {
-              "ByIndex": 125
+              "ByIndex": 126
             },
             "doc": ""
           },
@@ -3383,7 +3421,7 @@
             "display_name": "remove",
             "silent": false,
             "value": {
-              "ByIndex": 125
+              "ByIndex": 126
             },
             "doc": ""
           }
@@ -3393,7 +3431,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 146
+          "ByIndex": 147
         }
       }
     },
@@ -3407,7 +3445,7 @@
             "display_name": "new_limit_contract_code_size",
             "silent": false,
             "value": {
-              "ByIndex": 147
+              "ByIndex": 148
             },
             "doc": ""
           },
@@ -3415,7 +3453,7 @@
             "display_name": "new_block_gas_limit",
             "silent": false,
             "value": {
-              "ByIndex": 72
+              "ByIndex": 73
             },
             "doc": ""
           },
@@ -3423,7 +3461,7 @@
             "display_name": "new_tx_gas_limit",
             "silent": false,
             "value": {
-              "ByIndex": 72
+              "ByIndex": 73
             },
             "doc": ""
           }
@@ -3449,7 +3487,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 149
+              "ByIndex": 150
             },
             "silent": false,
             "doc": ""
@@ -3466,7 +3504,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 150
+              "ByIndex": 151
             }
           },
           {
@@ -3474,7 +3512,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 151
+              "ByIndex": 152
             }
           },
           {
@@ -3482,7 +3520,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 153
+              "ByIndex": 154
             }
           },
           {
@@ -3490,7 +3528,7 @@
             "discriminant": 3,
             "template": null,
             "value": {
-              "ByIndex": 154
+              "ByIndex": 155
             }
           },
           {
@@ -3498,7 +3536,7 @@
             "discriminant": 4,
             "template": null,
             "value": {
-              "ByIndex": 155
+              "ByIndex": 156
             }
           },
           {
@@ -3506,7 +3544,7 @@
             "discriminant": 5,
             "template": null,
             "value": {
-              "ByIndex": 156
+              "ByIndex": 157
             }
           },
           {
@@ -3520,7 +3558,7 @@
             "discriminant": 7,
             "template": null,
             "value": {
-              "ByIndex": 157
+              "ByIndex": 158
             }
           },
           {
@@ -3528,7 +3566,7 @@
             "discriminant": 8,
             "template": null,
             "value": {
-              "ByIndex": 158
+              "ByIndex": 159
             }
           },
           {
@@ -3542,7 +3580,7 @@
             "discriminant": 10,
             "template": null,
             "value": {
-              "ByIndex": 159
+              "ByIndex": 160
             }
           },
           {
@@ -3550,7 +3588,7 @@
             "discriminant": 11,
             "template": null,
             "value": {
-              "ByIndex": 160
+              "ByIndex": 161
             }
           },
           {
@@ -3558,7 +3596,7 @@
             "discriminant": 12,
             "template": null,
             "value": {
-              "ByIndex": 161
+              "ByIndex": 162
             }
           }
         ],
@@ -3636,7 +3674,7 @@
             "display_name": "content",
             "silent": false,
             "value": {
-              "ByIndex": 152
+              "ByIndex": 153
             },
             "doc": ""
           }
@@ -3928,7 +3966,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 163
+              "ByIndex": 164
             },
             "silent": false,
             "doc": ""
@@ -3945,7 +3983,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 164
+              "ByIndex": 165
             }
           },
           {
@@ -3953,7 +3991,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 165
+              "ByIndex": 166
             }
           },
           {
@@ -3961,7 +3999,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 166
+              "ByIndex": 167
             }
           }
         ],
@@ -4082,7 +4120,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 168
+              "ByIndex": 169
             }
           },
           {
@@ -4090,7 +4128,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 169
+              "ByIndex": 170
             }
           }
         ],
@@ -4147,7 +4185,7 @@
             "display_name": "max_priority_fee_bips",
             "silent": false,
             "value": {
-              "ByIndex": 171
+              "ByIndex": 172
             },
             "doc": ""
           },
@@ -4163,7 +4201,7 @@
             "display_name": "gas_limit",
             "silent": false,
             "value": {
-              "ByIndex": 66
+              "ByIndex": 67
             },
             "doc": ""
           },
@@ -4210,7 +4248,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 173
+              "ByIndex": 174
             },
             "silent": false,
             "doc": ""
@@ -4228,7 +4266,7 @@
             "display_name": "signatures",
             "silent": false,
             "value": {
-              "ByIndex": 174
+              "ByIndex": 175
             },
             "doc": ""
           },
@@ -4236,7 +4274,7 @@
             "display_name": "unused_pub_keys",
             "silent": false,
             "value": {
-              "ByIndex": 176
+              "ByIndex": 177
             },
             "doc": ""
           },
@@ -4265,7 +4303,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 167
+              "ByIndex": 168
             },
             "doc": ""
           },
@@ -4273,12 +4311,12 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 170
+              "ByIndex": 171
             },
             "doc": ""
           },
           {
-            "display_name": "target_address",
+            "display_name": "address_override",
             "silent": false,
             "value": {
               "ByIndex": 25
@@ -4291,7 +4329,7 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 175
+          "ByIndex": 176
         }
       }
     },
@@ -4351,7 +4389,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 178
+              "ByIndex": 179
             }
           },
           {
@@ -4359,7 +4397,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 180
+              "ByIndex": 181
             }
           }
         ],
@@ -4373,7 +4411,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 179
+              "ByIndex": 180
             },
             "silent": false,
             "doc": ""
@@ -4399,7 +4437,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 167
+              "ByIndex": 168
             },
             "doc": ""
           },
@@ -4407,7 +4445,15 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 170
+              "ByIndex": 171
+            },
+            "doc": ""
+          },
+          {
+            "display_name": "address_override",
+            "silent": false,
+            "value": {
+              "ByIndex": 25
             },
             "doc": ""
           }
@@ -4421,7 +4467,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 181
+              "ByIndex": 182
             },
             "silent": false,
             "doc": ""
@@ -4447,7 +4493,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 167
+              "ByIndex": 168
             },
             "doc": ""
           },
@@ -4455,7 +4501,7 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 170
+              "ByIndex": 171
             },
             "doc": ""
           },
@@ -4468,7 +4514,7 @@
             "doc": ""
           },
           {
-            "display_name": "target_address",
+            "display_name": "address_override",
             "silent": false,
             "value": {
               "ByIndex": 25
@@ -4481,7 +4527,7 @@
   ],
   "root_type_indices": [
     0,
-    177,
+    178,
     3,
     9
   ],
@@ -4576,6 +4622,9 @@
         },
         {
           "name": "details"
+        },
+        {
+          "name": "address_override"
         }
       ]
     },
@@ -4993,6 +5042,9 @@
         },
         {
           "name": "rotate_credential_on_address"
+        },
+        {
+          "name": "create_synthetic_address"
         }
       ]
     },
@@ -5041,6 +5093,14 @@
         },
         {
           "name": "new_credential"
+        }
+      ]
+    },
+    {
+      "name": "__SovVirtualWallet_CallMessage_CreateSyntheticAddress",
+      "fields_or_variants": [
+        {
+          "name": "salt"
         }
       ]
     },
@@ -6045,7 +6105,7 @@
           "name": "read_and_set_heavy_state"
         },
         {
-          "name": "run_cpu_heavy_operation"
+          "name": "run_c_p_u_heavy_operation"
         }
       ]
     },
@@ -6148,7 +6208,7 @@
           "name": "details"
         },
         {
-          "name": "target_address"
+          "name": "address_override"
         }
       ]
     },
@@ -6197,6 +6257,9 @@
         },
         {
           "name": "details"
+        },
+        {
+          "name": "address_override"
         }
       ]
     },
@@ -6220,7 +6283,7 @@
           "name": "credential_address"
         },
         {
-          "name": "target_address"
+          "name": "address_override"
         }
       ]
     }

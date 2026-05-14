@@ -3450,6 +3450,7 @@ dependencies = [
  "schemars 0.8.22",
  "serde",
  "serde_with",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-state",
 ]
