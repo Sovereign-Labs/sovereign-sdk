@@ -30,5 +30,10 @@
         "typedoc": "^0.28.4",
         "vite-plugin-wasm": "^3.4.1",
         "vitest": "4.0.7"
+    },
+    "pnpm": {
+        "overrides": {
+            "protobufjs@<7.5.5": "^7.5.5"
+        }
     }
 }
