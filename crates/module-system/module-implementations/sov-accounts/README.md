@@ -25,6 +25,33 @@ addresses and records which credentials may act for which addresses.
    There is no orphan guard on remove — revoking the last credential leaves
    the address unspendable via `account_owners`.
 
+6. It is possible to create a new *synthetic* address — an address whose
+   authorization lives purely in `account_owners` and which has no
+   naturally-corresponding private key — with
+   `CallMessage::CreateSyntheticAddress { salt }`. The address is derived
+   by hashing `(domain || visible_slot_hash || sender_addr ||
+   sender_credential || salt)` with `S::CryptoSpec::Hasher`, converting
+   the resulting 32 bytes to `CredentialId`, and then to `S::Address`.
+   The caller's current credential is auto-authorized for it. Different
+   callers, salts, and visible slots produce different addresses;
+   replaying the same tuple in the same slot is an idempotent no-op.
+
+   `visible_slot_hash` is part of the derivation by design: an attacker
+   who later compromises the caller's private key cannot reconstruct
+   the same synthetic address off-chain, because the slot hash only
+   becomes known once chain progress commits to it and is unforgeable
+   without participating in consensus. This makes the call
+   *bind-then-use*, not *counterfactual*: unlike CREATE2 or ERC-4337,
+   the address cannot be predicted and prefunded ahead of the
+   `CreateSyntheticAddress` transaction. Callers must wait for
+   finalization and read the derived address from the emitted
+   `SyntheticAddressCreated` event before routing assets or permissions
+   to it.
+
+   The resulting synthetic address is operated on through the same
+   `AddCredentialToAddress` / `RemoveCredentialFromAddress` /
+   `RotateCredentialOnAddress` calls as any other address.
+
 
 ## Credential and Address Relations
 
