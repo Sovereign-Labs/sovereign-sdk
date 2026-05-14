@@ -335,7 +335,9 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
         // On the unregistered path the sender pays its own sequencing, so the
-        // resolved address doubles as `sequencer_rollup_address`.
+        // resolved address doubles as `sequencer_rollup_address`. When
+        // `address_override = Some(X)`, both fields resolve to `X` — fee debit
+        // and gas refund follow the override.
         let address = self.resolve_authorized_sender(auth_data, state)?;
 
         Ok(Context::new(

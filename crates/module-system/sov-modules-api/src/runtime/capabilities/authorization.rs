@@ -122,8 +122,16 @@ pub struct AuthorizationData<S: Spec> {
 
     /// Signer-declared override of the default execution address.
     ///
-    /// `None` => resolve to the credential's default address.
-    /// `Some(X)` => requires an explicit `(X, credential_id)` entry in `account_owners`;
-    /// the transaction is skipped otherwise.
+    /// - `None` => resolve to the credential's default address. Allowed unless an
+    ///   explicit `false` entry exists for `(default_address, credential_id)` —
+    ///   "allowed-unless-revoked".
+    /// - `Some(X)` => requires an explicit `(X, credential_id)` entry in
+    ///   `account_owners`; the transaction is **skipped** otherwise.
+    ///
+    /// Footgun: `Some(default_address)` is NOT a no-op equivalent of `None`. The
+    /// `None` path uses the implicit allowed-unless-revoked fallback; `Some(_)`
+    /// requires an explicit allowlist entry. Passing the canonical default address
+    /// as `Some` will silently skip the transaction unless that exact pair has
+    /// been registered. Pass `None` for default-address semantics.
     pub address_override: Option<S::Address>,
 }

@@ -2877,8 +2877,7 @@ fn test_admit_path_diverges_from_canonical_for_non_canonical_default_address() {
 
     let credential = account_1.credential_id();
     let non_canonical_address = account_2.address();
-    let canonical_for_credential =
-        <S as Spec>::Address::from(account_1.credential_id());
+    let canonical_for_credential = <S as Spec>::Address::from(account_1.credential_id());
     assert_ne!(
         non_canonical_address, canonical_for_credential,
         "test scaffold: account_2's address must differ from canonical(account_1.credential)"
