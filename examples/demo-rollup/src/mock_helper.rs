@@ -103,46 +103,46 @@ where
 {
     let (inner_code_commitment, outer_code_commitment) = read_mock_code_commitments_from_env();
 
-    // Extract the persisted proof's public data without re-verifying
-    // its commitment. The commitment may have legitimately rotated
-    // since the proof was written (e.g. a guest-binary upgrade), but
-    // we still need its `final_slot_number` to anchor the STF-info
-    // stream so the next aggregation is contiguous with what's on
-    // disk.
+    // Read the persisted proof.
+    let previous_proof = read_latest_aggregated_proof(ledger_db).await;
     let previous_public_data: Option<MockAggregatedProofPublicData> =
-        match read_latest_aggregated_proof(ledger_db).await {
+        match previous_proof.as_ref() {
             None => None,
             Some(proof) => Some(
-                MockZkVerifier::extract_public_data(&proof.to_serialized_zk_proof()).map_err(
-                    |e| {
+                MockZkVerifier::extract_public_data(&proof.clone().to_serialized_zk_proof())
+                    .map_err(|e| {
                         anyhow::anyhow!(
                             "Failed to extract public data from persisted aggregated proof: {e}"
                         )
-                    },
-                )?,
+                    })?,
             ),
         };
 
     let latest_proof_final_slot = previous_public_data.as_ref().map(|p| p.final_slot_number);
 
-    let previous = previous_public_data
-        .as_ref()
-        .filter(|_| !start_fresh_outer_proof_on_resync);
-
-    if let Some(previous) = previous {
+    if let (false, Some(prev)) = (
+        start_fresh_outer_proof_on_resync,
+        previous_public_data.as_ref(),
+    ) {
         anyhow::ensure!(
-            inner_code_commitment.to_hash() == previous.inner_vkey_hash,
+            inner_code_commitment.to_hash() == prev.inner_vkey_hash,
             "inner code commitment changed since last proof; pass start_fresh_outer_proof_on_resync to reset"
         );
         anyhow::ensure!(
-            outer_code_commitment.to_hash() == previous.outer_vk_hash,
+            outer_code_commitment.to_hash() == prev.outer_vk_hash,
             "outer code commitment changed since last proof; pass start_fresh_outer_proof_on_resync to reset"
         );
     }
 
+    let previous_outer_proof = if start_fresh_outer_proof_on_resync {
+        None
+    } else {
+        previous_proof
+    };
+
     let inner_vm = MockZkvmHost::new_non_blocking().with_code_commitment(inner_code_commitment);
 
-    let outer_vm = MockZkvmHost::new_non_blocking_with_previous_anchor(previous)
+    let outer_vm = MockZkvmHost::new_non_blocking_with_previous_outer_proof(previous_outer_proof)
         .with_code_commitment(outer_code_commitment);
     let prover = ParallelProverService::new_with_default_workers(
         inner_vm,

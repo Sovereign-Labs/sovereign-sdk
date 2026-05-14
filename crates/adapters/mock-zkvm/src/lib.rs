@@ -113,12 +113,27 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
 
     type Error = anyhow::Error;
 
-    #[cfg(target_os = "zkvm")]
     fn verify_with_pub_values<T: DeserializeOwned>(
-        _public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues,
-        _code_commitment: &Self::CodeCommitment,
+        public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues,
+        code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        todo!("MockZkVerifier does not support `verify_with_pub_values`")
+        // The mock encodes a complete `MockProof` in `pub_values.pub_values` —
+        // mirroring SP1's deferred-proof channel, but in-band so the circuit
+        // can run natively.
+        let MockProof {
+            is_valid,
+            pub_data,
+            code_commitment: claimed,
+        } = bincode::deserialize(&public_values.pub_values)?;
+        if !is_valid {
+            anyhow::bail!("Proof is not valid");
+        }
+        if &claimed != code_commitment {
+            anyhow::bail!(
+                "Code commitment mismatch: proof claims {claimed:?}, verifier expects {code_commitment:?}"
+            );
+        }
+        Ok(bincode::deserialize(&pub_data)?)
     }
 
     fn verify_with_proof<T: DeserializeOwned>(

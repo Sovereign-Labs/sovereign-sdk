@@ -29,7 +29,7 @@ type VerifyResult<Address, Da, Root> = VerifiedProofData<Address, <Da as DaSpec>
 /// Runs the aggregation circuit: reads a witness from the host, verifies inner
 /// proofs and an optional previous outer proof, checks DA and state-root
 /// continuity, then commits [`AggregatedProofPublicData`] as the public output.
-pub fn run_aggregation_program<Address, Da, Root, V, G>(guest: G)
+pub fn run_aggregation_program<Address, Da, Root, V, G>(guest: &G)
 where
     Address: Clone + Serialize + DeserializeOwned,
     Da: DaSpec,
@@ -76,21 +76,25 @@ where
     } = verified_proof_data;
 
     // Propagate the origin state root forward through recursive aggregations.
-    // For the very first aggregation, the origin root is the initial state root
-    // of the first inner proof (i.e. the state root at chain genesis).
+    // For the very first aggregation (no predecessor), the origin root is the
+    // initial state root of the first inner proof.
     let origin_state_root = previous_public_data
         .as_ref()
         .map(|public_data| public_data.origin_state_root.clone())
         .unwrap_or_else(|| initial_boundary.state_root.clone());
 
     // Slot number that origin_state_root corresponds to. Propagated from the
-    // predecessor; for the first aggregation it is the slot before the first
-    // inner proof — i.e. the rollup genesis (SlotNumber::GENESIS), since the
-    // first inner proof must cover slot 1.
+    // predecessor when one exists; otherwise it is the slot immediately
+    // before the first inner proof. For a chain rooted at rollup genesis the
+    // first inner proof covers slot 1 and this evaluates to GENESIS, but the
+    // circuit doesn't itself enforce that — a chain that starts mid-flight
+    // (e.g. after a prover-service resync that intentionally skipped earlier
+    // slots) will produce an aggregation with `origin_slot_number > GENESIS`,
+    // which downstream consumers can use to detect the discontinuity.
     let origin_slot_number = previous_public_data
         .as_ref()
         .map(|public_data| public_data.origin_slot_number)
-        .unwrap_or(SlotNumber::GENESIS);
+        .unwrap_or_else(|| initial_boundary.slot_number.prev());
 
     let aggregated_public_data = AggregatedProofPublicData::<Address, Da, Root> {
         initial_slot_number: initial_boundary.slot_number,
@@ -155,19 +159,20 @@ where
 
         let current_slot_number = stf_public_data.slot_number;
 
-        // Slots advance 1:1 with DA blocks on the canonical fork, so each
-        // consecutive inner proof must increment the slot number by exactly one.
-        // For the very first aggregation (no predecessor), the first inner proof
-        // must cover slot 1 — slot 0 is the rollup genesis state and has no
-        // associated state transition / inner proof.
-        let expected = match expected_prev_slot_number {
-            Some(prev) => prev.next(),
-            None => SlotNumber::ONE,
-        };
-        assert_eq!(
-            current_slot_number, expected,
-            "Slot number discontinuity at index {index}: expected {expected}, got {current_slot_number}",
-        );
+        // Within a single aggregation, consecutive inner proofs must increment
+        // the slot number by exactly one — slots advance 1:1 with DA blocks on
+        // the canonical fork. When there's no predecessor outer proof, the
+        // first inner proof can start at any slot (the rollup may legitimately
+        // resume mid-flight after a resync that skipped earlier slots); the
+        // aggregation's `origin_slot_number` will reflect where this chain
+        // segment begins.
+        if let Some(prev) = expected_prev_slot_number {
+            let expected = prev.next();
+            assert_eq!(
+                current_slot_number, expected,
+                "Slot number discontinuity at index {index}: expected {expected}, got {current_slot_number}",
+            );
+        }
         expected_prev_slot_number = Some(current_slot_number);
 
         // Verify DA block hash-chain continuity: each block's prev_hash must equal

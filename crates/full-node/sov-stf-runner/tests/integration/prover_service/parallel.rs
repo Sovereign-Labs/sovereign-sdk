@@ -82,9 +82,9 @@ async fn test_prover_status_busy() -> anyhow::Result<()> {
         ..
     } = make_new_prover();
 
-    let headers: Vec<_> = (0..num_worker_threads)
-        .map(|height| make_header(MockHash::from([(height + 1) as u8; 32]), height as u64))
-        .collect();
+    // Headers must form a DA hash chain so consecutive single-header
+    // aggregations satisfy the circuit's cross-aggregation continuity check.
+    let headers = make_chained_headers(num_worker_threads);
 
     // Saturate the prover.
     for header in &headers {

@@ -144,7 +144,6 @@ pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
     /// supplies the serialized public values the proof is expected to commit
     /// to, along with the code commitment identifying which program was
     /// proven.
-    #[cfg(target_os = "zkvm")]
     fn verify_with_pub_values<T: DeserializeOwned>(
         pub_values: &aggregated_proof::common::SerializedPubValues,
         code_commitment: &Self::CodeCommitment,

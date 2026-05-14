@@ -21,5 +21,5 @@ pub fn main() {
         <<ProgramSpec as Spec>::Storage as Storage>::Root,
         SP1Verifier,
         SP1Guest,
-    >(guest);
+    >(&guest);
 }
