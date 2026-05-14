@@ -41,4 +41,4 @@ serialized = serializer.serialize_tx(signed_tx)
 - `Serializer`: Schema-based transaction serialization
 - `UnsignedTransaction`: Unsigned transaction with runtime calls
 - `TxDetails`: Transaction metadata (chain ID, fees, gas)
-- `UniquenessData`: Transaction uniqueness (nonce or generation)
+- `UniquenessData`: Transaction uniqueness (nonce, generation, or window)
