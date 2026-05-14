@@ -96,11 +96,12 @@ impl MockZkvmHost {
         code_commitment: MockCodeCommitment,
     ) -> SerializedZkProof {
         let data = bincode::serialize(&transition).unwrap();
-        let raw_proof = bincode::serialize(&MockProof {
+        let raw_proof = MockProof {
             is_valid,
             pub_data: data,
             code_commitment,
-        })
+        }
+        .serialize()
         .unwrap();
         SerializedZkProof { raw_proof }
     }
@@ -118,11 +119,12 @@ impl MockZkvmHost {
         pub_data: Vec<u8>,
         code_commitment: MockCodeCommitment,
     ) -> anyhow::Result<Vec<u8>> {
-        Ok(bincode::serialize(&MockProof {
+        Ok(MockProof {
             is_valid: true,
             pub_data,
             code_commitment,
-        })?)
+        }
+        .serialize()?)
     }
 
     /// Sleeps for the duration (in milliseconds) read from `env_var`. Used in
@@ -150,7 +152,7 @@ impl MockZkvmHost {
     fn inner_vkey_hash_from_proof(
         proof: &SerializedZkProof,
     ) -> sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash {
-        let mock_proof: MockProof = bincode::deserialize(&proof.raw_proof)
+        let mock_proof = MockProof::deserialize(&proof.raw_proof)
             .expect("inner proof must be a bincode-encoded MockProof");
         mock_proof.code_commitment.to_hash()
     }
@@ -205,7 +207,7 @@ impl OuterZkvmHost for MockZkvmHost {
 
         let mut proof_inputs = Vec::with_capacity(headers_with_block_proofs.len());
         for (header, bp) in headers_with_block_proofs {
-            let recovered: MockProof = bincode::deserialize(&bp.proof.raw_proof)
+            let recovered = MockProof::deserialize(&bp.proof.raw_proof)
                 .expect("inner proof must be a bincode-encoded MockProof");
             let pub_values = Self::valid_mock_proof_bytes(
                 bincode::serialize(&bp.st)?,

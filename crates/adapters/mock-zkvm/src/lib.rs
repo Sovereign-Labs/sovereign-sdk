@@ -102,6 +102,18 @@ struct MockProof {
     code_commitment: MockCodeCommitment,
 }
 
+impl MockProof {
+    /// Bincode-encodes this proof.
+    pub(crate) fn serialize(&self) -> bincode::Result<Vec<u8>> {
+        bincode::serialize(self)
+    }
+
+    /// Bincode-decodes a proof from `bytes`.
+    pub(crate) fn deserialize(bytes: &[u8]) -> bincode::Result<Self> {
+        bincode::deserialize(bytes)
+    }
+}
+
 /// The verifier for mock zk proofs.
 #[derive(Default, Clone, Debug, PartialEq, Eq)]
 pub struct MockZkVerifier;
@@ -124,7 +136,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
             is_valid,
             pub_data,
             code_commitment: claimed,
-        } = bincode::deserialize(&public_values.pub_values)?;
+        } = MockProof::deserialize(&public_values.pub_values)?;
         if !is_valid {
             anyhow::bail!("Proof is not valid");
         }
@@ -144,7 +156,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
             is_valid,
             pub_data: input,
             code_commitment: claimed,
-        } = bincode::deserialize(&serialized_proof.raw_proof)?;
+        } = MockProof::deserialize(&serialized_proof.raw_proof)?;
         if !is_valid {
             anyhow::bail!("Proof is not valid");
         }
@@ -161,7 +173,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
     ) -> Result<T, Self::Error> {
         let MockProof {
             pub_data: input, ..
-        } = bincode::deserialize(&serialized_proof.raw_proof)?;
+        } = MockProof::deserialize(&serialized_proof.raw_proof)?;
         Ok(bincode::deserialize(&input)?)
     }
 }
