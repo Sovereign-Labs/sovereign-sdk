@@ -14,6 +14,8 @@ use sov_modules_api::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobIters;
 use sov_rollup_interface::stf::DiscardedBlob;
+#[cfg(feature = "native")]
+use sov_state::Accessory;
 use sov_state::{Kernel, Storage, User};
 use std::convert::Infallible;
 
@@ -214,7 +216,8 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for SoftConfirmationsKer
         self.chain_state.operating_mode(state).unwrap_infallible()
     }
 
-    fn state_version<Reader: StateReader<User, Error = Infallible>>(
+    #[cfg(feature = "native")]
+    fn state_version<Reader: StateReader<Accessory, Error = Infallible>>(
         &self,
         state: &mut Reader,
     ) -> u64 {

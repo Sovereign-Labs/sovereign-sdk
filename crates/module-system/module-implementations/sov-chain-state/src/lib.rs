@@ -42,6 +42,8 @@ use sov_modules_api::{DaSpec, Gas, KernelStateValue, Module, StateValue, Version
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::codec::BcsCodec;
 use sov_state::namespaces::Kernel;
+#[cfg(feature = "native")]
+use sov_state::Accessory;
 use sov_state::{Storage, User};
 use tracing::trace;
 
@@ -261,7 +263,7 @@ pub struct ChainState<S: Spec> {
     /// This value is incremented on hard forks of the Sovereign SDK. It is used to ensure that
     /// versioned rollup binaries match the on-disk state corresponding to their consensus version.
     #[state]
-    state_version: StateValue<u64>,
+    state_version: AccessoryStateValue<u64>,
 }
 
 impl<S: Spec> ChainState<S> {
@@ -474,7 +476,8 @@ impl<S: Spec> ChainState<S> {
     /// Return the global on-chain state schema version.
     ///
     /// Existing state created before this field was introduced defaults to version 0.
-    pub fn state_version<Accessor: StateReader<User>>(
+    #[cfg(feature = "native")]
+    pub fn state_version<Accessor: StateReader<Accessory>>(
         &self,
         state: &mut Accessor,
     ) -> Result<u64, Accessor::Error> {

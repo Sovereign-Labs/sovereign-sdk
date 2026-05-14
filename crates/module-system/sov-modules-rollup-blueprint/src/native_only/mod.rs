@@ -653,7 +653,9 @@ where
     RT: RuntimeTrait<S>,
 {
     let compiled_state_version: u64 = sov_modules_api::macros::config_value!("STATE_VERSION");
-    let on_disk_state_version = runtime.chain_state().state_version(state);
+    let on_disk_state_version = runtime
+        .chain_state()
+        .state_version(&mut state.accessory_state());
 
     anyhow::ensure!(
         on_disk_state_version == compiled_state_version,
