@@ -257,9 +257,9 @@ pub struct ChainState<S: Spec> {
     #[state]
     oracle_time_nanos: StateValue<u128>,
 
-    /// The global on-chain state schema version.
-    ///
-    /// This value is appended to preserve the discriminants of existing chain-state items.
+    /// The global Sovereign SDK version of the rollup.
+    /// This value is incremented on hard forks of the Sovereign SDK. It is used to ensure that
+    /// versioned rollup binaries match the on-disk state corresponding to their consensus version.
     #[state]
     state_version: StateValue<u64>,
 }

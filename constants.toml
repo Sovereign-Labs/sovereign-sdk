@@ -10,7 +10,9 @@ freeze = [1, 1]
 # We use the ID 4321 for demo purposes. Change this value before deploying!
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
-# The global on-chain state schema version expected by this binary.
+# The global on-chain Sovereign state version expected by this binary.
+# This must match the `sov_chain_state::state_version` value in the current on-disk state. The compiled
+# rollup will refuse to run if there is a mismatch.
 # Increment this whenever an SDK upgrade requires an out-of-band state migration.
 STATE_VERSION = 1
 

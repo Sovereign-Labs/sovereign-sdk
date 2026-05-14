@@ -32,17 +32,13 @@ pub struct ChainStateConfig<S: Spec> {
     /// The height of the first DA block.
     pub genesis_da_height: u64,
 
-    /// The global on-chain state schema version.
-    #[serde(default = "default_state_version")]
+    /// The version of Sovereign SDK consensus the rollup will run at genesis.
+    #[serde(default)]
     pub state_version: u64,
 
     /// The admin address. This address is allowed to terminate setup mode early.
     #[serde(default)]
     pub admin: Option<S::Address>,
-}
-
-fn default_state_version() -> u64 {
-    0
 }
 
 impl<S: Spec> ChainState<S> {
