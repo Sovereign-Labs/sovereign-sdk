@@ -13,7 +13,9 @@
   "devDependencies": {
     "@noble/ed25519": "^2.1.0",
     "@noble/hashes": "^1.5.0",
+    "@sovereign-sdk/multisig": "workspace:^",
     "@sovereign-sdk/signers": "workspace:^",
+    "@sovereign-sdk/utils": "workspace:^",
     "@sovereign-sdk/web3": "workspace:^",
     "@types/node": "^22.7.4",
     "bech32": "^2.0.0",
