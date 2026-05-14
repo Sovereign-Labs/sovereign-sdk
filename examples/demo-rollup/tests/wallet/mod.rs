@@ -148,7 +148,6 @@ fn test_display_signed_tx() {
     );
 }
 
-#[ignore = "Ignored for rapid schema iteration, re-enable when CI timebomb goes off"]
 #[test]
 fn detect_schema_has_breaking_change() {
     let current_hash: [u8; 32] = [

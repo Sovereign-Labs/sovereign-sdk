@@ -70,18 +70,26 @@ pub enum CallMessage<S: Spec> {
     /// Creates a new *synthetic* address — an address whose authorization
     /// lives purely in `account_owners` and which has no
     /// naturally-corresponding private key — and auto-authorizes the
-    /// caller's current credential for it. This is the same construct other
-    /// ecosystems call a *counterfactual* address (cf. ERC-4337, CREATE2):
-    /// the address is deterministically derivable from public inputs and
-    /// can receive funds before any controller exists for it on-chain.
+    /// caller's current credential for it.
     ///
-    /// The new address is derived deterministically by hashing
+    /// The address is derived deterministically by hashing
     /// `(domain || visible_slot_hash || sender_addr || sender_credential || salt)`
     /// with `S::CryptoSpec::Hasher`, then converting the resulting 32 bytes
-    /// to `S::Address` via `CredentialId.into()`.
-    /// Different callers, salts, and visible slots produce different
-    /// addresses; replaying the same tuple in the same slot is an
-    /// idempotent no-op.
+    /// to `S::Address` via `CredentialId.into()`. Different callers, salts,
+    /// and visible slots produce different addresses; replaying the same
+    /// tuple in the same slot is an idempotent no-op.
+    ///
+    /// `visible_slot_hash` is part of the derivation by design: an
+    /// attacker who later compromises the caller's private key cannot
+    /// reconstruct the same synthetic address off-chain, because the slot
+    /// hash only becomes known once chain progress commits to it and is
+    /// unforgeable without participating in consensus. This makes the
+    /// call *bind-then-use*, not *counterfactual*: unlike CREATE2 or
+    /// ERC-4337, the address cannot be predicted and prefunded ahead of
+    /// the `CreateSyntheticAddress` transaction. Callers must wait for
+    /// finalization and read the derived address from the
+    /// `SyntheticAddressCreated` event before routing assets or
+    /// permissions to it.
     CreateSyntheticAddress {
         /// Caller-supplied salt that allows the same caller to derive
         /// multiple distinct synthetic addresses in the same slot.
@@ -194,7 +202,11 @@ impl<S: Spec> Accounts<S> {
         let new_address: S::Address = synthetic_credential.into();
 
         // Replays in the same visible slot must stay a no-op even if the
-        // creator explicitly revoked or rotated this credential away.
+        // creator explicitly revoked or rotated this credential away. The
+        // `.is_none()` check (not `.unwrap_or(false)`) is load-bearing: it
+        // relies on the `account_owners` invariant documented on the field
+        // in `lib.rs` — `None` means "never touched", so `Some(false)` from
+        // `revoke_credential` continues to skip re-authorization here.
         if self
             .account_owners
             .get(&AccountOwnerKey::new(new_address, caller_credential), state)

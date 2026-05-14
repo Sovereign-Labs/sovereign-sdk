@@ -48,9 +48,11 @@ pub struct Account<S: Spec> {
 pub enum Event<S: Spec> {
     /// Emitted by [`CallMessage::CreateSyntheticAddress`] when a new
     /// synthetic address — an address with no naturally-corresponding
-    /// private key, sometimes called a *counterfactual* address (cf.
-    /// ERC-4337, CREATE2) — is created and the caller's credential is
-    /// auto-authorized for it.
+    /// private key — is created and the caller's credential is
+    /// auto-authorized for it. Consumers should treat this event as the
+    /// canonical source of the derived address: because the derivation
+    /// is bound to the visible slot hash, it can only be reproduced
+    /// after the creation tx is finalized.
     SyntheticAddressCreated {
         /// The newly created address.
         address: S::Address,

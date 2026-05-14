@@ -646,6 +646,7 @@ const SYNTHETIC_ADDRESS_DOMAIN: &[u8] = b"sov_accounts::synthetic_address::v1";
 
 /// Destructures the single expected `SyntheticAddressCreated` event from a
 /// receipt's event list.
+#[track_caller]
 fn synthetic_address_created_event(
     events: &[TestAccountsRuntimeEvent<S>],
 ) -> (<S as Spec>::Address, <S as Spec>::Address, CredentialId) {
@@ -659,6 +660,7 @@ fn synthetic_address_created_event(
     }
 }
 
+#[track_caller]
 fn stored_synthetic_address_created_event(
     events: &[StoredEvent],
 ) -> (<S as Spec>::Address, <S as Spec>::Address, CredentialId) {
@@ -712,6 +714,7 @@ fn execute_create_synthetic_address(
         .expect("CreateSyntheticAddress event should have been captured")
 }
 
+#[track_caller]
 fn derive_synthetic_address(
     runner: &TestRunner<RT, S>,
     creator: <S as Spec>::Address,
