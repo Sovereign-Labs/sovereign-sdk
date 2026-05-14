@@ -168,7 +168,6 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
         _item: &T,
         _agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
-        // Mirror SP1: a proof commits whatever the guest commits, not the hint.
         // With no guest execution, the mock has nothing to commit, so the
         // inner proof carries empty public data. The aggregation step gets
         // the canonical public output side-band via `BlockProof::st`.

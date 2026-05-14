@@ -103,7 +103,9 @@ struct MockProof {
 }
 
 impl MockProof {
-    /// Bincode-encodes this proof.
+    /// Bincode-encodes this proof. Only the native host path produces
+    /// `MockProof`s; verifiers read them via [`Self::deserialize`].
+    #[cfg(feature = "native")]
     pub(crate) fn serialize(&self) -> bincode::Result<Vec<u8>> {
         bincode::serialize(self)
     }
