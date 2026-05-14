@@ -1,3 +1,4 @@
+mod commitment_rotation;
 mod max_concurrent_proof_blobs;
 mod skip_proving_on_resync;
 
@@ -39,6 +40,7 @@ pub async fn start_test_rollup(
     external_da: &ExternalDa,
     max_concurrent_proof_blobs: usize,
     start_fresh_outer_proof_on_resync: bool,
+    stop_at_rollup_height: Option<sov_modules_api::capabilities::RollupHeight>,
 ) -> anyhow::Result<TestRollup<ExternalMockDemoRollup<Native>>> {
     // Make sure the DA has produced the genesis block before the rollup tries
     // to read from it.
@@ -71,6 +73,7 @@ pub async fn start_test_rollup(
         c.aggregated_proof_block_jump = 2;
         c.max_concurrent_proof_blobs = max_concurrent_proof_blobs;
         c.start_fresh_outer_proof_on_resync = start_fresh_outer_proof_on_resync;
+        c.stop_at_rollup_height = stop_at_rollup_height;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
             sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
             sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;

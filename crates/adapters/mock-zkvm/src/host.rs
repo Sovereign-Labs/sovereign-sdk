@@ -10,7 +10,7 @@ use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, BlockProof, OuterZkvmHost, SerializedAggregatedProof,
 };
-use sov_rollup_interface::zk::SerializedZkProof;
+use sov_rollup_interface::zk::{CodeCommitmentTrait, SerializedZkProof};
 
 /// A DA block header paired with the inner-proof data covering that block.
 type HeaderWithBlockProof<Address, Da, Root> =
@@ -26,6 +26,8 @@ pub struct MockZkvmHost {
     /// [`OuterZkvmHost::run_proof_aggregation`] hold across the whole prover
     /// service.
     previous_anchor: Arc<Mutex<Option<PreviousAggregatedProofAnchor>>>,
+    /// Commitment this host stamps into proofs.
+    code_commitment: MockCodeCommitment,
 }
 
 /// Continuity anchor extracted from a previously produced aggregated proof.
@@ -74,6 +76,7 @@ impl MockZkvmHost {
             wait_for_proof: true,
             notification_manager: Default::default(),
             previous_anchor: Arc::new(Mutex::new(None)),
+            code_commitment: MockCodeCommitment::default(),
         }
     }
 
@@ -83,6 +86,7 @@ impl MockZkvmHost {
             wait_for_proof: false,
             notification_manager: Default::default(),
             previous_anchor: Arc::new(Mutex::new(None)),
+            code_commitment: MockCodeCommitment::default(),
         }
     }
 
@@ -104,7 +108,14 @@ impl MockZkvmHost {
             wait_for_proof: false,
             notification_manager: Default::default(),
             previous_anchor: Arc::new(Mutex::new(previous_anchor)),
+            code_commitment: MockCodeCommitment::default(),
         }
+    }
+
+    /// Override the [`MockCodeCommitment`] this host stamps into produced proofs.
+    pub fn with_code_commitment(mut self, code_commitment: MockCodeCommitment) -> Self {
+        self.code_commitment = code_commitment;
+        self
     }
 
     /// Simulates zk proof generation.
@@ -113,15 +124,29 @@ impl MockZkvmHost {
         self.notification_manager.notify();
     }
 
-    /// Create a proof for MockZkvm
+    /// Create a proof for MockZkvm.
     pub fn create_serialized_proof<T: Serialize>(
         is_valid: bool,
         transition: T,
+    ) -> SerializedZkProof {
+        Self::create_serialized_proof_with_commitment(
+            is_valid,
+            transition,
+            MockCodeCommitment::default(),
+        )
+    }
+
+    /// Create a proof that pins itself to the given [`MockCodeCommitment`].
+    pub fn create_serialized_proof_with_commitment<T: Serialize>(
+        is_valid: bool,
+        transition: T,
+        code_commitment: MockCodeCommitment,
     ) -> SerializedZkProof {
         let data = bincode::serialize(&transition).unwrap();
         let raw_proof = bincode::serialize(&MockProof {
             is_valid,
             pub_data: data,
+            code_commitment,
         })
         .unwrap();
         SerializedZkProof { raw_proof }
@@ -135,6 +160,7 @@ impl MockZkvmHost {
         Ok(bincode::serialize(&MockProof {
             is_valid: true,
             pub_data,
+            code_commitment: self.code_commitment.clone(),
         })?)
     }
 
@@ -196,6 +222,18 @@ impl MockZkvmHost {
             std::thread::sleep(std::time::Duration::from_millis(10));
         }
     }
+
+    /// Recovers the inner-guest commitment from the inner proofs being aggregated.
+    fn inner_vkey_hash_from_block_proofs<Address, Da: DaSpec, Root>(
+        block_proofs: &[&BlockProof<Address, Da, Root>],
+    ) -> sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash {
+        let first = block_proofs
+            .first()
+            .expect("at least one inner proof is required for aggregation");
+        let mock_proof: MockProof = bincode::deserialize(&first.proof.raw_proof)
+            .expect("inner proof must be a bincode-encoded MockProof");
+        mock_proof.code_commitment.to_hash()
+    }
 }
 
 impl Default for MockZkvmHost {
@@ -208,7 +246,7 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
     type Guest = MockZkGuest;
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
-        Ok(MockCodeCommitment::default())
+        Ok(self.code_commitment.clone())
     }
 
     fn add_hint_deferred_and_run<T: Serialize>(
@@ -248,12 +286,17 @@ impl OuterZkvmHost for MockZkvmHost {
             .map(|(_, bp)| bp)
             .collect::<Vec<_>>();
 
+        let inner_vkey_hash = Self::inner_vkey_hash_from_block_proofs(&block_proofs_data);
+        let outer_vk_hash = self.code_commitment.to_hash();
+
         let public_data = if let Some(prev) = previous.as_ref() {
             let origin_state_root = prev.deserialize_genesis_state_root();
             let public_data = AggregatedProofPublicData::from_block_proofs(
                 block_proofs_data.as_slice(),
                 prev.origin_slot_number,
                 origin_state_root,
+                inner_vkey_hash.clone(),
+                outer_vk_hash.clone(),
             );
 
             assert_eq!(
@@ -288,6 +331,8 @@ impl OuterZkvmHost for MockZkvmHost {
                 block_proofs_data.as_slice(),
                 origin_slot_number,
                 origin_state_root,
+                inner_vkey_hash,
+                outer_vk_hash,
             );
 
             public_data

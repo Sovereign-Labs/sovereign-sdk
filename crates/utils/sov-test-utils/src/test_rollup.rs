@@ -751,12 +751,14 @@ where
     }
 
     /// Waits for the rollup to shutdown.
-    pub async fn wait_for_rollup_to_shutdown(self, t: tokio::time::Duration) {
+    pub async fn wait_for_rollup_to_shutdown(self, t: tokio::time::Duration) -> RollupBuilder<R> {
         timeout(t, self.rollup_task)
             .await
             .expect("Failed to join rollup task before timeout.")
             .expect("Rollup task panicked.")
             .expect("Rollup execution returned an error.");
+
+        self.builder
     }
 
     /// Waits for the rollup to shutdown without panicking on timeout.

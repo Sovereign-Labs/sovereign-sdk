@@ -138,10 +138,10 @@ where
         da_service: &Self::DaService,
         ledger_db: &sov_db::ledger_db::LedgerDb,
         start_fresh_outer_proof_on_resync: bool,
-    ) -> (
+    ) -> anyhow::Result<(
         Self::ProverService,
         Option<sov_rollup_interface::common::SlotNumber>,
-    ) {
+    )> {
         self.inner
             .create_prover_service(
                 prover_config,

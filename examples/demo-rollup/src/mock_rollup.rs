@@ -9,41 +9,32 @@ use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{
-    MockCodeCommitment, MockZkVerifier, MockZkvm, MockZkvmCryptoSpec, MockZkvmHost,
-};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
-use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec};
+use sov_modules_api::{NodeEndpoints, Spec};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
-use sov_rollup_interface::zk::aggregated_proof::{
-    AggregateProofVerifier, AggregatedProofPublicData,
-};
 use sov_sequencer::{ProofBlobSender, Sequencer};
-use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::{DefaultStorageSpec, Storage};
+use sov_state::Storage;
 use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
-use crate::read_latest_aggregated_proof;
 use crate::solana_offchain_endpoint::solana_offchain_router;
+use crate::{
+    create_mock_prover_service, read_mock_code_commitments_from_env, Hasher, NativeStorage,
+};
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`MockZkvm`] inner vm and [`MockZkvm`] for outer vm
 #[derive(Default, Clone, Copy)]
 pub struct MockDemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
-
-type Hasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
-type NativeStorage =
-    NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
 
 /// The default spec of the rollup
 pub type MockRollupSpec<M> = ConfigurableSpec<
@@ -156,42 +147,9 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         _da_service: &Self::DaService,
         ledger_db: &LedgerDb,
         start_fresh_outer_proof_on_resync: bool,
-    ) -> (Self::ProverService, Option<SlotNumber>) {
-        let previous_public_data: Option<
-            AggregatedProofPublicData<
-                <Self::Spec as Spec>::Address,
-                MockDaSpec,
-                <<Self::Spec as Spec>::Storage as Storage>::Root,
-            >,
-        > = read_latest_aggregated_proof(ledger_db).await.map(|proof| {
-            AggregateProofVerifier::<MockZkVerifier>::new(MockCodeCommitment::default())
-                .verify(&proof)
-                .expect("Persisted aggregated proof failed verification")
-        });
-
-        let latest_proof_final_slot = previous_public_data.as_ref().map(|p| p.final_slot_number);
-
-        let inner_vm = MockZkvmHost::new_non_blocking();
-
-        let previous = crate::previous_outer_anchor(
-            previous_public_data.as_ref(),
-            start_fresh_outer_proof_on_resync,
-        );
-
-        let outer_vm = MockZkvmHost::new_non_blocking_with_previous_anchor(previous);
-        let da_verifier = Default::default();
-
-        let num_threads = rollup_config.proof_manager.prover_thread_count();
-
-        let prover = ParallelProverService::new_with_default_workers(
-            inner_vm,
-            outer_vm,
-            da_verifier,
-            rollup_config.proof_manager.prover_address,
-            num_threads,
-        );
-
-        (prover, latest_proof_final_slot)
+    ) -> anyhow::Result<(Self::ProverService, Option<SlotNumber>)> {
+        create_mock_prover_service(rollup_config, ledger_db, start_fresh_outer_proof_on_resync)
+            .await
     }
 
     fn create_storage_manager(
@@ -211,8 +169,6 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
     }
 
     fn compute_code_commitments() -> anyhow::Result<(MockCodeCommitment, MockCodeCommitment)> {
-        // MockZkvm has no ELF to derive a commitment from — the default zero
-        // commitment matches what `MockZkvmHost::code_commitment` returns.
-        Ok((MockCodeCommitment::default(), MockCodeCommitment::default()))
+        Ok(read_mock_code_commitments_from_env())
     }
 }

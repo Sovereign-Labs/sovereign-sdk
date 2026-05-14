@@ -98,6 +98,8 @@ struct MockProof {
     is_valid: bool,
     /// Public input.
     pub_data: Vec<u8>,
+    /// The commitment.
+    code_commitment: MockCodeCommitment,
 }
 
 /// The verifier for mock zk proofs.
@@ -121,17 +123,22 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
 
     fn verify_with_proof<T: DeserializeOwned>(
         serialized_proof: &SerializedZkProof,
-        _code_commitment: &Self::CodeCommitment,
+        code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         let MockProof {
             is_valid,
             pub_data: input,
+            code_commitment: claimed,
         } = bincode::deserialize(&serialized_proof.raw_proof)?;
-        if is_valid {
-            Ok(bincode::deserialize(&input)?)
-        } else {
-            anyhow::bail!("Proof is not valid")
+        if !is_valid {
+            anyhow::bail!("Proof is not valid");
         }
+        if &claimed != code_commitment {
+            anyhow::bail!(
+                "Code commitment mismatch: proof claims {claimed:?}, verifier expects {code_commitment:?}"
+            );
+        }
+        Ok(bincode::deserialize(&input)?)
     }
 
     fn extract_public_data<T: DeserializeOwned>(
@@ -151,7 +158,7 @@ mod tests {
 
     use super::*;
 
-    #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
     struct TestPublicData {
         hint: String,
     }
@@ -199,5 +206,42 @@ mod tests {
         assert!(verified_pub_data.is_err());
 
         Ok(())
+    }
+
+    #[test]
+    fn test_verify_accepts_matching_code_commitment() -> anyhow::Result<()> {
+        let commitment = MockCodeCommitment(*b"binary01");
+        let pub_data = TestPublicData {
+            hint: "match".to_owned(),
+        };
+
+        let mut vm = MockZkvmHost::new().with_code_commitment(commitment.clone());
+        vm.make_proof();
+        let proof = vm.add_hint_deferred_and_run(&pub_data, Default::default())?;
+
+        let verified = MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &commitment)?;
+        assert_eq!(verified, pub_data);
+        Ok(())
+    }
+
+    #[test]
+    fn test_verify_rejects_mismatched_code_commitment() {
+        let v1 = MockCodeCommitment(*b"binary01");
+        let v2 = MockCodeCommitment(*b"binary02");
+        let pub_data = TestPublicData {
+            hint: "mismatch".to_owned(),
+        };
+
+        let mut vm = MockZkvmHost::new().with_code_commitment(v1.clone());
+        vm.make_proof();
+        let proof = vm
+            .add_hint_deferred_and_run(&pub_data, Default::default())
+            .unwrap();
+
+        let err = MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &v2).unwrap_err();
+        assert!(
+            err.to_string().contains("Code commitment mismatch"),
+            "expected commitment-mismatch error, got: {err}"
+        );
     }
 }

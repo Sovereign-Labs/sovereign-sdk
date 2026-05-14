@@ -131,7 +131,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         da_service: &Self::DaService,
         ledger_db: &LedgerDb,
         start_fresh_outer_proof_on_resync: bool,
-    ) -> (Self::ProverService, Option<SlotNumber>);
+    ) -> anyhow::Result<(Self::ProverService, Option<SlotNumber>)>;
 
     /// Creates an instance of [`Self::StorageManager`].
     /// Panics if initialization fails.
@@ -514,7 +514,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     &ledger_db,
                     start_fresh_outer_proof_on_resync,
                 )
-                .await;
+                .await?;
             (Some(svc), slot)
         } else {
             (None, None)

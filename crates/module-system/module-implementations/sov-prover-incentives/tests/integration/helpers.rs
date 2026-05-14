@@ -128,12 +128,20 @@ pub(crate) fn consume_gas_tx_for_signer(signer: &TestUser<S>) -> TransactionType
 }
 
 pub(crate) fn serialize_proof<T: Serialize>(agg_proof: T) -> Vec<u8> {
-    let proof = sov_mock_zkvm::MockZkvmHost::create_serialized_proof(true, agg_proof);
+    serialize_proof_with_commitment(agg_proof, sov_mock_zkvm::MockCodeCommitment::default())
+}
+
+pub(crate) fn serialize_proof_with_commitment<T: Serialize>(
+    agg_proof: T,
+    commitment: sov_mock_zkvm::MockCodeCommitment,
+) -> Vec<u8> {
+    let proof = sov_mock_zkvm::MockZkvmHost::create_serialized_proof_with_commitment(
+        true, agg_proof, commitment,
+    );
     let serialized_proof = SerializedAggregatedProof {
         raw_aggregated_proof: proof.raw_proof,
     };
 
-    // Double serialzie because the blob selector deserialize a Vec<u8> and then that in turn gets deserialized by the STF
     borsh::to_vec(
         &serialize_proof_blob_with_metadata::<S>(serialized_proof)
             .unwrap()
