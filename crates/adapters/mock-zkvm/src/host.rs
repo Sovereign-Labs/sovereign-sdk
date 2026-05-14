@@ -165,15 +165,18 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
 
     fn add_hint_deferred_and_run<T: Serialize>(
         &mut self,
-        item: &T,
+        _item: &T,
         _agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
+        // Mirror SP1: a proof commits whatever the guest commits, not the hint.
+        // With no guest execution, the mock has nothing to commit, so the
+        // inner proof carries empty public data. The aggregation step gets
+        // the canonical public output side-band via `BlockProof::st`.
         Self::maybe_mock_sleep("SOV_MOCK_PROVE_SLEEP_MS");
-        let pub_data = bincode::serialize(item)?;
         if self.wait_for_proof {
             self.notification_manager.wait();
         }
-        let raw_proof = Self::valid_mock_proof_bytes(pub_data, self.code_commitment.clone())?;
+        let raw_proof = Self::valid_mock_proof_bytes(Vec::new(), self.code_commitment.clone())?;
         Ok(SerializedZkProof { raw_proof })
     }
 }

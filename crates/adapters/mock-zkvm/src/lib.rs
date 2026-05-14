@@ -202,19 +202,12 @@ mod tests {
 
     #[test]
     fn test_mock_vm() -> anyhow::Result<()> {
-        let pub_data = TestPublicData {
-            hint: "Test".to_owned(),
-        };
-
         let mut vm = MockZkvmHost::new();
         vm.make_proof();
-        let proof = vm
-            .add_hint_deferred_and_run(&pub_data, Default::default())
-            .unwrap();
-        let verified_pub_data =
-            MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &Default::default())?;
-
-        assert_eq!(verified_pub_data, pub_data);
+        // Inner mock proofs commit nothing (no guest to derive public output
+        // from the hint); verification asserts validity + matching commitment.
+        let proof = vm.add_hint_deferred_and_run(&(), Default::default())?;
+        MockZkVerifier::verify_with_proof::<()>(&proof, &Default::default())?;
         Ok(())
     }
 
@@ -238,16 +231,10 @@ mod tests {
     #[test]
     fn test_verify_accepts_matching_code_commitment() -> anyhow::Result<()> {
         let commitment = MockCodeCommitment(*b"binary01");
-        let pub_data = TestPublicData {
-            hint: "match".to_owned(),
-        };
-
         let mut vm = MockZkvmHost::new().with_code_commitment(commitment.clone());
         vm.make_proof();
-        let proof = vm.add_hint_deferred_and_run(&pub_data, Default::default())?;
-
-        let verified = MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &commitment)?;
-        assert_eq!(verified, pub_data);
+        let proof = vm.add_hint_deferred_and_run(&(), Default::default())?;
+        MockZkVerifier::verify_with_proof::<()>(&proof, &commitment)?;
         Ok(())
     }
 
@@ -255,17 +242,14 @@ mod tests {
     fn test_verify_rejects_mismatched_code_commitment() {
         let v1 = MockCodeCommitment(*b"binary01");
         let v2 = MockCodeCommitment(*b"binary02");
-        let pub_data = TestPublicData {
-            hint: "mismatch".to_owned(),
-        };
 
-        let mut vm = MockZkvmHost::new().with_code_commitment(v1.clone());
+        let mut vm = MockZkvmHost::new().with_code_commitment(v1);
         vm.make_proof();
         let proof = vm
-            .add_hint_deferred_and_run(&pub_data, Default::default())
+            .add_hint_deferred_and_run(&(), Default::default())
             .unwrap();
 
-        let err = MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &v2).unwrap_err();
+        let err = MockZkVerifier::verify_with_proof::<()>(&proof, &v2).unwrap_err();
         assert!(
             err.to_string().contains("Code commitment mismatch"),
             "expected commitment-mismatch error, got: {err}"
