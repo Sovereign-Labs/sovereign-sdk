@@ -36,6 +36,7 @@
   "dependencies": {
     "bs58": "^6.0.0",
     "@sovereign-sdk/client": "0.1.0-alpha.39",
+    "@sovereign-sdk/multisig": "workspace:^",
     "@sovereign-sdk/serializers": "workspace:^",
     "@sovereign-sdk/signers": "workspace:^",
     "@sovereign-sdk/universal-wallet-wasm": "workspace:^",

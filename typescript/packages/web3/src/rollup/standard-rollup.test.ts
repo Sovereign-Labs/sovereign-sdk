@@ -1,6 +1,9 @@
 import SovereignClient from "@sovereign-sdk/client";
+import { Multisig } from "@sovereign-sdk/multisig";
 import type { RollupSchema, Serializer } from "@sovereign-sdk/serializers";
+import { bytesToHex } from "@sovereign-sdk/utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { addressFromPublicKey } from "../addresses";
 import {
   StandardRollup,
   createStandardRollup,
@@ -160,6 +163,26 @@ const mockSerializer = {
 const getSerializer = (_schema: RollupSchema) =>
   mockSerializer as unknown as Serializer;
 
+function createMockStandardClient() {
+  const client = new SovereignClient({ fetch: vi.fn() });
+  const chainHash =
+    "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+  client.rollup = {
+    constants: vi.fn().mockResolvedValue({ chain_id: 1 }),
+    schema: vi.fn().mockResolvedValue({
+      schema: { chain_data: { chain_id: 1, chain_name: "TestChain" } },
+      chain_hash: chainHash,
+    }),
+    addresses: {
+      dedup: vi.fn().mockResolvedValue({ nonce: 5 }),
+    },
+  } as any;
+  client.post = vi.fn().mockResolvedValue({ status: "submitted" });
+
+  return client;
+}
+
 describe("createStandardRollup", () => {
   const mockConfig = {
     client: new SovereignClient({ fetch: vi.fn() }),
@@ -296,5 +319,133 @@ describe("createStandardRollup", () => {
       tx_details: txDetails,
       uniqueness: { nonce: 7 },
     });
+  });
+
+  it("should serialize V0 unsigned transactions as versioned envelopes when signing", async () => {
+    const client = createMockStandardClient();
+    const serializer = {
+      ...mockSerializer,
+      serializeUnsignedTx: vi.fn().mockReturnValue(new Uint8Array([7, 8, 9])),
+    };
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer: () => serializer as unknown as Serializer,
+      context: mockConfig.context,
+    });
+    const signer = {
+      sign: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
+      publicKey: vi.fn().mockResolvedValue(new Uint8Array([4, 5, 6])),
+    };
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 1 },
+      details: mockConfig.context.defaultTxDetails,
+      address_override: null,
+    };
+
+    await rollup.signTransaction(unsignedTx, signer as any);
+
+    expect(serializer.serializeUnsignedTx).toHaveBeenCalledWith({
+      V0: unsignedTx,
+    });
+  });
+
+  it("should fetch dedup data directly by credential id", async () => {
+    const client = createMockStandardClient();
+    const dedup = vi.fn().mockResolvedValue({ nonce: 9 });
+    client.rollup.addresses = { dedup } as any;
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer,
+      context: mockConfig.context,
+    });
+
+    await expect(rollup.dedupByCredentialId("aabb")).resolves.toEqual({
+      nonce: 9,
+    });
+    expect(dedup).toHaveBeenCalledWith("aabb");
+  });
+
+  it("should create multisig signing bytes and finalize via Multisig.toTransaction()", async () => {
+    const client = createMockStandardClient();
+    const serializer = {
+      ...mockSerializer,
+      serializeUnsignedTx: vi.fn().mockReturnValue(new Uint8Array([7, 8, 9])),
+    };
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer: () => serializer as unknown as Serializer,
+      context: mockConfig.context,
+    });
+    const signerPublicKey = new Uint8Array(32).fill(7);
+    const signer = {
+      sign: vi.fn().mockResolvedValue(new Uint8Array(64).fill(8)),
+      publicKey: vi.fn().mockResolvedValue(signerPublicKey),
+    };
+    const otherPublicKey = new Uint8Array(32).fill(9);
+    const multisig = Multisig.fromPubKeys(
+      [bytesToHex(signerPublicKey), bytesToHex(otherPublicKey)],
+      1,
+    );
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 1 },
+      details: mockConfig.context.defaultTxDetails,
+      address_override: null,
+    };
+
+    const signingBytes = await rollup.multisigSigningBytes(
+      unsignedTx,
+      multisig,
+    );
+
+    expect(serializer.serializeUnsignedTx).toHaveBeenCalledWith({
+      V1: {
+        ...unsignedTx,
+        credential_address: addressFromPublicKey(
+          multisig.getMultisigAddress(),
+          "sov",
+        ),
+      },
+    });
+    expect(signingBytes).toEqual(
+      new Uint8Array([7, 8, 9, ...new Array(32).fill(0)]),
+    );
+
+    const signatureBytes = await signer.sign(signingBytes);
+    const signature = {
+      pub_key: bytesToHex(signerPublicKey),
+      signature: bytesToHex(signatureBytes),
+    };
+    multisig.addSignature(signature.signature, signature.pub_key);
+
+    expect(multisig.toTransaction(unsignedTx)).toEqual({
+      V1: {
+        ...unsignedTx,
+        signatures: [signature],
+        unused_pub_keys: [bytesToHex(otherPublicKey)],
+        min_signers: 1,
+      },
+    });
+  });
+
+  it("should fail fast when converting an incomplete multisig transaction", () => {
+    const multisig = Multisig.fromPubKeys(
+      [
+        bytesToHex(new Uint8Array(32).fill(1)),
+        bytesToHex(new Uint8Array(32).fill(2)),
+      ],
+      2,
+    );
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 1 },
+      details: mockConfig.context.defaultTxDetails,
+      address_override: null,
+    };
+
+    expect(() => multisig.toTransaction(unsignedTx)).toThrow(
+      "Multisig transaction is incomplete",
+    );
   });
 });
