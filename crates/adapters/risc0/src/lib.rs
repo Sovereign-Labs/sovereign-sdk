@@ -100,6 +100,16 @@ impl ZkVerifier for Risc0Verifier {
     type CryptoSpec = Risc0CryptoSpec;
     type Error = anyhow::Error;
 
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        _public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues,
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // Risc0's `verify_with_pub_values` is only meaningful inside the guest.
+        unimplemented!(
+            "Risc0Verifier::verify_with_pub_values is only available inside the zkvm guest"
+        )
+    }
+
     fn verify_with_proof<T: DeserializeOwned>(
         serialized_proof: &SerializedZkProof,
         code_commitment: &Self::CodeCommitment,

@@ -144,7 +144,6 @@ pub trait ZkVerifier: Default + Clone + Send + Sync + 'static {
     /// supplies the serialized public values the proof is expected to commit
     /// to, along with the code commitment identifying which program was
     /// proven.
-    #[cfg(target_os = "zkvm")]
     fn verify_with_pub_values<T: DeserializeOwned>(
         pub_values: &aggregated_proof::common::SerializedPubValues,
         code_commitment: &Self::CodeCommitment,
@@ -219,6 +218,18 @@ pub struct StateTransitionPublicData<Address, Da: DaSpec, Root> {
 
     /// Prover address.
     pub prover_address: Address,
+}
+
+impl<Address, Da: DaSpec, Root> StateTransitionPublicData<Address, Da, Root> {
+    /// Bincode-encodes this public data.
+    pub fn serialize(&self) -> bincode::Result<Vec<u8>>
+    where
+        Address: Serialize,
+        Root: Serialize,
+        Da::SlotHash: Serialize,
+    {
+        bincode::serialize(self)
+    }
 }
 
 #[derive(Serialize, Deserialize, UniversalWallet)]

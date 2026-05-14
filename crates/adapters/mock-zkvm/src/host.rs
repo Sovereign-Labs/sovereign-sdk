@@ -5,10 +5,13 @@ use crate::notifier::NotificationManager;
 use crate::{MockCodeCommitment, MockProof, MockZkGuest};
 use serde::de::DeserializeOwned;
 use serde::Serialize;
-use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
+use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::aggregated_proof::circuit::run_aggregation_program;
+use sov_rollup_interface::zk::aggregated_proof::common::{
+    AggregatedProofWitness, DeferredProofInput, PreviousOuterProofWitness, SerializedPubValues,
+};
 use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, BlockProof, OuterZkvmHost, SerializedAggregatedProof,
+    BlockProof, OuterZkvmHost, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{CodeCommitmentTrait, SerializedZkProof};
 
@@ -21,52 +24,10 @@ type HeaderWithBlockProof<Address, Da, Root> =
 pub struct MockZkvmHost {
     notification_manager: NotificationManager,
     wait_for_proof: bool,
-    /// Anchor extracted from the most recently produced aggregated proof.
-    /// Shared across clones so that continuity assertions in
-    /// [`OuterZkvmHost::run_proof_aggregation`] hold across the whole prover
-    /// service.
-    previous_anchor: Arc<Mutex<Option<PreviousAggregatedProofAnchor>>>,
+    /// Most-recently-produced outer aggregated proof.
+    previous_outer_proof: Arc<Mutex<Option<SerializedAggregatedProof>>>,
     /// Commitment this host stamps into proofs.
     code_commitment: MockCodeCommitment,
-}
-
-/// Continuity anchor extracted from a previously produced aggregated proof.
-#[derive(Clone, Debug)]
-struct PreviousAggregatedProofAnchor {
-    final_slot_number: SlotNumber,
-    origin_slot_number: SlotNumber,
-    genesis_state_root: Vec<u8>,
-    final_state_root: Vec<u8>,
-}
-
-impl PreviousAggregatedProofAnchor {
-    fn from_public_data<Address, Da, Root>(
-        public_data: &AggregatedProofPublicData<Address, Da, Root>,
-    ) -> Self
-    where
-        Address: Serialize,
-        Da: DaSpec,
-        Root: Serialize,
-    {
-        Self {
-            final_slot_number: public_data.final_slot_number,
-            origin_slot_number: public_data.origin_slot_number,
-            genesis_state_root: bincode::serialize(&public_data.origin_state_root)
-                .expect("origin_state_root must be bincode-serializable"),
-            final_state_root: bincode::serialize(&public_data.final_state_root)
-                .expect("final_state_root must be bincode-serializable"),
-        }
-    }
-
-    fn deserialize_genesis_state_root<Root: DeserializeOwned>(&self) -> Root {
-        bincode::deserialize(&self.genesis_state_root)
-            .expect("genesis_state_root must be bincode-deserializable")
-    }
-
-    fn deserialize_final_state_root<Root: DeserializeOwned>(&self) -> Root {
-        bincode::deserialize(&self.final_state_root)
-            .expect("final_state_root must be bincode-deserializable")
-    }
 }
 
 impl MockZkvmHost {
@@ -75,7 +36,7 @@ impl MockZkvmHost {
         Self {
             wait_for_proof: true,
             notification_manager: Default::default(),
-            previous_anchor: Arc::new(Mutex::new(None)),
+            previous_outer_proof: Arc::new(Mutex::new(None)),
             code_commitment: MockCodeCommitment::default(),
         }
     }
@@ -85,29 +46,21 @@ impl MockZkvmHost {
         Self {
             wait_for_proof: false,
             notification_manager: Default::default(),
-            previous_anchor: Arc::new(Mutex::new(None)),
+            previous_outer_proof: Arc::new(Mutex::new(None)),
             code_commitment: MockCodeCommitment::default(),
         }
     }
 
-    /// Like [`Self::new_non_blocking`], but seeded with the public data of the
-    /// latest verified aggregated proof previously persisted in the ledger DB
-    /// so that continuity assertions in
-    /// [`OuterZkvmHost::run_proof_aggregation`] survive a node restart.
-    pub fn new_non_blocking_with_previous_anchor<Address, Da, Root>(
-        previous_public_data: Option<&AggregatedProofPublicData<Address, Da, Root>>,
-    ) -> Self
-    where
-        Address: Serialize,
-        Da: DaSpec,
-        Root: Serialize,
-    {
-        let previous_anchor =
-            previous_public_data.map(PreviousAggregatedProofAnchor::from_public_data);
+    /// Like [`Self::new_non_blocking`], but seeded with the
+    /// most-recently-produced [`SerializedAggregatedProof`] so the recursive
+    /// aggregation circuit can verify continuity across a node restart.
+    pub fn new_non_blocking_with_previous_outer_proof(
+        previous: Option<SerializedAggregatedProof>,
+    ) -> Self {
         Self {
             wait_for_proof: false,
             notification_manager: Default::default(),
-            previous_anchor: Arc::new(Mutex::new(previous_anchor)),
+            previous_outer_proof: Arc::new(Mutex::new(previous)),
             code_commitment: MockCodeCommitment::default(),
         }
     }
@@ -143,63 +96,27 @@ impl MockZkvmHost {
         code_commitment: MockCodeCommitment,
     ) -> SerializedZkProof {
         let data = bincode::serialize(&transition).unwrap();
-        let raw_proof = bincode::serialize(&MockProof {
+        let raw_proof = MockProof {
             is_valid,
             pub_data: data,
             code_commitment,
-        })
+        }
+        .serialize()
         .unwrap();
         SerializedZkProof { raw_proof }
     }
 
-    fn add_hint_and_run_inner<T: Serialize>(&self, item: &T) -> anyhow::Result<Vec<u8>> {
-        let pub_data = bincode::serialize(item)?;
-        if self.wait_for_proof {
-            self.notification_manager.wait();
-        }
-        Ok(bincode::serialize(&MockProof {
+    /// Bincode-encodes a [`MockProof`] with `is_valid: true` and the given public-data bytes and commitment.
+    fn valid_mock_proof_bytes(
+        pub_data: Vec<u8>,
+        code_commitment: MockCodeCommitment,
+    ) -> anyhow::Result<Vec<u8>> {
+        Ok(MockProof {
             is_valid: true,
             pub_data,
-            code_commitment: self.code_commitment.clone(),
-        })?)
-    }
-
-    /// Mirrors the per-inner-proof continuity checks performed by the real
-    /// aggregation circuit. Verifies that consecutive `BlockProof.st` entries
-    /// have:
-    ///   1. slot numbers that increment by exactly one,
-    ///   2. a `slot_hash` matching the paired DA block header's hash,
-    ///   3. a `prev_hash` pointing at the predecessor DA block's hash,
-    ///   4. an `initial_state_root` equal to the predecessor's `final_state_root`.
-    fn check_inner_proof_chain<Address, Da: DaSpec, Root: PartialEq + Debug>(
-        headers_with_block_proofs: &[HeaderWithBlockProof<Address, Da, Root>],
-    ) {
-        let mut prev: Option<(SlotNumber, &Da::SlotHash, &Root)> = None;
-        for (index, (header, bp)) in headers_with_block_proofs.iter().enumerate() {
-            let header_hash = header.hash();
-            assert_eq!(
-                header_hash, bp.st.slot_hash,
-                "Slot hash mismatch at index {index}: DA block header hash doesn't match inner-proof public data",
-            );
-            if let Some((prev_slot, prev_hash, prev_state_root)) = prev {
-                let expected = prev_slot.next();
-                assert_eq!(
-                    bp.st.slot_number, expected,
-                    "Slot number discontinuity at index {index}: expected {expected}, got {}",
-                    bp.st.slot_number,
-                );
-                assert_eq!(
-                    prev_hash,
-                    &header.prev_hash(),
-                    "DA block chain broken at index {index}: prev_hash mismatch",
-                );
-                assert_eq!(
-                    &bp.st.initial_state_root, prev_state_root,
-                    "State root discontinuity at index {index}: previous final_state_root != current initial_state_root",
-                );
-            }
-            prev = Some((bp.st.slot_number, &bp.st.slot_hash, &bp.st.final_state_root));
+            code_commitment,
         }
+        .serialize()?)
     }
 
     /// Sleeps for the duration (in milliseconds) read from `env_var`. Used in
@@ -224,13 +141,10 @@ impl MockZkvmHost {
     }
 
     /// Recovers the inner-guest commitment from the inner proofs being aggregated.
-    fn inner_vkey_hash_from_block_proofs<Address, Da: DaSpec, Root>(
-        block_proofs: &[&BlockProof<Address, Da, Root>],
+    fn inner_vkey_hash_from_proof(
+        proof: &SerializedZkProof,
     ) -> sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash {
-        let first = block_proofs
-            .first()
-            .expect("at least one inner proof is required for aggregation");
-        let mock_proof: MockProof = bincode::deserialize(&first.proof.raw_proof)
+        let mock_proof = MockProof::deserialize(&proof.raw_proof)
             .expect("inner proof must be a bincode-encoded MockProof");
         mock_proof.code_commitment.to_hash()
     }
@@ -251,102 +165,98 @@ impl sov_rollup_interface::zk::ZkvmHost for MockZkvmHost {
 
     fn add_hint_deferred_and_run<T: Serialize>(
         &mut self,
-        item: &T,
+        _item: &T,
         _agg_proofs: Vec<SerializedAggregatedProof>,
     ) -> anyhow::Result<SerializedZkProof> {
+        // With no guest execution, the mock has nothing to commit, so the
+        // inner proof carries empty public data. The aggregation step gets
+        // the canonical public output side-band via `BlockProof::st`.
         Self::maybe_mock_sleep("SOV_MOCK_PROVE_SLEEP_MS");
-        self.add_hint_and_run_inner(item)
-            .map(|raw_proof| SerializedZkProof { raw_proof })
+        if self.wait_for_proof {
+            self.notification_manager.wait();
+        }
+        let raw_proof = Self::valid_mock_proof_bytes(Vec::new(), self.code_commitment.clone())?;
+        Ok(SerializedZkProof { raw_proof })
     }
 }
 
 impl OuterZkvmHost for MockZkvmHost {
     fn run_proof_aggregation<
-        Address: Serialize + Clone,
+        Address: Serialize + DeserializeOwned + Clone,
         Da: DaSpec,
         Root: Serialize + DeserializeOwned + Clone + PartialEq + Debug,
     >(
         &self,
-        headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
+        headers_with_block_proofs: Vec<HeaderWithBlockProof<Address, Da, Root>>,
     ) -> anyhow::Result<SerializedAggregatedProof> {
         Self::maybe_mock_sleep("SOV_MOCK_AGGREGATION_SLEEP_MS");
         Self::wait_while_stop_proving("SOV_MOCK_AGGREGATION_GATE");
 
-        let mut previous = self
-            .previous_anchor
+        let mut previous_outer_proof = self
+            .previous_outer_proof
             .lock()
-            .expect("previous_anchor mutex was poisoned");
+            .expect("previous_outer_proof mutex was poisoned");
 
-        // Mirror the checks performed by the real aggregation circuit
-        // (`run_aggregation_program` in sov-rollup-interface).
-        Self::check_inner_proof_chain(&headers_with_block_proofs);
+        let first = headers_with_block_proofs
+            .first()
+            .expect("at least one inner proof is required for aggregation");
+        let inner_vkey_hash = Self::inner_vkey_hash_from_proof(&first.1.proof);
+        let outer_vkey_hash = self.code_commitment.to_hash();
 
-        let block_proofs_data = headers_with_block_proofs
-            .iter()
-            .map(|(_, bp)| bp)
-            .collect::<Vec<_>>();
+        let mut proof_inputs = Vec::with_capacity(headers_with_block_proofs.len());
+        for (header, bp) in headers_with_block_proofs {
+            let recovered = MockProof::deserialize(&bp.proof.raw_proof)
+                .expect("inner proof must be a bincode-encoded MockProof");
+            let pub_values =
+                Self::valid_mock_proof_bytes(bp.st.serialize()?, recovered.code_commitment)?;
+            proof_inputs.push(DeferredProofInput::<Da> {
+                public_values: SerializedPubValues { pub_values },
+                da_block_header: header,
+            });
+        }
 
-        let inner_vkey_hash = Self::inner_vkey_hash_from_block_proofs(&block_proofs_data);
-        let outer_vk_hash = self.code_commitment.to_hash();
+        let prev_outer_proof_witness =
+            previous_outer_proof
+                .as_ref()
+                .map(|prev| PreviousOuterProofWitness {
+                    public_values: SerializedPubValues {
+                        pub_values: prev.raw_aggregated_proof.clone(),
+                    },
+                });
 
-        let public_data = if let Some(prev) = previous.as_ref() {
-            let origin_state_root = prev.deserialize_genesis_state_root();
-            let public_data = AggregatedProofPublicData::from_block_proofs(
-                block_proofs_data.as_slice(),
-                prev.origin_slot_number,
-                origin_state_root,
-                inner_vkey_hash.clone(),
-                outer_vk_hash.clone(),
-            );
-
-            assert_eq!(
-                public_data.initial_slot_number,
-                prev.final_slot_number.next(),
-                "Aggregated proof continuity violated: new aggregation starts at slot {} but previous aggregation ended at slot {}",
-                public_data.initial_slot_number,
-                prev.final_slot_number,
-            );
-
-            let prev_genesis_state_root: Root = prev.deserialize_genesis_state_root();
-            let prev_final_state_root: Root = prev.deserialize_final_state_root();
-
-            assert_eq!(
-                public_data.origin_state_root, prev_genesis_state_root,
-                "Aggregated proof continuity violated: origin_state_root differs from previous aggregation",
-            );
-            assert_eq!(
-                public_data.initial_state_root, prev_final_state_root,
-                "Aggregated proof continuity violated: new initial_state_root does not match previous final_state_root",
-            );
-
-            public_data
-        } else {
-            let origin_state_root = block_proofs_data[0].st.initial_state_root.clone();
-            // origin_slot_number must correspond to origin_state_root: it is the
-            // slot at the end of which that root was produced — i.e. the slot
-            // immediately before the first inner proof's slot.
-            let origin_slot_number = block_proofs_data[0].st.slot_number.prev();
-
-            let public_data = AggregatedProofPublicData::from_block_proofs(
-                block_proofs_data.as_slice(),
-                origin_slot_number,
-                origin_state_root,
-                inner_vkey_hash,
-                outer_vk_hash,
-            );
-
-            public_data
+        let witness = AggregatedProofWitness::<Da> {
+            proof_inputs,
+            inner_vkey_hash,
+            outer_vkey_hash,
+            prev_outer_proof_witness,
         };
 
-        let serialized = self
-            .add_hint_and_run_inner(&public_data)
-            .map(|raw_aggregated_proof| SerializedAggregatedProof {
-                raw_aggregated_proof,
-            })?;
+        let serialized_witness = bincode::serialize(&witness)?;
+        let guest = MockZkGuest::with_hint(serialized_witness);
 
-        *previous = Some(PreviousAggregatedProofAnchor::from_public_data(
-            &public_data,
-        ));
+        // Runs the shared aggregation circuit natively: verifies inner proofs
+        // and the previous outer proof, asserts within-aggregation DA/state
+        // continuity, and commits the new `AggregatedProofPublicData` into
+        // the guest's commit slot.
+        run_aggregation_program::<Address, Da, Root, crate::MockZkVerifier, MockZkGuest>(&guest);
+
+        let committed_public_data = guest
+            .take_committed_bytes()
+            .expect("aggregation circuit must commit its public data");
+
+        if self.wait_for_proof {
+            self.notification_manager.wait();
+        }
+
+        let serialized = SerializedAggregatedProof {
+            raw_aggregated_proof: Self::valid_mock_proof_bytes(
+                committed_public_data,
+                self.code_commitment.clone(),
+            )?,
+        };
+
+        *previous_outer_proof = Some(serialized.clone());
+
         Ok(serialized)
     }
 }

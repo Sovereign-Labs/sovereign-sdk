@@ -1,6 +1,5 @@
 //! Defines types that are related to the `AggregatedProof`.
 /// Core aggregation circuit logic.
-#[cfg(target_os = "zkvm")]
 pub mod circuit;
 /// Common types shared between the aggregated proof program and the host script.
 pub mod common;
@@ -20,7 +19,7 @@ use crate::zk::SerializedZkProof;
 pub trait OuterZkvmHost: Clone + Send + Sync + 'static {
     /// Aggregates per-block inner proofs into a single serialized aggregated proof.
     fn run_proof_aggregation<
-        Address: Serialize + Clone,
+        Address: Serialize + DeserializeOwned + Clone,
         Da: DaSpec,
         Root: Serialize + DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
     >(
@@ -122,43 +121,6 @@ pub struct AggregatedProofPublicData<Address, Da: DaSpec, Root> {
     pub outer_vk_hash: CodeCommitmentHash,
     /// These are the addresses of the provers who proved individual blocks.
     pub rewarded_addresses: Vec<Address>,
-}
-
-impl<Address: Clone, Da: DaSpec, Root: Clone> AggregatedProofPublicData<Address, Da, Root>
-where
-    Da::SlotHash: Clone,
-{
-    /// Constructs an [`AggregatedProofPublicData`] from a slice of [`BlockProof`] references,
-    /// deriving initial/final fields from the first and last entries.
-    pub fn from_block_proofs(
-        block_proofs: &[&BlockProof<Address, Da, Root>],
-        origin_slot_number: SlotNumber,
-        origin_state_root: Root,
-        inner_vkey_hash: CodeCommitmentHash,
-        outer_vk_hash: CodeCommitmentHash,
-    ) -> Self {
-        let initial = block_proofs
-            .first()
-            .expect("block_proofs must not be empty");
-        let final_bp = block_proofs.last().expect("block_proofs must not be empty");
-        let rewarded_addresses = block_proofs
-            .iter()
-            .map(|bp| bp.st.prover_address.clone())
-            .collect();
-        Self {
-            rewarded_addresses,
-            initial_slot_number: initial.st.slot_number,
-            final_slot_number: final_bp.st.slot_number,
-            origin_slot_number,
-            origin_state_root,
-            initial_state_root: initial.st.initial_state_root.clone(),
-            final_state_root: final_bp.st.final_state_root.clone(),
-            initial_slot_hash: initial.st.slot_hash.clone(),
-            final_slot_hash: final_bp.st.slot_hash.clone(),
-            inner_vkey_hash,
-            outer_vk_hash,
-        }
-    }
 }
 
 impl<Address, Da: DaSpec, Root: AsRef<[u8]>> core::fmt::Display

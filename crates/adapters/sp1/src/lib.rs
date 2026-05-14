@@ -109,6 +109,16 @@ impl ZkVerifier for SP1Verifier {
     type CryptoSpec = SP1CryptoSpec;
     type Error = anyhow::Error;
 
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        _public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues,
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // SP1's `verify_with_pub_values` is only meaningful inside the guest.
+        unimplemented!(
+            "SP1Verifier::verify_with_pub_values is only available inside the zkvm guest"
+        )
+    }
+
     fn verify_with_proof<T: DeserializeOwned>(
         serialized_proof: &SerializedZkProof,
         code_commitment: &Self::CodeCommitment,

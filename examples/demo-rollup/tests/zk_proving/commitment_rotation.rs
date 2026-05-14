@@ -39,10 +39,13 @@ async fn code_commitment_rotation_requires_fresh_start() -> anyhow::Result<()> {
         .start_test_rollup()
         .await;
 
-    assert!(res.is_err());
+    assert!(
+        res.is_err(),
+        "expected resume to fail under rotated commitments"
+    );
 
     // With start_fresh_outer_proof_on_resync = true, startup drops the previous
-    // outer-proof anchor and begins a fresh aggregation chain under the rotated
+    // outer-proof and begins a fresh aggregation chain under the rotated
     // commitments — no vkey-hash check, so this restart succeeds.
     let test_rollup = builder
         .set_config(|c| {
