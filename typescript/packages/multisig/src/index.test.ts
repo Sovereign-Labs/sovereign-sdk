@@ -1,290 +1,236 @@
-import type {
-  Transaction,
-  TransactionV0,
-  TransactionV1,
-  UnsignedTransaction,
-} from "@sovereign-sdk/types";
 import { bytesToHex } from "@sovereign-sdk/utils";
 import { describe, expect, it } from "vitest";
 import {
   InvalidMultisigParameterError,
-  InvalidTransactionVersionError,
-  MultisigTransaction,
-  TransactionMismatchError,
+  MAX_SIGNERS,
+  Multisig,
+  type MultisigParams,
 } from "./index";
 
-const createUnsignedTx = (nonce = 1): UnsignedTransaction<string> => ({
-  runtime_call: "test_call",
-  uniqueness: { nonce },
-  details: {
-    max_priority_fee_bips: 100,
-    max_fee: "1000",
-    gas_limit: null,
-    chain_id: 1,
-  },
-  address_override: null,
+const pubkey1 =
+  "33dd646d7c43830b52289c4f277d3a5a26b3ab0a10ee05c871cb654bc046e545";
+const pubkey2 =
+  "8c7788ad88084f12ce1556703b33e673c5e450eec793c1e8e1a55b1140b4dfb8";
+const pubkey3 =
+  "74fc1e9c39b21173ef47c1cdfb37158764486c8b8ba81d8f29c6dd77800cd57f";
+
+const createParams = (overrides?: Partial<MultisigParams>): MultisigParams => ({
+  signatures: [],
+  unusedPubKeys: [pubkey1, pubkey2, pubkey3],
+  minSigners: 2,
+  ...overrides,
 });
 
-const createTransactionV0 = (
-  unsignedTx: UnsignedTransaction<string>,
-  pubKey: string,
-  signature: string,
-): TransactionV0<string> => ({
-  V0: {
-    pub_key: pubKey,
-    signature,
-    ...unsignedTx,
-  },
-});
-
-describe("MultisigTransaction", () => {
-  describe("fromTransactions", () => {
-    it("should require nonce based transactions", () => {
-      const unsignedTx: UnsignedTransaction<string> = {
-        runtime_call: "test_call",
-        uniqueness: { generation: 1 },
-        details: {
-          max_priority_fee_bips: 100,
-          max_fee: "1000",
-          gas_limit: null,
-          chain_id: 1,
-        },
-        address_override: null,
-      };
-      const tx = createTransactionV0(unsignedTx, "pubkey1", "sig1");
-
-      expect(() =>
-        MultisigTransaction.fromTransactions({
-          txns: [tx],
-          minSigners: 1,
-          allPubKeys: ["pubkey1"],
-        }),
+describe("Multisig", () => {
+  describe("constructor", () => {
+    it("should reject duplicate public keys across signatures and unused pubkeys", () => {
+      expect(
+        () =>
+          new Multisig(
+            createParams({
+              signatures: [{ pub_key: pubkey1, signature: "aa" }],
+              unusedPubKeys: [pubkey1, pubkey2],
+            }),
+          ),
       ).toThrow(InvalidMultisigParameterError);
     });
 
-    it("should require all inputs to be transaction V0", () => {
-      const unsignedTx = createUnsignedTx();
-      const txV1: Transaction<string> = {
-        V1: {
-          unused_pub_keys: ["pubkey2"],
-          signatures: [{ pub_key: "pubkey1", signature: "sig1" }],
-          min_signers: 1,
-          ...unsignedTx,
-        },
-      };
-
-      expect(() =>
-        MultisigTransaction.fromTransactions({
-          txns: [txV1],
-          minSigners: 1,
-          allPubKeys: ["pubkey1"],
-        }),
-      ).toThrow(InvalidTransactionVersionError);
-    });
-
-    it("should require all inputs to match the same unsigned transaction", () => {
-      const unsignedTx1 = createUnsignedTx(1);
-      const unsignedTx2 = createUnsignedTx(2);
-      const tx1 = createTransactionV0(unsignedTx1, "pubkey1", "sig1");
-      const tx2 = createTransactionV0(unsignedTx2, "pubkey2", "sig2");
-
-      expect(() =>
-        MultisigTransaction.fromTransactions({
-          txns: [tx1, tx2],
-          minSigners: 2,
-          allPubKeys: ["pubkey1", "pubkey2"],
-        }),
-      ).toThrow(TransactionMismatchError);
-    });
-
-    it("should return multisig with only unique signatures (no duplicate transactions)", () => {
-      const unsignedTx = createUnsignedTx();
-      const tx1 = createTransactionV0(unsignedTx, "pubkey1", "sig1");
-      const tx2 = createTransactionV0(unsignedTx, "pubkey2", "sig1"); // same signature
-
-      const multisig = MultisigTransaction.fromTransactions({
-        txns: [tx1, tx2],
-        minSigners: 2,
-        allPubKeys: ["pubkey1", "pubkey2"],
-      });
-
-      const result = multisig.asTransaction() as TransactionV1<string>;
-      expect(result.V1.signatures).toHaveLength(2);
-      expect(result.V1.signatures).toEqual([
-        { pub_key: "pubkey1", signature: "sig1" },
-        { pub_key: "pubkey2", signature: "sig1" },
-      ]);
-    });
-
-    it("should throw if an input transaction uses a pubkey not in the unused list", () => {
-      const unsignedTx = createUnsignedTx();
-      const tx = createTransactionV0(unsignedTx, "unknown_pubkey", "sig1");
-
-      expect(() =>
-        MultisigTransaction.fromTransactions({
-          txns: [tx],
-          minSigners: 1,
-          allPubKeys: ["pubkey1", "pubkey2"],
-        }),
+    it("should reject thresholds larger than the signer set", () => {
+      expect(
+        () =>
+          new Multisig(
+            createParams({
+              unusedPubKeys: [pubkey1, pubkey2],
+              minSigners: 3,
+            }),
+          ),
       ).toThrow(InvalidMultisigParameterError);
     });
 
-    it("should throw if same pubkey is used twice", () => {
-      const unsignedTx = createUnsignedTx();
-      const tx1 = createTransactionV0(unsignedTx, "pubkey1", "sig1");
-      const tx2 = createTransactionV0(unsignedTx, "pubkey1", "sig2");
+    it("should reject an empty signer set", () => {
+      expect(
+        () =>
+          new Multisig(
+            createParams({
+              unusedPubKeys: [],
+              minSigners: 1,
+            }),
+          ),
+      ).toThrow(InvalidMultisigParameterError);
+    });
 
-      expect(() =>
-        MultisigTransaction.fromTransactions({
-          txns: [tx1, tx2],
-          minSigners: 2,
-          allPubKeys: ["pubkey1", "pubkey2"],
-        }),
+    it("should reject a single-signer multisig", () => {
+      expect(
+        () =>
+          new Multisig(
+            createParams({
+              unusedPubKeys: [pubkey1],
+              minSigners: 1,
+            }),
+          ),
+      ).toThrow(InvalidMultisigParameterError);
+    });
+
+    it("should reject invalid public key hex as a multisig validation error", () => {
+      expect(
+        () =>
+          new Multisig(
+            createParams({
+              unusedPubKeys: ["xyz", pubkey2],
+            }),
+          ),
       ).toThrow(InvalidMultisigParameterError);
     });
   });
 
-  describe("isComplete", () => {
-    it("should return true if number of unique signatures is equal to or greater than minSigners", () => {
-      const multisig = new MultisigTransaction({
-        unsignedTx: createUnsignedTx(),
-        signatures: [
-          { pub_key: "pubkey1", signature: "sig1" },
-          { pub_key: "pubkey2", signature: "sig2" },
-          { pub_key: "pubkey3", signature: "sig3" },
-        ],
-        unusedPubKeys: [],
-        minSigners: 2,
-      });
+  describe("fromPubKeys", () => {
+    it("should create a multisig with the full signer set unused", () => {
+      const multisig = Multisig.fromPubKeys([pubkey1, pubkey2], 2);
 
-      expect(multisig.isComplete).toBe(true);
-
-      const multisigExact = new MultisigTransaction({
-        unsignedTx: createUnsignedTx(),
-        signatures: [
-          { pub_key: "pubkey1", signature: "sig1" },
-          { pub_key: "pubkey2", signature: "sig2" },
-        ],
-        unusedPubKeys: [],
-        minSigners: 2,
-      });
-
-      expect(multisigExact.isComplete).toBe(true);
-    });
-
-    it("should return false if number of unique signatures is less than minSigners", () => {
-      const multisig = new MultisigTransaction({
-        unsignedTx: createUnsignedTx(),
-        signatures: [{ pub_key: "pubkey1", signature: "sig1" }],
-        unusedPubKeys: ["pubkey2", "pubkey3"],
-        minSigners: 2,
-      });
-
-      expect(multisig.isComplete).toBe(false);
+      expect(multisig.threshold).toBe(2);
+      expect(multisig.signaturesAndPubKeys).toEqual([]);
+      expect([...multisig.remainingPubKeys]).toEqual([pubkey1, pubkey2]);
     });
   });
 
   describe("addSignature", () => {
-    it("should throw if pubkey is not in unused list", () => {
-      const multisig = new MultisigTransaction({
-        unsignedTx: createUnsignedTx(),
-        signatures: [],
-        unusedPubKeys: ["pubkey1", "pubkey2"],
-        minSigners: 2,
-      });
+    it("should add a signature and remove the signer from remaining keys", () => {
+      const multisig = new Multisig(createParams());
 
-      expect(() => multisig.addSignature("sig1", "unknown_pubkey")).toThrow(
-        InvalidMultisigParameterError,
-      );
-    });
+      multisig.addSignature("aa", pubkey1);
 
-    it("should add signature to the signatures set", () => {
-      const multisig = new MultisigTransaction({
-        unsignedTx: createUnsignedTx(),
-        signatures: [],
-        unusedPubKeys: ["pubkey1", "pubkey2"],
-        minSigners: 2,
-      });
-
-      multisig.addSignature("sig1", "pubkey1");
-
-      const result = multisig.asTransaction() as TransactionV1<string>;
-      expect(result.V1.signatures).toEqual([
-        { pub_key: "pubkey1", signature: "sig1" },
+      expect(multisig.signaturesAndPubKeys).toEqual([
+        { pub_key: pubkey1, signature: "aa" },
       ]);
-      expect(result.V1.signatures).toHaveLength(1);
+      expect([...multisig.remainingPubKeys]).toEqual([pubkey2, pubkey3]);
     });
 
-    it("should remove pubkey from unused list", () => {
-      const multisig = new MultisigTransaction({
-        unsignedTx: createUnsignedTx(),
-        signatures: [],
-        unusedPubKeys: ["pubkey1", "pubkey2"],
-        minSigners: 2,
-      });
+    it("should reject unknown or duplicate signers", () => {
+      const multisig = new Multisig(createParams());
 
-      multisig.addSignature("sig1", "pubkey1");
-
-      const result = multisig.asTransaction() as TransactionV1<string>;
-      expect(result.V1.unused_pub_keys).not.toContain("pubkey1");
-      expect(result.V1.unused_pub_keys).toContain("pubkey2");
-      expect(result.V1.unused_pub_keys).toHaveLength(1);
-    });
-
-    it("should throw if trying to add signature for already used pubkey", () => {
-      const multisig = new MultisigTransaction({
-        unsignedTx: createUnsignedTx(),
-        signatures: [],
-        unusedPubKeys: ["pubkey1", "pubkey2"],
-        minSigners: 2,
-      });
-
-      multisig.addSignature("sig1", "pubkey1");
-
-      expect(() => multisig.addSignature("sig2", "pubkey1")).toThrow(
+      expect(() => multisig.addSignature("aa", "11")).toThrow(
         InvalidMultisigParameterError,
       );
+
+      multisig.addSignature("aa", pubkey1);
+
+      expect(() => multisig.addSignature("bb", pubkey1)).toThrow(
+        InvalidMultisigParameterError,
+      );
+    });
+
+    it("should normalize user-supplied hex strings", () => {
+      const multisig = new Multisig({
+        signatures: [],
+        unusedPubKeys: [
+          `0x${pubkey1.toUpperCase()}`,
+          `0x${pubkey2.toUpperCase()}`,
+        ],
+        minSigners: 1,
+      });
+
+      multisig.addSignature("0xAA", `0x${pubkey1.toUpperCase()}`);
+
+      expect(multisig.signaturesAndPubKeys).toEqual([
+        { pub_key: pubkey1, signature: "aa" },
+      ]);
+      expect([...multisig.remainingPubKeys]).toEqual([pubkey2]);
     });
   });
 
-  describe("asTransaction", () => {
-    it("should include a null address override by default", () => {
-      const multisig = MultisigTransaction.empty(createUnsignedTx(), 1, [
-        "pubkey1",
-      ]);
+  describe("completion", () => {
+    it("should track whether enough signatures have been collected", () => {
+      const multisig = new Multisig(createParams());
 
-      const result = multisig.asTransaction() as TransactionV1<string>;
+      expect(multisig.isComplete).toBe(false);
 
-      expect(result.V1.address_override).toBeNull();
+      multisig.addSignature("aa", pubkey1);
+      expect(multisig.isComplete).toBe(false);
+
+      multisig.addSignature("bb", pubkey2);
+      expect(multisig.isComplete).toBe(true);
+    });
+  });
+
+  describe("toTransaction", () => {
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 1 },
+      details: {
+        max_priority_fee_bips: 0,
+        max_fee: "1000",
+        gas_limit: null,
+        chain_id: 1,
+      },
+      address_override: null,
+    };
+
+    it("should reject incomplete multisig transactions", () => {
+      const multisig = new Multisig(createParams());
+
+      expect(() => multisig.toTransaction(unsignedTx)).toThrow(
+        "Multisig transaction is incomplete",
+      );
     });
 
-    it("should include the provided address override", () => {
-      const multisig = MultisigTransaction.empty(createUnsignedTx(), 1, [
-        "pubkey1",
-      ]);
+    it("should convert a complete multisig into a V1 transaction", () => {
+      const multisig = new Multisig(createParams());
 
-      const result = multisig.asTransaction(
-        "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4",
-      ) as TransactionV1<string>;
+      multisig.addSignature("aa", pubkey1);
+      multisig.addSignature("bb", pubkey2);
 
-      expect(result.V1.address_override).toBe(
-        "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4",
-      );
+      expect(multisig.toTransaction(unsignedTx)).toEqual({
+        V1: {
+          ...unsignedTx,
+          signatures: [
+            { pub_key: pubkey1, signature: "aa" },
+            { pub_key: pubkey2, signature: "bb" },
+          ],
+          unused_pub_keys: [pubkey3],
+          min_signers: 2,
+        },
+      });
+    });
+
+    it("should preserve address overrides", () => {
+      const multisig = new Multisig(createParams());
+      const addressOverride =
+        "sov1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqq5k2jj4";
+
+      multisig.addSignature("aa", pubkey1);
+      multisig.addSignature("bb", pubkey2);
+
+      expect(
+        multisig.toTransaction({
+          ...unsignedTx,
+          address_override: addressOverride,
+        }).V1.address_override,
+      ).toBe(addressOverride);
     });
   });
 
   describe("getMultisigAddress", () => {
-    it("should match Rust implementation output for known test vector", () => {
-      const multisig = MultisigTransaction.empty(createUnsignedTx(), 2, [
-        "33dd646d7c43830b52289c4f277d3a5a26b3ab0a10ee05c871cb654bc046e545",
-        "8c7788ad88084f12ce1556703b33e673c5e450eec793c1e8e1a55b1140b4dfb8",
-        "74fc1e9c39b21173ef47c1cdfb37158764486c8b8ba81d8f29c6dd77800cd57f",
-      ]);
+    it("should expose the shared signer cap", () => {
+      expect(MAX_SIGNERS).toBe(21);
+    });
 
-      const address = multisig.getMultisigAddress();
-      const addressHex = bytesToHex(address);
+    it("should match the Rust test vector", () => {
+      const multisig = Multisig.fromPubKeys([pubkey1, pubkey2, pubkey3], 2);
 
-      expect(addressHex).toBe(
+      expect(bytesToHex(multisig.getMultisigAddress())).toBe(
+        "814394e81dd2a682efad0fc2082272cde35a172ba7e0e2240b0a0e9d68af23ee",
+      );
+    });
+
+    it("should be invariant to current signature collection state", () => {
+      const multisig = new Multisig(
+        createParams({
+          signatures: [{ pub_key: pubkey3, signature: "cc" }],
+          unusedPubKeys: [pubkey1, pubkey2],
+        }),
+      );
+
+      expect(bytesToHex(multisig.getMultisigAddress())).toBe(
         "814394e81dd2a682efad0fc2082272cde35a172ba7e0e2240b0a0e9d68af23ee",
       );
     });

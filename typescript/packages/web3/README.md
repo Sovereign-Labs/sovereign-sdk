@@ -116,6 +116,38 @@ const simulation = await rollup.simulate(
 );
 ```
 
+### Multisig
+
+```typescript
+import { Multisig } from "@sovereign-sdk/multisig";
+import type { UnsignedTransactionV0 } from "@sovereign-sdk/types";
+import { bytesToHex } from "@sovereign-sdk/utils";
+
+const unsignedTx: UnsignedTransactionV0<YourRuntimeCall> =
+  await rollup.buildUnsignedTransaction(runtimeCall, {
+    overrides: { uniqueness: { nonce: 1 } },
+  });
+
+const multisig = Multisig.fromPubKeys(
+  ["pubkey1hex", "pubkey2hex", "pubkey3hex"],
+  2,
+);
+
+const signingBytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
+multisig.addSignature(
+  bytesToHex(await signer1.sign(signingBytes)),
+  bytesToHex(await signer1.publicKey()),
+);
+
+multisig.addSignature(
+  bytesToHex(await signer2.sign(signingBytes)),
+  bytesToHex(await signer2.publicKey()),
+);
+
+const tx = multisig.toTransaction(unsignedTx);
+await rollup.submitTransaction(tx);
+```
+
 ## API Reference
 
 The package exports the following main components:
@@ -125,4 +157,3 @@ The package exports the following main components:
 - `createSerializer`: Function to create a Borsh serializer for your rollup schema
 
 For detailed API documentation, please refer to the inline TypeScript documentation in the source code.
-
