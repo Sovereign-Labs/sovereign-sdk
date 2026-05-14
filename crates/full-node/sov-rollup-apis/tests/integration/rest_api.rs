@@ -257,6 +257,48 @@ async fn test_simulation_success_with_address_override() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_simulation_create_synthetic_address_with_credential_sender() {
+    let data = TestData::setup().await;
+    let sender = data.user.credential_id().to_string();
+    let salt = Vec::from([7u8; 32]);
+    let params = json_obj!({
+        "sender": sender,
+        "call": {
+            "accounts": {
+                "create_synthetic_address": {
+                    "salt": salt,
+                },
+            },
+        },
+    });
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!("http://{}/rollup/simulate", data.axum_addr))
+        .json(&params)
+        .send()
+        .await
+        .unwrap();
+    let actual = response.json::<serde_json::Value>().await.unwrap();
+
+    assert_eq!(actual["outcome"], "success");
+    assert_eq!(actual["events"].as_array().unwrap().len(), 1);
+    assert_eq!(
+        actual["events"][0]["key"],
+        "Accounts/SyntheticAddressCreated"
+    );
+    assert_eq!(actual["events"][0]["module"], "Accounts");
+    assert_eq!(
+        actual["events"][0]["value"]["synthetic_address_created"]["creator"],
+        data.user.address().to_string()
+    );
+    assert_eq!(
+        actual["events"][0]["value"]["synthetic_address_created"]["credential"],
+        sender
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_simulation_fail() {
     let data = TestData::setup().await;
 
