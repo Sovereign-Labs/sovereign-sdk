@@ -19,10 +19,9 @@ revm = { workspace = true }
 alloy-eips = { workspace = true }
 alloy-sol-types = { workspace = true }
 alloy-transport = { workspace = true }
-reth-primitives-traits = { workspace = true }
 serde = { workspace = true }
 derive-new = { workspace = true }
-alloy-serde = "1.1.1"
+alloy-serde = { workspace = true }
 
 [lints]
 workspace = true
