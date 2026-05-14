@@ -133,6 +133,15 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
             anyhow::bail!("Proof is not valid")
         }
     }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error> {
+        let MockProof {
+            pub_data: input, ..
+        } = bincode::deserialize(&serialized_proof.raw_proof)?;
+        Ok(bincode::deserialize(&input)?)
+    }
 }
 
 #[cfg(test)]

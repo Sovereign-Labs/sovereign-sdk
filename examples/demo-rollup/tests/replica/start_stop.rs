@@ -15,7 +15,13 @@ async fn test_replica_start_stop() {
         }
     };
 
-    let (da_service, da_shutdown, addr) = create_da_service_periodic().await;
+    let ExternalDa {
+        service: da_service,
+        shutdown: da_shutdown,
+        addr,
+    } = start_external_mock_da(periodic_block_producing())
+        .await
+        .unwrap();
     // Ideal lag and stuff
     da_service.wait_for_height(10).await.unwrap();
 
@@ -253,7 +259,13 @@ async fn test_replica_start_stop_many_times() {
         }
     };
 
-    let (_da_service, da_shutdown, addr) = create_da_service_periodic().await;
+    let ExternalDa {
+        shutdown: da_shutdown,
+        addr,
+        ..
+    } = start_external_mock_da(periodic_block_producing())
+        .await
+        .unwrap();
     let key_and_address = read_private_key::<S>("tx_signer_private_key.json");
     let receiver_addr = random_address();
 

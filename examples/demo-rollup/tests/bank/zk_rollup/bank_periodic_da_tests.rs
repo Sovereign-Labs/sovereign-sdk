@@ -35,8 +35,6 @@ async fn inner(finalization_blocks: u32) -> anyhow::Result<()> {
     let test_case: TestCase = TestCase {
         wait_for_aggregated_proof: true,
         finalization_blocks,
-        aggregated_proof_block_jump: 5,
-        max_concurrent_proof_blobs: 1024,
     };
 
     tracing::info!("Starting test rollup");

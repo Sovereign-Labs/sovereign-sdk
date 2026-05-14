@@ -376,7 +376,6 @@ where
     ///
     /// References:
     /// - Geth `doCall`: <https://github.com/ethereum/go-ethereum/blob/master/internal/ethapi/api.go>
-    /// - Reth `call`: <https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-eth-api/src/helpers/call.rs>
     #[rpc_method(name = "eth_call")]
     pub fn eth_call(
         &self,

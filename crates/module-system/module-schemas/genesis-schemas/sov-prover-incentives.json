@@ -1,50 +1,54 @@
 {
-  "$schema": "http://json-schema.org/draft-07/schema#",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
   "title": "ProverIncentivesConfig",
-  "description": "Configuration of the prover incentives module. Specifies the minimum bond, the commitment to the allowed verifier method and a set of initial provers with their bonding amount.",
+  "description": "Configuration of the prover incentives module. Specifies the minimum bond, the commitment to\nthe allowed verifier method and a set of initial provers with their\nbonding amount.",
   "type": "object",
-  "required": [
-    "initial_provers",
-    "minimum_bond",
-    "proving_penalty"
-  ],
   "properties": {
+    "admin": {
+      "description": "The admin prover address. When `None`, no admin role is configured for this\ndeployment and admin-only paths (e.g. genesis-hash bypass, rollup upgrades) are\ninaccessible.",
+      "anyOf": [
+        {
+          "$ref": "#/$defs/Address"
+        },
+        {
+          "type": "null"
+        }
+      ],
+      "default": null
+    },
     "initial_provers": {
       "description": "A list of initial provers and their bonded amount.",
       "type": "array",
       "items": {
         "type": "array",
-        "items": [
+        "maxItems": 2,
+        "minItems": 2,
+        "prefixItems": [
           {
-            "$ref": "#/definitions/Address"
+            "$ref": "#/$defs/Address"
           },
           {
-            "$ref": "#/definitions/Amount"
+            "$ref": "#/$defs/Amount"
           }
-        ],
-        "maxItems": 2,
-        "minItems": 2
+        ]
       }
     },
     "minimum_bond": {
       "description": "The minimum bond for a prover.",
-      "allOf": [
-        {
-          "$ref": "#/definitions/GasUnit(2)"
-        }
-      ]
+      "$ref": "#/$defs/GasUnit(2)"
     },
     "proving_penalty": {
       "description": "A penalty for provers who submit a proof for transitions that were already proven",
-      "allOf": [
-        {
-          "$ref": "#/definitions/GasUnit(2)"
-        }
-      ]
+      "$ref": "#/$defs/GasUnit(2)"
     }
   },
   "additionalProperties": false,
-  "definitions": {
+  "required": [
+    "proving_penalty",
+    "minimum_bond",
+    "initial_provers"
+  ],
+  "$defs": {
     "Address": {
       "description": "Address",
       "type": "string",
@@ -52,9 +56,8 @@
     },
     "Amount": {
       "description": "A token amount.",
-      "type": "integer",
-      "format": "uint128",
-      "minimum": 0.0
+      "type": "string",
+      "pattern": "^[0-9]+$"
     },
     "GasUnit(2)": {
       "description": "GasUnit is an array of size 2",

@@ -1,6 +1,5 @@
 use alloy_primitives::U256;
 use alloy_rpc_types::error::EthRpcErrorCode;
-use reth_primitives_traits::transaction::error::InvalidTransactionError;
 use revm::context::result::{HaltReason, InvalidTransaction, OutOfGasError};
 
 use crate::{
@@ -169,6 +168,26 @@ pub enum RpcInvalidTransactionError {
     Other(Box<dyn ToRpcError>),
 }
 
+/// Local compatibility shim for txpool admission failures.
+///
+/// This keeps RPC error conversion independent from reth-specific error types while preserving the
+/// subset of semantics we use for send-path compatibility.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum TxPoolInvalidTransactionError {
+    InsufficientFunds { cost: U256, balance: U256 },
+    NonceTooLow { tx: u64, state: u64 },
+    OldLegacyChainId,
+    InvalidChainId,
+    TxTypeNotSupported,
+    GasUintOverflow,
+    GasTooLow,
+    GasTooHigh,
+    TipAboveFeeCap,
+    FeeCapTooLow,
+    SenderNoEOA,
+    GasLimitTooHigh,
+}
+
 impl RpcInvalidTransactionError {
     /// crates a new [`RpcInvalidTransactionError::Other`] variant.
     pub fn other<E: ToRpcError>(err: E) -> Self {
@@ -299,36 +318,28 @@ impl From<InvalidTransaction> for RpcInvalidTransactionError {
     }
 }
 
-impl From<InvalidTransactionError> for RpcInvalidTransactionError {
-    fn from(err: InvalidTransactionError) -> Self {
-        use InvalidTransactionError;
-        // This conversion is used to convert any transaction errors that could occur inside the
-        // txpool (e.g. `eth_sendRawTransaction`) to their corresponding RPC
+impl From<TxPoolInvalidTransactionError> for RpcInvalidTransactionError {
+    fn from(err: TxPoolInvalidTransactionError) -> Self {
         match err {
-            InvalidTransactionError::InsufficientFunds(res) => Self::InsufficientFunds {
-                cost: res.expected,
-                balance: res.got,
-            },
-            InvalidTransactionError::NonceNotConsistent { tx, state } => {
+            TxPoolInvalidTransactionError::InsufficientFunds { cost, balance } => {
+                Self::InsufficientFunds { cost, balance }
+            }
+            TxPoolInvalidTransactionError::NonceTooLow { tx, state } => {
                 Self::NonceTooLow { tx, state }
             }
-            InvalidTransactionError::OldLegacyChainId => {
-                // Note: this should be unreachable since Spurious Dragon now enabled
+            TxPoolInvalidTransactionError::OldLegacyChainId => {
+                // Note: this should be unreachable since Spurious Dragon is enabled.
                 Self::OldLegacyChainId
             }
-            InvalidTransactionError::ChainIdMismatch => Self::InvalidChainId,
-            InvalidTransactionError::Eip2930Disabled
-            | InvalidTransactionError::Eip1559Disabled
-            | InvalidTransactionError::Eip4844Disabled
-            | InvalidTransactionError::Eip7702Disabled
-            | InvalidTransactionError::TxTypeNotSupported => Self::TxTypeNotSupported,
-            InvalidTransactionError::GasUintOverflow => Self::GasUintOverflow,
-            InvalidTransactionError::GasTooLow => Self::GasTooLow,
-            InvalidTransactionError::GasTooHigh => Self::GasTooHigh,
-            InvalidTransactionError::TipAboveFeeCap => Self::TipAboveFeeCap,
-            InvalidTransactionError::FeeCapTooLow => Self::FeeCapTooLow,
-            InvalidTransactionError::SignerAccountHasBytecode => Self::SenderNoEOA,
-            InvalidTransactionError::GasLimitTooHigh => Self::GasLimitTooHigh,
+            TxPoolInvalidTransactionError::InvalidChainId => Self::InvalidChainId,
+            TxPoolInvalidTransactionError::TxTypeNotSupported => Self::TxTypeNotSupported,
+            TxPoolInvalidTransactionError::GasUintOverflow => Self::GasUintOverflow,
+            TxPoolInvalidTransactionError::GasTooLow => Self::GasTooLow,
+            TxPoolInvalidTransactionError::GasTooHigh => Self::GasTooHigh,
+            TxPoolInvalidTransactionError::TipAboveFeeCap => Self::TipAboveFeeCap,
+            TxPoolInvalidTransactionError::FeeCapTooLow => Self::FeeCapTooLow,
+            TxPoolInvalidTransactionError::SenderNoEOA => Self::SenderNoEOA,
+            TxPoolInvalidTransactionError::GasLimitTooHigh => Self::GasLimitTooHigh,
         }
     }
 }

@@ -101,8 +101,12 @@ pub(crate) fn build_proof(
     Ok(AggregatedProofPublicData {
         initial_slot_number: initial_slot,
         final_slot_number: end_slot,
-        initial_state_root: genesis_hash,
-        genesis_state_root: genesis_hash,
+        // For slot 1 this equals `genesis_hash`; for later slots it's the post-state of the
+        // previous slot. Reading it from the initial transition keeps the helper correct
+        // for any `initial_slot`, not just slot 1.
+        initial_state_root: *initial_transition.prev_state_root(),
+        origin_slot_number: SlotNumber::GENESIS,
+        origin_state_root: genesis_hash,
         final_state_root: *end_transition.post_state_root(),
         initial_slot_hash: *initial_transition.slot_hash(),
         final_slot_hash: *end_transition.slot().slot_hash(),

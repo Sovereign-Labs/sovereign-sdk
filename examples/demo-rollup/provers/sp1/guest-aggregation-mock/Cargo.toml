@@ -11,7 +11,6 @@ demo-stf = { path = "../../../stf", default-features = false }
 sp1-zkvm = "6.1.0"
 
 sov-mock-da = { path = "../../../../../crates/adapters/mock-da", default-features = false }
-sov-mock-zkvm = { path = "../../../../../crates/adapters/mock-zkvm", default-features = false }
 sov-modules-api = { path = "../../../../../crates/module-system/sov-modules-api", default-features = false }
 sov-rollup-interface = { path = "../../../../../crates/rollup-interface", default-features = false }
 sov-sp1-adapter = { path = "../../../../../crates/adapters/sp1", default-features = false }

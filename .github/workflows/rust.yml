@@ -104,6 +104,8 @@ jobs:
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
+      SKIP_GUEST_BUILD: "1"
+      SP1_SKIP_PROGRAM_BUILD: "true"
     steps:
       - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1

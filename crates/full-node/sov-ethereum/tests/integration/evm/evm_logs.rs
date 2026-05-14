@@ -527,7 +527,7 @@ async fn get_logs_topic_and_with_wildcard() -> anyhow::Result<()> {
 
     let sender = rollup_and_client.client.address();
     let filter = filter_for_tag(BlockNumberOrTag::Pending)
-        .topic0(simple_log_topic0())
+        .event_signature(simple_log_topic0())
         .topic1(sender)
         .topic3(U256::from(4));
     let logs = rollup_and_client.client.get_logs(&filter).await;
@@ -841,7 +841,7 @@ async fn get_logs_emitted_fields_match_event() -> anyhow::Result<()> {
     let filter = Filter::new()
         .at_block_hash(block_hash)
         .address(rollup_and_client.contract_address)
-        .topic0(simple_log_topic0());
+        .event_signature(simple_log_topic0());
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len() as u32, nb_of_logs_per_tx);
 
@@ -898,7 +898,7 @@ async fn get_logs_full_topic_log() -> anyhow::Result<()> {
     let filter = Filter::new()
         .at_block_hash(block_hash)
         .address(rollup_and_client.contract_address)
-        .topic0(full_topic_log_topic0());
+        .event_signature(full_topic_log_topic0());
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len(), 1);
 
@@ -953,7 +953,7 @@ async fn get_logs_data_only_log() -> anyhow::Result<()> {
     let filter = Filter::new()
         .at_block_hash(block_hash)
         .address(rollup_and_client.contract_address)
-        .topic0(data_only_log_topic0());
+        .event_signature(data_only_log_topic0());
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len(), 1);
 
@@ -1007,7 +1007,7 @@ async fn get_logs_indexed_only_log_data_empty() -> anyhow::Result<()> {
     let filter = Filter::new()
         .at_block_hash(block_hash)
         .address(rollup_and_client.contract_address)
-        .topic0(indexed_only_log_topic0())
+        .event_signature(indexed_only_log_topic0())
         .topic1(B256::from(value));
     let logs = rollup_and_client.client.get_logs(&filter).await;
     assert_eq!(logs.len(), 1);
@@ -1080,7 +1080,7 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
 
     let simple_filter = filter_for_tag(BlockNumberOrTag::Pending)
         .address(rollup_and_client.contract_address)
-        .topic0(simple_log_topic0());
+        .event_signature(simple_log_topic0());
     let simple_logs = rollup_and_client.client.get_logs(&simple_filter).await;
     assert_eq!(simple_logs.len(), 2);
     for (idx, log) in simple_logs.iter().enumerate() {
@@ -1105,7 +1105,7 @@ async fn get_logs_topic0_filters_event_signature() -> anyhow::Result<()> {
 
     let data_filter = filter_for_tag(BlockNumberOrTag::Pending)
         .address(rollup_and_client.contract_address)
-        .topic0(data_only_log_topic0());
+        .event_signature(data_only_log_topic0());
     let data_logs = rollup_and_client.client.get_logs(&data_filter).await;
     assert_eq!(data_logs.len(), 1);
     let expected = ExpectedLogMeta {
@@ -1340,7 +1340,7 @@ async fn get_logs_topic0_only_matches_any_indexed() -> anyhow::Result<()> {
     let filter = Filter::new()
         .at_block_hash(block_hash)
         .address(rollup_and_client.contract_address)
-        .topic0(simple_log_topic0());
+        .event_signature(simple_log_topic0());
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
     let meta_map = build_tx_log_meta(
@@ -1511,7 +1511,7 @@ async fn get_logs_topic0_or_semantics_multiple() -> anyhow::Result<()> {
         .from_block(0)
         .to_block(max_block)
         .address(rollup_and_client.contract_address)
-        .topic0(vec![simple_log_topic0(), data_only_log_topic0()]);
+        .event_signature(vec![simple_log_topic0(), data_only_log_topic0()]);
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
     let meta_map = build_tx_log_meta(
@@ -1628,7 +1628,7 @@ async fn get_logs_topic0_and_topic1_or_semantics() -> anyhow::Result<()> {
         .from_block(0)
         .to_block(max_block)
         .address(rollup_and_client.contract_address)
-        .topic0(vec![simple_log_topic0(), full_topic_log_topic0()])
+        .event_signature(vec![simple_log_topic0(), full_topic_log_topic0()])
         .topic1(vec![address_to_topic(sender), B256::from(full_topic_value)]);
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
@@ -1735,7 +1735,7 @@ async fn get_logs_trailing_null_topics_ignored() -> anyhow::Result<()> {
         .from_block(0)
         .to_block(max_block)
         .address(rollup_and_client.contract_address)
-        .topic0(simple_log_topic0());
+        .event_signature(simple_log_topic0());
     let logs = rollup_and_client.client.get_logs(&filter).await;
 
     let sender = rollup_and_client.client.address();

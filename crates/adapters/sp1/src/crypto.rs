@@ -9,6 +9,10 @@ use sov_rollup_interface::crypto::{PublicKeyHex, SigVerificationError};
 use sov_rollup_interface::reexports::schemars::{self, JsonSchema};
 use sov_universal_wallet::schema::OverrideSchema;
 
+/// Length of an ed25519 public key in bytes. `ed25519_consensus` does not expose
+/// this as a public constant, so we declare it here for use in JSON schemas.
+const PUBLIC_KEY_LENGTH: usize = 32;
+
 /// Defines private key types and operations
 #[cfg(feature = "native")]
 pub mod private_key {
@@ -161,19 +165,29 @@ pub mod private_key {
 }
 
 /// The public key of an ed25519 keypair. Wraps the optimized SP1 fork of the ed25519-consensus crate.
-#[derive(PartialEq, Eq, Hash, Clone, Debug, JsonSchema, PartialOrd, Ord)]
+#[derive(PartialEq, Eq, Hash, Clone, Debug, PartialOrd, Ord)]
 pub struct SP1PublicKey {
-    #[schemars(
-        flatten,
-        with = "String",
-        length(equal = "ed25519_consensus::VerificationKey::LENGTH * 2")
-    )]
     pub(crate) pub_key: VerificationKey,
+}
+
+impl JsonSchema for SP1PublicKey {
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "SP1PublicKey".into()
+    }
+
+    fn json_schema(
+        _gen: &mut sov_rollup_interface::reexports::schemars::SchemaGenerator,
+    ) -> sov_rollup_interface::reexports::schemars::Schema {
+        sov_rollup_interface::reexports::schemars::json_schema!({
+            "type": "string",
+            "pattern": format!("^[a-fA-F0-9]{{{}}}$", PUBLIC_KEY_LENGTH * 2),
+        })
+    }
 }
 
 impl SP1PublicKey {
     /// Returns the bytes of the underlying public key.
-    pub fn bytes(&self) -> &[u8; 32] {
+    pub fn bytes(&self) -> &[u8; PUBLIC_KEY_LENGTH] {
         self.pub_key.as_bytes()
     }
 }
@@ -202,12 +216,12 @@ impl sov_rollup_interface::crypto::PublicKey for SP1PublicKey {
 }
 
 impl OverrideSchema for SP1PublicKey {
-    type Output = [u8; 32];
+    type Output = [u8; PUBLIC_KEY_LENGTH];
 }
 
 impl BorshDeserialize for SP1PublicKey {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
-        let mut buffer = [0u8; 32];
+        let mut buffer = [0u8; PUBLIC_KEY_LENGTH];
         reader.read_exact(&mut buffer)?;
 
         let pub_key = VerificationKey::try_from(buffer.as_slice()).map_err(map_error)?;

@@ -2,9 +2,10 @@ use std::num::NonZero;
 use std::sync::Arc;
 
 use backon::{BackoffBuilder, ExponentialBuilder};
+use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput, SyncStatus};
 use sov_rollup_interface::stf::ProofSender;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use tokio::sync::mpsc;
@@ -32,10 +33,11 @@ pub struct ZkProofManager<Ps: ProverService> {
     max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
     proof_sender: Box<dyn ProofSender>,
     backoff_policy: ExponentialBuilder,
-    genesis_state_root: Ps::StateRoot,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
+    da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
     shutdown_sender: tokio::sync::watch::Sender<()>,
+    start_fresh_outer_proof_on_resync: bool,
 }
 
 impl<Ps: ProverService> ZkProofManager<Ps>
@@ -50,10 +52,11 @@ where
         eager_proof_submission: bool,
         max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
         proof_sender: Box<dyn ProofSender>,
-        genesis_state_root: Ps::StateRoot,
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
+        da_sync_state: Arc<DaSyncState>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
         shutdown_sender: tokio::sync::watch::Sender<()>,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> Self {
         Self {
             prover_service: Arc::new(prover_service),
@@ -66,10 +69,11 @@ where
                 .with_min_delay(Duration::from_secs(BACKOFF_POLICY_MIN_DELAY))
                 .with_max_delay(Duration::from_secs(BACKOFF_POLICY_MAX_DELAY))
                 .with_max_times(BACKOFF_POLICY_MAX_NUM_RETRIES),
-            genesis_state_root,
             stf_info_receiver,
+            da_sync_state,
             shutdown_receiver,
             shutdown_sender,
+            start_fresh_outer_proof_on_resync,
         }
     }
 
@@ -85,17 +89,18 @@ where
                 self.max_number_of_aggregated_proofs_in_memory.get(),
             );
 
-            // Cursor handle goes to the aggregator so the cursor only
-            // advances after publish succeeds. See module-level docs.
+            // Cursor handle is shared: the aggregator advances it after a
+            // publish succeeds, and the intake advances it for slots that are
+            // intentionally skipped (e.g. the resync window). See module-level
+            // docs.
             let cursor = self.stf_info_receiver.cursor_handle();
 
             let aggregator = AggregatorTask {
                 prover_service: self.prover_service.clone(),
                 proof_sender: self.proof_sender,
                 backoff_policy: self.backoff_policy,
-                genesis_state_root: self.genesis_state_root.clone(),
                 metadata_rx,
-                cursor,
+                cursor: cursor.clone(),
                 shutdown_receiver: self.shutdown_receiver.clone(),
                 shutdown_sender: self.shutdown_sender,
             };
@@ -111,8 +116,11 @@ where
                 aggregated_proof_block_jump: self.aggregated_proof_block_jump,
                 eager_proof_submission: self.eager_proof_submission,
                 stf_info_receiver: self.stf_info_receiver,
+                da_sync_state: self.da_sync_state,
                 metadata_tx,
+                cursor,
                 shutdown_receiver: self.shutdown_receiver,
+                start_fresh_outer_proof_on_resync: self.start_fresh_outer_proof_on_resync,
             };
             if let Err(e) = intake.run().await {
                 tracing::error!(error = ?e, "Intake task failed");
@@ -123,6 +131,18 @@ where
     }
 }
 
+/// Tracks the resync skip-window state machine for the proof intake.
+enum ResyncState {
+    /// `start_fresh_outer_proof_on_resync` is disabled; always prove.
+    Disabled,
+    /// Flag enabled, DA still `Syncing`. Skip-advance every slot so the runner
+    /// can keep pushing transitions and sync can complete. Cutoff not yet captured.
+    AwaitingSync,
+    /// Flag enabled, first `Synced` observed at this DA height. Skip slots below
+    /// this height (they were drained but never proved); prove slots at or above.
+    SkipBelow(u64),
+}
+
 /// Per-slot intake side of [`ZkProofManager`]. See the type-level docs for
 /// how it cooperates with [`AggregatorTask`].
 struct IntakeTask<Ps: ProverService> {
@@ -131,8 +151,11 @@ struct IntakeTask<Ps: ProverService> {
     aggregated_proof_block_jump: NonZero<usize>,
     eager_proof_submission: bool,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
+    da_sync_state: Arc<DaSyncState>,
     metadata_tx: mpsc::Sender<(AggregateProofMetadata<Ps>, u64)>,
+    cursor: CursorHandle,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    start_fresh_outer_proof_on_resync: bool,
 }
 
 impl<Ps: ProverService> IntakeTask<Ps>
@@ -140,6 +163,12 @@ where
     Ps::DaService: DaService<Error = anyhow::Error>,
 {
     async fn run(mut self) -> anyhow::Result<()> {
+        let mut resync_state = if self.start_fresh_outer_proof_on_resync {
+            ResyncState::AwaitingSync
+        } else {
+            ResyncState::Disabled
+        };
+
         loop {
             match future_or_shutdown(self.stf_info_receiver.read_next(), &self.shutdown_receiver)
                 .await
@@ -161,6 +190,36 @@ where
                         block_header = %stf_info.da_block_header().display(),
                         "Received STF info"
                     );
+
+                    // If still observing resync, try to capture the cutoff. Until the DA
+                    // layer reports `Synced` at least once, skip-advance the current slot
+                    // unconditionally — this drains the channel so the runner can keep
+                    // producing.
+                    if matches!(resync_state, ResyncState::AwaitingSync) {
+                        match self.da_sync_state.status() {
+                            SyncStatus::Syncing { .. } => {
+                                self.cursor.inc_next_height_to_receive_by(1);
+                                continue;
+                            }
+                            SyncStatus::Synced { synced_da_height } => {
+                                tracing::info!(
+                                    %synced_da_height,
+                                    "DA resync complete; recording skip cutoff for proof intake"
+                                );
+                                resync_state = ResyncState::SkipBelow(synced_da_height);
+                                // fall through; this slot may still be below the cutoff.
+                            }
+                        }
+                    }
+
+                    if let ResyncState::SkipBelow(skip_height) = resync_state {
+                        if stf_info.da_block_header().height() < skip_height {
+                            // Skipped slots will never be proved, so advance
+                            // the cursor manually.
+                            self.cursor.inc_next_height_to_receive_by(1);
+                            continue;
+                        }
+                    }
 
                     self.process_stf_info(stf_info).await?;
                 }
@@ -251,7 +310,6 @@ struct AggregatorTask<Ps: ProverService> {
     prover_service: Arc<Ps>,
     proof_sender: Box<dyn ProofSender>,
     backoff_policy: ExponentialBuilder,
-    genesis_state_root: Ps::StateRoot,
     metadata_rx: mpsc::Receiver<(AggregateProofMetadata<Ps>, u64)>,
     cursor: CursorHandle,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
@@ -296,7 +354,6 @@ where
             let agg_proof = create_aggregate_proof_with_retries(
                 metadata,
                 &*self.prover_service,
-                &self.genesis_state_root,
                 &self.backoff_policy,
             )
             .await?;
@@ -327,7 +384,6 @@ where
 async fn create_aggregate_proof_with_retries<Ps: ProverService>(
     mut metadata: AggregateProofMetadata<Ps>,
     prover_service: &Ps,
-    genesis_state_root: &Ps::StateRoot,
     backoff_policy: &ExponentialBuilder,
 ) -> anyhow::Result<SerializedAggregatedProof> {
     let mut attempt_num = 1u32;
@@ -336,7 +392,7 @@ async fn create_aggregate_proof_with_retries<Ps: ProverService>(
     loop {
         let maybe_backoff_duration = backoff_iter.next();
 
-        match metadata.prove(prover_service, genesis_state_root).await {
+        match metadata.prove(prover_service).await {
             Ok(proof) => return Ok(proof),
             Err((returned_metadata, error)) => {
                 let error_message = format!("Failed to generate aggregate proof: {error}");

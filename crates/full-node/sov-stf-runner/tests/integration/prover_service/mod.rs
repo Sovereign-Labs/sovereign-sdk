@@ -7,8 +7,6 @@ use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_stf_runner::processes::{ProofAggregationStatus, ProverService, StateTransitionInfo};
 use tokio::time;
 
-use crate::helpers::RawGenesisStateRoot;
-
 type StateRoot = Vec<u8>;
 type Address = Vec<u8>;
 
@@ -73,13 +71,12 @@ async fn wait_for_aggregated_proof<
     P: ProverService<StateRoot = Vec<u8>, DaService = sov_mock_da::MockDaService>,
 >(
     block_headers: &[MockBlockHeader],
-    genesis_state_root: &RawGenesisStateRoot,
     prover_service: &P,
 ) -> anyhow::Result<ProofAggregationStatus> {
     let mut counter = 0;
     loop {
         let status = prover_service
-            .create_aggregated_proof(block_headers, &genesis_state_root.0)
+            .create_aggregated_proof(block_headers)
             .await?;
 
         if let ProofAggregationStatus::Success(_) = &status {

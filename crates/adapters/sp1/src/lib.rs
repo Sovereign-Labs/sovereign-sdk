@@ -149,6 +149,13 @@ impl ZkVerifier for SP1Verifier {
 
         Ok(bincode::deserialize(proof.public_values.as_slice())?)
     }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error> {
+        let envelope: Sp1ProofEnvelope = bincode::deserialize(&serialized_proof.raw_proof)?;
+        Ok(bincode::deserialize(envelope.public_values.as_slice())?)
+    }
 }
 
 /// The SP1 Zkvm.
@@ -198,6 +205,14 @@ impl ZkVerifier for SP1Verifier {
 
         let public_values_digest: [u8; 32] = sha2::Sha256::digest(&public_values).into();
         sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash.0, &public_values_digest);
+        Ok(bincode::deserialize(&public_values)?)
+    }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error> {
+        let mut reader: &[u8] = &serialized_proof.raw_proof;
+        let public_values: Vec<u8> = bincode::deserialize_from(&mut reader)?;
         Ok(bincode::deserialize(&public_values)?)
     }
 }

@@ -44,3 +44,6 @@ native = [
 	"sov-timelock/native",
 	"sov-value-setter/native"
 ]
+
+[package.metadata.cargo-machete]
+ignored = ["serde_json"]

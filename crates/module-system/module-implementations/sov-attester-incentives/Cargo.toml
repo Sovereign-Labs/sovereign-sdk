@@ -34,7 +34,6 @@ derivative = { workspace = true }
 tracing = { workspace = true }
 schemars = { workspace = true }
 
-sov-address = { workspace = true }
 sov-bank = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-modules-api = { workspace = true }
@@ -46,7 +45,6 @@ tokio = { workspace = true, optional = true }
 default = []
 native = [
     "sov-attester-incentives/native",
-    "sov-address/native",
     "sov-bank/native",
     "sov-chain-state/native",
     "sov-mock-da/native",
