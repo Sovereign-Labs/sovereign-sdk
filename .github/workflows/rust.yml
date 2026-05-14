@@ -78,7 +78,6 @@ jobs:
       - doctests
       - hack
       - hack_default_targets
-      - nextest
       - nextest_all_features
       - coverage
       - cargo-deny-check-licenses
@@ -233,26 +232,6 @@ jobs:
         shell: bash
       - name: cargo hack
         run: make check-features-default-targets
-
-  nextest:
-    name: nextest
-    # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
-    timeout-minutes: 60
-    env:
-      RISC0_DEV_MODE: "true"
-      SP1_PROVER: "mock"
-      RUST_BACKTRACE: 1
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: namespacelabs/nscloud-cache-action@v1
-        with:
-          cache: rust
-      # CI always operates on the entire workspace
-      - run: cargo switcheroo disable
-        shell: bash
-      - run: make test-default-features
 
   nextest_all_features:
     name: nextest_all_features
@@ -629,30 +608,6 @@ jobs:
           echo "WALL_CLOCK_SECONDS=$SECONDS" >> "$GITHUB_ENV"
       - name: Print timing summary
         run: python3 scripts/print_compile_timings.py timing_check
-
-  timing_nextest:
-    name: timing_nextest
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
-    timeout-minutes: 60
-    env:
-      RISC0_DEV_MODE: "true"
-      SP1_PROVER: "mock"
-      RUST_BACKTRACE: 1
-      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-    steps:
-      - uses: actions/checkout@v5
-      - uses: namespacelabs/nscloud-cache-action@v1
-        with:
-          cache: rust
-      - run: cargo switcheroo disable
-        shell: bash
-      - name: Build test binaries with timings
-        run: |
-          SECONDS=0
-          cargo build --tests --timings
-          echo "WALL_CLOCK_SECONDS=$SECONDS" >> "$GITHUB_ENV"
-      - name: Print timing summary
-        run: python3 scripts/print_compile_timings.py timing_nextest
 
   timing_nextest_all_features:
     name: timing_nextest_all_features

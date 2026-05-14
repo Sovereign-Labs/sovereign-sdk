@@ -1,0 +1,47 @@
+name: Nightly default-features tests
+
+on:
+  schedule:
+    - cron: "0 6 * * *"
+  workflow_dispatch: {}
+
+env:
+  CARGO_TERM_COLOR: always
+  CARGO_NET_GIT_FETCH_WITH_CLI: true
+  NO_COLOR: 1
+
+jobs:
+  default_features_tests:
+    name: default_features_tests
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=default-features-daily-1-93
+    timeout-minutes: 60
+    env:
+      RISC0_DEV_MODE: "true"
+      SP1_PROVER: "mock"
+      RUST_BACKTRACE: 1
+      GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - run: cargo switcheroo disable
+        shell: bash
+      - name: Run targeted default-features tests
+        id: tests
+        run: |
+          cargo nextest run --no-fail-fast --status-level skip \
+            -p sov-db \
+            -p sov-modules-api \
+            -p sov-modules-macros
+
+      - name: Slack notification on failure
+        if: failure() && steps.tests.outcome == 'failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "❌ *Nightly default-features tests failed*\n\nDivergent default-features code paths in sov-db / sov-mock-da / sov-modules-api / sov-modules-macros regressed.\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
