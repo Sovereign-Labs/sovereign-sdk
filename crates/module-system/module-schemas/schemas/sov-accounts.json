@@ -102,6 +102,35 @@
       "required": [
         "rotate_credential_on_address"
       ]
+    },
+    {
+      "description": "Creates a new *synthetic* address — an address whose authorization lives purely in `account_owners` and which has no naturally-corresponding private key — and auto-authorizes the caller's current credential for it.\n\nThe address is derived deterministically by hashing `(domain || visible_slot_hash || sender_addr || sender_credential || salt)` with `S::CryptoSpec::Hasher`, then converting the resulting 32 bytes to `S::Address` via `CredentialId.into()`. Different callers, salts, and visible slots produce different addresses; replaying the same tuple in the same slot is an idempotent no-op.\n\n`visible_slot_hash` is part of the derivation by design: an attacker who later compromises the caller's private key cannot reconstruct the same synthetic address off-chain, because the slot hash only becomes known once chain progress commits to it and is unforgeable without participating in consensus. This makes the call *bind-then-use*, not *counterfactual*: unlike CREATE2 or ERC-4337, the address cannot be predicted and prefunded ahead of the `CreateSyntheticAddress` transaction. Callers must wait for finalization and read the derived address from the `SyntheticAddressCreated` event before routing assets or permissions to it.",
+      "type": "object",
+      "required": [
+        "create_synthetic_address"
+      ],
+      "properties": {
+        "create_synthetic_address": {
+          "type": "object",
+          "required": [
+            "salt"
+          ],
+          "properties": {
+            "salt": {
+              "description": "Caller-supplied salt that allows the same caller to derive multiple distinct synthetic addresses in the same slot.",
+              "type": "array",
+              "items": {
+                "type": "integer",
+                "format": "uint8",
+                "minimum": 0.0
+              },
+              "maxItems": 32,
+              "minItems": 32
+            }
+          }
+        }
+      },
+      "additionalProperties": false
     }
   ],
   "$defs": {
