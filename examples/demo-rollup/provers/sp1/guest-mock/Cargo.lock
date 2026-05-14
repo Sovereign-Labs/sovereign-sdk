@@ -5718,6 +5718,7 @@ dependencies = [
  "schemars 1.2.0",
  "serde",
  "serde_with",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-state",
 ]

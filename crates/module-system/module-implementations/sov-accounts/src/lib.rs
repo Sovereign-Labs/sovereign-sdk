@@ -18,6 +18,7 @@ pub use query::*;
 #[cfg(test)]
 mod tests;
 pub use call::CallMessage;
+use sov_modules_api::macros::serialize;
 use sov_modules_api::{
     Context, CredentialId, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
     StateMap, StateValue, TxState,
@@ -37,6 +38,29 @@ use sov_modules_api::{
 pub struct Account<S: Spec> {
     /// The mapped address.
     pub addr: S::Address,
+}
+
+/// Events emitted by the [`Accounts`] module.
+#[derive(Debug, PartialEq, Eq, Clone, schemars::JsonSchema)]
+#[serialize(Borsh, Serde)]
+#[serde(bound = "S: Spec", rename_all = "snake_case")]
+#[schemars(bound = "S::Address: ::schemars::JsonSchema", rename = "Event")]
+pub enum Event<S: Spec> {
+    /// Emitted by [`CallMessage::CreateSyntheticAddress`] when a new
+    /// synthetic address — an address with no naturally-corresponding
+    /// private key — is created and the caller's credential is
+    /// auto-authorized for it. Consumers should treat this event as the
+    /// canonical source of the derived address: because the derivation
+    /// is bound to the visible slot hash, it can only be reproduced
+    /// after the creation tx is finalized.
+    SyntheticAddressCreated {
+        /// The newly created address.
+        address: S::Address,
+        /// The address that submitted the creation transaction.
+        creator: S::Address,
+        /// The credential authorized to control the new address.
+        credential: CredentialId,
+    },
 }
 
 /// Composite key for [`Accounts::account_owners`].
@@ -82,11 +106,15 @@ impl<S: Spec> std::str::FromStr for AccountOwnerKey<S> {
 /// A module responsible for resolving credentials to addresses and recording
 /// credential authorizations.
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
-#[cfg_attr(feature = "arbitrary", derive(Debug))]
 pub struct Accounts<S: Spec> {
     /// The ID of the sov-accounts module.
     #[id]
     pub id: ModuleId,
+
+    /// Chain-state module, used to read the visible DA slot hash when
+    /// deriving synthetic addresses.
+    #[module]
+    pub(crate) chain_state: sov_chain_state::ChainState<S>,
 
     /// Tombstone for the legacy `credential_id -> address` routing index.
     ///
@@ -110,6 +138,14 @@ pub struct Accounts<S: Spec> {
     /// Authorization overrides. `Some(true)` means `credential_id` may sign as
     /// `address`; `Some(false)` explicitly revokes fallback authorization for
     /// the pair.
+    ///
+    /// **Invariant:** entries are written *only* by [`Self::authorize_credential`]
+    /// (writing `true`) and by [`crate::call::Accounts::revoke_credential`]
+    /// (writing `false`). The absence of an entry — `None` — therefore reliably
+    /// means "no call has ever touched this `(address, credential)` pair", which
+    /// is what [`crate::call::Accounts::create_synthetic_address`] relies on to
+    /// keep replay-after-revoke a no-op. Adding a new writer that does not
+    /// preserve this convention breaks that guarantee.
     #[state]
     pub(crate) account_owners: StateMap<AccountOwnerKey<S>, bool>,
 }
@@ -121,7 +157,7 @@ impl<S: Spec> Module for Accounts<S> {
 
     type CallMessage = call::CallMessage<S>;
 
-    type Event = ();
+    type Event = Event<S>;
 
     type Error = anyhow::Error;
 
@@ -163,6 +199,9 @@ impl<S: Spec> Module for Accounts<S> {
                 context,
                 state,
             ),
+            call::CallMessage::CreateSyntheticAddress { salt } => {
+                self.create_synthetic_address(salt, context, state)
+            }
         }
     }
 }

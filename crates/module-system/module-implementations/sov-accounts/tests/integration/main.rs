@@ -1,11 +1,17 @@
-use sov_accounts::{AccountData, Accounts, CallMessage};
+use std::cell::{Cell, RefCell};
+use std::rc::Rc;
+
+use borsh::BorshDeserialize;
+use sov_accounts::{AccountData, Accounts, CallMessage, Event};
+use sov_modules_api::digest::Digest;
 use sov_modules_api::transaction::{UnsignedTransactionV0, Version1};
 use sov_modules_api::{
-    CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents, Spec, TxEffect,
+    Amount, CredentialId, CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents,
+    Spec, StoredEvent, TxEffect,
 };
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
-use sov_test_utils::{default_test_tx_details, TransactionType};
+use sov_test_utils::{default_test_tx_details, BatchTestCase, BatchType, TransactionType};
 use sov_test_utils::{
     generate_optimistic_runtime, AsUser, TestPrivateKey, TestUser, TransactionTestCase,
 };
@@ -603,6 +609,21 @@ fn make_v0_tx(
     utx.sign(sender.private_key(), &<RT as Runtime<S>>::CHAIN_HASH)
 }
 
+fn make_v0_tx_with_call(
+    sender: &TestUser<S>,
+    call: CallMessage<S>,
+    address_override: Option<<S as Spec>::Address>,
+    generation: u64,
+) -> Transaction<RT, S> {
+    let utx = UnsignedTransactionV0::<RT, S>::new_with_details(
+        TestAccountsRuntimeCall::Accounts(call),
+        sov_modules_api::capabilities::UniquenessData::Generation(generation),
+        default_test_tx_details::<S>(),
+        address_override,
+    );
+    utx.sign(sender.private_key(), &<RT as Runtime<S>>::CHAIN_HASH)
+}
+
 fn sign_v1(tx: &mut Version1<RT, S>, key: &TestPrivateKey) {
     tx.sign(key, &<RT as Runtime<S>>::CHAIN_HASH).unwrap();
 }
@@ -618,6 +639,109 @@ fn submit_v1(tx: Version1<RT, S>) -> TransactionType<RT, S> {
     TransactionType::<RT, S>::PreSigned(RawTx {
         data: borsh::to_vec(&tx).unwrap(),
     })
+}
+
+/// Mirrors `CallMessage::CreateSyntheticAddress` derivation for test setup.
+const SYNTHETIC_ADDRESS_DOMAIN: &[u8] = b"sov_accounts::synthetic_address::v1";
+
+/// Destructures the single expected `SyntheticAddressCreated` event from a
+/// receipt's event list.
+#[track_caller]
+fn synthetic_address_created_event(
+    events: &[TestAccountsRuntimeEvent<S>],
+) -> (<S as Spec>::Address, <S as Spec>::Address, CredentialId) {
+    match events {
+        [TestAccountsRuntimeEvent::Accounts(Event::SyntheticAddressCreated {
+            address,
+            creator,
+            credential,
+        })] => (*address, *creator, *credential),
+        other => panic!("expected one synthetic-address event, got {other:?}"),
+    }
+}
+
+#[track_caller]
+fn stored_synthetic_address_created_event(
+    events: &[StoredEvent],
+) -> (<S as Spec>::Address, <S as Spec>::Address, CredentialId) {
+    match events {
+        [stored_event] => {
+            let event = TestAccountsRuntimeEvent::<S>::deserialize(
+                &mut stored_event.value().inner().as_slice(),
+            )
+            .expect("stored batch event should deserialize into runtime event");
+
+            synthetic_address_created_event(std::slice::from_ref(&event))
+        }
+        other => panic!("expected one synthetic-address event, got {other:?}"),
+    }
+}
+
+/// Executes a `CreateSyntheticAddress` transaction, asserts it succeeded and
+/// emitted a matching event, and returns the newly created address.
+fn execute_create_synthetic_address(
+    runner: &mut TestRunner<RT, S>,
+    input: TransactionType<RT, S>,
+    expected_creator: <S as Spec>::Address,
+    expected_credential: CredentialId,
+) -> <S as Spec>::Address {
+    let captured: Rc<Cell<Option<<S as Spec>::Address>>> = Rc::new(Cell::new(None));
+    let captured_for_assert = Rc::clone(&captured);
+
+    runner.execute_transaction(TransactionTestCase {
+        input,
+        assert: Box::new(move |result, state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "CreateSyntheticAddress should succeed, got {:?}",
+                result.tx_receipt
+            );
+            let (address, creator, credential) = synthetic_address_created_event(&result.events);
+            assert_eq!(creator, expected_creator);
+            assert_eq!(credential, expected_credential);
+
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_explicitly_authorized(&address, &expected_credential, state)
+                .unwrap());
+
+            captured_for_assert.set(Some(address));
+        }),
+    });
+
+    captured
+        .get()
+        .expect("CreateSyntheticAddress event should have been captured")
+}
+
+#[track_caller]
+fn derive_synthetic_address(
+    runner: &TestRunner<RT, S>,
+    creator: <S as Spec>::Address,
+    credential: CredentialId,
+    salt: [u8; 32],
+) -> <S as Spec>::Address {
+    // Mirrors the visible slot hash the call will see when it executes.
+    // MockDA encodes block hashes as `u64_to_bytes(height + 1)` (see
+    // `MockBlockHeader::new`) and TestRunner advances one true slot per
+    // call, so the next visible-slot hash is `runner.true_slot_number() + 2`
+    // serialized big-endian into the first 8 bytes. Update both halves of
+    // this constant if either convention changes.
+    let next_slot_hash = {
+        let mut hash = [0u8; 32];
+        hash[..8].copy_from_slice(&(runner.true_slot_number().get() + 2).to_be_bytes());
+        hash
+    };
+
+    let mut hasher = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher::new();
+    hasher.update(SYNTHETIC_ADDRESS_DOMAIN);
+    hasher.update(next_slot_hash.as_ref());
+    hasher.update(creator.as_ref());
+    let credential_bytes: &[u8] = credential.0.as_ref();
+    hasher.update(credential_bytes);
+    hasher.update(salt);
+    let synthetic_credential = CredentialId::from_bytes(hasher.finalize().into());
+    synthetic_credential.into()
 }
 
 /// V1 tx with `address_override = None` executes as the multisig's default
@@ -2067,6 +2191,542 @@ fn test_multisig_key_rotation_atomic() {
                 );
             }
             other => panic!("expected skipped tx after rotation, got {other:?}"),
+        }),
+    });
+}
+
+/// V0 single-signer happy path: the new address is created, the caller's
+/// credential is auto-authorized for it, and exactly one matching event is
+/// emitted.
+#[test]
+fn test_create_synthetic_address_happy_path() {
+    let user = TestUser::<S>::generate_with_default_balance();
+    let user_address = user.address();
+    let user_credential = user.credential_id();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![user.clone()]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let new_address = execute_create_synthetic_address(
+        &mut runner,
+        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateSyntheticAddress {
+            salt: [7; 32],
+        }),
+        user_address,
+        user_credential,
+    );
+
+    // The new address is not the caller's own address, nor the canonical
+    // address of any unrelated credential we can sample.
+    assert_ne!(new_address, user_address);
+    assert_ne!(new_address, <S as Spec>::Address::from(user_credential));
+    assert_ne!(
+        new_address,
+        <S as Spec>::Address::from(CredentialId::from([99u8; 32]))
+    );
+}
+
+/// Re-issuing the same `(caller, salt)` in the same slot is an idempotent
+/// no-op: both transactions succeed, and the `account_owners` entry remains
+/// authorized.
+#[test]
+fn test_create_synthetic_address_is_idempotent_in_same_slot() {
+    let user = TestUser::<S>::generate_with_default_balance();
+    let user_address = user.address();
+    let user_credential = user.credential_id();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![user.clone()]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+    let salt = [22; 32];
+
+    let tx_1 =
+        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateSyntheticAddress { salt });
+    let tx_2 =
+        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateSyntheticAddress { salt });
+
+    runner.execute_batch(BatchTestCase {
+        input: BatchType::from(vec![tx_1, tx_2]),
+        assert: Box::new(move |result, state| {
+            let batch = result.batch_receipt.expect("batch should be accepted");
+            assert_eq!(batch.tx_receipts.len(), 2);
+            assert!(
+                batch.tx_receipts[0].receipt.is_successful(),
+                "first CreateSyntheticAddress should succeed, got {:?}",
+                batch.tx_receipts[0].receipt
+            );
+            assert!(
+                batch.tx_receipts[1].receipt.is_successful(),
+                "duplicate CreateSyntheticAddress in same slot should be idempotent, got {:?}",
+                batch.tx_receipts[1].receipt
+            );
+            assert_eq!(batch.tx_receipts[0].events.len(), 1);
+            assert!(
+                batch.tx_receipts[1].events.is_empty(),
+                "same-slot replay should not emit a second creation event"
+            );
+
+            let (synthetic_address, creator, credential) =
+                stored_synthetic_address_created_event(&batch.tx_receipts[0].events);
+            assert_eq!(creator, user_address);
+            assert_eq!(credential, user_credential);
+
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_explicitly_authorized(&synthetic_address, &user_credential, state)
+                .unwrap());
+        }),
+    });
+}
+
+/// Revoking the creator credential from a just-created synthetic address must
+/// survive a same-slot replay of the same creation tuple.
+#[test]
+fn test_create_synthetic_address_replay_after_revoke_in_same_slot_does_not_restore_authorization() {
+    let user = TestUser::<S>::generate_with_default_balance();
+    let user_address = user.address();
+    let user_credential = user.credential_id();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![user.clone()]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+    let salt = [23; 32];
+    let synthetic_address = derive_synthetic_address(&runner, user_address, user_credential, salt);
+
+    let create_tx =
+        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateSyntheticAddress { salt });
+    // The revoke transaction sets `address_override = Some(synthetic_address)`,
+    // which makes the synthetic address pay its own gas. The newly-created
+    // synthetic address starts with zero balance, so without this transfer the
+    // revoke is skipped with `CannotReserveGas` before it can run.
+    let fund_tx =
+        user.create_plain_message::<RT, sov_bank::Bank<S>>(sov_bank::CallMessage::Transfer {
+            to: synthetic_address,
+            coins: sov_bank::Coins {
+                amount: Amount::new(1_000_000_000_000),
+                token_id: sov_bank::config_gas_token_id(),
+            },
+        });
+    let revoke_tx = submit_v0(make_v0_tx_with_call(
+        &user,
+        CallMessage::RemoveCredentialFromAddress {
+            address: synthetic_address,
+            credential: user_credential,
+        },
+        Some(synthetic_address),
+        1,
+    ));
+    let replay_tx =
+        user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateSyntheticAddress { salt });
+
+    runner.execute_batch(BatchTestCase {
+        input: BatchType::from(vec![create_tx, fund_tx, revoke_tx, replay_tx]),
+        assert: Box::new(move |result, state| {
+            let batch = result.batch_receipt.expect("batch should be accepted");
+            assert_eq!(batch.tx_receipts.len(), 4);
+            assert!(
+                batch.tx_receipts[0].receipt.is_successful(),
+                "first CreateSyntheticAddress should succeed, got {:?}",
+                batch.tx_receipts[0].receipt
+            );
+            assert!(
+                batch.tx_receipts[1].receipt.is_successful(),
+                "funding the synthetic address should succeed, got {:?}",
+                batch.tx_receipts[1].receipt
+            );
+            assert!(
+                batch.tx_receipts[2].receipt.is_successful(),
+                "revoking the creator credential from the synthetic address should succeed, got {:?}",
+                batch.tx_receipts[2].receipt
+            );
+            assert!(
+                batch.tx_receipts[3].receipt.is_successful(),
+                "replayed CreateSyntheticAddress should remain a no-op after revocation, got {:?}",
+                batch.tx_receipts[3].receipt
+            );
+            assert!(
+                batch.tx_receipts[3].events.is_empty(),
+                "same-slot replay after revocation should not emit a second creation event"
+            );
+
+            let accounts = Accounts::<S>::default();
+            assert!(!accounts
+                .is_authorized_for(&synthetic_address, &user_credential, state)
+                .unwrap());
+        }),
+    });
+}
+
+/// Different salts from the same caller produce distinct synthetic addresses.
+#[test]
+fn test_create_synthetic_address_different_salt_produces_different_address() {
+    let user = TestUser::<S>::generate_with_default_balance();
+    let user_address = user.address();
+    let user_credential = user.credential_id();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![user.clone()]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    runner.execute_batch(BatchTestCase {
+        input: BatchType::from(vec![
+            user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateSyntheticAddress {
+                salt: [1; 32],
+            }),
+            user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateSyntheticAddress {
+                salt: [2; 32],
+            }),
+        ]),
+        assert: Box::new(move |result, state| {
+            let batch = result.batch_receipt.expect("batch should be accepted");
+            let accounts = Accounts::<S>::default();
+            assert_eq!(batch.tx_receipts.len(), 2);
+
+            let mut created_addresses = Vec::with_capacity(batch.tx_receipts.len());
+            for tx_receipt in &batch.tx_receipts {
+                assert!(
+                    tx_receipt.receipt.is_successful(),
+                    "CreateSyntheticAddress should succeed, got {:?}",
+                    tx_receipt.receipt
+                );
+
+                let (address, creator, credential) =
+                    stored_synthetic_address_created_event(&tx_receipt.events);
+                assert_eq!(creator, user_address);
+                assert_eq!(credential, user_credential);
+                assert!(accounts
+                    .is_explicitly_authorized(&address, &user_credential, state)
+                    .unwrap());
+                created_addresses.push(address);
+            }
+
+            assert_ne!(created_addresses[0], created_addresses[1]);
+        }),
+    });
+}
+
+/// Two different callers using the same salt produce distinct addresses, and
+/// neither caller can `AddCredentialToAddress` to the other's synthetic
+/// address — the standard `ensure_caller_owns` guard applies.
+#[test]
+fn test_create_synthetic_address_is_creator_scoped() {
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(2);
+    let users = genesis_config.additional_accounts();
+    let creator_1 = users[0].clone();
+    let creator_2 = users[1].clone();
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let salt = [33; 32];
+    let creator_1_address = creator_1.address();
+    let creator_1_credential = creator_1.credential_id();
+    let creator_2_address = creator_2.address();
+    let creator_2_credential = creator_2.credential_id();
+    let captured_addresses = Rc::new(RefCell::new((None, None)));
+    let captured_addresses_for_assert = Rc::clone(&captured_addresses);
+
+    runner.execute_batch(BatchTestCase {
+        input: BatchType::from(vec![
+            creator_1.create_plain_message::<RT, Accounts<S>>(
+                CallMessage::CreateSyntheticAddress { salt },
+            ),
+            creator_2.create_plain_message::<RT, Accounts<S>>(
+                CallMessage::CreateSyntheticAddress { salt },
+            ),
+        ]),
+        assert: Box::new(move |result, state| {
+            let batch = result.batch_receipt.expect("batch should be accepted");
+            assert_eq!(batch.tx_receipts.len(), 2);
+
+            let accounts = Accounts::<S>::default();
+            let mut created_addresses = Vec::with_capacity(batch.tx_receipts.len());
+            for (tx_receipt, (expected_creator, expected_credential)) in
+                batch.tx_receipts.iter().zip([
+                    (creator_1_address, creator_1_credential),
+                    (creator_2_address, creator_2_credential),
+                ])
+            {
+                assert!(
+                    tx_receipt.receipt.is_successful(),
+                    "CreateSyntheticAddress should succeed, got {:?}",
+                    tx_receipt.receipt
+                );
+
+                let (address, creator, credential) =
+                    stored_synthetic_address_created_event(&tx_receipt.events);
+                assert_eq!(creator, expected_creator);
+                assert_eq!(credential, expected_credential);
+                assert!(accounts
+                    .is_explicitly_authorized(&address, &expected_credential, state)
+                    .unwrap());
+                created_addresses.push(address);
+            }
+
+            assert_ne!(created_addresses[0], created_addresses[1]);
+            *captured_addresses_for_assert.borrow_mut() =
+                (Some(created_addresses[0]), Some(created_addresses[1]));
+        }),
+    });
+
+    let (address_1, _address_2) = Rc::try_unwrap(captured_addresses)
+        .expect("capture should have no outstanding references")
+        .into_inner();
+    let address_1 = address_1.expect("first synthetic address should have been captured");
+
+    // creator_2 cannot mutate creator_1's synthetic address.
+    let attacker_credential = TestPrivateKey::generate().pub_key().credential_id();
+    runner.execute_transaction(TransactionTestCase {
+        input: creator_2.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::AddCredentialToAddress {
+                address: address_1,
+                credential: attacker_credential,
+            },
+        ),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                let msg = contents.reason.to_string();
+                assert!(
+                    msg.contains("not authorized to modify credentials"),
+                    "expected ensure_caller_owns rejection; got: {msg}"
+                );
+            }
+            other => panic!("expected non-owner add to revert, got {other:?}"),
+        }),
+    });
+}
+
+/// Long-form: a multisig creates an synthetic address, funds it via bank
+/// transfer, inserts a follow-up credential, adds a rotated multisig
+/// credential, removes the incumbent credential, then verifies the rotated
+/// multisig can act as the synthetic address while the old multisig can no
+/// longer reach it.
+#[test]
+fn test_create_synthetic_address_can_be_used_and_rotated() {
+    use sov_modules_api::Multisig;
+
+    let MultisigEnv {
+        keys: keys_1,
+        multisig: multisig_1,
+        credential_id: credential_id_1,
+        user: multisig_user,
+    } = make_multisig_env();
+    let keys_2 = [
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+        TestPrivateKey::generate(),
+    ];
+    let multisig_2 = Multisig::new(2, keys_2.iter().map(|k| k.pub_key()).collect());
+    let credential_id_2 =
+        multisig_2.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
+
+    let creator = multisig_user.address();
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user]);
+    let genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let mut create_tx = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::CreateSyntheticAddress { salt: [11; 32] },
+        None,
+        0,
+    );
+    sign_v1(&mut create_tx, &keys_1[0]);
+    sign_v1(&mut create_tx, &keys_1[1]);
+    let synthetic_address = execute_create_synthetic_address(
+        &mut runner,
+        submit_v1(create_tx),
+        creator,
+        credential_id_1,
+    );
+
+    // Sanity: the new address is not the canonical address of any sampled
+    // pre-existing credential.
+    for sampled_credential in [
+        credential_id_1,
+        credential_id_2,
+        CredentialId::from([99u8; 32]),
+    ] {
+        assert_ne!(
+            synthetic_address,
+            <S as Spec>::Address::from(sampled_credential)
+        );
+    }
+
+    let mut fund_synthetic_address = UnsignedTransactionV0::<RT, S>::new_with_details(
+        TestAccountsRuntimeCall::Bank(sov_bank::CallMessage::Transfer {
+            to: synthetic_address,
+            coins: sov_bank::Coins {
+                amount: Amount::new(1_000_000_000_000),
+                token_id: sov_bank::config_gas_token_id(),
+            },
+        }),
+        sov_modules_api::capabilities::UniquenessData::Generation(1),
+        default_test_tx_details::<S>(),
+        None,
+    )
+    .to_multisig_tx(multisig_1.clone());
+    sign_v1(&mut fund_synthetic_address, &keys_1[0]);
+    sign_v1(&mut fund_synthetic_address, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(fund_synthetic_address),
+        assert: Box::new(move |result, _state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "funding synthetic address should succeed, got {:?}",
+                result.tx_receipt
+            );
+        }),
+    });
+
+    let follow_up_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut m1_follow_up = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::InsertCredentialId(follow_up_credential),
+        Some(synthetic_address),
+        2,
+    );
+    sign_v1(&mut m1_follow_up, &keys_1[0]);
+    sign_v1(&mut m1_follow_up, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(m1_follow_up),
+        assert: Box::new(move |result, state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "incumbent credential should control synthetic address, got {:?}",
+                result.tx_receipt
+            );
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_explicitly_authorized(&synthetic_address, &follow_up_credential, state)
+                .unwrap());
+        }),
+    });
+
+    let mut add_rotated = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::AddCredentialToAddress {
+            address: synthetic_address,
+            credential: credential_id_2,
+        },
+        Some(synthetic_address),
+        3,
+    );
+    sign_v1(&mut add_rotated, &keys_1[0]);
+    sign_v1(&mut add_rotated, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(add_rotated),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_explicitly_authorized(&synthetic_address, &credential_id_2, state)
+                .unwrap());
+        }),
+    });
+
+    let mut remove_incumbent = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::RemoveCredentialFromAddress {
+            address: synthetic_address,
+            credential: credential_id_1,
+        },
+        Some(synthetic_address),
+        4,
+    );
+    sign_v1(&mut remove_incumbent, &keys_1[0]);
+    sign_v1(&mut remove_incumbent, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(remove_incumbent),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(!accounts
+                .is_authorized_for(&synthetic_address, &credential_id_1, state)
+                .unwrap());
+            assert!(accounts
+                .is_explicitly_authorized(&synthetic_address, &credential_id_2, state)
+                .unwrap());
+        }),
+    });
+
+    // After revocation, multisig_1 attempting to sign as the synthetic address
+    // is skipped by the resolver.
+    let stale_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut stale_tx = make_v1_tx_with_call(
+        &multisig_1,
+        CallMessage::InsertCredentialId(stale_credential),
+        Some(synthetic_address),
+        5,
+    );
+    sign_v1(&mut stale_tx, &keys_1[0]);
+    sign_v1(&mut stale_tx, &keys_1[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(stale_tx),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Skipped(SkippedTxContents { error, .. }) => {
+                let msg = error.to_string();
+                assert!(
+                    msg.contains("not authorized for address override"),
+                    "expected resolver skip after synthetic-address rotation; got: {msg}"
+                );
+            }
+            other => panic!("expected skipped tx, got {other:?}"),
+        }),
+    });
+
+    // The rotated multisig_2 can now act as the synthetic address.
+    let rotated_credential = TestPrivateKey::generate().pub_key().credential_id();
+    let mut rotated_tx = make_v1_tx_with_call(
+        &multisig_2,
+        CallMessage::InsertCredentialId(rotated_credential),
+        Some(synthetic_address),
+        0,
+    );
+    sign_v1(&mut rotated_tx, &keys_2[0]);
+    sign_v1(&mut rotated_tx, &keys_2[1]);
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(rotated_tx),
+        assert: Box::new(move |result, state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "rotated credential should control synthetic address, got {:?}",
+                result.tx_receipt
+            );
+            let accounts = Accounts::<S>::default();
+            assert!(accounts
+                .is_explicitly_authorized(&synthetic_address, &rotated_credential, state)
+                .unwrap());
+        }),
+    });
+}
+
+/// `enable_custom_account_mappings = false` rejects `CreateSyntheticAddress`
+/// just like the other custom-mapping call messages.
+#[test]
+fn test_create_synthetic_address_rejected_when_custom_account_mappings_disabled() {
+    let (user, mut runner) = setup_with_disable_custom_account_mappings();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: user.create_plain_message::<RT, Accounts<S>>(CallMessage::CreateSyntheticAddress {
+            salt: [0; 32],
+        }),
+        assert: Box::new(move |result, _state| match result.tx_receipt {
+            TxEffect::Reverted(contents) => {
+                assert_eq!(
+                    contents.reason.to_string(),
+                    "Custom account mappings are disabled"
+                );
+            }
+            _ => panic!("Expected reverted transaction"),
         }),
     });
 }

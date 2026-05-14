@@ -11012,6 +11012,8 @@ dependencies = [
  "serde",
  "serde_with",
  "sov-accounts",
+ "sov-bank",
+ "sov-chain-state",
  "sov-modules-api",
  "sov-state",
  "sov-test-utils",
