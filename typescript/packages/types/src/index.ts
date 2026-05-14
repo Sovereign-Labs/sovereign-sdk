@@ -25,10 +25,9 @@ export type Nonce = { nonce: number };
 export type Uniqueness = Nonce | Generation;
 
 /**
- * Base transaction structure before signing, containing the core transaction data.
- * Generic over RuntimeCall to support different rollup runtime call types.
+ * Common unsigned transaction fields shared by all unsigned transaction versions.
  */
-export type UnsignedTransaction<RuntimeCall> = {
+type UnsignedTransactionFields<RuntimeCall> = {
   /** The specific runtime call/method being invoked on the rollup */
   runtime_call: RuntimeCall;
   /** Uniqueness mechanism (nonce or generation) to prevent replay attacks */
@@ -40,6 +39,33 @@ export type UnsignedTransaction<RuntimeCall> = {
 };
 
 /**
+ * Consumer-facing version 0 unsigned transaction.
+ * Used for standard rollup transaction building and single-signature signing.
+ */
+export type UnsignedTransactionV0<RuntimeCall> =
+  UnsignedTransactionFields<RuntimeCall>;
+
+/**
+ * Version 1 unsigned transaction.
+ * Used internally for multisig signing bytes and includes the credential commitment.
+ */
+export type UnsignedTransactionV1<
+  RuntimeCall,
+  CredentialAddress = unknown,
+> = UnsignedTransactionFields<RuntimeCall> & {
+  /** The multisig credential address in the rollup's native address format */
+  credential_address: CredentialAddress;
+};
+
+/**
+ * Versioned unsigned transaction envelope.
+ * This is the exact root object serialized for signing.
+ */
+export type UnsignedTransaction<RuntimeCall, CredentialAddress = unknown> =
+  | { V0: UnsignedTransactionV0<RuntimeCall> }
+  | { V1: UnsignedTransactionV1<RuntimeCall, CredentialAddress> };
+
+/**
  * Version 0 transaction format with single signature.
  * Used for standard single-party transactions.
  */
@@ -49,7 +75,7 @@ export type TransactionV0<RuntimeCall> = {
     pub_key: HexString;
     /** Cryptographic signature of the transaction in hex format */
     signature: HexString;
-  } & UnsignedTransaction<RuntimeCall>;
+  } & UnsignedTransactionV0<RuntimeCall>;
 };
 
 /**
@@ -75,7 +101,7 @@ export type TransactionV1<RuntimeCall> = {
     signatures: SignatureAndPubKey[];
     /** Minimum number of signatures required for transaction validity */
     min_signers: number;
-  } & UnsignedTransaction<RuntimeCall>;
+  } & UnsignedTransactionV0<RuntimeCall>;
 };
 
 /**
