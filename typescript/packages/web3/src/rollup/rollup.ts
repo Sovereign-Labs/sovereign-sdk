@@ -294,16 +294,16 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
     return this.signTransaction(unsignedTx, signer);
   }
 
-  protected async unsignedTxForSigning(
+  protected async toSigningPayload(
     unsignedTx: S["UnsignedTransaction"],
-  ): Promise<unknown> {
-    return unsignedTx;
+  ): Promise<S["TransactionSigningPayload"]> {
+    return unsignedTx as unknown as S["TransactionSigningPayload"];
   }
 
   /**
    * Signs an unsigned transaction using the provided signer.
-   * Creates a signature by combining the serialized unsigned transaction with the chain hash,
-   * then constructs a fully signed transaction.
+   * Creates a signature over the serialized transaction signing payload, then constructs a fully
+   * signed transaction.
    *
    * @param unsignedTx - The unsigned transaction to sign.
    * @param signer - The signer to use for signing the transaction.
@@ -314,13 +314,9 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
     signer: Signer,
   ): Promise<S["Transaction"]> {
     const serializer = await this.serializer();
-    const signingUnsignedTx = await this.unsignedTxForSigning(unsignedTx);
-    const serializedUnsignedTx =
-      serializer.serializeUnsignedTx(signingUnsignedTx);
-    const chainHash = await this.chainHash();
-    const signature = await signer.sign(
-      new Uint8Array([...serializedUnsignedTx, ...chainHash]),
-    );
+    const signingPayload = await this.toSigningPayload(unsignedTx);
+    const signingBytes = serializer.serializeSigningPayload(signingPayload);
+    const signature = await signer.sign(signingBytes);
     const publicKey = await signer.publicKey();
     const context = {
       unsignedTx,

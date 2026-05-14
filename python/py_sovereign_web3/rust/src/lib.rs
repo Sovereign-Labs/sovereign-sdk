@@ -2,7 +2,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::types::PyDict;
 use pyo3::{prelude::*, types::PyType};
 use sovereign_web3::schema::{
-    default_uniqueness, Serializer, Transaction, TxDetails, UniquenessData, UnsignedTransactionV0,
+    default_uniqueness, Serializer, Transaction, TxDetails, UniquenessData, UnsignedTransaction,
     DEFAULT_MAX_FEE, DEFAULT_MAX_PRIORITY_FEE_BIPS,
 };
 
@@ -35,12 +35,17 @@ impl PySerializer {
         Ok(hash.to_vec())
     }
 
-    fn serialize_unsigned_tx(&self, unsigned_tx: &PyUnsignedTransactionV0) -> PyResult<Vec<u8>> {
+    fn serialize_signing_payload(&self, unsigned_tx: &PyUnsignedTransaction) -> PyResult<Vec<u8>> {
+        let chain_hash = self
+            .inner
+            .chain_hash()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get chain hash: {e}")))?;
+        let signing_payload = unsigned_tx.inner.to_signing_payload_v0(chain_hash);
         let bytes = self
             .inner
-            .serialize_unsigned_tx(&unsigned_tx.inner)
+            .serialize_signing_payload(&signing_payload)
             .map_err(|e| {
-                PyValueError::new_err(format!("Failed to serialize unsigned transaction: {e}"))
+                PyValueError::new_err(format!("Failed to serialize signing payload: {e}"))
             })?;
         Ok(bytes)
     }
@@ -110,13 +115,13 @@ impl PyTxDetails {
     }
 }
 
-#[pyclass(name = "UnsignedTransactionV0")]
-struct PyUnsignedTransactionV0 {
-    inner: UnsignedTransactionV0,
+#[pyclass(name = "UnsignedTransaction")]
+struct PyUnsignedTransaction {
+    inner: UnsignedTransaction,
 }
 
 #[pymethods]
-impl PyUnsignedTransactionV0 {
+impl PyUnsignedTransaction {
     #[new]
     #[pyo3(signature = (runtime_call, details, uniqueness=None, address_override=None))]
     fn new(
@@ -136,14 +141,14 @@ impl PyUnsignedTransactionV0 {
             })?,
         };
 
-        let unsigned_tx = UnsignedTransactionV0 {
+        let unsigned_tx = UnsignedTransaction {
             runtime_call: call,
             uniqueness,
             details: details.inner.clone(),
             address_override,
         };
 
-        Ok(PyUnsignedTransactionV0 { inner: unsigned_tx })
+        Ok(PyUnsignedTransaction { inner: unsigned_tx })
     }
 
     fn bytes_for_signing(&self, serializer: &PySerializer) -> PyResult<Vec<u8>> {
@@ -207,6 +212,6 @@ impl PyUniquenessData {
 mod py_sovereign_web3 {
     #[pymodule_export]
     use super::{
-        PySerializer, PyTransaction, PyTxDetails, PyUniquenessData, PyUnsignedTransactionV0,
+        PySerializer, PyTransaction, PyTxDetails, PyUniquenessData, PyUnsignedTransaction,
     };
 }

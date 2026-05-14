@@ -4382,7 +4382,7 @@
     },
     {
       "Enum": {
-        "type_name": "UnsignedTransaction",
+        "type_name": "TransactionSigningPayload",
         "variants": [
           {
             "name": "V0",
@@ -4421,7 +4421,7 @@
     },
     {
       "Struct": {
-        "type_name": "UnsignedTransactionV0",
+        "type_name": "TransactionSigningPayloadV0",
         "template": null,
         "peekable": false,
         "fields": [
@@ -4456,6 +4456,19 @@
               "ByIndex": 25
             },
             "doc": ""
+          },
+          {
+            "display_name": "chain_hash",
+            "silent": true,
+            "value": {
+              "Immediate": {
+                "ByteArray": {
+                  "len": 32,
+                  "display": "Hex"
+                }
+              }
+            },
+            "doc": ""
           }
         ]
       }
@@ -4477,7 +4490,7 @@
     },
     {
       "Struct": {
-        "type_name": "UnsignedTransactionV1",
+        "type_name": "TransactionSigningPayloadV1",
         "template": null,
         "peekable": false,
         "fields": [
@@ -4518,6 +4531,19 @@
             "silent": false,
             "value": {
               "ByIndex": 25
+            },
+            "doc": ""
+          },
+          {
+            "display_name": "chain_hash",
+            "silent": true,
+            "value": {
+              "Immediate": {
+                "ByteArray": {
+                  "len": 32,
+                  "display": "Hex"
+                }
+              }
             },
             "doc": ""
           }
@@ -6232,7 +6258,7 @@
       "fields_or_variants": []
     },
     {
-      "name": "UnsignedTransaction",
+      "name": "TransactionSigningPayload",
       "fields_or_variants": [
         {
           "name": "V0"
@@ -6247,7 +6273,7 @@
       "fields_or_variants": []
     },
     {
-      "name": "UnsignedTransactionV0",
+      "name": "TransactionSigningPayloadV0",
       "fields_or_variants": [
         {
           "name": "runtime_call"
@@ -6260,6 +6286,9 @@
         },
         {
           "name": "address_override"
+        },
+        {
+          "name": "chain_hash"
         }
       ]
     },
@@ -6268,7 +6297,7 @@
       "fields_or_variants": []
     },
     {
-      "name": "UnsignedTransactionV1",
+      "name": "TransactionSigningPayloadV1",
       "fields_or_variants": [
         {
           "name": "runtime_call"
@@ -6284,6 +6313,9 @@
         },
         {
           "name": "address_override"
+        },
+        {
+          "name": "chain_hash"
         }
       ]
     }

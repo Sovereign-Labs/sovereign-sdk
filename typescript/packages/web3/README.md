@@ -120,10 +120,10 @@ const simulation = await rollup.simulate(
 
 ```typescript
 import { Multisig } from "@sovereign-sdk/multisig";
-import type { UnsignedTransactionV0 } from "@sovereign-sdk/types";
+import type { UnsignedTransaction } from "@sovereign-sdk/types";
 import { bytesToHex } from "@sovereign-sdk/utils";
 
-const unsignedTx: UnsignedTransactionV0<YourRuntimeCall> =
+const unsignedTx: UnsignedTransaction<YourRuntimeCall> =
   await rollup.buildUnsignedTransaction(runtimeCall, {
     overrides: { uniqueness: { nonce: 1 } },
   });

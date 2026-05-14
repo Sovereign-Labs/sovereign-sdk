@@ -11,9 +11,7 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::transaction::PubKeyAndSignature;
 use sov_modules_api::transaction::TxDetails;
-use sov_modules_api::transaction::{
-    PriorityFeeBips, Transaction, UnsignedTransaction, UnsignedTransactionV0, UnsignedTransactionV1,
-};
+use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::Multisig;
 use sov_modules_api::SkippedTxContents;
@@ -133,7 +131,7 @@ fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
     (runner, admin)
 }
 
-pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransactionV0<RT, S> {
+pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransaction<RT, S> {
     create_utx_with_generation::<S, RT>(message, 0, None)
 }
 
@@ -141,14 +139,14 @@ pub fn create_utx_with_generation<S: Spec, RT: Runtime<S>>(
     message: RT::Decodable,
     generation: u64,
     address_override: Option<S::Address>,
-) -> UnsignedTransactionV0<RT, S> {
+) -> UnsignedTransaction<RT, S> {
     let details = TxDetails {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee: TEST_DEFAULT_MAX_FEE,
         gas_limit: None,
         chain_id: config_value!("CHAIN_ID"),
     };
-    UnsignedTransactionV0::new_with_details(
+    UnsignedTransaction::new_with_details(
         message,
         UniquenessData::Generation(generation),
         details,
@@ -157,21 +155,22 @@ pub fn create_utx_with_generation<S: Spec, RT: Runtime<S>>(
 }
 
 pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
-    utx: &UnsignedTransactionV0<RT, S>,
+    utx: &UnsignedTransaction<RT, S>,
     private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
 ) -> <S::CryptoSpec as CryptoSpec>::Signature {
     let schema = TestSchemaProvider::get_schema();
 
     let transaction_type_index = schema
         .rollup_expected_index(
-            sov_modules_api::sov_universal_wallet::schema::RollupRoots::UnsignedTransaction,
+            sov_modules_api::sov_universal_wallet::schema::RollupRoots::TransactionSigningPayload,
         )
         .unwrap();
 
-    let utx_enum = sov_modules_api::transaction::UnsignedTransaction::<RT, S>::V0(utx.clone());
-    let utx_bytes = borsh::to_vec(&utx_enum).expect("Failed to serialize unsigned transaction");
+    let signing_payload = utx.to_signing_payload_v0(schema.chain_hash().unwrap());
+    let signing_payload_bytes =
+        borsh::to_vec(&signing_payload).expect("Failed to serialize signing payload");
     let eip712_signing_data = schema
-        .eip712_signing_digest(transaction_type_index, &utx_bytes)
+        .eip712_signing_digest(transaction_type_index, &signing_payload_bytes)
         .expect("Failed to calculate EIP712 hash");
 
     private_key.sign(&eip712_signing_data)
@@ -180,39 +179,34 @@ pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
 /// Signs a V1 (multisig) unsigned transaction with the given private key using EIP712.
 /// The credential_address is computed from the provided multisig.
 pub fn sign_utx_v1_in_place<S: Spec, RT: Runtime<S>>(
-    utx: &UnsignedTransactionV0<RT, S>,
+    utx: &UnsignedTransaction<RT, S>,
     multisig: &Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
-    address_override: Option<S::Address>,
     private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
 ) -> <S::CryptoSpec as CryptoSpec>::Signature {
     let schema = TestSchemaProvider::get_schema();
 
     let transaction_type_index = schema
         .rollup_expected_index(
-            sov_modules_api::sov_universal_wallet::schema::RollupRoots::UnsignedTransaction,
+            sov_modules_api::sov_universal_wallet::schema::RollupRoots::TransactionSigningPayload,
         )
         .unwrap();
 
     let credential_address: S::Address = multisig
         .credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>()
         .into();
-    let utx_enum = UnsignedTransaction::<RT, S>::V1(UnsignedTransactionV1 {
-        runtime_call: utx.runtime_call.clone(),
-        uniqueness: utx.uniqueness,
-        details: utx.details.clone(),
-        credential_address,
-        address_override,
-    });
-    let utx_bytes = borsh::to_vec(&utx_enum).expect("Failed to serialize unsigned transaction");
+    let signing_payload =
+        utx.to_signing_payload_v1(credential_address, schema.chain_hash().unwrap());
+    let signing_payload_bytes =
+        borsh::to_vec(&signing_payload).expect("Failed to serialize signing payload");
     let eip712_signing_data = schema
-        .eip712_signing_digest(transaction_type_index, &utx_bytes)
+        .eip712_signing_digest(transaction_type_index, &signing_payload_bytes)
         .expect("Failed to calculate EIP712 hash");
 
     private_key.sign(&eip712_signing_data)
 }
 
 pub fn sign_utx<S: Spec, RT: Runtime<S>>(
-    utx: UnsignedTransactionV0<RT, S>,
+    utx: UnsignedTransaction<RT, S>,
     signer: &TestUser<S>,
 ) -> Transaction<RT, S> {
     let signature = sign_utx_in_place(&utx, signer.private_key());
@@ -318,10 +312,9 @@ fn test_multisig_signature_verification() {
         );
         let signatures = multisig_keys
             .iter()
-            .map(|key| sign_utx_v1_in_place(&utx, &multisig, address_override, key))
+            .map(|key| sign_utx_v1_in_place(&utx, &multisig, key))
             .collect::<Vec<_>>();
-        let random_signature =
-            sign_utx_v1_in_place(&utx, &multisig, address_override, &random_private_key);
+        let random_signature = sign_utx_v1_in_place(&utx, &multisig, &random_private_key);
 
         (
             utx.to_multisig_tx(multisig.clone()),

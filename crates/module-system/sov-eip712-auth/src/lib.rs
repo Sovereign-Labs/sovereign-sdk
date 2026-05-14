@@ -270,29 +270,38 @@ fn get_eip712_hash<
     tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
     raw_tx_hash: TxHash,
 ) -> Result<Eip712Hash, AuthenticationError> {
-    // Convert the transaction to unsigned transaction (removes signature)
-    let unsigned_tx = tx.as_unsigned_transaction();
-
-    // Serialize the unsigned transaction - this is what should be signed
-    let unsigned_tx_bytes = borsh::to_vec(&unsigned_tx).map_err(|e| {
+    // Use the schema provider to get the schema and calculate the EIP712 signing hash.
+    let schema = SP::get_schema();
+    let chain_hash = schema.chain_hash().map_err(|e| {
         AuthenticationError::FatalError(
             FatalError::SigVerificationFailed(format!(
-                "Failed to serialize unsigned transaction: {e}"
+                "Failed to calculate chain hash from schema: {e}"
             )),
             raw_tx_hash,
         )
     })?;
 
-    // Use the schema provider to get the schema and calculate the EIP712 signing hash
-    let schema = SP::get_schema();
-    let transaction_type_index = schema.rollup_expected_index(sov_modules_api::sov_universal_wallet::schema::RollupRoots::UnsignedTransaction)
+    // Convert the transaction to the payload whose Borsh serialization is transformed into
+    // EIP-712 typed data.
+    let signing_payload = tx.to_signing_payload(chain_hash);
+
+    let signing_payload_bytes = borsh::to_vec(&signing_payload).map_err(|e| {
+        AuthenticationError::FatalError(
+            FatalError::SigVerificationFailed(format!(
+                "Failed to serialize transaction signing payload: {e}"
+            )),
+            raw_tx_hash,
+        )
+    })?;
+
+    let transaction_type_index = schema.rollup_expected_index(sov_modules_api::sov_universal_wallet::schema::RollupRoots::TransactionSigningPayload)
          .map_err(|e| AuthenticationError::FatalError(
-             FatalError::SigVerificationFailed(format!("Cannot verify EIP712 signature. Failed to get UnsignedTransaction type from schema: {e}")),
+             FatalError::SigVerificationFailed(format!("Cannot verify EIP712 signature. Failed to get TransactionSigningPayload type from schema: {e}")),
              raw_tx_hash,
          ))?;
 
     let eip712_hash = schema
-        .eip712_signing_digest(transaction_type_index, &unsigned_tx_bytes)
+        .eip712_signing_digest(transaction_type_index, &signing_payload_bytes)
         .map_err(|e| {
             AuthenticationError::FatalError(
                 FatalError::SigVerificationFailed(format!("Failed to calculate EIP712 hash: {e}")),

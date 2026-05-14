@@ -18,42 +18,44 @@ const TEST_PUBLIC_KEY = secp.getPublicKey(
 
 const schema = Schema.fromJSON(JSON.stringify(demoRollupSchema));
 
-// Sample unsigned transaction for testing
-const sampleUnsignedTx = {
-  runtime_call: {
-    bank: {
-      transfer: {
-        to: {
-          Standard: "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
-        },
-        coins: {
-          amount: "1000",
-          token_id:
-            "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6",
+// Sample transaction signing payload for testing
+const sampleSigningPayload = {
+  V0: {
+    runtime_call: {
+      bank: {
+        transfer: {
+          to: {
+            Standard: "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
+          },
+          coins: {
+            amount: "1000",
+            token_id:
+              "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6",
+          },
         },
       },
     },
+    uniqueness: { generation: "12345" },
+    details: {
+      max_priority_fee_bips: "1000",
+      max_fee: "10000",
+      gas_limit: null,
+      chain_id: "1",
+    },
+    address_override: null,
+    chain_hash: Array.from(schema.chainHash),
   },
-  uniqueness: { generation: "12345" },
-  details: {
-    max_priority_fee_bips: "1000",
-    max_fee: "10000",
-    gas_limit: null,
-    chain_id: "1",
-  },
-  address_override: null,
 };
 
 /**
  * Creates the message that would be passed to signer.sign().
- * This is what rollup.signTransaction() does - serialize unsigned tx and append chain hash.
+ * This is what rollup.signTransaction() does: serialize the signing payload.
  */
 function createTestMessage(): Uint8Array {
-  const unsignedTxBorsh = schema.jsonToBorsh(
-    schema.knownTypeIndex(KnownTypeId.UnsignedTransaction),
-    JSON.stringify({ V0: sampleUnsignedTx }),
+  return schema.jsonToBorsh(
+    schema.knownTypeIndex(KnownTypeId.TransactionSigningPayload),
+    JSON.stringify(sampleSigningPayload),
   );
-  return new Uint8Array([...unsignedTxBorsh, ...schema.chainHash]);
 }
 
 /**
@@ -69,7 +71,7 @@ function parseTypedDataForViem(typedDataJson: string) {
   return {
     domain: { ...typedData.domain, chainId },
     types: typesWithoutDomain,
-    primaryType: typedData.primaryType as "UnsignedTransaction",
+    primaryType: typedData.primaryType as "TransactionSigningPayload",
     message: typedData.message,
   };
 }
@@ -134,7 +136,7 @@ describe("Eip712Signer", () => {
   });
 
   describe("sign", () => {
-    it("should throw error if message is too short for chain hash", async () => {
+    it("should throw error if message cannot be decoded", async () => {
       const signer = new Eip712Signer(
         mockProvider as any,
         demoRollupSchema,
@@ -142,7 +144,7 @@ describe("Eip712Signer", () => {
       );
       const shortMessage = new Uint8Array([1, 2, 3]);
       await expect(signer.sign(shortMessage)).rejects.toThrow(
-        "Message too short, expected at least 32 bytes for chain hash",
+        "Failed to generate EIP-712 JSON from message",
       );
     });
 

@@ -4,17 +4,14 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::UniversalWallet;
-use sov_modules_api::transaction::{
-    TransactionCallable, TxDetails, UnsignedTransaction, UnsignedTransactionV0,
-    UnsignedTransactionV1,
-};
+use sov_modules_api::transaction::{TransactionCallable, TxDetails, UnsignedTransaction};
 use sov_modules_api::{SafeString, Spec};
 
 /// The payload for a solana offchain message.
-/// Essentially a wrapper around `sov_modules_api::transaction::UnsignedTransactionV0` that also
+/// Essentially a wrapper around `sov_modules_api::transaction::UnsignedTransaction` that also
 /// includes the chain_name, in order to ensure the name gets displayed to the user and signed as
 /// part of the message.
-/// We duplicate the UnsignedTransactionV0 type rather than wrapping it to ensure the JSON displayed
+/// We duplicate the UnsignedTransaction type rather than wrapping it to ensure the JSON displayed
 /// to the user doesn't get too nested.
 #[serde_with::serde_as]
 #[derive(Debug, Serialize, Deserialize, UniversalWallet)]
@@ -46,12 +43,12 @@ where
     <R as TransactionCallable>::Call: Serialize + DeserializeOwned,
 {
     pub(super) fn into_unsigned_tx(self) -> UnsignedTransaction<R, S> {
-        UnsignedTransaction::V0(UnsignedTransactionV0 {
+        UnsignedTransaction {
             runtime_call: self.runtime_call,
             uniqueness: self.uniqueness,
             details: self.details,
             address_override: self.address_override,
-        })
+        }
     }
 
     pub(super) fn unmetered_deserialize(buf: &[u8]) -> Result<Self, serde_json::Error> {
@@ -111,13 +108,12 @@ where
     <R as TransactionCallable>::Call: Serialize + DeserializeOwned,
 {
     pub(super) fn into_unsigned_tx(self) -> UnsignedTransaction<R, S> {
-        UnsignedTransaction::V1(UnsignedTransactionV1 {
+        UnsignedTransaction {
             runtime_call: self.runtime_call,
             uniqueness: self.uniqueness,
             details: self.details,
-            credential_address: self.multisig_id,
             address_override: self.address_override,
-        })
+        }
     }
 
     pub(super) fn unmetered_deserialize(buf: &[u8]) -> Result<Self, serde_json::Error> {

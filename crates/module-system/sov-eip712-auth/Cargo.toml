@@ -29,6 +29,9 @@ jsonrpsee = { workspace = true, features = ["jsonrpsee-types"] }
 # but in that case the dependency is almost certainly already present:
 serde_json = { workspace = true } 
 
+[dev-dependencies]
+sov-eip712-auth = { path = ".", features = ["native"] }
+
 [features]
 native = [
 	"sov-modules-api/native",

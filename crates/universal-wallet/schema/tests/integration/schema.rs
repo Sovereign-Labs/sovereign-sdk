@@ -1540,7 +1540,7 @@ fn test_multiobject_schema() {
         schema
             .display(
                 schema
-                    .rollup_expected_index(RollupRoots::UnsignedTransaction)
+                    .rollup_expected_index(RollupRoots::TransactionSigningPayload)
                     .unwrap(),
                 &struct_borsh_ser
             )
@@ -1551,7 +1551,7 @@ fn test_multiobject_schema() {
         schema
             .json_to_borsh(
                 schema
-                    .rollup_expected_index(RollupRoots::UnsignedTransaction)
+                    .rollup_expected_index(RollupRoots::TransactionSigningPayload)
                     .unwrap(),
                 &struct_json
             )

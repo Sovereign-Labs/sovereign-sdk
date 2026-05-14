@@ -4,7 +4,7 @@ import { type Signer, isLedgerSolanaSigner } from "@sovereign-sdk/signers";
 import type {
   Transaction,
   TransactionV1,
-  UnsignedTransactionV0,
+  UnsignedTransaction,
 } from "@sovereign-sdk/types";
 import type { HexString } from "@sovereign-sdk/utils";
 import {
@@ -26,7 +26,7 @@ import {
 } from "./standard-rollup";
 
 export type SolanaOffchainUnsignedTransaction<RuntimeCall> = Omit<
-  UnsignedTransactionV0<RuntimeCall>,
+  UnsignedTransaction<RuntimeCall>,
   "address_override"
 > & {
   chain_name: string;
@@ -247,7 +247,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    */
   private async buildTransactionResult(
     response: SovereignClient.Sequencer.TxCreateResponse,
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     pubkey: Uint8Array,
     signature: Uint8Array,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
@@ -311,7 +311,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Helper to create and serialize a SolanaOffchainUnsignedTransaction to JSON bytes.
    */
   private async createSolanaJsonBytes(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
   ): Promise<Uint8Array> {
     const serializer = await this.inner.serializer();
     const schema = serializer.schema;
@@ -337,7 +337,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Returns the transaction result in the same format as standard rollup.
    */
   private async signWithSolanaSimpleAndSubmit(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     signer: Signer,
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
@@ -365,7 +365,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Returns the transaction result in the same format as standard rollup.
    */
   private async signWithSolanaSpecAndSubmit(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     signer: Signer,
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
@@ -409,7 +409,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     params: {
       signer: Signer;
       authenticator: Authenticator;
-      overrides?: DeepPartial<UnsignedTransactionV0<RuntimeCall>>;
+      overrides?: DeepPartial<UnsignedTransaction<RuntimeCall>>;
     },
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
@@ -469,7 +469,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * @returns The transaction result
    */
   async signAndSubmitTransaction(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     params: { signer: Signer; authenticator: Authenticator },
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
@@ -506,8 +506,8 @@ export class SolanaSignableRollup<RuntimeCall> {
 
   async buildUnsignedTransaction(
     runtimeCall: RuntimeCall,
-    params?: { overrides?: DeepPartial<UnsignedTransactionV0<RuntimeCall>> },
-  ): Promise<UnsignedTransactionV0<RuntimeCall>> {
+    params?: { overrides?: DeepPartial<UnsignedTransaction<RuntimeCall>> },
+  ): Promise<UnsignedTransaction<RuntimeCall>> {
     return this.inner.buildUnsignedTransaction(runtimeCall, params);
   }
 
@@ -516,7 +516,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * The resulting JSON is what each signer signs directly (no discriminator prefix).
    */
   private async createMultisigJsonBytes(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisigId: unknown,
   ): Promise<Uint8Array> {
     const serializer = await this.inner.serializer();
@@ -591,7 +591,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    */
   private unsignedTxFromTransaction(
     tx: TransactionV1<RuntimeCall>["V1"],
-  ): UnsignedTransactionV0<RuntimeCall> {
+  ): UnsignedTransaction<RuntimeCall> {
     return {
       runtime_call: tx.runtime_call,
       uniqueness: tx.uniqueness,
@@ -604,7 +604,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Creates the preamble+JSON bytes signed by every signer in a spec-compliant multisig flow.
    */
   private async createSpecCompliantMultisigSignedMessage(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisig: Multisig,
   ): Promise<Uint8Array> {
     const jsonBytes = await this.createMultisigJsonBytes(
@@ -622,7 +622,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   async multisigSigningBytes(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisig: Multisig,
     authenticator: SubmissionAuthenticator,
   ): Promise<Uint8Array> {
@@ -791,7 +791,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     authenticator: Exclude<SubmissionAuthenticator, "standard">,
     options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
-    const unsignedTx: UnsignedTransactionV0<RuntimeCall> = {
+    const unsignedTx: UnsignedTransaction<RuntimeCall> = {
       runtime_call: transaction.runtime_call,
       uniqueness: transaction.uniqueness,
       details: transaction.details,

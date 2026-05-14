@@ -10,6 +10,7 @@ This package provides TypeScript type definitions for working with "standard" So
 While Sovereign SDK supports this level of customization, most rollups will use a common set of primitives. This package provides type definitions for these standard components (and more):
 
 - `UnsignedTransaction` - Standard unsigned transaction format
+- `TransactionSigningPayload` - Versioned payload serialized for signatures
 - `Transaction` - Standard signed transaction format
 
 These types work out-of-the-box with the default Sovereign SDK rollup configuration and are compatible with the other packages in this monorepo (`@sovereign-sdk/web3`, `@sovereign-sdk/signers`, etc.).
@@ -19,11 +20,11 @@ These types work out-of-the-box with the default Sovereign SDK rollup configurat
 ```typescript
 import type {
   Transaction,
+  TransactionSigningPayload,
   UnsignedTransaction,
-  UnsignedTransactionV0,
 } from "@sovereign-sdk/types";
 
-const unsignedTxV0: UnsignedTransactionV0<YourRuntimeCall> = {
+const unsignedTx: UnsignedTransaction<YourRuntimeCall> = {
   runtime_call: {
     // Your rollup-specific call data
   },
@@ -36,15 +37,18 @@ const unsignedTxV0: UnsignedTransactionV0<YourRuntimeCall> = {
   },
 };
 
-const signingEnvelope: UnsignedTransaction<YourRuntimeCall, string> = {
-  V0: unsignedTxV0,
+const signingPayload: TransactionSigningPayload<YourRuntimeCall, string> = {
+  V0: {
+    ...unsignedTx,
+    chain_hash: Array.from(chainHash),
+  },
 };
 
 const signedTx: Transaction<YourRuntimeCall> = {
   V0: {
     pub_key: "deadbeef",
     signature: "cafebabe",
-    ...unsignedTxV0,
+    ...unsignedTx,
   },
 };
 ```

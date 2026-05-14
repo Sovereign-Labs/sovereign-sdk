@@ -22,7 +22,7 @@ use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::default_spec::{DefaultNomtSpec, DefaultSpec};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{
-    PriorityFeeBips, Transaction, TransactionCallable, TxDetails, UnsignedTransactionV0,
+    PriorityFeeBips, Transaction, TransactionCallable, TxDetails, UnsignedTransaction,
 };
 use sov_modules_api::{Amount, BasicGasMeter, CryptoSpec, Gas, GasArray, Spec};
 pub use sov_modules_api::{EncodeCall, TxProcessingError, TxReceiptContents};
@@ -252,7 +252,7 @@ pub fn test_signed_transaction<T: TransactionCallable, S: Spec>(
     Transaction::<T, S>::new_signed_tx(
         key,
         chain_hash,
-        UnsignedTransactionV0::new(
+        UnsignedTransaction::new(
             msg.clone(),
             tx_details.chain_id,
             tx_details.max_priority_fee_bips,

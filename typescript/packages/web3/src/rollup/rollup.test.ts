@@ -14,7 +14,7 @@ import {
 const mockSerializer = {
   serialize: vi.fn().mockReturnValue(new Uint8Array([1, 2, 3])),
   serializeRuntimeCall: vi.fn().mockReturnValue(new Uint8Array([4, 5, 6])),
-  serializeUnsignedTx: vi.fn().mockReturnValue(new Uint8Array([7, 8, 9])),
+  serializeSigningPayload: vi.fn().mockReturnValue(new Uint8Array([7, 8, 9])),
   serializeTx: vi.fn().mockReturnValue(new Uint8Array([10, 11, 12])),
   schema: { chainHash: new Uint8Array([1, 2, 3, 4]) } as any,
 };
@@ -248,11 +248,8 @@ describe("Rollup", () => {
 
       await rollup.signAndSubmitTransaction(unsignedTx, { signer: mockSigner });
 
-      // should be called with (serialized tx ++ chain hash)
-      expect(mockSigner.sign).toHaveBeenCalledWith(
-        new Uint8Array([7, 8, 9, 1, 2, 3, 4]),
-      );
-      expect(mockSerializer.serializeUnsignedTx).toHaveBeenCalledWith(
+      expect(mockSigner.sign).toHaveBeenCalledWith(new Uint8Array([7, 8, 9]));
+      expect(mockSerializer.serializeSigningPayload).toHaveBeenCalledWith(
         unsignedTx,
       );
     });

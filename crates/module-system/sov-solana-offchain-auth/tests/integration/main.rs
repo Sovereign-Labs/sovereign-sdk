@@ -14,7 +14,7 @@ use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
 use sov_mock_zkvm::crypto::Ed25519Signature;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
-use sov_modules_api::transaction::{PubKeyAndSignature, Transaction, UnsignedTransactionV0};
+use sov_modules_api::transaction::{PubKeyAndSignature, Transaction, UnsignedTransaction};
 use sov_modules_api::{prelude::*, Base58Address, PrivateKey, SafeVec};
 use sov_modules_api::{CryptoSpec, FullyBakedTx, RawTx, Runtime, Spec};
 use sov_modules_stf_blueprint::GenesisParams;
@@ -235,7 +235,7 @@ fn create_transfer_tx_json_with_address_override(
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
-    let unsigned_tx = UnsignedTransactionV0::<RT, S>::new(
+    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         msg,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -523,7 +523,7 @@ fn create_multisig_transfer_tx_json(
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
-    let unsigned_tx = UnsignedTransactionV0::<RT, S>::new(
+    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         msg,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -1319,7 +1319,7 @@ fn build_v1_payload(
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
-    let unsigned_tx = UnsignedTransactionV0::<RT, S>::new(
+    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         call,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -1542,7 +1542,7 @@ fn build_v0_payload(
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
-    let unsigned_tx = UnsignedTransactionV0::<RT, S>::new(
+    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         call,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
