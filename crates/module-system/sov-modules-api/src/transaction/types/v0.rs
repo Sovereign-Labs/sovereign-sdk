@@ -4,8 +4,7 @@ use sov_universal_wallet::UniversalWallet;
 
 use crate::capabilities::{AuthenticationError, AuthorizationData, UniquenessData};
 use crate::transaction::{
-    hex_field_format, Credentials, Transaction, TransactionCallable, TransactionSigningPayload,
-    UnsignedTransaction,
+    hex_field_format, Credentials, Transaction, TransactionCallable, UnsignedTransaction,
 };
 use crate::{metered_credential, CryptoSpecExt, GasMeter, Spec, TxHash};
 
@@ -58,10 +57,10 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
         )
     }
 
-    /// Derives the transaction signing payload from this signed envelope.
-    pub fn to_signing_payload(&self, chain_hash: [u8; 32]) -> TransactionSigningPayload<R, S> {
+    /// Serializes the V0 transaction signing payload for this signed envelope.
+    pub fn to_signing_bytes(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
         self.to_unsigned_transaction()
-            .to_signing_payload_v0(chain_hash)
+            .to_signing_bytes_v0(*chain_hash)
     }
 
     /// Extracts authorization data from this transaction.

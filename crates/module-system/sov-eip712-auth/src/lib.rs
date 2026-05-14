@@ -281,18 +281,9 @@ fn get_eip712_hash<
         )
     })?;
 
-    // Convert the transaction to the payload whose Borsh serialization is transformed into
+    // Convert the transaction to the canonical signing bytes that are transformed into
     // EIP-712 typed data.
-    let signing_payload = tx.to_signing_payload(chain_hash);
-
-    let signing_payload_bytes = borsh::to_vec(&signing_payload).map_err(|e| {
-        AuthenticationError::FatalError(
-            FatalError::SigVerificationFailed(format!(
-                "Failed to serialize transaction signing payload: {e}"
-            )),
-            raw_tx_hash,
-        )
-    })?;
+    let signing_payload_bytes = tx.to_signing_bytes(&chain_hash);
 
     let transaction_type_index = schema.rollup_expected_index(sov_modules_api::sov_universal_wallet::schema::RollupRoots::TransactionSigningPayload)
          .map_err(|e| AuthenticationError::FatalError(

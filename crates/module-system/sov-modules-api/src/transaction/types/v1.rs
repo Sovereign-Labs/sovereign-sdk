@@ -1,7 +1,6 @@
 use crate::capabilities::{AuthenticationError, AuthorizationData, UniquenessData};
 use crate::transaction::{
-    Credentials, Transaction, TransactionCallable, TransactionSigningPayload, TxDetails,
-    UnsignedTransaction,
+    Credentials, Transaction, TransactionCallable, TxDetails, UnsignedTransaction,
 };
 use crate::{CryptoSpecExt, GasMeter, GasSpec, Multisig, Spec, TxHash};
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -118,10 +117,11 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
         )
     }
 
-    /// Derives the transaction signing payload from this signed envelope.
-    pub fn to_signing_payload(&self, chain_hash: [u8; 32]) -> TransactionSigningPayload<R, S> {
+    /// Serializes the V1 transaction signing payload for this signed envelope.
+    pub fn to_signing_bytes(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
         self.to_unsigned_transaction()
-            .to_signing_payload_v1(self.credential_address(), chain_hash)
+            .signing_payload_v1_with_credential(self.credential_address(), *chain_hash)
+            .to_bytes()
     }
 }
 
@@ -129,7 +129,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
     /// Signs the transaction with the given key but does not add the signature to the list in the transaction.
     #[cfg(feature = "native")]
     pub fn sign_without_adding(&self, key: &C::PrivateKey, chain_hash: &[u8; 32]) -> C::Signature {
-        key.sign(&self.signing_bytes(chain_hash))
+        key.sign(&self.to_signing_bytes(chain_hash))
     }
 
     /// Signs and adds the signature to the transaction.
@@ -137,11 +137,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
     pub fn sign(&mut self, key: &C::PrivateKey, chain_hash: &[u8; 32]) -> anyhow::Result<()> {
         let signature = self.sign_without_adding(key, chain_hash);
         self.add_signature(signature, key.pub_key())
-    }
-
-    /// Serializes the transaction signing payload, producing the bytes to be signed.
-    pub fn signing_bytes(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
-        self.to_signing_payload(*chain_hash).signing_bytes()
     }
 
     /// Adds a signature to the signing set of the multisig, removing the public key from the set of unused pub keys.

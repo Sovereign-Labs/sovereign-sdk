@@ -95,8 +95,7 @@ fn test_display_unsigned_tx() {
         chain_name: "TestChain".to_string(),
     })
     .unwrap();
-    let signing_payload = unsigned_tx.to_signing_payload_v0(schema.chain_hash().unwrap());
-    let signing_payload_data = borsh::to_vec(&signing_payload).unwrap();
+    let signing_payload_data = unsigned_tx.to_signing_bytes_v0(schema.chain_hash().unwrap());
     assert_eq!(
         schema
             .display(

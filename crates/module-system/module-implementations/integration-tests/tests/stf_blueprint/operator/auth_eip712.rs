@@ -166,9 +166,7 @@ pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
         )
         .unwrap();
 
-    let signing_payload = utx.to_signing_payload_v0(schema.chain_hash().unwrap());
-    let signing_payload_bytes =
-        borsh::to_vec(&signing_payload).expect("Failed to serialize signing payload");
+    let signing_payload_bytes = utx.to_signing_bytes_v0(schema.chain_hash().unwrap());
     let eip712_signing_data = schema
         .eip712_signing_digest(transaction_type_index, &signing_payload_bytes)
         .expect("Failed to calculate EIP712 hash");
@@ -191,13 +189,7 @@ pub fn sign_utx_v1_in_place<S: Spec, RT: Runtime<S>>(
         )
         .unwrap();
 
-    let credential_address: S::Address = multisig
-        .credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>()
-        .into();
-    let signing_payload =
-        utx.to_signing_payload_v1(credential_address, schema.chain_hash().unwrap());
-    let signing_payload_bytes =
-        borsh::to_vec(&signing_payload).expect("Failed to serialize signing payload");
+    let signing_payload_bytes = utx.to_signing_bytes_v1(multisig, schema.chain_hash().unwrap());
     let eip712_signing_data = schema
         .eip712_signing_digest(transaction_type_index, &signing_payload_bytes)
         .expect("Failed to calculate EIP712 hash");

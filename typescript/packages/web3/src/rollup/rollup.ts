@@ -294,10 +294,13 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
     return this.signTransaction(unsignedTx, signer);
   }
 
-  protected async toSigningPayload(
+  protected async toSigningBytes(
     unsignedTx: S["UnsignedTransaction"],
-  ): Promise<S["TransactionSigningPayload"]> {
-    return unsignedTx as unknown as S["TransactionSigningPayload"];
+  ): Promise<Uint8Array> {
+    const serializer = await this.serializer();
+    return serializer.serializeSigningPayload(
+      unsignedTx as unknown as S["TransactionSigningPayload"],
+    );
   }
 
   /**
@@ -313,9 +316,7 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
     unsignedTx: S["UnsignedTransaction"],
     signer: Signer,
   ): Promise<S["Transaction"]> {
-    const serializer = await this.serializer();
-    const signingPayload = await this.toSigningPayload(unsignedTx);
-    const signingBytes = serializer.serializeSigningPayload(signingPayload);
+    const signingBytes = await this.toSigningBytes(unsignedTx);
     const signature = await signer.sign(signingBytes);
     const publicKey = await signer.publicKey();
     const context = {

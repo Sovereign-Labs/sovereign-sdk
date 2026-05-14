@@ -66,7 +66,7 @@ impl<R: TransactionCallable, S: Spec> Eq for TransactionSigningPayload<R, S> {}
 impl<R: TransactionCallable, S: Spec> TransactionSigningPayload<R, S> {
     /// Serializes the signing payload, producing the bytes used for signing and
     /// signature verification.
-    pub fn signing_bytes(&self) -> Vec<u8> {
+    pub fn to_bytes(&self) -> Vec<u8> {
         borsh::to_vec(self).expect("Serialization to vec is infallible")
     }
 

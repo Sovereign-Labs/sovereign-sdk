@@ -379,12 +379,7 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<Vec<u8>, AuthenticationError> {
-    let serialized_tx = tx.signing_bytes(chain_hash).map_err(|e| {
-        AuthenticationError::FatalError(
-            FatalError::DeserializationFailed(e.to_string()),
-            raw_tx_hash,
-        )
-    })?;
+    let serialized_tx = tx.to_signing_bytes(chain_hash);
 
     tx.charge_gas_for_signature(serialized_tx.len(), meter)
         .map_err(|e| match e {

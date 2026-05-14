@@ -174,8 +174,8 @@ fn send_tx_bad_generation_duplicate_with_malleated_v1_envelope() {
     malleated_tx.unused_pub_keys.swap(0, 1);
 
     assert_eq!(
-        original_tx.signing_bytes(&RT::CHAIN_HASH),
-        malleated_tx.signing_bytes(&RT::CHAIN_HASH),
+        original_tx.to_signing_bytes(&RT::CHAIN_HASH),
+        malleated_tx.to_signing_bytes(&RT::CHAIN_HASH),
         "The signable payload should be unchanged by V1 envelope malleation"
     );
     assert_ne!(

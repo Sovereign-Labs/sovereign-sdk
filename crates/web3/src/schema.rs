@@ -375,6 +375,8 @@ pub struct TransactionSigningPayloadV0 {
     pub uniqueness: UniquenessData,
     /// Transaction execution details including fees and gas limits.
     pub details: TxDetails,
+    /// Optional address override for execution; null uses default routing.
+    pub address_override: Option<String>,
     /// Chain hash binding the signature to the rollup schema and metadata.
     pub chain_hash: [u8; 32],
 }
@@ -396,18 +398,19 @@ impl From<TransactionSigningPayloadV0> for TransactionSigningPayload {
 }
 
 impl UnsignedTransaction {
-    pub fn to_signing_payload_v0(&self, chain_hash: [u8; 32]) -> TransactionSigningPayload {
+    fn signing_payload_v0(&self, chain_hash: [u8; 32]) -> TransactionSigningPayload {
         TransactionSigningPayload::V0(TransactionSigningPayloadV0 {
             runtime_call: self.runtime_call.clone(),
             uniqueness: self.uniqueness,
             details: self.details.clone(),
+            address_override: self.address_override.clone(),
             chain_hash,
         })
     }
 
     pub fn bytes_for_signing(&self, serializer: &Serializer) -> Result<Vec<u8>, SerializerError> {
         let chain_hash = serializer.chain_hash()?;
-        serializer.serialize_signing_payload(&self.to_signing_payload_v0(chain_hash))
+        serializer.serialize_signing_payload(&self.signing_payload_v0(chain_hash))
     }
 
     pub fn to_signed(&self, pub_key: Vec<u8>, signature: Vec<u8>) -> Transaction {

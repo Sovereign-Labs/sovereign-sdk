@@ -36,14 +36,9 @@ impl PySerializer {
     }
 
     fn serialize_signing_payload(&self, unsigned_tx: &PyUnsignedTransaction) -> PyResult<Vec<u8>> {
-        let chain_hash = self
+        let bytes = unsigned_tx
             .inner
-            .chain_hash()
-            .map_err(|e| PyValueError::new_err(format!("Failed to get chain hash: {e}")))?;
-        let signing_payload = unsigned_tx.inner.to_signing_payload_v0(chain_hash);
-        let bytes = self
-            .inner
-            .serialize_signing_payload(&signing_payload)
+            .bytes_for_signing(&self.inner)
             .map_err(|e| {
                 PyValueError::new_err(format!("Failed to serialize signing payload: {e}"))
             })?;

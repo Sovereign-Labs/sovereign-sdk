@@ -106,9 +106,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         chain_hash: &[u8; 32],
         unsigned_tx: UnsignedTransaction<R, S>,
     ) -> Self {
-        let signing_bytes = unsigned_tx
-            .to_signing_payload_v0(*chain_hash)
-            .signing_bytes();
+        let signing_bytes = unsigned_tx.to_signing_bytes_v0(*chain_hash);
 
         let pub_key = priv_key.pub_key();
         let signature = priv_key.sign(&signing_bytes);
@@ -194,21 +192,13 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         })
     }
 
-    /// Derives the transaction signing payload using the runtime's chain hash.
-    pub fn to_signing_payload(&self, chain_hash: [u8; 32]) -> TransactionSigningPayload<R, S> {
-        match &self {
-            Transaction::V0(inner) => inner.to_signing_payload(chain_hash),
-            Transaction::V1(inner) => inner.to_signing_payload(chain_hash),
-        }
-    }
-
-    /// Serialize the transaction signing payload.
+    /// Serializes the transaction signing payload.
     /// This is the standard serialization for Sovereign signature signing.
-    pub fn signing_bytes(
-        &self,
-        chain_hash: &[u8; 32],
-    ) -> Result<Vec<u8>, TransactionVerificationError<S::Gas>> {
-        Ok(self.to_signing_payload(*chain_hash).signing_bytes())
+    pub fn to_signing_bytes(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
+        match &self {
+            Transaction::V0(inner) => inner.to_signing_bytes(chain_hash),
+            Transaction::V1(inner) => inner.to_signing_bytes(chain_hash),
+        }
     }
 
     /// Charge gas for verifying the transaction signature against the given message.

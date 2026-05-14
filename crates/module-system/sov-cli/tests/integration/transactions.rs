@@ -106,7 +106,7 @@ fn transaction_is_serialized_correctly() {
             ),
         );
 
-        tx.verify_signature_unmetered(&tx.signing_bytes(&chain_hash).unwrap())
+        tx.verify_signature_unmetered(&tx.to_signing_bytes(&chain_hash))
             .expect("the computed signature is incorrect");
 
         assert_eq!(
@@ -194,9 +194,7 @@ fn transaction_signed_properly_from_file() {
         Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
     signed_tx
         .verify_signature_unmetered(
-            &signed_tx
-                .signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
-                .unwrap(),
+            &signed_tx.to_signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH),
         )
         .unwrap();
 
@@ -250,9 +248,7 @@ fn transaction_signed_properly_from_json_string() {
         Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
     signed_tx
         .verify_signature_unmetered(
-            &signed_tx
-                .signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
-                .unwrap(),
+            &signed_tx.to_signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH),
         )
         .unwrap();
     assert_eq!(&runtime_call, signed_tx.runtime_call());
@@ -312,9 +308,7 @@ fn transaction_signed_by_account_nickname() {
         Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
     signed_tx
         .verify_signature_unmetered(
-            &signed_tx
-                .signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
-                .unwrap(),
+            &signed_tx.to_signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH),
         )
         .unwrap();
 
@@ -372,9 +366,7 @@ fn transaction_outputs_json() {
         Transaction::unmetered_deserialize(&mut raw_signed_tx).unwrap();
     signed_tx
         .verify_signature_unmetered(
-            &signed_tx
-                .signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
-                .unwrap(),
+            &signed_tx.to_signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH),
         )
         .unwrap();
 }

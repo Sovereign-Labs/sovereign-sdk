@@ -146,8 +146,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
         }
     }
 
-    /// Derives a V0 transaction signing payload from this unsigned transaction.
-    pub fn to_signing_payload_v0(&self, chain_hash: [u8; 32]) -> TransactionSigningPayload<R, S> {
+    fn signing_payload_v0(&self, chain_hash: [u8; 32]) -> TransactionSigningPayload<R, S> {
         TransactionSigningPayload::V0(TransactionSigningPayloadV0 {
             runtime_call: self.runtime_call.clone(),
             uniqueness: self.uniqueness,
@@ -157,8 +156,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
         })
     }
 
-    /// Derives a V1 transaction signing payload from this unsigned transaction.
-    pub fn to_signing_payload_v1(
+    pub(crate) fn signing_payload_v1_with_credential(
         &self,
         credential_address: S::Address,
         chain_hash: [u8; 32],
@@ -171,6 +169,24 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
             address_override: self.address_override,
             chain_hash,
         })
+    }
+
+    /// Serializes the V0 transaction signing payload for this unsigned transaction.
+    pub fn to_signing_bytes_v0(&self, chain_hash: [u8; 32]) -> Vec<u8> {
+        self.signing_payload_v0(chain_hash).to_bytes()
+    }
+
+    /// Serializes the V1 transaction signing payload for this unsigned transaction.
+    pub fn to_signing_bytes_v1(
+        &self,
+        multisig: &Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
+        chain_hash: [u8; 32],
+    ) -> Vec<u8> {
+        let credential_address = multisig
+            .credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>()
+            .into();
+        self.signing_payload_v1_with_credential(credential_address, chain_hash)
+            .to_bytes()
     }
 
     /// Returns a reference to the runtime call.

@@ -110,15 +110,18 @@ export class StandardRollup<RuntimeCall> extends Rollup<
   StandardRollupSpec<RuntimeCall>,
   StandardRollupContext
 > {
-  protected async toSigningPayload(
+  protected async toSigningBytes(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
-  ): Promise<TransactionSigningPayload<RuntimeCall>> {
-    return {
+  ): Promise<Uint8Array> {
+    const serializer = await this.serializer();
+    const signingPayload: TransactionSigningPayload<RuntimeCall> = {
       V0: {
         ...unsignedTx,
         chain_hash: Array.from(await this.chainHash()),
       },
     };
+
+    return serializer.serializeSigningPayload(signingPayload);
   }
 
   private async credentialAddressFromId(
@@ -135,11 +138,12 @@ export class StandardRollup<RuntimeCall> extends Rollup<
     return addressFromPublicKey(credentialId, "sov");
   }
 
-  private async multisigSigningPayload(
+  async multisigSigningBytes(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisig: Multisig,
-  ): Promise<TransactionSigningPayload<RuntimeCall>> {
-    return {
+  ): Promise<Uint8Array> {
+    const serializer = await this.serializer();
+    const signingPayload: TransactionSigningPayload<RuntimeCall> = {
       V1: {
         ...unsignedTx,
         chain_hash: Array.from(await this.chainHash()),
@@ -148,22 +152,8 @@ export class StandardRollup<RuntimeCall> extends Rollup<
         ),
       },
     };
-  }
 
-  private async signingBytesForPayload(
-    signingPayload: TransactionSigningPayload<RuntimeCall>,
-  ): Promise<Uint8Array> {
-    const serializer = await this.serializer();
     return serializer.serializeSigningPayload(signingPayload);
-  }
-
-  async multisigSigningBytes(
-    unsignedTx: UnsignedTransaction<RuntimeCall>,
-    multisig: Multisig,
-  ): Promise<Uint8Array> {
-    return this.signingBytesForPayload(
-      await this.multisigSigningPayload(unsignedTx, multisig),
-    );
   }
 
   /**
