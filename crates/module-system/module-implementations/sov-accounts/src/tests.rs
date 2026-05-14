@@ -3,7 +3,7 @@ use sov_modules_api::sov_universal_wallet::schema::Schema;
 use sov_modules_api::Spec;
 use sov_test_utils::TestSpec;
 
-use crate::CallMessage;
+use crate::{Accounts, CallMessage};
 
 #[test]
 fn test_display_accounts_call() {
@@ -77,5 +77,42 @@ fn test_display_accounts_call() {
     assert!(
         rendered.contains("0x0505050505050505050505050505050505050505050505050505050505050505"),
         "render missing new_credential: {rendered}"
+    );
+}
+
+/// `caller_credential_id` must reject any sender credential that is not a
+/// `CryptoSpec::PublicKey` or `Multisig`. We exercise the rejection path by
+/// handing `Context::new` an empty `Credentials` bag, which is the same shape
+/// the function sees if a future authenticator stores some unknown third
+/// credential type.
+#[test]
+fn test_create_synthetic_address_rejects_unsupported_credential() {
+    use sov_modules_api::transaction::Credentials;
+    use sov_modules_api::{Context, ExecutionContext, SequencerType};
+
+    type S = TestSpec;
+
+    let sender_bytes: [u8; 28] = core::array::from_fn(|i| (i + 1) as u8);
+    let sender = <S as Spec>::Address::from(sender_bytes);
+    let da_address = <<S as Spec>::Da as sov_modules_api::DaSpec>::Address::default();
+
+    let ctx = Context::<S>::new(
+        sender,
+        Credentials::default(),
+        sender,
+        da_address,
+        None,
+        ExecutionContext::Node,
+        SequencerType::Preferred,
+    );
+
+    let accounts = Accounts::<S>::default();
+    let err = accounts
+        .caller_credential_id(&ctx)
+        .expect_err("empty credentials should not resolve to a credential id");
+    let msg = err.to_string();
+    assert!(
+        msg.contains("CreateSyntheticAddress"),
+        "error should attribute to the CreateSyntheticAddress call message, got: {msg}"
     );
 }

@@ -41,6 +41,7 @@ const sampleUnsignedTx = {
     gas_limit: null,
     chain_id: "1",
   },
+  address_override: null,
 };
 
 /**
