@@ -9,6 +9,9 @@ pub use data::{AuthenticatedTransactionData, Credentials, PriorityFeeBips, TxDet
 use derivative::Derivative;
 pub(crate) use rewards::transaction_consumption_helper;
 pub use rewards::{ProverReward, RemainingFunds, SequencerReward, TransactionConsumption};
+pub use signing_payload::{
+    TransactionSigningPayload, TransactionSigningPayloadV0, TransactionSigningPayloadV1,
+};
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
 use sov_rollup_interface::crypto::{SigVerificationError, Signature};
@@ -21,16 +24,14 @@ pub use types::{
     v0::Version0,
     v1::{PubKeyAndSignature, Version1},
 };
-pub use unsigned::{
-    TransactionSigningPayload, TransactionSigningPayloadV0, TransactionSigningPayloadV1,
-    UnsignedTransaction,
-};
+pub use unsigned::UnsignedTransaction;
 
 use crate::{
     CryptoSpecExt, DispatchCall, Gas, GasMeter, GasMeteringError, MeteredSigVerificationError,
     MeteredSignature, Spec,
 };
 
+mod signing_payload;
 #[cfg(test)]
 mod tests;
 mod types;

@@ -1,11 +1,11 @@
-pub(crate) mod v0;
-pub(crate) mod v1;
+mod v0;
+mod v1;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_universal_wallet::UniversalWallet;
 
-pub use v0::{TransactionSigningPayloadV0, UnsignedTransaction};
+pub use v0::TransactionSigningPayloadV0;
 pub use v1::TransactionSigningPayloadV1;
 
 use crate::{
@@ -51,6 +51,7 @@ impl<R: TransactionCallable, S: Spec> Clone for TransactionSigningPayload<R, S> 
         }
     }
 }
+
 impl<R: TransactionCallable, S: Spec> PartialEq for TransactionSigningPayload<R, S> {
     fn eq(&self, other: &Self) -> bool {
         match (self, other) {
@@ -60,6 +61,7 @@ impl<R: TransactionCallable, S: Spec> PartialEq for TransactionSigningPayload<R,
         }
     }
 }
+
 impl<R: TransactionCallable, S: Spec> Eq for TransactionSigningPayload<R, S> {}
 
 // Getters on the enum for version-agnostic field access.
