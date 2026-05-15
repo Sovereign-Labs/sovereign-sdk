@@ -16,8 +16,6 @@ use sov_modules_api::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobIters;
 use sov_rollup_interface::stf::DiscardedBlob;
-#[cfg(feature = "native")]
-use sov_state::Accessory;
 use sov_state::{Kernel, Storage, User};
 
 /// The simplest imaginable kernel. It does not do any batching or reordering of blobs.
@@ -227,7 +225,7 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for BasicKernel<'_, S> {
     }
 
     #[cfg(feature = "native")]
-    fn state_version<Reader: StateReader<Accessory, Error = Infallible>>(
+    fn state_version<Reader: StateReader<sov_state::Accessory, Error = Infallible>>(
         &self,
         state: &mut Reader,
     ) -> u64 {

@@ -2,8 +2,6 @@ use std::convert::Infallible;
 
 use sov_rollup_interface::common::VisibleSlotNumber;
 use sov_rollup_interface::da::DaSpec;
-#[cfg(feature = "native")]
-use sov_state::Accessory;
 use sov_state::{Kernel, Storage, User};
 
 use super::RollupHeight;
@@ -114,7 +112,7 @@ pub trait ChainState {
 
     /// Returns the global on-chain state schema version.
     #[cfg(feature = "native")]
-    fn state_version<Reader: StateReader<Accessory, Error = Infallible>>(
+    fn state_version<Reader: StateReader<sov_state::Accessory, Error = Infallible>>(
         &self,
         state: &mut Reader,
     ) -> u64;

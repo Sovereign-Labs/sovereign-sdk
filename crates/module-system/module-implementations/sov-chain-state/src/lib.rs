@@ -42,8 +42,6 @@ use sov_modules_api::{DaSpec, Gas, KernelStateValue, Module, StateValue, Version
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 use sov_state::codec::BcsCodec;
 use sov_state::namespaces::Kernel;
-#[cfg(feature = "native")]
-use sov_state::Accessory;
 use sov_state::{Storage, User};
 use tracing::trace;
 
@@ -477,7 +475,7 @@ impl<S: Spec> ChainState<S> {
     ///
     /// Existing state created before this field was introduced defaults to version 0.
     #[cfg(feature = "native")]
-    pub fn state_version<Accessor: StateReader<Accessory>>(
+    pub fn state_version<Accessor: StateReader<sov_state::Accessory>>(
         &self,
         state: &mut Accessor,
     ) -> Result<u64, Accessor::Error> {
