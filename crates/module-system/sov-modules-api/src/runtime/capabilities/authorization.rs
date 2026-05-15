@@ -104,13 +104,38 @@ pub struct AuthorizationData<S: Spec> {
     /// provides information about which `Authenticator` was used to authenticate the transaction.
     pub credentials: Credentials,
 
-    /// The default address.
+    /// The authenticator-declared default address for this credential.
+    ///
+    /// When `address_override` is `None`, the admit-path uses this address as
+    /// the transaction sender, gated only by the permissive
+    /// `is_default_address_authorized` check (entry-or-`true`). The
+    /// authenticator is trusted to have verified the credential→address
+    /// binding before producing this value.
+    ///
+    /// May differ from `canonical(credential_id)`. The EVM authenticator, for
+    /// example, sets this to `S::Address::from_vm_address(ethereum_address)`
+    /// — which is the `MultiAddress::Vm` variant — while
+    /// `<S::Address as From<CredentialId>>::from(credential_id)` produces the
+    /// `MultiAddress::Standard` variant. Code that compares this address to
+    /// `canonical(credential_id)` (e.g. for off-chain inspection of
+    /// authorization state) MUST account for this divergence; an
+    /// authenticator-specific default address can be admitted by the chain
+    /// even though the canonical-fallback view in
+    /// `sov_accounts::Accounts::is_authorized_for` returns `false`.
     pub default_address: S::Address,
 
     /// Signer-declared override of the default execution address.
     ///
-    /// `None` => resolve to the credential's default address.
-    /// `Some(X)` => requires an explicit `(X, credential_id)` entry in `account_owners`;
-    /// the transaction is skipped otherwise.
+    /// - `None` => resolve to the credential's default address. Allowed unless an
+    ///   explicit `false` entry exists for `(default_address, credential_id)` —
+    ///   "allowed-unless-revoked".
+    /// - `Some(X)` => requires an explicit `(X, credential_id)` entry in
+    ///   `account_owners`; the transaction is **skipped** otherwise.
+    ///
+    /// Footgun: `Some(default_address)` is NOT a no-op equivalent of `None`. The
+    /// `None` path uses the implicit allowed-unless-revoked fallback; `Some(_)`
+    /// requires an explicit allowlist entry. Passing the canonical default address
+    /// as `Some` will silently skip the transaction unless that exact pair has
+    /// been registered. Pass `None` for default-address semantics.
     pub address_override: Option<S::Address>,
 }
