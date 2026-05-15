@@ -1600,7 +1600,7 @@ mod tests {
                     result.unwrap().unwrap().await.is_ok(),
                     "Expected tx {i} to succeed"
                 ),
-                Outcome::Err(reason) => {
+                Outcome::Err(_reason) => {
                     let inner = result.expect("Expected Ok from TransactionReceiverResult");
                     let err =
                         inner.expect_err(&format!("Expected tx {i} to fail with nonce error"));
