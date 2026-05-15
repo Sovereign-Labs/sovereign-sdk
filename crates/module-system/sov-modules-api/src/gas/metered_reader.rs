@@ -1,25 +1,19 @@
 use std::io;
 
 use crate::gas::traits::GasMeter;
-use crate::{as_u32_or_panic, GasMeteringError, GasSpec, Spec};
+use crate::{as_u32_or_panic, GasSpec, Spec};
 
 /// `io::Read` adapter that charges gas to a `GasMeter` for every byte read.
 ///
 /// Wraps an inner `Read` source and a meter; every `read` and `read_exact` call charges
-/// `per_byte × n + per_read_bias`. If the meter exhausts mid-decode, the typed
-/// `GasMeteringError` is stashed and a synthetic `io::Error` is returned. Call
-/// [`MeteredReader::take_stashed_error`] after the decode bubbles the error up to
-/// recover the typed gas error.
-///
-/// Used by `MeteredBorshDeserialize::deserialize_from_slice` to convert byte-based
-/// gas charging into work-based charging that scales with the number of bytes the
-/// deserializer actually pulls.
+/// `per_byte × n + per_read_bias`. A failed charge wraps the typed `GasMeteringError`
+/// inside the returned `io::Error` (via [`io::Error::other`]); the caller recovers it
+/// with [`io::Error::downcast`].
 pub struct MeteredReader<'a, R: io::Read, M: GasMeter> {
     inner: R,
     meter: &'a mut M,
     per_byte: <M::Spec as Spec>::Gas,
     per_read_bias: <M::Spec as Spec>::Gas,
-    stashed: Option<GasMeteringError<<M::Spec as Spec>::Gas>>,
 }
 
 impl<'a, R: io::Read, M: GasMeter> MeteredReader<'a, R, M> {
@@ -46,31 +40,16 @@ impl<'a, R: io::Read, M: GasMeter> MeteredReader<'a, R, M> {
             meter,
             per_byte,
             per_read_bias,
-            stashed: None,
         }
-    }
-
-    /// Take the stashed typed gas error if a charge failed during a read.
-    ///
-    /// After borsh's `deserialize_reader` returns an `io::Error`, call this to
-    /// distinguish "out of gas" from "genuine IO error" — only out-of-gas charges
-    /// stash here.
-    pub fn take_stashed_error(&mut self) -> Option<GasMeteringError<<M::Spec as Spec>::Gas>> {
-        self.stashed.take()
     }
 
     fn charge(&mut self, n: usize) -> io::Result<()> {
-        if let Err(e) = self.meter.charge_gas(self.per_read_bias) {
-            self.stashed = Some(e);
-            return Err(io::Error::new(io::ErrorKind::Other, "out of gas"));
-        }
-        if let Err(e) = self
-            .meter
+        self.meter
+            .charge_gas(self.per_read_bias)
+            .map_err(io::Error::other)?;
+        self.meter
             .charge_linear_gas(self.per_byte, as_u32_or_panic(n))
-        {
-            self.stashed = Some(e);
-            return Err(io::Error::new(io::ErrorKind::Other, "out of gas"));
-        }
+            .map_err(io::Error::other)?;
         Ok(())
     }
 }

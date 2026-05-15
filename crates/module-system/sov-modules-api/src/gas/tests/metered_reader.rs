@@ -7,7 +7,10 @@ use sov_test_utils::MockDaSpec;
 
 use crate::default_spec::DefaultSpec;
 use crate::gas::GasArray;
-use crate::{Amount, Gas, GasPrice, GasUnit, MeteredReader, StateCheckpoint, WorkingSet};
+use crate::{
+    Amount, Gas, GasMeteringError, GasPrice, GasUnit, MeteredReader, Spec, StateCheckpoint,
+    WorkingSet,
+};
 
 type S = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
@@ -59,17 +62,15 @@ fn read_exact_meters_against_slice() {
     assert!(reader.read_exact(&mut buf).is_ok(), "first read_exact(8) must succeed");
     assert_eq!(buf, [0, 1, 2, 3, 4, 5, 6, 7]);
 
-    // Second read_exact must fail because the budget was exactly one read.
+    // Second read_exact must fail because the budget was exactly one read; the
+    // returned io::Error must wrap a typed GasMeteringError.
     let mut buf2 = [0u8; 1];
     let err = reader
         .read_exact(&mut buf2)
         .expect_err("second read_exact must fail — gas is exhausted");
-    assert_eq!(err.kind(), io::ErrorKind::Other);
-
-    // The stashed typed gas error must be present.
     assert!(
-        reader.take_stashed_error().is_some(),
-        "out-of-gas during read_exact must stash a typed GasMeteringError"
+        err.downcast::<GasMeteringError<<S as Spec>::Gas>>().is_ok(),
+        "out-of-gas io::Error must downcast to a typed GasMeteringError"
     );
 }
 
@@ -144,7 +145,7 @@ fn partial_read_charges_only_actual_bytes() {
 }
 
 #[test]
-fn out_of_gas_during_read_stashes_typed_error() {
+fn out_of_gas_during_read_wraps_typed_error() {
     let per_byte = GasUnit::<2>::from([10, 10]);
     let per_read_bias = GasUnit::<2>::from([5, 5]);
 
@@ -159,14 +160,10 @@ fn out_of_gas_during_read_stashes_typed_error() {
     let err = reader
         .read(&mut buf)
         .expect_err("read with zero gas budget must fail");
-    assert_eq!(err.kind(), io::ErrorKind::Other);
-
     assert!(
-        reader.take_stashed_error().is_some(),
-        "failed charge must stash a typed GasMeteringError"
+        err.downcast::<GasMeteringError<<S as Spec>::Gas>>().is_ok(),
+        "out-of-gas io::Error must downcast to a typed GasMeteringError"
     );
-    // A subsequent call drains the stash.
-    assert!(reader.take_stashed_error().is_none());
 }
 
 #[test]
@@ -185,5 +182,4 @@ fn eof_read_does_not_charge() {
         .read(&mut buf)
         .expect("EOF (0 bytes returned) must not charge gas");
     assert_eq!(n, 0);
-    assert!(reader.take_stashed_error().is_none());
 }
