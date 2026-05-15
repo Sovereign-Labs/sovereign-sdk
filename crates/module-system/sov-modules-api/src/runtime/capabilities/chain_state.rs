@@ -110,6 +110,13 @@ pub trait ChainState {
         state: &mut Reader,
     ) -> OperatingMode;
 
+    /// Returns the global on-chain state schema version.
+    #[cfg(feature = "native")]
+    fn state_version<Reader: StateReader<sov_state::Accessory, Error = Infallible>>(
+        &self,
+        state: &mut Reader,
+    ) -> u64;
+
     /// Returns the visible root hash accessible at the requested rollup height using the accessory state.
     ///
     /// ## Note

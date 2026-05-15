@@ -215,6 +215,14 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for SoftConfirmationsKer
     }
 
     #[cfg(feature = "native")]
+    fn state_version<Reader: StateReader<sov_state::Accessory, Error = Infallible>>(
+        &self,
+        state: &mut Reader,
+    ) -> u64 {
+        self.chain_state.state_version(state).unwrap_infallible()
+    }
+
+    #[cfg(feature = "native")]
     fn test_only_set_rollup_height_for_genesis(
         &mut self,
         state: &mut KernelStateAccessor<'_, Self::Spec>,
