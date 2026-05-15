@@ -95,11 +95,10 @@ impl<S: Spec> RollupBlockExecutorError<S> {
                     sov_rollup_interface::stf::TxEffect::Reverted(reverted) => {
                         reverted.reason.error_detail().unwrap_or(json_obj!({}))
                     }
-                    _ => serde_json::to_value(&receipt).unwrap_or_else(|_| {
-                        json_obj!({
-                            "error": format!("{:?}", receipt),
-                        })
-                    }),
+                    _ => match serde_json::to_value(&receipt) {
+                        Ok(serde_json::Value::Object(m)) => m,
+                        _ => json_obj!({"error": format!("{:?}", receipt)}),
+                    },
                 };
                 ErrorObject {
                     status: StatusCode::BAD_REQUEST,
