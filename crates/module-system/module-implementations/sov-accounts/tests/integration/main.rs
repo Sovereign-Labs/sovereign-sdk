@@ -440,6 +440,12 @@ fn test_register_new_account() {
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
 
+            let (event_address, event_credential, event_authorizer) =
+                credential_added_event(&result.events);
+            assert_eq!(event_address, non_registered_account.address());
+            assert_eq!(event_credential, new_credential);
+            assert_eq!(event_authorizer, non_registered_account.address());
+
             let accounts = Accounts::<S>::default();
 
             assert!(accounts
@@ -674,6 +680,56 @@ fn stored_synthetic_address_created_event(
             synthetic_address_created_event(std::slice::from_ref(&event))
         }
         other => panic!("expected one synthetic-address event, got {other:?}"),
+    }
+}
+
+fn credential_added_event(
+    events: &[TestAccountsRuntimeEvent<S>],
+) -> (<S as Spec>::Address, CredentialId, <S as Spec>::Address) {
+    match events {
+        [TestAccountsRuntimeEvent::Accounts(Event::CredentialAdded {
+            address,
+            credential,
+            authorizer_address,
+        })] => (*address, *credential, *authorizer_address),
+        other => panic!("expected one CredentialAdded event, got {other:?}"),
+    }
+}
+
+fn credential_removed_event(
+    events: &[TestAccountsRuntimeEvent<S>],
+) -> (<S as Spec>::Address, CredentialId, <S as Spec>::Address) {
+    match events {
+        [TestAccountsRuntimeEvent::Accounts(Event::CredentialRemoved {
+            address,
+            credential,
+            authorizer_address,
+        })] => (*address, *credential, *authorizer_address),
+        other => panic!("expected one CredentialRemoved event, got {other:?}"),
+    }
+}
+
+fn credential_rotated_event(
+    events: &[TestAccountsRuntimeEvent<S>],
+) -> (
+    <S as Spec>::Address,
+    CredentialId,
+    CredentialId,
+    <S as Spec>::Address,
+) {
+    match events {
+        [TestAccountsRuntimeEvent::Accounts(Event::CredentialRotated {
+            address,
+            old_credential,
+            new_credential,
+            authorizer_address,
+        })] => (
+            *address,
+            *old_credential,
+            *new_credential,
+            *authorizer_address,
+        ),
+        other => panic!("expected one CredentialRotated event, got {other:?}"),
     }
 }
 
@@ -1179,6 +1235,13 @@ fn test_add_credential_to_address_by_owner() {
         }),
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
+
+            let (event_address, event_credential, event_authorizer) =
+                credential_added_event(&result.events);
+            assert_eq!(event_address, owner_address);
+            assert_eq!(event_credential, new_credential);
+            assert_eq!(event_authorizer, owner_address);
+
             let accounts = Accounts::<S>::default();
             assert!(
                 accounts
@@ -1384,6 +1447,13 @@ fn test_remove_credential_from_address_by_owner() {
         ),
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
+
+            let (event_address, event_credential, event_authorizer) =
+                credential_removed_event(&result.events);
+            assert_eq!(event_address, owner_address);
+            assert_eq!(event_credential, removed_credential);
+            assert_eq!(event_authorizer, owner_address);
+
             let accounts = Accounts::<S>::default();
             assert!(!accounts
                 .is_authorized_for(&owner_address, &removed_credential, state)
@@ -1587,6 +1657,60 @@ fn test_remove_last_credential_orphans_address() {
                 );
             }
             other => panic!("expected skipped tx, got {other:?}"),
+        }),
+    });
+}
+
+/// Regression test: `is_explicitly_authorized` must return `false` once
+/// `revoke_credential` has written `Some(false)`. An earlier version used
+/// `.is_some()`, which collapsed `Some(false)` and `Some(true)` into `true`
+/// and silently neutered revocation for the `address_override` path.
+#[test]
+fn test_is_explicitly_authorized_honors_revoked_false() {
+    let MultisigEnv {
+        keys,
+        multisig,
+        credential_id: multisig_credential_id,
+        user: multisig_user,
+    } = make_multisig_env();
+    let alice = TestUser::<S>::generate_with_default_balance();
+    let alice_address = alice.address();
+
+    let genesis_config =
+        HighLevelOptimisticGenesisConfig::generate().add_accounts(vec![multisig_user, alice]);
+    let mut genesis = GenesisConfig::from_minimal_config(genesis_config.into());
+    // Seed `(alice_address, multisig_credential_id) = true` so the
+    // post-revoke entry is `Some(false)`, not `None`.
+    genesis.accounts.accounts.push(AccountData {
+        credential_id: multisig_credential_id,
+        address: alice_address,
+    });
+    let mut runner: TestRunner<RT, S> =
+        TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
+    let mut revoke_tx = make_v1_tx_with_call(
+        &multisig,
+        CallMessage::RemoveCredentialFromAddress {
+            address: alice_address,
+            credential: multisig_credential_id,
+        },
+        Some(alice_address),
+        0,
+    );
+    sign_v1(&mut revoke_tx, &keys[0]);
+    sign_v1(&mut revoke_tx, &keys[1]);
+
+    runner.execute_transaction(TransactionTestCase {
+        input: submit_v1(revoke_tx),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+            assert!(
+                !accounts
+                    .is_explicitly_authorized(&alice_address, &multisig_credential_id, state)
+                    .unwrap(),
+                "is_explicitly_authorized must honor a stored Some(false) and report not-authorized"
+            );
         }),
     });
 }
@@ -1809,6 +1933,14 @@ fn test_rotate_credential_by_owner() {
         ),
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
+
+            let (event_address, event_old, event_new, event_authorizer) =
+                credential_rotated_event(&result.events);
+            assert_eq!(event_address, owner_address);
+            assert_eq!(event_old, old_credential);
+            assert_eq!(event_new, new_credential);
+            assert_eq!(event_authorizer, owner_address);
+
             let accounts = Accounts::<S>::default();
             assert!(!accounts
                 .is_authorized_for(&owner_address, &old_credential, state)
@@ -2727,6 +2859,126 @@ fn test_create_synthetic_address_rejected_when_custom_account_mappings_disabled(
                 );
             }
             _ => panic!("Expected reverted transaction"),
+        }),
+    });
+}
+
+/// For an `(address, credential_id)` pair with no `account_owners` row,
+/// `is_default_address_authorized` returns `true` — the admit-path trusts the
+/// authenticator's declared default via `unwrap_or(true)` — while
+/// `is_authorized_for` returns `false` whenever `address` is not the canonical
+/// address of `credential_id`, since its fallback is
+/// `canonical_address == address`. This test pins that divergence.
+///
+/// The pair is built as `(account_2.address(), account_1.credential_id())`:
+/// the simplest way to construct a `(non-canonical-address, credential)` pair
+/// on `TestSpec`'s single-variant Address. In production the same divergence
+/// arises naturally for the EVM authenticator, where `default_address` is a
+/// `MultiAddress::Vm` variant and `canonical(credential_id)` is
+/// `MultiAddress::Standard`.
+///
+/// Such a pair is never observed on the admit-path in production:
+/// `resolve_authorized_sender` (in `sov-capabilities`) is reached only after
+/// the authenticator has verified the `credential_id -> default_address`
+/// binding. This test deliberately bypasses the authenticator to probe the
+/// on-chain layer in isolation.
+#[test]
+fn test_admit_path_diverges_from_canonical_for_non_canonical_default_address() {
+    let (
+        TestData {
+            account_1,
+            account_2,
+            ..
+        },
+        runner,
+    ) = setup();
+
+    let credential = account_1.credential_id();
+    let non_canonical_address = account_2.address();
+    let canonical_for_credential = <S as Spec>::Address::from(account_1.credential_id());
+    assert_ne!(
+        non_canonical_address, canonical_for_credential,
+        "test scaffold: account_2's address must differ from canonical(account_1.credential)"
+    );
+
+    runner.query_visible_state(|state| {
+        let accounts = Accounts::<S>::default();
+
+        let explicit = accounts
+            .is_explicitly_authorized(&non_canonical_address, &credential, state)
+            .unwrap();
+        let default_path = accounts
+            .is_default_address_authorized(&non_canonical_address, &credential, state)
+            .unwrap();
+        let canonical_view = accounts
+            .is_authorized_for(&non_canonical_address, &credential, state)
+            .unwrap();
+
+        assert!(
+            !explicit,
+            "no explicit account_owners entry exists: is_explicitly_authorized must be false"
+        );
+        assert!(
+            default_path,
+            "no explicit account_owners entry exists: is_default_address_authorized must be true (chain trusts authenticator default)"
+        );
+        assert!(
+            !canonical_view,
+            "no explicit account_owners entry AND non-canonical address: is_authorized_for must be false"
+        );
+    });
+}
+
+/// Verifies the inverse: an explicit `account_owners[(addr, cred)] = false`
+/// entry (written by `RemoveCredentialFromAddress`) denies all three
+/// predicates. This is the design invariant that lets revocation block the
+/// admit-path even when the authenticator would otherwise have admitted the
+/// transaction via the default-trust fallback.
+#[test]
+fn test_explicit_revoke_denies_all_three_authorization_predicates() {
+    let (
+        TestData {
+            non_registered_account: owner,
+            ..
+        },
+        mut runner,
+    ) = setup();
+    let address = owner.address();
+    let credential = owner.credential_id();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: owner.create_plain_message::<RT, Accounts<S>>(
+            CallMessage::RemoveCredentialFromAddress {
+                address,
+                credential,
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+            let accounts = Accounts::<S>::default();
+
+            let explicit = accounts
+                .is_explicitly_authorized(&address, &credential, state)
+                .unwrap();
+            let default_path = accounts
+                .is_default_address_authorized(&address, &credential, state)
+                .unwrap();
+            let canonical_view = accounts
+                .is_authorized_for(&address, &credential, state)
+                .unwrap();
+
+            assert!(
+                !explicit,
+                "explicit `false` entry: is_explicitly_authorized must be false"
+            );
+            assert!(
+                !default_path,
+                "explicit `false` entry blocks the admit-path default-trust fallback"
+            );
+            assert!(
+                !canonical_view,
+                "explicit `false` entry overrides the canonical fallback"
+            );
         }),
     });
 }
