@@ -18,9 +18,9 @@ clap = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-sp1-adapter = { workspace = true, features = ["native"] }
-sp1-sdk = { version = "6.1.0", default-features = false, features = ["blocking", "profiling"] }
+sp1-sdk = { workspace = true, features = ["blocking", "profiling"] }
 
 [build-dependencies]
 anyhow = { workspace = true }
 sov-zkvm-utils = { workspace = true }
-sp1-build = { version = "6.1.0", default-features = false }
+sp1-build = { workspace = true }
