@@ -15,7 +15,8 @@ impl<S: Spec> Uniqueness<S> {
     ) -> Result<(), CheckUniquenessError> {
         let mut senders_buckets = self
             .generations
-            .get(credential_id, state)?
+            .get(credential_id, state)
+            .map_err(|e| CheckUniquenessError::Internal(e.to_string()))?
             .unwrap_or_default();
 
         // The "currently active" generations is the range containing the latest seen generation

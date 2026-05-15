@@ -9,7 +9,11 @@ impl<S: Spec> Uniqueness<S> {
         transaction_nonce: u64,
         state: &mut impl StateReader<User>,
     ) -> Result<(), CheckUniquenessError> {
-        let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
+        let nonce = self
+            .nonces
+            .get(credential_id, state)
+            .map_err(|e| CheckUniquenessError::Internal(e.to_string()))?
+            .unwrap_or_default();
 
         if nonce != transaction_nonce {
             return Err(CheckUniquenessError::BadNonce {
@@ -27,7 +31,11 @@ impl<S: Spec> Uniqueness<S> {
         transaction_nonce: u64,
         state: &mut impl StateReader<User>,
     ) -> Result<(), CheckUniquenessError> {
-        let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
+        let nonce = self
+            .nonces
+            .get(credential_id, state)
+            .map_err(|e| CheckUniquenessError::Internal(e.to_string()))?
+            .unwrap_or_default();
 
         if nonce > transaction_nonce {
             return Err(CheckUniquenessError::NonceTooLow {
