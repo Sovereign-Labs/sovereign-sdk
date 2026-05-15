@@ -96,6 +96,7 @@ Temporary section for maintaining breaking changes from individual PRs, which wi
   * The `UnsignedTransaction` type, and multiple member methods of `Transaction`, have changed. Our client SDKs have been updated, but for users manually constructing an UnsignedTransaction in Rust, we recommend explicitly using `UnsignedTransactionV0`. For creating a multisig, use `UnsignedTransactionV0::to_multisig_tx()`.
   * The CHAIN_HASH has changed.
   * The `Generation` uniqueness (replay protection) mechanism has been amended to fix a transaction hash malleability vulnerability with V1 transactions. New, non-malleable hashes are used to prevent replay. **If the rollup has had public V1 transactions submitted**, a migration script must increment the current generation of every user that has submitted a V1 transaction by `PAST_TRANSACTION_GENERATIONS` to invalidate prior existing hashes. No action is needed if there are no users with a prior V1 submission.
+  * Hard fork version tracking: a new `chain_state.state_version` state item has been added, and a corresponding `STATE_VERSION` entry in constants.toml. These must match for the rollup to start. The binary `STATE_VERSION` will be incremented on breaking hard forks. On genesis, the state value must be initialised to the starting rollup binary's version, and it will subsequently be incremented by migrations between versions.
 
 # 2026-04-01
 - #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
