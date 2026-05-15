@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use sp1_microbenches::cmd::{ed25519, sha256};
+use sp1_microbenches::cmd::{borsh, ed25519, sha256};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -17,6 +17,8 @@ enum BenchCmd {
     Sha256(sha256::Sha256Args),
     /// Run the ed25519 signature-verification prover-gas sweep.
     Ed25519(ed25519::Ed25519Args),
+    /// Run the borsh deserialization prover-gas sweeps.
+    Borsh(borsh::BorshArgs),
 }
 
 impl BenchCmd {
@@ -24,6 +26,7 @@ impl BenchCmd {
         match self {
             BenchCmd::Sha256(args) => sha256::run(args),
             BenchCmd::Ed25519(args) => ed25519::run(args),
+            BenchCmd::Borsh(args) => args.run(),
         }
     }
 }
