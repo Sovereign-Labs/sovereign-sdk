@@ -9,7 +9,9 @@ pub use endpoints::*;
 use futures::future;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
-use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, RollupHeight};
+use sov_modules_api::capabilities::{
+    ChainState as _, HasCapabilities, HasKernel, ProofProcessor, RollupHeight,
+};
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::ApiState;
@@ -496,8 +498,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 .await?;
 
         let mut rt = Self::Runtime::default();
-        let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
+        let mut checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
         let current_height = checkpoint.rollup_height_to_access();
+        validate_state_version::<Self::Spec, Self::Runtime>(&mut rt, &mut checkpoint)?;
 
         validate_heights(
             current_height,
@@ -768,6 +771,27 @@ async fn cleanup_failed_startup<S: Spec>(
              some tasks may still hold storage references"
         );
     }
+}
+
+fn validate_state_version<S, RT>(
+    runtime: &mut RT,
+    state: &mut StateCheckpoint<S>,
+) -> anyhow::Result<()>
+where
+    S: Spec,
+    RT: RuntimeTrait<S>,
+{
+    let compiled_state_version: u64 = sov_modules_api::macros::config_value!("STATE_VERSION");
+    let on_disk_state_version = runtime
+        .chain_state()
+        .state_version(&mut state.accessory_state());
+
+    anyhow::ensure!(
+        on_disk_state_version == compiled_state_version,
+        "State version mismatch: on-disk state has version {on_disk_state_version}, but this binary was compiled with STATE_VERSION {compiled_state_version}. Run the appropriate migration binary or use a matching rollup binary."
+    );
+
+    Ok(())
 }
 
 fn validate_heights(
