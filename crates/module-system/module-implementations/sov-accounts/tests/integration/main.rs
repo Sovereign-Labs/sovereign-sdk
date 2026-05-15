@@ -2863,16 +2863,25 @@ fn test_create_synthetic_address_rejected_when_custom_account_mappings_disabled(
     });
 }
 
-/// Documents the design contract that the on-chain admit-path
-/// (`is_default_address_authorized`) and the canonical-fallback view
-/// (`is_authorized_for`) diverge for `(address, credential_id)` pairs with no
-/// `account_owners` entry whose address is not the credential's canonical
-/// address. This mirrors what the EVM authenticator does in production:
-/// `default_address` is set to a `MultiAddress::Vm` variant while
-/// `canonical(credential_id)` is `MultiAddress::Standard`. Tests on `TestSpec`
-/// (single-variant Address) simulate the divergence by using a foreign user's
-/// address with a different user's credential — the address-credential
-/// relationship is non-canonical regardless of address variant.
+/// For an `(address, credential_id)` pair with no `account_owners` row,
+/// `is_default_address_authorized` returns `true` — the admit-path trusts the
+/// authenticator's declared default via `unwrap_or(true)` — while
+/// `is_authorized_for` returns `false` whenever `address` is not the canonical
+/// address of `credential_id`, since its fallback is
+/// `canonical_address == address`. This test pins that divergence.
+///
+/// The pair is built as `(account_2.address(), account_1.credential_id())`:
+/// the simplest way to construct a `(non-canonical-address, credential)` pair
+/// on `TestSpec`'s single-variant Address. In production the same divergence
+/// arises naturally for the EVM authenticator, where `default_address` is a
+/// `MultiAddress::Vm` variant and `canonical(credential_id)` is
+/// `MultiAddress::Standard`.
+///
+/// Such a pair is never observed on the admit-path in production:
+/// `resolve_authorized_sender` (in `sov-capabilities`) is reached only after
+/// the authenticator has verified the `credential_id -> default_address`
+/// binding. This test deliberately bypasses the authenticator to probe the
+/// on-chain layer in isolation.
 #[test]
 fn test_admit_path_diverges_from_canonical_for_non_canonical_default_address() {
     let (
