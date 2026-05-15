@@ -44,10 +44,10 @@ pub struct StandardProvenRollupCapabilities<'a, S: Spec, GasPayer = ()> {
 impl<'a, S: Spec, T> StandardProvenRollupCapabilities<'a, S, T> {
     fn get_prover_token_holder(
         &'a self,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         state: &mut impl InfallibleStateAccessor,
     ) -> TokenHolder<S> {
-        let rewarded_token_holder = match oprating_mode {
+        let rewarded_token_holder = match operating_mode {
             OperatingMode::Zk => self.prover_incentives.id().to_payable().into(),
             OperatingMode::Optimistic => self.attester_incentives.id().to_payable().into(),
             OperatingMode::Operator => {
@@ -139,10 +139,10 @@ where
     fn reward_prover(
         &mut self,
         prover_rewards: &ProverReward,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         state: &mut impl InfallibleStateAccessor,
     ) {
-        let rewarded_module = self.get_prover_token_holder(oprating_mode, state);
+        let rewarded_module = self.get_prover_token_holder(operating_mode, state);
 
         self.bank
             .transfer_from(
@@ -181,10 +181,10 @@ where
         &mut self,
         amount: Amount,
         _sequencer: &S::Address,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         state: &mut impl InfallibleStateAccessor,
     ) -> anyhow::Result<()> {
-        let rewarded_prover_module = self.get_prover_token_holder(oprating_mode, state);
+        let rewarded_prover_module = self.get_prover_token_holder(operating_mode, state);
         // Transfer the penalty from the sequencer bank to the sequencer
         Ok(self.bank.transfer_from(
             self.bank.id.clone().to_payable(),
@@ -335,7 +335,9 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
         // On the unregistered path the sender pays its own sequencing, so the
-        // resolved address doubles as `sequencer_rollup_address`.
+        // resolved address doubles as `sequencer_rollup_address`. When
+        // `address_override = Some(X)`, both fields resolve to `X` — fee debit
+        // and gas refund follow the override.
         let address = self.resolve_authorized_sender(auth_data, state)?;
 
         Ok(Context::new(
@@ -351,10 +353,25 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
 }
 
 impl<S: Spec, T> StandardProvenRollupCapabilities<'_, S, T> {
-    /// Picks the sender address for a transaction:
-    /// - `address_override = Some(_)` requires an explicit `(addr, cred)` entry — overriding the default is opt-in.
-    /// - `address_override = None` uses the authenticator-selected default address unless that
-    ///   exact `(addr, cred)` pair is explicitly denied (e.g. by `revoke_credential`).
+    /// Picks the sender address for a transaction.
+    ///
+    /// The two branches use deliberately different authorization predicates:
+    /// - `address_override = Some(_)` — requires an explicit `true` entry in
+    ///   `account_owners` for `(addr, cred)`. Overriding the default is
+    ///   opt-in and must be granted by a prior `InsertCredentialId` call.
+    ///   The REST endpoint exposes this predicate as the `admit_as_override`
+    ///   field of `sov_accounts::query::AuthorizationResponse`.
+    /// - `address_override = None` — trusts the authenticator's declared
+    ///   `default_address` unless that exact `(addr, cred)` pair is
+    ///   explicitly denied (e.g. by `revoke_credential`). The authenticator
+    ///   is responsible for having verified the credential→default_address
+    ///   binding before reaching this code. The REST endpoint exposes this
+    ///   predicate as the `admit_as_default` field.
+    ///
+    /// The off-chain `sov_accounts::Accounts::is_authorized_for` (which
+    /// includes a canonical-fallback semantic) is *not* used here and can
+    /// disagree with the admit-path for authenticators (notably EVM) whose
+    /// `default_address` is not the credential's canonical address.
     fn resolve_authorized_sender(
         &mut self,
         auth_data: &AuthorizationData<S>,
