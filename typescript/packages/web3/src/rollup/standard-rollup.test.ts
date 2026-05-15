@@ -150,6 +150,37 @@ describe("standardTypeBuilder", () => {
       });
     });
   });
+
+  describe("transactionSigningPayload", () => {
+    it("should format a V0 signing payload with the provided chain hash", async () => {
+      const unsignedTx = {
+        runtime_call: {
+          value_setter: { set_value: { value: 5, gas: null } },
+        },
+        uniqueness: { generation: 5 },
+        details: {
+          max_priority_fee_bips: 100,
+          max_fee: "1000",
+          chain_id: 1,
+          gas_limit: null,
+        },
+        address_override: null,
+      };
+
+      const result = await builder.transactionSigningPayload({
+        unsignedTx,
+        chainHash: new Uint8Array([1, 2, 3, 4]),
+        rollup: mockRollup as any,
+      });
+
+      expect(result).toEqual({
+        V0: {
+          ...unsignedTx,
+          chain_hash: [1, 2, 3, 4],
+        },
+      });
+    });
+  });
 });
 
 const mockSerializer = {
@@ -240,6 +271,8 @@ describe("createStandardRollup", () => {
     expect(typeBuilder.unsignedTransaction).toBe(customUnsignedTransaction);
     expect(typeBuilder.transaction).toBeDefined();
     expect(typeof typeBuilder.transaction).toBe("function");
+    expect(typeBuilder.transactionSigningPayload).toBeDefined();
+    expect(typeof typeBuilder.transactionSigningPayload).toBe("function");
   });
 
   it("should be created using the default context", async () => {

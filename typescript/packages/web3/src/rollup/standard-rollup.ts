@@ -16,6 +16,7 @@ import {
   type RollupConfig,
   type SignerParams,
   type TransactionContext,
+  type TransactionSigningPayloadContext,
   type TypeBuilder,
   type UnsignedTransactionContext,
 } from "./rollup";
@@ -87,6 +88,17 @@ export function standardTypeBuilder<
         },
       } as S["Transaction"];
     },
+    async transactionSigningPayload({
+      unsignedTx,
+      chainHash,
+    }: TransactionSigningPayloadContext<S, StandardRollupContext>) {
+      return {
+        V0: {
+          ...unsignedTx,
+          chain_hash: Array.from(chainHash),
+        },
+      } as S["TransactionSigningPayload"];
+    },
   };
 }
 
@@ -110,20 +122,6 @@ export class StandardRollup<RuntimeCall> extends Rollup<
   StandardRollupSpec<RuntimeCall>,
   StandardRollupContext
 > {
-  protected async toSigningBytes(
-    unsignedTx: UnsignedTransaction<RuntimeCall>,
-  ): Promise<Uint8Array> {
-    const serializer = await this.serializer();
-    const signingPayload: TransactionSigningPayload<RuntimeCall> = {
-      V0: {
-        ...unsignedTx,
-        chain_hash: Array.from(await this.chainHash()),
-      },
-    };
-
-    return serializer.serializeSigningPayload(signingPayload);
-  }
-
   private async credentialAddressFromId(
     credentialId: Uint8Array,
   ): Promise<string> {
