@@ -1,7 +1,25 @@
 {
-    "current_time": 0,
-    "operating_mode": "zk",
-    "inner_code_commitment": [0, 0, 0, 0, 0, 0, 0, 0],
-    "outer_code_commitment": [0, 0, 0, 0, 0, 0, 0, 0],
-    "genesis_da_height": 0
+  "current_time": 0,
+  "genesis_da_height": 0,
+  "inner_code_commitment": [
+    1677757548,
+    2063076770,
+    1938687492,
+    1055254139,
+    1067130824,
+    1303915656,
+    569179521,
+    320085676
+  ],
+  "operating_mode": "zk",
+  "outer_code_commitment": [
+    714179577,
+    537824807,
+    386126656,
+    1248375855,
+    354738363,
+    1503434512,
+    152705656,
+    435312298
+  ]
 }
