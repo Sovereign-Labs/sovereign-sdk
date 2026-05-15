@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::gas::traits::GasMeter;
-use crate::{as_u32_or_panic, GasSpec, Spec};
+use crate::{GasSpec, Spec};
 
 /// `io::Read` adapter that charges gas to a `GasMeter` for every byte read.
 ///
@@ -44,11 +44,13 @@ impl<'a, R: io::Read, M: GasMeter> MeteredReader<'a, R, M> {
     }
 
     fn charge(&mut self, n: usize) -> io::Result<()> {
+        let n_u32 = u32::try_from(n)
+            .map_err(|_| io::Error::other("read length exceeds u32::MAX"))?;
         self.meter
             .charge_gas(self.per_read_bias)
             .map_err(io::Error::other)?;
         self.meter
-            .charge_linear_gas(self.per_byte, as_u32_or_panic(n))
+            .charge_linear_gas(self.per_byte, n_u32)
             .map_err(io::Error::other)?;
         Ok(())
     }
