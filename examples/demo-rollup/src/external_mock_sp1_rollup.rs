@@ -7,7 +7,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
-use sov_mock_da::storable::StorableMockDaService;
+use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
@@ -30,14 +30,14 @@ use crate::sp1_helper::{
     Sp1ProverService,
 };
 
-/// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, and [`SP1`] for both inner and outer vm
+/// SP1 rollup wired to the external `mock-da-server` over RPC.
 #[derive(Default, Clone, Copy)]
-pub struct MockSp1DemoRollup<M> {
+pub struct ExternalMockSp1DemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
 
-/// The default spec of the rollup
-pub type MockSp1RollupSpec<M> = ConfigurableSpec<
+/// The default spec of the rollup.
+pub type ExternalMockSp1RollupSpec<M> = ConfigurableSpec<
     MockDaSpec,
     SP1,
     SP1,
@@ -47,27 +47,27 @@ pub type MockSp1RollupSpec<M> = ConfigurableSpec<
     Sp1NativeStorage,
 >;
 
-impl RollupBlueprint<Native> for MockSp1DemoRollup<Native>
+impl RollupBlueprint<Native> for ExternalMockSp1DemoRollup<Native>
 where
-    MockSp1RollupSpec<Native>: PluggableSpec,
-    <MockSp1RollupSpec<Native> as Spec>::Address: FromVmAddress<EthereumAddress>,
+    ExternalMockSp1RollupSpec<Native>: PluggableSpec,
+    <ExternalMockSp1RollupSpec<Native> as Spec>::Address: FromVmAddress<EthereumAddress>,
 {
-    type Spec = MockSp1RollupSpec<Native>;
+    type Spec = ExternalMockSp1RollupSpec<Native>;
     type Runtime = Runtime<Self::Spec>;
 }
 
-impl RollupBlueprint<WitnessGeneration> for MockSp1DemoRollup<WitnessGeneration>
+impl RollupBlueprint<WitnessGeneration> for ExternalMockSp1DemoRollup<WitnessGeneration>
 where
-    MockSp1RollupSpec<WitnessGeneration>: PluggableSpec,
-    <MockSp1RollupSpec<WitnessGeneration> as Spec>::Address: FromVmAddress<EthereumAddress>,
+    ExternalMockSp1RollupSpec<WitnessGeneration>: PluggableSpec,
+    <ExternalMockSp1RollupSpec<WitnessGeneration> as Spec>::Address: FromVmAddress<EthereumAddress>,
 {
-    type Spec = MockSp1RollupSpec<WitnessGeneration>;
+    type Spec = ExternalMockSp1RollupSpec<WitnessGeneration>;
     type Runtime = Runtime<Self::Spec>;
 }
 
 #[async_trait]
-impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
-    type DaService = StorableMockDaService;
+impl FullNodeBlueprint<Native> for ExternalMockSp1DemoRollup<Native> {
+    type DaService = StorableMockDaClient;
 
     type StorageManager = NomtStorageManager<MockDaSpec, Sp1Hasher, Sp1NativeStorage>;
 
@@ -128,9 +128,10 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        _shutdown_receiver: tokio::sync::watch::Receiver<()>,
     ) -> Self::DaService {
-        StorableMockDaService::from_config(rollup_config.da.clone(), shutdown_receiver).await
+        StorableMockDaClient::from_config(rollup_config.da.clone())
+            .expect("Failed to create da service")
     }
 
     async fn create_prover_service(
