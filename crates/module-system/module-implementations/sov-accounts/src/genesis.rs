@@ -6,7 +6,9 @@ use sov_modules_api::{CredentialId, CryptoSpec, GenesisState};
 
 use crate::{AccountOwnerKey, Accounts};
 
-/// Returns `true` if `address` cannot represent a valid public key under `S::CryptoSpec`.
+/// Best-effort guard-rail: returns `true` if `address` cannot represent a valid
+/// public key under `S::CryptoSpec`. A `false` result does **not** prove the
+/// address is non-synthetic — see below for the limits.
 ///
 /// For 32-byte address specs (e.g., Solana-style `Base58Address` with ed25519) this
 /// rejects addresses whose bytes are on the curve — addresses that correspond to a
