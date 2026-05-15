@@ -92,8 +92,12 @@ export function standardTypeBuilder<
 /**
  * The parameters for simulating a runtime call transaction.
  *
- * Adds `address_override` until the regenerated `@sovereign-sdk/client` carries it natively;
- * drop this extension and the cast in `simulate` once the client is republished.
+ * Adds `address_override` until `@sovereign-sdk/client` is republished with it.
+ * As of `0.1.0-alpha.39` the generated `RollupSimulateParams` is missing the
+ * field even though the Rust type and OpenAPI spec ship it (added in commit
+ * `6e7d22a52`). Once a newer client publishes `address_override` natively,
+ * drop this `Omit`-extension AND the `as SovereignClient.RollupSimulateParams`
+ * cast in `simulate()`.
  */
 export type SimulateParams = Omit<
   SovereignClient.RollupSimulateParams,

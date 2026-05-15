@@ -91,6 +91,27 @@ type RT = TestRuntime<SolanaTestSpec>;
 type S = SolanaTestSpec;
 type TestHasher = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
 
+/// Produces a 32-byte `Base58Address` whose bytes are NOT a valid ed25519 public key
+/// (off-curve). Used as override targets for genesis registration because `sov-accounts`
+/// now rejects natural pubkey-derived addresses at genesis (synthetic-only invariant).
+///
+/// SHA256 outputs are ~50% on-curve, so we walk a counter until we find an off-curve hash.
+/// In practice this finishes in 1-2 iterations.
+fn make_synthetic_base58_address(label: &str) -> Base58Address {
+    use sov_modules_api::digest::Digest;
+    type Pk = <<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey;
+    for counter in 0u32..32 {
+        let mut hasher = TestHasher::new();
+        hasher.update(label.as_bytes());
+        hasher.update(counter.to_le_bytes());
+        let bytes: [u8; 32] = hasher.finalize().into();
+        if <Pk as TryFrom<Vec<u8>>>::try_from(bytes.to_vec()).is_err() {
+            return Base58Address::from(bytes);
+        }
+    }
+    panic!("could not find an off-curve 32-byte hash for label `{label}`");
+}
+
 async fn create_test_rollup() -> anyhow::Result<(
     TestRollup<SolanaOffchainAuthBlueprint<SolanaTestSpec, RT>>,
     TestUser<SolanaTestSpec>,
@@ -1164,11 +1185,12 @@ async fn test_submit_ledger_signed_multisig_transaction() {
     );
 }
 
-/// End-to-end plumbing test: a V1 transaction carrying `address_override = Some(admin)` — where
-/// genesis authorizes `(admin.address(), multisig_credential_id)` in `account_owners` — routes
-/// execution as `admin`, not as the multisig's default address. Proves that `address_override`
+/// End-to-end plumbing test: a V1 transaction carrying `address_override = Some(target)` — where
+/// genesis authorizes `(target, multisig_credential_id)` in `account_owners` — routes
+/// execution as `target`, not as the multisig's default address. Proves that `address_override`
 /// flows from the signed JSON through `authenticate`, `build_auth_data`, `AuthorizationData`,
-/// and into `resolve_context`.
+/// and into `resolve_context`. The target is a synthetic (off-curve) address because the
+/// sov-accounts genesis invariant rejects natural pubkey-derived addresses.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_multisig_with_authorized_address_override() {
     // Build a 2-of-3 multisig (its default address is never funded).
@@ -1184,25 +1206,45 @@ async fn test_submit_multisig_with_authorized_address_override() {
     let multisig_credential_id = multisig.credential_id::<TestHasher>();
     let multisig_default_address: <SolanaTestSpec as Spec>::Address = multisig_credential_id.into();
 
-    // Bring up a rollup where admin's address is authorized for the multisig's credential.
-    let (test_rollup, admin) = create_test_rollup_with_extra_account_owners(|admin| {
+    // Synthetic 32-byte target the multisig is delegated to. Off-curve by construction
+    // so it satisfies the sov-accounts genesis synthetic-only invariant.
+    let target_address = make_synthetic_base58_address("multisig_override_target");
+    let target_address_str = target_address.to_string();
+
+    let (test_rollup, admin) = create_test_rollup_with_extra_account_owners(|_admin| {
         vec![sov_test_utils::runtime::sov_accounts::AccountData {
             credential_id: multisig_credential_id,
-            address: admin.address(),
+            address: target_address,
         }]
     })
     .await
     .expect("Failed to create rollup");
 
-    let admin_address_str = admin.address().to_string();
-    let admin_balance_before = query_balance(&test_rollup.client, &admin_address_str).await;
+    // Fund the synthetic target so the multisig has something to spend.
+    let funding_response = submit_simple_json_tx(
+        test_rollup.api_client(),
+        create_transfer_tx_json(Amount(10_000), &target_address_str),
+        admin.private_key(),
+    )
+    .await;
+    assert!(
+        funding_response.status().is_success(),
+        "Failed to fund target address. Response: {funding_response:?}"
+    );
 
-    // Build a V1 multisig transfer targeting admin's address.
+    let target_balance_before = query_balance(&test_rollup.client, &target_address_str).await;
+    assert_eq!(
+        target_balance_before,
+        Some(Amount::new(10_000)),
+        "Expected synthetic target funded with 10,000 before override-routed multisig tx"
+    );
+
+    // Build a V1 multisig transfer targeting the synthetic address.
     let transfer_json = create_multisig_transfer_tx_json(
         Amount(7_000),
         RECIPIENT_ADDRESS,
         multisig_default_address,
-        Some(admin.address()),
+        Some(target_address),
     );
     let json_bytes = transfer_json.as_bytes();
     let wire_bytes = create_multisig_simple_wire_bytes(&transfer_json);
@@ -1244,12 +1286,13 @@ async fn test_submit_multisig_with_authorized_address_override() {
         "Expected recipient to have received 7,000 tokens via override-routed multisig tx"
     );
 
-    // Admin's balance decreased (fees + transferred amount). We only check the ordering
-    // invariant: post < pre. A strict equality is fragile because paymaster gas is deducted.
-    let admin_balance_after = query_balance(&test_rollup.client, &admin_address_str).await;
-    assert!(
-        admin_balance_after < admin_balance_before,
-        "Expected admin balance to decrease after override-routed tx; before={admin_balance_before:?}, after={admin_balance_after:?}"
+    // The synthetic target's balance dropped by the transferred amount (gas is paid by the
+    // paymaster, not by the target).
+    let target_balance_after = query_balance(&test_rollup.client, &target_address_str).await;
+    assert_eq!(
+        target_balance_after,
+        Some(Amount::new(3_000)),
+        "Expected target balance to drop by 7,000 after override-routed multisig tx; before={target_balance_before:?}, after={target_balance_after:?}"
     );
 
     // The multisig's default address was never funded and should still have no balance —
@@ -1353,10 +1396,12 @@ fn test_v1_payload_with_address_override_round_trips() {
 /// End-to-end plumbing test for single-sig V0: admin's credential is explicitly
 /// authorized for a delegated address at genesis, that delegated address is funded,
 /// and a V0 tx carrying `address_override = Some(delegated)` spends from it.
+///
+/// The delegated target is a synthetic (off-curve) 32-byte address — `sov-accounts`
+/// rejects natural pubkey-derived addresses at genesis.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_single_sig_with_authorized_address_override() {
-    let delegated_user = TestUser::<S>::generate_with_default_balance();
-    let delegated_address = delegated_user.address();
+    let delegated_address = make_synthetic_base58_address("single_sig_delegated_v0");
     let delegated_address_str = delegated_address.to_string();
     let (test_rollup, admin) = create_test_rollup_with_extra_account_owners(|admin| {
         vec![sov_test_utils::runtime::sov_accounts::AccountData {
@@ -1445,8 +1490,7 @@ async fn test_submit_single_sig_with_unauthorized_address_override_fails() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_single_sig_with_tampered_address_override_fails_signature() {
-    let delegated_user = TestUser::<S>::generate_with_default_balance();
-    let delegated_address = delegated_user.address();
+    let delegated_address = make_synthetic_base58_address("single_sig_tampered_v0");
     let (test_rollup, admin) = create_test_rollup_with_extra_account_owners(|admin| {
         vec![sov_test_utils::runtime::sov_accounts::AccountData {
             credential_id: admin.credential_id(),

@@ -12,7 +12,7 @@ addresses and records which credentials may act for which addresses.
    the `CallMessage::InsertCredentialId(..)` message.
    This writes an `account_owners` authorization.
 
-5. It is possible to explicitly authorize a credential for the caller's own
+3. It is possible to explicitly authorize a credential for the caller's own
    address with `CallMessage::AddCredentialToAddress { address, credential }`,
    revoke such an authorization with
    `CallMessage::RemoveCredentialFromAddress { address, credential }`, and
@@ -25,7 +25,7 @@ addresses and records which credentials may act for which addresses.
    There is no orphan guard on remove — revoking the last credential leaves
    the address unspendable via `account_owners`.
 
-6. It is possible to create a new *synthetic* address — an address whose
+4. It is possible to create a new *synthetic* address — an address whose
    authorization lives purely in `account_owners` and which has no
    naturally-corresponding private key — with
    `CallMessage::CreateSyntheticAddress { salt }`. The address is derived
@@ -58,11 +58,29 @@ addresses and records which credentials may act for which addresses.
 ### Stateless canonical address
 
 ```text
-credential_id -> credential_id.into::<S::Address>()
+canonical(credential_id) = credential_id.into::<S::Address>()
 ```
 
-This is the default address for a credential. It is deterministic and requires no state write.
-If a credential has no explicit authorization, this canonical address is the natural fallback.
+This is a deterministic, stateless derivation. It requires no state write. For
+specs whose `S::Address` is a simple hash-derived address, an unauthorized
+credential can still act as `canonical(credential_id)` thanks to the canonical
+fallback in `is_authorized_for`. For composite address specs (e.g.
+`MultiAddress<VmAddress>`), `canonical(credential_id)` is only one of several
+possible "natural" addresses for a credential — see the worked example below.
+
+### Authenticator-declared default address
+
+```text
+default_address = authenticator(credential_id)
+```
+
+This is the address the authenticator chooses to admit the transaction as,
+absent an explicit `address_override`. It is **not stateless** and **not
+required to equal** `canonical(credential_id)`. The authenticator is trusted
+to have verified the credential→default_address binding before producing this
+value; the on-chain admit-path treats `default_address` as authoritative
+unless `account_owners[(default_address, credential_id)] = false` is
+explicitly recorded.
 
 ### Account-credential authorization map
 
@@ -70,17 +88,57 @@ If a credential has no explicit authorization, this canonical address is the nat
 account_owners[(address, credential_id)] = true | false
 ```
 
-This state map records authorization overrides. `true` means the credential is authorized to sign transactions that execute as the given address.
-`false`
-explicitly revokes fallback authorization for that pair, including stateless
-canonical fallback. The key is the exact `(address, credential_id)` pair, so
-this relation does not provide a credential-only lookup by itself.
+This state map records authorization overrides. `true` grants authorization;
+`false` explicitly revokes authorization for that pair, including the
+stateless canonical fallback. The key is the exact `(address, credential_id)`
+pair, so this relation does not provide a credential-only lookup by itself.
+New `InsertCredentialId` / `AddCredentialToAddress` calls write `true`;
+`RemoveCredentialFromAddress` writes `false`.
 
-This relation answers "may this credential act as this address?" once the target address is known.
-New `InsertCredentialId` calls write this relation.
+### Three predicates
 
-Callers that need to verify whether a known address may be used with a credential should use
-`is_authorized_for`, which checks the stateless canonical address and `account_owners`.
+`Accounts` exposes three authorization predicates with deliberately different
+fallback semantics. Each answers a different question:
+
+| Function | No-entry fallback | Question answered | Used by |
+|---|---|---|---|
+| `is_explicitly_authorized(addr, cred)` | `false` | "Is this pair explicitly granted?" | On-chain admit-path when `address_override = Some(_)` |
+| `is_default_address_authorized(addr, cred)` | `true` | "Would the chain admit a tx if an authenticator declared this address as default?" | On-chain admit-path when `address_override = None` |
+| `is_authorized_for(addr, cred)` | `canonical(cred) == addr` | "Is this credential authorized to act as this address under the canonical-fallback view?" | Internal credential lifecycle checks (revoke, rotate, conflict) |
+
+The REST endpoint `GET /authorizations/{address}/{credential_id}` returns all
+three as `admit_as_override`, `admit_as_default`, and `authorized`
+(deprecated — kept for backward compatibility).
+
+### Worked example: EVM authenticator divergence
+
+Consider a rollup whose spec is `MultiAddress<EthereumAddress>` and a
+transaction signed by EVM `signer = 0xAa...Bb` with `credential_id = C =
+keccak256(signer_pubkey)`:
+
+- `canonical(C) = C.into::<S::Address>() = MultiAddress::Standard(...)`
+  via the blanket `impl<VmAddress> From<CredentialId> for MultiAddress<VmAddress>`
+  in `sov-address/src/lib.rs`.
+- `default_address = S::Address::from_vm_address(EthereumAddress(0xAa...Bb)) =
+  MultiAddress::Vm(0xAa...Bb)` set by `sov-evm/src/authenticate.rs` in
+  `extract_evm_authorization_data`.
+
+The two are different enum discriminants, so `default_address != canonical(C)`
+for every EVM-signed transaction. Querying
+`GET /authorizations/{default_address}/{C}` with no prior `account_owners`
+entry returns:
+
+| Field | Value | Why |
+|---|---|---|
+| `admit_as_override` | `false` | No explicit entry |
+| `admit_as_default` | `true` | No entry → chain trusts authenticator |
+| `authorized` (deprecated) | `false` | No entry AND `canonical(C) != default_address` (different `MultiAddress` variants) |
+
+The chain admits these transactions (via the `admit_as_default` path).
+Consumers that inspect authorization via the REST endpoint must read
+`admit_as_default` — not the deprecated `authorized` field — or they will
+incorrectly report EVM signers as unauthorized for addresses the chain
+actually authorizes.
 
 ## Upgrade procedure for chains with legacy `accounts` entries
 
@@ -118,6 +176,12 @@ The migration converts each `accounts[C] = A` row into `account_owners[(A, C)] =
 legacy row where `A != canonical(credential_id)`, the credential gains authorization to act as
 `canonical(credential_id)` after the migration, in addition to keeping authorization for `A`. The
 canonical fallback is computed, not stored, so it cannot be revoked through `account_owners`.
+
+Worked example: suppose pre-migration `accounts[C] = A` with `A = 0x1111…` and
+`canonical(C) = C.into::<S::Address>() = 0x2222…`. Before the migration, `C` could sign only as
+`0x1111…`. After the migration, `account_owners[(0x1111…, C)] = true` is written, and the
+unsuppressed canonical fallback means `C` can now also sign as `0x2222…` — two addresses, one
+credential.
 
 Operators should treat each migrated entry as also implicitly authorizing
 `credential_id.into::<S::Address>()`. If that address holds assets or permissions whose security
