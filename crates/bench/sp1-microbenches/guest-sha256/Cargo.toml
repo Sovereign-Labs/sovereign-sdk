@@ -8,7 +8,7 @@ resolver = "2"
 [workspace]
 
 [dependencies]
-sp1-zkvm = { version = "6.1.0" }
+sp1-zkvm = { version = "6.2.1" }
 sov-modules-api = { path = "../../../module-system/sov-modules-api", default-features = false }
 sov-mock-da = { path = "../../../adapters/mock-da", default-features = false }
 sov-mock-zkvm = { path = "../../../adapters/mock-zkvm", default-features = false }
