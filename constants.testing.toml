@@ -105,20 +105,15 @@ PROCESS_TX_PRE_EXEC_GAS = [1, 1]
 PROCESS_TX_PRE_EXEC_GAS_PER_TX_BYTE = [1, 1]
 # --- End Gas parameters to specify how to charge gas for signature verification ---
 
-# Common entry bias charged once per borsh decode via MeteredBorshDeserialize.
+# --- Borsh deserialization gas constants ---
 BIAS_BORSH_DESERIALIZATION = [1, 1]
-
-# The cost of deserializing a tx using JSON
-TX_GAS_TO_CHARGE_PER_BYTE_JSON_DESERIALIZATION = [1, 1]
-TX_BIAS_JSON_DESERIALIZATION = [1, 1]
-
-# Work-based borsh decoding constants used by `MeteredReader`. Inert (zero) until
-# calibration.
 BORSH_PER_BYTE_READ = [0, 0]
 BORSH_PER_READ_BIAS = [0, 0]
-
-# Upfront per-byte cost charged against opaque blob payloads in sov-blob-storage.
 GAS_TO_CHARGE_PER_BYTE_BLOB_DECODE_UPFRONT = [1, 1]
+
+# --- JSON deserialization gas constants ---
+TX_GAS_TO_CHARGE_PER_BYTE_JSON_DESERIALIZATION = [1, 1]
+TX_BIAS_JSON_DESERIALIZATION = [1, 1]
 
 # The amount of gas to charge per zk-proof byte
 GAS_TO_CHARGE_PER_PROOF_BYTE = [1, 1]

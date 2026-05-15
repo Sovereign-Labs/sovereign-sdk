@@ -480,20 +480,20 @@ pub fn authenticate<
         &mut raw_tx,
         state,
     ) {
-            Ok(ok) => ok,
+        Ok(ok) => ok,
 
-            Err(MeteredBorshDeserializeError::GasError(e)) => {
-                return Err(AuthenticationError::OutOfGas(format!(
-                    "Transaction deserialization run out of gas {e}, tx hash {raw_tx_hash}"
-                )))
-            }
-            Err(MeteredBorshDeserializeError::IOError(e)) => {
-                return Err(AuthenticationError::FatalError(
-                    FatalError::DeserializationFailed(e.to_string()),
-                    raw_tx_hash,
-                ));
-            }
-        };
+        Err(MeteredBorshDeserializeError::GasError(e)) => {
+            return Err(AuthenticationError::OutOfGas(format!(
+                "Transaction deserialization run out of gas {e}, tx hash {raw_tx_hash}"
+            )))
+        }
+        Err(MeteredBorshDeserializeError::IOError(e)) => {
+            return Err(AuthenticationError::FatalError(
+                FatalError::DeserializationFailed(e.to_string()),
+                raw_tx_hash,
+            ));
+        }
+    };
 
     verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
 }

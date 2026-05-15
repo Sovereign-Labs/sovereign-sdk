@@ -25,11 +25,7 @@ fn create_working_set(remaining_funds: Amount) -> WorkingSet<S, StateCheckpoint<
 }
 
 /// Gas needed for one read of `n` bytes through a `MeteredReader` with the given prices.
-fn budget_for_reads(
-    per_byte: GasUnit<2>,
-    per_read_bias: GasUnit<2>,
-    reads: &[u32],
-) -> Amount {
+fn budget_for_reads(per_byte: GasUnit<2>, per_read_bias: GasUnit<2>, reads: &[u32]) -> Amount {
     let mut total = GasUnit::<2>::ZEROED;
     for &n in reads {
         total = total
@@ -59,7 +55,10 @@ fn read_exact_meters_against_slice() {
         MeteredReader::new_with_prices(data.as_slice(), &mut ws, per_byte, per_read_bias);
 
     let mut buf = [0u8; 8];
-    assert!(reader.read_exact(&mut buf).is_ok(), "first read_exact(8) must succeed");
+    assert!(
+        reader.read_exact(&mut buf).is_ok(),
+        "first read_exact(8) must succeed"
+    );
     assert_eq!(buf, [0, 1, 2, 3, 4, 5, 6, 7]);
 
     // Second read_exact must fail because the budget was exactly one read; the

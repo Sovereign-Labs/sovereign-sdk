@@ -147,7 +147,6 @@ pub struct BorshTestStruct {
     pub field2: u32,
 }
 
-
 /// Total gas cost to decode a `BorshTestStruct` through `deserialize_from_slice`:
 /// the common entry bias plus the per-read cost of two `read_exact(4)` calls
 /// (one per `u32` field), each charging `per_read_bias + per_byte_read × 4`.
@@ -173,12 +172,11 @@ fn test_metered_deserializer() {
     let remaining_funds = gas_cost_for_borsh_test_struct().value(TEST_GAS_PRICE);
     let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
-    let deserialized_data =
-        <BorshTestStruct as MeteredBorshDeserialize>::deserialize_from_slice(
-            &mut serialized_data.as_slice(),
-            &mut ws,
-        )
-        .unwrap();
+    let deserialized_data = <BorshTestStruct as MeteredBorshDeserialize>::deserialize_from_slice(
+        &mut serialized_data.as_slice(),
+        &mut ws,
+    )
+    .unwrap();
 
     assert_eq!(deserialized_data, data);
 }
