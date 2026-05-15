@@ -254,6 +254,29 @@ fn test_metered_deserializer_charges_per_byte_and_per_read() {
 }
 
 #[test]
+fn test_metered_deserializer_advances_buf_by_bytes_consumed() {
+    let data = TEST_BORSH_STRUCT;
+    let mut serialized = borsh::to_vec(&data).unwrap();
+    let tail = [0xAB, 0xCD, 0xEF];
+    serialized.extend_from_slice(&tail);
+
+    let mut ws = create_working_set(
+        gas_cost_for_borsh_test_struct().value(TEST_GAS_PRICE),
+        &TEST_GAS_PRICE,
+    );
+
+    let mut buf: &[u8] = &serialized;
+    let decoded =
+        <BorshTestStruct as MeteredBorshDeserialize>::deserialize_from_slice(&mut buf, &mut ws)
+            .unwrap();
+    assert_eq!(decoded, data);
+    assert_eq!(
+        buf, &tail,
+        "deserialize_from_slice must advance *buf by exactly the bytes consumed"
+    );
+}
+
+#[test]
 fn test_metered_deserializer_recovers_gas_error_mid_decode() {
     set_borsh_read_constants("[10, 10]", "[5, 5]");
 
