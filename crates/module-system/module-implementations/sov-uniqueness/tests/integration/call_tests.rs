@@ -1,5 +1,5 @@
 use sov_modules_api::macros::config_value;
-use sov_modules_api::{CredentialId, TxEffect};
+use sov_modules_api::{CheckUniquenessError, CredentialId, TxEffect};
 use sov_test_utils::{BatchType, SlotInput, TransactionTestCase, TxProcessingError};
 use sov_uniqueness::Uniqueness;
 
@@ -93,9 +93,7 @@ fn do_max_stored_tx_hashes_per_credential_test() {
                 panic!("Transaction should be skipped");
             };
             match skipped.error {
-                TxProcessingError::CheckUniquenessFailed(reason) => {
-                    assert!(reason.contains("Too many transactions for credential_id"));
-                }
+                TxProcessingError::CheckUniquenessFailed(CheckUniquenessError::GenerationCapacityExceeded { .. }) => {}
                 _ => {
                     panic!("Transaction should be rejected because it's not unique");
                 }

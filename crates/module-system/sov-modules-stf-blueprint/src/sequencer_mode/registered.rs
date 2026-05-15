@@ -233,7 +233,7 @@ where
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();
         return (
             Err((
-                TxProcessingError::CheckUniquenessFailed(err.to_string()),
+                TxProcessingError::CheckUniquenessFailed(err),
                 raw_tx,
             )),
             scratchpad,

@@ -982,11 +982,8 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
         InvalidNonceReason::Replaced => format!("{was_queued_msg} But a new transaction with the same nonce has arrived and replaced it in the account's queue."),
         InvalidNonceReason::AlreadyQueued => format!("An identical transaction with the same hash is already in the nonce queue; its existing status is unchanged from this request. {was_queued_msg}"),
     };
-    let error_msg = format!(
-        "Tx bad nonce for credential id: {credential_id}, expected: {expected_nonce}, but found: {tx_nonce}. {queue_error_msg}"
-    );
     tracing::debug!(
-        "Sequencer rejecting nonce transaction with error: {error_msg}, tx_hash: {tx_hash}"
+        "Sequencer rejecting nonce transaction: credential_id={credential_id}, expected_nonce={expected_nonce}, tx_nonce={tx_nonce}, reason={queue_error_msg}, tx_hash={tx_hash}"
     );
     let receipt = TransactionReceipt {
         tx_hash,
@@ -994,7 +991,12 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
         events: Vec::new(),
         receipt: sov_rollup_interface::stf::TxEffect::Skipped(SkippedTxContents {
             gas_used: <S::Gas as Gas>::zero(),
-            error: TxProcessingError::CheckUniquenessFailed(error_msg),
+            error: TxProcessingError::CheckUniquenessFailed(
+                sov_modules_api::CheckUniquenessError::BadNonce {
+                    expected_nonce,
+                    provided_nonce: tx_nonce,
+                },
+            ),
         }),
     };
     Ok(Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
@@ -1334,7 +1336,7 @@ mod tests {
                     events: Vec::new(),
                     receipt: sov_rollup_interface::stf::TxEffect::Skipped(SkippedTxContents {
                         gas_used: <TestSpec as Spec>::Gas::from([0, 0]),
-                        error: TxProcessingError::CheckUniquenessFailed(format!("Tx bad nonce for credential id: {}, expected: {executor_nonce}, but found: {tx_nonce}", CredentialId::from_bytes([1u8; 32]))),
+                        error: TxProcessingError::CheckUniquenessFailed(sov_modules_api::CheckUniquenessError::BadNonce { expected_nonce: executor_nonce, provided_nonce: tx_nonce }),
                     }),
                 };
                 return Ok(Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
@@ -1606,28 +1608,10 @@ mod tests {
                             match receipt.receipt {
                                 sov_rollup_interface::stf::TxEffect::Skipped(contents) => {
                                     match contents.error {
-                                        TxProcessingError::CheckUniquenessFailed(msg) => {
-                                            // Verify the message contains "bad nonce"
-                                            assert!(
-                                                msg.contains("bad nonce"),
-                                                "Tx {i}: Error should mention bad nonce: \"{msg}\"",
-                                            );
-
-                                            // Verify the reason-specific substring
-                                            let expected_substring = match reason {
-                                                InvalidNonceReason::Invalid => "did not attempt to queue",
-                                                InvalidNonceReason::Timeout => "has timed out and is being evicted",
-                                                InvalidNonceReason::EvictedBeforeExecution => "dropped from the queue for an unknown reason",
-
-                                                InvalidNonceReason::Replaced => "new transaction with the same nonce has arrived and replaced it",
-                                                InvalidNonceReason::AlreadyQueued => "identical transaction with the same hash",
-                                            };
-                                            assert!(
-                                                msg.contains(expected_substring),
-                                                "Tx {i}: Error message should contain \"{expected_substring}\" for reason {reason:?}, but got: \"{msg}\"",
-                                            );
-                                        }
-                                        other => panic!("Tx {i}: Expected CheckUniquenessFailed error, got: {other:?}"),
+                                        TxProcessingError::CheckUniquenessFailed(
+                                            sov_modules_api::CheckUniquenessError::BadNonce { .. },
+                                        ) => {}
+                                        other => panic!("Tx {i}: Expected CheckUniquenessFailed(BadNonce), got: {other:?}"),
                                     }
                                 }
                                 other => panic!("Tx {i}: Expected Skipped receipt, got: {other:?}"),
@@ -1691,10 +1675,6 @@ mod tests {
                     let inner = result.expect("Expected Ok from TransactionReceiverResult");
                     let err = inner.expect_err(&format!("Expected tx {i} to fail with rejection"));
 
-                    let expected_msg = format!(
-                        "Tx bad nonce for credential id: {}, expected: {expected}, but found: {tx}",
-                        CredentialId::from_bytes([1u8; 32])
-                    );
                     assert!(
                         matches!(
                             &err,
@@ -1702,13 +1682,18 @@ mod tests {
                                 RollupBlockExecutorError::UnsuccessfulTransaction {
                                     receipt: TransactionReceipt {
                                         receipt: sov_rollup_interface::stf::TxEffect::Skipped(SkippedTxContents {
-                                            error: TxProcessingError::CheckUniquenessFailed(msg),
+                                            error: TxProcessingError::CheckUniquenessFailed(
+                                                sov_modules_api::CheckUniquenessError::BadNonce {
+                                                    expected_nonce,
+                                                    provided_nonce,
+                                                }
+                                            ),
                                             ..
                                         }),
                                         ..
                                     }
                                 },
-                            )) if msg == &expected_msg
+                            )) if *expected_nonce == expected as u64 && *provided_nonce == tx as u64
                         ),
                         "Tx {i}: Expected STF nonce rejection with expected={expected}, tx={tx}, got: {err:?}"
                     );
