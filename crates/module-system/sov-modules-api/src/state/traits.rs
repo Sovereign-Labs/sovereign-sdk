@@ -371,7 +371,7 @@ macro_rules! blanket_impl_metered_state_reader {
                     // so we use the upfront-byte charge rather than routing through MeteredReader.
                     maybe_trace_span!("all_accesses::charge_per_byte_upfront_decode", {
                         self.charge_linear_gas(
-                            <T::Spec as GasSpec>::gas_to_charge_per_byte_blob_decode_upfront(),
+                            <T::Spec as GasSpec>::gas_to_charge_per_byte_borsh_read(),
                             storage_value.size(),
                         )
                         .map_err(|e| StateAccessorError::Decode {

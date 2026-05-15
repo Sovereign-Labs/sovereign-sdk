@@ -77,14 +77,12 @@ pub trait GasSpec:
     // --- Borsh deserialization gas constants ---
     /// Common entry bias charged once per borsh decode in `MeteredBorshDeserialize::deserialize_from_slice`.
     fn bias_borsh_deserialization() -> Self::Gas;
-    /// Per-byte cost charged inside `MeteredReader` during work-based borsh decoding.
+    /// Per-byte cost — charged inside `MeteredReader` for work-based decoding, and
+    /// applied upfront against opaque payloads (sov-blob-storage bond-burn,
+    /// state-codec per-byte charge in state accessors).
     fn gas_to_charge_per_byte_borsh_read() -> Self::Gas;
     /// Per-read fixed cost charged inside `MeteredReader` on each `read`/`read_exact` call.
     fn bias_borsh_per_read() -> Self::Gas;
-    /// Upfront per-byte cost for opaque payloads decoded outside `MeteredReader` —
-    /// used by sov-blob-storage (charged against the sequencer's bond before decode)
-    /// and the generic `StateItemCodec` per-byte charge in state accessors.
-    fn gas_to_charge_per_byte_blob_decode_upfront() -> Self::Gas;
 
     // --- JSON deserialization gas constants ---
     /// The cost of deserializing a transaction using JSON
@@ -198,10 +196,6 @@ impl<S: Spec> GasSpec for S {
 
     fn bias_borsh_per_read() -> Self::Gas {
         new_constant!("BORSH_PER_READ_BIAS", Self::Gas)
-    }
-
-    fn gas_to_charge_per_byte_blob_decode_upfront() -> Self::Gas {
-        new_constant!("GAS_TO_CHARGE_PER_BYTE_BLOB_DECODE_UPFRONT", Self::Gas)
     }
 
     // --- JSON deserialization gas constants ---
