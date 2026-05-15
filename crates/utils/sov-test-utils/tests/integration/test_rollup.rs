@@ -2,6 +2,7 @@ use std::sync::Arc;
 
 use sov_db::ledger_db::LedgerDb;
 use sov_mock_da::MockBlock;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::Runtime;
 use sov_modules_rollup_blueprint::logging::initialize_logging;
 use sov_modules_rollup_blueprint::FullNodeBlueprint;
@@ -76,6 +77,72 @@ async fn validates_rollup_mode_before_genesis_initialization() {
     let (_, ledger_state) = storage_manager.create_state_after(&genesis_header).unwrap();
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
     assert!(ledger_db.get_head_slot().unwrap().is_none());
+}
+
+fn genesis_params_with_state_version(
+    state_version: u64,
+) -> GenesisParams<<TestRuntime<TestSpec> as Runtime<TestSpec>>::GenesisConfig> {
+    let mut runtime =
+        <TestRuntime<TestSpec> as Runtime<TestSpec>>::GenesisConfig::from_minimal_config(
+            HighLevelOptimisticGenesisConfig::generate().into(),
+        );
+    runtime.chain_state.state_version = state_version;
+    GenesisParams { runtime }
+}
+
+fn rollup_builder_with_state_version(state_version: u64) -> RollupBuilder<TestBlueprint> {
+    RollupBuilder::<TestBlueprint>::new(
+        GenesisSource::CustomParams(genesis_params_with_state_version(state_version)),
+        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+        1,
+    )
+    .set_config(|c| {
+        c.rollup_prover_config = RollupProverConfig::Disabled;
+    })
+    .with_standard_sequencer()
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn rollup_startup_accepts_matching_state_version() {
+    let _guard = initialize_logging();
+    let state_version: u64 = config_value!("STATE_VERSION");
+
+    let test_rollup = rollup_builder_with_state_version(state_version)
+        .start_test_rollup()
+        .await
+        .unwrap();
+
+    test_rollup.shutdown().await.unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn rollup_startup_rejects_mismatched_state_version() {
+    let _guard = initialize_logging();
+    let expected_state_version: u64 = config_value!("STATE_VERSION");
+    let mismatched_state_version = expected_state_version + 1;
+
+    let Err(err) = rollup_builder_with_state_version(mismatched_state_version)
+        .start_test_rollup()
+        .await
+    else {
+        panic!("rollup startup unexpectedly succeeded with a mismatched state version");
+    };
+    let err = format!("{err:#}");
+
+    assert!(
+        err.contains("State version mismatch"),
+        "unexpected error: {err}"
+    );
+    assert!(
+        err.contains(&format!(
+            "on-disk state has version {mismatched_state_version}"
+        )),
+        "unexpected error: {err}"
+    );
+    assert!(
+        err.contains(&format!("STATE_VERSION {expected_state_version}")),
+        "unexpected error: {err}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
