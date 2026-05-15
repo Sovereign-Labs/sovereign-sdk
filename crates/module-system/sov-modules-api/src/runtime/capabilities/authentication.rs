@@ -476,8 +476,10 @@ pub fn authenticate<
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
-    let tx =
-        match <Transaction<D, S> as MeteredBorshDeserialize<S>>::deserialize(&mut raw_tx, state) {
+    let tx = match <Transaction<D, S> as MeteredBorshDeserialize>::deserialize_from_slice(
+        &mut raw_tx,
+        state,
+    ) {
             Ok(ok) => ok,
 
             Err(MeteredBorshDeserializeError::GasError(e)) => {
@@ -593,9 +595,8 @@ pub fn decode_sov_tx<S: Spec, D: DispatchCall<Spec = S>>(
 pub fn decode_sov_tx_with_cryptospec<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
     mut raw_tx: &[u8],
 ) -> Result<D::Decodable, FatalError> {
-    let tx =
-        <Transaction<D, S, C> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
-            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+    let tx = <Transaction<D, S, C> as MeteredBorshDeserialize>::unmetered_deserialize(&mut raw_tx)
+        .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok(tx.into_runtime_call())
 }

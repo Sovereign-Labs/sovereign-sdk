@@ -33,7 +33,7 @@ fn check_txs(tx_statuses: Vec<TxStatus>) {
         runner.config.sequencer_da_address,
     );
 
-    let seq_burn_gas = <S as GasSpec>::gas_to_charge_per_byte_borsh_deserialization()
+    let seq_burn_gas = <S as GasSpec>::gas_to_charge_per_byte_blob_decode_upfront()
         .checked_scalar_product(mock_blob.total_len() as u64)
         .unwrap();
 

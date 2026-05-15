@@ -218,9 +218,9 @@ impl<S: Spec> BlobStorage<S> {
                     WORST_CASE_GAS_PRICE_INCREASE as u64 * estimated_bytes_with_key_size,
                 )?,
             )?
-            // We also charge borsh deserialization cost because we need to deserialize the blob
+            // We also charge upfront blob-decode cost because we need to deserialize the blob.
             .checked_combine(
-                <S as GasSpec>::gas_to_charge_per_byte_borsh_deserialization()
+                <S as GasSpec>::gas_to_charge_per_byte_blob_decode_upfront()
                     .checked_scalar_product(
                         WORST_CASE_GAS_PRICE_INCREASE as u64 * (estimated_bytes_to_store as u64),
                     )?,

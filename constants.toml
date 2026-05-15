@@ -140,25 +140,25 @@ PROCESS_TX_PRE_EXEC_GAS = [1, 1]
 PROCESS_TX_PRE_EXEC_GAS_PER_TX_BYTE = [1, 1]
 # --- End Gas parameters to specify how to charge gas for signature verification ---
 
-# The cost of deserializing a message using Borsh
-DEFAULT_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
+# Common entry bias charged once per borsh decode via MeteredBorshDeserialize.
 BIAS_BORSH_DESERIALIZATION = [1, 1]
-
-# The cost of deserializing a tx using Borsh
-TX_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
-TX_BIAS_BORSH_DESERIALIZATION = [1, 1]
 
 # The cost of deserializing a tx using JSON
 TX_GAS_TO_CHARGE_PER_BYTE_JSON_DESERIALIZATION = [1, 1]
 TX_BIAS_JSON_DESERIALIZATION = [1, 1]
 
-# The cost of deserializing a proof using Borsh
-PROOF_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
-PROOF_BIAS_BORSH_DESERIALIZATION = [1, 1]
+# Work-based borsh decoding constants used by `MeteredReader`. Inert (zero) until
+# calibration. `BORSH_PER_BYTE_READ` is charged per byte the deserializer actually
+# consumes; `BORSH_PER_READ_BIAS` is charged once per `read`/`read_exact` call.
+BORSH_PER_BYTE_READ = [0, 0]
+BORSH_PER_READ_BIAS = [0, 0]
 
-# The cost of deserializing a string using Borsh
-STRING_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
-STRING_BIAS_BORSH_DESERIALIZATION = [1, 1]
+# Upfront per-byte cost charged against opaque blob payloads decoded outside of the
+# trait-based metering (e.g. sequencer blob → `Batch` decode in sov-blob-storage).
+# Cannot use the work-based MeteredReader here because we don't control the inner
+# `BorshDeserialize` impl. Charged as `per_byte × blob.total_len()` upfront, burned
+# from the sequencer's bond.
+GAS_TO_CHARGE_PER_BYTE_BLOB_DECODE_UPFRONT = [1, 1]
 
 # The percentage of the "base fee" that is burned when a transaction is processed.
 # The portion that is not burned is awarded to provers and/or attesters on the network.

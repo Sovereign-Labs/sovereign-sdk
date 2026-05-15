@@ -74,30 +74,23 @@ pub trait GasSpec:
     /// Gas to charge for EVM execution
     fn gas_to_charge_per_evm_gas() -> Self::Gas;
 
-    /// The cost of deserializing a message using Borsh
-    fn gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas;
-    /// The bias to charge for deserializing a message using Borsh
+    /// Common entry bias charged once per borsh decode in `MeteredBorshDeserialize::deserialize_from_slice`.
     fn bias_borsh_deserialization() -> Self::Gas;
-
-    /// The cost of deserializing a transaction using Borsh
-    fn tx_gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas;
-    /// The bias to charge for deserializing a tx using Borsh
-    fn tx_bias_borsh_deserialization() -> Self::Gas;
 
     /// The cost of deserializing a transaction using JSON
     fn tx_gas_to_charge_per_byte_json_deserialization() -> Self::Gas;
     /// The bias to charge for deserializing a tx using JSON
     fn tx_bias_json_deserialization() -> Self::Gas;
 
-    /// The cost of deserializing a proof using Borsh
-    fn proof_gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas;
-    /// The bias to charge for deserializing a proof using Borsh
-    fn proof_bias_borsh_deserialization() -> Self::Gas;
+    /// Per-byte cost charged inside `MeteredReader` during work-based borsh decoding.
+    fn gas_to_charge_per_byte_borsh_read() -> Self::Gas;
+    /// Per-read fixed cost charged inside `MeteredReader` on each `read`/`read_exact` call.
+    fn bias_borsh_per_read() -> Self::Gas;
 
-    /// The cost of deserializing a sample string using Borsh
-    fn string_gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas;
-    /// The bias to charge for deserializing a sample string using Borsh
-    fn string_bias_borsh_deserialization() -> Self::Gas;
+    /// Upfront per-byte cost for opaque blob payloads decoded outside of `MeteredBorshDeserialize`
+    /// (e.g. sequencer blob → `Batch` in sov-blob-storage; see `validation.rs` and `capabilities.rs`).
+    /// Charged against the sequencer's bond at registration / dispatch time, not via the reader.
+    fn gas_to_charge_per_byte_blob_decode_upfront() -> Self::Gas;
 
     // --- Gas fee adjustment parameters: See https://eips.ethereum.org/EIPS/eip-1559 for a detailed description ---
     /// The initial gas limit of the rollup.
@@ -194,23 +187,8 @@ impl<S: Spec> GasSpec for S {
         )
     }
 
-    fn gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas {
-        new_constant!(
-            "DEFAULT_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION",
-            Self::Gas
-        )
-    }
-
     fn bias_borsh_deserialization() -> Self::Gas {
         new_constant!("BIAS_BORSH_DESERIALIZATION", Self::Gas)
-    }
-
-    fn tx_gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas {
-        new_constant!("TX_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION", Self::Gas)
-    }
-
-    fn tx_bias_borsh_deserialization() -> Self::Gas {
-        new_constant!("TX_BIAS_BORSH_DESERIALIZATION", Self::Gas)
     }
 
     fn tx_gas_to_charge_per_byte_json_deserialization() -> Self::Gas {
@@ -221,26 +199,16 @@ impl<S: Spec> GasSpec for S {
         new_constant!("TX_BIAS_JSON_DESERIALIZATION", Self::Gas)
     }
 
-    fn proof_gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas {
-        new_constant!(
-            "PROOF_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION",
-            Self::Gas
-        )
+    fn gas_to_charge_per_byte_borsh_read() -> Self::Gas {
+        new_constant!("BORSH_PER_BYTE_READ", Self::Gas)
     }
 
-    fn proof_bias_borsh_deserialization() -> Self::Gas {
-        new_constant!("PROOF_BIAS_BORSH_DESERIALIZATION", Self::Gas)
+    fn gas_to_charge_per_byte_blob_decode_upfront() -> Self::Gas {
+        new_constant!("GAS_TO_CHARGE_PER_BYTE_BLOB_DECODE_UPFRONT", Self::Gas)
     }
 
-    fn string_gas_to_charge_per_byte_borsh_deserialization() -> Self::Gas {
-        new_constant!(
-            "STRING_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION",
-            Self::Gas
-        )
-    }
-
-    fn string_bias_borsh_deserialization() -> Self::Gas {
-        new_constant!("STRING_BIAS_BORSH_DESERIALIZATION", Self::Gas)
+    fn bias_borsh_per_read() -> Self::Gas {
+        new_constant!("BORSH_PER_READ_BIAS", Self::Gas)
     }
 
     fn gas_to_charge_hash_update() -> Self::Gas {
