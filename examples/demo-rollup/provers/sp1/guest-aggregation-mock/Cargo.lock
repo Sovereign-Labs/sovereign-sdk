@@ -6213,6 +6213,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "bincode",
  "borsh",
  "bytes",
  "derive_more 2.1.1",

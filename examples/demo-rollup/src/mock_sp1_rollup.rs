@@ -11,7 +11,7 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
-use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec};
+use sov_modules_api::{CodeCommitmentTrait, CryptoSpec, NodeEndpoints, Spec};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
@@ -19,11 +19,8 @@ use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::SyncStatus;
-use sov_rollup_interface::zk::aggregated_proof::{
-    AggregateProofVerifier, AggregatedProofPublicData,
-};
 use sov_sequencer::{ProofBlobSender, Sequencer};
-use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
+use sov_sp1_adapter::host::{code_commitment_from_verifying_key, SP1AggregationHost, SP1Host};
 use sov_sp1_adapter::{SP1CryptoSpec, SP1MethodId, SP1Verifier, SP1};
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
@@ -31,8 +28,31 @@ use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
-use crate::read_latest_aggregated_proof;
+use crate::get_persisted_outer_proof;
 use crate::solana_offchain_endpoint::solana_offchain_router;
+
+/// Output of [`build_sp1_inner_host`]: the inner [`SP1Host`] together with the
+/// inner and outer code commitments derived from the same setup pass.
+struct Sp1InnerHostBundle {
+    inner_host: SP1Host,
+    inner_code_commitment: SP1MethodId,
+    outer_code_commitment: SP1MethodId,
+}
+
+/// Runs the SP1 prover setup once per ELF and returns the inner host plus both
+/// code commitments. Callers that only need the commitments can drop
+/// `inner_host`; the setup cost is identical either way.
+fn build_sp1_inner_host(inner_elf: &[u8], outer_elf: &[u8]) -> anyhow::Result<Sp1InnerHostBundle> {
+    let outer_vk = Arc::new(sov_sp1_adapter::host::verifying_key_from_elf(outer_elf)?);
+    let outer_code_commitment = code_commitment_from_verifying_key(&outer_vk);
+    let inner_host = SP1Host::new(inner_elf, outer_vk)?;
+    let inner_code_commitment = code_commitment_from_verifying_key(inner_host.verifying_key());
+    Ok(Sp1InnerHostBundle {
+        inner_host,
+        inner_code_commitment,
+        outer_code_commitment,
+    })
+}
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, and [`SP1`] for both inner and outer vm
 #[derive(Default, Clone, Copy)]
@@ -152,31 +172,31 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
         let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
 
-        let outer_verifying_key = tokio::task::spawn_blocking(move || {
-            sov_sp1_adapter::host::verifying_key_from_elf(agg_elf).map(Arc::new)
-        })
-        .await
-        .expect("Outer verifying key setup task panicked")
-        .expect("Failed to derive outer verifying key from aggregation guest ELF");
-
         // SP1's blocking CPU prover spins up its own tokio runtime during setup,
         // so it must be constructed off the async executor thread.
-        let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf, outer_verifying_key))
+        let Sp1InnerHostBundle {
+            inner_host: inner_vm,
+            inner_code_commitment,
+            outer_code_commitment,
+        } = tokio::task::spawn_blocking(move || build_sp1_inner_host(elf, agg_elf))
             .await
-            .expect("SP1Host setup task panicked")
-            .expect("Failed to create SP1Host from guest ELF");
+            .expect("SP1 host setup task panicked")?;
 
         let inner_verifying_key = inner_vm.verifying_key().clone();
 
-        if start_fresh_outer_proof_on_resync {
-            panic!(
-                "`start_fresh_outer_proof_on_resync` is not supported for the SP1 mock rollup: todo #2551"
-            );
-        }
+        let (previous_for_outer, latest_proof_final_slot) = get_persisted_outer_proof::<
+            SP1Verifier,
+            <Self::Spec as Spec>::Address,
+            MockDaSpec,
+            <<Self::Spec as Spec>::Storage as Storage>::Root,
+        >(
+            ledger_db,
+            inner_code_commitment.to_hash(),
+            outer_code_commitment.to_hash(),
+            start_fresh_outer_proof_on_resync,
+        )
+        .await?;
 
-        let previous_aggregated_proof = read_latest_aggregated_proof(ledger_db).await;
-
-        let previous_for_outer = previous_aggregated_proof.clone();
         let outer_vm = tokio::task::spawn_blocking(move || {
             SP1AggregationHost::new_with_previous_proof(
                 agg_elf,
@@ -187,19 +207,6 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         })
         .await
         .expect("SP1AggregationHost setup task panicked");
-
-        // Validate the persisted proof and extract the `final_slot_number` so
-        // the runner can rewind the STF-info stream to `final_slot + 1`.
-        let latest_proof_final_slot = previous_aggregated_proof.as_ref().map(|proof| {
-            let public_data: AggregatedProofPublicData<
-                <Self::Spec as Spec>::Address,
-                MockDaSpec,
-                <<Self::Spec as Spec>::Storage as Storage>::Root,
-            > = AggregateProofVerifier::<SP1Verifier>::new(outer_vm.code_commitment())
-                .verify(proof)
-                .expect("Persisted aggregated proof failed verification");
-            public_data.final_slot_number
-        });
 
         let da_verifier = Default::default();
 
@@ -235,9 +242,12 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         let inner_elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
         let outer_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
 
-        let inner = sov_sp1_adapter::host::code_commitment_from_elf(inner_elf)?;
-        let outer = sov_sp1_adapter::host::code_commitment_from_elf(outer_elf)?;
+        let Sp1InnerHostBundle {
+            inner_code_commitment,
+            outer_code_commitment,
+            ..
+        } = build_sp1_inner_host(inner_elf, outer_elf)?;
 
-        Ok((inner, outer))
+        Ok((inner_code_commitment, outer_code_commitment))
     }
 }
