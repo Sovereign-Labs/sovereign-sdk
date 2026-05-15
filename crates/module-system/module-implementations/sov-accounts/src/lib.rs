@@ -61,21 +61,18 @@ pub enum Event<S: Spec> {
         /// The credential authorized to control the new address.
         credential: CredentialId,
     },
-    /// Emitted by [`CallMessage::InsertCredentialId`] when the caller
-    /// authorizes a new credential for their own address.
-    CredentialInserted {
-        /// The address whose credential set was extended.
-        address: S::Address,
-        /// The newly authorized credential.
-        credential: CredentialId,
-    },
-    /// Emitted by [`CallMessage::AddCredentialToAddress`] when a credential
-    /// is authorized for an explicit address (which must be the caller).
+    /// Emitted by [`CallMessage::InsertCredentialId`] and
+    /// [`CallMessage::AddCredentialToAddress`] when a new credential is
+    /// authorized for an address.
     CredentialAdded {
         /// The address whose credential set was extended.
         address: S::Address,
         /// The newly authorized credential.
         credential: CredentialId,
+        /// The address that submitted the authorizing transaction. Today
+        /// equals `address` (handlers require `context.sender() == address`);
+        /// recorded separately for audit.
+        authorizer_address: S::Address,
     },
     /// Emitted by [`CallMessage::RemoveCredentialFromAddress`] when a
     /// credential is revoked from an address.
@@ -84,6 +81,10 @@ pub enum Event<S: Spec> {
         address: S::Address,
         /// The revoked credential.
         credential: CredentialId,
+        /// The address that submitted the revoking transaction. Today
+        /// equals `address` (handlers require `context.sender() == address`);
+        /// recorded separately for audit.
+        authorizer_address: S::Address,
     },
     /// Emitted by [`CallMessage::RotateCredentialOnAddress`] when a
     /// credential is atomically swapped for another on an address.
@@ -94,6 +95,10 @@ pub enum Event<S: Spec> {
         old_credential: CredentialId,
         /// The newly authorized credential.
         new_credential: CredentialId,
+        /// The address that submitted the rotating transaction. Today
+        /// equals `address` (handlers require `context.sender() == address`);
+        /// recorded separately for audit.
+        authorizer_address: S::Address,
     },
 }
 

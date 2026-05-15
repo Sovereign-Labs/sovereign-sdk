@@ -111,9 +111,10 @@ impl<S: Spec> Accounts<S> {
         self.authorize_credential(context.sender(), &new_credential_id, state)?;
         self.emit_event(
             state,
-            Event::CredentialInserted {
+            Event::CredentialAdded {
                 address: *context.sender(),
                 credential: new_credential_id,
+                authorizer_address: *context.sender(),
             },
         );
         Ok(())
@@ -136,6 +137,7 @@ impl<S: Spec> Accounts<S> {
             Event::CredentialAdded {
                 address,
                 credential,
+                authorizer_address: *context.sender(),
             },
         );
         Ok(())
@@ -163,6 +165,7 @@ impl<S: Spec> Accounts<S> {
             Event::CredentialRemoved {
                 address,
                 credential,
+                authorizer_address: *context.sender(),
             },
         );
         Ok(())
@@ -194,6 +197,7 @@ impl<S: Spec> Accounts<S> {
                 address,
                 old_credential,
                 new_credential,
+                authorizer_address: *context.sender(),
             },
         );
         Ok(())

@@ -440,9 +440,11 @@ fn test_register_new_account() {
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
 
-            let (event_address, event_credential) = credential_inserted_event(&result.events);
+            let (event_address, event_credential, event_authorizer) =
+                credential_added_event(&result.events);
             assert_eq!(event_address, non_registered_account.address());
             assert_eq!(event_credential, new_credential);
+            assert_eq!(event_authorizer, non_registered_account.address());
 
             let accounts = Accounts::<S>::default();
 
@@ -681,51 +683,52 @@ fn stored_synthetic_address_created_event(
     }
 }
 
-fn credential_inserted_event(
-    events: &[TestAccountsRuntimeEvent<S>],
-) -> (<S as Spec>::Address, CredentialId) {
-    match events {
-        [TestAccountsRuntimeEvent::Accounts(Event::CredentialInserted {
-            address,
-            credential,
-        })] => (*address, *credential),
-        other => panic!("expected one CredentialInserted event, got {other:?}"),
-    }
-}
-
 fn credential_added_event(
     events: &[TestAccountsRuntimeEvent<S>],
-) -> (<S as Spec>::Address, CredentialId) {
+) -> (<S as Spec>::Address, CredentialId, <S as Spec>::Address) {
     match events {
         [TestAccountsRuntimeEvent::Accounts(Event::CredentialAdded {
             address,
             credential,
-        })] => (*address, *credential),
+            authorizer_address,
+        })] => (*address, *credential, *authorizer_address),
         other => panic!("expected one CredentialAdded event, got {other:?}"),
     }
 }
 
 fn credential_removed_event(
     events: &[TestAccountsRuntimeEvent<S>],
-) -> (<S as Spec>::Address, CredentialId) {
+) -> (<S as Spec>::Address, CredentialId, <S as Spec>::Address) {
     match events {
         [TestAccountsRuntimeEvent::Accounts(Event::CredentialRemoved {
             address,
             credential,
-        })] => (*address, *credential),
+            authorizer_address,
+        })] => (*address, *credential, *authorizer_address),
         other => panic!("expected one CredentialRemoved event, got {other:?}"),
     }
 }
 
 fn credential_rotated_event(
     events: &[TestAccountsRuntimeEvent<S>],
-) -> (<S as Spec>::Address, CredentialId, CredentialId) {
+) -> (
+    <S as Spec>::Address,
+    CredentialId,
+    CredentialId,
+    <S as Spec>::Address,
+) {
     match events {
         [TestAccountsRuntimeEvent::Accounts(Event::CredentialRotated {
             address,
             old_credential,
             new_credential,
-        })] => (*address, *old_credential, *new_credential),
+            authorizer_address,
+        })] => (
+            *address,
+            *old_credential,
+            *new_credential,
+            *authorizer_address,
+        ),
         other => panic!("expected one CredentialRotated event, got {other:?}"),
     }
 }
@@ -1233,9 +1236,11 @@ fn test_add_credential_to_address_by_owner() {
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
 
-            let (event_address, event_credential) = credential_added_event(&result.events);
+            let (event_address, event_credential, event_authorizer) =
+                credential_added_event(&result.events);
             assert_eq!(event_address, owner_address);
             assert_eq!(event_credential, new_credential);
+            assert_eq!(event_authorizer, owner_address);
 
             let accounts = Accounts::<S>::default();
             assert!(
@@ -1443,9 +1448,11 @@ fn test_remove_credential_from_address_by_owner() {
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
 
-            let (event_address, event_credential) = credential_removed_event(&result.events);
+            let (event_address, event_credential, event_authorizer) =
+                credential_removed_event(&result.events);
             assert_eq!(event_address, owner_address);
             assert_eq!(event_credential, removed_credential);
+            assert_eq!(event_authorizer, owner_address);
 
             let accounts = Accounts::<S>::default();
             assert!(!accounts
@@ -1927,10 +1934,12 @@ fn test_rotate_credential_by_owner() {
         assert: Box::new(move |result, state| {
             assert!(result.tx_receipt.is_successful());
 
-            let (event_address, event_old, event_new) = credential_rotated_event(&result.events);
+            let (event_address, event_old, event_new, event_authorizer) =
+                credential_rotated_event(&result.events);
             assert_eq!(event_address, owner_address);
             assert_eq!(event_old, old_credential);
             assert_eq!(event_new, new_credential);
+            assert_eq!(event_authorizer, owner_address);
 
             let accounts = Accounts::<S>::default();
             assert!(!accounts
