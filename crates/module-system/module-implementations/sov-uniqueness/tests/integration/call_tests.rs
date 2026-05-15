@@ -93,7 +93,9 @@ fn do_max_stored_tx_hashes_per_credential_test() {
                 panic!("Transaction should be skipped");
             };
             match skipped.error {
-                TxProcessingError::CheckUniquenessFailed(CheckUniquenessError::GenerationCapacityExceeded { .. }) => {}
+                TxProcessingError::CheckUniquenessFailed(
+                    CheckUniquenessError::GenerationCapacityExceeded { .. },
+                ) => {}
                 _ => {
                     panic!("Transaction should be rejected because it's not unique");
                 }

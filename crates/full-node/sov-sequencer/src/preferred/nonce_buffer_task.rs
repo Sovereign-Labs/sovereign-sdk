@@ -1336,7 +1336,12 @@ mod tests {
                     events: Vec::new(),
                     receipt: sov_rollup_interface::stf::TxEffect::Skipped(SkippedTxContents {
                         gas_used: <TestSpec as Spec>::Gas::from([0, 0]),
-                        error: TxProcessingError::CheckUniquenessFailed(sov_modules_api::CheckUniquenessError::BadNonce { expected_nonce: executor_nonce, provided_nonce: tx_nonce }),
+                        error: TxProcessingError::CheckUniquenessFailed(
+                            sov_modules_api::CheckUniquenessError::BadNonce {
+                                expected_nonce: executor_nonce,
+                                provided_nonce: tx_nonce,
+                            },
+                        ),
                     }),
                 };
                 return Ok(Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(

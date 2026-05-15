@@ -1,5 +1,7 @@
 use sov_modules_api::macros::config_value;
-use sov_modules_api::{CheckUniquenessError, CredentialId, Spec, StateAccessor, StateReader, TxHash};
+use sov_modules_api::{
+    CheckUniquenessError, CredentialId, Spec, StateAccessor, StateReader, TxHash,
+};
 use sov_state::User;
 
 use crate::Uniqueness;
@@ -37,7 +39,8 @@ impl<S: Spec> Uniqueness<S> {
         // `transaction_generation >= latest_generation - (PAST_TRANSACTION_GENERATIONS - 1)`.
         // N.B. this does add one edge case where an extra generation is accepted when `latest generation == PAST_TRANSACTION_GENERATIONS`, which is deemed acceptable.
         // which amounts to `latest_generation - (PAST_TRANSACTION_GENERATIONS - 1) <= transaction_generation`
-        if latest_generation.saturating_sub(transaction_generation_cutoff) > transaction_generation {
+        if latest_generation.saturating_sub(transaction_generation_cutoff) > transaction_generation
+        {
             return Err(CheckUniquenessError::BadGeneration {
                 latest_generation,
                 provided_generation: transaction_generation,
@@ -71,11 +74,14 @@ impl<S: Spec> Uniqueness<S> {
             .values()
             .try_fold(0_u64, |acc, bucket| {
                 let bucket_len: u64 = bucket.len().try_into().map_err(|e| {
-                    CheckUniquenessError::Internal(format!("Overflow when converting bucket length: {e}"))
+                    CheckUniquenessError::Internal(format!(
+                        "Overflow when converting bucket length: {e}"
+                    ))
                 })?;
-                acc.checked_add(bucket_len).ok_or(CheckUniquenessError::Internal(
-                    "Overflow when summing transaction counts".into(),
-                ))
+                acc.checked_add(bucket_len)
+                    .ok_or(CheckUniquenessError::Internal(
+                        "Overflow when summing transaction counts".into(),
+                    ))
             })?
             .checked_add(1)
             .ok_or(CheckUniquenessError::Internal(
