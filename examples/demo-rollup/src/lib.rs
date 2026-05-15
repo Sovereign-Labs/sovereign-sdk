@@ -83,7 +83,7 @@ where
         })
         .transpose()
         .map_err(|e| {
-            anyhow::anyhow!("Failed to extract public data from persisted aggregated proof: {e:#}")
+            anyhow::anyhow!("Failed to extract public data from persisted aggregated proof: {e:?}")
         })?;
 
     let latest_proof_final_slot = previous_public_data.as_ref().map(|p| p.final_slot_number);
