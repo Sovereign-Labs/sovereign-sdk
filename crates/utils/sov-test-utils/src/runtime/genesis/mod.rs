@@ -170,6 +170,7 @@ impl<S: Spec> BasicGenesisConfig<S> {
         ChainStateConfig {
             current_time: Default::default(),
             genesis_da_height: 0,
+            state_version: sov_modules_api::macros::config_value!("STATE_VERSION"),
             operating_mode,
             inner_code_commitment,
             outer_code_commitment,
