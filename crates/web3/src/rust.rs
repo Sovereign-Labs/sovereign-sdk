@@ -50,12 +50,12 @@ pub enum TransactionBuilderError {
     PrivateKeyInvalid,
 }
 
-/// Trait for providing chain-specific hash values.
+/// Trait for providing chain-specific schema hash values.
 ///
-/// This trait must be implemented by types that need to provide
-/// a unique 32-byte hash identifying a specific blockchain.
+/// This trait must be implemented by types that provide the 32-byte chain hash
+/// committed to by transaction signing payloads.
 pub trait ChainHash {
-    /// Returns the 32-byte hash that uniquely identifies the chain.
+    /// Returns the 32-byte hash for the target rollup schema and metadata.
     fn chain_hash() -> [u8; 32];
 }
 
@@ -230,7 +230,8 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
     /// Builds and signs a transaction in one step.
     ///
     /// This is a convenience method that builds the transaction with the configured
-    /// parameters and immediately signs it with the provided private key.
+    /// parameters and immediately signs its canonical signing payload with the
+    /// provided private key. The signing payload commits to `C::chain_hash()`.
     ///
     /// # Arguments
     ///
