@@ -1,6 +1,6 @@
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
-    CheckUniquenessError, CredentialId, Spec, StateAccessor, StateReader, TxHash,
+    CheckUniquenessError, CoreModuleError, CredentialId, Spec, StateAccessor, StateReader, TxHash,
 };
 use sov_state::User;
 
@@ -16,7 +16,7 @@ impl<S: Spec> Uniqueness<S> {
         let mut senders_buckets = self
             .generations
             .get(credential_id, state)
-            .map_err(|e| CheckUniquenessError::Internal(e.to_string()))?
+            .map_err(CoreModuleError::state_read)?
             .unwrap_or_default();
 
         // The "currently active" generations is the range containing the latest seen generation
@@ -27,9 +27,9 @@ impl<S: Spec> Uniqueness<S> {
 
         let past_transaction_generations: u64 = config_value!("PAST_TRANSACTION_GENERATIONS");
         let transaction_generation_cutoff: u64 = past_transaction_generations.checked_sub(1)
-            .ok_or(CheckUniquenessError::Internal("PAST_TRANSACTION_GENERATIONS should be greater than 0. Please ensure you have set this value correctly".into()))?;
+            .ok_or_else(|| CheckUniquenessError::from(anyhow::anyhow!("PAST_TRANSACTION_GENERATIONS should be greater than 0. Please ensure you have set this value correctly")))?;
 
-        // Ensure we're not below the current generation range.
+        // If we're below the current generation range, reject this transaction.
         // Note about the arithmetic: for a given PAST_TRANSACTION_GENERATIONS, the correct
         // comparison is
         // `transaction_generation > latest_generation - PAST_TRANSACTION_GENERATIONS`.
@@ -75,19 +75,22 @@ impl<S: Spec> Uniqueness<S> {
             .values()
             .try_fold(0_u64, |acc, bucket| {
                 let bucket_len: u64 = bucket.len().try_into().map_err(|e| {
-                    CheckUniquenessError::Internal(format!(
+                    CheckUniquenessError::from(anyhow::anyhow!(
                         "Overflow when converting bucket length: {e}"
                     ))
                 })?;
-                acc.checked_add(bucket_len)
-                    .ok_or(CheckUniquenessError::Internal(
-                        "Overflow when summing transaction counts".into(),
+                acc.checked_add(bucket_len).ok_or_else(|| {
+                    CheckUniquenessError::from(anyhow::anyhow!(
+                        "Overflow when summing transaction counts"
                     ))
+                })
             })?
             .checked_add(1)
-            .ok_or(CheckUniquenessError::Internal(
-                "Overflow when incrementing transaction count".into(),
-            ))?;
+            .ok_or_else(|| {
+                CheckUniquenessError::from(anyhow::anyhow!(
+                    "Overflow when incrementing transaction count"
+                ))
+            })?;
 
         if num_txs_after_increment > config_value!("MAX_STORED_TX_HASHES_PER_CREDENTIAL") {
             let earliest_valid_bucket = senders_buckets
@@ -97,9 +100,9 @@ impl<S: Spec> Uniqueness<S> {
 
             let next_valid_generation = earliest_valid_bucket
                 .checked_add(config_value!("PAST_TRANSACTION_GENERATIONS"))
-                .ok_or(CheckUniquenessError::Internal(
-                    "Overflow when computing next valid generation. This account can no longer accept transactions.".into(),
-                ))?;
+                .ok_or_else(|| CheckUniquenessError::from(anyhow::anyhow!(
+                    "Overflow when computing next valid generation. This account can no longer accept transactions."
+                )))?;
 
             return Err(CheckUniquenessError::GenerationCapacityExceeded {
                 current_generation: transaction_generation,

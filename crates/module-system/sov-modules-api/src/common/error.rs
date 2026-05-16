@@ -100,6 +100,34 @@ pub enum CoreModuleError {
     StateWrite(Box<dyn std::error::Error + Send + Sync>),
 }
 
+impl Clone for CoreModuleError {
+    fn clone(&self) -> Self {
+        CoreModuleError::Generic(anyhow::anyhow!("{}", self))
+    }
+}
+
+impl PartialEq for CoreModuleError {
+    fn eq(&self, other: &Self) -> bool {
+        self.to_string() == other.to_string()
+    }
+}
+
+impl Eq for CoreModuleError {}
+
+impl<'de> serde::Deserialize<'de> for CoreModuleError {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: serde::Deserializer<'de>,
+    {
+        #[derive(serde::Deserialize)]
+        struct Helper {
+            message: String,
+        }
+        let h = Helper::deserialize(deserializer)?;
+        Ok(CoreModuleError::Generic(anyhow::anyhow!("{}", h.message)))
+    }
+}
+
 impl CoreModuleError {
     /// Creates a new `StateRead` error variant from any error type.
     ///

@@ -1,4 +1,7 @@
-use sov_modules_api::{CheckUniquenessError, CredentialId, Spec, StateAccessor, StateReader};
+use sov_modules_api::{
+    BadNonceReason, CheckUniquenessError, CoreModuleError, CredentialId, Spec, StateAccessor,
+    StateReader,
+};
 use sov_state::User;
 
 use crate::Uniqueness;
@@ -12,13 +15,14 @@ impl<S: Spec> Uniqueness<S> {
         let nonce = self
             .nonces
             .get(credential_id, state)
-            .map_err(|e| CheckUniquenessError::Internal(e.to_string()))?
+            .map_err(CoreModuleError::state_read)?
             .unwrap_or_default();
 
         if nonce != transaction_nonce {
             return Err(CheckUniquenessError::BadNonce {
                 expected_nonce: nonce,
                 provided_nonce: transaction_nonce,
+                reason: BadNonceReason::WrongNonce,
             });
         }
 
@@ -34,7 +38,7 @@ impl<S: Spec> Uniqueness<S> {
         let nonce = self
             .nonces
             .get(credential_id, state)
-            .map_err(|e| CheckUniquenessError::Internal(e.to_string()))?
+            .map_err(CoreModuleError::state_read)?
             .unwrap_or_default();
 
         if nonce > transaction_nonce {

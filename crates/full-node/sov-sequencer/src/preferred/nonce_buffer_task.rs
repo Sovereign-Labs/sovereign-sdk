@@ -2,7 +2,8 @@ use async_trait::async_trait;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
-    FullyBakedTx, Gas, Runtime, SkippedTxContents, Spec, TransactionReceipt, TxProcessingError,
+    BadNonceReason, FullyBakedTx, Gas, Runtime, SkippedTxContents, Spec, TransactionReceipt,
+    TxProcessingError,
 };
 use sov_rollup_interface::{
     crypto::CredentialId,
@@ -985,6 +986,13 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
     tracing::debug!(
         "Sequencer rejecting nonce transaction: credential_id={credential_id}, expected_nonce={expected_nonce}, tx_nonce={tx_nonce}, reason={queue_error_msg}, tx_hash={tx_hash}"
     );
+    let bad_nonce_reason = match queue_rejection_reason {
+        InvalidNonceReason::Invalid => BadNonceReason::OutsideQueueRange,
+        InvalidNonceReason::Timeout => BadNonceReason::QueueTimeout,
+        InvalidNonceReason::EvictedBeforeExecution => BadNonceReason::QueueEvicted,
+        InvalidNonceReason::Replaced => BadNonceReason::Replaced,
+        InvalidNonceReason::AlreadyQueued => BadNonceReason::AlreadyQueued,
+    };
     let receipt = TransactionReceipt {
         tx_hash,
         body_to_save: None,
@@ -995,6 +1003,7 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
                 sov_modules_api::CheckUniquenessError::BadNonce {
                     expected_nonce,
                     provided_nonce: tx_nonce,
+                    reason: bad_nonce_reason,
                 },
             ),
         }),
@@ -1340,6 +1349,7 @@ mod tests {
                             sov_modules_api::CheckUniquenessError::BadNonce {
                                 expected_nonce: executor_nonce,
                                 provided_nonce: tx_nonce,
+                                reason: BadNonceReason::WrongNonce,
                             },
                         ),
                     }),
@@ -1600,12 +1610,19 @@ mod tests {
                     result.unwrap().unwrap().await.is_ok(),
                     "Expected tx {i} to succeed"
                 ),
-                Outcome::Err(_reason) => {
+                Outcome::Err(queue_reason) => {
                     let inner = result.expect("Expected Ok from TransactionReceiverResult");
                     let err =
                         inner.expect_err(&format!("Expected tx {i} to fail with nonce error"));
 
-                    // Pattern match to extract the error message
+                    let expected_reason = match queue_reason {
+                        InvalidNonceReason::Invalid => BadNonceReason::OutsideQueueRange,
+                        InvalidNonceReason::Timeout => BadNonceReason::QueueTimeout,
+                        InvalidNonceReason::EvictedBeforeExecution => BadNonceReason::QueueEvicted,
+                        InvalidNonceReason::Replaced => BadNonceReason::Replaced,
+                        InvalidNonceReason::AlreadyQueued => BadNonceReason::AlreadyQueued,
+                    };
+
                     match err {
                         AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
                             RollupBlockExecutorError::UnsuccessfulTransaction { receipt },
@@ -1614,8 +1631,14 @@ mod tests {
                                 sov_rollup_interface::stf::TxEffect::Skipped(contents) => {
                                     match contents.error {
                                         TxProcessingError::CheckUniquenessFailed(
-                                            sov_modules_api::CheckUniquenessError::BadNonce { .. },
-                                        ) => {}
+                                            sov_modules_api::CheckUniquenessError::BadNonce { reason, .. },
+                                        ) => {
+                                            assert_eq!(
+                                                reason,
+                                                expected_reason,
+                                                "Tx {i}: BadNonce reason mismatch",
+                                            );
+                                        }
                                         other => panic!("Tx {i}: Expected CheckUniquenessFailed(BadNonce), got: {other:?}"),
                                     }
                                 }
@@ -1691,6 +1714,7 @@ mod tests {
                                                 sov_modules_api::CheckUniquenessError::BadNonce {
                                                     expected_nonce,
                                                     provided_nonce,
+                                                    ..
                                                 }
                                             ),
                                             ..
