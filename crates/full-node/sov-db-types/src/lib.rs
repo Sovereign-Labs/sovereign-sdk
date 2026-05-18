@@ -490,7 +490,7 @@ impl SlotKey {
         }
     }
 
-    /// Craetes a test key with the given byte.
+    /// Creates a test key with the given byte.
     pub fn test_key(byte: u8) -> Self {
         Self {
             key: KeyContents::Inline(

@@ -38,7 +38,7 @@ pub fn verify_storage_proof<S: MerkleProofSpec>(
                 .confirm_nonexistence(&key_path)
                 .map_err(|e| anyhow::anyhow!("Key out of scope: {:?}", e))?
             {
-                anyhow::bail!("Failed to verify non-existence of key");
+                anyhow::bail!("Failed to verify non-existence of key {key}");
             }
         }
         Some(slot_value) => {
@@ -52,7 +52,7 @@ pub fn verify_storage_proof<S: MerkleProofSpec>(
                 .confirm_value(&leaf)
                 .map_err(|e| anyhow::anyhow!("Key out of scope: {:?}", e))?
             {
-                anyhow::bail!("Failed to verify value for key");
+                anyhow::bail!("Failed to verify value for key {key}");
             }
         }
     }
