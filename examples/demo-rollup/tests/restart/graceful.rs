@@ -696,7 +696,7 @@ async fn check_with_increasing_stf_infos(
                 .unwrap();
         assert!(
             slot.number > last_processed_slot_number,
-            "Received notification for slot n={} is lower than last seen: {}",
+            "Received notification for slot n={} is not greater than last seen: {}",
             slot.number,
             last_processed_slot_number
         );
