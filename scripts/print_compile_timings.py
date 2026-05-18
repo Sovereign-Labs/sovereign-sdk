@@ -1,7 +1,22 @@
 #!/usr/bin/env python3
 """Parse cargo --timings HTML report and print a summary table.
 
-Used by CI compile-monitoring jobs to produce machine-readable output.
+IMPORTANT - what this report does NOT measure
+=============================================
+cargo --timings only records units that were *actually recompiled* during
+this invocation. Units that were served from the cache (fresh) do not
+appear in the report at all.
+
+That means:
+  * The count below is "units recompiled in this run", NOT "total units
+    in the build".
+  * A small recompiled count with mostly-workspace crates near the top is
+    a sign the cache is WARM for external dependencies. It is NOT a sign
+    the cache is cold.
+  * To get a real fresh-vs-dirty count, parse cargo's JSON message stream
+    (`--message-format=json`) and look for `fresh: true/false` on each
+    `compiler-artifact` event. This script intentionally does not do that
+    to keep the CI step lightweight.
 
 Usage:
     WALL_CLOCK_SECONDS=342 python3 scripts/print_compile_timings.py timing_check
@@ -39,9 +54,10 @@ def main():
 
     wall_clock = int(os.environ.get("WALL_CLOCK_SECONDS", 0))
     cumulative = sum(u.get("duration", 0) for u in units)
-    total_units = len(units)
-    fresh_units = sum(1 for u in units if u.get("duration", 0) == 0.0)
-    dirty_units = total_units - fresh_units
+    # Every entry in UNIT_DATA was recompiled in this run. Fresh units are
+    # not included by cargo, so we don't try to count them here; see module
+    # docstring for why.
+    recompiled_units = len(units)
 
     lines = []
     lines.append(f"## Compilation Timing: {job_name}")
@@ -51,12 +67,18 @@ def main():
     lines.append(f"| Wall clock (bash SECONDS) | {wall_clock}s |")
     if cargo_duration is not None:
         lines.append(f"| Wall clock (cargo DURATION) | {cargo_duration}s |")
-    lines.append(f"| Cumulative unit time | {cumulative:.1f}s |")
-    lines.append(f"| Total units | {total_units} |")
-    lines.append(f"| Dirty (recompiled) units | {dirty_units} |")
-    lines.append(f"| Fresh (cached) units | {fresh_units} |")
+    lines.append(f"| Cumulative recompile time | {cumulative:.1f}s |")
+    lines.append(f"| Units recompiled this run | {recompiled_units} |")
     lines.append("")
-    lines.append("### Top 30 slowest crates")
+    lines.append(
+        "> This report lists only the units that cargo recompiled. Units"
+        " served from the cache are not shown. A short list of mostly-"
+        "workspace crates here means the dependency cache is working;"
+        " the workspace itself is always recompiled when its source"
+        " changes."
+    )
+    lines.append("")
+    lines.append("### Top 30 slowest recompiled crates")
     lines.append("")
     lines.append(f"| {'#':>3} | {'Crate':<40} | {'Version':<10} | {'Duration':>10} | {'Codegen':>10} | Target |")
     lines.append(f"|{'---':>5}|{'---':<42}|{'---':<12}|{'---':>12}|{'---':>12}|--------|")
@@ -78,10 +100,8 @@ def main():
     lines.append(
         f"COMPILATION_TIMING_SUMMARY: job={job_name}"
         f" wall_clock={wall_clock}s"
-        f" cumulative={cumulative:.1f}s"
-        f" units={total_units}"
-        f" dirty={dirty_units}"
-        f" fresh={fresh_units}"
+        f" cumulative_recompile={cumulative:.1f}s"
+        f" recompiled_units={recompiled_units}"
     )
 
     output = "\n".join(lines)
