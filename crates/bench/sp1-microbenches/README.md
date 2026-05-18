@@ -45,6 +45,16 @@ primitive call that the metered path eventually makes. Results calibrate
 `DEFAULT_FIXED_GAS_TO_CHARGE_PER_SIGNATURE_VERIFICATION` and
 `DEFAULT_GAS_TO_CHARGE_PER_BYTE_SIGNATURE_VERIFICATION`.
 
+**Borsh** — three sub-commands isolate the three borsh deserialization
+constants independently. `reader-bytes` calibrates `BORSH_PER_BYTE_READ` by
+sweeping read length at one read per iteration. `reader-count` calibrates
+`BORSH_PER_READ_BIAS` by sweeping read count at one byte per read.
+`decode-vec` calibrates `BIAS_BORSH_DESERIALIZATION` by running full
+`MeteredBorshDeserialize::deserialize_from_slice::<Vec<u8>>` and subtracting
+out the reader-level contributions. Borsh decode is cheap per cycle (no
+precompiles), so this bench uses two-iteration differencing — see
+"Methodology choice" below.
+
 ## Run
 
 ```sh
@@ -97,6 +107,32 @@ binary) — they're pure clap-derive glue with no library role.
 Shared infrastructure lives in `lib.rs` (`BenchResult`, `load_guest_elf`) and
 `fit.rs` (OLS fit).
 
+## Methodology choice: single-pass vs two-iteration differencing
+
+Every SP1 execution carries a per-execution setup cost (zkVM bootstrap,
+stdin reads, guest allocations) that gets amortized into the linear fit's
+intercept and — if any setup work scales with N — also into the slope.
+
+Whether you need to cancel that setup depends on the workload:
+
+- **Precompile-heavy work** (hashes, signature verify, big-int math): a
+  single operation burns far more gas than per-execution setup amortized
+  over reasonable iteration counts. Setup is a fraction of a percent of
+  signal. Use single-pass: one sweep, call `fit_prover_gas_per_byte`. See
+  `cmd/sha256.rs`, `cmd/ed25519.rs`.
+
+- **Cheap-per-cycle work** (memcpy, simple arithmetic, byte counting,
+  serialization): setup overhead is comparable to or larger than the
+  signal. Use two-iteration differencing: run the sweep at two iteration
+  counts (e.g. 10 and 100), compute `per_iter = (gas_high - gas_low) /
+  (iter_high - iter_low)` per N, fit `fit_linear` on the result. Setup
+  cancels exactly because it's identical between the two runs at the same
+  N. See `cmd/borsh.rs`.
+
+Heuristic: if the bench drives a precompile (sha256, keccak, secp256k1,
+curve ops), single-pass is fine. If it drives generic Rust (allocs,
+memcpy, decoding), use differencing.
+
 ## Adding a new microbench
 
 1. Create `guest-{name}/` mirroring `guest-sha256/` — same SP1 patches, same
@@ -105,8 +141,10 @@ Shared infrastructure lives in `lib.rs` (`BenchResult`, `load_guest_elf`) and
    work (cheap insurance — see `guest-sha256/src/main.rs`).
 2. Add a `build_program_with_args` call in `build.rs`.
 3. Create `src/cmd/{name}.rs` with `{Name}Args` and
-   `pub fn run(args: {Name}Args) -> anyhow::Result<()>`. Inside, run the
-   sweep, call `fit_prover_gas_per_byte`, and `println!` the results.
+   `pub fn run(args: {Name}Args) -> anyhow::Result<()>`. Pick single-pass or
+   two-iter differencing per the methodology heuristic above. For single-pass
+   call `fit_prover_gas_per_byte`; for differencing call `fit_linear`
+   directly on the differential.
 4. Add `pub mod {name};` to `src/cmd/mod.rs`.
 5. Add the variant to `BenchCmd` in `src/main.rs` and route it in
    `BenchCmd::run`.

@@ -123,7 +123,10 @@ fn run_reader_bytes(args: ReaderBytesArgs) -> anyhow::Result<()> {
     print_fit(&fit, "byte");
 
     println!("\n=== suggested constant ===");
-    println!("  BORSH_PER_BYTE_READ ≈ {}", fit.per_byte.round() as i64);
+    println!(
+        "  BORSH_PER_BYTE_READ ≈ {}",
+        round_at_least_one(fit.per_byte)
+    );
     println!("  (clean per-byte slope, setup cancelled by two-iter differencing)");
 
     Ok(())
@@ -187,7 +190,7 @@ fn run_reader_count(args: ReaderCountArgs) -> anyhow::Result<()> {
                 "  BORSH_PER_READ_BIAS ≈ per_read - per_byte_read = {:.4} - {:.4} = {}",
                 fit.per_byte,
                 per_byte,
-                bias.round() as i64
+                round_at_least_one(bias)
             );
         }
         None => {
@@ -264,7 +267,7 @@ fn run_decode_vec(args: DecodeVecArgs) -> anyhow::Result<()> {
                 fit.bias,
                 2.0 * prb,
                 4.0 * pb,
-                bias_const.round() as i64
+                round_at_least_one(bias_const)
             );
             println!(
                 "  Sanity: fit slope = {:.4} should match per_byte_read = {pb:.4}",
@@ -357,4 +360,15 @@ fn print_fit(fit: &LinearFit, unit: &str) {
     println!("  per_{unit}     = {:.4} prover gas / {unit}", fit.per_byte);
     println!("  R²           = {:.6}", fit.r_squared);
     println!("  max residual = {:.2} prover gas", fit.max_residual);
+}
+
+/// Rounds the value to nearest integer, but never floors a strictly positive cost to zero —
+/// any positive sub-1 value becomes 1 so the constant doesn't end up effectively unmetered.
+fn round_at_least_one(v: f64) -> i64 {
+    let rounded = v.round() as i64;
+    if v > 0.0 && rounded == 0 {
+        1
+    } else {
+        rounded
+    }
 }
