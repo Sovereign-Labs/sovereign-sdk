@@ -41,6 +41,10 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
             ordered_writes: state_writes,
         } = state_accesses;
 
+        if state_reads.is_empty() && state_writes.is_empty() {
+            return Ok(prev_root);
+        }
+
         let multi_proof: MultiProof = array_witness.get_hint();
         let verified_multi_proof = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
             &multi_proof,

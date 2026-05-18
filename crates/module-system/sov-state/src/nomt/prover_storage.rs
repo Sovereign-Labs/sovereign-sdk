@@ -533,8 +533,9 @@ fn compute_state_update_namespace<S: MerkleProofSpec>(
     write_witness: bool,
 ) -> anyhow::Result<FinishedSession> {
     tracing::trace!(accesses = accesses.len(), "compute state update");
+    let has_accesses = !accesses.is_empty();
     let mut finished = session.finish(accesses)?;
-    if write_witness {
+    if write_witness && has_accesses {
         let nomt_witness = finished.take_witness().expect("Witness cannot be missing");
         let nomt::Witness {
             path_proofs,
@@ -1006,8 +1007,11 @@ mod tests {
 
     use super::{GetWithProofError, NomtProverStorage};
     use crate::cache::{OrderedReadsAndWrites, StateAccesses};
+    use crate::nomt::zk_storage::NomtVerifierStorage;
     use crate::storage::{NativeStorage, StateUpdate, Storage};
-    use crate::{DefaultStorageSpec, SlotKey, SlotValue, User};
+    use crate::{
+        DefaultStorageSpec, ProvableNamespace, SlotKey, SlotValue, StateRoot, User, Witness,
+    };
 
     type TestStorage = NomtProverStorage<DefaultStorageSpec<Sha256>, MockHash>;
     type TestStorageManager = NomtStorageManager<MockDaSpec, Sha256, TestStorage>;
@@ -1088,6 +1092,75 @@ mod tests {
             storage.get_accessory_unbound(accessory_key.clone(), Some(slot_number)),
             Some(expected_value.clone())
         );
+    }
+
+    fn kernel_only_accesses(kernel_key: SlotKey, value: SlotValue) -> StateAccesses {
+        StateAccesses {
+            user: OrderedReadsAndWrites::default(),
+            kernel: OrderedReadsAndWrites {
+                ordered_reads: Vec::new(),
+                ordered_writes: vec![(kernel_key, Some(value))],
+            },
+        }
+    }
+
+    #[test]
+    fn verifier_carries_untouched_non_empty_namespace_forward() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            true,
+        )
+        .unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+
+        let first_header = MockBlockHeader::from_height(1);
+        let first_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &first_header,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+        assert_ne!(
+            first_root.namespace_root(ProvableNamespace::User),
+            nomt::trie::TERMINATOR
+        );
+
+        let second_header = MockBlockHeader::from_height(2);
+        let (prover_storage, _ledger_storage) =
+            storage_manager.create_state_for(&second_header).unwrap();
+        let kernel_key = SlotKey::from_slice(b"kernel-only-counter");
+        let kernel_value = SlotValue::from(vec![2]);
+        let witness = Default::default();
+        let (prover_root, _state_update) = prover_storage
+            .compute_state_update(
+                kernel_only_accesses(kernel_key.clone(), kernel_value.clone()),
+                &witness,
+                first_root,
+                None,
+            )
+            .unwrap();
+
+        let verifier_storage = NomtVerifierStorage::<DefaultStorageSpec<Sha256>>::new();
+        let (verifier_root, _state_update) = verifier_storage
+            .compute_state_update(
+                kernel_only_accesses(kernel_key, kernel_value),
+                &witness,
+                first_root,
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(verifier_root, prover_root);
+        assert_eq!(
+            verifier_root.namespace_root(ProvableNamespace::User),
+            first_root.namespace_root(ProvableNamespace::User)
+        );
+        assert!(witness.is_empty());
     }
 
     #[test]
