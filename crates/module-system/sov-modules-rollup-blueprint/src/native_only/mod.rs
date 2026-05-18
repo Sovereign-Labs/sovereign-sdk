@@ -237,7 +237,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         da_sync_state,
                         &rollup_config.storage.path,
                         &rollup_config.sequencer.with_seq_config(seq_config.clone()),
-                        rollup_config.proof_manager.max_concurrent_proof_blobs,
+                        rollup_config
+                            .proof_manager
+                            .as_ref()
+                            .map(|p| p.max_concurrent_proof_blobs)
+                            .unwrap_or(0),
                         ledger_db.clone(),
                         api_ledger_db.clone(),
                         shutdown_sender,
@@ -278,7 +282,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                             .sequencer
                             .with_seq_config(seq_config.clone())
                             .clone(),
-                        rollup_config.proof_manager.max_concurrent_proof_blobs,
+                        rollup_config
+                            .proof_manager
+                            .as_ref()
+                            .map(|p| p.max_concurrent_proof_blobs)
+                            .unwrap_or(0),
                         ledger_db.clone(),
                         api_ledger_db.clone(),
                         shutdown_sender.clone(),
@@ -364,6 +372,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
             panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
+        }
+
+        if operating_mode != OperatingMode::Operator && rollup_config.proof_manager.is_none() {
+            anyhow::bail!(
+                "Missing `[proof_manager]` section in rollup config: it is required for `{operating_mode:?}` rollups.",
+            );
         }
 
         let da_service = self
@@ -526,7 +540,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             rollup_config.runner.clone(),
             axum_tcp,
             if prover_config.is_enabled() {
-                Some(rollup_config.proof_manager)
+                rollup_config.proof_manager
             } else {
                 None
             },
@@ -567,10 +581,13 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 .expect("prover service must be present when stf_info_receiver is Some");
             let proof_sender =
                 Box::new(self.create_proof_sender(&rollup_config, sequencer.proof_sender.clone())?);
+            let proof_manager = rollup_config
+                .proof_manager
+                .expect("proof_manager must be set when prover is enabled");
 
             let workflow_task_handle = match operating_mode {
                 OperatingMode::Optimistic => {
-                    let prover_address = rollup_config.proof_manager.prover_address;
+                    let prover_address = proof_manager.prover_address;
                     let bonding_proof_service = Self::Runtime::default()
                         .proof_processor()
                         .create_bonding_proof_service::<Self::Runtime>(
@@ -589,11 +606,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 OperatingMode::Zk => {
                     start_zk_workflow_in_background(
                         prover_service,
-                        rollup_config.proof_manager.aggregated_proof_block_jump,
-                        rollup_config.proof_manager.eager_proof_submission,
-                        rollup_config
-                            .proof_manager
-                            .max_number_of_aggregated_proofs_in_memory,
+                        proof_manager.aggregated_proof_block_jump,
+                        proof_manager.eager_proof_submission,
+                        proof_manager.max_number_of_aggregated_proofs_in_memory,
                         proof_sender,
                         stf_info_receiver,
                         runner.da_sync_state(),

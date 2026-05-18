@@ -372,7 +372,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 save_tx_bodies: false,
             },
             da: self.da_config.clone(),
-            proof_manager: ProofManagerConfig {
+            proof_manager: Some(ProofManagerConfig {
                 aggregated_proof_block_jump: NonZero::new(self.config.aggregated_proof_block_jump)
                     .unwrap(),
                 prover_address: FromStr::from_str(&self.config.prover_address)
@@ -384,7 +384,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 prover_thread_count_override: None,
                 max_number_of_aggregated_proofs_in_memory: NonZero::new(5).unwrap(),
                 max_concurrent_proof_blobs: self.config.max_concurrent_proof_blobs,
-            },
+            }),
             sequencer: SequencerConfig {
                 automatic_batch_production: self.config.automatic_batch_production,
                 max_allowed_node_distance_behind: self.config.max_allowed_node_distance_behind,
