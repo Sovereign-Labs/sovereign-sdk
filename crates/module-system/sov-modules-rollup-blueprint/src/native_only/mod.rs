@@ -228,6 +228,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<SequencerCreationReceipt<Self::Spec>> {
+        let max_concurrent_proof_blobs = rollup_config
+            .proof_manager
+            .as_ref()
+            .map(|p| p.max_concurrent_proof_blobs)
+            .unwrap_or(0);
+
         match &rollup_config.sequencer.sequencer_kind_config {
             SequencerKindConfig::Standard(seq_config) => {
                 let (sequencer, background_handles) =
@@ -237,11 +243,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         da_sync_state,
                         &rollup_config.storage.path,
                         &rollup_config.sequencer.with_seq_config(seq_config.clone()),
-                        rollup_config
-                            .proof_manager
-                            .as_ref()
-                            .map(|p| p.max_concurrent_proof_blobs)
-                            .unwrap_or(0),
+                        max_concurrent_proof_blobs,
                         ledger_db.clone(),
                         api_ledger_db.clone(),
                         shutdown_sender,
@@ -282,11 +284,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                             .sequencer
                             .with_seq_config(seq_config.clone())
                             .clone(),
-                        rollup_config
-                            .proof_manager
-                            .as_ref()
-                            .map(|p| p.max_concurrent_proof_blobs)
-                            .unwrap_or(0),
+                        max_concurrent_proof_blobs,
                         ledger_db.clone(),
                         api_ledger_db.clone(),
                         shutdown_sender.clone(),
