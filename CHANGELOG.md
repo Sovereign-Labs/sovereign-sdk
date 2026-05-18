@@ -1,4 +1,5 @@
 # 2026-05-18
+- #2881 **Breaking config change**: Moves `max_concurrent_proof_blobs` from `[sequencer]` to `[proof_manager]` in rollup TOML configs. The `[proof_manager]` section is now optional for `operator` rollups and remains required for `zk`/`optimistic` rollups (enforced at startup).
 - #2879 Updates NOMT crate version. **Breaking for existing ZK-rollups**. Proof type has changed.
 
 # 2026-05-11
