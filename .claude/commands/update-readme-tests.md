@@ -1,84 +1,103 @@
 # Update demo-rollup README tests
 
-Refresh the `bashtestmd:compare-output` blocks in `examples/demo-rollup/README.md` and `examples/demo-rollup/README_CELESTIA.md` after rebasing/changes that alter on-chain values (chain_hash, tx_hash, supply, etc.).
+Refresh stale `bashtestmd:compare-output` blocks in `examples/demo-rollup/README.md` and `examples/demo-rollup/README_CELESTIA.md`.
 
-CI runs `bashtestmd` against these READMEs (`.github/workflows/rust.yml`: jobs `check-demo-rollup-bash-commands-mock-da` and `check-demo-rollup-bash-commands-celestia`). Any `bashtestmd:compare-output` block whose embedded value drifts from the actual rollup output fails the job.
+Use this when CI fails in `check-demo-rollup-bash-commands-mock-da` (runs `README.md`) or `check-demo-rollup-bash-commands` (runs `README_CELESTIA.md` despite the generic name), or when branch changes affect demo-rollup / `sov-cli` output. README edits are **not** required for drift to happen.
 
-## Values that typically drift
+CI runs `bashtestmd` against both READMEs from `.github/workflows/rust.yml`. Any embedded expected output that drifts from current behavior will fail those jobs.
 
-- `chain_hash` — `README.md` L337, `README_CELESTIA.md` L293. Derived from sov-cli's compiled-in chain spec. Changes when accounts/credential/tx-encoding/genesis layout shifts.
-- `tx_hash` — `README.md` only, appears 4× (log line, `Submitted tx hash="…"`, curl URL, JSON `"tx_hash"`). Computed by sov-cli during `make test-create-token`.
-- Less commonly: token supply numbers, sub-command help output (when a new module is added to `sov-cli transactions import from-file`).
+## Usual drift points
 
-Both `chain_hash` and `tx_hash` are independent of the zk-vm choice — `--zk-vm mock` produces the same values as `--zk-vm sp1`.
+- `chain_hash` in both READMEs. Locate it by content, not line number:
+  ```bash
+  rg -n '"chain_hash":' examples/demo-rollup/README.md examples/demo-rollup/README_CELESTIA.md
+  ```
+- `tx_hash` in `README.md`. Find all exact occurrences before editing:
+  ```bash
+  rg -n 'tx_hash=|Submitted tx hash=|/ledger/txs/|"tx_hash":' examples/demo-rollup/README.md
+  ```
+- Less often, an entire `bashtestmd:compare-output` block drifts, such as token supply output or `sov-cli ... -h` output. In that case update only the failing block, anchored by the command inside the block.
+
+For this demo, `chain_hash` and `tx_hash` are independent of `--zk-vm mock` vs `--zk-vm sp1`, so local verification can use `--zk-vm mock`.
 
 ## Instructions
 
-### Step 1: Confirm the script is the right thing to update
+### Step 1: Make sure this command is warranted
+
+Prefer concrete evidence:
+
+- If CI is already failing in `check-demo-rollup-bash-commands-mock-da` or `check-demo-rollup-bash-commands`, continue.
+- Otherwise inspect likely sources of drift:
 
 ```bash
-git diff dev..HEAD -- examples/demo-rollup/README.md examples/demo-rollup/README_CELESTIA.md
+git diff --name-only dev..HEAD -- examples/demo-rollup crates/web3 crates/universal-wallet crates/module-system
 ```
 
-If those files weren't touched on the branch, drift is unlikely — ask the user before continuing.
+If nothing relevant changed and the user did not report README test drift, ask before continuing.
 
-### Step 2: Read the actual chain_hash
+### Step 2: Read the actual `chain_hash`
 
-`sov-cli transactions import from-file` prints `chain_hash` without needing a running rollup. Always do this first — it's free.
+`sov-cli transactions import from-file` prints `chain_hash` without a running rollup. Do this first.
 
 ```bash
-# Make sure sov-cli is built
 SKIP_GUEST_BUILD=1 cargo build --bin sov-cli
 
-# Read the chain_hash that the current branch's sov-cli computes
 cd examples/demo-rollup
 rm -rf ~/.sov_cli_wallet
-../../target/debug/sov-cli transactions import from-file bank \
-    --max-fee 100000000 \
-    --path ../test-data/requests/transfer.json
+CHAIN_HASH=$(
+  ../../target/debug/sov-cli transactions import from-file bank \
+      --max-fee 100000000 \
+      --path ../test-data/requests/transfer.json \
+    | sed -n '/^{/,$p' \
+    | jq -r '.chain_hash'
+)
+printf '%s\n' "$CHAIN_HASH"
 ```
 
-The `"chain_hash"` field in the printed JSON is the new value. Compare it to L337 of `README.md` and L293 of `README_CELESTIA.md`.
+If `jq` is unavailable, read the `"chain_hash"` field from the printed JSON manually.
 
-### Step 3: Read the actual tx_hash (requires running rollup)
+### Step 3: Read the actual `tx_hash`
 
-The tx_hash comes from `make test-create-token` against a running rollup. **Bypass SP1** — the user's env usually has `SKIP_GUEST_BUILD=1` which leaves the SP1 ELFs empty and crashes `--zk-vm sp1`. Use `--zk-vm mock`; the hash is identical.
+The `tx_hash` comes from `make test-create-token` against a running rollup. Use `--zk-vm mock`; local environments often set `SKIP_GUEST_BUILD=1`, which makes `--zk-vm sp1` unusable.
 
 ```bash
 cd examples/demo-rollup
 make clean
-../../target/debug/sov-demo-rollup --zk-vm mock 2>&1 | tee /tmp/rollup-mock.log &
+../../target/debug/sov-demo-rollup --zk-vm mock > /tmp/rollup-mock.log 2>&1 &
+ROLLUP_PID=$!
+trap 'kill "$ROLLUP_PID" 2>/dev/null || true' EXIT
 
-# Wait for the REST endpoint
 until grep -q rest_address /tmp/rollup-mock.log; do
     sleep 2
-    grep -q "panicked\|error\[" /tmp/rollup-mock.log && { echo "rollup failed"; exit 1; }
+    grep -q 'panicked\|error\[' /tmp/rollup-mock.log && { cat /tmp/rollup-mock.log; exit 1; }
 done
 
-# Capture the new tx_hash from the create_token submission
 rm -rf ~/.sov_cli_wallet
-make test-create-token 2>&1 | grep "Submitting tx index=0 tx_hash="
+TX_HASH=$(
+  make test-create-token 2>&1 \
+    | sed -n 's/.*tx_hash=\(0x[0-9a-fA-F]\+\).*/\1/p' \
+    | tail -n 1
+)
+printf '%s\n' "$TX_HASH"
 ```
 
-The matched line contains `tx_hash=0x…` — that is the new value.
+Optional sanity check:
 
-(Optional sanity check — confirms the event payload still matches the README modulo the hash):
 ```bash
-curl -sS http://127.0.0.1:12346/ledger/txs/<NEW_TX_HASH>/events | jq
+curl -sS "http://127.0.0.1:12346/ledger/txs/$TX_HASH/events" | jq
 ```
-
-Then kill the rollup: `pkill -f sov-demo-rollup`.
 
 ### Step 4: Patch the READMEs
 
-Use `Edit` with `replace_all=true` for `tx_hash` since it appears 4× in `README.md`. The `chain_hash` line is unique enough to edit by full-line match.
+Use exact-value replacements found via search, not line numbers.
 
-- `examples/demo-rollup/README.md`: replace old → new tx_hash (4 occurrences) and chain_hash (1 occurrence).
-- `examples/demo-rollup/README_CELESTIA.md`: replace chain_hash only.
+- In `examples/demo-rollup/README.md`, replace every exact old `tx_hash` occurrence with `$TX_HASH`.
+- In `examples/demo-rollup/README.md` and `examples/demo-rollup/README_CELESTIA.md`, replace the exact old `chain_hash` with `$CHAIN_HASH`.
+- If another compare-output block failed, patch the smallest expected-output region that differs. Anchor the edit by the command line inside that block, not by an absolute line number.
 
-### Step 5: Verify end-to-end
+### Step 5: Verify `README.md` locally
 
-Regenerate the script and run it. Patch `--zk-vm sp1` → `--zk-vm mock` so it works locally with `SKIP_GUEST_BUILD=1`:
+Compile the README to a script, patch it to use mock zkVM locally, then require an explicit success marker:
 
 ```bash
 bashtestmd --input examples/demo-rollup/README.md --output demo-rollup-readme.sh --tag test-ci
@@ -87,20 +106,29 @@ sed -i.bak \
     -e 's|SP1_PROVER=mock ../../target/debug/sov-demo-rollup|../../target/debug/sov-demo-rollup|g' \
     demo-rollup-readme.sh
 chmod +x demo-rollup-readme.sh
-./demo-rollup-readme.sh
+./demo-rollup-readme.sh > /tmp/demo-rollup-readme.log 2>&1 || true
+grep -q 'All tests passed!' /tmp/demo-rollup-readme.log
 ```
 
-Expect `All tests passed!` at the end with no `not found in text:` lines. If a block other than chain_hash/tx_hash diverges, the failure output shows expected (README) vs actual — patch the README to match.
+If `grep` fails, inspect `/tmp/demo-rollup-readme.log`. `bashtestmd` prints the expected vs actual output for the first mismatching block.
 
-Clean up the artifact: `rm -f demo-rollup-readme.sh demo-rollup-readme.sh.bak`.
+Clean up when finished:
 
-### Step 6: For README_CELESTIA.md
+```bash
+rm -f demo-rollup-readme.sh demo-rollup-readme.sh.bak /tmp/demo-rollup-readme.log
+```
 
-The Celestia flavour requires Docker + Celestia containers (`make start`) and is heavy to run locally. Rely on parity: the chain_hash printed by sov-cli is the same in both flavours (same chain_id, same chain spec). The sub-command help output blocks are identical to README.md so they pass for free. Patch README_CELESTIA.md alongside README.md and let CI verify.
+### Step 6: Handle `README_CELESTIA.md` explicitly
+
+Local verification is usually **partial** unless Docker and Celestia containers are already running.
+
+- Step 2 proves the current `chain_hash`, and that value should be patched in both READMEs.
+- Step 5 does **not** prove that every Celestia-specific compare-output block still matches.
+- If the local Celestia stack is already available, run the same `bashtestmd` flow for `examples/demo-rollup/README_CELESTIA.md`.
+- Otherwise patch the confirmed drift and let CI validate the full Celestia README.
 
 ## Notes
 
-- The script's run via `./demo-rollup-readme.sh 2>&1 | tee log` can return exit 0 even on failure (tee masks the upstream status). Always check the log for `All tests passed!` rather than trusting `$?`.
-- The literal `rm -rf "~/.sov-cli-wallet"` line in `make clean` doesn't expand the tilde — clean the wallet manually with `rm -rf ~/.sov_cli_wallet` (note the underscore) between attempts.
-- If a comparison block other than the listed hashes drifts (e.g. new module added to `transactions import from-file -h`), it's the same flow — read failure output, patch the README, re-run.
-- `bashtestmd` lives at `~/.cargo/bin/bashtestmd` (installed via the workflow's setup action: `tool: bashtestmd@0.5`).
+- `examples/demo-rollup/Makefile` currently contains `rm -rf "~/.sov-cli-wallet"` inside `make clean`; that quoted tilde does not expand. Keep cleaning the real wallet manually with `rm -rf ~/.sov_cli_wallet` between attempts.
+- If a hash-extraction command prints nothing, inspect `/tmp/rollup-mock.log` or rerun the relevant command without capture to see the raw output.
+- If `bashtestmd` is not on `PATH`, it is usually installed at `~/.cargo/bin/bashtestmd`.
