@@ -183,7 +183,6 @@ pub async fn create_sp1_rollup_builder(
             postgres_config,
             batch_execution_time_limit_millis: 11_000,
             disable_state_root_consistency_checks: true,
-            // Pinned cache is currently not compatible with ZKPs
             num_cache_warmup_workers: 0,
             ..Default::default()
         });
