@@ -336,7 +336,12 @@ pub fn verifying_key_from_elf(elf: &[u8]) -> anyhow::Result<SP1VerifyingKey> {
 /// Computes the [`SP1MethodId`] (code commitment) for the given guest ELF.
 pub fn code_commitment_from_elf(elf: &[u8]) -> anyhow::Result<SP1MethodId> {
     let vk = verifying_key_from_elf(elf)?;
-    Ok(SP1MethodId(vk.hash_u32()))
+    Ok(code_commitment_from_verifying_key(&vk))
+}
+
+/// Computes the [`SP1MethodId`] (code commitment) for an already-derived verifying key.
+pub fn code_commitment_from_verifying_key(vk: &SP1VerifyingKey) -> SP1MethodId {
+    SP1MethodId(vk.hash_u32())
 }
 
 fn prover_and_pk(elf: &[u8]) -> anyhow::Result<(EnvProver, EnvProvingKey)> {
