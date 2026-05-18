@@ -33,7 +33,6 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::execution_mode::{Native, Zk};
 use sov_state::nomt::prover_storage::NomtProverStorage;
-pub use sov_state::ProverStorage;
 use sov_state::{DefaultStorageSpec, StateAccesses, Storage};
 pub use testcontainers::ContainerAsync;
 pub use {
@@ -63,7 +62,7 @@ pub mod runtime;
 
 /// Utilities for testing the sequencer.
 pub mod sequencer;
-/// Utilities for testing that require [`ProverStorage`].
+/// Utilities for testing storage-backed state.
 pub mod storage;
 
 pub mod docker;
@@ -80,9 +79,6 @@ pub type TestCryptoSpec = MockZkvmCryptoSpec;
 pub type TestHasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 /// The default storage spec type. Uses a [`TestHasher`] for hashing.
 pub type TestStorageSpec = DefaultStorageSpec<TestHasher>;
-/// The default test spec. Uses a [`MockZkvm`] for both inner and outer vm verification.
-/// Uses [`MockZkvmCryptoSpec`] for cryptographic primitives.
-pub type TestJmtSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 /// Shortcut to [`sov_mock_da::MockHash`];
 pub type TestSlotHash = <MockDaSpec as DaSpec>::SlotHash;
 /// The default test spec for NOMT. Uses a [`MockZkvm`] for both inner and outer vm verification.
@@ -103,7 +99,7 @@ pub type TestSignature = <TestCryptoSpec as CryptoSpec>::Signature;
 pub type TestStfBlueprint<RT, S> = StfBlueprint<S, RT>;
 /// Just [`NomtProverStorage`] with predefined configs.
 pub type TestStorage = NomtProverStorage<TestStorageSpec, TestSlotHash>;
-/// The default [`sov_db::storage_manager::NativeStorageManager`], that can be used with [`NomtProverStorage`] and [`TestStorageSpec`].
+/// The default [`sov_db::storage_manager::NomtStorageManager`], that can be used with [`NomtProverStorage`] and [`TestStorageSpec`].
 pub type TestStorageManager =
     sov_db::storage_manager::NomtStorageManager<MockDaSpec, TestHasher, TestStorage>;
 // --- Blessed test parameters ---

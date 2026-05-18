@@ -13,10 +13,34 @@ use crate::higher_kinded_types::{Generic, HigherKindedHelper};
 use crate::{CryptoSpecExt, GasUnit, Spec};
 
 #[cfg(feature = "native")]
-type DefaultStorage<StorageSpec> = sov_state::ProverStorage<StorageSpec>;
+#[doc(hidden)]
+pub struct DefaultStorage<Da, StorageSpec>(PhantomData<(Da, StorageSpec)>);
 
 #[cfg(not(feature = "native"))]
-type DefaultStorage<StorageSpec> = sov_state::ZkStorage<StorageSpec>;
+#[doc(hidden)]
+pub struct DefaultStorage<Da, StorageSpec>(PhantomData<(Da, StorageSpec)>);
+
+#[doc(hidden)]
+pub trait DefaultStorageProvider {
+    type Storage;
+}
+
+#[cfg(feature = "native")]
+impl<Da, StorageSpec> DefaultStorageProvider for DefaultStorage<Da, StorageSpec>
+where
+    Da: DaSpec,
+    StorageSpec: sov_state::MerkleProofSpec,
+{
+    type Storage = sov_state::nomt::prover_storage::NomtProverStorage<StorageSpec, Da::SlotHash>;
+}
+
+#[cfg(not(feature = "native"))]
+impl<Da, StorageSpec> DefaultStorageProvider for DefaultStorage<Da, StorageSpec>
+where
+    StorageSpec: sov_state::MerkleProofSpec,
+{
+    type Storage = sov_state::nomt::zk_storage::NomtVerifierStorage<StorageSpec>;
+}
 
 /// A default implementation of the [`Spec`] trait. Used for testing but can also be a good
 /// starting point for implementing a custom rollup.
@@ -36,7 +60,10 @@ pub struct ConfigurableSpec<
     Address,
     Mode,
     CryptoSpec = <<InnerZkvm as Zkvm>::Verifier as ZkVerifier>::CryptoSpec,
-    Storage = DefaultStorage<DefaultStorageSpec<<CryptoSpec as CryptoSpecTrait>::Hasher>>,
+    Storage = <DefaultStorage<
+        Da,
+        DefaultStorageSpec<<CryptoSpec as CryptoSpecTrait>::Hasher>,
+    > as DefaultStorageProvider>::Storage,
 >(PhantomData<(Da, InnerZkvm, OuterZkvm, CryptoSpec, Address, Mode, Storage)>);
 
 impl<Da, InnerZkvm, OuterZkvm, Address, Mode, CryptoSpec, Storage> Default

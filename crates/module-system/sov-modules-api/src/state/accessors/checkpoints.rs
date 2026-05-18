@@ -414,7 +414,7 @@ pub mod native {
     use crate::{Spec, StateCheckpoint};
 
     impl<S: Spec> StateCheckpoint<S> {
-        /// Returns a handler for the accessory state (non-JMT state).
+        /// Returns a handler for the accessory state.
         ///
         /// You can use this method when calling getters and setters on accessory
         /// state containers, like AccessoryStateMap.
@@ -424,7 +424,7 @@ pub mod native {
     }
 
     /// A wrapper over [`crate::StateCheckpoint`] that only allows access to the accessory
-    /// state (non-JMT state).
+    /// state.
     pub struct AccessoryStateCheckpoint<'a, S: Spec> {
         pub(in crate::state) checkpoint: &'a mut StateCheckpoint<S>,
     }

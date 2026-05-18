@@ -15,7 +15,7 @@ use crate::{
     StateWriter,
 };
 
-/// A growable array of values stored as JMT-backed state.
+/// A growable array of values stored as authenticated state.
 #[derive(
     Debug,
     Clone,

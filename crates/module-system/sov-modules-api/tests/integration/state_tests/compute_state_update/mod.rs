@@ -1,4 +1,3 @@
-mod jmt;
 mod nomt;
 use sov_state::{NodeLeaf, OrderedReadsAndWrites, SlotKey, SlotValue, StateAccesses, Storage};
 use sov_test_utils::TestHasher;

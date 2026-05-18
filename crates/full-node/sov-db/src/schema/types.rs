@@ -57,8 +57,6 @@ pub type AccessoryStateValue = Option<Vec<u8>>;
 
 /// A hash stored in the database
 pub type DbHash = [u8; 32];
-/// The "value" half of a key/value pair from the JMT
-pub type JmtValue = Option<Vec<u8>>;
 
 /// The on-disk format of a slot. Specifies the batches contained in the slot
 /// and the hash of the da block. TODO(@preston-evans98): add any additional data
@@ -71,7 +69,7 @@ pub type JmtValue = Option<Vec<u8>>;
 pub struct StoredSlot {
     /// The slot's hash, as reported by the DA layer.
     pub hash: DbHash,
-    /// The root hash of the slot's JMT state.
+    /// The root hash of the slot's rollup state.
     pub state_root: DbBytes,
     /// Any extra data which the rollup decides to store relating to this slot.
     pub extra_data: DbBytes,

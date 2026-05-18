@@ -9,10 +9,6 @@ pub use crate::schema::namespace::Namespace;
 pub struct KernelNamespace;
 
 impl Namespace for KernelNamespace {
-    const KEY_HASH_TO_KEY_TABLE_NAME: ColumnFamilyName = "kernel_key_hash_to_key";
-
-    const JMT_NODES_TABLE_NAME: ColumnFamilyName = "kernel_jmt_nodes";
-
     const STATE_VALUES_TABLE_NAME: ColumnFamilyName = "kernel_jmt_values";
 
     const PRUNING_COLUMN_FAMILY: ColumnFamilyName = "kernel_pruning";
@@ -27,10 +23,6 @@ impl Namespace for KernelNamespace {
 pub struct UserNamespace;
 
 impl Namespace for UserNamespace {
-    const KEY_HASH_TO_KEY_TABLE_NAME: ColumnFamilyName = "user_key_hash_to_key";
-
-    const JMT_NODES_TABLE_NAME: ColumnFamilyName = "user_jmt_nodes";
-
     const STATE_VALUES_TABLE_NAME: ColumnFamilyName = "user_jmt_values";
 
     const PRUNING_COLUMN_FAMILY: ColumnFamilyName = "user_pruning";

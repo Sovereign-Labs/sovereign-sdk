@@ -17,18 +17,12 @@
 //! - `(EventKey, TxNumber) -> EventNumber`
 //! - `EventNumber -> (EventKey, EventValue)`
 //!
-//! JMT Tables, for each namespace:
-//! - `KeyHash -> Key`
-//! - `(Key, Version) -> StateValue`
-//! - `NodeKey -> Node`
-//!
 //! Module Accessory State Table:
 //! - `(ModuleIdBytes, Key) -> Value`
 
 use borsh::ser::BorshSerialize;
 use borsh::BorshDeserialize;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use jmt::Version;
 use rockbound::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, ValueCodec};
 use rockbound::{CodecError, SchemaValue, SeekKeyEncoder};
 use sov_rollup_interface::common::SlotNumber;
@@ -318,7 +312,7 @@ define_table_with_seek_key_codec!(
 );
 
 define_table_without_codec!(
-    /// Non-JMT state stored by a module for JSON-RPC use.
+    /// Non-provable state stored by a module for JSON-RPC use.
     (ModuleAccessoryState) (AccessoryKey, SlotNumber) => AccessoryStateValue
 );
 
@@ -330,7 +324,7 @@ define_table_without_codec!(
 
 impl KeyEncoder<ModuleAccessoryState> for (AccessoryKey, SlotNumber) {
     fn encode_key(&self) -> rockbound::schema::Result<Vec<u8>> {
-        let mut out = Vec::with_capacity(self.0.len() + std::mem::size_of::<Version>() + 8);
+        let mut out = Vec::with_capacity(self.0.len() + std::mem::size_of::<u64>() + 8);
         self.0
             .as_slice()
             .serialize(&mut out)
@@ -369,7 +363,7 @@ impl ValueCodec<ModuleAccessoryState> for AccessoryStateValue {
 
 impl KeyEncoder<AccessoryKeysByVersion> for (SlotNumber, AccessoryKey) {
     fn encode_key(&self) -> rockbound::schema::Result<Vec<u8>> {
-        let mut out = Vec::with_capacity(std::mem::size_of::<Version>() + self.1.len() + 8);
+        let mut out = Vec::with_capacity(std::mem::size_of::<u64>() + self.1.len() + 8);
 
         out.write_u64::<BigEndian>(self.0.get())
             .expect("serialization to vec is infallible");

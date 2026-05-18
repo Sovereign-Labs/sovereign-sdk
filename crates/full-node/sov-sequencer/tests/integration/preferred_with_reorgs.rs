@@ -54,7 +54,7 @@ type TestRollupBuilder = RollupBuilder<RollupBlueprint>;
 
 const TEST_RANDOMIZATION_SEED: HexHash = HexHash::new([10; 32]);
 const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
-const RUNNER_LOG_DEBUG: &str = "debug,sov_metrics=error,sov_sequencer::preferred=trace,sov_db=trace,sov_ledger_apis=trace,integration=warn,jmt=info,hyper=info,request=info,tower=info,sqlx=warn,h2=info";
+const RUNNER_LOG_DEBUG: &str = "debug,sov_metrics=error,sov_sequencer::preferred=trace,sov_db=trace,sov_ledger_apis=trace,integration=warn,hyper=info,request=info,tower=info,sqlx=warn,h2=info";
 
 fn setup_genesis(additional_accounts: usize) -> (HighLevelZkGenesisConfig<S>, GenesisConfig<S>) {
     let high_level_genesis_config = HighLevelZkGenesisConfig::generate()

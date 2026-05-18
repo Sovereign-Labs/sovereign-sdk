@@ -880,7 +880,7 @@ where
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
         let version_to_use = match self.get_version_to_use(Some(version)) {
             None => {
-                // Mimic error from jmt, historical reasons.
+                // Keep the historical error message stable.
                 anyhow::bail!("Root node not found for version {}.", version)
             }
             Some(v) => v,

@@ -5,6 +5,8 @@ use sov_rollup_interface::execution_mode::{Native, WitnessGeneration};
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier, Zkvm};
 #[cfg(feature = "native")]
 use sov_state::nomt::prover_storage::NomtProverStorage;
+#[cfg(any(not(feature = "native"), feature = "test-utils"))]
+use sov_state::nomt::zk_storage::NomtVerifierStorage;
 use sov_state::DefaultStorageSpec;
 
 use crate::higher_kinded_types::{Generic, HigherKindedHelper};
@@ -87,8 +89,10 @@ where
     type Address = Address;
     type Gas = GasUnit<2>;
 
-    type Storage =
-        sov_state::ProverStorage<DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>>;
+    type Storage = NomtProverStorage<
+        DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>,
+        Da::SlotHash,
+    >;
 
     type InnerZkvm = InnerZkvm;
     type OuterZkvm = OuterZkvm;
@@ -106,10 +110,10 @@ where
     type Address = Address;
     type Gas = GasUnit<2>;
 
-    // This TODO is for performance enhancement, not a security concern.
-    // TODO: Replace ProverStorage with an optimized impl!
-    type Storage =
-        sov_state::ProverStorage<DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>>;
+    type Storage = NomtProverStorage<
+        DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>,
+        Da::SlotHash,
+    >;
 
     type InnerZkvm = InnerZkvm;
     type OuterZkvm = OuterZkvm;
@@ -128,7 +132,7 @@ where
     type Gas = GasUnit<2>;
 
     type Storage =
-        sov_state::ZkStorage<DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>>;
+        NomtVerifierStorage<DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>>;
 
     type InnerZkvm = InnerZkvm;
     type OuterZkvm = OuterZkvm;
@@ -137,7 +141,7 @@ where
 }
 
 /// A default implementation of the [`Spec`] trait using NOMT storage.
-/// Similar to [`DefaultSpec`] but uses [`NomtProverStorage`] instead of [`sov_state::ProverStorage`].
+/// This is kept as a compatibility synonym for [`DefaultSpec`].
 #[cfg_attr(feature = "arbitrary", derive(arbitrary::Arbitrary))]
 #[derive(
     Default,

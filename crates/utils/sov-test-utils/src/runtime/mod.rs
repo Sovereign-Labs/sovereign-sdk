@@ -16,7 +16,6 @@ pub use sov_blob_storage::BlobStorage;
 use sov_blob_storage::PreferredBatchData;
 pub use sov_capabilities::StandardProvenRollupCapabilities;
 pub use sov_chain_state::{ChainState, ChainStateConfig};
-use sov_db::storage_manager::NativeChangeSet;
 pub use sov_kernels::basic::BasicKernel;
 pub use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 use sov_mock_da::{MockAddress, MockBlob, MockBlockHeader, MockDaSpec};
@@ -198,7 +197,7 @@ pub struct RunnerOutput<S: Spec> {
     /// The slot receipt emitted at the end of the slot execution
     pub receipt: SlotReceipt<S>,
     /// The change set containing the delta of the state after the slot execution
-    pub change_set: NativeChangeSet,
+    pub change_set: <<S as Spec>::Storage as Storage>::ChangeSet,
     /// The root of the state after the slot execution
     pub root: <<S as Spec>::Storage as Storage>::Root,
 }

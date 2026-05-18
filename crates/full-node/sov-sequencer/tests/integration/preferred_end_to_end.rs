@@ -2754,7 +2754,7 @@ async fn test_no_crashes_on_resync_with_transactions() {
     let rollup_storage_path = builder.storage_path();
     // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
     // doesn't interfere.
-    // NOMT uses different directories than JMT:
+    // NOMT persists state in these directories:
     // - user_nomt_db, kernel_nomt_db (NOMT state)
     // - state-db, archival-state-db (FlatStateDb)
     // - accessory, ledger, blob_sender (common to both)

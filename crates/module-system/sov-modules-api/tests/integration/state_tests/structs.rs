@@ -241,7 +241,7 @@ fn test_witness_round_trip() -> Result<(), Infallible> {
             &ArrayWitness::default(),
             <<TestSpec as Spec>::Storage as Storage>::PRE_GENESIS_ROOT,
         )
-        .expect("Native jmt validation should succeed");
+        .expect("Native storage validation should succeed");
         storage_manager.commit(genesis_change_set);
         // Actual
         let mut mock_kernel = MockKernel::<TestSpec>::default();
@@ -256,7 +256,7 @@ fn test_witness_round_trip() -> Result<(), Infallible> {
         let (cache_log, _, witness) = state.freeze();
 
         let _ = validate_and_materialize(storage, cache_log, &witness, root)
-            .expect("Native jmt validation should succeed");
+            .expect("Native storage validation should succeed");
         (witness, root)
     };
 

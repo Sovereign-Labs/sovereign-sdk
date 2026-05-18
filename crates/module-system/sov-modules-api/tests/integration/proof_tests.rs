@@ -43,7 +43,7 @@ fn make_user_map_proof(
         &witness,
         <<S as Spec>::Storage as Storage>::PRE_GENESIS_ROOT,
     )
-    .expect("Native jmt validation should succeed");
+    .expect("Native storage validation should succeed");
     storage_manager.commit(change_set);
     let storage = storage_manager.create_storage();
 
@@ -83,7 +83,7 @@ fn make_user_value_proof(
         &witness,
         <S as Spec>::Storage::PRE_GENESIS_ROOT,
     )
-    .expect("Native jmt validation should succeed");
+    .expect("Native storage validation should succeed");
     storage_manager.commit(change_set);
     let storage = storage_manager.create_storage();
 
@@ -217,7 +217,7 @@ fn test_archival_proof_gen() {
 
         let (root, change_set) =
             validate_and_materialize(storage, cache_log, &witness, current_root)
-                .expect("Native jmt validation should succeed");
+                .expect("Native storage validation should succeed");
         current_root = root;
 
         storage_manager.commit(change_set);

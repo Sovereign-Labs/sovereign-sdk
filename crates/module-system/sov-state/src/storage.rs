@@ -4,7 +4,6 @@ use core::fmt;
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use jmt::KeyHash;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 #[cfg(feature = "native")]
@@ -19,9 +18,7 @@ use crate::pinned_cache::PinnedCache;
 use crate::sequencer_state::MaybePresentValue;
 #[cfg(feature = "native")]
 use crate::{CompileTimeNamespace, Namespace};
-use crate::{
-    MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot, Witness,
-};
+use crate::{StateAccesses, StateItemDecoder, Witness};
 
 pub use sov_db_types::val_hash_and_size_inner;
 pub use sov_db_types::Prefix;
@@ -450,33 +447,4 @@ pub trait NativeStorage: Storage {
     ///
     /// Note that the sequencer passes the pinned cache directly between executors without this hack, so this method is only used in the full node.
     fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache>;
-}
-
-pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(
-    state_root: StorageRoot<S>,
-    state_proof: StorageProof<SparseMerkleProof<S::Hasher>>,
-) -> anyhow::Result<(SlotKey, Option<SlotValue>)> {
-    let StorageProof {
-        key,
-        value,
-        proof,
-        namespace,
-    } = state_proof;
-    let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
-
-    // The proof leaves contain hash(combine(val_hash, val_len)).
-    // The outer hashing is handled by the verify method, so we need to pass combine(val_hash, val_len).
-    let val_hash_and_size = value
-        .as_ref()
-        .map(SlotValue::combine_val_hash_and_size::<S::Hasher>);
-
-    proof.inner().verify(
-        // We need to verify the proof against the correct root hash.
-        // Hence we match the key against its namespace
-        jmt::RootHash(state_root.namespace_root(namespace)),
-        key_hash,
-        val_hash_and_size,
-    )?;
-
-    Ok((key, value))
 }

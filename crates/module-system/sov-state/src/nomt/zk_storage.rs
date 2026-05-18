@@ -135,7 +135,7 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     }
 
     fn get_accessory(&self, _key: &SlotKey) -> Option<SlotValue> {
-        unimplemented!("The NomtZkStorage does not have the accessory state yet.")
+        unimplemented!("The NomtVerifierStorage does not have the accessory state yet.")
     }
 
     fn compute_state_update(
@@ -168,8 +168,8 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
 }
 
 #[cfg(all(feature = "test-utils", feature = "native"))]
-// `NativeStorage`` is implemented for `ZkStorage` solely for testing purposes.
-// In some tests, we use both `ProverStorage`` and `ZkStorage`.
+// `NativeStorage` is implemented for `NomtVerifierStorage` solely for testing purposes.
+// In some tests, we use both `NomtProverStorage` and `NomtVerifierStorage`.
 // Due to feature unification, we must provide this implementation even though it is not used.
 impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S> {
     fn latest_version(&self) -> SlotNumber {
