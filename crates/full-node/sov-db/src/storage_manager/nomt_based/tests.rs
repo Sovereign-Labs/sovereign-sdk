@@ -352,11 +352,33 @@ async fn test_historical_state_with_pruning() {
         storage_manager.finalize(&da_header).unwrap();
     }
 
-    // Create a storage to read from
-    let da_header = MockBlockHeader::from_height(blocks);
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            match storage_manager.pruner.as_ref() {
+                None => break,
+                Some(pruner) if pruner.is_finished() => break,
+                Some(_) => tokio::task::yield_now().await,
+            }
+        }
+    })
+    .await
+    .expect("pruner did not finish before timeout");
+
+    // A completed pruning batch is committed only during finalization, so finalize
+    // one more block in case the background pruner completed after block 14.
+    let da_header = MockBlockHeader::from_height(blocks + 1);
     let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
-    // Note: Sleep here to give time for the pruner to run since it's in a background thread.
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let dummy_key = vec![u8::MAX, 0, 0];
+    let dummy_value = blocks.to_be_bytes().to_vec();
+    let (stf_changes, _) =
+        stf_storage.materialize_from_key_values(&[(dummy_key, Some(dummy_value))], blocks);
+    storage_manager
+        .save_change_set(&da_header, stf_changes, SchemaBatch::default())
+        .unwrap();
+    storage_manager.finalize(&da_header).unwrap();
+
+    // Create a storage to read from after the completed pruner run has been committed.
+    let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
 
     // This is where the interesting logic happens.
     for key in 1..=10u64 {
@@ -369,15 +391,8 @@ async fn test_historical_state_with_pruning() {
             .map(|v| v.as_ref().to_vec());
         assert_eq!(value, Some(key.to_be_bytes().to_vec()));
 
-        // Pipeline arithmetic for the expected `oldest_available_version`:
-        // - `blocks` finalize calls drive `last_committed_live_db` from 0 to `blocks - 1`.
-        // - Pruners spawn every other finalize (interval = 1) at heights 1, 4, 7, 10, 13, …
-        //   and commit on the *following* finalize. So the last pruner that commits before
-        //   the test reads was spawned one finalize earlier than the last finalize and saw
-        //   `last_committed = blocks - 2`.
-        // - That pruner runs with `cutoff = last_committed - versions_to_keep = blocks - 2 - K`
-        //   and records `pruned_version = cutoff - 1` (rockbound's conservative metadata).
-        // - Therefore `oldest_available_version = pruned_version + 1 = blocks - K - 2`.
+        // The committed pruning batch was collected by the pruner spawned at height 13,
+        // which saw `last_committed = blocks - 2`.
         let oldest_available_version = blocks - versions_to_keep as u64 - 2;
 
         // Now, check that the value is pruned at the correct versions.

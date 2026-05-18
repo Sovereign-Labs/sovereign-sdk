@@ -373,14 +373,19 @@ where
             std::thread::spawn(move || -> anyhow::Result<PrunerJobOutput> {
                 let keep = versions_to_keep as u64;
                 let user_output = user_db.collect_pruning_batch(keep, Some(max_batch_size))?;
-                let kernel_output = kernel_db.collect_pruning_batch(keep, Some(max_batch_size))?;
+                let remaining = max_batch_size.saturating_sub(user_output.keys_to_prune);
 
                 let mut pruning_batch = user_output.batch;
-                pruning_batch.merge(kernel_output.batch);
+                let mut hit_size_limit = user_output.hit_size_limit;
+                if remaining > 0 {
+                    let kernel_output = kernel_db.collect_pruning_batch(keep, Some(remaining))?;
+                    pruning_batch.merge(kernel_output.batch);
+                    hit_size_limit |= kernel_output.hit_size_limit;
+                }
 
                 Ok(PrunerJobOutput {
                     pruning_batch,
-                    hit_size_limit: user_output.hit_size_limit || kernel_output.hit_size_limit,
+                    hit_size_limit,
                 })
             });
 
