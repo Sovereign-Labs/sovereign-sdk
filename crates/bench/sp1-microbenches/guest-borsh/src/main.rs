@@ -17,6 +17,11 @@ const MODE_READER_BYTES: u8 = 0;
 const MODE_READER_COUNT: u8 = 1;
 const MODE_DECODE_VEC: u8 = 2;
 
+// Source buffers in reader-bytes / reader-count are sized to these regardless of the sweep
+// point so guest setup cost (vec alloc + init) is N-independent.
+const MAX_BYTES: usize = 65536;
+const MAX_READS: usize = 512;
+
 pub fn main() {
     let mode: u8 = sp1_zkvm::io::read();
     let iterations: u32 = sp1_zkvm::io::read();
@@ -32,9 +37,10 @@ pub fn main() {
 fn run_reader_bytes(iterations: u32) {
     let n_bytes: u32 = sp1_zkvm::io::read();
     let n = n_bytes as usize;
+    assert!(n <= MAX_BYTES, "n_bytes exceeds MAX_BYTES");
 
-    let source: Vec<u8> = vec![0xABu8; n];
-    let mut out: Vec<u8> = vec![0u8; n];
+    let source: Vec<u8> = vec![0xABu8; MAX_BYTES];
+    let mut out: Vec<u8> = vec![0u8; MAX_BYTES];
     let mut meter = UnlimitedGasMeter::<MicrobenchSpec>::default();
     let source = black_box(source);
     let mut cursor = Cursor::new(source.as_slice());
@@ -44,7 +50,7 @@ fn run_reader_bytes(iterations: u32) {
         cursor.set_position(0);
         let mut reader = MeteredReader::new(black_box(&mut cursor), &mut meter);
         reader
-            .read_exact(black_box(&mut out))
+            .read_exact(black_box(&mut out[..n]))
             .expect("UnlimitedGasMeter never errors");
         let _ = black_box(&out);
     }
@@ -55,8 +61,9 @@ fn run_reader_bytes(iterations: u32) {
 
 fn run_reader_count(iterations: u32) {
     let n_reads: u32 = sp1_zkvm::io::read();
+    assert!(n_reads as usize <= MAX_READS, "n_reads exceeds MAX_READS");
 
-    let source: Vec<u8> = vec![0xABu8; n_reads as usize];
+    let source: Vec<u8> = vec![0xABu8; MAX_READS];
     let mut byte_buf = [0u8; 1];
     let mut meter = UnlimitedGasMeter::<MicrobenchSpec>::default();
     let source = black_box(source);

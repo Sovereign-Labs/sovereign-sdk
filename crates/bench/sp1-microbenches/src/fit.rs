@@ -41,7 +41,7 @@ pub fn fit_prover_gas_per_byte(results: &[BenchResult]) -> anyhow::Result<Linear
 /// Implemented ourselves rather than pulled from `linregress` or `linfa`: single-regressor OLS
 /// is a few lines of closed-form arithmetic, we don't need confidence intervals or p-values,
 /// and avoiding the dependency keeps `ndarray` and friends out of the build graph.
-fn fit_linear(inputs: &[f64], measurements: &[f64]) -> anyhow::Result<LinearFit> {
+pub fn fit_linear(inputs: &[f64], measurements: &[f64]) -> anyhow::Result<LinearFit> {
     if inputs.len() < 2 {
         anyhow::bail!(
             "need at least 2 data points to fit a line, got {}",
