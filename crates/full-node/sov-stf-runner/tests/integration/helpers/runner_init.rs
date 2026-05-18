@@ -281,11 +281,7 @@ pub async fn initialize_runner_with_stop_at(
     let mut runner = StateTransitionRunner::new(
         rollup_config.runner.clone(),
         axum_tcp,
-        if nb_of_prover_threads.is_some() {
-            rollup_config.proof_manager
-        } else {
-            None
-        },
+        nb_of_prover_threads.and(rollup_config.proof_manager),
         da_service.clone(),
         ledger_db.clone(),
         stf,

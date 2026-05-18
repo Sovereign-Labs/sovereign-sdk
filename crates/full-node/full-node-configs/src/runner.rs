@@ -117,7 +117,7 @@ impl HttpServerConfig {
 }
 
 /// Prover service configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Copy, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, JsonSchema)]
 pub struct ProofManagerConfig<Address> {
     /// The "distance" measured in the number of blocks between two consecutive aggregated proofs.
     pub aggregated_proof_block_jump: NonZero<usize>,
@@ -420,6 +420,6 @@ mod tests {
             toml::from_str::<RollupConfig<Address, MockDaService, MonitoringConfig>>(config_s)
                 .unwrap();
 
-        assert!(config.proof_manager.is_none());
+        assert_eq!(config.proof_manager, None);
     }
 }
