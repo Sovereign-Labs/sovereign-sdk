@@ -152,10 +152,6 @@ fn default_eager_proof_submission() -> bool {
     true
 }
 
-fn default_proof_manager<Address>() -> Option<ProofManagerConfig<Address>> {
-    None
-}
-
 impl<Address> ProofManagerConfig<Address> {
     /// Number of prover threads.
     pub fn prover_thread_count(&self) -> usize {
@@ -181,7 +177,7 @@ pub struct RollupConfig<Address: Copy, Da: DaService, M> {
     pub da: Da::Config,
     /// Proof manager configuration. Required for `zk` and `optimistic` rollups,
     /// optional for `operator` rollups.
-    #[serde(default = "default_proof_manager::<Address>")]
+    #[serde(default = "Option::<ProofManagerConfig<Address>>::default")]
     pub proof_manager: Option<ProofManagerConfig<Address>>,
     /// Sequencer (and batch builder) configuration.
     pub sequencer: SequencerConfig<Address, SequencerKindConfig<Address>>,
