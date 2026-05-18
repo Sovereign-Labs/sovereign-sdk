@@ -8,7 +8,6 @@ use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
-use crate::nomt::NomtMultiProof;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
@@ -107,7 +106,7 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
 impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     type Hasher = S::Hasher;
     type Witness = S::Witness;
-    type Proof = NomtMultiProof;
+    type Proof = MultiProof;
     type Root = StorageRoot<S>;
     type StateUpdate = ();
     type ChangeSet = ();
