@@ -289,7 +289,6 @@ async fn test_ledger_finalized_height_is_updated_on_start() {
 ///  - Queries for pruned versions return an error.
 ///  - Queries for unpruned versions return the correct value as of that version.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "TODO: Re-enable this test once pruning is re-enabled"]
 async fn test_historical_state_with_pruning() {
     // Create a temporary directory for the test
     let temp_dir = tempfile::TempDir::new().unwrap();
@@ -370,13 +369,27 @@ async fn test_historical_state_with_pruning() {
             .map(|v| v.as_ref().to_vec());
         assert_eq!(value, Some(key.to_be_bytes().to_vec()));
 
+        // Pipeline arithmetic for the expected `oldest_available_version`:
+        // - `blocks` finalize calls drive `last_committed_live_db` from 0 to `blocks - 1`.
+        // - Pruners spawn every other finalize (interval = 1) at heights 1, 4, 7, 10, 13, …
+        //   and commit on the *following* finalize. So the last pruner that commits before
+        //   the test reads was spawned one finalize earlier than the last finalize and saw
+        //   `last_committed = blocks - 2`.
+        // - That pruner runs with `cutoff = last_committed - versions_to_keep = blocks - 2 - K`
+        //   and records `pruned_version = cutoff - 1` (rockbound's conservative metadata).
+        // - Therefore `oldest_available_version = pruned_version + 1 = blocks - K - 2`.
+        let oldest_available_version = blocks - versions_to_keep as u64 - 2;
+
         // Now, check that the value is pruned at the correct versions.
         for version in 0..keys_to_write.len() as u64 {
             let value_at_version = stf_storage
                 .historical_state
                 .get_user_value_option_by_key_historical(&user_key, SlotNumber::new(version));
-            // Everything below the pruning threshold should be pruned. Since pruning doesn't
-            if version < blocks - (versions_to_keep as u64 + pruning_frequency) {
+            if version < oldest_available_version {
+                // rockbound returns `Err(PrunedVersion)` for any read below
+                // `oldest_available_version`, even when the underlying historical row is
+                // physically still present (e.g., a single-version key whose only write
+                // was preserved by the cascading delete logic).
                 assert!(
                     value_at_version.is_err(),
                     "Unexpected value for key {key} at version {version}. Expected error, found {value_at_version:?}",
@@ -384,18 +397,14 @@ async fn test_historical_state_with_pruning() {
             } else {
                 let value_at_version =
                     value_at_version.expect("Query for unpruned version return error");
-                if version == 0 {
-                    assert_eq!(value_at_version, None, "All keys should be none at version 0, since we wrote nothing in that block. Key {key} was {value_at_version:?} instead.");
-                } else {
-                    // We stop writing each key at its own version. (I.e. key '1' is written in block 1, key '2' is written in blocks, 1 and 2, etc.)
-                    let expected_value = std::cmp::min(version, key);
-                    assert_eq!(
-                        value_at_version,
-                        Some(SlotValue::from(expected_value.to_be_bytes().to_vec())),
-                        "Unexpected value for key {key} at version {version}. Expected {:?}, found {value_at_version:?}",
-                        expected_value.to_be_bytes().to_vec(),
-                    );
-                }
+                // We stop writing each key at its own version. (I.e. key '1' is written in block 1, key '2' is written in blocks 1 and 2, etc.)
+                let expected_value = std::cmp::min(version, key);
+                assert_eq!(
+                    value_at_version,
+                    Some(SlotValue::from(expected_value.to_be_bytes().to_vec())),
+                    "Unexpected value for key {key} at version {version}. Expected {:?}, found {value_at_version:?}",
+                    expected_value.to_be_bytes().to_vec(),
+                );
             }
         }
     }
