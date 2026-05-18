@@ -306,7 +306,7 @@ mod tests {
     use crate::capabilities::mocks::MockKernel;
     use crate::{StateCheckpoint, StateValue};
 
-    type TestSpec = crate::default_spec::DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
     fn state_value_raw_roundtrip_and_remove() {

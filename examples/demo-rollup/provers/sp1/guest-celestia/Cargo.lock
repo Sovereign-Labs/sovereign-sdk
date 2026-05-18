@@ -6615,7 +6615,6 @@ dependencies = [
  "serde-big-array",
  "sov-db-types",
  "sov-metrics",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-universal-wallet",
 ]

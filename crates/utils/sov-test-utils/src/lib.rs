@@ -19,12 +19,14 @@ use sov_mock_da::BlockProducingConfig;
 pub use sov_mock_da::MockHash;
 pub use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
 use sov_modules_api::capabilities::UniquenessData;
-use sov_modules_api::default_spec::{DefaultNomtSpec, DefaultSpec};
+use sov_modules_api::default_spec::DefaultSpec;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{
     PriorityFeeBips, Transaction, TransactionCallable, TxDetails, UnsignedTransaction,
 };
-use sov_modules_api::{Amount, BasicGasMeter, CryptoSpec, Gas, GasArray, Spec};
+use sov_modules_api::{
+    Amount, BasicGasMeter, CryptoSpec, Gas, GasArray, KernelStateValue, Spec, StateCheckpoint,
+};
 pub use sov_modules_api::{EncodeCall, TxProcessingError, TxReceiptContents};
 pub use sov_modules_rollup_blueprint::logging::initialize_logging;
 pub use sov_modules_stf_blueprint::get_gas_used;
@@ -33,7 +35,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::execution_mode::{Native, Zk};
 use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::{DefaultStorageSpec, StateAccesses, Storage};
+use sov_state::{BorshCodec, DefaultStorageSpec, Prefix, StateAccesses, Storage};
 pub use testcontainers::ContainerAsync;
 pub use {
     sov_bank, sov_chain_state, sov_paymaster, sov_rollup_apis, sov_sequencer_registry,
@@ -81,9 +83,9 @@ pub type TestHasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 pub type TestStorageSpec = DefaultStorageSpec<TestHasher>;
 /// Shortcut to [`sov_mock_da::MockHash`];
 pub type TestSlotHash = <MockDaSpec as DaSpec>::SlotHash;
-/// The default test spec for NOMT. Uses a [`MockZkvm`] for both inner and outer vm verification.
+/// The default test spec. Uses a [`MockZkvm`] for both inner and outer vm verification.
 /// Uses [`MockZkvmCryptoSpec`] for cryptographic primitives.
-pub type TestSpec = DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+pub type TestSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 /// The default test spec for ZK. Uses a [`MockZkvm`] for both inner and outer vm verification.
 pub type ZkTestSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Zk>;
 /// The default address type. This is the [`sov_modules_api::BasicAddress`] type defined by the [`TestSpec`].
@@ -102,6 +104,19 @@ pub type TestStorage = NomtProverStorage<TestStorageSpec, TestSlotHash>;
 /// The default [`sov_db::storage_manager::NomtStorageManager`], that can be used with [`NomtProverStorage`] and [`TestStorageSpec`].
 pub type TestStorageManager =
     sov_db::storage_manager::NomtStorageManager<MockDaSpec, TestHasher, TestStorage>;
+
+/// Writes a placeholder value into the kernel namespace.
+///
+/// NOMT requires the user and kernel namespaces to advance together at every commit.
+/// Tests that only mutate user state should call this before committing so that the
+/// kernel namespace produces a corresponding state update.
+pub fn write_kernel_marker<S: Spec>(
+    state: &mut StateCheckpoint<S>,
+) -> Result<(), std::convert::Infallible> {
+    let mut kernel_value = KernelStateValue::<u8>::with_codec(Prefix::new(255, 0), BorshCodec);
+    kernel_value.set(&0u8, state)
+}
+
 // --- Blessed test parameters ---
 
 // Blessed gas parameters

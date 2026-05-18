@@ -7,17 +7,9 @@ use sov_modules_api::{
 };
 use sov_state::{BorshCodec, Prefix, ProvableNamespace, StateRoot};
 use sov_test_utils::storage::SimpleStorageManager;
-use sov_test_utils::TestSpec;
+use sov_test_utils::{write_kernel_marker, TestSpec};
 
 use crate::state_tests::{commit_to_storage, ForklessStorageManager};
-
-/// Helper to write a dummy value to the kernel namespace.
-/// NOMT requires both user and kernel namespaces to be written together.
-fn write_kernel_marker<S: Spec>(state: &mut StateCheckpoint<S>) -> Result<(), Infallible> {
-    let mut kernel_val: KernelStateValue<u8> =
-        KernelStateValue::with_codec(Prefix::new(255, 0), BorshCodec);
-    kernel_val.set(&0u8, state)
-}
 
 #[test]
 fn test_nomt_state_value_user_namespace() -> Result<(), Infallible> {

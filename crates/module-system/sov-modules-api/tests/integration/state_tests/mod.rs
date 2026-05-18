@@ -15,12 +15,8 @@ use sov_test_utils::storage::ForklessStorageManager;
 use sov_test_utils::{validate_and_materialize, TestSpec, TestStorageSpec};
 use unwrap_infallible::UnwrapInfallible;
 
-pub type Zk = sov_modules_api::default_spec::DefaultNomtSpec<
-    MockDaSpec,
-    MockZkvm,
-    MockZkvm,
-    execution_mode::Zk,
->;
+pub type Zk =
+    sov_modules_api::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, execution_mode::Zk>;
 pub type StorageSpec = TestStorageSpec;
 
 pub fn commit_to_storage<S, Sm>(

@@ -12,11 +12,6 @@ use sov_state::DefaultStorageSpec;
 use crate::higher_kinded_types::{Generic, HigherKindedHelper};
 use crate::{CryptoSpecExt, GasUnit, Spec};
 
-#[cfg(feature = "native")]
-#[doc(hidden)]
-pub struct DefaultStorage<Da, StorageSpec>(PhantomData<(Da, StorageSpec)>);
-
-#[cfg(not(feature = "native"))]
 #[doc(hidden)]
 pub struct DefaultStorage<Da, StorageSpec>(PhantomData<(Da, StorageSpec)>);
 

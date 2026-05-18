@@ -646,7 +646,7 @@ mod test {
     use crate::capabilities::mocks::MockKernel;
     use crate::StateCheckpoint;
 
-    type TestSpec = crate::default_spec::DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
     fn double_ended_iterator_from_back() {
