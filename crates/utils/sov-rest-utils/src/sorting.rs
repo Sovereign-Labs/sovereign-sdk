@@ -113,9 +113,7 @@ mod tests {
     fn try_deserialize(query_params: &[(&str, &str)]) -> anyhow::Result<SortingQuery> {
         let uri = uri_with_query_params(query_params);
         Ok(Query::<SortingQuery>::try_from_uri(&uri)
-            .map_err(|e| {
-                anyhow::anyhow!("failed to parse sorting query string: {}", e.to_string())
-            })?
+            .map_err(|e| anyhow::anyhow!("failed to parse sorting query string: {e}"))?
             .0)
     }
 
