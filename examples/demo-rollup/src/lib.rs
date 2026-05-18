@@ -23,8 +23,8 @@ pub use mock_helper::{
 };
 mod mock_rollup;
 pub use mock_rollup::*;
-mod sp1_helper;
 mod mock_sp1_rollup;
+mod sp1_helper;
 pub use mock_sp1_rollup::*;
 mod external_mock_sp1_rollup;
 pub use external_mock_sp1_rollup::*;

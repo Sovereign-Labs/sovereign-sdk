@@ -700,6 +700,9 @@ where
             let point = RunnerMetrics {
                 sync_distance: target_da_height as i64 - synced_da_height as i64,
                 da_height: next_da_height,
+                rollup_height: slot_result.rollup_height.get(),
+                start_at_rollup_height: start_at_rollup_height.as_ref().map(|h| h.get()),
+                stop_at_rollup_height: stop_at_rollup_height.as_ref().map(|h| h.get()),
                 get_block_time,
                 batches_processed: batch_count,
                 batch_bytes_processed,

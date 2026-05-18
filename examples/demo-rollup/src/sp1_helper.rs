@@ -99,8 +99,12 @@ where
     .await?;
 
     let outer_vm = tokio::task::spawn_blocking(move || {
-        SP1AggregationHost::new_with_previous_proof(agg_elf, inner_verifying_key, previous_for_outer)
-            .expect("Failed to create SP1AggregationHost from aggregation guest ELF")
+        SP1AggregationHost::new_with_previous_proof(
+            agg_elf,
+            inner_verifying_key,
+            previous_for_outer,
+        )
+        .expect("Failed to create SP1AggregationHost from aggregation guest ELF")
     })
     .await
     .expect("SP1AggregationHost setup task panicked");
