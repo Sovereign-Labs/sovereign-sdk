@@ -136,7 +136,6 @@ fn test_invalid_final_slot_hash() {
 }
 
 #[test]
-#[ignore = "enable when NOMT bug fixed: https://github.com/Sovereign-Labs/sovereign-sdk/pull/2739"]
 fn test_invalid_final_state_root() {
     let (mut runner, prover, mut aggregated_proof) = prepare_for_slashing();
     aggregated_proof
