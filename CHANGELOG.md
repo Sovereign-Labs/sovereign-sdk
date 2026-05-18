@@ -1,5 +1,6 @@
 # 2026-05-18
 - #2879 Updates NOMT crate version. **Breaking for existing ZK-rollups**. Proof type has changed.
+- #2882 Removes EVM pinned cache support.
 
 # 2026-05-11
 - #2847 Removes bincode support from `sov-risc0-adapter`

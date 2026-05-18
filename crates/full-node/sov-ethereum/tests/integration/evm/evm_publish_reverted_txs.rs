@@ -22,7 +22,6 @@ async fn do_revert_tx_test(preferred_sequencer_publish_reverted_txs: bool) -> an
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
     let exec_config_contents = EvmExecutionConfigContents {
         preferred_sequencer_publish_reverted_txs,
-        ..Default::default()
     };
     std::fs::write(
         &exec_config_path,
