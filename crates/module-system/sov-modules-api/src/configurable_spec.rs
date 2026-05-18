@@ -12,13 +12,34 @@ use sov_state::DefaultStorageSpec;
 use crate::higher_kinded_types::{Generic, HigherKindedHelper};
 use crate::{CryptoSpecExt, GasUnit, Spec};
 
+// Internal helper that lets the `Storage =` default depend on both `Da` and
+// `StorageSpec`, even in the Zk variant where the resulting storage type
+// happens not to mention `Da`. A direct `type` alias would fail E0091 in the
+// Zk variant because `Da` would be unused on the right-hand side.
+#[doc(hidden)]
+pub struct DefaultStorageMarker<Da, StorageSpec>(PhantomData<(Da, StorageSpec)>);
+
+#[doc(hidden)]
+pub trait DefaultStorageOf {
+    type Storage;
+}
+
 #[cfg(feature = "native")]
-type DefaultStorage<Da, StorageSpec> =
-    sov_state::nomt::prover_storage::NomtProverStorage<StorageSpec, <Da as DaSpec>::SlotHash>;
+impl<Da: DaSpec, StorageSpec: sov_state::MerkleProofSpec> DefaultStorageOf
+    for DefaultStorageMarker<Da, StorageSpec>
+{
+    type Storage = sov_state::nomt::prover_storage::NomtProverStorage<StorageSpec, Da::SlotHash>;
+}
 
 #[cfg(not(feature = "native"))]
+impl<Da, StorageSpec: sov_state::MerkleProofSpec> DefaultStorageOf
+    for DefaultStorageMarker<Da, StorageSpec>
+{
+    type Storage = sov_state::nomt::zk_storage::NomtVerifierStorage<StorageSpec>;
+}
+
 type DefaultStorage<Da, StorageSpec> =
-    sov_state::nomt::zk_storage::NomtVerifierStorage<StorageSpec>;
+    <DefaultStorageMarker<Da, StorageSpec> as DefaultStorageOf>::Storage;
 
 /// A default implementation of the [`Spec`] trait. Used for testing but can also be a good
 /// starting point for implementing a custom rollup.
