@@ -20,7 +20,6 @@ use sov_db::storage_manager::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
-use crate::nomt::NomtMultiProof;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
@@ -418,7 +417,7 @@ where
     fn get_with_proof_once<N: ProvableCompileTimeNamespace>(
         &self,
         proven_key: SlotKey,
-    ) -> Result<(StorageProof<NomtMultiProof>, SlotNumber, StorageRoot<S>), GetWithProofError> {
+    ) -> Result<(StorageProof<MultiProof>, SlotNumber, StorageRoot<S>), GetWithProofError> {
         let namespace = N::PROVABLE_NAMESPACE;
         // Fetch the latest root hash from the newest delta or the live table, whichever is newer.
         let (_, pre_fetch_state_root) =
@@ -463,7 +462,7 @@ where
             StorageProof {
                 key: proven_key,
                 value,
-                proof: NomtMultiProof(multi_proof),
+                proof: multi_proof,
                 namespace,
             },
             committed_slot_number,
@@ -610,7 +609,7 @@ where
 {
     type Hasher = S::Hasher;
     type Witness = S::Witness;
-    type Proof = NomtMultiProof;
+    type Proof = MultiProof;
     type Root = StorageRoot<S>;
     // These 2 are effectively the same thing, `StateUpdate` is not materialized, `ChangeSet` is materialized.
     type StateUpdate = NomtStateUpdate<S>;
