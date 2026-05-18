@@ -1,5 +1,6 @@
 ---
 source: crates/full-node/full-node-configs/src/runner.rs
+assertion_line: 257
 expression: config
 ---
 {
@@ -54,7 +55,8 @@ expression: config
     "max_number_of_transitions_in_memory": 100,
     "eager_proof_submission": true,
     "prover_thread_count_override": null,
-    "max_number_of_aggregated_proofs_in_memory": 5
+    "max_number_of_aggregated_proofs_in_memory": 5,
+    "max_concurrent_proof_blobs": 16
   },
   "sequencer": {
     "automatic_batch_production": true,
@@ -68,7 +70,6 @@ expression: config
     },
     "max_batch_size_bytes": 1048576,
     "max_concurrent_batch_blobs": 16,
-    "max_concurrent_proof_blobs": 16,
     "blob_processing_timeout_secs": 60,
     "extension": null
   },

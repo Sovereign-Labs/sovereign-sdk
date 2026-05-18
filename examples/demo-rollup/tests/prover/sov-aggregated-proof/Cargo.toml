@@ -17,7 +17,7 @@ demo-stf = { workspace = true, features = ["native"] }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1.0"
 sp1 = { path = "../../../provers/sp1" }
-sp1-sdk = { version = "6.1.0", default-features = false, features = ["blocking"] }
+sp1-sdk = { workspace = true, features = ["blocking"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true }

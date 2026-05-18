@@ -119,12 +119,16 @@ where
 
     let outer_vm = MockZkvmHost::new_non_blocking_with_previous_outer_proof(previous_outer_proof)
         .with_code_commitment(outer_code_commitment);
+    let proof_manager = rollup_config
+        .proof_manager
+        .as_ref()
+        .expect("proof_manager must be set when prover is enabled");
     let prover = ParallelProverService::new_with_default_workers(
         inner_vm,
         outer_vm,
         Da::Verifier::default(),
-        rollup_config.proof_manager.prover_address,
-        rollup_config.proof_manager.prover_thread_count(),
+        proof_manager.prover_address,
+        proof_manager.prover_thread_count(),
     );
 
     Ok((prover, latest_proof_final_slot))
