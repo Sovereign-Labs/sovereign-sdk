@@ -79,47 +79,37 @@ mod default_impls {
     }
 }
 
+// Native and WitnessGeneration share an identical `Spec` impl; expand it for each via macro
+// to avoid coherence conflicts with the Zk impl below when `test-utils` is enabled.
 #[cfg(feature = "native")]
-impl<Da: DaSpec, InnerZkvm: Zkvm, OuterZkvm: Zkvm> Spec
-    for DefaultSpec<Da, InnerZkvm, OuterZkvm, WitnessGeneration>
-where
-    <InnerZkvm::Verifier as ZkVerifier>::CryptoSpec: crate::CryptoSpecExt,
-{
-    type Da = Da;
-    type Address = Address;
-    type Gas = GasUnit<2>;
+macro_rules! impl_default_spec_native {
+    ($mode:ty) => {
+        impl<Da: DaSpec, InnerZkvm: Zkvm, OuterZkvm: Zkvm> Spec
+            for DefaultSpec<Da, InnerZkvm, OuterZkvm, $mode>
+        where
+            <InnerZkvm::Verifier as ZkVerifier>::CryptoSpec: crate::CryptoSpecExt,
+        {
+            type Da = Da;
+            type Address = Address;
+            type Gas = GasUnit<2>;
 
-    type Storage = NomtProverStorage<
-        DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>,
-        Da::SlotHash,
-    >;
+            type Storage = NomtProverStorage<
+                DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>,
+                Da::SlotHash,
+            >;
 
-    type InnerZkvm = InnerZkvm;
-    type OuterZkvm = OuterZkvm;
+            type InnerZkvm = InnerZkvm;
+            type OuterZkvm = OuterZkvm;
 
-    type CryptoSpec = <InnerZkvm::Verifier as ZkVerifier>::CryptoSpec;
+            type CryptoSpec = <InnerZkvm::Verifier as ZkVerifier>::CryptoSpec;
+        }
+    };
 }
 
 #[cfg(feature = "native")]
-impl<Da: DaSpec, InnerZkvm: Zkvm, OuterZkvm: Zkvm> Spec
-    for DefaultSpec<Da, InnerZkvm, OuterZkvm, Native>
-where
-    <InnerZkvm::Verifier as ZkVerifier>::CryptoSpec: crate::CryptoSpecExt,
-{
-    type Da = Da;
-    type Address = Address;
-    type Gas = GasUnit<2>;
-
-    type Storage = NomtProverStorage<
-        DefaultStorageSpec<<Self::CryptoSpec as CryptoSpec>::Hasher>,
-        Da::SlotHash,
-    >;
-
-    type InnerZkvm = InnerZkvm;
-    type OuterZkvm = OuterZkvm;
-
-    type CryptoSpec = <InnerZkvm::Verifier as ZkVerifier>::CryptoSpec;
-}
+impl_default_spec_native!(Native);
+#[cfg(feature = "native")]
+impl_default_spec_native!(WitnessGeneration);
 
 #[cfg(any(not(feature = "native"), feature = "test-utils"))]
 impl<Da: DaSpec, InnerZkvm: Zkvm, OuterZkvm: Zkvm> Spec

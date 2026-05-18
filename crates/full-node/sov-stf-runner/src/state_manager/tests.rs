@@ -1281,10 +1281,7 @@ fn produce_synthetic_changes<Da: DaSpec>(
         .user
         .ordered_writes
         .push((SlotKey::from_slice(&data), Some(SlotValue::from(data))));
-    accesses.kernel.ordered_writes.push((
-        SlotKey::from_slice(b"synthetic_kernel_marker"),
-        Some(SlotValue::from(block_header.hash().as_ref().to_vec())),
-    ));
+    sov_test_utils::push_kernel_marker(&mut accesses);
     let (state_root, state_update) = prover_storage
         .compute_state_update(accesses, &ArrayWitness::default(), pre_state_root, None)
         .unwrap();

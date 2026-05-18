@@ -35,7 +35,9 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::execution_mode::{Native, Zk};
 use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::{BorshCodec, DefaultStorageSpec, Prefix, StateAccesses, Storage};
+use sov_state::{
+    BorshCodec, DefaultStorageSpec, Prefix, SlotKey, SlotValue, StateAccesses, Storage,
+};
 pub use testcontainers::ContainerAsync;
 pub use {
     sov_bank, sov_chain_state, sov_paymaster, sov_rollup_apis, sov_sequencer_registry,
@@ -105,7 +107,7 @@ pub type TestStorage = NomtProverStorage<TestStorageSpec, TestSlotHash>;
 pub type TestStorageManager =
     sov_db::storage_manager::NomtStorageManager<MockDaSpec, TestHasher, TestStorage>;
 
-/// Writes a placeholder value into the kernel namespace.
+/// Writes a placeholder value into the kernel namespace via a [`StateCheckpoint`].
 ///
 /// NOMT requires the user and kernel namespaces to advance together at every commit.
 /// Tests that only mutate user state should call this before committing so that the
@@ -115,6 +117,19 @@ pub fn write_kernel_marker<S: Spec>(
 ) -> Result<(), std::convert::Infallible> {
     let mut kernel_value = KernelStateValue::<u8>::with_codec(Prefix::new(255, 0), BorshCodec);
     kernel_value.set(&0u8, state)
+}
+
+/// Pushes a placeholder write into the kernel namespace of a raw [`StateAccesses`].
+///
+/// The lower-level counterpart to [`write_kernel_marker`] for tests that build a
+/// [`StateAccesses`] directly (e.g. when synthesizing input for
+/// `Storage::compute_state_update`). NOMT requires the kernel namespace to advance
+/// alongside the user namespace.
+pub fn push_kernel_marker(accesses: &mut StateAccesses) {
+    accesses.kernel.ordered_writes.push((
+        SlotKey::from_slice(b"\xff\xffkernel_marker"),
+        Some(SlotValue::from(vec![0u8])),
+    ));
 }
 
 // --- Blessed test parameters ---
