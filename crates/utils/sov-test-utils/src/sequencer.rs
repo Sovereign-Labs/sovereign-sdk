@@ -154,7 +154,6 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             sequencer_kind_config: sequencer_config,
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
-            max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
             blob_processing_timeout_secs: 60,
             extension: None,
         };
@@ -165,6 +164,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             da_sync_state,
             dir.path(),
             &config,
+            TEST_MAX_CONCURRENT_PROOF_BLOBS,
             ledger_db,
             api_ledger_db,
             shutdown_sender.clone(),

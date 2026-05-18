@@ -85,11 +85,15 @@ where
         let inner_vm = MockZkvmHost::new_non_blocking();
         let outer_vm = MockZkvmHost::new_non_blocking();
 
+        let proof_manager = rollup_config
+            .proof_manager
+            .as_ref()
+            .expect("proof_manager must be set when prover is enabled");
         ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             Default::default(),
-            rollup_config.proof_manager.prover_address,
+            proof_manager.prover_address,
             5,
         )
     }
