@@ -93,6 +93,9 @@ impl MetricsTracker {
         let timestamp = timestamp();
         let RunnerMetrics {
             da_height: da_height_processed,
+            rollup_height,
+            start_at_rollup_height,
+            stop_at_rollup_height,
             sync_distance,
             get_block_time,
             batches_processed,
@@ -111,6 +114,9 @@ impl MetricsTracker {
             timestamp,
             RunnerDaMetrics {
                 da_height: da_height_processed,
+                rollup_height,
+                start_at_rollup_height,
+                stop_at_rollup_height,
                 sync_distance,
                 get_block_time,
             },
@@ -153,6 +159,12 @@ pub fn timestamp() -> u128 {
 pub struct RunnerMetrics {
     /// DA height processed in this iteration.
     pub da_height: u64,
+    /// Rollup height produced in this iteration.
+    pub rollup_height: u64,
+    /// Configured rollup height the runner started syncing from, if set.
+    pub start_at_rollup_height: Option<u64>,
+    /// Configured rollup height the runner should stop at, if set.
+    pub stop_at_rollup_height: Option<u64>,
     /// Distance between processed DA height and DA head.
     pub sync_distance: i64,
     /// Time it took to fetch given block from DA layer.
@@ -187,6 +199,9 @@ pub struct RunnerMetrics {
 #[derive(Debug)]
 pub(crate) struct RunnerDaMetrics {
     pub da_height: u64,
+    pub rollup_height: u64,
+    pub start_at_rollup_height: Option<u64>,
+    pub stop_at_rollup_height: Option<u64>,
     pub sync_distance: i64,
     pub get_block_time: std::time::Duration,
 }
@@ -322,12 +337,20 @@ impl Metric for RunnerDaMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} da_height={},sync_distance={},get_block_time_ms={}",
+            "{} da_height={},rollup_height={},sync_distance={},get_block_time_ms={}",
             self.measurement_name(),
             self.da_height,
+            self.rollup_height,
             self.sync_distance,
             self.get_block_time.as_millis(),
-        )
+        )?;
+        if let Some(h) = self.start_at_rollup_height {
+            write!(buffer, ",start_at_rollup_height={h}")?;
+        }
+        if let Some(h) = self.stop_at_rollup_height {
+            write!(buffer, ",stop_at_rollup_height={h}")?;
+        }
+        Ok(())
     }
 }
 
