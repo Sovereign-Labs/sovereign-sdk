@@ -35,7 +35,7 @@ where
 
     for current_height in 0..100 {
         let (storage, prev_root) = storage_manager.create_storage_with_root();
-        let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
+        let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
         let api_accessor = ApiStateAccessor::new(
             Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
                 state_checkpoint,
@@ -61,7 +61,7 @@ where
             prev_root,
         );
         let storage = storage_manager.create_prover_storage();
-        let state_checkpoint = StateCheckpoint::new(storage, &kernel, None);
+        let state_checkpoint = StateCheckpoint::new(storage, &kernel);
         let api_accessor = ApiStateAccessor::new(
             Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
                 state_checkpoint,

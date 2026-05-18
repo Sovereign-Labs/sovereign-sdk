@@ -1,5 +1,4 @@
 //! Prover side of NOMT-based Storage implementation
-use std::any::Any;
 use std::collections::btree_map::Entry;
 use std::collections::BTreeMap;
 use std::fmt::Formatter;
@@ -20,7 +19,6 @@ use sov_db::storage_manager::{
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
-use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
     Accessory, CompileTimeNamespace, Kernel, MerkleProofSpec, Namespace, NativeStorage, NodeLeaf,
@@ -67,8 +65,8 @@ where
     /// Enable staleness/consistency checks (NOMT vs rocksdb, root hash comparison).
     /// Should be true for all node-context block processing.
     strict_mode: bool,
-    /// Controls witness hint generation for ZK proofs and optional pinned cache.
-    witness_mode: WitnessMode<PinnedCache>,
+    /// Controls witness hint generation for ZK proofs.
+    witness_mode: WitnessMode,
 }
 
 impl<S: MerkleProofSpec, K: Clone> Clone for NomtProverStorage<S, K>
@@ -77,14 +75,6 @@ where
     K: Clone,
 {
     fn clone(&self) -> Self {
-        if matches!(
-            self.witness_mode,
-            WitnessMode::Off {
-                pinned_cache: Some(_)
-            }
-        ) {
-            tracing::warn!("Cloning NomtProverStorage which has an active pinned cache. The pinned cache will not be propagated to the clone.");
-        }
         let witness_mode = if self.witness_mode.is_witness_enabled() {
             WitnessMode::On
         } else {
@@ -121,7 +111,7 @@ where
         historical_state: HistoricalStateReader,
         accessory: AccessoryDb,
         strict_mode: bool,
-        witness_mode: WitnessMode<PinnedCache>,
+        witness_mode: WitnessMode,
     ) -> Self {
         Self {
             state_session_builder,
@@ -326,7 +316,6 @@ where
             user,
             kernel,
             next_root_hash,
-            pinned_cache,
         } = state_update;
         let user_to_materialize = user_versioned.ordered_writes.into_iter();
         let kernel_to_materialize = kernel_versioned.ordered_writes.into_iter();
@@ -351,13 +340,10 @@ where
             version,
         )
         .expect("accessory db materialization must succeed");
-        // Erase the type of the pinned cache since the storage manager isn't aware of it.
-        let pinned_cache = pinned_cache.map(|c| Box::new(c) as Box<dyn Any + Send + Sync>);
         NomtChangeSet {
             state: StateFinishedSession::new(user, kernel),
             historical_state: historical_schema_batch,
             accessory: accessory_batch,
-            pinned_cache,
         }
     }
 
@@ -566,13 +552,6 @@ where
         strict_mode: bool,
         witness_mode: WitnessMode,
     ) -> Self {
-        let witness_mode = match witness_mode {
-            WitnessMode::On => WitnessMode::On,
-            WitnessMode::Off { pinned_cache } => {
-                let pinned_cache: Option<PinnedCache> = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
-                WitnessMode::Off { pinned_cache }
-            }
-        };
         Self::create(
             state_db,
             historical_state,
@@ -590,7 +569,6 @@ pub struct NomtStateUpdate<S: MerkleProofSpec> {
     accessory: OrderedReadsAndWrites,
     state_accesses: StateAccesses,
     next_root_hash: StorageRoot<S>,
-    pinned_cache: Option<PinnedCache>,
 }
 
 impl<S: MerkleProofSpec> StateUpdate for NomtStateUpdate<S> {
@@ -676,7 +654,6 @@ where
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
-        pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let start = std::time::Instant::now();
         let nomt_accesses_user = to_nomt_accesses::<S>(&state_accesses.user)?;
@@ -777,7 +754,6 @@ where
             accessory: Default::default(),
             state_accesses,
             next_root_hash: root,
-            pinned_cache,
         };
 
         Ok((root, state_update))
@@ -961,10 +937,6 @@ where
             iter.filter_map(|(key, value)| value.map(|v| (key, v))),
         ))
     }
-
-    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
-        self.witness_mode.take_pinned_cache()
-    }
 }
 
 /// Metric for number of reads and writes in both namespaces that have been passed to `compute_state_update`
@@ -1046,7 +1018,6 @@ mod tests {
                 },
                 &Default::default(),
                 prev_root,
-                None,
             )
             .unwrap();
         state_update.add_accessory_item(accessory_key.clone(), Some(value.clone()));

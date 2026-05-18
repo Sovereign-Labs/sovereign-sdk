@@ -18,7 +18,6 @@ anyhow = { workspace = true }
 borsh = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["alloc", "derive"] }
 serde_json = { workspace = true, optional = true }
-tracing = { workspace = true }
 
 sov-accounts = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }

@@ -14,7 +14,6 @@ use crate::cache::{OrderedReadsAndWrites, StateAccesses};
 use crate::namespaces::{
     Accessory, CompileTimeNamespace, Namespace, ProvableCompileTimeNamespace, ProvableNamespace,
 };
-use crate::pinned_cache::PinnedCache;
 use crate::storage::{NativeStorage, SlotKey, SlotValue, StateUpdate, Storage, StorageProof};
 use crate::storage_internals::{SparseMerkleProof, StorageRoot};
 use crate::{
@@ -373,20 +372,12 @@ impl<S: MerkleProofSpec> Storage for ProverStorage<S> {
         self.read_value::<Accessory>(key, None)
     }
 
-    /// # Panics
-    ///
-    /// Panics if `pinned_cache` is `Some`, as JMT prover storage is incompatible with pinned caches.
     fn compute_state_update(
         &self,
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
-        pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
-        assert!(
-            pinned_cache.is_none(),
-            "JMT ProverStorage does not support pinned cache as it is incompatible with ZKPs."
-        );
         let prev_user_root = prev_state_root.namespace_root(ProvableNamespace::User);
         let prev_kernel_root = prev_state_root.namespace_root(ProvableNamespace::Kernel);
         let (user_root, user_state_update) = self
@@ -573,10 +564,5 @@ impl<S: MerkleProofSpec> NativeStorage for ProverStorage<S> {
         _cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
         Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
-    }
-
-    // JMT doesn't currently support pinned cache, so we return None.
-    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
-        None
     }
 }

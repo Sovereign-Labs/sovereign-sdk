@@ -347,7 +347,7 @@ where
         let mut runtime = RT::default();
         let kernel = runtime.kernel();
 
-        let mut state_checkpoint = StateCheckpoint::<S>::new(stf_state.clone(), &kernel, None);
+        let mut state_checkpoint = StateCheckpoint::<S>::new(stf_state.clone(), &kernel);
         let base_fee_per_gas = RT::default()
             .chain_state()
             .base_fee_per_gas(&mut state_checkpoint).expect("Impossible to get the base fee per gas for the current slot. This is a bug. Please report it");
@@ -370,7 +370,7 @@ where
         let mut runtime = RT::default();
         let kernel = runtime.kernel();
 
-        let mut state_checkpoint = StateCheckpoint::<S>::new(stf_state.clone(), &kernel, None);
+        let mut state_checkpoint = StateCheckpoint::<S>::new(stf_state.clone(), &kernel);
         let base_fee_per_gas = RT::default()
             .chain_state()
             .base_fee_per_gas(&mut state_checkpoint).expect("Impossible to get the base fee per gas for the current slot. This is a bug. Please report it");
@@ -433,7 +433,7 @@ where
 
         let mut runtime = RT::default();
 
-        let mut state = StateCheckpoint::<S>::new(stf_state.clone(), &runtime.kernel(), None);
+        let mut state = StateCheckpoint::<S>::new(stf_state.clone(), &runtime.kernel());
 
         let mut kernel_state = runtime.kernel().accessor(&mut state);
 
@@ -464,7 +464,7 @@ where
     fn synchronize_storage_channel(&mut self) {
         let storage = self.storage_manager.create_prover_storage();
         self.checkpoint_sender
-            .send(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(StateCheckpoint::new(storage, &RT::default().kernel(), None))))
+            .send(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(StateCheckpoint::new(storage, &RT::default().kernel()))))
             .expect("Failed to send storage, the storage channel is closed. This is a bug. Please report it.");
     }
 
@@ -488,7 +488,7 @@ where
 
         let (sender, receiver) =
             watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-                StateCheckpoint::new(stf_state.clone(), &RT::default().kernel(), None),
+                StateCheckpoint::new(stf_state.clone(), &RT::default().kernel()),
             )));
 
         let (state_root, change_set) =

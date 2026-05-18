@@ -136,7 +136,7 @@ async fn rest_api_routes() {
     let storage = storage_manager.create_storage();
     let (_sender, receiver) =
         tokio::sync::watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None),
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default()),
         )));
     let runtime = MyRuntime::<TestSpec>::default();
     let state = ApiState::build(

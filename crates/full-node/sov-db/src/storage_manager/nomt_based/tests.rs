@@ -101,7 +101,6 @@ impl TestableStorage for TestNomtStorage {
                 },
                 historical_state: historical_change_set,
                 accessory: accessory_change_set,
-                pinned_cache: None,
             },
             root_hash,
         )

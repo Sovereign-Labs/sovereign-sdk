@@ -30,7 +30,7 @@ fn make_user_map_proof(
     let kernel = MockKernel::<S>::default();
     let mut storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
-    let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel, None);
+    let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel);
     let mut map = StateMap::with_codec(Prefix::new(0, 0), BorshCodec);
     map.set(&key, &value, &mut state).unwrap_infallible();
     write_kernel_marker(&mut state);
@@ -47,7 +47,7 @@ fn make_user_map_proof(
     storage_manager.commit(change_set);
     let storage = storage_manager.create_storage();
 
-    let state_checkpoint = StateCheckpoint::new(storage, &kernel, None);
+    let state_checkpoint = StateCheckpoint::new(storage, &kernel);
     let mut state = ApiStateAccessor::new(
         Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
             state_checkpoint,
@@ -70,7 +70,7 @@ fn make_user_value_proof(
     let kernel = MockKernel::<S>::default();
     let mut storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
-    let mut state = StateCheckpoint::<S>::new(storage.clone(), &MockKernel::<S>::default(), None);
+    let mut state = StateCheckpoint::<S>::new(storage.clone(), &MockKernel::<S>::default());
     let mut state_val = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
     state_val.set(&value, &mut state).unwrap_infallible();
     write_kernel_marker(&mut state);
@@ -87,7 +87,7 @@ fn make_user_value_proof(
     storage_manager.commit(change_set);
     let storage = storage_manager.create_storage();
 
-    let state_checkpoint = StateCheckpoint::new(storage, &kernel, None);
+    let state_checkpoint = StateCheckpoint::new(storage, &kernel);
     let mut state = ApiStateAccessor::new(
         Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
             state_checkpoint,
@@ -204,7 +204,7 @@ fn test_archival_proof_gen() {
             kernel.increase_heights();
         }
 
-        let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel, None);
+        let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel);
 
         if iter % 2 == 0 {
             state_val.set(&iter, &mut state).unwrap_infallible();
@@ -227,7 +227,7 @@ fn test_archival_proof_gen() {
 
     let storage = storage_manager.create_storage();
     // Generate a proof at each archival state and validate it against the root
-    let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
+    let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
     let mut api_state_accessor = ApiStateAccessor::new(
         Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
             state_checkpoint,

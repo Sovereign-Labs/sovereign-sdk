@@ -205,7 +205,6 @@ where
         rollup_exec_config.clone(),
         seq_config.clone(),
         Default::default(),
-        None, // We'll populate the pinned cache on the first `update_state` call.
     );
     let executor_rebase_height = executor.checkpoint.rollup_height_to_access();
 
@@ -296,10 +295,8 @@ struct InitialStatus {
 
 impl InitialStatus {
     /// After startup, resync, or recovery, the sequencer's in-memory state is no longer guaranteed to be correct and up to date.
-    /// When this happens, we replay all soft-confirmed transactions to repopulate the tx and pinned-state caches.
-    /// Note: We may be able to optimize away reloading the pinned cache on resync; on startup we have to populate the pinned cache because
-    /// it doesn't exist yet, and on recovery we have to relaod it because it was (likely) incorrect - by on simple resync this shouldn't be necessary.
-    fn should_flush_tx_cache_and_pinned_cache(&self) -> bool {
+    /// When this happens, we replay all soft-confirmed transactions to repopulate the tx cache.
+    fn should_flush_tx_cache(&self) -> bool {
         self.is_startup || self.is_resync || self.is_recover
     }
 }

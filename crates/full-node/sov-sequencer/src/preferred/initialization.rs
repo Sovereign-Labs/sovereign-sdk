@@ -290,7 +290,7 @@ where
     ) -> anyhow::Result<()> {
         let mut runtime: Rt = Default::default();
         let mut checkpoint =
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
         let registry_preferred = runtime
             .sequencer_remuneration()
             .preferred_sequencer(&mut checkpoint);
@@ -324,7 +324,7 @@ where
             accepts_preferred_batches(runtime.blob_selector()),
             "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
         );
-        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
         // Preferred sequencer deliberately treats the latest available slot as finalized
         // when initializing API state (soft-confirmation semantics).
         let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);

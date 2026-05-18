@@ -25,7 +25,6 @@ use sov_modules_api::digest;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::pinned_cache::PinnedCache;
 use sov_state::{
     MerkleProofSpec, NativeStorage, ProverStorage, StateAccesses, Storage, StorageRoot,
 };
@@ -86,7 +85,6 @@ impl<S: MerkleProofSpec> SimpleJmtStorageManager<S> {
                 state_accesses_genesis,
                 &witness,
                 <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
-                None,
             )
             .expect("state update computation must succeed");
 
@@ -164,7 +162,6 @@ pub struct SimpleStorageManager<S: MerkleProofSpec> {
     root: StorageRoot<S>,
     is_strict_mode: bool,
     with_witness: bool,
-    pinned_cache: Mutex<Option<PinnedCache>>,
 }
 
 impl<S: MerkleProofSpec> SimpleStorageManager<S> {
@@ -188,7 +185,6 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             root: <NomtProverStorage<S, TestSlotHash> as Storage>::PRE_GENESIS_ROOT,
             is_strict_mode: true,
             with_witness: true,
-            pinned_cache: Mutex::new(None),
         }
     }
 
@@ -200,11 +196,6 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
     /// Set witness generation independently from strict mode.
     pub fn set_witness_generation(&mut self, with_witness: bool) {
         self.with_witness = with_witness;
-    }
-
-    /// Inject a pinned cache that will be passed to the next `create_storage` call.
-    pub fn set_pinned_cache(&self, cache: PinnedCache) {
-        *self.pinned_cache.lock().unwrap() = Some(cache);
     }
 
     /// Create a new [`NomtProverStorage`] that has a view only on data written to disc.
@@ -235,8 +226,7 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             AccessoryDb::with_reader(DeltaReader::new(self.accessory.clone(), Vec::new()))
                 .expect("Failed to create accessory db");
 
-        let pinned_cache = self.pinned_cache.lock().unwrap().take();
-        let witness_mode = WitnessMode::new_with_assert(self.with_witness, pinned_cache);
+        let witness_mode = WitnessMode::from_bool(self.with_witness);
         NomtProverStorage::create(
             state_session_builder,
             historical_state_reader,
@@ -252,14 +242,11 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             state,
             historical_state,
             accessory,
-            pinned_cache,
         } = stf_change_set;
 
         self.state.commit_change_set(state).unwrap();
         self.accessory.write_schemas(&accessory).unwrap();
         self.historical_state.commit(historical_state).unwrap();
-
-        *self.pinned_cache.lock().unwrap() = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
     }
 }
 

@@ -2,13 +2,11 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use super::FinalizedSlotPolicy;
-use crate::state::traits::PinnedCacheAccessor;
 use crate::ConcurrentStateCheckpoint;
 use crate::GasMeteringError;
 use concread::hashmap::HashMapReadTxn;
 use sov_metrics::{StateAccessMetric, StateMetrics};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
-use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::MaybePresentValue;
 use sov_state::StateGetter;
 use sov_state::{
@@ -298,11 +296,9 @@ impl<S: Spec> PerBlockCache for ApiStateAccessor<S> {
     }
 }
 
-impl<S: Spec> PinnedCacheAccessor<S> for ApiStateAccessor<S> {
-    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache> {
-        None
-    }
-    fn storage(&self) -> &S::Storage {
+impl<S: Spec> ApiStateAccessor<S> {
+    /// Returns a reference to the storage backing this accessor.
+    pub fn storage(&self) -> &S::Storage {
         self.checkpoint_and_read_txn.state_checkpoint.storage()
     }
 }

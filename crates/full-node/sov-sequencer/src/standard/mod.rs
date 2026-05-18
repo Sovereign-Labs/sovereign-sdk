@@ -141,7 +141,7 @@ where
         let latest_state_update = state_update_receiver.borrow().clone();
         let checkpoint = Arc::new(
             ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
-                StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None),
+                StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel()),
                 latest_state_update.latest_finalized_slot_number,
             ),
         );
@@ -156,7 +156,7 @@ where
 
         let txsm = TxStatusManager::default();
         let checkpoint =
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
 
         let da_address = da.get_signer().await.context(
             "Standard sequencer require DaService to be configured with submitting support",
@@ -680,7 +680,7 @@ where
             latest_finalized_slot_number,
             ..
         } = &state_update_info;
-        let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel(), None);
+        let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel());
 
         tracing::debug!(
             %slot_number,
@@ -693,9 +693,7 @@ where
                 .send(Arc::new(
                     // Standard sequencer preserves true finality as reported by the node.
                     ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
-                        checkpoint
-                            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(
-                            ),
+                        checkpoint.clone_with_empty_witness_dropping_temp_cache(),
                         *latest_finalized_slot_number,
                     ),
                 ))
