@@ -584,6 +584,12 @@
           "type": "boolean",
           "default": true
         },
+        "max_concurrent_proof_blobs": {
+          "description": "Maximum number of proof blobs sent in parallel. Batch blobs are not\ncounted against this limit.",
+          "type": "integer",
+          "format": "uint",
+          "minimum": 0
+        },
         "max_number_of_aggregated_proofs_in_memory": {
           "description": "Maximum number of completed aggregation windows that can be buffered in\nmemory between the intake task and the aggregator task. When the\naggregator falls behind by this many windows, intake stalls and\nback-pressure propagates upstream.",
           "type": "integer",
@@ -622,7 +628,8 @@
         "prover_address",
         "max_number_of_transitions_in_db",
         "max_number_of_transitions_in_memory",
-        "max_number_of_aggregated_proofs_in_memory"
+        "max_number_of_aggregated_proofs_in_memory",
+        "max_concurrent_proof_blobs"
       ]
     },
     "RandomizationBehaviour": {
@@ -1073,12 +1080,6 @@
           "format": "uint",
           "minimum": 0
         },
-        "max_concurrent_proof_blobs": {
-          "description": "Maximum number of proof blobs sent in parallel. Batch blobs are not\ncounted against this limit.",
-          "type": "integer",
-          "format": "uint",
-          "minimum": 0
-        },
         "rollup_address": {
           "description": "Rollup address of the sequencer.",
           "$ref": "#/$defs/Address"
@@ -1115,7 +1116,6 @@
         "rollup_address",
         "max_batch_size_bytes",
         "max_concurrent_batch_blobs",
-        "max_concurrent_proof_blobs",
         "blob_processing_timeout_secs"
       ],
       "unevaluatedProperties": false

@@ -453,6 +453,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             eager_proof_submission: true,
             prover_thread_count_override: None,
             max_number_of_aggregated_proofs_in_memory: NonZero::new(5).unwrap(),
+            max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
         },
         sequencer: SequencerConfig {
             automatic_batch_production: true,
@@ -467,7 +468,6 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             }),
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
-            max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
             blob_processing_timeout_secs: TEST_BLOB_PROCESSING_TIMEOUT,
             extension: None,
         },

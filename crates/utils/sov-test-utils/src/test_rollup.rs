@@ -383,6 +383,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 eager_proof_submission: true,
                 prover_thread_count_override: None,
                 max_number_of_aggregated_proofs_in_memory: NonZero::new(5).unwrap(),
+                max_concurrent_proof_blobs: self.config.max_concurrent_proof_blobs,
             },
             sequencer: SequencerConfig {
                 automatic_batch_production: self.config.automatic_batch_production,
@@ -395,7 +396,6 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 sequencer_kind_config: self.config.sequencer_config.clone(),
                 max_batch_size_bytes: self.config.max_batch_size_bytes,
                 max_concurrent_batch_blobs: self.config.max_concurrent_batch_blobs,
-                max_concurrent_proof_blobs: self.config.max_concurrent_proof_blobs,
                 blob_processing_timeout_secs: self.config.blob_processing_timeout_secs,
                 extension: self.config.extension,
             },

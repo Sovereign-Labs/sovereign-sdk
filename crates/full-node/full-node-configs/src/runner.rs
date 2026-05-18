@@ -143,6 +143,9 @@ pub struct ProofManagerConfig<Address> {
     /// aggregator falls behind by this many windows, intake stalls and
     /// back-pressure propagates upstream.
     pub max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
+    /// Maximum number of proof blobs sent in parallel. Batch blobs are not
+    /// counted against this limit.
+    pub max_concurrent_proof_blobs: usize,
 }
 
 fn default_eager_proof_submission() -> bool {
@@ -238,11 +241,11 @@ mod tests {
             max_number_of_transitions_in_db = 1000
             max_number_of_transitions_in_memory = 100
             max_number_of_aggregated_proofs_in_memory = 5
+            max_concurrent_proof_blobs = 16
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
             max_concurrent_batch_blobs = 16
-            max_concurrent_proof_blobs = 16
             max_allowed_node_distance_behind = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.standard]
@@ -283,11 +286,11 @@ mod tests {
             max_number_of_transitions_in_db = 1000
             max_number_of_transitions_in_memory = 100
             max_number_of_aggregated_proofs_in_memory = 5
+            max_concurrent_proof_blobs = 16
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
             max_concurrent_batch_blobs = 16
-            max_concurrent_proof_blobs = 16
             max_allowed_node_distance_behind = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.preferred]
@@ -338,11 +341,11 @@ mod tests {
             max_number_of_transitions_in_db = 1000
             max_number_of_transitions_in_memory = 100
             max_number_of_aggregated_proofs_in_memory = 5
+            max_concurrent_proof_blobs = 16
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
             max_concurrent_batch_blobs = 16
-            max_concurrent_proof_blobs = 16
             max_allowed_node_distance_behind = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.preferred]
