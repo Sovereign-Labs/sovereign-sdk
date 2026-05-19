@@ -24,16 +24,17 @@ sov-rollup-full-node-interface = { workspace = true }
 sov-stf-runner = { workspace = true }
 
 # Sovereign crates
-sov-accounts = { workspace = true, features = ["native"], optional = true }
+sov-accounts = { workspace = true, features = ["native"] }
 sov-bank = { workspace = true, features = ["native"] }
-sov-blob-storage = { workspace = true, features = ["native"], optional = true }
-sov-chain-state = { workspace = true, features = ["native"], optional = true }
-sov-paymaster = { workspace = true, features = ["native"], optional = true }
-sov-sequencer-registry = { workspace = true, features = ["native"], optional = true }
+sov-blob-storage = { workspace = true, features = ["native"] }
+sov-chain-state = { workspace = true, features = ["native"] }
+sov-paymaster = { workspace = true, features = ["native"] }
+sov-sequencer-registry = { workspace = true, features = ["native"] }
 sov-cli = { workspace = true }
 sov-db = { workspace = true }
 sov-ethereum = { workspace = true, features = ["local"] }
 sov-kernels = { workspace = true, features = ["native"] }
+sov-migrations = { workspace = true }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-node-client = { workspace = true }
@@ -69,8 +70,8 @@ serde = { workspace = true, default-features = false, features = [
 serde_json = { workspace = true, default-features = false, features = [
     "alloc",
 ] }
-hex = { workspace = true, optional = true }
-bincode = { workspace = true, optional = true }
+hex = { workspace = true }
+bincode = { workspace = true }
 tokio = { workspace = true, features = [
     "rt-multi-thread",
     "sync",
@@ -79,7 +80,7 @@ tokio = { workspace = true, features = [
     "tracing",
 ] }
 tracing = { workspace = true }
-rockbound = { workspace = true, optional = true }
+rockbound = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
 alloy = { workspace = true, features = ["genesis"] }
@@ -163,21 +164,6 @@ default = ["mock_da"]
 mock_da = ["dep:sov-mock-da", "dep:sov-sp1-adapter", "dep:sp1"]
 celestia_da = ["dep:sov-celestia-adapter", "dep:sov-risc0-adapter", "dep:risc0"]
 
-migration-script = [
-    # The migration binary bridges both DAs (references MockDemoRollup + CelestiaDemoRollup).
-    "mock_da",
-    "celestia_da",
-    "dep:sov-accounts",
-    "dep:sov-blob-storage",
-    "dep:rockbound",
-    "dep:bincode",
-    "dep:hex",
-    "dep:sov-chain-state",
-    "dep:sov-paymaster",
-    "dep:sov-sequencer-registry",
-    "sov-db/migration-script",
-]
-
 [[bin]]
 name = "sov-cli"
 path = "src/sov-cli/main.rs"
@@ -201,12 +187,10 @@ required-features = ["celestia_da"]
 [[bin]]
 name = "mockda-to-celestia-migrate"
 path = "src/migrations/mockda_to_celestia.rs"
-required-features = ["migration-script"]
 
 [[bin]]
-name = "legacy-accounts-migrate"
+name = "migrate_to_v1"
 path = "src/migrations/legacy_accounts.rs"
-required-features = ["migration-script"]
 
 [[bin]]
 name = "sov-hive-genesis-adapter"
