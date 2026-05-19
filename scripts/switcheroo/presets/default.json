@@ -16,6 +16,7 @@
     "crates/utils/nearly-linear",
     "crates/utils/sov-zkvm-utils",
     "crates/utils/sov-build",
+    "crates/utils/sov-migrations",
     "crates/module-system/hyperlane",
     "crates/module-system/sov-cli",
     "crates/module-system/sov-modules-stf-blueprint",
