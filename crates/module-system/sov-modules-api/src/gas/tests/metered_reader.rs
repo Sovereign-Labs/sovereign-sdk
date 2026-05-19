@@ -6,7 +6,7 @@ use sov_test_utils::storage::SimpleJmtStorageManager;
 use sov_test_utils::MockDaSpec;
 
 use crate::default_spec::DefaultSpec;
-use crate::gas::GasArray;
+use crate::gas::tests::budget_for_reader_calls;
 use crate::{
     Amount, Gas, GasMeteringError, GasPrice, GasUnit, MeteredReader, Spec, StateCheckpoint,
     WorkingSet,
@@ -24,17 +24,8 @@ fn create_working_set(remaining_funds: Amount) -> WorkingSet<S, StateCheckpoint<
     WorkingSet::new_with_gas_meter(storage, remaining_funds, &TEST_GAS_PRICE)
 }
 
-/// Gas needed for one read of `n` bytes through a `MeteredReader` with the given prices.
 fn budget_for_reads(per_byte: GasUnit<2>, per_read_bias: GasUnit<2>, reads: &[u32]) -> Amount {
-    let mut total = GasUnit::<2>::ZEROED;
-    for &n in reads {
-        total = total
-            .checked_combine(per_read_bias)
-            .unwrap()
-            .checked_combine(per_byte.checked_scalar_product(u64::from(n)).unwrap())
-            .unwrap();
-    }
-    total.value(TEST_GAS_PRICE)
+    budget_for_reader_calls(per_byte, per_read_bias, reads).value(TEST_GAS_PRICE)
 }
 
 #[test]

@@ -1,7 +1,7 @@
 use std::io;
 
 use crate::gas::traits::GasMeter;
-use crate::{GasSpec, Spec};
+use crate::{as_u32_or_panic, GasSpec, Spec};
 
 /// `io::Read` adapter that charges gas to a `GasMeter` for every byte read.
 ///
@@ -29,7 +29,7 @@ impl<'a, R: io::Read, M: GasMeter> MeteredReader<'a, R, M> {
     }
 
     /// Construct a metered reader with explicit prices. Used for testing.
-    pub fn new_with_prices(
+    pub(crate) fn new_with_prices(
         inner: R,
         meter: &'a mut M,
         per_byte: <M::Spec as Spec>::Gas,
@@ -44,13 +44,11 @@ impl<'a, R: io::Read, M: GasMeter> MeteredReader<'a, R, M> {
     }
 
     fn charge(&mut self, n: usize) -> io::Result<()> {
-        let n_u32 = u32::try_from(n)
-            .map_err(|_| io::Error::other("read length exceeds u32::MAX"))?;
         self.meter
             .charge_gas(self.per_read_bias)
             .map_err(io::Error::other)?;
         self.meter
-            .charge_linear_gas(self.per_byte, n_u32)
+            .charge_linear_gas(self.per_byte, as_u32_or_panic(n))
             .map_err(io::Error::other)?;
         Ok(())
     }
@@ -68,11 +66,7 @@ impl<R: io::Read, M: GasMeter> io::Read for MeteredReader<'_, R, M> {
     }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        // Must override the default `Read::read_exact` impl. `<&[u8] as Read>::read_exact`
-        // is specialised to a direct memcpy that bypasses `Read::read`, so leaving the
-        // default would silently skip metering against `&[u8]` sources — which is
-        // exactly the source borsh's slice-based deserialize feeds in. The
-        // `read_exact_meters_against_slice` unit test catches a missing override.
+        // Override required: `<&[u8] as Read>::read_exact` bypasses `Read::read`, skipping metering.
         self.inner.read_exact(buf)?;
         self.charge(buf.len())
     }

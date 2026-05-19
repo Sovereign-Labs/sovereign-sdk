@@ -220,10 +220,9 @@ impl<S: Spec> BlobStorage<S> {
             )?
             // We also charge per-byte borsh decode cost because we need to deserialize the blob.
             .checked_combine(
-                <S as GasSpec>::gas_to_charge_per_byte_borsh_read()
-                    .checked_scalar_product(
-                        WORST_CASE_GAS_PRICE_INCREASE as u64 * (estimated_bytes_to_store as u64),
-                    )?,
+                <S as GasSpec>::gas_to_charge_per_byte_borsh_read().checked_scalar_product(
+                    WORST_CASE_GAS_PRICE_INCREASE as u64 * (estimated_bytes_to_store as u64),
+                )?,
             )?
             .checked_value(current_gas_price)?;
         let tokens_needed_for_retrieval =

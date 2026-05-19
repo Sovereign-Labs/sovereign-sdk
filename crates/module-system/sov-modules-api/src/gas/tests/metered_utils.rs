@@ -148,17 +148,13 @@ pub struct BorshTestStruct {
 }
 
 /// Total gas cost to decode a `BorshTestStruct` through `deserialize_from_slice`:
-/// the common entry bias plus the per-read cost of two `read_exact(4)` calls
-/// (one per `u32` field), each charging `per_read_bias + per_byte_read × 4`.
+/// the common entry bias plus two `read_exact(4)` calls (one per `u32` field).
 fn gas_cost_for_borsh_test_struct() -> <S as Spec>::Gas {
-    let per_read = <S as GasSpec>::bias_borsh_per_read()
-        .checked_combine(
-            <S as GasSpec>::gas_to_charge_per_byte_borsh_read()
-                .checked_scalar_product(4)
-                .unwrap(),
-        )
-        .unwrap();
-    let two_reads = per_read.checked_scalar_product(2).unwrap();
+    let two_reads = super::budget_for_reader_calls(
+        <S as GasSpec>::gas_to_charge_per_byte_borsh_read(),
+        <S as GasSpec>::bias_borsh_per_read(),
+        &[4, 4],
+    );
     <S as GasSpec>::bias_borsh_deserialization()
         .checked_combine(two_reads)
         .unwrap()
@@ -250,7 +246,10 @@ fn test_metered_deserializer_charges_per_byte_and_per_read() {
         &mut serialized.as_slice(),
         &mut ws,
     );
-    assert!(matches!(result, Err(MeteredBorshDeserializeError::GasError(..))));
+    assert!(matches!(
+        result,
+        Err(MeteredBorshDeserializeError::GasError(..))
+    ));
 }
 
 #[test]
@@ -286,13 +285,11 @@ fn test_metered_deserializer_recovers_gas_error_mid_decode() {
     // Budget entry bias + exactly one read. The second field's read_exact must
     // exhaust gas mid-decode; `deserialize_from_slice` must downcast the resulting
     // io::Error back into a typed GasError rather than surface it as IOError.
-    let one_read = <S as GasSpec>::bias_borsh_per_read()
-        .checked_combine(
-            <S as GasSpec>::gas_to_charge_per_byte_borsh_read()
-                .checked_scalar_product(4)
-                .unwrap(),
-        )
-        .unwrap();
+    let one_read = super::budget_for_reader_calls(
+        <S as GasSpec>::gas_to_charge_per_byte_borsh_read(),
+        <S as GasSpec>::bias_borsh_per_read(),
+        &[4],
+    );
     let budget = <S as GasSpec>::bias_borsh_deserialization()
         .checked_combine(one_read)
         .unwrap()
@@ -303,5 +300,8 @@ fn test_metered_deserializer_recovers_gas_error_mid_decode() {
         &mut serialized.as_slice(),
         &mut ws,
     );
-    assert!(matches!(result, Err(MeteredBorshDeserializeError::GasError(..))));
+    assert!(matches!(
+        result,
+        Err(MeteredBorshDeserializeError::GasError(..))
+    ));
 }

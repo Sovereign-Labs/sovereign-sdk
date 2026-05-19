@@ -1041,10 +1041,9 @@ impl<S: Spec> BlobStorage<S> {
         state: &mut KernelStateAccessor<'_, S>,
     ) -> Option<B> {
         if let Some((registered_sender, gas_price_for_new_block)) = charge_for_deserialization {
-            let funds_for_deserialization =
-                <S as GasSpec>::gas_to_charge_per_byte_borsh_read()
-                    .checked_scalar_product(blob.total_len() as u64)?
-                    .checked_value(gas_price_for_new_block)?;
+            let funds_for_deserialization = <S as GasSpec>::gas_to_charge_per_byte_borsh_read()
+                .checked_scalar_product(blob.total_len() as u64)?
+                .checked_value(gas_price_for_new_block)?;
             if registered_sender.balance < funds_for_deserialization {
                 return None;
             }
