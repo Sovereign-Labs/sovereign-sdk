@@ -29,11 +29,7 @@ fn budget_for_reads(per_byte: GasUnit<2>, per_read_bias: GasUnit<2>, reads: &[u3
 }
 
 #[test]
-fn read_exact_meters_against_slice() {
-    // Regression test for the `<&[u8] as Read>::read_exact` bypass: that impl is a
-    // direct memcpy that does NOT call `Read::read`. If `MeteredReader::read_exact`
-    // is left as the default (which routes through `Read::read`), metering is silently
-    // skipped against `&[u8]` sources. The test catches a missing override.
+fn read_exact_charges_once_per_call() {
     let per_byte = GasUnit::<2>::from([10, 10]);
     let per_read_bias = GasUnit::<2>::from([5, 5]);
 

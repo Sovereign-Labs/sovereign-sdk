@@ -67,7 +67,6 @@ impl<R: io::Read, M: GasMeter> io::Read for MeteredReader<'_, R, M> {
     }
 
     fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        // Override required: `<&[u8] as Read>::read_exact` bypasses `Read::read`, skipping metering.
         self.inner.read_exact(buf)?;
         self.charge(buf.len())
     }
