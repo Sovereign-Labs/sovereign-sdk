@@ -23,6 +23,7 @@ use crate::error::into_rpc_error;
 use crate::evm::executor;
 use crate::executor::get_cfg_env;
 use crate::helpers::prepare_call_env;
+use crate::precompiles::{EvmPrecompileSet, PrecompileDb, SovPrecompileProvider};
 use crate::{verify_contract_creation_allowlist, Evm};
 
 /// Validates fee-field consistency in an `eth_call` / `eth_estimateGas` /
@@ -68,9 +69,10 @@ pub(crate) fn validate_simulation_max_fee_against_base_fee(
     Ok(())
 }
 
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: EvmPrecompileSet<S>,
 {
     pub(crate) fn resolve_simulation_nonce(
         &self,
@@ -188,7 +190,10 @@ where
 
         if !has_overrides {
             let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
-            return simulate_call(&mut evm_db, &block_env, cfg, request);
+            let precompiles = self
+                .precompile_provider(None)
+                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+            return simulate_call(&mut evm_db, &block_env, cfg, request, precompiles);
         }
 
         let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
@@ -199,7 +204,10 @@ where
             state_overrides,
             block_overrides,
         )?;
-        simulate_call(&mut evm_state, &block_env, cfg, request)
+        let precompiles = self
+            .precompile_provider(None)
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+        simulate_call(&mut evm_state, &block_env, cfg, request, precompiles)
     }
 }
 
@@ -209,19 +217,24 @@ fn invalid_override_params(message: impl Into<String>) -> EthApiError {
 
 /// Executes the shared tail of a simulation call: builds the EVM config, prepares
 /// the transaction environment, runs the transaction, and verifies the allowlist.
-fn simulate_call<DB: Database>(
+fn simulate_call<'a, S, P, DB>(
     db: &mut DB,
     block_env: &BlockEnv,
     cfg: &crate::config::EvmRuntimeConfig,
     request: TransactionRequest,
+    precompiles: SovPrecompileProvider<'a, S, P>,
 ) -> Result<ResultAndState, EthApiError>
 where
+    S: Spec,
+    P: EvmPrecompileSet<S>,
+    DB: Database + PrecompileDb<S>,
     DB::Error: Into<EthApiError> + revm_database_interface::DBErrorMarker + std::fmt::Display,
 {
     let cfg_env = get_cfg_env(block_env, cfg, Some(get_cfg_env_template()));
     let tx_env = prepare_call_env(block_env, request, cfg.chain_spec.tx_gas_limit)?;
     let caller = tx_env.caller;
-    let result = executor::transact(&mut *db, block_env, tx_env, cfg_env)?;
+    let result =
+        executor::transact_with_precompiles(&mut *db, block_env, tx_env, cfg_env, precompiles)?;
     verify_contract_creation_allowlist(&result.state, &caller, cfg, db).map_err(|e| {
         EthApiError::other(sov_rpc_eth_types::rpc_error_with_code(
             alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code(),

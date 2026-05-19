@@ -12,11 +12,13 @@ mod genesis;
 mod hooks;
 #[cfg(feature = "native")]
 mod metrics;
+pub mod precompiles;
 mod sov_evm;
 mod sov_fee_and_gas_utils;
 mod state_access;
 use sov_rollup_interface::da::Time;
 use sov_state::{Kernel, User};
+use std::marker::PhantomData;
 use std::ops::RangeInclusive;
 
 pub use call::*;
@@ -94,7 +96,7 @@ const BLOB_GAS_PRICE: u128 = 0;
 
 /// The sov-evm module provides compatibility with the EVM.
 #[derive(Clone, ModuleInfo)]
-pub struct Evm<S: Spec> {
+pub struct Evm<S: Spec, P: precompiles::EvmPrecompileSet<S> = precompiles::NoCustomPrecompiles<S>> {
     /// The ID of the evm module.
     #[id]
     pub(crate) id: ModuleId,
@@ -188,7 +190,7 @@ pub struct Evm<S: Spec> {
     pub(crate) chain_state_module: sov_chain_state::ChainState<S>,
 
     #[phantom]
-    phantom: core::marker::PhantomData<S>,
+    phantom: PhantomData<(S, P)>,
 
     /// When true, the max fee check in the authenticator is disabled.
     /// This is set to true when an EvmRuntimeConfigUpdate with all fields None is received.
@@ -223,9 +225,10 @@ impl From<anyhow::Error> for Error {
     }
 }
 
-impl<S: Spec> Module for Evm<S>
+impl<S: Spec, P> Module for Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: precompiles::EvmPrecompileSet<S>,
 {
     type Spec = S;
 
@@ -261,7 +264,10 @@ where
     }
 }
 
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: precompiles::EvmPrecompileSet<S>,
+{
     pub(crate) fn base_fee<Reader, E>(&self, state: &mut Reader) -> Result<u64, E>
     where
         Reader: VersionReader + StateReader<User, Error = E> + StateReader<Kernel, Error = E>,
@@ -282,6 +288,13 @@ impl<S: Spec> Evm<S> {
     {
         let admin = self.admin.get(state)?;
         Ok(admin.expect("Admin must be set at genesis and cannot be removed"))
+    }
+
+    pub(crate) fn precompile_provider<'a>(
+        &self,
+        context: Option<&'a Context<S>>,
+    ) -> anyhow::Result<precompiles::SovPrecompileProvider<'a, S, P>> {
+        precompiles::SovPrecompileProvider::new(P::default(), context).map_err(Into::into)
     }
 }
 

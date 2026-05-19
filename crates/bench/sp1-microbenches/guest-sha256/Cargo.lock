@@ -1209,15 +1209,14 @@ dependencies = [
 
 [[package]]
 name = "nomt-core"
-version = "1.0.3"
+version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "e86909b9e6666306bb3878401e8fc8afe4bcd99771acf30d94ad0bab1c1173f9"
+checksum = "1c29af216422c69aeef84d7c20bb7638d442ec5016d93df53d1fb5152f7e4dc7"
 dependencies = [
  "arrayvec",
  "bitvec",
  "borsh",
  "digest",
- "hex",
  "ruint",
  "serde",
 ]
@@ -2133,7 +2132,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "alloy-primitives",
  "arrayvec",
@@ -2153,7 +2152,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macro-helpers"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bech32",
  "borsh",
@@ -2167,7 +2166,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macros"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.117",

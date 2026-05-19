@@ -6,10 +6,12 @@
 //!   3. Update `genesis.json` with any additional data required by your new module
 
 pub mod address;
+pub mod evm_precompiles;
 #[cfg(feature = "test-utils")]
 mod test_utils;
 
 pub use address::MultiAddressEvmSolana;
+pub use evm_precompiles::DemoEvmPrecompiles;
 
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_hyperlane_integration::{
@@ -96,7 +98,7 @@ where
     pub warp: Warp<S>,
     #[cfg_attr(feature = "native", cli_skip)]
     /// The EVM module.
-    pub evm: sov_evm::Evm<S>,
+    pub evm: sov_evm::Evm<S, DemoEvmPrecompiles<S>>,
     /// A module used in benchmarks to generate a wide range of transaction access patterns.
     pub access_pattern: sov_test_modules::access_pattern::AccessPattern<S>,
     /// A module for synthetic load testing and state operations.

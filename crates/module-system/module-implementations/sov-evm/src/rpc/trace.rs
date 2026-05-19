@@ -18,13 +18,15 @@ use sov_rpc_eth_types::EthApiError;
 use super::maybe_archival_state::MaybeArchivalState;
 use crate::conversions::replay_tx_env;
 use crate::db::EvmDb;
+use crate::error::into_rpc_error;
 use crate::evm::primitive_types::{MaybeSealedBlock, TxSignedAndRecovered};
-use crate::executor::{get_cfg_env, inspect, transact_commit};
+use crate::executor::{get_cfg_env, inspect_with_precompiles, transact_commit_with_precompiles};
 use crate::Evm;
 
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     /// Pre-load transactions from a block to avoid borrow conflicts
     pub(super) fn preload_block_transactions(
@@ -138,8 +140,17 @@ where
                 break;
             }
 
-            transact_commit(&mut evm_db, &block_env, replay_tx_env(&tx), cfg_env.clone())
-                .map_err(EthApiError::from)?;
+            let precompiles = self
+                .precompile_provider(None)
+                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+            transact_commit_with_precompiles(
+                &mut evm_db,
+                &block_env,
+                replay_tx_env(&tx),
+                cfg_env.clone(),
+                precompiles,
+            )
+            .map_err(EthApiError::from)?;
         }
 
         // Trace the target transaction
@@ -178,8 +189,17 @@ where
                     let mut inspector = TracingInspector::new(inspector_config);
 
                     let gas_limit = tx_env.gas_limit;
-                    let ExecResultAndState { result, state } =
-                        inspect(&mut *db, block_env, tx_env, cfg, &mut inspector)?;
+                    let precompiles = self
+                        .precompile_provider(None)
+                        .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+                    let ExecResultAndState { result, state } = inspect_with_precompiles(
+                        &mut *db,
+                        block_env,
+                        tx_env,
+                        cfg,
+                        &mut inspector,
+                        precompiles,
+                    )?;
                     db.try_commit(state)?;
 
                     inspector.set_transaction_gas_limit(gas_limit);

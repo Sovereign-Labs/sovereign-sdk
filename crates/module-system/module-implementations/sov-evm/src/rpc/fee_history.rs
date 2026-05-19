@@ -31,9 +31,10 @@ struct FeesAndUsage {
     gas_used_ratios: Vec<f64>,
 }
 
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     pub(super) fn get_fee_history(
         &self,

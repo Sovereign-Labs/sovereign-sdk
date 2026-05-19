@@ -29,9 +29,10 @@ use sov_rpc_eth_types::{RevertError, RpcInvalidTransactionError};
 use sov_state::User;
 use tracing::trace;
 
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     /// Runs a quick EVM simulation and returns `Err` with a proper revert
     /// error (including raw output bytes) if the transaction would revert.

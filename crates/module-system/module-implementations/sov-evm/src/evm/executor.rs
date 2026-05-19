@@ -1,5 +1,6 @@
 use crate::{
     get_spec_id,
+    precompiles::{EvmPrecompileSet, PrecompileDb, SovPrecompileProvider},
     sov_evm::{SovEvm, StorageAccessInspector},
     EvmRuntimeConfig,
 };
@@ -58,7 +59,30 @@ pub fn transact_commit<DB: Database<Error = E> + TryDatabaseCommit<Error = E>, E
     Ok(result)
 }
 
+/// Execute an Ethereum transaction with custom Sovereign precompiles and commit it to the database.
+#[allow(dead_code)]
+pub(crate) fn transact_commit_with_precompiles<'a, S, P, DB, E>(
+    mut db: &mut DB,
+    block_env: &'a BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+    precompiles: SovPrecompileProvider<'a, S, P>,
+) -> Result<ExecutionResult, EVMError<E>>
+where
+    S: sov_modules_api::Spec,
+    P: EvmPrecompileSet<S>,
+    DB: Database<Error = E> + TryDatabaseCommit<Error = E> + PrecompileDb<S>,
+    E: DBErrorMarker,
+{
+    let ExecResultAndState { result, state } =
+        transact_with_precompiles(&mut db, block_env, tx, cfg, precompiles)?;
+    // We don't use transact_commit as it does not support returning an error
+    db.try_commit(state)?;
+    Ok(result)
+}
+
 #[cfg(feature = "native")]
+#[allow(dead_code)]
 pub(crate) fn inspect<'a, DB: Database<Error = E>, E: DBErrorMarker, I>(
     db: DB,
     block_env: &'a BlockEnv,
@@ -82,6 +106,36 @@ where
     Ok(exec_result)
 }
 
+/// Execute ethereum transaction with inspection and custom Sovereign precompiles.
+#[cfg(feature = "native")]
+pub(crate) fn inspect_with_precompiles<'a, S, P, DB, E, I>(
+    db: DB,
+    block_env: &'a BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+    inspector: I,
+    precompiles: SovPrecompileProvider<'a, S, P>,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
+where
+    S: sov_modules_api::Spec,
+    P: EvmPrecompileSet<S>,
+    DB: Database<Error = E> + PrecompileDb<S>,
+    E: DBErrorMarker,
+    I: Inspector<Context<&'a BlockEnv, TxEnv, CfgEnv, DB>, EthInterpreter>,
+{
+    let context = context(db, block_env, cfg);
+    let storage_inspector = StorageAccessInspector::new();
+    let mut evm = SovEvm::with_precompiles(context, (inspector, storage_inspector), precompiles);
+    let mut exec_result = evm.inspect_tx(tx)?;
+    // Rebate the gas we charged for storage access during execution. We rebate after rather than during execution so that
+    // a loop of SSTORE/SLOADs will still terminate due to OOG despite the rebate.
+    rebate_gas(
+        &mut exec_result,
+        evm.inspector().1.gas_spent_on_storage_access(),
+    );
+    Ok(exec_result)
+}
+
 /// Execute ethereum transaction
 pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
     db: DB,
@@ -91,6 +145,32 @@ pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
     let context = context(db, block_env, cfg);
     let mut evm = SovEvm::new(context, StorageAccessInspector::new());
+    let mut exec_result = evm.inspect_tx(tx)?;
+    // Rebate the gas we charged for storage access during execution. We rebate after rather than during execution so that
+    // a loop of SSTORE/SLOADs will still terminate due to OOG despite the rebate.
+    rebate_gas(
+        &mut exec_result,
+        evm.inspector().gas_spent_on_storage_access(),
+    );
+    Ok(exec_result)
+}
+
+/// Execute ethereum transaction with custom Sovereign precompiles.
+pub(crate) fn transact_with_precompiles<'a, S, P, DB, E>(
+    db: DB,
+    block_env: &'a BlockEnv,
+    tx: TxEnv,
+    cfg: CfgEnv,
+    precompiles: SovPrecompileProvider<'a, S, P>,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
+where
+    S: sov_modules_api::Spec,
+    P: EvmPrecompileSet<S>,
+    DB: Database<Error = E> + PrecompileDb<S>,
+    E: DBErrorMarker,
+{
+    let context = context(db, block_env, cfg);
+    let mut evm = SovEvm::with_precompiles(context, StorageAccessInspector::new(), precompiles);
     let mut exec_result = evm.inspect_tx(tx)?;
     // Rebate the gas we charged for storage access during execution. We rebate after rather than during execution so that
     // a loop of SSTORE/SLOADs will still terminate due to OOG despite the rebate.
