@@ -1,5 +1,6 @@
 mod commitment_rotation;
 mod max_concurrent_proof_blobs;
+mod replica;
 mod skip_proving_on_resync;
 
 use demo_stf::genesis_config::create_genesis_config;

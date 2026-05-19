@@ -893,10 +893,7 @@ pub struct SequencerCreationReceipt<S: Spec> {
     pub da_address: <S::Da as DaSpec>::Address,
 }
 
-fn should_enable_proof_pipeline(
-    prover_config: RollupProverConfig,
-    is_replica: bool,
-) -> bool {
+fn should_enable_proof_pipeline(prover_config: RollupProverConfig, is_replica: bool) -> bool {
     prover_config.is_enabled() && !is_replica
 }
 
