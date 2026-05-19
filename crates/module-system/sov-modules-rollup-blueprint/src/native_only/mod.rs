@@ -393,6 +393,32 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             );
         }
 
+        let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
+        let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
+        let axum_socket_addr = axum_tcp.local_addr()?;
+
+        // Resolve the runtime sequencer role up-front so witness generation,
+        // prover setup, and proof-pipeline wiring all match the *actual* role
+        // this node will run as. For `DbElected` this performs the initial
+        // heartbeat that decides leadership, so we must do it once and pass
+        // the resolved state into `create_sequencer` below.
+        let resolved_db = match &rollup_config.sequencer.sequencer_kind_config {
+            SequencerKindConfig::Preferred(seq_config) => Some(
+                sov_sequencer::preferred::ResolvedSequencerDb::resolve(
+                    &seq_config.postgres_config,
+                    &rollup_config.storage.path,
+                    axum_socket_addr,
+                )
+                .await?,
+            ),
+            SequencerKindConfig::Standard(_) => None,
+        };
+        let is_replica = resolved_db
+            .as_ref()
+            .map(|r| r.is_replica())
+            .unwrap_or(false);
+        let proof_pipeline_enabled = should_enable_proof_pipeline(prover_config, is_replica);
+
         let da_service = self
             .create_da_service(&rollup_config, secondary_shutdown_receiver.clone())
             .await;
@@ -409,7 +435,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         .await?;
         let current_finalized_header = da_service.get_last_finalized_block_header().await?;
 
-        let witness_generation = prover_config.is_enabled();
+        let witness_generation = proof_pipeline_enabled;
         let mut storage_manager =
             self.create_storage_manager(&rollup_config, witness_generation)?;
 
@@ -526,32 +552,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let visible_state_height_tracker: Box<dyn ProvableHeightTracker> = Box::new(
             MaximumProvableHeight::new(state_channel.subscribe_storage(), Self::Runtime::default()),
         );
-
-        let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
-        let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
-        let axum_socket_addr = axum_tcp.local_addr()?;
-
-        // Resolve the runtime sequencer role up-front so both prover setup and
-        // proof-pipeline wiring match the *actual* role this node will run as.
-        // For `DbElected` this performs the initial heartbeat that decides
-        // leadership, so we must do it once and pass the resolved state into
-        // `create_sequencer` below.
-        let resolved_db = match &rollup_config.sequencer.sequencer_kind_config {
-            SequencerKindConfig::Preferred(seq_config) => Some(
-                sov_sequencer::preferred::ResolvedSequencerDb::resolve(
-                    &seq_config.postgres_config,
-                    &rollup_config.storage.path,
-                    axum_socket_addr,
-                )
-                .await?,
-            ),
-            SequencerKindConfig::Standard(_) => None,
-        };
-        let is_replica = resolved_db
-            .as_ref()
-            .map(|r| r.is_replica())
-            .unwrap_or(false);
-        let proof_pipeline_enabled = should_enable_proof_pipeline(prover_config, is_replica);
 
         // The prover service validates the latest aggregated proof persisted in
         // the ledger DB and returns its `final_slot_number`. We pass this slot
