@@ -1,8 +1,8 @@
 use revm::{
     context::{ContextError, ContextSetters, ContextTr, Evm, FrameStack},
     handler::{
-        evm::FrameTr, instructions::EthInstructions, EthFrame, EthPrecompiles, EvmTr,
-        FrameInitOrResult, ItemOrResult, PrecompileProvider,
+        evm::FrameTr, instructions::EthInstructions, EthFrame, EvmTr, FrameInitOrResult,
+        ItemOrResult, PrecompileProvider,
     },
     inspector::{InspectorEvmTr, JournalExt},
     interpreter::{interpreter::EthInterpreter, InterpreterResult},
@@ -11,22 +11,9 @@ use revm::{
 
 /// Customized EVM implementation that uses SovHandler to override gas charging behavior
 #[derive(Debug)]
-pub struct SovEvm<CTX, INSP, P = EthPrecompiles>(
+pub struct SovEvm<CTX, INSP, P>(
     pub Evm<CTX, INSP, EthInstructions<EthInterpreter, CTX>, P, EthFrame<EthInterpreter>>,
 );
-
-impl<CTX: ContextTr, INSP> SovEvm<CTX, INSP, EthPrecompiles> {
-    /// Creates new SovEvm instance from context and inspector
-    pub fn new(ctx: CTX, inspector: INSP) -> Self {
-        Self(Evm {
-            ctx,
-            inspector,
-            instruction: EthInstructions::new_mainnet(),
-            precompiles: EthPrecompiles::default(),
-            frame_stack: FrameStack::new(),
-        })
-    }
-}
 
 impl<CTX, INSP, P> SovEvm<CTX, INSP, P>
 where
@@ -34,7 +21,7 @@ where
     P: PrecompileProvider<CTX, Output = InterpreterResult>,
 {
     /// Creates new SovEvm instance from context, inspector, and precompile provider.
-    pub fn with_precompiles(ctx: CTX, inspector: INSP, precompiles: P) -> Self {
+    pub fn new(ctx: CTX, inspector: INSP, precompiles: P) -> Self {
         Self(Evm {
             ctx,
             inspector,

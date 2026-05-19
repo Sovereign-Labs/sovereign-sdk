@@ -444,7 +444,7 @@ where
         let precompiles = self
             .precompile_provider(None)
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
-        let execution = crate::executor::inspect_with_precompiles(
+        let execution = crate::executor::inspect(
             evm_db,
             &block_env,
             tx_env,

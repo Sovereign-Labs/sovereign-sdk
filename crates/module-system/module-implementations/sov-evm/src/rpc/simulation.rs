@@ -233,8 +233,7 @@ where
     let cfg_env = get_cfg_env(block_env, cfg, Some(get_cfg_env_template()));
     let tx_env = prepare_call_env(block_env, request, cfg.chain_spec.tx_gas_limit)?;
     let caller = tx_env.caller;
-    let result =
-        executor::transact_with_precompiles(&mut *db, block_env, tx_env, cfg_env, precompiles)?;
+    let result = executor::transact(&mut *db, block_env, tx_env, cfg_env, precompiles)?;
     verify_contract_creation_allowlist(&result.state, &caller, cfg, db).map_err(|e| {
         EthApiError::other(sov_rpc_eth_types::rpc_error_with_code(
             alloy_rpc_types::error::EthRpcErrorCode::TransactionRejected.code(),

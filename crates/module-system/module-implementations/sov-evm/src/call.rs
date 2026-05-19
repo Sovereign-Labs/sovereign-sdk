@@ -22,7 +22,7 @@ use crate::db::{self, metrics::MetricsDb};
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 #[cfg(feature = "native")]
 use crate::execution_config::EVM_EXECUTION_CONFIG;
-use crate::executor::{get_cfg_env, transact_with_precompiles};
+use crate::executor::{get_cfg_env, transact};
 #[cfg(feature = "native")]
 use crate::metrics::EvmTxMetrics;
 use crate::sov_fee_and_gas_utils::project_receipt_gas_from_actual_fee;
@@ -257,7 +257,7 @@ where
         let ExecResultAndState {
             result,
             state: state_changes,
-        } = match transact_with_precompiles(&mut db, &block, tx_env, cfg_env, precompiles) {
+        } = match transact(&mut db, &block, tx_env, cfg_env, precompiles) {
             Ok(result) => result,
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };
