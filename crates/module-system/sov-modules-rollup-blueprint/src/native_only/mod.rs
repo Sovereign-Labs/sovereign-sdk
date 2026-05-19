@@ -218,7 +218,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     ///
     /// `resolved_db` must be `Some` for [`SequencerKindConfig::Preferred`] and
     /// `None` for [`SequencerKindConfig::Standard`]; it is produced by
-    /// [`sov_sequencer::ResolvedSequencerDb::resolve`] up-front so the role
+    /// [`sov_sequencer::preferred::ResolvedSequencerDb::resolve`] up-front so the role
     /// (including the `DbElected` outcome) is known to the blueprint before
     /// the proof pipeline is wired up.
     #[allow(clippy::too_many_arguments)]
@@ -234,7 +234,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         shutdown_sender: tokio::sync::watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
-        resolved_db: Option<sov_sequencer::ResolvedSequencerDb>,
+        resolved_db: Option<sov_sequencer::preferred::ResolvedSequencerDb>,
     ) -> anyhow::Result<SequencerCreationReceipt<Self::Spec>> {
         let max_concurrent_proof_blobs = rollup_config
             .proof_manager
@@ -531,10 +531,32 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
         let axum_socket_addr = axum_tcp.local_addr()?;
 
+        // Resolve the runtime sequencer role up-front so both prover setup and
+        // proof-pipeline wiring match the *actual* role this node will run as.
+        // For `DbElected` this performs the initial heartbeat that decides
+        // leadership, so we must do it once and pass the resolved state into
+        // `create_sequencer` below.
+        let resolved_db = match &rollup_config.sequencer.sequencer_kind_config {
+            SequencerKindConfig::Preferred(seq_config) => Some(
+                sov_sequencer::preferred::ResolvedSequencerDb::resolve(
+                    &seq_config.postgres_config,
+                    &rollup_config.storage.path,
+                    axum_socket_addr,
+                )
+                .await?,
+            ),
+            SequencerKindConfig::Standard(_) => None,
+        };
+        let is_replica = resolved_db
+            .as_ref()
+            .map(|r| r.is_replica())
+            .unwrap_or(false);
+        let proof_pipeline_enabled = should_enable_proof_pipeline(prover_config, is_replica);
+
         // The prover service validates the latest aggregated proof persisted in
         // the ledger DB and returns its `final_slot_number`. We pass this slot
         // into the runner so the STF-info stream resumes at `final_slot + 1`.
-        let (prover_service, latest_proof_final_slot) = if prover_config.is_enabled() {
+        let (prover_service, latest_proof_final_slot) = if proof_pipeline_enabled {
             let (svc, slot) = self
                 .create_prover_service(
                     prover_config,
@@ -549,35 +571,10 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             (None, None)
         };
 
-        // Resolve the runtime sequencer role up-front so the proof pipeline
-        // matches the *actual* role this node will run as — not just its
-        // configured role. For `DbElected` this performs the initial
-        // heartbeat that decides leadership, so we must do it once and pass
-        // the resolved state into `create_sequencer` below.
-        let resolved_db = match &rollup_config.sequencer.sequencer_kind_config {
-            SequencerKindConfig::Preferred(seq_config) => Some(
-                sov_sequencer::ResolvedSequencerDb::resolve(
-                    &seq_config.postgres_config,
-                    &rollup_config.storage.path,
-                    axum_socket_addr,
-                )
-                .await?,
-            ),
-            SequencerKindConfig::Standard(_) => None,
-        };
-
-        // Replicas never publish to DA, so they must not run the proof pipeline.
-        // Treat them like `proof_manager = None`: the runner skips the STF-info
-        // channel and the prover workflow below stays dormant.
-        let is_replica = resolved_db
-            .as_ref()
-            .map(|r| r.is_replica())
-            .unwrap_or(false);
-
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             axum_tcp,
-            if prover_config.is_enabled() && !is_replica {
+            if proof_pipeline_enabled {
                 rollup_config.proof_manager
             } else {
                 None
@@ -894,4 +891,33 @@ pub struct SequencerCreationReceipt<S: Spec> {
     pub background_handles: Vec<JoinHandle<()>>,
     #[allow(missing_docs)]
     pub da_address: <S::Da as DaSpec>::Address,
+}
+
+fn should_enable_proof_pipeline(
+    prover_config: RollupProverConfig,
+    is_replica: bool,
+) -> bool {
+    prover_config.is_enabled() && !is_replica
+}
+
+#[cfg(test)]
+mod tests {
+    use super::should_enable_proof_pipeline;
+    use sov_stf_runner::processes::RollupProverConfig;
+
+    #[test]
+    fn proof_pipeline_is_disabled_for_replicas() {
+        assert!(!should_enable_proof_pipeline(
+            RollupProverConfig::Prove,
+            true,
+        ));
+        assert!(should_enable_proof_pipeline(
+            RollupProverConfig::Prove,
+            false,
+        ));
+        assert!(!should_enable_proof_pipeline(
+            RollupProverConfig::Disabled,
+            false,
+        ));
+    }
 }

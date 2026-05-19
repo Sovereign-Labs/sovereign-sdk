@@ -1,5 +1,42 @@
 use super::*;
+use crate::SequencerRole;
 use time::OffsetDateTime;
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_db_elected_resolution_returns_replica_when_leader_exists() {
+    let Some(postgres) = setup_test_postgres().await else {
+        return;
+    };
+
+    let leader = DB::new(
+        &postgres,
+        String::from("node_id_1"),
+        ConfiguredNodeRole::Leader,
+    )
+    .await;
+    let _ = leader.maybe_update_leader().await.unwrap();
+
+    let postgres_config = config_from_postgres_container(
+        &postgres,
+        String::from("node_id_2"),
+        ConfiguredNodeRole::DbElected,
+    )
+    .await
+    .unwrap();
+
+    let storage_dir = tempfile::tempdir().unwrap();
+    let bind_addr = SocketAddr::from(([127, 0, 0, 1], 0));
+    let resolved = crate::preferred::ResolvedSequencerDb::resolve(
+        &Some(postgres_config),
+        storage_dir.path(),
+        bind_addr,
+    )
+    .await
+    .unwrap();
+
+    assert!(resolved.is_replica());
+    assert_eq!(resolved.role(), SequencerRole::PgSyncReplica);
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_sequencer_leader_election() {
