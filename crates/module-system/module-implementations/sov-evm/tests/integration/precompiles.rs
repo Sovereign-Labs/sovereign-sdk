@@ -26,7 +26,8 @@ use sov_modules_api::{RawTx, Spec, TxState};
 use sov_rollup_interface::da::Time;
 use sov_rollup_interface::execution_mode::Native;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
-use sov_test_utils::runtime::TestRunner;
+use sov_test_utils::runtime::traits::MinimalGenesis;
+use sov_test_utils::runtime::{Runtime, TestRunner};
 use sov_test_utils::{
     generate_runtime, AsUser, MockDaSpec, MockZkvm, MockZkvmCryptoSpec, TestStorage, TestUser,
     TransactionTestCase, TransactionType, TEST_DEFAULT_USER_BALANCE,
@@ -196,160 +197,178 @@ define_runtime!(
     Evm<S, CompositePrecompiles<S>>
 );
 
-macro_rules! evm_tx {
-    ($module:ident, $nonce:expr, $caller:expr, $to:expr, $input:expr, $gas_limit:expr) => {{
-        let raw_tx = create_raw_evm_tx($nonce, &$caller, $to, $input, $gas_limit);
-        TransactionType::<$module::RT, S>::PreAuthenticated($module::RT::encode_with_ethereum_auth(
-            raw_tx,
-        ))
-    }};
+#[track_caller]
+fn deploy_tester<RT, Sp>(runner: &mut TestRunner<RT, Sp>, caller: &EvmAccount) -> Address
+where
+    RT: Runtime<Sp> + EthereumAuthenticator<Sp> + MinimalGenesis<Sp>,
+    Sp: Spec<Da = MockDaSpec, CryptoSpec = MockZkvmCryptoSpec, Storage = TestStorage>,
+{
+    let tester = caller.address().create(0);
+    runner.execute_transaction(TransactionTestCase {
+        input: create_evm_tx::<RT, Sp>(
+            0,
+            caller,
+            TxKind::Create,
+            Bytes::from(PrecompileTester::BYTECODE.to_vec()),
+            3_000_000,
+        ),
+        assert: Box::new(|ctx, state| {
+            assert!(ctx.tx_receipt.is_successful());
+            let receipt = Evm::<Sp>::default()
+                .receipt(0, state)
+                .expect("deployment should have an EVM receipt");
+            assert!(receipt.0.receipt.success);
+        }),
+    });
+    tester
 }
 
-macro_rules! deploy_tester {
-    ($module:ident, $runner:expr, $caller:expr) => {{
-        let tester = $caller.address().create(0);
-        $runner.execute_transaction(TransactionTestCase {
-            input: evm_tx!(
-                $module,
-                0,
-                $caller,
-                TxKind::Create,
-                Bytes::from(PrecompileTester::BYTECODE.to_vec()),
-                3_000_000
-            ),
-            assert: Box::new(|ctx, state| {
-                assert!(ctx.tx_receipt.is_successful());
-                let receipt = Evm::<S>::default()
-                    .receipt(0, state)
-                    .expect("deployment should have an EVM receipt");
-                assert!(receipt.0.receipt.success);
-            }),
-        });
-        tester
-    }};
-}
-
-macro_rules! assert_precompile_result {
-    (
-        $module:ident,
-        $runner:expr,
-        $caller:expr,
-        $tester:expr,
-        $nonce:expr,
-        $precompile:expr,
-        $input:expr,
-        $expected_output:expr
-    ) => {{
-        let call = PrecompileTester::assertPrecompileResultCall {
-            precompile: $precompile,
-            input: $input,
-            expectedOutput: $expected_output,
-        };
-        let nonce = $nonce;
-
-        $runner.execute_transaction(TransactionTestCase {
-            input: evm_tx!(
-                $module,
-                nonce,
-                $caller,
-                TxKind::Call($tester),
-                Bytes::from(call.abi_encode()),
-                1_000_000
-            ),
-            assert: Box::new(move |ctx, state| {
-                assert!(ctx.tx_receipt.is_successful());
-                let receipt = Evm::<S>::default()
-                    .receipt(nonce, state)
-                    .expect("precompile assertion call should have an EVM receipt");
-                assert!(
-                    receipt.0.receipt.success,
-                    "precompile assertion call reverted at EVM receipt index {nonce}"
-                );
-            }),
-        });
-    }};
-}
-
-macro_rules! assert_identity_precompile {
-    ($module:ident, $runner:expr, $caller:expr, $tester:expr, $nonce:expr) => {{
-        let input = Bytes::from_static(b"sov-identity");
-        assert_precompile_result!(
-            $module,
-            $runner,
-            $caller,
-            $tester,
-            $nonce,
-            IDENTITY_PRECOMPILE,
-            input.clone(),
-            input
-        );
-    }};
-}
-
-macro_rules! assert_empty_precompile {
-    ($module:ident, $runner:expr, $caller:expr, $tester:expr, $nonce:expr, $precompile:expr, $input:expr $(,)?) => {
-        assert_precompile_result!(
-            $module,
-            $runner,
-            $caller,
-            $tester,
-            $nonce,
-            $precompile,
-            $input,
-            Bytes::new()
-        );
+#[track_caller]
+fn assert_precompile_result<RT, Sp>(
+    runner: &mut TestRunner<RT, Sp>,
+    caller: &EvmAccount,
+    tester: Address,
+    nonce: u64,
+    precompile: Address,
+    input: Bytes,
+    expected_output: Bytes,
+) where
+    RT: Runtime<Sp> + EthereumAuthenticator<Sp> + MinimalGenesis<Sp>,
+    Sp: Spec<Da = MockDaSpec, CryptoSpec = MockZkvmCryptoSpec, Storage = TestStorage>,
+{
+    let call = PrecompileTester::assertPrecompileResultCall {
+        precompile,
+        input,
+        expectedOutput: expected_output,
     };
+
+    runner.execute_transaction(TransactionTestCase {
+        input: create_evm_tx::<RT, Sp>(
+            nonce,
+            caller,
+            TxKind::Call(tester),
+            Bytes::from(call.abi_encode()),
+            1_000_000,
+        ),
+        assert: Box::new(move |ctx, state| {
+            assert!(ctx.tx_receipt.is_successful());
+            let receipt = Evm::<Sp>::default()
+                .receipt(nonce, state)
+                .expect("precompile assertion call should have an EVM receipt");
+            assert!(
+                receipt.0.receipt.success,
+                "precompile assertion call reverted at EVM receipt index {nonce}"
+            );
+        }),
+    });
 }
 
-macro_rules! assert_bank_balance_precompile {
-    ($module:ident, $runner:expr, $caller:expr, $tester:expr, $nonce:expr, $balance_holder:expr, $expected_balance:expr $(,)?) => {
-        assert_precompile_result!(
-            $module,
-            $runner,
-            $caller,
-            $tester,
-            $nonce,
-            BANK_BALANCE_PRECOMPILE_ADDRESS,
-            bank_input($balance_holder),
-            u256_bytes(($expected_balance).0)
-        );
-    };
+#[track_caller]
+fn assert_identity_precompile<RT, Sp>(
+    runner: &mut TestRunner<RT, Sp>,
+    caller: &EvmAccount,
+    tester: Address,
+    nonce: u64,
+) where
+    RT: Runtime<Sp> + EthereumAuthenticator<Sp> + MinimalGenesis<Sp>,
+    Sp: Spec<Da = MockDaSpec, CryptoSpec = MockZkvmCryptoSpec, Storage = TestStorage>,
+{
+    let input = Bytes::from_static(b"sov-identity");
+    assert_precompile_result::<RT, Sp>(
+        runner,
+        caller,
+        tester,
+        nonce,
+        IDENTITY_PRECOMPILE,
+        input.clone(),
+        input,
+    );
 }
 
-macro_rules! assert_timestamp_precompile {
-    ($module:ident, $runner:expr, $caller:expr, $tester:expr, $nonce:expr) => {
-        assert_precompile_result!(
-            $module,
-            $runner,
-            $caller,
-            $tester,
-            $nonce,
-            SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
-            Bytes::new(),
-            u256_bytes((TIMESTAMP_SECONDS as u128) * 1_000_000_000)
-        );
-    };
+#[track_caller]
+fn assert_empty_precompile<RT, Sp>(
+    runner: &mut TestRunner<RT, Sp>,
+    caller: &EvmAccount,
+    tester: Address,
+    nonce: u64,
+    precompile: Address,
+    input: Bytes,
+) where
+    RT: Runtime<Sp> + EthereumAuthenticator<Sp> + MinimalGenesis<Sp>,
+    Sp: Spec<Da = MockDaSpec, CryptoSpec = MockZkvmCryptoSpec, Storage = TestStorage>,
+{
+    assert_precompile_result::<RT, Sp>(
+        runner,
+        caller,
+        tester,
+        nonce,
+        precompile,
+        input,
+        Bytes::new(),
+    );
+}
+
+#[track_caller]
+fn assert_bank_balance_precompile<RT, Sp>(
+    runner: &mut TestRunner<RT, Sp>,
+    caller: &EvmAccount,
+    tester: Address,
+    nonce: u64,
+    balance_holder: Address,
+    expected_balance: Amount,
+) where
+    RT: Runtime<Sp> + EthereumAuthenticator<Sp> + MinimalGenesis<Sp>,
+    Sp: Spec<Da = MockDaSpec, CryptoSpec = MockZkvmCryptoSpec, Storage = TestStorage>,
+{
+    assert_precompile_result::<RT, Sp>(
+        runner,
+        caller,
+        tester,
+        nonce,
+        BANK_BALANCE_PRECOMPILE_ADDRESS,
+        bank_input(balance_holder),
+        u256_bytes(expected_balance.0),
+    );
+}
+
+#[track_caller]
+fn assert_timestamp_precompile<RT, Sp>(
+    runner: &mut TestRunner<RT, Sp>,
+    caller: &EvmAccount,
+    tester: Address,
+    nonce: u64,
+) where
+    RT: Runtime<Sp> + EthereumAuthenticator<Sp> + MinimalGenesis<Sp>,
+    Sp: Spec<Da = MockDaSpec, CryptoSpec = MockZkvmCryptoSpec, Storage = TestStorage>,
+{
+    assert_precompile_result::<RT, Sp>(
+        runner,
+        caller,
+        tester,
+        nonce,
+        SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
+        Bytes::new(),
+        u256_bytes((TIMESTAMP_SECONDS as u128) * 1_000_000_000),
+    );
 }
 
 #[test]
 fn default_evm_keeps_eth_precompiles_and_custom_addresses_are_empty() {
     let (mut runner, caller, balance_holder, _) = default_runtime::setup();
-    let tester = deploy_tester!(default_runtime, runner, caller);
+    let tester = deploy_tester(&mut runner, &caller);
 
-    assert_identity_precompile!(default_runtime, runner, caller, tester, 1);
-    assert_empty_precompile!(
-        default_runtime,
-        runner,
-        caller,
+    assert_identity_precompile(&mut runner, &caller, tester, 1);
+    assert_empty_precompile(
+        &mut runner,
+        &caller,
         tester,
         2,
         BANK_BALANCE_PRECOMPILE_ADDRESS,
         bank_input(balance_holder.address()),
     );
-    assert_empty_precompile!(
-        default_runtime,
-        runner,
-        caller,
+    assert_empty_precompile(
+        &mut runner,
+        &caller,
         tester,
         3,
         SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
@@ -360,22 +379,20 @@ fn default_evm_keeps_eth_precompiles_and_custom_addresses_are_empty() {
 #[test]
 fn bank_precompile_runtime_enables_only_bank_precompile() {
     let (mut runner, caller, balance_holder, _) = bank_runtime::setup();
-    let tester = deploy_tester!(bank_runtime, runner, caller);
+    let tester = deploy_tester(&mut runner, &caller);
 
-    assert_identity_precompile!(bank_runtime, runner, caller, tester, 1);
-    assert_bank_balance_precompile!(
-        bank_runtime,
-        runner,
-        caller,
+    assert_identity_precompile(&mut runner, &caller, tester, 1);
+    assert_bank_balance_precompile(
+        &mut runner,
+        &caller,
         tester,
         2,
         balance_holder.address(),
         TEST_DEFAULT_USER_BALANCE,
     );
-    assert_empty_precompile!(
-        bank_runtime,
-        runner,
-        caller,
+    assert_empty_precompile(
+        &mut runner,
+        &caller,
         tester,
         3,
         SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
@@ -387,14 +404,13 @@ fn bank_precompile_runtime_enables_only_bank_precompile() {
 fn timestamp_precompile_runtime_enables_only_timestamp_precompile() {
     let (mut runner, caller, balance_holder, _) = timestamp_runtime::setup();
     runner.config.freeze_time = Some(Time::from_secs(TIMESTAMP_SECONDS));
-    let tester = deploy_tester!(timestamp_runtime, runner, caller);
+    let tester = deploy_tester(&mut runner, &caller);
 
-    assert_identity_precompile!(timestamp_runtime, runner, caller, tester, 1);
-    assert_timestamp_precompile!(timestamp_runtime, runner, caller, tester, 2);
-    assert_empty_precompile!(
-        timestamp_runtime,
-        runner,
-        caller,
+    assert_identity_precompile(&mut runner, &caller, tester, 1);
+    assert_timestamp_precompile(&mut runner, &caller, tester, 2);
+    assert_empty_precompile(
+        &mut runner,
+        &caller,
         tester,
         3,
         BANK_BALANCE_PRECOMPILE_ADDRESS,
@@ -405,12 +421,11 @@ fn timestamp_precompile_runtime_enables_only_timestamp_precompile() {
 #[test]
 fn bank_precompile_reflects_bank_transfer() {
     let (mut runner, caller, balance_holder, bank_sender) = bank_runtime::setup();
-    let tester = deploy_tester!(bank_runtime, runner, caller);
+    let tester = deploy_tester(&mut runner, &caller);
 
-    assert_bank_balance_precompile!(
-        bank_runtime,
-        runner,
-        caller,
+    assert_bank_balance_precompile(
+        &mut runner,
+        &caller,
         tester,
         1,
         balance_holder.address(),
@@ -434,10 +449,9 @@ fn bank_precompile_reflects_bank_transfer() {
         }),
     });
 
-    assert_bank_balance_precompile!(
-        bank_runtime,
-        runner,
-        caller,
+    assert_bank_balance_precompile(
+        &mut runner,
+        &caller,
         tester,
         2,
         balance_holder.address(),
@@ -451,19 +465,33 @@ fn bank_precompile_reflects_bank_transfer() {
 fn composite_precompile_runtime_includes_both_custom_precompiles() {
     let (mut runner, caller, balance_holder, _) = composite_runtime::setup();
     runner.config.freeze_time = Some(Time::from_secs(TIMESTAMP_SECONDS));
-    let tester = deploy_tester!(composite_runtime, runner, caller);
+    let tester = deploy_tester(&mut runner, &caller);
 
-    assert_identity_precompile!(composite_runtime, runner, caller, tester, 1);
-    assert_bank_balance_precompile!(
-        composite_runtime,
-        runner,
-        caller,
+    assert_identity_precompile(&mut runner, &caller, tester, 1);
+    assert_bank_balance_precompile(
+        &mut runner,
+        &caller,
         tester,
         2,
         balance_holder.address(),
         TEST_DEFAULT_USER_BALANCE,
     );
-    assert_timestamp_precompile!(composite_runtime, runner, caller, tester, 3);
+    assert_timestamp_precompile(&mut runner, &caller, tester, 3);
+}
+
+fn create_evm_tx<RT, Sp>(
+    nonce: u64,
+    caller: &EvmAccount,
+    to: TxKind,
+    input: Bytes,
+    gas_limit: u64,
+) -> TransactionType<RT, Sp>
+where
+    RT: Runtime<Sp> + EthereumAuthenticator<Sp>,
+    Sp: Spec,
+{
+    let raw_tx = create_raw_evm_tx(nonce, caller, to, input, gas_limit);
+    TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx))
 }
 
 fn create_raw_evm_tx(
