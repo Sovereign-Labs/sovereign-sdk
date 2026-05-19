@@ -490,6 +490,7 @@ jobs:
       - run: git diff --exit-code
 
   check-web3-js-sdk-integration:
+    name: check TypeScript demo-rollup integrations
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
     needs:
       - check
@@ -513,7 +514,7 @@ jobs:
       - uses: pnpm/action-setup@v4
         with:
           package_json_file: ./typescript/package.json
-      - name: Run web3-js SDK tests against demo-rollup
+      - name: Run TypeScript demo-rollup tests
         # See the script for more details about what to do if job
         run: |
           cd examples/demo-rollup

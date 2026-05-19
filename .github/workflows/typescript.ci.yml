@@ -46,6 +46,8 @@ jobs:
         # Need to build wasm package first
       - name: Build
         run: pnpm build
+      - name: Typecheck demo-rollup viem tests
+        run: pnpm --filter @sovereign-sdk/demo-rollup-viem-tests typecheck
       - name: Test
         run: pnpm coverage
       - name: Check docs build
