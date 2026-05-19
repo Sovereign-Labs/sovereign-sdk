@@ -35,6 +35,8 @@ enum BorshSubcommand {
     ReaderCount(ReaderCountArgs),
     /// Sweep `Vec<u8>` decode size. Calibrates `BIAS_BORSH_DESERIALIZATION`.
     DecodeVec(DecodeVecArgs),
+    /// Run all three sweeps in sequence and print final calibrated constants.
+    All(AllArgs),
 }
 
 #[derive(Args, Debug)]
@@ -70,12 +72,21 @@ pub struct DecodeVecArgs {
     pub per_read_bias: Option<f64>,
 }
 
+#[derive(Args, Debug)]
+pub struct AllArgs {
+    #[arg(long, default_value_t = DEFAULT_ITERATIONS)]
+    pub iterations: u32,
+    #[arg(long, default_value_t = DEFAULT_BASELINE_ITERATIONS)]
+    pub baseline_iterations: u32,
+}
+
 impl BorshArgs {
     pub fn run(self) -> anyhow::Result<()> {
         match self.cmd {
             BorshSubcommand::ReaderBytes(args) => run_reader_bytes(args),
             BorshSubcommand::ReaderCount(args) => run_reader_count(args),
             BorshSubcommand::DecodeVec(args) => run_decode_vec(args),
+            BorshSubcommand::All(args) => run_all(args),
         }
     }
 }
@@ -132,7 +143,9 @@ fn run_reader_count(args: ReaderCountArgs) -> anyhow::Result<()> {
             );
         }
         None => {
-            println!("  Re-run with `--per-byte-read <slope>` from `borsh reader-bytes` to compute");
+            println!(
+                "  Re-run with `--per-byte-read <slope>` from `borsh reader-bytes` to compute"
+            );
             println!(
                 "  BORSH_PER_READ_BIAS = per_read - per_byte_read (currently per_read = {:.4})",
                 fit.per_byte
@@ -184,11 +197,101 @@ fn run_decode_vec(args: DecodeVecArgs) -> anyhow::Result<()> {
         }
         _ => {
             println!("  Re-run with `--per-byte-read <X> --per-read-bias <Y>` to compute");
-            println!("  BIAS_BORSH_DESERIALIZATION = intercept - 2·per_read_bias - 4·per_byte_read");
+            println!(
+                "  BIAS_BORSH_DESERIALIZATION = intercept - 2·per_read_bias - 4·per_byte_read"
+            );
             println!("  (currently intercept = {:.2})", fit.bias);
         }
     }
     Ok(())
+}
+
+fn run_all(args: AllArgs) -> anyhow::Result<()> {
+    let AllArgs {
+        iterations,
+        baseline_iterations,
+    } = args;
+
+    println!("\n========== STEP 1: reader-bytes ==========");
+    let fit_bytes = run_sweep(
+        "reader-bytes",
+        READER_BYTES_SIZES,
+        MODE_READER_BYTES,
+        iterations,
+        baseline_iterations,
+        "bytes",
+        |stdin, n_bytes| {
+            stdin.write(&n_bytes);
+            n_bytes
+        },
+    )?;
+    print_fit(&fit_bytes, "byte");
+    let per_byte_read = fit_bytes.per_byte;
+
+    println!("\n========== STEP 2: reader-count ==========");
+    let fit_reads = run_sweep(
+        "reader-count",
+        READER_COUNT_SIZES,
+        MODE_READER_COUNT,
+        iterations,
+        baseline_iterations,
+        "reads",
+        |stdin, n_reads| {
+            stdin.write(&n_reads);
+            n_reads
+        },
+    )?;
+    print_fit(&fit_reads, "read");
+    let per_read_bias = fit_reads.per_byte - per_byte_read;
+
+    println!("\n========== STEP 3: decode-vec ==========");
+    let fit_decode = run_sweep(
+        "decode-vec",
+        DECODE_VEC_SIZES,
+        MODE_DECODE_VEC,
+        iterations,
+        baseline_iterations,
+        "bytes",
+        |stdin, payload| {
+            let data: Vec<u8> = (0..payload).map(|i| (i as u8).wrapping_mul(0xAB)).collect();
+            let buf: Vec<u8> = borsh::to_vec(&data).expect("borsh::to_vec of Vec<u8>");
+            let buf_len = u32::try_from(buf.len()).expect("buf len fits in u32");
+            stdin.write_vec(buf);
+            buf_len
+        },
+    )?;
+    print_fit(&fit_decode, "byte");
+    let bias_borsh_deserialization = fit_decode.bias - 2.0 * per_read_bias - 4.0 * per_byte_read;
+
+    println!("\n========== SUMMARY ==========");
+    println!("Raw fitted values (prover gas):");
+    println!("  per_byte_read              = {per_byte_read:.4}");
+    println!("  per_read_bias              = {per_read_bias:.4}  (per_read slope - per_byte_read)");
+    println!("  bias_borsh_deserialization = {bias_borsh_deserialization:.2}  (decode intercept - 2·per_read_bias - 4·per_byte_read)");
+    println!("  Sanity: decode-vec slope = {:.4} vs per_byte_read = {per_byte_read:.4}", fit_decode.per_byte);
+
+    println!("\nSuggested constants.toml values (X/2 split per dimension, rounded ≥1):");
+    let pbr = split_half(per_byte_read);
+    let prb = split_half(per_read_bias);
+    let bbd = split_half(bias_borsh_deserialization);
+    println!("  BORSH_PER_BYTE_READ          = [{pbr}, {pbr}]");
+    println!("  BORSH_PER_READ_BIAS          = [{prb}, {prb}]");
+    println!("  BIAS_BORSH_DESERIALIZATION   = [{bbd}, {bbd}]");
+
+    Ok(())
+}
+
+/// Splits a total cost across the two gas dimensions (compute, memory) using the X/2
+/// convention. Returns at least 1 for any positive value to avoid zero-charging.
+fn split_half(total: f64) -> u64 {
+    let half = total / 2.0;
+    if half >= 1.0 {
+        half.round() as u64
+    } else if total > 0.0 {
+        1
+    } else {
+        0
+    }
 }
 
 /// Runs the high/low iteration sweep, differences out setup cost, fits a line, and prints the
@@ -231,8 +334,9 @@ where
             stdin.write(&mode);
             stdin.write(&iter_count);
             let input_size = write_payload(&mut stdin, n);
-            let report = execute_and_collect(&client, elf.clone(), stdin, input_size, iter_count)
-                .with_context(|| format!("{name} failed at {x_label}={n} iter={iter_count}"))?;
+            let report =
+                execute_and_collect(&client, elf.clone(), stdin, input_size, iter_count)
+                    .with_context(|| format!("{name} failed at {x_label}={n} iter={iter_count}"))?;
             results.push(report);
         }
     }
@@ -260,11 +364,7 @@ fn execute_and_collect(
         .gas()
         .context("prover gas not available; ProverClient may have disabled gas calculation")?;
     let total_cycles = report.total_instruction_count();
-    let region_cycles = report
-        .cycle_tracker
-        .get("borsh_loop")
-        .copied()
-        .unwrap_or(0);
+    let region_cycles = report.cycle_tracker.get("borsh_loop").copied().unwrap_or(0);
     let invocations = report
         .invocation_tracker
         .get("borsh_loop")
@@ -287,7 +387,10 @@ fn differential(
     baseline_iterations: u32,
 ) -> (Vec<f64>, Vec<f64>) {
     let iter_delta = f64::from(iterations - baseline_iterations);
-    let sizes: Vec<f64> = results_high.iter().map(|r| f64::from(r.input_size)).collect();
+    let sizes: Vec<f64> = results_high
+        .iter()
+        .map(|r| f64::from(r.input_size))
+        .collect();
     let per_iter_gas: Vec<f64> = results_high
         .iter()
         .zip(results_low.iter())

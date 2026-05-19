@@ -62,6 +62,19 @@ cargo run --release -p sp1-microbenches -- sha256
 cargo run --release -p sp1-microbenches -- ed25519
 ```
 
+Borsh has three chained sub-commands (each later one needs the slope/bias
+from the previous), plus an `all` wrapper that runs them in sequence:
+
+```sh
+# Run the three steps in one command (recommended)
+cargo run --release -p sp1-microbenches -- borsh all
+
+# Or run them individually, copying values between steps
+cargo run --release -p sp1-microbenches -- borsh reader-bytes
+cargo run --release -p sp1-microbenches -- borsh reader-count --per-byte-read <X>
+cargo run --release -p sp1-microbenches -- borsh decode-vec --per-byte-read <X> --per-read-bias <Y>
+```
+
 Optional override:
 
 ```sh
