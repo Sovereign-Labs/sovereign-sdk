@@ -11,9 +11,9 @@ use sov_test_utils::MockDaSpec;
 use crate::default_spec::DefaultSpec;
 use crate::gas::GasArray;
 use crate::{
-    Amount, Gas, GasMeter, GasPrice, GasSpec, GasUnit, MeteredBorshDeserialize,
-    MeteredBorshDeserializeError, MeteredHasher, MeteredSigVerificationError, MeteredSignature,
-    Spec, StateCheckpoint, WorkingSet,
+    Amount, Gas, GasPrice, GasSpec, GasUnit, MeteredBorshDeserialize, MeteredBorshDeserializeError,
+    MeteredHasher, MeteredSigVerificationError, MeteredSignature, Spec, StateCheckpoint,
+    WorkingSet,
 };
 type S = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 

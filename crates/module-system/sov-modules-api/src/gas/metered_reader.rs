@@ -44,6 +44,9 @@ impl<'a, R: io::Read, M: GasMeter> MeteredReader<'a, R, M> {
     }
 
     fn charge(&mut self, n: usize) -> io::Result<()> {
+        if n == 0 {
+            return Ok(());
+        }
         self.meter
             .charge_gas(self.per_read_bias)
             .map_err(io::Error::other)?;
@@ -59,9 +62,7 @@ impl<R: io::Read, M: GasMeter> io::Read for MeteredReader<'_, R, M> {
         // Charge after the inner read so partial reads / EOF / inner failures
         // don't over-charge for bytes that were not delivered.
         let n = self.inner.read(buf)?;
-        if n > 0 {
-            self.charge(n)?;
-        }
+        self.charge(n)?;
         Ok(n)
     }
 

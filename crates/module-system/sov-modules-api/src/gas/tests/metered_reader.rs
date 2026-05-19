@@ -157,6 +157,21 @@ fn out_of_gas_during_read_wraps_typed_error() {
 }
 
 #[test]
+fn read_exact_zero_buf_does_not_charge() {
+    let per_byte = GasUnit::<2>::from([10, 10]);
+    let per_read_bias = GasUnit::<2>::from([5, 5]);
+    let mut ws = create_working_set(Amount::new(0));
+
+    let data: &[u8] = &[1, 2, 3];
+    let mut reader = MeteredReader::new_with_prices(data, &mut ws, per_byte, per_read_bias);
+
+    let mut buf: [u8; 0] = [];
+    reader
+        .read_exact(&mut buf)
+        .expect("0-byte read_exact must not charge gas");
+}
+
+#[test]
 fn eof_read_does_not_charge() {
     let per_byte = GasUnit::<2>::from([10, 10]);
     let per_read_bias = GasUnit::<2>::from([5, 5]);
