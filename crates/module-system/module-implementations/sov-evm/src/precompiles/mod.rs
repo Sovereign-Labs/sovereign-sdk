@@ -3,25 +3,20 @@
 use core::marker::PhantomData;
 
 pub use alloy_primitives::Address;
-use alloy_primitives::{Bytes, U256};
-use borsh::BorshDeserialize;
+use alloy_primitives::Bytes;
 use revm::context_interface::{Block, ContextTr, Transaction};
 use revm::database::State as RevmState;
 use revm::handler::{EthPrecompiles, PrecompileProvider};
 use revm::interpreter::{CallInputs, Gas, InstructionResult, InterpreterResult};
-use sov_address::{EthereumAddress, FromVmAddress};
-use sov_bank::{config_gas_token_id, TokenId};
-use sov_modules_api::{Context as SovContext, HDTimestamp, Spec, TxState};
+use sov_modules_api::{Context as SovContext, Spec, TxState};
 
-/// The gas-token bank balance precompile address.
-pub const BANK_BALANCE_PRECOMPILE_ADDRESS: Address = Address::new([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00, 0x00,
-]);
+mod bank_balance;
+mod sequencing_timestamp;
 
-/// The sequencing/oracle timestamp precompile address.
-pub const SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS: Address = Address::new([
-    0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0x01, 0x00, 0x01,
-]);
+pub use bank_balance::{BankBalancePrecompile, BANK_BALANCE_PRECOMPILE_ADDRESS};
+pub use sequencing_timestamp::{
+    SequencingTimestampPrecompile, SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
+};
 
 /// Result type for Sovereign precompile execution.
 pub type PrecompileResult = Result<PrecompileOutput, PrecompileError>;
@@ -66,13 +61,13 @@ pub struct EvmPrecompileEnv<'a, S: Spec, ST: TxState<S>> {
     /// The Sovereign transaction context, when execution is happening inside an SDK transaction.
     pub sov_context: Option<&'a SovContext<S>>,
     /// The EVM block timestamp in seconds since the Unix epoch.
-    pub block_timestamp: U256,
+    pub block_timestamp: alloy_primitives::U256,
     /// The top-level EVM transaction caller.
     pub tx_caller: Address,
     /// The current EVM call-frame caller.
     pub caller: Address,
     /// The current EVM call value.
-    pub apparent_value: U256,
+    pub apparent_value: alloy_primitives::U256,
     /// Whether the current EVM call is static.
     pub is_static: bool,
 }
@@ -115,85 +110,6 @@ impl<S: Spec> EvmPrecompileSet<S> for NoCustomPrecompiles<S> {
         _env: &mut EvmPrecompileEnv<'_, S, ST>,
     ) -> Option<PrecompileResult> {
         None
-    }
-}
-
-/// A built-in precompile that returns a `sov-bank` token balance.
-#[derive(Clone)]
-pub struct BankBalancePrecompile<S: Spec> {
-    bank: sov_bank::Bank<S>,
-}
-
-impl<S: Spec> Default for BankBalancePrecompile<S> {
-    fn default() -> Self {
-        Self {
-            bank: sov_bank::Bank::default(),
-        }
-    }
-}
-
-impl<S> EvmPrecompileSet<S> for BankBalancePrecompile<S>
-where
-    S: Spec,
-    S::Address: FromVmAddress<EthereumAddress>,
-{
-    fn addresses(&self) -> impl Iterator<Item = Address> {
-        core::iter::once(BANK_BALANCE_PRECOMPILE_ADDRESS)
-    }
-
-    fn execute<ST: TxState<S>>(
-        &self,
-        address: Address,
-        input: &[u8],
-        gas_limit: u64,
-        env: &mut EvmPrecompileEnv<'_, S, ST>,
-    ) -> Option<PrecompileResult> {
-        if address != BANK_BALANCE_PRECOMPILE_ADDRESS {
-            return None;
-        }
-
-        Some(bank_balance_precompile(
-            input, gas_limit, &self.bank, env.state,
-        ))
-    }
-}
-
-/// A built-in precompile that returns the current sequencing/oracle timestamp in nanoseconds.
-#[derive(Clone)]
-pub struct SequencingTimestampPrecompile<S: Spec> {
-    chain_state: sov_chain_state::ChainState<S>,
-}
-
-impl<S: Spec> Default for SequencingTimestampPrecompile<S> {
-    fn default() -> Self {
-        Self {
-            chain_state: sov_chain_state::ChainState::default(),
-        }
-    }
-}
-
-impl<S: Spec> EvmPrecompileSet<S> for SequencingTimestampPrecompile<S> {
-    fn addresses(&self) -> impl Iterator<Item = Address> {
-        core::iter::once(SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS)
-    }
-
-    fn execute<ST: TxState<S>>(
-        &self,
-        address: Address,
-        input: &[u8],
-        gas_limit: u64,
-        env: &mut EvmPrecompileEnv<'_, S, ST>,
-    ) -> Option<PrecompileResult> {
-        if address != SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS {
-            return None;
-        }
-
-        Some(sequencing_timestamp_precompile(
-            input,
-            gas_limit,
-            &self.chain_state,
-            env,
-        ))
     }
 }
 
@@ -352,83 +268,6 @@ fn convert_to_interpreter_result(result: PrecompileResult, gas_limit: u64) -> In
             output: Bytes::new(),
         },
     }
-}
-
-const BANK_BALANCE_GAS: u64 = 100;
-const SEQUENCING_TIMESTAMP_GAS: u64 = 50;
-
-fn bank_balance_precompile<S: Spec, ST: TxState<S>>(
-    input: &[u8],
-    gas_limit: u64,
-    bank: &sov_bank::Bank<S>,
-    state: &mut ST,
-) -> PrecompileResult
-where
-    S::Address: FromVmAddress<EthereumAddress>,
-{
-    if BANK_BALANCE_GAS > gas_limit {
-        return Err(PrecompileError::OutOfGas);
-    }
-
-    let (address_bytes, token_id) = match input.len() {
-        20 => (&input[0..20], config_gas_token_id()),
-        52 => {
-            let mut token_bytes = [0u8; 32];
-            token_bytes.copy_from_slice(&input[20..52]);
-            (&input[0..20], TokenId::from(token_bytes))
-        }
-        _ => {
-            return Err(PrecompileError::InvalidInput(
-                "expected 20-byte address or 20-byte address plus 32-byte token id",
-            ));
-        }
-    };
-
-    let address = S::Address::from_vm_address(
-        EthereumAddress::try_from(address_bytes)
-            .expect("conversion from 20-byte slice to EthereumAddress is infallible"),
-    );
-
-    let balance = bank
-        .get_balance_of(&address, token_id, state)
-        .map_err(|e| PrecompileError::State(e.to_string()))?
-        .unwrap_or_default();
-
-    Ok(PrecompileOutput {
-        gas_used: BANK_BALANCE_GAS,
-        bytes: Bytes::copy_from_slice(&U256::from(balance.0).to_be_bytes::<32>()),
-    })
-}
-
-fn sequencing_timestamp_precompile<S: Spec, ST: TxState<S>>(
-    input: &[u8],
-    gas_limit: u64,
-    chain_state: &sov_chain_state::ChainState<S>,
-    env: &mut EvmPrecompileEnv<'_, S, ST>,
-) -> PrecompileResult {
-    if SEQUENCING_TIMESTAMP_GAS > gas_limit {
-        return Err(PrecompileError::OutOfGas);
-    }
-    if !input.is_empty() {
-        return Err(PrecompileError::InvalidInput("expected empty input"));
-    }
-
-    let nanos = env
-        .sov_context
-        .and_then(|ctx| ctx.sequencing_data().as_ref())
-        .and_then(|bytes| HDTimestamp::try_from_slice(bytes).ok())
-        .map(|timestamp| timestamp.as_nanos())
-        .map(Ok)
-        .unwrap_or_else(|| {
-            chain_state
-                .get_oracle_time_nanos(env.state)
-                .map_err(|e| PrecompileError::State(e.to_string()))
-        })?;
-
-    Ok(PrecompileOutput {
-        gas_used: SEQUENCING_TIMESTAMP_GAS,
-        bytes: Bytes::copy_from_slice(&U256::from(nanos).to_be_bytes::<32>()),
-    })
 }
 
 #[cfg(test)]
