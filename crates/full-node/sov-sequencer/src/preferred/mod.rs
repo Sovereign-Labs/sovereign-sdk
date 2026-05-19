@@ -28,7 +28,7 @@ use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
-pub use db::SequencerRole;
+pub use db::{ResolvedSequencerDb, SequencerRole};
 use db::{PreferredSequencerDb, ReadBatch, ReadBlob};
 use derive_more::Deref;
 use futures::Stream;
@@ -147,7 +147,8 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    /// Creates a new [`PreferredSequencer`] instance.
+    /// Creates a new [`PreferredSequencer`] instance from a pre-resolved
+    /// [`ResolvedSequencerDb`].
     #[allow(clippy::too_many_arguments)]
     pub async fn create(
         da: Da,
@@ -160,6 +161,7 @@ where
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
+        resolved_db: ResolvedSequencerDb,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         Builder::new(da, config, max_concurrent_proof_blobs)
             .build(
@@ -170,6 +172,7 @@ where
                 shutdown_sender,
                 stop_at_rollup_height,
                 bind_addr,
+                resolved_db,
             )
             .await
     }

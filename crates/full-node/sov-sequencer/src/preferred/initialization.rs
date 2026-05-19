@@ -48,7 +48,12 @@ where
         }
     }
 
-    /// Builds the sequencer instance.
+    /// Builds the sequencer instance using a pre-resolved [`ResolvedSequencerDb`].
+    ///
+    /// The caller is responsible for resolving the role exactly once via
+    /// [`ResolvedSequencerDb::resolve`]. This decoupling lets the rollup
+    /// blueprint inspect the runtime role (including `DbElected` outcomes)
+    /// before constructing the runner.
     pub async fn build(
         self,
         state_update_receiver: StateUpdateReceiver<S::Storage>,
@@ -58,6 +63,7 @@ where
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
+        resolved_db: crate::preferred::ResolvedSequencerDb,
     ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
@@ -87,13 +93,8 @@ where
 
         let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
 
-        let (db, seq_role) = PreferredSequencerDb::new(
-            shutdown_sender.clone(),
-            storage_path,
-            &preferred_config.postgres_config,
-            bind_addr,
-        )
-        .await?;
+        let (db, seq_role) =
+            PreferredSequencerDb::from_resolved(shutdown_sender.clone(), resolved_db);
 
         let (next_sequence_number, db_cache) = db.initial_data().await?;
         let mut handles = vec![];
