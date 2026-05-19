@@ -81,45 +81,18 @@ impl BorshArgs {
 }
 
 fn run_reader_bytes(args: ReaderBytesArgs) -> anyhow::Result<()> {
-    let ReaderBytesArgs {
-        iterations,
-        baseline_iterations,
-    } = args;
-    anyhow::ensure!(
-        iterations > baseline_iterations,
-        "--iterations must be greater than --baseline-iterations"
-    );
-
-    let elf = load_guest_elf(GUEST_ELF_PATH)?;
-    let client = ProverClient::from_env();
-
-    let mut results_high = Vec::with_capacity(READER_BYTES_SIZES.len());
-    let mut results_low = Vec::with_capacity(READER_BYTES_SIZES.len());
-    for &n_bytes in READER_BYTES_SIZES {
-        for (iter_count, results) in [
-            (iterations, &mut results_high),
-            (baseline_iterations, &mut results_low),
-        ] {
-            println!("[run] borsh reader-bytes n_bytes={n_bytes} iterations={iter_count}");
-            let mut stdin = SP1Stdin::new();
-            stdin.write(&MODE_READER_BYTES);
-            stdin.write(&iter_count);
+    let fit = run_sweep(
+        "reader-bytes",
+        READER_BYTES_SIZES,
+        MODE_READER_BYTES,
+        args.iterations,
+        args.baseline_iterations,
+        "bytes",
+        |stdin, n_bytes| {
             stdin.write(&n_bytes);
-            let report = execute_and_collect(&client, elf.clone(), stdin, n_bytes, iter_count)
-                .with_context(|| {
-                    format!("reader-bytes failed at n_bytes={n_bytes} iter={iter_count}")
-                })?;
-            results.push(report);
-        }
-    }
-
-    let (sizes, per_iter_gas) =
-        differential(&results_high, &results_low, iterations, baseline_iterations);
-    let fit = fit_linear(&sizes, &per_iter_gas)?;
-
-    print_raw_table("high-iter", &results_high, "bytes");
-    print_raw_table("low-iter (baseline)", &results_low, "bytes");
-    print_differential_table(&sizes, &per_iter_gas, "bytes");
+            n_bytes
+        },
+    )?;
     print_fit(&fit, "byte");
 
     println!("\n=== suggested constant ===");
@@ -128,61 +101,26 @@ fn run_reader_bytes(args: ReaderBytesArgs) -> anyhow::Result<()> {
         round_at_least_one(fit.per_byte)
     );
     println!("  (clean per-byte slope, setup cancelled by two-iter differencing)");
-
     Ok(())
 }
 
 fn run_reader_count(args: ReaderCountArgs) -> anyhow::Result<()> {
-    let ReaderCountArgs {
-        iterations,
-        baseline_iterations,
-        per_byte_read,
-    } = args;
-    anyhow::ensure!(
-        iterations > baseline_iterations,
-        "--iterations must be greater than --baseline-iterations"
-    );
-
-    let elf = load_guest_elf(GUEST_ELF_PATH)?;
-    let client = ProverClient::from_env();
-
-    let mut results_high = Vec::with_capacity(READER_COUNT_SIZES.len());
-    let mut results_low = Vec::with_capacity(READER_COUNT_SIZES.len());
-    for &n_reads in READER_COUNT_SIZES {
-        for (iter_count, results) in [
-            (iterations, &mut results_high),
-            (baseline_iterations, &mut results_low),
-        ] {
-            println!("[run] borsh reader-count n_reads={n_reads} iterations={iter_count}");
-            let mut stdin = SP1Stdin::new();
-            stdin.write(&MODE_READER_COUNT);
-            stdin.write(&iter_count);
+    let fit = run_sweep(
+        "reader-count",
+        READER_COUNT_SIZES,
+        MODE_READER_COUNT,
+        args.iterations,
+        args.baseline_iterations,
+        "reads",
+        |stdin, n_reads| {
             stdin.write(&n_reads);
-            let report = execute_and_collect(&client, elf.clone(), stdin, n_reads, iter_count)
-                .with_context(|| {
-                    format!("reader-count failed at n_reads={n_reads} iter={iter_count}")
-                })?;
-            results.push(report);
-        }
-    }
-
-    let (sizes, per_iter_gas) =
-        differential(&results_high, &results_low, iterations, baseline_iterations);
-    let fit = fit_linear(&sizes, &per_iter_gas)?;
-
-    print_raw_table("high-iter", &results_high, "reads");
-    print_raw_table("low-iter (baseline)", &results_low, "reads");
-    print_differential_table(&sizes, &per_iter_gas, "reads");
-
-    println!("\n=== linear fit (clean prover gas per call) ===");
-    println!("Model: gas_per_call = bias + per_read * n_reads");
-    println!("  bias         = {:.2} prover gas / call", fit.bias);
-    println!("  per_read     = {:.4} prover gas / read", fit.per_byte);
-    println!("  R²           = {:.6}", fit.r_squared);
-    println!("  max residual = {:.2} prover gas", fit.max_residual);
+            n_reads
+        },
+    )?;
+    print_fit(&fit, "read");
 
     println!("\n=== suggested constant ===");
-    match per_byte_read {
+    match args.per_byte_read {
         Some(per_byte) => {
             let bias = fit.per_byte - per_byte;
             println!("  Using per_byte_read = {per_byte:.4} from `borsh reader-bytes`:");
@@ -205,55 +143,25 @@ fn run_reader_count(args: ReaderCountArgs) -> anyhow::Result<()> {
 }
 
 fn run_decode_vec(args: DecodeVecArgs) -> anyhow::Result<()> {
-    let DecodeVecArgs {
-        iterations,
-        baseline_iterations,
-        per_byte_read,
-        per_read_bias,
-    } = args;
-    anyhow::ensure!(
-        iterations > baseline_iterations,
-        "--iterations must be greater than --baseline-iterations"
-    );
-
-    let elf = load_guest_elf(GUEST_ELF_PATH)?;
-    let client = ProverClient::from_env();
-
-    let mut results_high = Vec::with_capacity(DECODE_VEC_SIZES.len());
-    let mut results_low = Vec::with_capacity(DECODE_VEC_SIZES.len());
-    for &payload in DECODE_VEC_SIZES {
-        let data: Vec<u8> = (0..payload).map(|i| (i as u8).wrapping_mul(0xAB)).collect();
-        let buf: Vec<u8> = borsh::to_vec(&data).expect("borsh::to_vec of Vec<u8>");
-        let buf_len = u32::try_from(buf.len()).expect("buf len fits in u32");
-
-        for (iter_count, results) in [
-            (iterations, &mut results_high),
-            (baseline_iterations, &mut results_low),
-        ] {
-            println!("[run] borsh decode-vec payload={payload} iterations={iter_count}");
-            let mut stdin = SP1Stdin::new();
-            stdin.write(&MODE_DECODE_VEC);
-            stdin.write(&iter_count);
-            stdin.write_vec(buf.clone());
-            let report = execute_and_collect(&client, elf.clone(), stdin, buf_len, iter_count)
-                .with_context(|| {
-                    format!("decode-vec failed at payload={payload} iter={iter_count}")
-                })?;
-            results.push(report);
-        }
-    }
-
-    let (sizes, per_iter_gas) =
-        differential(&results_high, &results_low, iterations, baseline_iterations);
-    let fit = fit_linear(&sizes, &per_iter_gas)?;
-
-    print_raw_table("high-iter", &results_high, "bytes");
-    print_raw_table("low-iter (baseline)", &results_low, "bytes");
-    print_differential_table(&sizes, &per_iter_gas, "bytes");
+    let fit = run_sweep(
+        "decode-vec",
+        DECODE_VEC_SIZES,
+        MODE_DECODE_VEC,
+        args.iterations,
+        args.baseline_iterations,
+        "bytes",
+        |stdin, payload| {
+            let data: Vec<u8> = (0..payload).map(|i| (i as u8).wrapping_mul(0xAB)).collect();
+            let buf: Vec<u8> = borsh::to_vec(&data).expect("borsh::to_vec of Vec<u8>");
+            let buf_len = u32::try_from(buf.len()).expect("buf len fits in u32");
+            stdin.write_vec(buf);
+            buf_len
+        },
+    )?;
     print_fit(&fit, "byte");
 
     println!("\n=== suggested constant ===");
-    match (per_byte_read, per_read_bias) {
+    match (args.per_byte_read, args.per_read_bias) {
         (Some(pb), Some(prb)) => {
             // Vec<u8> decode = 2 reads (length + body). Intercept = BIAS_BORSH_DESERIALIZATION
             // + 2 * per_read_bias + 4 * per_byte_read (length prefix is 4 bytes).
@@ -281,6 +189,63 @@ fn run_decode_vec(args: DecodeVecArgs) -> anyhow::Result<()> {
         }
     }
     Ok(())
+}
+
+/// Runs the high/low iteration sweep, differences out setup cost, fits a line, and prints the
+/// raw + differential tables. Each subcommand wraps this with its mode-specific stdin payload
+/// (via `write_payload`) and its trailing `print_fit` + "suggested constant" block.
+///
+/// `write_payload` writes the per-sweep-point payload to `stdin` (after the common mode and
+/// iteration-count writes) and returns the `input_size` to record in the `BenchResult`. For
+/// reader-bytes/reader-count this is just the sweep value; for decode-vec it's the encoded
+/// buffer length.
+fn run_sweep<W>(
+    name: &str,
+    sizes: &[u32],
+    mode: u8,
+    iterations: u32,
+    baseline_iterations: u32,
+    x_label: &str,
+    mut write_payload: W,
+) -> anyhow::Result<LinearFit>
+where
+    W: FnMut(&mut SP1Stdin, u32) -> u32,
+{
+    anyhow::ensure!(
+        iterations > baseline_iterations,
+        "--iterations must be greater than --baseline-iterations"
+    );
+
+    let elf = load_guest_elf(GUEST_ELF_PATH)?;
+    let client = ProverClient::from_env();
+
+    let mut results_high = Vec::with_capacity(sizes.len());
+    let mut results_low = Vec::with_capacity(sizes.len());
+    for &n in sizes {
+        for (iter_count, results) in [
+            (iterations, &mut results_high),
+            (baseline_iterations, &mut results_low),
+        ] {
+            println!("[run] borsh {name} {x_label}={n} iterations={iter_count}");
+            let mut stdin = SP1Stdin::new();
+            stdin.write(&mode);
+            stdin.write(&iter_count);
+            let input_size = write_payload(&mut stdin, n);
+            let report = execute_and_collect(&client, elf.clone(), stdin, input_size, iter_count)
+                .with_context(|| format!("{name} failed at {x_label}={n} iter={iter_count}"))?;
+            results.push(report);
+        }
+    }
+
+    let (sizes_f, per_iter_gas) =
+        differential(&results_high, &results_low, iterations, baseline_iterations);
+    let fit = fit_linear(&sizes_f, &per_iter_gas)?;
+
+    print_raw_table("high-iter", &results_high, x_label);
+    print_raw_table("low-iter (baseline)", &results_low, x_label);
+    print_differential_table(&sizes_f, &per_iter_gas, x_label);
+
+    Ok(fit)
 }
 
 fn execute_and_collect(

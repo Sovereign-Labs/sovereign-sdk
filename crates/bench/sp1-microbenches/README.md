@@ -109,29 +109,17 @@ Shared infrastructure lives in `lib.rs` (`BenchResult`, `load_guest_elf`) and
 
 ## Methodology choice: single-pass vs two-iteration differencing
 
-Every SP1 execution carries a per-execution setup cost (zkVM bootstrap,
-stdin reads, guest allocations) that gets amortized into the linear fit's
-intercept and — if any setup work scales with N — also into the slope.
+Per-execution setup cost (zkVM bootstrap, stdin reads, guest allocations)
+contaminates the fit when per-operation work is small. Precompile-heavy
+benches (hashes, sig verify, big-int) use single-pass — setup is a
+fraction of a percent of signal. Cheap-per-cycle benches (memcpy,
+decoding) use two-iteration differencing: run the sweep at two iteration
+counts, compute `per_iter = (gas_high - gas_low) / (iter_high - iter_low)`
+per N, fit `fit_linear` on the result. Setup cancels exactly because it's
+identical between the two runs at the same N.
 
-Whether you need to cancel that setup depends on the workload:
-
-- **Precompile-heavy work** (hashes, signature verify, big-int math): a
-  single operation burns far more gas than per-execution setup amortized
-  over reasonable iteration counts. Setup is a fraction of a percent of
-  signal. Use single-pass: one sweep, call `fit_prover_gas_per_byte`. See
-  `cmd/sha256.rs`, `cmd/ed25519.rs`.
-
-- **Cheap-per-cycle work** (memcpy, simple arithmetic, byte counting,
-  serialization): setup overhead is comparable to or larger than the
-  signal. Use two-iteration differencing: run the sweep at two iteration
-  counts (e.g. 10 and 100), compute `per_iter = (gas_high - gas_low) /
-  (iter_high - iter_low)` per N, fit `fit_linear` on the result. Setup
-  cancels exactly because it's identical between the two runs at the same
-  N. See `cmd/borsh.rs`.
-
-Heuristic: if the bench drives a precompile (sha256, keccak, secp256k1,
-curve ops), single-pass is fine. If it drives generic Rust (allocs,
-memcpy, decoding), use differencing.
+Heuristic: precompile (sha256, keccak, secp256k1, curve ops) → single-pass.
+Generic Rust (allocs, memcpy, decoding) → differencing.
 
 ## Adding a new microbench
 
