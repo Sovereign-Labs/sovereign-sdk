@@ -11459,6 +11459,7 @@ dependencies = [
  "sov-full-node-configs",
  "sov-hyperlane-integration",
  "sov-kernels",
+ "sov-migrations",
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
@@ -11868,6 +11869,23 @@ dependencies = [
  "tokio-metrics",
  "toml 0.8.23",
  "tracing",
+]
+
+[[package]]
+name = "sov-migrations"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "rockbound",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-chain-state",
+ "sov-db",
+ "sov-full-node-configs",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-state",
 ]
 
 [[package]]
