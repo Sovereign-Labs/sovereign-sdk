@@ -66,8 +66,27 @@ impl<R: io::Read, M: GasMeter> io::Read for MeteredReader<'_, R, M> {
         Ok(n)
     }
 
-    fn read_exact(&mut self, buf: &mut [u8]) -> io::Result<()> {
-        self.inner.read_exact(buf)?;
-        self.charge(buf.len())
+    fn read_exact(&mut self, mut buf: &mut [u8]) -> io::Result<()> {
+        let mut consumed = 0usize;
+        while !buf.is_empty() {
+            match self.inner.read(buf) {
+                Ok(0) => {
+                    let _ = self.charge(consumed);
+                    return Err(io::Error::from(io::ErrorKind::UnexpectedEof));
+                }
+                Ok(n) => {
+                    consumed += n;
+                    let tmp = std::mem::take(&mut buf);
+                    let (_, rest) = tmp.split_at_mut(n);
+                    buf = rest;
+                }
+                Err(err) if err.kind() == io::ErrorKind::Interrupted => continue,
+                Err(err) => {
+                    let _ = self.charge(consumed);
+                    return Err(err);
+                }
+            }
+        }
+        self.charge(consumed)
     }
 }

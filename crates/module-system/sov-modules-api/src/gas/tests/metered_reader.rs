@@ -131,6 +131,41 @@ fn partial_read_charges_only_actual_bytes() {
 }
 
 #[test]
+fn read_exact_propagates_inner_error_when_partial_charge_overflows_budget() {
+    struct PartialFailReader {
+        delivered: bool,
+    }
+    impl Read for PartialFailReader {
+        fn read(&mut self, buf: &mut [u8]) -> io::Result<usize> {
+            if !self.delivered {
+                self.delivered = true;
+                let n = buf.len().min(3);
+                buf[..n].fill(0xCD);
+                Ok(n)
+            } else {
+                Err(io::Error::new(io::ErrorKind::Other, "BOOM"))
+            }
+        }
+    }
+
+    let per_byte = GasUnit::<2>::from([10, 10]);
+    let per_read_bias = GasUnit::<2>::from([5, 5]);
+    let funds = budget_for_reads(per_byte, per_read_bias, &[1]);
+    let mut ws = create_working_set(funds);
+    let source = PartialFailReader { delivered: false };
+    let mut reader = MeteredReader::new_with_prices(source, &mut ws, per_byte, per_read_bias);
+
+    let mut buf = [0u8; 10];
+    let err = reader
+        .read_exact(&mut buf)
+        .expect_err("read_exact must propagate inner error");
+    assert!(
+        err.to_string().contains("BOOM"),
+        "inner error must reach the caller, not be clobbered by gas OOG; got: {err}"
+    );
+}
+
+#[test]
 fn out_of_gas_during_read_wraps_typed_error() {
     let per_byte = GasUnit::<2>::from([10, 10]);
     let per_read_bias = GasUnit::<2>::from([5, 5]);
