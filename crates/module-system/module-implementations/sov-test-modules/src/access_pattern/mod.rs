@@ -20,11 +20,6 @@ pub const MAX_VEC_LEN_BENCH: usize = 100_000;
 /// Max length of a string for a bench pattern call message
 pub const MAX_STR_LEN_BENCH: usize = 1_024;
 
-/// A newtype struct that deserializes into a string. Metered decode is provided by
-/// the blanket impl on `BorshDeserialize` in `sov-modules-api`.
-#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
-pub struct MeteredBorshDeserializeString(pub String);
-
 /// Call message to specify storage access patterns.
 #[derive(Debug, Clone, JsonSchema, EnumDiscriminants, EnumIs, Derivative, UniversalWallet)]
 #[serialize(Borsh, Serde)]
@@ -353,7 +348,7 @@ impl<S: Spec> AccessPattern<S> {
                     .iter(state)?
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let deserialized_string: MeteredBorshDeserializeString =
+                let deserialized_string: String =
                     MeteredBorshDeserialize::deserialize_from_slice(
                         &mut serialized_bytes.as_ref(),
                         state,
@@ -362,16 +357,16 @@ impl<S: Spec> AccessPattern<S> {
                         "access-pattern: Impossible to deserialize the input bytes to string"
                     })?;
 
-                self.deserialized_bytes.set(&deserialized_string.0, state)?;
+                self.deserialized_bytes.set(&deserialized_string, state)?;
             }
             AccessPatternMessages::DeserializeCustomString { input } => {
-                let deserialized_string: MeteredBorshDeserializeString =
+                let deserialized_string: String =
                     MeteredBorshDeserialize::deserialize_from_slice(&mut input.as_ref(), state)
                         .with_context(|| {
                             "access-pattern: Impossible to deserialize the input bytes to string"
                         })?;
 
-                self.deserialized_bytes.set(&deserialized_string.0, state)?;
+                self.deserialized_bytes.set(&deserialized_string, state)?;
             }
             AccessPatternMessages::StoreSerializedString { input } => {
                 self.serialized_bytes.clear(state)?;
