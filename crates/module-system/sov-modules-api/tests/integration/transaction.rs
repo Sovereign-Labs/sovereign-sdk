@@ -1,6 +1,8 @@
 use sov_mock_zkvm::MockZkvmCryptoSpec;
 use sov_modules_api::capabilities::UniquenessData;
-use sov_modules_api::transaction::{Transaction, TransactionSigningPayload, TxDetails, Version0};
+use sov_modules_api::transaction::{
+    Transaction, TransactionSigningPayload, TxDetails, UnsignedTransaction, Version0,
+};
 use sov_modules_api::CryptoSpec;
 use sov_test_utils::runtime::{sov_value_setter, TestOptimisticRuntime, TestOptimisticRuntimeCall};
 use sov_test_utils::TestSpec;
