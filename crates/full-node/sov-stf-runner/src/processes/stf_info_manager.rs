@@ -664,7 +664,7 @@ mod tests {
         // Simulate a former replica that restarts as a prover: the resume cursor
         // points at slot 3, but the local node only has STF infos starting at 5.
         {
-            let (ledger_db, mut storage_manager, mut sender, _receiver) = setup_with_resume(
+            let (ledger_db, mut storage_manager, sender, _receiver) = setup_with_resume(
                 temp_dir.path(),
                 channel_size,
                 max_nb_of_infos_in_db,
