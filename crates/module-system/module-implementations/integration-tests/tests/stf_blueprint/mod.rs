@@ -117,15 +117,6 @@ fn default_rewards() -> Rewards {
 
 pub(crate) fn reset_constants() {
     env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION",
-        "[1, 1]",
-    );
-    env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_MAX_ALLOWED_DATA_SIZE_RETURNED_BY_BLOB_STORAGE",
-        "10000000",
-    );
-
-    env::set_var(
         "SOV_TEST_CONST_OVERRIDE_MAX_ALLOWED_DATA_SIZE_RETURNED_BY_BLOB_STORAGE",
         "10000000",
     );
