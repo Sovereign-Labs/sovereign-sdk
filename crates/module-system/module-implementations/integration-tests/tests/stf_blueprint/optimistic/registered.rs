@@ -203,7 +203,7 @@ fn non_existing_seq_da_tests() {
 #[test]
 fn sequencer_run_out_of_gas() {
     env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION",
+        "SOV_TEST_CONST_OVERRIDE_BORSH_PER_BYTE_READ",
         "[100000, 100000]",
     );
 
