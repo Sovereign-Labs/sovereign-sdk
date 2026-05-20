@@ -40,6 +40,10 @@ pub struct EvmGenesisConfig<S: Spec> {
     pub chain_spec: EvmChainSpec,
     /// Policy - who can create contracts. Everyone or allowlist
     pub contract_creation_policy: ContractCreationPolicy,
+    /// Custom precompile addresses enabled at genesis. Addresses must be available in the
+    /// concrete EVM precompile set configured for the runtime.
+    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    pub enabled_custom_precompiles: BTreeSet<Address>,
     /// The address which is allowed to modify the config.
     pub admin: S::Address,
 }
@@ -53,6 +57,7 @@ impl<S: Spec> EvmGenesisConfig<S> {
             genesis_timestamp: 0,
             chain_spec: EvmChainSpec::default(),
             contract_creation_policy: ContractCreationPolicy::Everyone,
+            enabled_custom_precompiles: Default::default(),
             admin,
         }
     }
@@ -168,6 +173,9 @@ pub struct EvmRuntimeConfigUpdate<S: Spec> {
     pub new_hardfork: Option<(u64, BorshSpecId)>,
     /// A new contract creation policy to apply. None means "no change"
     pub new_contract_creation_policy: Option<ContractCreationPolicyUpdate>,
+    /// Custom precompiles to enable or disable. None means "no change"
+    #[serde(default)]
+    pub enabled_custom_precompiles: Option<EnabledCustomPrecompilesUpdate>,
     /// A new chain spec to apply. None means "no change"
     pub chain_spec_update: Option<ChainSpecUpdate>,
     /// A new admin address to set. None means "no change"
@@ -181,6 +189,7 @@ impl<S: Spec> EvmRuntimeConfigUpdate<S> {
         Self {
             new_hardfork: None,
             new_contract_creation_policy: None,
+            enabled_custom_precompiles: None,
             chain_spec_update: None,
             new_admin: None,
         }
@@ -190,6 +199,28 @@ impl<S: Spec> EvmRuntimeConfigUpdate<S> {
     pub fn is_empty(&self) -> bool {
         *self == Self::empty()
     }
+}
+
+/// An update to the enabled custom EVM precompile set.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Deserialize,
+    serde::Serialize,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    UniversalWallet,
+    JsonSchema,
+)]
+#[serde(rename = "enabled_custom_precompiles_update")]
+pub struct EnabledCustomPrecompilesUpdate {
+    /// Custom precompile addresses to enable.
+    pub add: SafeVec<HexString<[u8; 20]>, 32>,
+    /// Custom precompile addresses to disable.
+    pub remove: SafeVec<HexString<[u8; 20]>, 32>,
 }
 
 #[derive(
@@ -301,6 +332,7 @@ mod tests {
             },
             genesis_timestamp: 0,
             contract_creation_policy: Default::default(),
+            enabled_custom_precompiles: Default::default(),
             initial_base_fee: 7,
             admin: sov_modules_api::Address::from_str(
                 "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",

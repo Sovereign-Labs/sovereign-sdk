@@ -137,6 +137,7 @@ pub fn build_genesis(opts: GenesisOptions) -> TestGenesis {
             .contract_creation_policy
             .clone()
             .unwrap_or(ContractCreationPolicy::Everyone),
+        enabled_custom_precompiles: Default::default(),
         admin: admin_address,
     };
 

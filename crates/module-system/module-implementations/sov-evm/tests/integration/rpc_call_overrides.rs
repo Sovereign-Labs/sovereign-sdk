@@ -157,6 +157,7 @@ fn setup_with_hardforks(hardforks: Vec<(u64, SpecId)>) -> (TestRunner<RT, S>, Ev
             hardforks,
         },
         contract_creation_policy: ContractCreationPolicy::Everyone,
+        enabled_custom_precompiles: Default::default(),
         initial_base_fee: 0,
         genesis_timestamp: 0,
         admin: admin.address(),

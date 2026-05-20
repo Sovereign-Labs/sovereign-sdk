@@ -28,8 +28,9 @@ use crate::metrics::EvmTxMetrics;
 use crate::sov_fee_and_gas_utils::project_receipt_gas_from_actual_fee;
 use crate::{
     gas_metering_mode, BorshSpecId, ChainSpecUpdate, ContractCreationPolicy,
-    ContractCreationPolicyUpdate, Evm, EvmChainSpec, EvmRuntimeConfig, EvmRuntimeConfigUpdate,
-    GasMeteringMode, PendingTransaction, RlpEvmTransaction, TransactionSigned,
+    ContractCreationPolicyUpdate, EnabledCustomPrecompilesUpdate, Evm, EvmChainSpec,
+    EvmRuntimeConfig, EvmRuntimeConfigUpdate, GasMeteringMode, PendingTransaction,
+    RlpEvmTransaction, TransactionSigned,
 };
 use anyhow::{bail, Context as _};
 
@@ -121,6 +122,7 @@ where
         let EvmRuntimeConfigUpdate {
             new_hardfork,
             new_contract_creation_policy,
+            enabled_custom_precompiles,
             chain_spec_update,
             new_admin,
         } = update;
@@ -159,12 +161,41 @@ where
             }
         }
 
+        if let Some(enabled_custom_precompiles) = enabled_custom_precompiles {
+            self.apply_enabled_custom_precompiles_update(enabled_custom_precompiles, state)?;
+        }
+
         // Update the chain spec
         if let Some(chain_spec_update) = chain_spec_update {
             self.apply_chain_spec_update(chain_spec_update, &mut cfg)?;
         }
 
         self.cfg.set(&cfg, state)?;
+        Ok(())
+    }
+
+    fn apply_enabled_custom_precompiles_update(
+        &mut self,
+        update: EnabledCustomPrecompilesUpdate,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        let mut enabled = self.enabled_custom_precompile_addresses(state)?;
+
+        for address in update.add {
+            let address = Address::from(address.0);
+            ensure!(
+                P::ADDRESSES.contains(&address),
+                "custom EVM precompile address {address} is not available in this runtime"
+            );
+            enabled.insert(address);
+        }
+
+        for address in update.remove {
+            let address = Address::from(address.0);
+            enabled.remove(&address);
+        }
+
+        self.enabled_custom_precompiles.set(&enabled, state)?;
         Ok(())
     }
 
@@ -249,7 +280,7 @@ where
             self.fetch_state(context, state, tx)?;
 
         save_elapsed!(fetch_state_time SINCE fetch_state);
-        let precompiles = self.precompile_provider(Some(context))?;
+        let precompiles = self.precompile_provider(Some(context), state)?;
         let db = self.db(state);
         let mut db = MetricsDb::new(db);
 

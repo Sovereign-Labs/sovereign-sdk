@@ -14,8 +14,9 @@ use sov_evm::precompiles::{
     SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
 };
 use sov_evm::{
-    AccountData, ContractCreationPolicy, EthereumAuthenticator, Evm, EvmAuthenticatorInput,
-    EvmChainSpec, EvmGenesisConfig, RlpEvmTransaction, SpecId,
+    AccountData, CallMessage, ContractCreationPolicy, EnabledCustomPrecompilesUpdate,
+    EthereumAuthenticator, Evm, EvmAuthenticatorInput, EvmChainSpec, EvmGenesisConfig,
+    EvmRuntimeConfigUpdate, RlpEvmTransaction, SpecId,
 };
 use sov_evm_test_utils::{PrecompileTester, SolCall};
 use sov_modules_api::capabilities::TransactionAuthenticator;
@@ -23,7 +24,7 @@ use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::sov_universal_wallet::schema::UniversalWallet;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{RawTx, Spec};
+use sov_modules_api::{HexString, RawTx, SafeVec, Spec, TxEffect};
 use sov_rollup_interface::da::Time;
 use sov_rollup_interface::execution_mode::Native;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
@@ -92,8 +93,9 @@ macro_rules! define_runtime {
 
             pub type RT = $runtime<super::S>;
 
-            pub fn setup() -> (TestRunner<RT, super::S>, EvmAccount, EvmAccount, TestUser<super::S>)
-            {
+            pub fn setup_with_enabled_custom_precompiles(
+                enabled_custom_precompiles: impl IntoIterator<Item = Address>,
+            ) -> (TestRunner<RT, super::S>, EvmAccount, EvmAccount, TestUser<super::S>) {
                 let caller = EvmAccount::generate();
                 let balance_holder = EvmAccount::generate();
                 let genesis_config = HighLevelOptimisticGenesisConfig::generate()
@@ -117,6 +119,7 @@ macro_rules! define_runtime {
                         hardforks: vec![(0, SpecId::CANCUN)],
                     },
                     contract_creation_policy: ContractCreationPolicy::Everyone,
+                    enabled_custom_precompiles: enabled_custom_precompiles.into_iter().collect(),
                     initial_base_fee: 0,
                     genesis_timestamp: 0,
                     admin: bank_sender.address(),
@@ -312,9 +315,40 @@ fn assert_timestamp_precompile<RT, Sp>(
     );
 }
 
+#[track_caller]
+fn update_enabled_custom_precompiles(
+    runner: &mut TestRunner<composite_runtime::RT, S>,
+    admin: &TestUser<S>,
+    add: Vec<Address>,
+    remove: Vec<Address>,
+) {
+    runner.execute_transaction(TransactionTestCase {
+        input: admin
+            .create_plain_message::<composite_runtime::RT, Evm<S, CompositePrecompiles<S>>>(
+                CallMessage::UpdateRuntimeConfig(EvmRuntimeConfigUpdate {
+                    enabled_custom_precompiles: Some(EnabledCustomPrecompilesUpdate {
+                        add: SafeVec::try_from(
+                            add.into_iter().map(address_hex).collect::<Vec<_>>(),
+                        )
+                        .unwrap(),
+                        remove: SafeVec::try_from(
+                            remove.into_iter().map(address_hex).collect::<Vec<_>>(),
+                        )
+                        .unwrap(),
+                    }),
+                    ..EvmRuntimeConfigUpdate::empty()
+                }),
+            ),
+        assert: Box::new(|ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful());
+        }),
+    });
+}
+
 #[test]
 fn default_evm_keeps_eth_precompiles_and_custom_addresses_are_empty() {
-    let (mut runner, caller, balance_holder, _) = default_runtime::setup();
+    let (mut runner, caller, balance_holder, _) =
+        default_runtime::setup_with_enabled_custom_precompiles(vec![]);
     let tester = deploy_tester(&mut runner, &caller);
 
     assert_identity_precompile(&mut runner, &caller, tester, 1);
@@ -338,7 +372,8 @@ fn default_evm_keeps_eth_precompiles_and_custom_addresses_are_empty() {
 
 #[test]
 fn bank_precompile_runtime_enables_only_bank_precompile() {
-    let (mut runner, caller, balance_holder, _) = bank_runtime::setup();
+    let (mut runner, caller, balance_holder, _) =
+        bank_runtime::setup_with_enabled_custom_precompiles(vec![BANK_BALANCE_PRECOMPILE_ADDRESS]);
     let tester = deploy_tester(&mut runner, &caller);
 
     assert_identity_precompile(&mut runner, &caller, tester, 1);
@@ -362,7 +397,10 @@ fn bank_precompile_runtime_enables_only_bank_precompile() {
 
 #[test]
 fn timestamp_precompile_runtime_enables_only_timestamp_precompile() {
-    let (mut runner, caller, balance_holder, _) = timestamp_runtime::setup();
+    let (mut runner, caller, balance_holder, _) =
+        timestamp_runtime::setup_with_enabled_custom_precompiles(vec![
+            SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
+        ]);
     runner.config.freeze_time = Some(Time::from_secs(TIMESTAMP_SECONDS));
     let tester = deploy_tester(&mut runner, &caller);
 
@@ -380,7 +418,8 @@ fn timestamp_precompile_runtime_enables_only_timestamp_precompile() {
 
 #[test]
 fn bank_precompile_reflects_bank_transfer() {
-    let (mut runner, caller, balance_holder, bank_sender) = bank_runtime::setup();
+    let (mut runner, caller, balance_holder, bank_sender) =
+        bank_runtime::setup_with_enabled_custom_precompiles(vec![BANK_BALANCE_PRECOMPILE_ADDRESS]);
     let tester = deploy_tester(&mut runner, &caller);
 
     assert_bank_balance_precompile(
@@ -423,7 +462,11 @@ fn bank_precompile_reflects_bank_transfer() {
 
 #[test]
 fn composite_precompile_runtime_includes_both_custom_precompiles() {
-    let (mut runner, caller, balance_holder, _) = composite_runtime::setup();
+    let (mut runner, caller, balance_holder, _) =
+        composite_runtime::setup_with_enabled_custom_precompiles(vec![
+            BANK_BALANCE_PRECOMPILE_ADDRESS,
+            SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
+        ]);
     runner.config.freeze_time = Some(Time::from_secs(TIMESTAMP_SECONDS));
     let tester = deploy_tester(&mut runner, &caller);
 
@@ -440,8 +483,88 @@ fn composite_precompile_runtime_includes_both_custom_precompiles() {
 }
 
 #[test]
+fn admin_update_enables_and_disables_custom_precompiles() {
+    let (mut runner, caller, balance_holder, admin) =
+        composite_runtime::setup_with_enabled_custom_precompiles(vec![]);
+    let tester = deploy_tester(&mut runner, &caller);
+
+    assert_identity_precompile(&mut runner, &caller, tester, 1);
+    assert_empty_precompile(
+        &mut runner,
+        &caller,
+        tester,
+        2,
+        BANK_BALANCE_PRECOMPILE_ADDRESS,
+        bank_input(balance_holder.address()),
+    );
+
+    update_enabled_custom_precompiles(
+        &mut runner,
+        &admin,
+        vec![BANK_BALANCE_PRECOMPILE_ADDRESS],
+        vec![],
+    );
+    assert_bank_balance_precompile(
+        &mut runner,
+        &caller,
+        tester,
+        3,
+        balance_holder.address(),
+        TEST_DEFAULT_USER_BALANCE,
+    );
+
+    update_enabled_custom_precompiles(
+        &mut runner,
+        &admin,
+        vec![],
+        vec![BANK_BALANCE_PRECOMPILE_ADDRESS],
+    );
+    assert_empty_precompile(
+        &mut runner,
+        &caller,
+        tester,
+        4,
+        BANK_BALANCE_PRECOMPILE_ADDRESS,
+        bank_input(balance_holder.address()),
+    );
+}
+
+#[test]
+fn admin_update_rejects_unavailable_custom_precompile() {
+    let (mut runner, _, _, admin) =
+        composite_runtime::setup_with_enabled_custom_precompiles(vec![]);
+    let unavailable_precompile = address!("0000000000000000000000000000000000010002");
+
+    runner.execute_transaction(TransactionTestCase {
+        input: admin
+            .create_plain_message::<composite_runtime::RT, Evm<S, CompositePrecompiles<S>>>(
+                CallMessage::UpdateRuntimeConfig(EvmRuntimeConfigUpdate {
+                    enabled_custom_precompiles: Some(EnabledCustomPrecompilesUpdate {
+                        add: SafeVec::try_from(vec![address_hex(unavailable_precompile)]).unwrap(),
+                        remove: SafeVec::try_from(vec![]).unwrap(),
+                    }),
+                    ..EvmRuntimeConfigUpdate::empty()
+                }),
+            ),
+        assert: Box::new(|ctx, _state| {
+            let TxEffect::Reverted(reverted) = &ctx.tx_receipt else {
+                panic!("Expected a reverted transaction");
+            };
+            assert!(reverted
+                .reason
+                .to_string()
+                .contains("is not available in this runtime"));
+        }),
+    });
+}
+
+#[test]
 fn rpc_call_paths_initialize_custom_precompiles() {
-    let (mut runner, caller, balance_holder, _) = composite_runtime::setup();
+    let (mut runner, caller, balance_holder, _) =
+        composite_runtime::setup_with_enabled_custom_precompiles(vec![
+            BANK_BALANCE_PRECOMPILE_ADDRESS,
+            SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
+        ]);
     runner.config.freeze_time = Some(Time::from_secs(TIMESTAMP_SECONDS));
     let tester = deploy_tester(&mut runner, &caller);
 
@@ -562,7 +685,11 @@ fn rpc_call_paths_initialize_custom_precompiles() {
 
 #[test]
 fn rpc_trace_paths_initialize_custom_precompiles() {
-    let (mut runner, caller, balance_holder, _) = composite_runtime::setup();
+    let (mut runner, caller, balance_holder, _) =
+        composite_runtime::setup_with_enabled_custom_precompiles(vec![
+            BANK_BALANCE_PRECOMPILE_ADDRESS,
+            SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
+        ]);
     let tester = deploy_tester(&mut runner, &caller);
 
     let assertion_input = precompile_assertion_input(
@@ -713,6 +840,12 @@ fn precompile_assertion_input(precompile: Address, input: Bytes, expected_output
 
 fn bank_input(address: Address) -> Bytes {
     Bytes::copy_from_slice(address.as_slice())
+}
+
+fn address_hex(address: Address) -> HexString<[u8; 20]> {
+    let mut bytes = [0; 20];
+    bytes.copy_from_slice(address.as_slice());
+    HexString(bytes)
 }
 
 fn u256_bytes(value: u128) -> Bytes {
