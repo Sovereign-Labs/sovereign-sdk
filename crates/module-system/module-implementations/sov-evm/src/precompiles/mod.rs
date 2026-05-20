@@ -2,7 +2,7 @@
 
 pub use alloy_primitives::Address;
 use alloy_primitives::Bytes;
-use revm::context_interface::{Block, ContextTr, Transaction};
+use revm::context_interface::ContextTr;
 use revm::database::State as RevmState;
 use revm::handler::{EthPrecompiles, PrecompileProvider};
 use revm::interpreter::{CallInputs, Gas, InstructionResult, InterpreterResult};
@@ -54,16 +54,6 @@ pub struct EvmPrecompileEnv<'a, S: Spec, ST: TxState<S>> {
     pub state: &'a mut ST,
     /// The Sovereign transaction context, when execution is happening inside an SDK transaction.
     pub sov_context: Option<&'a SovContext<S>>,
-    /// The EVM block timestamp in seconds since the Unix epoch.
-    pub block_timestamp: alloy_primitives::U256,
-    /// The top-level EVM transaction caller.
-    pub tx_caller: Address,
-    /// The current EVM call-frame caller.
-    pub caller: Address,
-    /// The current EVM call value.
-    pub apparent_value: alloy_primitives::U256,
-    /// Whether the current EVM call is static.
-    pub is_static: bool,
 }
 
 /// Internal adapter for revm database wrappers that can expose Sovereign transaction state.
@@ -138,17 +128,10 @@ where
         }
 
         let input = inputs.input.bytes(ctx);
-        let block_timestamp = ctx.block().timestamp();
-        let tx_caller = ctx.tx().caller();
         let state = ctx.db_mut().precompile_state_mut();
         let mut env = EvmPrecompileEnv {
             state,
             sov_context: self.sov_context,
-            block_timestamp,
-            tx_caller,
-            caller: inputs.caller,
-            apparent_value: inputs.value.get(),
-            is_static: inputs.is_static,
         };
 
         let result = self
