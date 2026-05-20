@@ -36,5 +36,6 @@ sov-eip712-auth = { path = ".", features = ["native"] }
 native = [
 	"sov-modules-api/native",
 	"sov-state/native",
-	"sov-address/native"
+	"sov-address/native",
+	"sov-eip712-auth/native"
 ]
