@@ -216,11 +216,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     /// Creates a new sequencer and provides a [`SequencerCreationReceipt`] with
     /// some information about said sequencer.
     ///
-    /// `resolved_db` must be `Some` for [`SequencerKindConfig::Preferred`] and
-    /// `None` for [`SequencerKindConfig::Standard`]; it is produced by
-    /// [`sov_sequencer::ResolvedSequencerDb::resolve`] up-front so the role
-    /// (including the `DbElected` outcome) is known to the blueprint before
-    /// the proof pipeline is wired up.
     #[allow(clippy::too_many_arguments)]
     async fn create_sequencer(
         &self,
@@ -234,7 +229,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         shutdown_sender: tokio::sync::watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
-        resolved_db: Option<sov_sequencer::ResolvedSequencerDb>,
     ) -> anyhow::Result<SequencerCreationReceipt<Self::Spec>> {
         let max_concurrent_proof_blobs = rollup_config
             .proof_manager
@@ -244,10 +238,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         match &rollup_config.sequencer.sequencer_kind_config {
             SequencerKindConfig::Standard(seq_config) => {
-                debug_assert!(
-                    resolved_db.is_none(),
-                    "Standard sequencer kind does not use ResolvedSequencerDb"
-                );
                 let (sequencer, background_handles) =
                     StdSequencer::<Self::Spec, Self::Runtime, Self::DaService>::create(
                         da_service.clone(),
@@ -284,11 +274,10 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
                     da_address,
+                    is_replica: false,
                 })
             }
             SequencerKindConfig::Preferred(seq_config) => {
-                let resolved_db = resolved_db
-                    .context("Preferred sequencer kind requires a ResolvedSequencerDb")?;
                 let (sequencer, background_handles) =
                     PreferredSequencer::<Self::Spec, Self::Runtime, Self::DaService>::create(
                         da_service.clone(),
@@ -304,9 +293,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         shutdown_sender.clone(),
                         stop_at_rollup_height,
                         bind_addr,
-                        resolved_db,
                     )
                     .await?;
+                let seq_role = sequencer.sequencer_role().await?;
 
                 let da_address = da_service.get_signer().await.context(
                     "Full node with preferred sequencer require DaService with signer support",
@@ -330,6 +319,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
                     da_address,
+                    is_replica: seq_role.is_replica(),
                 })
             }
         }
@@ -530,11 +520,27 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
         let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
         let axum_socket_addr = axum_tcp.local_addr()?;
+        let sequencer = self
+            .create_sequencer(
+                state_update_receiver.clone(),
+                da_sync_state.clone(),
+                &rollup_config,
+                &ledger_db,
+                &api_ledger_db,
+                &da_service,
+                main_shutdown_receiver.clone(),
+                main_shutdown_sender.clone(),
+                stop_at_rollup_height,
+                axum_socket_addr,
+            )
+            .await?;
+        let proof_pipeline_enabled =
+            should_enable_proof_pipeline(prover_config, sequencer.is_replica);
 
         // The prover service validates the latest aggregated proof persisted in
         // the ledger DB and returns its `final_slot_number`. We pass this slot
         // into the runner so the STF-info stream resumes at `final_slot + 1`.
-        let (prover_service, latest_proof_final_slot) = if prover_config.is_enabled() {
+        let (prover_service, latest_proof_final_slot) = if proof_pipeline_enabled {
             let (svc, slot) = self
                 .create_prover_service(
                     prover_config,
@@ -549,35 +555,10 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             (None, None)
         };
 
-        // Resolve the runtime sequencer role up-front so the proof pipeline
-        // matches the *actual* role this node will run as — not just its
-        // configured role. For `DbElected` this performs the initial
-        // heartbeat that decides leadership, so we must do it once and pass
-        // the resolved state into `create_sequencer` below.
-        let resolved_db = match &rollup_config.sequencer.sequencer_kind_config {
-            SequencerKindConfig::Preferred(seq_config) => Some(
-                sov_sequencer::ResolvedSequencerDb::resolve(
-                    &seq_config.postgres_config,
-                    &rollup_config.storage.path,
-                    axum_socket_addr,
-                )
-                .await?,
-            ),
-            SequencerKindConfig::Standard(_) => None,
-        };
-
-        // Replicas never publish to DA, so they must not run the proof pipeline.
-        // Treat them like `proof_manager = None`: the runner skips the STF-info
-        // channel and the prover workflow below stays dormant.
-        let is_replica = resolved_db
-            .as_ref()
-            .map(|r| r.is_replica())
-            .unwrap_or(false);
-
         let mut runner = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             axum_tcp,
-            if prover_config.is_enabled() && !is_replica {
+            if proof_pipeline_enabled {
                 rollup_config.proof_manager
             } else {
                 None
@@ -598,22 +579,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             latest_proof_final_slot,
         )
         .await?;
-
-        let sequencer = self
-            .create_sequencer(
-                state_update_receiver.clone(),
-                da_sync_state,
-                &rollup_config,
-                &ledger_db,
-                &api_ledger_db,
-                &da_service,
-                main_shutdown_receiver.clone(),
-                main_shutdown_sender.clone(),
-                stop_at_rollup_height,
-                axum_socket_addr,
-                resolved_db,
-            )
-            .await?;
 
         if let Some(stf_info_receiver) = runner.take_stf_info_receiver() {
             let prover_service = prover_service
@@ -894,4 +859,10 @@ pub struct SequencerCreationReceipt<S: Spec> {
     pub background_handles: Vec<JoinHandle<()>>,
     #[allow(missing_docs)]
     pub da_address: <S::Da as DaSpec>::Address,
+    /// Whether the resolved sequencer role is a replica role.
+    pub is_replica: bool,
+}
+
+fn should_enable_proof_pipeline(prover_config: RollupProverConfig, is_replica: bool) -> bool {
+    prover_config.is_enabled() && !is_replica
 }

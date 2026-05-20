@@ -103,12 +103,15 @@ impl<
         max_provable_slot_number: &dyn ProvableHeightTracker,
     ) -> anyhow::Result<()> {
         let maybe_write_rollup_height = ledger_db.get_stf_info_write_slot_number().await?;
-        let next_rollup_height_to_receive = self.next_height_to_receive.load(Ordering::SeqCst);
 
         let max_provable_slot_number = max_provable_slot_number.max_provable_slot_number();
 
         match maybe_write_rollup_height {
             Some(write_rollup_height) => {
+                self.realign_notifier_cursor_to_available_stf_info(ledger_db, write_rollup_height)
+                    .await?;
+                let next_rollup_height_to_receive =
+                    self.next_height_to_receive.load(Ordering::SeqCst);
                 assert!(
                     write_rollup_height.get() + 1 >= next_rollup_height_to_receive,
                     "The `write_rollup_height` ({write_rollup_height}) is more than one slot behind `next_rollup_height_to_receive` ({next_rollup_height_to_receive})"
@@ -239,12 +242,16 @@ where
             return Ok(());
         };
 
-        // The `next_height_to_receive` is the minimum height that should be notified next to the receiver.
+        self.realign_notifier_cursor_to_available_stf_info(ledger_db, write_rollup_height)
+            .await?;
         let next_height_to_send = self.next_height_to_send;
 
         // We always have to ensure we don't notify for a height that is not already written to the DB.
         // So we always notify up to the `write_rollup_height`, even if the `max_provable_slot_number` is higher.
         let height_to_notify = std::cmp::min(max_provable_slot_number, write_rollup_height);
+        if height_to_notify < next_height_to_send {
+            return Ok(());
+        }
 
         let range_to_notify = next_height_to_send.range_inclusive(height_to_notify);
         tracing::trace!(
@@ -355,6 +362,51 @@ where
     async fn get_oldest_slot_number(&self, ledger_db: &LedgerDb) -> anyhow::Result<SlotNumber> {
         let oldest_height = ledger_db.get_stf_info_oldest_slot_number().await?;
         Ok(oldest_height.unwrap_or(SlotNumber::ONE))
+    }
+
+    async fn realign_notifier_cursor_to_available_stf_info(
+        &mut self,
+        ledger_db: &LedgerDb,
+        write_rollup_height: SlotNumber,
+    ) -> anyhow::Result<()> {
+        if self.next_height_to_send > write_rollup_height {
+            return Ok(());
+        }
+
+        let resume_cursor = self.next_height_to_send;
+        for height in resume_cursor.range_inclusive(write_rollup_height) {
+            if ledger_db.get_stf_info(height)?.is_some() {
+                if height > resume_cursor {
+                    // The consumer's resume cursor (derived from the last
+                    // durably-observed proof/attestation, so equal to
+                    // `latest_proof_final_slot + 1` in zk mode) sits before the
+                    // first STF info this node actually has locally. This is
+                    // the expected shape when a node ran without a proof
+                    // pipeline and now starts one (e.g. a former replica taking
+                    // over leadership): observed proofs advanced the resume
+                    // cursor while no local STF infos were written. The slots
+                    // in the gap will never be proven by this node.
+                    tracing::warn!(
+                        resume_cursor = %resume_cursor,
+                        first_local_slot = %height,
+                        %write_rollup_height,
+                        "Realigning STF-info notifier cursor: resume position sits before the first locally-materialized STF info. \
+                         Slots in [{resume_cursor}, {height}) are not present locally and will be skipped. \
+                         This usually means the node previously ran without the proof pipeline (e.g. as a replica)."
+                    );
+                    self.next_height_to_send = height;
+                    self.next_height_to_receive
+                        .fetch_max(height.get(), Ordering::SeqCst);
+                }
+                return Ok(());
+            }
+        }
+
+        bail!(
+            "The `stf-info-manager` metadata says STF infos exist through slot {write_rollup_height}, \
+             but none were found in the notify range starting at {resume_cursor}. \
+             This is a bug. Please report it"
+        );
     }
 }
 
@@ -598,6 +650,49 @@ mod tests {
             let stf_info = receiver.read_next().await?.unwrap();
             assert_eq!(stf_info.slot_number().get(), 3);
             assert_eq!(sender.get_oldest_slot_number(&ledger_db).await?.get(), 2);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_stf_info_restart_realigns_missing_local_prefix() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 10;
+
+        // Simulate a former replica that restarts as a prover: the resume cursor
+        // points at slot 3, but the local node only has STF infos starting at 5.
+        {
+            let (ledger_db, mut storage_manager, mut sender, _receiver) = setup_with_resume(
+                temp_dir.path(),
+                channel_size,
+                max_nb_of_infos_in_db,
+                Some(SlotNumber::new(2)),
+            )
+            .await?;
+
+            for height in 5..=6 {
+                let stf_info = make_stf_info(height);
+                let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
+                storage_manager.commit(&schema_batch);
+            }
+        }
+
+        {
+            let (_, _, _, mut receiver) = setup_with_resume(
+                temp_dir.path(),
+                channel_size,
+                max_nb_of_infos_in_db,
+                Some(SlotNumber::new(2)),
+            )
+            .await?;
+
+            let stf_info = receiver.read_next().await?.unwrap();
+            assert_eq!(stf_info.slot_number().get(), 5);
+
+            let stf_info = receiver.read_next().await?.unwrap();
+            assert_eq!(stf_info.slot_number().get(), 6);
         }
 
         Ok(())
