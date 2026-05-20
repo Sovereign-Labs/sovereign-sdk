@@ -42,12 +42,6 @@ pub enum PrecompileError {
     /// The precompile failed while reading Sovereign state.
     #[error("precompile state error: {0}")]
     State(String),
-    /// Two precompile implementations use the same address.
-    #[error("duplicate precompile address: {0}")]
-    DuplicateAddress(Address),
-    /// A Sovereign precompile collides with an Ethereum precompile.
-    #[error("precompile address collides with an Ethereum precompile: {0}")]
-    EthereumCollision(Address),
 }
 
 /// Execution environment passed to Sovereign precompiles.
@@ -72,25 +66,39 @@ pub struct EvmPrecompileEnv<'a, S: Spec, ST: TxState<S>> {
     pub is_static: bool,
 }
 
+/// A single read-only Sovereign EVM precompile.
+pub trait EvmPrecompile<S: Spec>: Clone + Default + Send + Sync + 'static {
+    /// The EVM address handled by this precompile.
+    const ADDRESS: Address;
+
+    /// Executes this precompile.
+    fn execute<ST: TxState<S>>(
+        &self,
+        input: &[u8],
+        gas_limit: u64,
+        env: &mut EvmPrecompileEnv<'_, S, ST>,
+    ) -> PrecompileResult;
+}
+
 /// A composable set of read-only Sovereign EVM precompiles.
 pub trait EvmPrecompileSet<S: Spec>: Clone + Default + Send + Sync + 'static {
-    /// Returns the EVM addresses handled by this set.
-    ///
-    /// The iterator must be deterministic. Duplicate addresses and collisions with Ethereum
-    /// precompiles are rejected when the provider is constructed.
-    fn addresses(&self) -> impl Iterator<Item = Address>;
+    /// The EVM addresses handled by this set.
+    const ADDRESSES: &'static [Address];
+
+    /// Statically validates the addresses exposed by this set.
+    const CHECK_ADDRESSES: () = assert_valid_precompile_addresses(Self::ADDRESSES);
 
     /// Executes the precompile at `address`.
     ///
-    /// Return `None` when this set does not handle `address`; this allows rollups to manually
-    /// compose multiple nested precompile sets.
+    /// Callers must check `Self::ADDRESSES` before dispatching. Implementations may assume
+    /// `address` is one of the advertised addresses.
     fn execute<ST: TxState<S>>(
         &self,
         address: Address,
         input: &[u8],
         gas_limit: u64,
         env: &mut EvmPrecompileEnv<'_, S, ST>,
-    ) -> Option<PrecompileResult>;
+    ) -> PrecompileResult;
 }
 
 /// A precompile set with no custom precompiles.
@@ -98,9 +106,7 @@ pub trait EvmPrecompileSet<S: Spec>: Clone + Default + Send + Sync + 'static {
 pub struct NoCustomPrecompiles<S>(PhantomData<S>);
 
 impl<S: Spec> EvmPrecompileSet<S> for NoCustomPrecompiles<S> {
-    fn addresses(&self) -> impl Iterator<Item = Address> {
-        core::iter::empty()
-    }
+    const ADDRESSES: &'static [Address] = &[];
 
     fn execute<ST: TxState<S>>(
         &self,
@@ -108,9 +114,139 @@ impl<S: Spec> EvmPrecompileSet<S> for NoCustomPrecompiles<S> {
         _input: &[u8],
         _gas_limit: u64,
         _env: &mut EvmPrecompileEnv<'_, S, ST>,
-    ) -> Option<PrecompileResult> {
-        None
+    ) -> PrecompileResult {
+        unreachable!("no custom precompiles are configured")
     }
+}
+
+#[doc(hidden)]
+pub mod __private {
+    pub use sov_modules_api::{Spec, TxState};
+}
+
+/// Generates an [`EvmPrecompileSet`] from a flat list of individual [`EvmPrecompile`]s.
+///
+/// The generated set owns one instance of each listed precompile and derives its static address
+/// list from their `ADDRESS` constants.
+#[macro_export]
+macro_rules! generate_precompile_set {
+    (
+        $(#[$meta:meta])*
+        $vis:vis struct $name:ident<$spec:ident> {
+            $($field:ident: $precompile:ty),* $(,)?
+        }
+    ) => {
+        $(#[$meta])*
+        #[derive(Clone, Default)]
+        $vis struct $name<$spec: $crate::precompiles::__private::Spec> {
+            $($field: $precompile,)*
+        }
+
+        impl<$spec> $crate::precompiles::EvmPrecompileSet<$spec> for $name<$spec>
+        where
+            $spec: $crate::precompiles::__private::Spec,
+            $($precompile: $crate::precompiles::EvmPrecompile<$spec>,)*
+        {
+            const ADDRESSES: &'static [$crate::precompiles::Address] = &[
+                $(<$precompile as $crate::precompiles::EvmPrecompile<$spec>>::ADDRESS,)*
+            ];
+
+            fn execute<ST: $crate::precompiles::__private::TxState<$spec>>(
+                &self,
+                address: $crate::precompiles::Address,
+                input: &[u8],
+                gas_limit: u64,
+                env: &mut $crate::precompiles::EvmPrecompileEnv<'_, $spec, ST>,
+            ) -> $crate::precompiles::PrecompileResult {
+                $(
+                    if address == <$precompile as $crate::precompiles::EvmPrecompile<$spec>>::ADDRESS {
+                        return <$precompile as $crate::precompiles::EvmPrecompile<$spec>>::execute(
+                            &self.$field,
+                            input,
+                            gas_limit,
+                            env,
+                        );
+                    }
+                )*
+
+                unreachable!("provider pre-filters custom precompile addresses")
+            }
+        }
+    };
+}
+
+const ETH_RESERVED_PRECOMPILE_ADDRESSES: &[Address] = &[
+    eth_precompile_address(1),
+    eth_precompile_address(2),
+    eth_precompile_address(3),
+    eth_precompile_address(4),
+    eth_precompile_address(5),
+    eth_precompile_address(6),
+    eth_precompile_address(7),
+    eth_precompile_address(8),
+    eth_precompile_address(9),
+    eth_precompile_address(0x0a),
+    eth_precompile_address(0x0b),
+    eth_precompile_address(0x0c),
+    eth_precompile_address(0x0d),
+    eth_precompile_address(0x0e),
+    eth_precompile_address(0x0f),
+    eth_precompile_address(0x10),
+    eth_precompile_address(0x11),
+    eth_precompile_address(0x100),
+];
+
+const fn assert_valid_precompile_addresses(addresses: &[Address]) {
+    if !has_unique_addresses(addresses) {
+        panic!("duplicate custom EVM precompile address");
+    }
+    if has_reserved_ethereum_precompile_collision(addresses) {
+        panic!("custom EVM precompile address collides with Ethereum precompile");
+    }
+}
+
+const fn has_unique_addresses(addresses: &[Address]) -> bool {
+    let mut i = 0;
+    while i < addresses.len() {
+        let mut j = i + 1;
+        while j < addresses.len() {
+            if addresses[i].const_eq(&addresses[j]) {
+                return false;
+            }
+            j += 1;
+        }
+        i += 1;
+    }
+    true
+}
+
+const fn has_reserved_ethereum_precompile_collision(addresses: &[Address]) -> bool {
+    let mut i = 0;
+    while i < addresses.len() {
+        if is_reserved_ethereum_precompile_address(&addresses[i]) {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+const fn is_reserved_ethereum_precompile_address(address: &Address) -> bool {
+    let mut i = 0;
+    while i < ETH_RESERVED_PRECOMPILE_ADDRESSES.len() {
+        if address.const_eq(&ETH_RESERVED_PRECOMPILE_ADDRESSES[i]) {
+            return true;
+        }
+        i += 1;
+    }
+    false
+}
+
+const fn eth_precompile_address(x: u64) -> Address {
+    let x = x.to_be_bytes();
+    Address::new([
+        0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, x[0], x[1], x[2], x[3], x[4], x[5], x[6], x[7],
+    ])
 }
 
 /// Internal adapter for revm database wrappers that can expose Sovereign transaction state.
@@ -137,38 +273,23 @@ impl<S: Spec, DB: PrecompileDb<S>> PrecompileDb<S> for RevmState<DB> {
 }
 
 /// revm precompile provider that combines Ethereum precompiles with Sovereign precompiles.
-#[derive(Debug, Clone)]
+#[derive(Clone)]
 pub(crate) struct SovPrecompileProvider<'a, S: Spec, P: EvmPrecompileSet<S>> {
     eth: EthPrecompiles,
     custom: P,
-    custom_addresses: Vec<Address>,
     sov_context: Option<&'a SovContext<S>>,
 }
 
 impl<'a, S: Spec, P: EvmPrecompileSet<S>> SovPrecompileProvider<'a, S, P> {
-    pub(crate) fn new(
-        custom: P,
-        sov_context: Option<&'a SovContext<S>>,
-    ) -> Result<Self, PrecompileError> {
+    pub(crate) fn new(custom: P, sov_context: Option<&'a SovContext<S>>) -> Self {
+        let () = P::CHECK_ADDRESSES;
         let eth = EthPrecompiles::default();
-        let mut custom_addresses = Vec::new();
 
-        for address in custom.addresses() {
-            if custom_addresses.contains(&address) {
-                return Err(PrecompileError::DuplicateAddress(address));
-            }
-            if eth.contains(&address) {
-                return Err(PrecompileError::EthereumCollision(address));
-            }
-            custom_addresses.push(address);
-        }
-
-        Ok(Self {
+        Self {
             eth,
             custom,
-            custom_addresses,
             sov_context,
-        })
+        }
     }
 }
 
@@ -195,7 +316,7 @@ where
             return self.eth.run(ctx, inputs);
         }
 
-        if !self.custom_addresses.contains(&address) {
+        if !P::ADDRESSES.contains(&address) {
             return Ok(None);
         }
 
@@ -213,30 +334,25 @@ where
             is_static: inputs.is_static,
         };
 
-        match self
+        let result = self
             .custom
-            .execute(address, &input, inputs.gas_limit, &mut env)
-        {
-            Some(result) => Ok(Some(convert_to_interpreter_result(
-                result,
-                inputs.gas_limit,
-            ))),
-            None => Err(format!(
-                "precompile provider advertised address {address} but did not handle it"
-            )),
-        }
+            .execute(address, &input, inputs.gas_limit, &mut env);
+        Ok(Some(convert_to_interpreter_result(
+            result,
+            inputs.gas_limit,
+        )))
     }
 
     fn warm_addresses(&self) -> Box<impl Iterator<Item = Address>> {
         Box::new(
             self.eth
                 .warm_addresses()
-                .chain(self.custom_addresses.iter().copied()),
+                .chain(P::ADDRESSES.iter().copied()),
         )
     }
 
     fn contains(&self, address: &Address) -> bool {
-        self.eth.contains(address) || self.custom_addresses.contains(address)
+        self.eth.contains(address) || P::ADDRESSES.contains(address)
     }
 }
 
@@ -273,73 +389,42 @@ fn convert_to_interpreter_result(result: PrecompileResult, gas_limit: u64) -> In
 #[cfg(test)]
 mod tests {
     use super::*;
-    use sov_test_utils::TestSpec;
 
-    #[derive(Clone, Debug, Default)]
-    struct DuplicatePrecompiles;
-
-    impl<S: Spec> EvmPrecompileSet<S> for DuplicatePrecompiles {
-        fn addresses(&self) -> impl Iterator<Item = Address> {
-            [
-                BANK_BALANCE_PRECOMPILE_ADDRESS,
-                BANK_BALANCE_PRECOMPILE_ADDRESS,
-            ]
-            .into_iter()
-        }
-
-        fn execute<ST: TxState<S>>(
-            &self,
-            _address: Address,
-            _input: &[u8],
-            _gas_limit: u64,
-            _env: &mut EvmPrecompileEnv<'_, S, ST>,
-        ) -> Option<PrecompileResult> {
-            None
-        }
-    }
-
-    #[derive(Clone, Debug, Default)]
-    struct EthereumCollisionPrecompiles;
-
-    impl<S: Spec> EvmPrecompileSet<S> for EthereumCollisionPrecompiles {
-        fn addresses(&self) -> impl Iterator<Item = Address> {
-            core::iter::once(Address::with_last_byte(1))
-        }
-
-        fn execute<ST: TxState<S>>(
-            &self,
-            _address: Address,
-            _input: &[u8],
-            _gas_limit: u64,
-            _env: &mut EvmPrecompileEnv<'_, S, ST>,
-        ) -> Option<PrecompileResult> {
-            None
-        }
+    #[test]
+    fn address_validation_detects_duplicate_custom_addresses() {
+        assert!(!has_unique_addresses(&[
+            BANK_BALANCE_PRECOMPILE_ADDRESS,
+            BANK_BALANCE_PRECOMPILE_ADDRESS,
+        ]));
     }
 
     #[test]
-    fn provider_rejects_duplicate_custom_addresses() {
-        let err = SovPrecompileProvider::<TestSpec, DuplicatePrecompiles>::new(
-            DuplicatePrecompiles,
-            None,
-        )
-        .unwrap_err();
-        assert_eq!(
-            err,
-            PrecompileError::DuplicateAddress(BANK_BALANCE_PRECOMPILE_ADDRESS)
-        );
+    fn address_validation_detects_ethereum_precompile_collisions() {
+        assert!(has_reserved_ethereum_precompile_collision(&[
+            eth_precompile_address(1)
+        ]));
+        assert!(has_reserved_ethereum_precompile_collision(&[
+            eth_precompile_address(0x11)
+        ]));
+        assert!(has_reserved_ethereum_precompile_collision(&[
+            eth_precompile_address(0x100)
+        ]));
+        assert!(!has_reserved_ethereum_precompile_collision(&[
+            BANK_BALANCE_PRECOMPILE_ADDRESS
+        ]));
     }
 
     #[test]
-    fn provider_rejects_ethereum_precompile_collisions() {
-        let err = SovPrecompileProvider::<TestSpec, EthereumCollisionPrecompiles>::new(
-            EthereumCollisionPrecompiles,
-            None,
-        )
-        .unwrap_err();
+    fn address_validation_accepts_built_in_custom_precompiles() {
+        assert_valid_precompile_addresses(&[
+            BANK_BALANCE_PRECOMPILE_ADDRESS,
+            SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
+        ]);
         assert_eq!(
-            err,
-            PrecompileError::EthereumCollision(Address::with_last_byte(1))
+            <SequencingTimestampPrecompile<sov_test_utils::TestSpec> as EvmPrecompileSet<
+                sov_test_utils::TestSpec,
+            >>::ADDRESSES,
+            &[SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS]
         );
     }
 

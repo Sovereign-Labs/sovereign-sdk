@@ -6,12 +6,10 @@
 //!   3. Update `genesis.json` with any additional data required by your new module
 
 pub mod address;
-pub mod evm_precompiles;
 #[cfg(feature = "test-utils")]
 mod test_utils;
 
 pub use address::MultiAddressEvmSolana;
-pub use evm_precompiles::DemoEvmPrecompiles;
 
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_hyperlane_integration::{
@@ -24,6 +22,13 @@ use sov_modules_api::{Base58Address, DispatchCall, Event, Genesis, Hooks, Messag
 
 /// The hyperlane mailbox type, parameterized with Warp as the recipient.
 pub type Mailbox<S> = RawMailbox<S, Warp<S>>;
+
+sov_evm::generate_precompile_set! {
+    pub struct DemoEvmPrecompiles<S> {
+        bank_balance: sov_evm::precompiles::BankBalancePrecompile<S>,
+        sequencing_timestamp: sov_evm::precompiles::SequencingTimestampPrecompile<S>,
+    }
+}
 
 /// The runtime defines the logic of the rollup.
 ///

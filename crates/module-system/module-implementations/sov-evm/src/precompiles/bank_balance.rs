@@ -4,7 +4,7 @@ use sov_bank::{config_gas_token_id, Bank, TokenId};
 use sov_modules_api::{Spec, TxState};
 
 use super::{
-    Address, EvmPrecompileEnv, EvmPrecompileSet, PrecompileError, PrecompileOutput,
+    Address, EvmPrecompile, EvmPrecompileEnv, EvmPrecompileSet, PrecompileError, PrecompileOutput,
     PrecompileResult,
 };
 
@@ -29,29 +29,38 @@ impl<S: Spec> Default for BankBalancePrecompile<S> {
     }
 }
 
+impl<S> EvmPrecompile<S> for BankBalancePrecompile<S>
+where
+    S: Spec,
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    const ADDRESS: Address = BANK_BALANCE_PRECOMPILE_ADDRESS;
+
+    fn execute<ST: TxState<S>>(
+        &self,
+        input: &[u8],
+        gas_limit: u64,
+        env: &mut EvmPrecompileEnv<'_, S, ST>,
+    ) -> PrecompileResult {
+        bank_balance_precompile(input, gas_limit, &self.bank, env.state)
+    }
+}
+
 impl<S> EvmPrecompileSet<S> for BankBalancePrecompile<S>
 where
     S: Spec,
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    fn addresses(&self) -> impl Iterator<Item = Address> {
-        core::iter::once(BANK_BALANCE_PRECOMPILE_ADDRESS)
-    }
+    const ADDRESSES: &'static [Address] = &[BANK_BALANCE_PRECOMPILE_ADDRESS];
 
     fn execute<ST: TxState<S>>(
         &self,
-        address: Address,
+        _address: Address,
         input: &[u8],
         gas_limit: u64,
         env: &mut EvmPrecompileEnv<'_, S, ST>,
-    ) -> Option<PrecompileResult> {
-        if address != BANK_BALANCE_PRECOMPILE_ADDRESS {
-            return None;
-        }
-
-        Some(bank_balance_precompile(
-            input, gas_limit, &self.bank, env.state,
-        ))
+    ) -> PrecompileResult {
+        <Self as EvmPrecompile<S>>::execute(self, input, gas_limit, env)
     }
 }
 

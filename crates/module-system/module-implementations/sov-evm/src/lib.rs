@@ -294,7 +294,10 @@ where
         &self,
         context: Option<&'a Context<S>>,
     ) -> anyhow::Result<precompiles::SovPrecompileProvider<'a, S, P>> {
-        precompiles::SovPrecompileProvider::new(P::default(), context).map_err(Into::into)
+        Ok(precompiles::SovPrecompileProvider::new(
+            P::default(),
+            context,
+        ))
     }
 }
 

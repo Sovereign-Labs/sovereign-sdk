@@ -8,8 +8,7 @@ use sov_address::{EthereumAddress, FromVmAddress, MultiAddress, MultiAddressEvm}
 use sov_bank::{config_gas_token_id, Amount, Coins};
 use sov_eth_dev_signer::Signer;
 use sov_evm::precompiles::{
-    BankBalancePrecompile, EvmPrecompileEnv, EvmPrecompileSet, PrecompileResult,
-    SequencingTimestampPrecompile, BANK_BALANCE_PRECOMPILE_ADDRESS,
+    BankBalancePrecompile, SequencingTimestampPrecompile, BANK_BALANCE_PRECOMPILE_ADDRESS,
     SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
 };
 use sov_evm::{
@@ -22,7 +21,7 @@ use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::sov_universal_wallet::schema::UniversalWallet;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::{RawTx, Spec, TxState};
+use sov_modules_api::{RawTx, Spec};
 use sov_rollup_interface::da::Time;
 use sov_rollup_interface::execution_mode::Native;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
@@ -49,45 +48,10 @@ const IDENTITY_PRECOMPILE: Address = address!("000000000000000000000000000000000
 const TIMESTAMP_SECONDS: i64 = 1_234_567;
 const TRANSFER_AMOUNT: Amount = Amount::new(123_456);
 
-#[derive(Clone)]
-struct CompositePrecompiles<S: Spec> {
-    bank_balance: BankBalancePrecompile<S>,
-    sequencing_timestamp: SequencingTimestampPrecompile<S>,
-}
-
-impl<S: Spec> Default for CompositePrecompiles<S> {
-    fn default() -> Self {
-        Self {
-            bank_balance: BankBalancePrecompile::default(),
-            sequencing_timestamp: SequencingTimestampPrecompile::default(),
-        }
-    }
-}
-
-impl<S> EvmPrecompileSet<S> for CompositePrecompiles<S>
-where
-    S: Spec,
-    S::Address: FromVmAddress<EthereumAddress>,
-{
-    fn addresses(&self) -> impl Iterator<Item = Address> {
-        self.bank_balance
-            .addresses()
-            .chain(self.sequencing_timestamp.addresses())
-    }
-
-    fn execute<ST: TxState<S>>(
-        &self,
-        address: Address,
-        input: &[u8],
-        gas_limit: u64,
-        env: &mut EvmPrecompileEnv<'_, S, ST>,
-    ) -> Option<PrecompileResult> {
-        self.bank_balance
-            .execute(address, input, gas_limit, env)
-            .or_else(|| {
-                self.sequencing_timestamp
-                    .execute(address, input, gas_limit, env)
-            })
+sov_evm::generate_precompile_set! {
+    struct CompositePrecompiles<S> {
+        bank_balance: BankBalancePrecompile<S>,
+        sequencing_timestamp: SequencingTimestampPrecompile<S>,
     }
 }
 

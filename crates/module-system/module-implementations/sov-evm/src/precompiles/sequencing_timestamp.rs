@@ -3,7 +3,7 @@ use borsh::BorshDeserialize;
 use sov_modules_api::{HDTimestamp, Spec, TxState};
 
 use super::{
-    Address, EvmPrecompileEnv, EvmPrecompileSet, PrecompileError, PrecompileOutput,
+    Address, EvmPrecompile, EvmPrecompileEnv, EvmPrecompileSet, PrecompileError, PrecompileOutput,
     PrecompileResult,
 };
 
@@ -28,28 +28,30 @@ impl<S: Spec> Default for SequencingTimestampPrecompile<S> {
     }
 }
 
-impl<S: Spec> EvmPrecompileSet<S> for SequencingTimestampPrecompile<S> {
-    fn addresses(&self) -> impl Iterator<Item = Address> {
-        core::iter::once(SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS)
-    }
+impl<S: Spec> EvmPrecompile<S> for SequencingTimestampPrecompile<S> {
+    const ADDRESS: Address = SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS;
 
     fn execute<ST: TxState<S>>(
         &self,
-        address: Address,
         input: &[u8],
         gas_limit: u64,
         env: &mut EvmPrecompileEnv<'_, S, ST>,
-    ) -> Option<PrecompileResult> {
-        if address != SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS {
-            return None;
-        }
+    ) -> PrecompileResult {
+        sequencing_timestamp_precompile(input, gas_limit, &self.chain_state, env)
+    }
+}
 
-        Some(sequencing_timestamp_precompile(
-            input,
-            gas_limit,
-            &self.chain_state,
-            env,
-        ))
+impl<S: Spec> EvmPrecompileSet<S> for SequencingTimestampPrecompile<S> {
+    const ADDRESSES: &'static [Address] = &[SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS];
+
+    fn execute<ST: TxState<S>>(
+        &self,
+        _address: Address,
+        input: &[u8],
+        gas_limit: u64,
+        env: &mut EvmPrecompileEnv<'_, S, ST>,
+    ) -> PrecompileResult {
+        <Self as EvmPrecompile<S>>::execute(self, input, gas_limit, env)
     }
 }
 
