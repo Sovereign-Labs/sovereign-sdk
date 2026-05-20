@@ -1,3 +1,7 @@
+# 2026-05-20
+- #2893 Adds a new interface for providing custom EVM precompiles that can access sov-state (read-only). Precompiles must implement the `EvmPrecopmile` trait. The `sov-evm::Evm` module is now generic on `EvmPrecompileSet`; a Set can be generated from several `EvmPrecopmile`s using the `generate_precompile_set!` macro. See e.g. `BankBalancePrecompile` or `SequencingTimestampPrecompile` for implementation examples, and the demo-rollup changes for a usage example.
+  * Breaking(code): This PR also changes the visibility of some `sov-evm` export which are intended for internal usage, as well as the signature and generic on `sov-evm` construction. Normal rollup usage should be unaffected.
+
 # 2026-05-15
 - #2875 Upgrades SP1 crates from 6.1.0 to 6.2.1. Centralizes the `sp1-*` and `slop-algebra` workspace dependencies in the root `Cargo.toml`; the upgrade also drops the transitive `halo2` / `zkhash` chain, allowing the `halo2` proprietary-license exception to be removed from `deny.toml`. Stale Plonky-3 / SP1 v5 entries in `.cargo/config.toml` are refreshed to match the v6 architecture.
 # 2026-05-18
