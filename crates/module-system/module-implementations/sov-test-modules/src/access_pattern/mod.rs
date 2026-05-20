@@ -348,14 +348,13 @@ impl<S: Spec> AccessPattern<S> {
                     .iter(state)?
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let deserialized_string: String =
-                    MeteredBorshDeserialize::deserialize_from_slice(
-                        &mut serialized_bytes.as_ref(),
-                        state,
-                    )
-                    .with_context(|| {
-                        "access-pattern: Impossible to deserialize the input bytes to string"
-                    })?;
+                let deserialized_string: String = MeteredBorshDeserialize::deserialize_from_slice(
+                    &mut serialized_bytes.as_ref(),
+                    state,
+                )
+                .with_context(|| {
+                    "access-pattern: Impossible to deserialize the input bytes to string"
+                })?;
 
                 self.deserialized_bytes.set(&deserialized_string, state)?;
             }
