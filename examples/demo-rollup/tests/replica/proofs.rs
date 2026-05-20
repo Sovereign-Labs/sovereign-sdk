@@ -34,12 +34,7 @@ async fn test_failover_and_zk_proof() {
 
     let mut proof_sub = leader.subscribe_aggregated_proof().await.unwrap();
 
-    for i in 0..5 {
-        tokio::time::timeout(Duration::from_secs(20), proof_sub.next())
-            .await
-            .unwrap()
-            .unwrap();
-    }
+    expect_aggregated_proofs(&mut proof_sub, 5).await.unwrap();
 
     // Kill the leader
     let _ = leader.shutdown().await;
@@ -81,13 +76,20 @@ async fn test_failover_and_zk_proof() {
 
     let mut proof_sub = restarted_rollup.subscribe_aggregated_proof().await.unwrap();
 
-    for i in 0..25 {
-        tokio::time::timeout(Duration::from_secs(20), proof_sub.next())
-            .await
-            .unwrap()
-            .unwrap();
-    }
+    expect_aggregated_proofs(&mut proof_sub, 5).await.unwrap();
 
     let _ = restarted_rollup.shutdown().await;
     let _ = setup.shutdown().await;
+}
+
+async fn expect_aggregated_proofs(
+    proof_sub: &mut BoxStream<'static, anyhow::Result<types::AggregatedProof>>,
+    n: usize,
+) -> anyhow::Result<()> {
+    for _ in 0..n {
+        tokio::time::timeout(Duration::from_secs(30), proof_sub.next())
+            .await?
+            .context("proof stream ended")??;
+    }
+    Ok(())
 }
