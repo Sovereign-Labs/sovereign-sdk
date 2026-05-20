@@ -3,7 +3,9 @@ use crate::helpers::EvmAccount;
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_eips::eip2718::Encodable2718;
-use alloy_primitives::{address, Address, Bytes, TxKind, U256};
+use alloy_primitives::{address, Address, Bytes, TxKind, B256, U256};
+use alloy_rpc_types::{BlockOverrides, TransactionRequest};
+use alloy_rpc_types_trace::geth::{GethDebugBuiltInTracerType, GethDebugTracingOptions, GethTrace};
 use sov_address::{EthereumAddress, FromVmAddress, MultiAddress, MultiAddressEvm};
 use sov_bank::{config_gas_token_id, Amount, Coins};
 use sov_eth_dev_signer::Signer;
@@ -28,8 +30,8 @@ use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConf
 use sov_test_utils::runtime::traits::MinimalGenesis;
 use sov_test_utils::runtime::{Runtime, TestRunner};
 use sov_test_utils::{
-    generate_runtime, AsUser, MockDaSpec, MockZkvm, MockZkvmCryptoSpec, TestStorage, TestUser,
-    TransactionTestCase, TransactionType, TEST_DEFAULT_USER_BALANCE,
+    generate_runtime, AsUser, BatchTestCase, MockDaSpec, MockZkvm, MockZkvmCryptoSpec, TestStorage,
+    TestUser, TransactionTestCase, TransactionType, TEST_DEFAULT_USER_BALANCE,
 };
 
 type PrecompileTestSpec = ConfigurableSpec<
@@ -196,24 +198,17 @@ fn assert_precompile_result<RT, Sp>(
     precompile: Address,
     input: Bytes,
     expected_output: Bytes,
-) where
+) -> B256
+where
     RT: Runtime<Sp> + EthereumAuthenticator<Sp> + MinimalGenesis<Sp>,
     Sp: Spec<Da = MockDaSpec, CryptoSpec = MockZkvmCryptoSpec, Storage = TestStorage>,
 {
-    let call = PrecompileTester::assertPrecompileResultCall {
-        precompile,
-        input,
-        expectedOutput: expected_output,
-    };
+    let input = precompile_assertion_input(precompile, input, expected_output);
+    let (tx, tx_hash) =
+        create_evm_tx_with_hash::<RT, Sp>(nonce, caller, TxKind::Call(tester), input, 1_000_000);
 
     runner.execute_transaction(TransactionTestCase {
-        input: create_evm_tx::<RT, Sp>(
-            nonce,
-            caller,
-            TxKind::Call(tester),
-            Bytes::from(call.abi_encode()),
-            1_000_000,
-        ),
+        input: tx,
         assert: Box::new(move |ctx, state| {
             assert!(ctx.tx_receipt.is_successful());
             let receipt = Evm::<Sp>::default()
@@ -225,6 +220,7 @@ fn assert_precompile_result<RT, Sp>(
             );
         }),
     });
+    tx_hash
 }
 
 #[track_caller]
@@ -443,6 +439,155 @@ fn composite_precompile_runtime_includes_both_custom_precompiles() {
     assert_timestamp_precompile(&mut runner, &caller, tester, 3);
 }
 
+#[test]
+fn rpc_call_paths_initialize_custom_precompiles() {
+    let (mut runner, caller, balance_holder, _) = composite_runtime::setup();
+    runner.config.freeze_time = Some(Time::from_secs(TIMESTAMP_SECONDS));
+    let tester = deploy_tester(&mut runner, &caller);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S, CompositePrecompiles<S>>::default();
+
+        let bank_request = precompile_request(
+            caller.address(),
+            BANK_BALANCE_PRECOMPILE_ADDRESS,
+            bank_input(balance_holder.address()),
+        );
+        let bank_output = evm
+            .eth_call(bank_request.clone(), None, None, None, state)
+            .expect("eth_call should execute the bank precompile");
+        assert_eq!(bank_output, u256_bytes(TEST_DEFAULT_USER_BALANCE.0));
+
+        let overridden_bank_output = evm
+            .eth_call(
+                bank_request,
+                None,
+                None,
+                Some(Box::new(
+                    BlockOverrides::default().with_number(U256::from(77u64)),
+                )),
+                state,
+            )
+            .expect("eth_call with overrides should execute the bank precompile");
+        assert_eq!(
+            overridden_bank_output,
+            u256_bytes(TEST_DEFAULT_USER_BALANCE.0)
+        );
+
+        let timestamp_output = evm
+            .eth_call(
+                precompile_request(
+                    caller.address(),
+                    SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
+                    Bytes::new(),
+                ),
+                None,
+                None,
+                None,
+                state,
+            )
+            .expect("eth_call should execute the timestamp precompile");
+        assert_eq!(
+            timestamp_output,
+            u256_bytes((TIMESTAMP_SECONDS as u128) * 1_000_000_000)
+        );
+
+        let assertion_request = TransactionRequest {
+            from: Some(caller.address()),
+            to: Some(TxKind::Call(tester)),
+            nonce: Some(1),
+            input: precompile_assertion_input(
+                BANK_BALANCE_PRECOMPILE_ADDRESS,
+                bank_input(balance_holder.address()),
+                u256_bytes(TEST_DEFAULT_USER_BALANCE.0),
+            )
+            .into(),
+            ..Default::default()
+        };
+
+        evm.check_for_evm_revert(&assertion_request, None, state)
+            .expect("revert precheck should execute custom precompiles");
+
+        let estimated_gas = evm
+            .eth_estimate_gas_helper(assertion_request.clone(), None, None, None, state)
+            .expect("eth_estimateGas should execute custom precompiles");
+        assert!(estimated_gas.to::<u64>() > 0);
+
+        let access_list = evm
+            .eth_create_access_list(assertion_request, None, state)
+            .expect("eth_createAccessList should run");
+        assert_eq!(access_list.error, None);
+    });
+}
+
+#[test]
+fn rpc_trace_paths_initialize_custom_precompiles() {
+    let (mut runner, caller, balance_holder, _) = composite_runtime::setup();
+    let tester = deploy_tester(&mut runner, &caller);
+
+    let assertion_input = precompile_assertion_input(
+        BANK_BALANCE_PRECOMPILE_ADDRESS,
+        bank_input(balance_holder.address()),
+        u256_bytes(TEST_DEFAULT_USER_BALANCE.0),
+    );
+    let (first_tx, _) = create_evm_tx_with_hash::<composite_runtime::RT, S>(
+        1,
+        &caller,
+        TxKind::Call(tester),
+        assertion_input.clone(),
+        1_000_000,
+    );
+    let (second_tx, second_tx_hash) = create_evm_tx_with_hash::<composite_runtime::RT, S>(
+        2,
+        &caller,
+        TxKind::Call(tester),
+        assertion_input,
+        1_000_000,
+    );
+
+    runner.execute_batch(BatchTestCase {
+        input: vec![first_tx, second_tx].into(),
+        assert: Box::new(|ctx, state| {
+            assert!(ctx
+                .batch_receipt
+                .as_ref()
+                .expect("batch should have a receipt")
+                .tx_receipts
+                .iter()
+                .all(|receipt| receipt.receipt.is_successful()));
+            assert!(
+                Evm::<S>::default()
+                    .receipt(1, state)
+                    .expect("first precompile assertion should have an EVM receipt")
+                    .0
+                    .receipt
+                    .success
+            );
+            assert!(
+                Evm::<S>::default()
+                    .receipt(2, state)
+                    .expect("second precompile assertion should have an EVM receipt")
+                    .0
+                    .receipt
+                    .success
+            );
+        }),
+    });
+
+    runner.query_state(|state| {
+        let evm = Evm::<S, CompositePrecompiles<S>>::default();
+        let opts = GethDebugTracingOptions::new_tracer(GethDebugBuiltInTracerType::CallTracer);
+        let trace = evm
+            .debug_trace_transaction(second_tx_hash, Some(opts), state)
+            .expect("debug_traceTransaction should replay and trace custom precompiles");
+        let GethTrace::CallTracer(frame) = trace else {
+            panic!("expected call tracer output");
+        };
+        assert_eq!(frame.error, None);
+        assert_eq!(frame.revert_reason, None);
+    });
+}
+
 fn create_evm_tx<RT, Sp>(
     nonce: u64,
     caller: &EvmAccount,
@@ -454,17 +599,35 @@ where
     RT: Runtime<Sp> + EthereumAuthenticator<Sp>,
     Sp: Spec,
 {
-    let raw_tx = create_raw_evm_tx(nonce, caller, to, input, gas_limit);
+    let (raw_tx, _) = create_raw_evm_tx_with_hash(nonce, caller, to, input, gas_limit);
     TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx))
 }
 
-fn create_raw_evm_tx(
+fn create_evm_tx_with_hash<RT, Sp>(
     nonce: u64,
     caller: &EvmAccount,
     to: TxKind,
     input: Bytes,
     gas_limit: u64,
-) -> RawTx {
+) -> (TransactionType<RT, Sp>, B256)
+where
+    RT: Runtime<Sp> + EthereumAuthenticator<Sp>,
+    Sp: Spec,
+{
+    let (raw_tx, tx_hash) = create_raw_evm_tx_with_hash(nonce, caller, to, input, gas_limit);
+    (
+        TransactionType::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx)),
+        tx_hash,
+    )
+}
+
+fn create_raw_evm_tx_with_hash(
+    nonce: u64,
+    caller: &EvmAccount,
+    to: TxKind,
+    input: Bytes,
+    gas_limit: u64,
+) -> (RawTx, B256) {
     let tx = TxEip1559 {
         to,
         input,
@@ -479,11 +642,33 @@ fn create_raw_evm_tx(
     let signed_tx = signer
         .sign_transaction(TypedTransaction::Eip1559(tx))
         .unwrap();
+    let tx_hash = *signed_tx.hash();
     let rlp = signed_tx.encoded_2718();
 
-    RawTx {
-        data: borsh::to_vec(&RlpEvmTransaction { rlp }).unwrap(),
+    (
+        RawTx {
+            data: borsh::to_vec(&RlpEvmTransaction { rlp }).unwrap(),
+        },
+        tx_hash,
+    )
+}
+
+fn precompile_request(from: Address, precompile: Address, input: Bytes) -> TransactionRequest {
+    TransactionRequest {
+        from: Some(from),
+        to: Some(TxKind::Call(precompile)),
+        input: input.into(),
+        ..Default::default()
     }
+}
+
+fn precompile_assertion_input(precompile: Address, input: Bytes, expected_output: Bytes) -> Bytes {
+    let call = PrecompileTester::assertPrecompileResultCall {
+        precompile,
+        input,
+        expectedOutput: expected_output,
+    };
+    Bytes::from(call.abi_encode())
 }
 
 fn bank_input(address: Address) -> Bytes {
