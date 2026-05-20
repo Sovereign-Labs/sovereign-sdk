@@ -534,6 +534,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 axum_socket_addr,
             )
             .await?;
+        let mut sequencer = sequencer;
         let proof_pipeline_enabled =
             should_enable_proof_pipeline(prover_config, sequencer.is_replica);
 
@@ -541,7 +542,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         // the ledger DB and returns its `final_slot_number`. We pass this slot
         // into the runner so the STF-info stream resumes at `final_slot + 1`.
         let (prover_service, latest_proof_final_slot) = if proof_pipeline_enabled {
-            let (svc, slot) = self
+            let create_prover_service_result = self
                 .create_prover_service(
                     prover_config,
                     &rollup_config,
@@ -549,13 +550,26 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     &ledger_db,
                     start_fresh_outer_proof_on_resync,
                 )
-                .await?;
-            (Some(svc), slot)
+                .await;
+
+            match create_prover_service_result {
+                Ok((svc, slot)) => (Some(svc), slot),
+                Err(error) => {
+                    cleanup_failed_startup(
+                        &main_shutdown_sender,
+                        &secondary_shutdown_sender,
+                        &mut background_handles,
+                        &mut sequencer,
+                    )
+                    .await;
+                    return Err(error);
+                }
+            }
         } else {
             (None, None)
         };
 
-        let mut runner = StateTransitionRunner::new(
+        let runner_result = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             axum_tcp,
             if proof_pipeline_enabled {
@@ -578,18 +592,44 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             genesis_da_height,
             latest_proof_final_slot,
         )
-        .await?;
+        .await;
+        let mut runner = match runner_result {
+            Ok(runner) => runner,
+            Err(error) => {
+                cleanup_failed_startup(
+                    &main_shutdown_sender,
+                    &secondary_shutdown_sender,
+                    &mut background_handles,
+                    &mut sequencer,
+                )
+                .await;
+                return Err(error);
+            }
+        };
 
         if let Some(stf_info_receiver) = runner.take_stf_info_receiver() {
             let prover_service = prover_service
                 .expect("prover service must be present when stf_info_receiver is Some");
-            let proof_sender =
-                Box::new(self.create_proof_sender(&rollup_config, sequencer.proof_sender.clone())?);
+            let proof_sender: Box<dyn ProofSender> =
+                match self.create_proof_sender(&rollup_config, sequencer.proof_sender.clone()) {
+                    Ok(proof_sender) => Box::new(proof_sender),
+                    Err(error) => {
+                        let _ = runner.shutdown_before_run().await;
+                        cleanup_failed_startup(
+                            &main_shutdown_sender,
+                            &secondary_shutdown_sender,
+                            &mut background_handles,
+                            &mut sequencer,
+                        )
+                        .await;
+                        return Err(error);
+                    }
+                };
             let proof_manager = rollup_config
                 .proof_manager
                 .expect("proof_manager must be set when prover is enabled");
 
-            let workflow_task_handle = match operating_mode {
+            let workflow_task_handle_result = match operating_mode {
                 OperatingMode::Optimistic => {
                     let prover_address = proof_manager.prover_address;
                     let bonding_proof_service = Self::Runtime::default()
@@ -605,7 +645,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         secondary_shutdown_receiver,
                         stf_info_receiver,
                     )
-                    .await?
+                    .await
                 }
                 OperatingMode::Zk => {
                     start_zk_workflow_in_background(
@@ -620,17 +660,31 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         main_shutdown_sender.clone(),
                         start_fresh_outer_proof_on_resync,
                     )
-                    .await?
+                    .await
                 }
                 OperatingMode::Operator => {
-                    start_operator_workflow_in_background(secondary_shutdown_receiver).await
+                    Ok(start_operator_workflow_in_background(secondary_shutdown_receiver).await)
+                }
+            };
+            let workflow_task_handle = match workflow_task_handle_result {
+                Ok(handle) => handle,
+                Err(error) => {
+                    let _ = runner.shutdown_before_run().await;
+                    cleanup_failed_startup(
+                        &main_shutdown_sender,
+                        &secondary_shutdown_sender,
+                        &mut background_handles,
+                        &mut sequencer,
+                    )
+                    .await;
+                    return Err(error);
                 }
             };
 
             background_handles.push(workflow_task_handle);
         }
 
-        let endpoints = self
+        let endpoints_result = self
             .create_endpoints(
                 state_update_receiver,
                 sync_status_receiver,
@@ -640,7 +694,21 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 &da_service,
                 &rollup_config,
             )
-            .await?;
+            .await;
+        let endpoints = match endpoints_result {
+            Ok(endpoints) => endpoints,
+            Err(error) => {
+                let _ = runner.shutdown_before_run().await;
+                cleanup_failed_startup(
+                    &main_shutdown_sender,
+                    &secondary_shutdown_sender,
+                    &mut background_handles,
+                    &mut sequencer,
+                )
+                .await;
+                return Err(error);
+            }
+        };
 
         let endpoints = NodeEndpointsContainer {
             inner: endpoints,
@@ -659,6 +727,31 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             background_handles,
             genesis_slot_number: genesis_da_height,
         })
+    }
+}
+
+async fn cleanup_failed_startup<S: Spec>(
+    main_shutdown_sender: &watch::Sender<()>,
+    secondary_shutdown_sender: &watch::Sender<()>,
+    background_handles: &mut Vec<JoinHandle<()>>,
+    sequencer: &mut SequencerCreationReceipt<S>,
+) {
+    let _ = main_shutdown_sender.send(());
+    let _ = secondary_shutdown_sender.send(());
+
+    let background_handles_to_join = std::mem::take(background_handles);
+    for handle in background_handles_to_join {
+        let _ = handle.await;
+    }
+
+    let sequencer_background_handles = std::mem::take(&mut sequencer.background_handles);
+    for handle in sequencer_background_handles {
+        let _ = handle.await;
+    }
+
+    let endpoint_background_handles = std::mem::take(&mut sequencer.endpoints.background_handles);
+    for handle in endpoint_background_handles {
+        let _ = handle.await;
     }
 }
 

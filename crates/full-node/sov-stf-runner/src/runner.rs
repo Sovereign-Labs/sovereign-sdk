@@ -314,6 +314,24 @@ where
         Ok(())
     }
 
+    /// Shuts down any background work spawned during initialization before the
+    /// runner enters its main loop.
+    pub async fn shutdown_before_run(mut self) -> anyhow::Result<()> {
+        if let Err(e) = self.secondary_shutdown_sender.send(()) {
+            tracing::warn!(
+                error = ?e,
+                "Failed to send secondary shutdown signal while aborting runner startup"
+            );
+        }
+
+        let background_handles = std::mem::take(&mut self.background_handles);
+        for handle in background_handles {
+            let _ = handle.await?;
+        }
+
+        Ok(())
+    }
+
     /// Spawn a [`tokio::task`] that updates the sync status every `polling_interval`.
     fn spawn_sync_status_updater(
         &self,
