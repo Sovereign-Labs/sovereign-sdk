@@ -30,6 +30,7 @@ async fn code_commitment_rotation_requires_fresh_start() -> anyhow::Result<()> {
     // default code commitments, and the rotated env vars no longer match its
     // inner/outer vkey hashes — startup refuses to resume on top of a proof it can't
     // verify against the current commitments.
+
     let err = match builder
         .clone()
         .set_config(|c| {

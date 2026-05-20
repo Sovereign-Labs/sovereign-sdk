@@ -324,10 +324,9 @@ where
             );
         }
 
+        // Drain concurrently.
         let background_handles = std::mem::take(&mut self.background_handles);
-        for handle in background_handles {
-            let _ = handle.await?;
-        }
+        futures::future::join_all(background_handles).await;
 
         Ok(())
     }

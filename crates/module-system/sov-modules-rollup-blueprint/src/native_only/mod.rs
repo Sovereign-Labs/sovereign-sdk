@@ -6,6 +6,7 @@ mod wallet;
 use anyhow::Context;
 use async_trait::async_trait;
 pub use endpoints::*;
+use futures::future;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, RollupHeight};
@@ -739,19 +740,27 @@ async fn cleanup_failed_startup<S: Spec>(
     let _ = main_shutdown_sender.send(());
     let _ = secondary_shutdown_sender.send(());
 
+    // Drain handles concurrently rather than serially.
     let background_handles_to_join = std::mem::take(background_handles);
-    for handle in background_handles_to_join {
-        let _ = handle.await;
-    }
-
     let sequencer_background_handles = std::mem::take(&mut sequencer.background_handles);
-    for handle in sequencer_background_handles {
-        let _ = handle.await;
-    }
-
     let endpoint_background_handles = std::mem::take(&mut sequencer.endpoints.background_handles);
-    for handle in endpoint_background_handles {
-        let _ = handle.await;
+
+    let drain = async move {
+        let _ = tokio::join!(
+            future::join_all(background_handles_to_join),
+            future::join_all(sequencer_background_handles),
+            future::join_all(endpoint_background_handles),
+        );
+    };
+
+    if tokio::time::timeout(std::time::Duration::from_secs(30), drain)
+        .await
+        .is_err()
+    {
+        tracing::warn!(
+            "Timed out waiting for background tasks to drain after a failed startup; \
+             some tasks may still hold storage references"
+        );
     }
 }
 
