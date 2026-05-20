@@ -520,7 +520,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
         let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
         let axum_socket_addr = axum_tcp.local_addr()?;
-        let sequencer = self
+        let mut sequencer = self
             .create_sequencer(
                 state_update_receiver.clone(),
                 da_sync_state.clone(),
@@ -534,7 +534,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 axum_socket_addr,
             )
             .await?;
-        let mut sequencer = sequencer;
+
         let proof_pipeline_enabled =
             should_enable_proof_pipeline(prover_config, sequencer.is_replica);
 
