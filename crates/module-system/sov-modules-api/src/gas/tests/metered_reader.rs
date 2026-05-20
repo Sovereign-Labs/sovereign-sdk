@@ -143,7 +143,7 @@ fn read_exact_propagates_inner_error_when_partial_charge_overflows_budget() {
                 buf[..n].fill(0xCD);
                 Ok(n)
             } else {
-                Err(io::Error::new(io::ErrorKind::Other, "BOOM"))
+                Err(io::Error::other("BOOM"))
             }
         }
     }
