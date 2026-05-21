@@ -206,10 +206,6 @@ impl<S: Spec> ProverIncentives<S> {
             }
         };
 
-        self.latest_proof_succesfully_verified
-            .set(&public_outputs, state)
-            .map_err(Into::<anyhow::Error>::into)?;
-
         #[cfg(feature = "native")]
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(crate::metrics::LatestVerifiedProofMetric {
@@ -250,6 +246,10 @@ impl<S: Spec> ProverIncentives<S> {
             is_admin,
             state,
         )?;
+
+        self.latest_proof_succesfully_verified
+            .set(&public_outputs, state)
+            .map_err(Into::<anyhow::Error>::into)?;
 
         match self.calculate_reward_and_remove(
             public_outputs.initial_slot_number,
