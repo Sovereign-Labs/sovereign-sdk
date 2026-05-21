@@ -204,6 +204,7 @@ fn test_admin_matching_proof_does_not_record_upgrade() {
 #[test]
 fn test_admin_upgrade_not_recorded_on_penalized_proof() {
     let (mut runner, prover, mut first_proof) = prepare_admin_proof();
+    let last_valid_outputs = first_proof.clone();
     // First proof for slots 1->2: a normal (no-op) admin proof that claims the
     // reward and pins last_claimed_reward to slot 2.
     runner.execute_proof::<TestProverIncentives>(ProofTestCase {
@@ -249,6 +250,11 @@ fn test_admin_upgrade_not_recorded_on_penalized_proof() {
                     .unwrap()
                     .is_none(),
                 "Penalized admin proof must not write an admin_upgrades entry",
+            );
+            assert_eq!(
+                module.latest_proof_succesfully_verified.get(state).unwrap(),
+                Some(last_valid_outputs.clone()),
+                "Penalized proof must not replace the latest accepted proof",
             );
             // The admin is penalized (loses bond), not slashed; they remain
             // bonded after the deduction.

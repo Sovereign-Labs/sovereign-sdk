@@ -206,21 +206,13 @@ impl<S: Spec> ProverIncentives<S> {
             }
         };
 
-        #[cfg(feature = "native")]
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(crate::metrics::LatestVerifiedProofMetric {
-                final_slot_number: public_outputs.final_slot_number.get(),
-                execution_context: execution_context.str(),
-            });
-        });
-        #[cfg(not(feature = "native"))]
-        let _ = execution_context;
-
         tracing::debug!(
             %public_outputs.initial_slot_number,
             %public_outputs.final_slot_number,
             "Processing aggregated proof"
         );
+        #[cfg(not(feature = "native"))]
+        let _ = execution_context;
 
         // The expected origin state root and inner VK hash were already resolved
         // into `ctx` above; this binds the inner circuit (so a prover cannot
@@ -247,10 +239,6 @@ impl<S: Spec> ProverIncentives<S> {
             state,
         )?;
 
-        self.latest_proof_succesfully_verified
-            .set(&public_outputs, state)
-            .map_err(Into::<anyhow::Error>::into)?;
-
         match self.calculate_reward_and_remove(
             public_outputs.initial_slot_number,
             public_outputs.final_slot_number,
@@ -270,6 +258,20 @@ impl<S: Spec> ProverIncentives<S> {
                 if is_admin_upgrade {
                     self.apply_admin_upgrade(&public_outputs, state)?;
                 }
+
+                // Only expose proofs that were fully accepted into canonical
+                // state; penalized proofs are valid but non-canonical.
+                self.latest_proof_succesfully_verified
+                    .set(&public_outputs, state)
+                    .map_err(Into::<anyhow::Error>::into)?;
+
+                #[cfg(feature = "native")]
+                sov_metrics::track_metrics(|tracker| {
+                    tracker.submit(crate::metrics::LatestVerifiedProofMetric {
+                        final_slot_number: public_outputs.final_slot_number.get(),
+                        execution_context: execution_context.str(),
+                    });
+                });
 
                 Ok(public_outputs)
             }
