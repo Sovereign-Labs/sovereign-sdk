@@ -158,6 +158,7 @@ pub struct SP1Prover {
     prover: EnvProver,
     pk: Arc<EnvProvingKey>,
     circuit: ZkCircuit,
+    is_reserved_network: bool,
 }
 
 impl SP1Prover {
@@ -172,11 +173,12 @@ impl SP1Prover {
     }
 
     fn with_circuit(elf: &[u8], circuit: ZkCircuit) -> anyhow::Result<Self> {
-        let (prover, pk) = prover_and_pk(elf)?;
+        let (prover, pk, is_reserved_network) = prover_and_pk(elf)?;
         Ok(Self {
             prover,
             pk: Arc::new(pk),
             circuit,
+            is_reserved_network,
         })
     }
 
@@ -260,9 +262,13 @@ impl SP1Prover {
         pk: &SP1ProvingKey,
         stdin: SP1Stdin,
     ) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
-        let request_id = network
-            .prove(pk, stdin)
-            .compressed()
+        let mut request_builder = network.prove(pk, stdin).compressed();
+
+        if self.is_reserved_network {
+            request_builder = request_builder.strategy(FulfillmentStrategy::Reserved);
+        }
+
+        let request_id = request_builder
             .request()
             .map_err(|e| anyhow::anyhow!("SP1 network proof submission failed. Error: {:?}", e))?;
 
@@ -329,7 +335,7 @@ impl SP1Host {
 
 /// Verification key.
 pub fn verifying_key_from_elf(elf: &[u8]) -> anyhow::Result<SP1VerifyingKey> {
-    let (_, pk) = prover_and_pk(elf)?;
+    let (_, pk, _) = prover_and_pk(elf)?;
     Ok(pk.verifying_key().clone())
 }
 
@@ -344,14 +350,43 @@ pub fn code_commitment_from_verifying_key(vk: &SP1VerifyingKey) -> SP1MethodId {
     SP1MethodId(vk.hash_u32())
 }
 
-fn prover_and_pk(elf: &[u8]) -> anyhow::Result<(EnvProver, EnvProvingKey)> {
-    let prover = ProverClient::from_env();
+fn prover_and_pk(elf: &[u8]) -> anyhow::Result<(EnvProver, EnvProvingKey, bool)> {
+    let (mut prover, is_reserved_network) = prover_client_from_env();
 
     let pk = prover
         .setup(elf.into())
         .map_err(|e| anyhow::anyhow!("SP1 setup failed. Error: {:?}", e))?;
 
-    Ok((prover, pk))
+    Ok((prover, pk, is_reserved_network))
+}
+
+fn prover_client_from_env() -> (EnvProver, bool) {
+    let prover = match std::env::var("SP1_PROVER") {
+        Ok(prover) => prover,
+        Err(_) => "cpu".to_string(),
+    };
+
+    match prover.as_str() {
+        "cpu" => (
+            Self::Cpu(CpuProver::new_with_opts_and_machine(core_opts, machine)),
+            false,
+        ),
+        "mock" => (Self::Mock(MockProver::new_with_machine(machine)), false),
+        "light" => (Self::Light(LightProver::new_with_machine(machine)), false),
+
+        "network" => Self::Network(Box::new((
+            crate::blocking::network::builder::NetworkProverBuilder::new_with_machine(machine)
+                .build(),
+            false,
+        ))),
+        "network-reserved" => {
+            let client = ProverClient::builder()
+                .network_for(NetworkMode::Reserved)
+                .build();
+
+            (Self::Network(Box::new(client)), true)
+        }
+    }
 }
 
 impl core::fmt::Debug for SP1Host {
