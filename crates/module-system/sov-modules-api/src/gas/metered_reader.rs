@@ -76,7 +76,7 @@ impl<R: io::Read, M: GasMeter> io::Read for MeteredReader<'_, R, M> {
                 }
                 Ok(n) => {
                     consumed += n;
-                    let tmp = std::mem::take(&mut buf);
+                    buf = &mut buf[n..];
                     let (_, rest) = tmp.split_at_mut(n);
                     buf = rest;
                 }
