@@ -91,9 +91,10 @@ where
             (address_bytes, TokenId::from(token_bytes))
         }
         _ => {
-            return Err(PrecompileError::InvalidInput(
-                "expected 20-byte address or 20-byte address plus 32-byte token id",
-            ));
+            return Err(PrecompileError::InvalidInput(format!(
+                "expected 20-byte address or 20-byte address plus 32-byte token id, got {} bytes",
+                input.len()
+            )));
         }
     };
 

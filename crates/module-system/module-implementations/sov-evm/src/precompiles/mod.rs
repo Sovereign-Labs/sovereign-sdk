@@ -38,7 +38,7 @@ pub enum PrecompileError {
     OutOfGas,
     /// The precompile input was invalid.
     #[error("invalid precompile input: {0}")]
-    InvalidInput(&'static str),
+    InvalidInput(String),
     /// The precompile failed while reading Sovereign state.
     #[error("precompile state error: {0}")]
     State(String),

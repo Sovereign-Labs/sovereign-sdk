@@ -490,7 +490,7 @@ fn rpc_call_paths_initialize_custom_precompiles() {
         assert!(
             invalid_bank_error
                 .message()
-                .contains("invalid precompile input: expected 20-byte address"),
+                .contains("invalid precompile input: expected 20-byte address or 20-byte address plus 32-byte token id, got 7 bytes"),
             "unexpected eth_call error: {invalid_bank_error}"
         );
 
@@ -510,6 +510,26 @@ fn rpc_call_paths_initialize_custom_precompiles() {
         assert_eq!(
             timestamp_output,
             u256_bytes((TIMESTAMP_SECONDS as u128) * 1_000_000_000)
+        );
+
+        let invalid_timestamp_error = evm
+            .eth_call(
+                precompile_request(
+                    caller.address(),
+                    SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
+                    Bytes::from_static(b"invalid"),
+                ),
+                None,
+                None,
+                None,
+                state,
+            )
+            .expect_err("eth_call should expose timestamp precompile input errors");
+        assert!(
+            invalid_timestamp_error
+                .message()
+                .contains("invalid precompile input: expected empty input, got 7 bytes"),
+            "unexpected eth_call error: {invalid_timestamp_error}"
         );
 
         let assertion_request = TransactionRequest {

@@ -65,7 +65,10 @@ fn sequencing_timestamp_precompile<S: Spec, ST: TxState<S>>(
         return Err(PrecompileError::OutOfGas);
     }
     if !input.is_empty() {
-        return Err(PrecompileError::InvalidInput("expected empty input"));
+        return Err(PrecompileError::InvalidInput(format!(
+            "expected empty input, got {} bytes",
+            input.len()
+        )));
     }
 
     let nanos = env
