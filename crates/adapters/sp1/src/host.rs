@@ -397,7 +397,7 @@ fn prover_client_from_env() -> (EnvProver, bool) {
 
             (EnvProver::Network(Box::new(client)), true)
         }
-        &_ => panic!("Invalid SP1_PROVER env variable"),
+        var => panic!("Invalid SP1_PROVER env variable: {var}"),
     }
 }
 
