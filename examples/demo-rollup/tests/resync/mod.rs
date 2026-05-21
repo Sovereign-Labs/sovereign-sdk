@@ -85,14 +85,26 @@ fn tx_set_value_for_check(
 }
 
 async fn check_value(client: &demo_stf_json_client::Client, expected: u64) {
-    let response = client
-        .synthetic_load_heavy_state_get_state_value(None, None)
+    // Poll until the value is committed. Under CI load the node can lag the slot subscription,
+    // so a single read may hit `{"value":null}` (which fails to deserialize into a sequence).
+    // Retry until it populates rather than asserting on the first read.
+    let poll = async {
+        loop {
+            // Err / wrong-length means the value isn't committed yet — keep waiting.
+            if let Ok(resp) = client
+                .synthetic_load_heavy_state_get_state_value(None, None)
+                .await
+            {
+                if resp.into_inner().value.len() == expected as usize {
+                    return;
+                }
+            }
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    };
+    tokio::time::timeout(Duration::from_secs(30), poll)
         .await
-        .unwrap()
-        .into_inner();
-
-    println!("State value: {:?}", response.value);
-    assert_eq!(response.value.len(), expected as usize);
+        .unwrap_or_else(|_| panic!("state value never reached expected len {expected} within 30s"));
 }
 
 async fn start_rollup(
