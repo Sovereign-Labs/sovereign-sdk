@@ -30,18 +30,23 @@ async fn code_commitment_rotation_requires_fresh_start() -> anyhow::Result<()> {
     // default code commitments, and the rotated env vars no longer match its
     // inner/outer vkey hashes — startup refuses to resume on top of a proof it can't
     // verify against the current commitments.
-    let res = builder
+
+    let err = match builder
         .clone()
         .set_config(|c| {
             c.start_at_rollup_height = Some(RollupHeight::new(STOP_AT + 1));
             c.stop_at_rollup_height = None;
         })
         .start_test_rollup()
-        .await;
+        .await
+    {
+        Ok(_) => anyhow::bail!("expected resume to fail under rotated commitments"),
+        Err(err) => err,
+    };
 
     assert!(
-        res.is_err(),
-        "expected resume to fail under rotated commitments"
+        format!("{err:#}").contains("code commitment changed since last proof"),
+        "expected commitment mismatch error, got: {err:#}"
     );
 
     // With start_fresh_outer_proof_on_resync = true, startup drops the previous
