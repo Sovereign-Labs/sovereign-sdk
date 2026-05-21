@@ -2,7 +2,7 @@
 
 pub use alloy_primitives::Address;
 use alloy_primitives::Bytes;
-use revm::context_interface::ContextTr;
+use revm::context_interface::{ContextTr, JournalTr, LocalContextTr};
 use revm::database::State as RevmState;
 use revm::handler::{EthPrecompiles, PrecompileProvider};
 use revm::interpreter::{CallInputs, Gas, InstructionResult, InterpreterResult};
@@ -127,16 +127,25 @@ where
             return Ok(None);
         }
 
-        let input = inputs.input.bytes(ctx);
-        let state = ctx.db_mut().precompile_state_mut();
-        let mut env = EvmPrecompileEnv {
-            state,
-            sov_context: self.sov_context,
+        let result = {
+            let input = inputs.input.bytes(ctx);
+            let state = ctx.db_mut().precompile_state_mut();
+            let mut env = EvmPrecompileEnv {
+                state,
+                sov_context: self.sov_context,
+            };
+
+            self.custom
+                .execute(address, &input, inputs.gas_limit, &mut env)
         };
 
-        let result = self
-            .custom
-            .execute(address, &input, inputs.gas_limit, &mut env);
+        if let Err(error) = &result {
+            if !matches!(error, PrecompileError::OutOfGas) && ctx.journal().depth() == 1 {
+                ctx.local_mut()
+                    .set_precompile_error_context(error.to_string());
+            }
+        }
+
         Ok(Some(convert_to_interpreter_result(
             result,
             inputs.gas_limit,

@@ -474,6 +474,26 @@ fn rpc_call_paths_initialize_custom_precompiles() {
             u256_bytes(TEST_DEFAULT_USER_BALANCE.0)
         );
 
+        let invalid_bank_error = evm
+            .eth_call(
+                precompile_request(
+                    caller.address(),
+                    BANK_BALANCE_PRECOMPILE_ADDRESS,
+                    Bytes::from_static(b"invalid"),
+                ),
+                None,
+                None,
+                None,
+                state,
+            )
+            .expect_err("eth_call should expose custom precompile input errors");
+        assert!(
+            invalid_bank_error
+                .message()
+                .contains("invalid precompile input: expected 20-byte address"),
+            "unexpected eth_call error: {invalid_bank_error}"
+        );
+
         let timestamp_output = evm
             .eth_call(
                 precompile_request(
