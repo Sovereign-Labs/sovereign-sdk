@@ -572,23 +572,23 @@ impl<S: Spec> ProverIncentives<S> {
 
         // Here the final rollup height is inclusive
         for slot_num in first_claimed_reward.range_inclusive(final_slot_num) {
-            // Check if the reward was already claimed
-
-            // If not, reward the prover with the block reward
-            // `get_historical_transitions` should always return `Some` because we are iterating over the range of `init_slot_num..=final_slot_num`
-            // whose integrity was checked beforehand.
-            if let Some(transition) = self
+            // `slot_at_height` must return `Some`: `check_proof_outputs`
+            // verified `final_slot_num` exists, and chain_state slot heights
+            // are contiguous, so every slot in this range must exist. A `None`
+            // here means that invariant has broken and reward accounting would
+            // silently under-pay — fail loud instead of skipping the slot.
+            let transition = self
                 .chain_state
                 .slot_at_height(slot_num, state)
                 .map_err(Into::<anyhow::Error>::into)?
-            {
-                // SAFETY: this cannot overflow, because that would require more than the entire token supply to be spent on gas
-                // *before* the prover claimed their reward, but gas fees are locked until the prover claims them.
-                let curr_reward = transition.gas_used().value(transition.gas_price());
-                total_reward = total_reward
-                    .checked_add(curr_reward)
-                    .expect("Gas token Overflow");
-            }
+                .expect("slot must exist: range bounded by verified final_slot_num");
+
+            // SAFETY: this cannot overflow, because that would require more than the entire token supply to be spent on gas
+            // *before* the prover claimed their reward, but gas fees are locked until the prover claims them.
+            let curr_reward = transition.gas_used().value(transition.gas_price());
+            total_reward = total_reward
+                .checked_add(curr_reward)
+                .expect("Gas token Overflow");
         }
 
         if first_claimed_reward > final_slot_num {
