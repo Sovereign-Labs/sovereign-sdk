@@ -353,7 +353,7 @@ pub fn code_commitment_from_verifying_key(vk: &SP1VerifyingKey) -> SP1MethodId {
 }
 
 fn prover_and_pk(elf: &[u8]) -> anyhow::Result<(EnvProver, EnvProvingKey, bool)> {
-    let (prover, is_reserved_network) = prover_client_from_env();
+    let (prover, is_reserved_network) = prover_client_from_env()?;
 
     let pk = prover
         .setup(elf.into())
@@ -362,7 +362,7 @@ fn prover_and_pk(elf: &[u8]) -> anyhow::Result<(EnvProver, EnvProvingKey, bool)>
     Ok((prover, pk, is_reserved_network))
 }
 
-fn prover_client_from_env() -> (EnvProver, bool) {
+fn prover_client_from_env() -> anyhow::Result<(EnvProver, bool)> {
     let machine = RiscvAir::machine();
 
     let prover = match std::env::var("SP1_PROVER") {
@@ -370,7 +370,7 @@ fn prover_client_from_env() -> (EnvProver, bool) {
         Err(_) => "cpu".to_string(),
     };
 
-    match prover.as_str() {
+    let res = match prover.as_str() {
         "cpu" => (
             EnvProver::Cpu(CpuProver::new_with_opts_and_machine(None, machine)),
             false,
@@ -397,8 +397,10 @@ fn prover_client_from_env() -> (EnvProver, bool) {
 
             (EnvProver::Network(Box::new(client)), true)
         }
-        var => panic!("Invalid SP1_PROVER env variable: {var}"),
-    }
+        var => anyhow::bail!("Invalid SP1_PROVER env variable: {var}"),
+    };
+
+    Ok(res)
 }
 
 impl core::fmt::Debug for SP1Host {
