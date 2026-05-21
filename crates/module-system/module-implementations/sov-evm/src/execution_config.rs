@@ -67,7 +67,10 @@ pub const fn default_bucket_size_limit() -> usize {
     100 * 1024 * 1024 // 100MB
 }
 
-impl<S: Spec> ExecutionInit for Evm<S> {
+impl<S: Spec, P> ExecutionInit for Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     type Config = EvmExecutionConfig;
     // Do nothing; the configure function handles everything we need.
     fn init(_config: &Self::Config) -> Result<(), Box<dyn std::error::Error>> {
@@ -75,7 +78,10 @@ impl<S: Spec> ExecutionInit for Evm<S> {
     }
 }
 
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     pub(crate) fn get_bucket_id_for_address(&self, address: &Address) -> BucketId {
         let slot_key = self.account_storage.slot_key(&(address, &U256::ZERO));
         BucketId::from_slot_key(&slot_key, 21) // 21 bytes because the address is 20 bytes and the bcs prefixes with a length byte (always "20" (0x14))

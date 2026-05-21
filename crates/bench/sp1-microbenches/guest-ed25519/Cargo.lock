@@ -4270,7 +4270,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bech32",
  "borsh",
@@ -4285,7 +4285,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macro-helpers"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bech32",
  "borsh",
@@ -4299,7 +4299,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macros"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.117",

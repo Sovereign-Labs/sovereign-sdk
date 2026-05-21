@@ -61,9 +61,10 @@ impl AccountData {
     }
 }
 
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     pub(crate) fn init_module(
         &mut self,
