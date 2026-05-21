@@ -591,14 +591,15 @@ impl<S: Spec> ProverIncentives<S> {
             }
         }
 
-        // We need to remove the reward once it is claimed
-        self.last_claimed_reward
-            .set(&max(first_available_reward, final_slot_num), state)
-            .map_err(Into::<anyhow::Error>::into)?;
-
         if first_claimed_reward > final_slot_num {
+            // Nothing in the proof's range was unclaimed, so the cursor must
+            // stay put — otherwise a stale proof would silently burn the next
+            // honest slot's reward.
             Ok(Paycheck::Penalized)
         } else {
+            self.last_claimed_reward
+                .set(&final_slot_num, state)
+                .map_err(Into::<anyhow::Error>::into)?;
             Ok(Paycheck::Rewarded(total_reward))
         }
     }
