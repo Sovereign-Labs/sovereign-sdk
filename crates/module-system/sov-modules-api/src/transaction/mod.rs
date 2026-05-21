@@ -182,6 +182,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         signature: C::Signature,
         uniqueness: UniquenessData,
         details: TxDetails<S>,
+        address_override: Option<S::Address>,
     ) -> Self {
         Self::V0(Version0 {
             signature,
@@ -189,7 +190,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
             runtime_call,
             uniqueness,
             details,
-            address_override: None,
+            address_override,
         })
     }
 

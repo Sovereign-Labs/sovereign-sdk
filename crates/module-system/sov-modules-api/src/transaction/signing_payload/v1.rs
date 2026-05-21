@@ -55,12 +55,12 @@ impl<R: TransactionCallable, S: Spec> Clone for TransactionSigningPayloadV1<R, S
 
 impl<R: TransactionCallable, S: Spec> PartialEq for TransactionSigningPayloadV1<R, S> {
     fn eq(&self, other: &Self) -> bool {
-        self.runtime_call == other.runtime_call
+        self.chain_hash == other.chain_hash
             && self.uniqueness == other.uniqueness
-            && self.details == other.details
             && self.credential_address == other.credential_address
             && self.address_override == other.address_override
-            && self.chain_hash == other.chain_hash
+            && self.details == other.details
+            && self.runtime_call == other.runtime_call
     }
 }
 

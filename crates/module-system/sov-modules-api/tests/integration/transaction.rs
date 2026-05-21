@@ -1,8 +1,6 @@
 use sov_mock_zkvm::MockZkvmCryptoSpec;
 use sov_modules_api::capabilities::UniquenessData;
-use sov_modules_api::transaction::{
-    Transaction, TransactionSigningPayload, TxDetails, UnsignedTransaction, Version0,
-};
+use sov_modules_api::transaction::{Transaction, TransactionSigningPayload, TxDetails, Version0};
 use sov_modules_api::CryptoSpec;
 use sov_test_utils::runtime::{sov_value_setter, TestOptimisticRuntime, TestOptimisticRuntimeCall};
 use sov_test_utils::TestSpec;
@@ -221,9 +219,11 @@ mod web3_compatibility {
             "gas_limit": null,
             "chain_id": 1337
         },
-        "address_override": null
+        "address_override": null,
+        "chain_hash": "0x0000000000000000000000000000000000000000000000000000000000000000"
     }}"#;
-        let schema = Schema::of_single_type::<UnsignedTransaction<Runtime, TestSpec>>().unwrap();
+        let schema =
+            Schema::of_single_type::<TransactionSigningPayload<Runtime, TestSpec>>().unwrap();
 
         assert!(schema.json_to_borsh(0, json).is_ok(), "{ASSERT_MSG}");
     }
