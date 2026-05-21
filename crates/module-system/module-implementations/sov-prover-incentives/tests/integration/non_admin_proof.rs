@@ -122,9 +122,9 @@ fn test_non_admin_invalid_inner_vkey_hash_slashed() {
         .unwrap();
 
     aggregated_proof.inner_vkey_hash = {
-        let mut bytes = vec![0u8; 32];
+        let mut bytes = [0u8; CodeCommitmentHash::HASH_LEN];
         bytes[..8].copy_from_slice(&[0xab; 8]);
-        CodeCommitmentHash(bytes)
+        CodeCommitmentHash::from_u8_array(bytes)
     };
     let prover_address = prover.user_info.address();
 

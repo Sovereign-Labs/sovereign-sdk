@@ -14,6 +14,9 @@ pub use host::MockZkvmHost;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub mod crypto;
+use sov_rollup_interface::common::strict_bincode_deserialize;
+use sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues;
+use sov_rollup_interface::zk::aggregated_proof::{CodeCommitmentDecodeError, CodeCommitmentHash};
 use sov_rollup_interface::zk::{CryptoSpec, SerializedZkProof, Zkvm};
 
 use crate::crypto::{Ed25519PublicKey, Ed25519Signature};
@@ -65,18 +68,19 @@ impl Zkvm for MockZkvm {
 pub struct MockCodeCommitment(pub [u8; 8]);
 
 impl sov_rollup_interface::zk::CodeCommitmentTrait for MockCodeCommitment {
-    fn to_hash(&self) -> sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash {
+    fn to_hash(&self) -> CodeCommitmentHash {
         // Pad the 8-byte mock commitment to 32 bytes to match the canonical hash layout.
-        let mut bytes = vec![0u8; 32];
+        let mut bytes = [0u8; CodeCommitmentHash::HASH_LEN];
         bytes[..8].copy_from_slice(&self.0);
-        sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash(bytes)
+        CodeCommitmentHash::from_u8_array(bytes)
     }
 
-    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
+    fn try_from_hash(hash: CodeCommitmentHash) -> Result<Self, CodeCommitmentDecodeError> {
+        let words = hash.to_u32_array()?;
         let mut bytes = [0u8; 8];
-        let len = hash.0.len().min(8);
-        bytes[..len].copy_from_slice(&hash.0[..len]);
-        Self(bytes)
+        bytes[..4].copy_from_slice(&words[0].to_be_bytes());
+        bytes[4..].copy_from_slice(&words[1].to_be_bytes());
+        Ok(Self(bytes))
     }
 }
 
@@ -112,7 +116,7 @@ impl MockProof {
 
     /// Bincode-decodes a proof from `bytes`.
     pub(crate) fn deserialize(bytes: &[u8]) -> bincode::Result<Self> {
-        bincode::deserialize(bytes)
+        strict_bincode_deserialize(bytes)
     }
 }
 
@@ -128,7 +132,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
     type Error = anyhow::Error;
 
     fn verify_with_pub_values<T: DeserializeOwned>(
-        public_values: &sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues,
+        public_values: &SerializedPubValues,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         // The mock encodes a complete `MockProof` in `pub_values.pub_values` —
@@ -147,7 +151,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
                 "Code commitment mismatch: proof claims {claimed:?}, verifier expects {code_commitment:?}"
             );
         }
-        Ok(bincode::deserialize(&pub_data)?)
+        Ok(strict_bincode_deserialize(&pub_data)?)
     }
 
     fn verify_with_proof<T: DeserializeOwned>(
@@ -167,7 +171,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
                 "Code commitment mismatch: proof claims {claimed:?}, verifier expects {code_commitment:?}"
             );
         }
-        Ok(bincode::deserialize(&input)?)
+        Ok(strict_bincode_deserialize(&input)?)
     }
 
     fn extract_public_data<T: DeserializeOwned>(
@@ -176,7 +180,7 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
         let MockProof {
             pub_data: input, ..
         } = MockProof::deserialize(&serialized_proof.raw_proof)?;
-        Ok(bincode::deserialize(&input)?)
+        Ok(strict_bincode_deserialize(&input)?)
     }
 }
 
