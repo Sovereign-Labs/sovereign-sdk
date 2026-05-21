@@ -78,11 +78,17 @@ where
     }
 
     let (address_bytes, token_id) = match input.len() {
-        20 => (&input[0..20], config_gas_token_id()),
+        20 => {
+            let mut address_bytes = [0u8; 20];
+            address_bytes.copy_from_slice(&input[0..20]);
+            (address_bytes, config_gas_token_id())
+        }
         52 => {
+            let mut address_bytes = [0u8; 20];
+            address_bytes.copy_from_slice(&input[0..20]);
             let mut token_bytes = [0u8; 32];
             token_bytes.copy_from_slice(&input[20..52]);
-            (&input[0..20], TokenId::from(token_bytes))
+            (address_bytes, TokenId::from(token_bytes))
         }
         _ => {
             return Err(PrecompileError::InvalidInput(
@@ -91,10 +97,7 @@ where
         }
     };
 
-    let address = S::Address::from_vm_address(
-        EthereumAddress::try_from(address_bytes)
-            .expect("conversion from 20-byte slice to EthereumAddress is infallible"),
-    );
+    let address = S::Address::from_vm_address(EthereumAddress::new(address_bytes));
 
     let balance = bank
         .get_balance_of(&address, token_id, state)
