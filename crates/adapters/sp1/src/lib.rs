@@ -10,6 +10,7 @@ use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::common::strict_bincode_deserialize;
 use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
 use sov_rollup_interface::zk::SerializedZkProof;
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
@@ -41,8 +42,19 @@ impl sov_rollup_interface::zk::CodeCommitmentTrait for SP1MethodId {
         CodeCommitmentHash::from_u32_array(self.0)
     }
 
-    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
-        Self(hash.to_u32_array())
+    fn try_from_hash(
+        hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash,
+    ) -> Result<Self, sov_rollup_interface::zk::aggregated_proof::CodeCommitmentDecodeError> {
+        if hash.0.len() != sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::HASH_LEN
+        {
+            return Err(
+                sov_rollup_interface::zk::aggregated_proof::CodeCommitmentDecodeError::InvalidLength {
+                    expected: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::HASH_LEN,
+                    got: hash.0.len(),
+                },
+            );
+        }
+        Ok(Self(hash.to_u32_array()))
     }
 }
 
@@ -157,14 +169,16 @@ impl ZkVerifier for SP1Verifier {
             }
         }
 
-        Ok(bincode::deserialize(proof.public_values.as_slice())?)
+        Ok(strict_bincode_deserialize(proof.public_values.as_slice())?)
     }
 
     fn extract_public_data<T: DeserializeOwned>(
         serialized_proof: &SerializedZkProof,
     ) -> Result<T, Self::Error> {
-        let envelope: Sp1ProofEnvelope = bincode::deserialize(&serialized_proof.raw_proof)?;
-        Ok(bincode::deserialize(envelope.public_values.as_slice())?)
+        let envelope: Sp1ProofEnvelope = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+        Ok(strict_bincode_deserialize(
+            envelope.public_values.as_slice(),
+        )?)
     }
 }
 
@@ -215,7 +229,7 @@ impl ZkVerifier for SP1Verifier {
 
         let public_values_digest: [u8; 32] = sha2::Sha256::digest(&public_values).into();
         sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash.0, &public_values_digest);
-        Ok(bincode::deserialize(&public_values)?)
+        Ok(strict_bincode_deserialize(&public_values)?)
     }
 
     fn extract_public_data<T: DeserializeOwned>(
@@ -223,7 +237,7 @@ impl ZkVerifier for SP1Verifier {
     ) -> Result<T, Self::Error> {
         let mut reader: &[u8] = &serialized_proof.raw_proof;
         let public_values: Vec<u8> = bincode::deserialize_from(&mut reader)?;
-        Ok(bincode::deserialize(&public_values)?)
+        Ok(strict_bincode_deserialize(&public_values)?)
     }
 }
 
@@ -232,8 +246,8 @@ impl ZkVerifier for SP1Verifier {
 pub fn decode_sp1_proof(
     serialized_proof: &SerializedZkProof,
 ) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
-    let envelope: Sp1ProofEnvelope = bincode::deserialize(&serialized_proof.raw_proof)?;
-    Ok(bincode::deserialize(&envelope.sp1_proof)?)
+    let envelope: Sp1ProofEnvelope = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+    Ok(strict_bincode_deserialize(&envelope.sp1_proof)?)
 }
 
 #[cfg(test)]

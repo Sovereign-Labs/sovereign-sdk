@@ -10,6 +10,7 @@ use risc0_zkvm::Receipt;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
+use sov_rollup_interface::common::strict_bincode_deserialize;
 use sov_rollup_interface::zk::SerializedZkProof;
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 use thiserror::Error;
@@ -36,8 +37,19 @@ impl sov_rollup_interface::zk::CodeCommitmentTrait for Risc0MethodId {
         sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::from_u32_array(self.0)
     }
 
-    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
-        Self(hash.to_u32_array())
+    fn try_from_hash(
+        hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash,
+    ) -> Result<Self, sov_rollup_interface::zk::aggregated_proof::CodeCommitmentDecodeError> {
+        if hash.0.len() != sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::HASH_LEN
+        {
+            return Err(
+                sov_rollup_interface::zk::aggregated_proof::CodeCommitmentDecodeError::InvalidLength {
+                    expected: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash::HASH_LEN,
+                    got: hash.0.len(),
+                },
+            );
+        }
+        Ok(Self(hash.to_u32_array()))
     }
 }
 
@@ -114,16 +126,16 @@ impl ZkVerifier for Risc0Verifier {
         serialized_proof: &SerializedZkProof,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let receipt: Receipt = bincode::deserialize(&serialized_proof.raw_proof)?;
+        let receipt: Receipt = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
         receipt.verify(code_commitment.0)?;
-        Ok(bincode::deserialize(&receipt.journal.bytes)?)
+        Ok(strict_bincode_deserialize(&receipt.journal.bytes)?)
     }
 
     fn extract_public_data<T: DeserializeOwned>(
         serialized_proof: &SerializedZkProof,
     ) -> Result<T, Self::Error> {
-        let receipt: Receipt = bincode::deserialize(&serialized_proof.raw_proof)?;
-        Ok(bincode::deserialize(&receipt.journal.bytes)?)
+        let receipt: Receipt = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+        Ok(strict_bincode_deserialize(&receipt.journal.bytes)?)
     }
 }
 

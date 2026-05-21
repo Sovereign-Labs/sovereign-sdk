@@ -11,7 +11,7 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 
 use super::{StateTransitionPublicData, ZkVerifier};
-use crate::common::SlotNumber;
+use crate::common::{SafeVec, SlotNumber};
 use crate::da::DaSpec;
 use crate::zk::SerializedZkProof;
 
@@ -38,42 +38,87 @@ pub struct BlockProof<Address, Da: DaSpec, Root> {
 }
 
 /// A code commitment hash used to identify ZK circuits (both inner and outer).
+///
+/// Wraps a [`SafeVec<u8, 32>`](SafeVec) so the borsh and serde decoders enforce
+/// an upper bound on length before allocating — an attacker who controls proof
+/// bytes can't claim a 4 GB inner hash and force a giant allocation attempt.
+/// The capacity must stay in sync with [`Self::HASH_LEN`].
 #[derive(Debug, Eq, PartialEq, BorshDeserialize, BorshSerialize, Serialize, Deserialize, Clone)]
-pub struct CodeCommitmentHash(pub Vec<u8>);
+pub struct CodeCommitmentHash(pub SafeVec<u8, 32>);
 
 impl Default for CodeCommitmentHash {
     fn default() -> Self {
         // We use [0u8; 32] to match the placeholder value in the chain_state genesis.
         // This remains the default until the full proof aggregation workflow is finalized.
-        Self(vec![0u8; 32])
+        Self::from_u8_array([0u8; Self::HASH_LEN])
     }
 }
 
+impl From<[u8; CodeCommitmentHash::HASH_LEN]> for CodeCommitmentHash {
+    fn from(bytes: [u8; CodeCommitmentHash::HASH_LEN]) -> Self {
+        Self::from_u8_array(bytes)
+    }
+}
+
+/// Error returned when decoding a [`CodeCommitmentHash`] into a concrete
+/// [`crate::zk::CodeCommitmentTrait`] implementation fails.
+#[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
+pub enum CodeCommitmentDecodeError {
+    /// The hash length did not match the adapter's expected length.
+    #[error("invalid code commitment hash length: expected {expected}, got {got}")]
+    InvalidLength {
+        /// Expected byte length (typically [`CodeCommitmentHash::HASH_LEN`]).
+        expected: usize,
+        /// Actual byte length supplied.
+        got: usize,
+    },
+}
+
 impl CodeCommitmentHash {
-    /// Canonical byte length expected by every [`crate::zk::CodeCommitmentTrait`]
-    /// implementation. Concrete adapters (Risc0, SP1) panic in [`Self::to_u32_array`]
-    /// when this invariant is violated, so callers reading hashes from untrusted
-    /// sources should reject mismatched lengths before invoking
-    /// [`crate::zk::CodeCommitmentTrait::from_hash`].
+    /// Canonical byte length expected by every
+    /// [`crate::zk::CodeCommitmentTrait`] implementation. Must match the
+    /// `SafeVec` capacity in the struct definition above. Adapters validate
+    /// this length in [`crate::zk::CodeCommitmentTrait::try_from_hash`] and
+    /// return [`CodeCommitmentDecodeError::InvalidLength`] on mismatch.
     pub const HASH_LEN: usize = 32;
+
+    /// Creates a [`CodeCommitmentHash`] from a `[u8; HASH_LEN]` array. This is
+    /// the infallible primary constructor — the fixed-size input statically
+    /// guarantees the inner `SafeVec` invariant.
+    pub fn from_u8_array(bytes: [u8; Self::HASH_LEN]) -> Self {
+        Self(
+            bytes
+                .to_vec()
+                .try_into()
+                .expect("HASH_LEN bytes always fit in SafeVec<u8, HASH_LEN>"),
+        )
+    }
 
     /// Creates a [`CodeCommitmentHash`] from a `[u32; 8]` array using big-endian byte order.
     /// This matches the representation used by SP1's `HashableKey::hash_bytes`.
     pub fn from_u32_array(arr: [u32; 8]) -> Self {
-        let mut bytes = Vec::with_capacity(32);
-        for word in arr {
-            bytes.extend_from_slice(&word.to_be_bytes());
+        let mut bytes = [0u8; Self::HASH_LEN];
+        for (idx, word) in arr.iter().enumerate() {
+            bytes[idx * 4..(idx + 1) * 4].copy_from_slice(&word.to_be_bytes());
         }
-        Self(bytes)
+        Self::from_u8_array(bytes)
     }
 
     /// Converts this hash back to a `[u32; 8]` array using big-endian byte order.
     ///
     /// # Panics
     ///
-    /// Panics if the inner byte vector is not exactly 32 bytes long.
+    /// Panics if the inner byte vector is not exactly 32 bytes long. The
+    /// [`SafeVec`] only caps the upper bound, so callers reading hashes from
+    /// untrusted bytes should validate length first (e.g. via
+    /// [`crate::zk::CodeCommitmentTrait::try_from_hash`]).
     pub fn to_u32_array(&self) -> [u32; 8] {
-        assert_eq!(self.0.len(), 32, "CodeCommitmentHash must be 32 bytes");
+        assert_eq!(
+            self.0.len(),
+            Self::HASH_LEN,
+            "CodeCommitmentHash must be {} bytes",
+            Self::HASH_LEN
+        );
         let mut arr = [0u32; 8];
         for (idx, chunk) in self.0.chunks_exact(4).enumerate() {
             arr[idx] = u32::from_be_bytes(chunk.try_into().unwrap());
