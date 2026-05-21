@@ -17,11 +17,13 @@ use sov_rollup_interface::zk::aggregated_proof::{
 };
 use sov_rollup_interface::zk::{SerializedZkProof, ZkvmHost};
 use sp1_sdk::blocking::{
-    EnvProver, EnvProvingKey, NetworkProver, ProveRequest, Prover, ProverClient,
+    CpuProver, EnvProver, EnvProvingKey, LightProver, MockProver, NetworkProver,
+    NetworkProverBuilder, ProveRequest, Prover, ProverClient,
 };
-use sp1_sdk::ProvingKey;
+use sp1_sdk::network::{FulfillmentStrategy, NetworkMode};
 use sp1_sdk::SP1VerifyingKey;
 use sp1_sdk::{HashableKey, SP1Proof, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{ProvingKey, RiscvAir};
 
 /// SP1 host that produces aggregated (outer) proofs by recursively verifying
 /// a batch of inner state-transition proofs inside an SP1 guest program.
@@ -351,7 +353,7 @@ pub fn code_commitment_from_verifying_key(vk: &SP1VerifyingKey) -> SP1MethodId {
 }
 
 fn prover_and_pk(elf: &[u8]) -> anyhow::Result<(EnvProver, EnvProvingKey, bool)> {
-    let (mut prover, is_reserved_network) = prover_client_from_env();
+    let (prover, is_reserved_network) = prover_client_from_env();
 
     let pk = prover
         .setup(elf.into())
@@ -361,6 +363,8 @@ fn prover_and_pk(elf: &[u8]) -> anyhow::Result<(EnvProver, EnvProvingKey, bool)>
 }
 
 fn prover_client_from_env() -> (EnvProver, bool) {
+    let machine = RiscvAir::machine();
+
     let prover = match std::env::var("SP1_PROVER") {
         Ok(prover) => prover,
         Err(_) => "cpu".to_string(),
@@ -368,24 +372,32 @@ fn prover_client_from_env() -> (EnvProver, bool) {
 
     match prover.as_str() {
         "cpu" => (
-            Self::Cpu(CpuProver::new_with_opts_and_machine(core_opts, machine)),
+            EnvProver::Cpu(CpuProver::new_with_opts_and_machine(None, machine)),
             false,
         ),
-        "mock" => (Self::Mock(MockProver::new_with_machine(machine)), false),
-        "light" => (Self::Light(LightProver::new_with_machine(machine)), false),
-
-        "network" => Self::Network(Box::new((
-            crate::blocking::network::builder::NetworkProverBuilder::new_with_machine(machine)
-                .build(),
+        "mock" => (
+            EnvProver::Mock(MockProver::new_with_machine(machine)),
             false,
-        ))),
+        ),
+        "light" => (
+            EnvProver::Light(LightProver::new_with_machine(machine)),
+            false,
+        ),
+
+        "network" => (
+            EnvProver::Network(Box::new(
+                NetworkProverBuilder::new_with_machine(machine).build(),
+            )),
+            false,
+        ),
         "network-reserved" => {
             let client = ProverClient::builder()
                 .network_for(NetworkMode::Reserved)
                 .build();
 
-            (Self::Network(Box::new(client)), true)
+            (EnvProver::Network(Box::new(client)), true)
         }
+        &_ => panic!("Invalid SP1_PROVER env variable"),
     }
 }
 
