@@ -366,10 +366,12 @@ macro_rules! blanket_impl_metered_state_reader {
 
             storage_value
                 .map(|storage_value| {
-                    // We need to charge for the cost to deserialize the value
-                    maybe_trace_span!("all_accesses::charge_per_byte_borsh_deserialization", {
+                    // We need to charge for the cost to deserialize the value. The state codec
+                    // is opaque to the meter (could be borsh or any other StateItemCodec impl),
+                    // so we use the upfront-byte charge rather than routing through MeteredReader.
+                    maybe_trace_span!("all_accesses::charge_per_byte_upfront_decode", {
                         self.charge_linear_gas(
-                            <T::Spec as GasSpec>::gas_to_charge_per_byte_borsh_deserialization(),
+                            <T::Spec as GasSpec>::gas_to_charge_per_byte_borsh_read(),
                             storage_value.size(),
                         )
                         .map_err(|e| StateAccessorError::Decode {

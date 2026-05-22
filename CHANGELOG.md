@@ -1,3 +1,6 @@
+# 2026-05-20
+- #2890 **Breaking Change**: Borsh deserialization is now metered by work done. Adds `MeteredReader` + `MeteredBorshDeserialize` (blanket-impl'd for `T: BorshDeserialize`) and three new gas constants (`BIAS_BORSH_DESERIALIZATION`, `BORSH_PER_BYTE_READ`, `BORSH_PER_READ_BIAS`) replacing the per-type `*_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION` / `*_BIAS_BORSH_DESERIALIZATION` constants (DEFAULT, TX, PROOF, STRING). Changes the chain hash.
+
 # 2026-05-15
 - #2875 Upgrades SP1 crates from 6.1.0 to 6.2.1. Centralizes the `sp1-*` and `slop-algebra` workspace dependencies in the root `Cargo.toml`; the upgrade also drops the transitive `halo2` / `zkhash` chain, allowing the `halo2` proprietary-license exception to be removed from `deny.toml`. Stale Plonky-3 / SP1 v5 entries in `.cargo/config.toml` are refreshed to match the v6 architecture.
 # 2026-05-18

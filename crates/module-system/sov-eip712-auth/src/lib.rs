@@ -204,7 +204,7 @@ pub fn authenticate<
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
-    let tx = match <Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec> as MeteredBorshDeserialize<S>>::deserialize(
+    let tx = match <Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec> as MeteredBorshDeserialize>::deserialize_from_slice(
         &mut &raw_tx[..],
         state,
     ) {
