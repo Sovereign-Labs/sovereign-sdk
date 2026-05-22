@@ -73,6 +73,8 @@ impl NodeDiscoveryTask {
 
 #[derive(Debug, thiserror::Error)]
 enum HandleClusterUpdateError {
+    #[error("Failed to connect to the cluster database")]
+    Connect(#[source] anyhow::Error),
     #[error("Failed to fetch cluster info")]
     GetClusterInfo(#[source] anyhow::Error),
     #[error("Failed to notify on cluster update")]
@@ -84,20 +86,26 @@ enum HandleClusterUpdateError {
 impl HandleClusterUpdateError {
     fn stage(&self) -> &'static str {
         match self {
+            Self::Connect(_) => "connect",
             Self::GetClusterInfo(_) => "get_cluster_info",
             Self::Notify(_) => "notify",
             Self::RecvNotification(_) => "recv_notification",
         }
     }
 
-    /// Logs the failure, records a failure metric, and backs off before the
-    /// caller's next retry.
-    async fn report_and_backoff(&self) {
+    /// Logs the failure and records a failure metric.
+    fn report(&self) {
         let stage = self.stage();
         tracing::warn!(stage, error = ?self, "Cluster update failed");
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(ClusterUpdateFailureMetric { stage });
         });
+    }
+
+    /// Logs the failure, records a failure metric, and backs off before the
+    /// caller's next retry.
+    async fn report_and_backoff(&self) {
+        self.report();
         tokio::time::sleep(Duration::from_millis(1000)).await;
     }
 }
@@ -126,6 +134,21 @@ impl NodeDiscovery {
     ///
     /// Returns a [`NodeDiscovery`] ready to subscribe for cluster updates.
     pub async fn connect(
+        connection_string: &str,
+        max_age: Duration,
+        poll_interval: Duration,
+        notifier: Option<Box<dyn ClusterUpdateNotifier>>,
+    ) -> Result<Self> {
+        Self::try_connect(connection_string, max_age, poll_interval, notifier)
+            .await
+            .map_err(|error| {
+                let error = HandleClusterUpdateError::Connect(error);
+                error.report();
+                anyhow::Error::new(error)
+            })
+    }
+
+    async fn try_connect(
         connection_string: &str,
         max_age: Duration,
         poll_interval: Duration,
