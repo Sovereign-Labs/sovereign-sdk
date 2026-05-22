@@ -1,7 +1,6 @@
 mod data;
 mod rewards;
 use std::fmt::Debug;
-use std::io;
 
 use crate::Multisig;
 use borsh::{BorshDeserialize, BorshSerialize};
@@ -24,8 +23,8 @@ pub use types::{
 pub use unsigned::{UnsignedTransaction, UnsignedTransactionV0, UnsignedTransactionV1};
 
 use crate::{
-    CryptoSpecExt, DispatchCall, Gas, GasMeter, GasMeteringError, GasSpec, MeteredBorshDeserialize,
-    MeteredBorshDeserializeError, MeteredSigVerificationError, MeteredSignature, Spec,
+    CryptoSpecExt, DispatchCall, Gas, GasMeter, GasMeteringError, MeteredSigVerificationError,
+    MeteredSignature, Spec,
 };
 
 #[cfg(test)]
@@ -117,52 +116,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Convenience function to return the transaction bytes in the correct format ready for submission.
     pub fn tx_bytes(&self) -> Vec<u8> {
         borsh::to_vec(self).expect("Serialization should be never fail")
-    }
-
-    fn unmetered_deserialize_inner(buf: &mut &[u8]) -> Result<Self, io::Error> {
-        let this = <Transaction<R, S, C> as borsh::BorshDeserialize>::deserialize(buf)?;
-        tracing::trace!(transaction = ?this, "Deserialized transaction");
-        Ok(this)
-    }
-}
-
-/// Charge gas for deserializing a transaction.
-pub fn charge_tx_deserialization<S: Spec>(
-    meter: &mut impl GasMeter<Spec = S>,
-    len: usize,
-) -> Result<(), MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-    crate::charge_gas_to_deserialize(
-        S::tx_bias_borsh_deserialization(),
-        S::tx_gas_to_charge_per_byte_borsh_deserialization(),
-        len,
-        meter,
-    )
-}
-
-impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> MeteredBorshDeserialize<S>
-    for Transaction<R, S, C>
-{
-    #[cfg_attr(feature = "bench", crate::cycle_tracker)]
-    #[cfg_attr(
-        all(feature = "gas-constant-estimation", feature = "native"),
-        crate::track_gas_constants_usage
-    )]
-    fn deserialize(
-        buf: &mut &[u8],
-        meter: &mut impl GasMeter<Spec = S>,
-    ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-        charge_tx_deserialization(meter, buf.len())?;
-
-        Transaction::<R, S, C>::unmetered_deserialize_inner(buf)
-            .map_err(MeteredBorshDeserializeError::IOError)
-    }
-
-    #[cfg(feature = "native")]
-    fn unmetered_deserialize(
-        buf: &mut &[u8],
-    ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-        Transaction::<R, S, C>::unmetered_deserialize_inner(buf)
-            .map_err(MeteredBorshDeserializeError::IOError)
     }
 }
 

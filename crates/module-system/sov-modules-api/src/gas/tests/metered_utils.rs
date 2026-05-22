@@ -11,9 +11,9 @@ use sov_test_utils::MockDaSpec;
 use crate::default_spec::DefaultSpec;
 use crate::gas::GasArray;
 use crate::{
-    Amount, Gas, GasMeter, GasPrice, GasUnit, MeteredBorshDeserialize,
-    MeteredBorshDeserializeError, MeteredHasher, MeteredSigVerificationError, MeteredSignature,
-    Spec, StateCheckpoint, WorkingSet,
+    Amount, Gas, GasPrice, GasSpec, GasUnit, MeteredBorshDeserialize, MeteredBorshDeserializeError,
+    MeteredHasher, MeteredSigVerificationError, MeteredSignature, Spec, StateCheckpoint,
+    WorkingSet,
 };
 type S = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
@@ -147,40 +147,28 @@ pub struct BorshTestStruct {
     pub field2: u32,
 }
 
-impl MeteredBorshDeserialize<S> for BorshTestStruct {
-    fn deserialize(
-        buf: &mut &[u8],
-        meter: &mut impl GasMeter<Spec = S>,
-    ) -> Result<Self, MeteredBorshDeserializeError<<S as Spec>::Gas>> {
-        crate::charge_gas_to_deserialize(
-            <S as Spec>::Gas::zero(),
-            <S as Spec>::Gas::zero(),
-            buf.len(),
-            meter,
-        )?;
-
-        <Self as borsh::BorshDeserialize>::deserialize(buf)
-            .map_err(MeteredBorshDeserializeError::IOError)
-    }
-
-    fn unmetered_deserialize(
-        buf: &mut &[u8],
-    ) -> Result<Self, MeteredBorshDeserializeError<<S as Spec>::Gas>> {
-        <Self as borsh::BorshDeserialize>::deserialize(buf)
-            .map_err(MeteredBorshDeserializeError::IOError)
-    }
+/// Total gas cost to decode a `BorshTestStruct` through `deserialize_from_slice`:
+/// the common entry bias plus two `read_exact(4)` calls (one per `u32` field).
+fn gas_cost_for_borsh_test_struct() -> <S as Spec>::Gas {
+    let two_reads = super::budget_for_reader_calls(
+        <S as GasSpec>::gas_to_charge_per_byte_borsh_read(),
+        <S as GasSpec>::bias_borsh_per_read(),
+        &[4, 4],
+    );
+    <S as GasSpec>::bias_borsh_deserialization()
+        .checked_combine(two_reads)
+        .unwrap()
 }
 
 #[test]
 fn test_metered_deserializer() {
     let data = TEST_BORSH_STRUCT;
     let serialized_data = borsh::to_vec(&data).unwrap();
-    let gas_to_charge = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
 
-    let remaining_funds = gas_to_charge.value(TEST_GAS_PRICE);
+    let remaining_funds = gas_cost_for_borsh_test_struct().value(TEST_GAS_PRICE);
     let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
-    let deserialized_data = <BorshTestStruct as MeteredBorshDeserialize<S>>::deserialize(
+    let deserialized_data = <BorshTestStruct as MeteredBorshDeserialize>::deserialize_from_slice(
         &mut serialized_data.as_slice(),
         &mut ws,
     )
@@ -193,15 +181,14 @@ fn test_metered_deserializer() {
 fn test_metered_deserializer_not_enough_gas() {
     let data = TEST_BORSH_STRUCT;
     let serialized_data = borsh::to_vec(&data).unwrap();
-    let gas_to_charge = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
 
-    let remaining_funds = gas_to_charge
+    let remaining_funds = gas_cost_for_borsh_test_struct()
         .value(TEST_GAS_PRICE)
         .checked_sub(Amount::new(1))
         .unwrap();
     let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
-    let result = <BorshTestStruct as MeteredBorshDeserialize<S>>::deserialize(
+    let result = <BorshTestStruct as MeteredBorshDeserialize>::deserialize_from_slice(
         &mut serialized_data.as_slice(),
         &mut ws,
     );
@@ -216,12 +203,11 @@ fn test_metered_deserializer_not_enough_gas() {
 fn test_metered_deserializer_invalid_data() {
     let data = TEST_BORSH_STRUCT;
     let serialized_data = borsh::to_vec(&data).unwrap();
-    let gas_to_charge = gas_cost_to_deserialize::<S>(&serialized_data).unwrap();
 
-    let remaining_funds = gas_to_charge.value(TEST_GAS_PRICE);
+    let remaining_funds = gas_cost_for_borsh_test_struct().value(TEST_GAS_PRICE);
     let mut ws = create_working_set(remaining_funds, &TEST_GAS_PRICE);
 
-    let result = <BorshTestStruct as MeteredBorshDeserialize<S>>::deserialize(
+    let result = <BorshTestStruct as MeteredBorshDeserialize>::deserialize_from_slice(
         &mut &serialized_data[1..],
         &mut ws,
     );
@@ -232,46 +218,90 @@ fn test_metered_deserializer_invalid_data() {
     ));
 }
 
+fn set_borsh_read_constants(per_byte: &str, per_read_bias: &str) {
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_BORSH_PER_BYTE_READ", per_byte);
+    std::env::set_var("SOV_TEST_CONST_OVERRIDE_BORSH_PER_READ_BIAS", per_read_bias);
+}
+
 #[test]
-fn test_total_deserialization_cost() {
-    let cases = [
-        (GasUnit::<2>::from([1; 2]), 22, true),
-        (GasUnit::<2>::from([1; 2]), u64::MAX, false),
-        (GasUnit::<2>::from([1, 2]), u64::MAX, false),
-        (GasUnit::<2>::from([2; 2]), u64::MAX, false),
-    ];
-    for (gas, buf_len, should_succeed) in cases {
-        assert_eq!(
-            total_deserialization_cost::<S>(gas, buf_len).is_ok(),
-            should_succeed
-        );
-    }
+fn test_metered_deserializer_charges_per_byte_and_per_read() {
+    set_borsh_read_constants("[10, 10]", "[5, 5]");
+
+    let data = TEST_BORSH_STRUCT;
+    let serialized = borsh::to_vec(&data).unwrap();
+    let total = gas_cost_for_borsh_test_struct().value(TEST_GAS_PRICE);
+
+    let mut ws = create_working_set(total, &TEST_GAS_PRICE);
+    let decoded: BorshTestStruct =
+        <BorshTestStruct as MeteredBorshDeserialize>::deserialize_from_slice(
+            &mut serialized.as_slice(),
+            &mut ws,
+        )
+        .unwrap();
+    assert_eq!(decoded, data);
+
+    // One unit short — the per-read accounting must actually have fired for this to fail.
+    let mut ws = create_working_set(total.checked_sub(Amount::new(1)).unwrap(), &TEST_GAS_PRICE);
+    let result = <BorshTestStruct as MeteredBorshDeserialize>::deserialize_from_slice(
+        &mut serialized.as_slice(),
+        &mut ws,
+    );
+    assert!(matches!(
+        result,
+        Err(MeteredBorshDeserializeError::GasError(..))
+    ));
 }
 
-use crate::{GasMeteringError, GasSpec};
-fn total_deserialization_cost<S: Spec>(
-    deserialization_cost: S::Gas,
-    buf_len: u64,
-) -> Result<S::Gas, MeteredBorshDeserializeError<S::Gas>> {
-    deserialization_cost
-        .checked_scalar_product(buf_len)
-        .ok_or(MeteredBorshDeserializeError::GasError(
-            GasMeteringError::Overflow(
-                "Deserialization cost overflows `u64::MAX` value".to_string(),
-            ),
-        ))?
-        .checked_combine(S::bias_borsh_deserialization())
-        .ok_or(MeteredBorshDeserializeError::GasError(
-            GasMeteringError::Overflow(
-                "Deserialization cost overflows `u64::MAX` value".to_string(),
-            ),
-        ))
+#[test]
+fn test_metered_deserializer_advances_buf_by_bytes_consumed() {
+    let data = TEST_BORSH_STRUCT;
+    let mut serialized = borsh::to_vec(&data).unwrap();
+    let tail = [0xAB, 0xCD, 0xEF];
+    serialized.extend_from_slice(&tail);
+
+    let mut ws = create_working_set(
+        gas_cost_for_borsh_test_struct().value(TEST_GAS_PRICE),
+        &TEST_GAS_PRICE,
+    );
+
+    let mut buf: &[u8] = &serialized;
+    let decoded =
+        <BorshTestStruct as MeteredBorshDeserialize>::deserialize_from_slice(&mut buf, &mut ws)
+            .unwrap();
+    assert_eq!(decoded, data);
+    assert_eq!(
+        buf, &tail,
+        "deserialize_from_slice must advance *buf by exactly the bytes consumed"
+    );
 }
 
-fn gas_cost_to_deserialize<S: Spec>(
-    buf: &[u8],
-) -> Result<S::Gas, MeteredBorshDeserializeError<S::Gas>> {
-    let deserialization_cost = S::gas_to_charge_per_byte_borsh_deserialization();
+#[test]
+fn test_metered_deserializer_recovers_gas_error_mid_decode() {
+    set_borsh_read_constants("[10, 10]", "[5, 5]");
 
-    total_deserialization_cost::<S>(deserialization_cost, buf.len() as u64)
+    let data = TEST_BORSH_STRUCT;
+    let serialized = borsh::to_vec(&data).unwrap();
+
+    // Budget entry bias + exactly one read. The second field's read_exact must
+    // exhaust gas mid-decode; `deserialize_from_slice` must downcast the resulting
+    // io::Error back into a typed GasError rather than surface it as IOError.
+    let one_read = super::budget_for_reader_calls(
+        <S as GasSpec>::gas_to_charge_per_byte_borsh_read(),
+        <S as GasSpec>::bias_borsh_per_read(),
+        &[4],
+    );
+    let budget = <S as GasSpec>::bias_borsh_deserialization()
+        .checked_combine(one_read)
+        .unwrap()
+        .value(TEST_GAS_PRICE);
+
+    let mut ws = create_working_set(budget, &TEST_GAS_PRICE);
+    let result = <BorshTestStruct as MeteredBorshDeserialize>::deserialize_from_slice(
+        &mut serialized.as_slice(),
+        &mut ws,
+    );
+    assert!(matches!(
+        result,
+        Err(MeteredBorshDeserializeError::GasError(..))
+    ));
 }
