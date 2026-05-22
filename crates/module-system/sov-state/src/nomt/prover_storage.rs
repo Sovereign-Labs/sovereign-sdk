@@ -362,14 +362,9 @@ where
             version,
         )
         .expect("historical state db materialization must succeed");
-        let accessory_batch = AccessoryDb::materialize_values(
-            accessory_writes
-                .ordered_writes
-                .into_iter()
-                .map(|(k, v_opt)| (k, v_opt.map(|v| v.into_bytes()))),
-            version,
-        )
-        .expect("accessory db materialization must succeed");
+        let accessory_batch =
+            AccessoryDb::materialize_values(accessory_writes.ordered_writes.into_iter(), version)
+                .expect("accessory db materialization must succeed");
         // Erase the type of the pinned cache since the storage manager isn't aware of it.
         let pinned_cache = pinned_cache.map(|c| Box::new(c) as Box<dyn Any + Send + Sync>);
         NomtChangeSet {

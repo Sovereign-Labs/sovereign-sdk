@@ -36,6 +36,7 @@ use super::types::{
     LatestFinalizedSlotSingleton, ProofUniqueId, StateRootHashId, StfInfoUniqueId, StoredBatch,
     StoredSlot, StoredStfInfo, StoredTransaction, TxNumber,
 };
+use crate::schema::types::slot_key::SlotValue;
 use crate::schema::types::{DiscardedBlobNumber, StoredDiscardedBlob};
 
 /* Other tables used by the Rollup */
@@ -356,6 +357,18 @@ impl ValueCodec<ModuleAccessoryState> for AccessoryStateValue {
 
     fn decode_value(data: &[u8]) -> rockbound::schema::Result<Self> {
         Ok(Self::deserialize_reader(&mut &data[..])?)
+    }
+}
+
+impl ValueCodec<ModuleAccessoryState> for Option<SlotValue> {
+    fn encode_value(&self) -> rockbound::schema::Result<Vec<u8>> {
+        let view: Option<&[u8]> = self.as_ref().map(|v| v.value());
+        borsh::to_vec(&view).map_err(CodecError::from)
+    }
+
+    fn decode_value(data: &[u8]) -> rockbound::schema::Result<Self> {
+        let opt = <Option<Vec<u8>>>::deserialize_reader(&mut &data[..])?;
+        Ok(opt.map(SlotValue::from))
     }
 }
 

@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
 use rockbound::cache::delta_reader::DeltaReader;
+use rockbound::schema::ValueCodec;
 use rockbound::{rocksdb, SchemaBatch};
 use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
 
@@ -55,10 +56,14 @@ impl AccessoryDb {
     }
 
     /// Collects a sequence of key-value pairs into [`SchemaBatch`].
-    pub fn materialize_values<K: AsRef<[u8]> + core::fmt::Debug>(
-        key_value_pairs: impl IntoIterator<Item = (K, AccessoryStateValue)>,
+    pub fn materialize_values<K, V>(
+        key_value_pairs: impl IntoIterator<Item = (K, V)>,
         version: SlotNumber,
-    ) -> anyhow::Result<SchemaBatch> {
+    ) -> anyhow::Result<SchemaBatch>
+    where
+        K: AsRef<[u8]> + core::fmt::Debug,
+        V: ValueCodec<ModuleAccessoryState>,
+    {
         let mut batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
             let key_bytes = key.as_ref();
@@ -174,9 +179,36 @@ impl AccessoryDb {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::types::slot_key::SlotValue;
     use crate::schema::types::AccessoryKey;
     use sov_rollup_interface::common::IntoSlotNumber;
     use std::{collections::HashMap, sync::Arc};
+
+    #[test]
+    fn materialize_with_slot_value_round_trips() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let rocksdb = Arc::new(
+            AccessoryDb::get_rockbound_options()
+                .default_setup_db_as_subdir(tempdir.path())
+                .unwrap(),
+        );
+        let reader = DeltaReader::new(rocksdb.clone(), Vec::new());
+        let db = AccessoryDb::with_reader(reader).unwrap();
+
+        let key = b"sv-key".to_vec();
+        let value = vec![0x12, 0x34, 0x56, 0x78];
+        let changes = AccessoryDb::materialize_values(
+            vec![(key.clone(), Some(SlotValue::from(value.clone())))],
+            0.to_slot_number(),
+        )
+        .unwrap();
+        rocksdb.write_schemas(&changes).unwrap();
+        assert_eq!(
+            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number())
+                .unwrap(),
+            Some(value)
+        );
+    }
 
     #[test]
     fn get_after_set() {
@@ -242,8 +274,11 @@ mod tests {
             Some(value.clone())
         );
 
-        let changes2 =
-            AccessoryDb::materialize_values(vec![(key.clone(), None)], 0.to_slot_number()).unwrap();
+        let changes2 = AccessoryDb::materialize_values(
+            vec![(key.clone(), AccessoryStateValue::None)],
+            0.to_slot_number(),
+        )
+        .unwrap();
         rocksdb.write_schemas(&changes2).unwrap();
         assert_eq!(
             db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number())
