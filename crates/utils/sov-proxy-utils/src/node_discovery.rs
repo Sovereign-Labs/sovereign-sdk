@@ -77,6 +77,8 @@ enum HandleClusterUpdateError {
     GetClusterInfo(#[source] anyhow::Error),
     #[error("Failed to notify on cluster update")]
     Notify(#[source] anyhow::Error),
+    #[error("Failed to receive cluster notification")]
+    RecvNotification(#[source] anyhow::Error),
 }
 
 impl HandleClusterUpdateError {
@@ -84,7 +86,19 @@ impl HandleClusterUpdateError {
         match self {
             Self::GetClusterInfo(_) => "get_cluster_info",
             Self::Notify(_) => "notify",
+            Self::RecvNotification(_) => "recv_notification",
         }
+    }
+
+    /// Logs the failure, records a failure metric, and backs off before the
+    /// caller's next retry.
+    async fn report_and_backoff(&self) {
+        let stage = self.stage();
+        tracing::warn!(stage, error = ?self, "Cluster update failed");
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(ClusterUpdateFailureMetric { stage });
+        });
+        tokio::time::sleep(Duration::from_millis(1000)).await;
     }
 }
 
@@ -202,17 +216,13 @@ impl NodeDiscovery {
         let handle = tokio::spawn(async move {
             loop {
                 if let Err(error) = self.handle_cluster_update().await {
-                    let stage = error.stage();
-
-                    tracing::warn!(stage, ?error, "Cluster update failed");
-                    sov_metrics::track_metrics(|tracker| {
-                        tracker.submit(ClusterUpdateFailureMetric { stage });
-                    });
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                    error.report_and_backoff().await;
                 }
 
                 // Wait for the next change signal, or re-poll after poll_interval.
-                self.recv_notification().await;
+                if let Err(error) = self.recv_notification().await {
+                    error.report_and_backoff().await;
+                }
 
                 // Drain any additional pending notifications.
                 while self.listener.next_buffered().is_some() {}
@@ -224,7 +234,7 @@ impl NodeDiscovery {
 
     /// Waits once for the next cluster change signal before returning to the
     /// caller's loop, which always re-polls cluster info.
-    async fn recv_notification(&mut self) {
+    async fn recv_notification(&mut self) -> Result<(), HandleClusterUpdateError> {
         let poll_interval = self.poll_interval;
         match tokio::time::timeout(poll_interval, self.listener.try_recv()).await {
             // A notification arrived — re-poll.
@@ -247,15 +257,10 @@ impl NodeDiscovery {
                 );
             }
             Ok(Err(error)) => {
-                tracing::warn!(?error, "Failed to receive cluster notification, retrying");
-                sov_metrics::track_metrics(|tracker| {
-                    tracker.submit(ClusterUpdateFailureMetric {
-                        stage: "recv_notification",
-                    });
-                });
-                tokio::time::sleep(Duration::from_millis(1000)).await;
+                return Err(HandleClusterUpdateError::RecvNotification(error.into()));
             }
         }
+        Ok(())
     }
 
     async fn handle_cluster_update(&mut self) -> Result<(), HandleClusterUpdateError> {
