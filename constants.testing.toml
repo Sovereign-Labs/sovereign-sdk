@@ -125,25 +125,14 @@ PROCESS_TX_PRE_EXEC_GAS = [1, 1]
 PROCESS_TX_PRE_EXEC_GAS_PER_TX_BYTE = [1, 1]
 # --- End Gas parameters to specify how to charge gas for signature verification ---
 
-# The cost of deserializing a message using Borsh
-DEFAULT_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
+# --- Borsh deserialization gas constants ---
 BIAS_BORSH_DESERIALIZATION = [1, 1]
+BORSH_PER_BYTE_READ = [1, 1]
+BORSH_PER_READ_BIAS = [0, 0]
 
-# The cost of deserializing a tx using Borsh
-TX_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
-TX_BIAS_BORSH_DESERIALIZATION = [1, 1]
-
-# The cost of deserializing a tx using Borsh
+# --- JSON deserialization gas constants ---
 TX_GAS_TO_CHARGE_PER_BYTE_JSON_DESERIALIZATION = [1, 1]
 TX_BIAS_JSON_DESERIALIZATION = [1, 1]
-
-# The cost of deserializing a proof using Borsh
-PROOF_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
-PROOF_BIAS_BORSH_DESERIALIZATION = [1, 1]
-
-# The cost of deserializing a string using Borsh
-STRING_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
-STRING_BIAS_BORSH_DESERIALIZATION = [1, 1]
 
 # The amount of gas to charge per zk-proof byte
 GAS_TO_CHARGE_PER_PROOF_BYTE = [1, 1]

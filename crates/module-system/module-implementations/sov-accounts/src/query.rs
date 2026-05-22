@@ -124,7 +124,7 @@ mod tests {
         let kernel = Arc::new(MockKernel::<S>::default());
         let storage = SimpleStorageManager::new().create_storage();
         let checkpoint = Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-            StateCheckpoint::<S>::new(storage, kernel.as_ref(), None),
+            StateCheckpoint::<S>::new(storage, kernel.as_ref()),
         ));
         let (_sender, receiver) = sov_modules_api::prelude::tokio::sync::watch::channel(checkpoint);
 
