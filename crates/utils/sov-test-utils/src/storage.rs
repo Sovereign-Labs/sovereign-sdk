@@ -70,7 +70,6 @@ pub struct SimpleStorageManager<S: MerkleProofSpec> {
     accessory: Arc<rockbound::DB>,
     root: StorageRoot<S>,
     is_strict_mode: bool,
-    with_witness: bool,
 }
 
 impl<S: MerkleProofSpec> SimpleStorageManager<S> {
@@ -93,18 +92,12 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             accessory: Arc::new(accessory_rocksdb),
             root: <NomtProverStorage<S, TestSlotHash> as Storage>::PRE_GENESIS_ROOT,
             is_strict_mode: true,
-            with_witness: true,
         }
     }
 
     /// Change in which mode storage is going to be created.
     pub fn set_strict_mode(&mut self, use_strict_mode: bool) {
         self.is_strict_mode = use_strict_mode;
-    }
-
-    /// Set witness generation independently from strict mode.
-    pub fn set_witness_generation(&mut self, with_witness: bool) {
-        self.with_witness = with_witness;
     }
 
     /// Create a new [`NomtProverStorage`] that has a view only on data written to disc.
@@ -135,13 +128,12 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             AccessoryDb::with_reader(DeltaReader::new(self.accessory.clone(), Vec::new()))
                 .expect("Failed to create accessory db");
 
-        let witness_mode = WitnessMode::from_bool(self.with_witness);
         NomtProverStorage::create(
             state_session_builder,
             historical_state_reader,
             accessory_db,
             self.is_strict_mode,
-            witness_mode,
+            WitnessMode::On,
         )
     }
 
