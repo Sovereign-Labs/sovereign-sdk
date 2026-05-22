@@ -9,10 +9,9 @@ use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::macros::{serialize, UniversalWallet};
 use sov_modules_api::{
-    AccessoryStateMap, AccessoryStateValue, Context, CryptoSpec, DaSpec, GasSpec, GenesisState,
-    MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher, MeteredSignature, Module,
-    ModuleId, ModuleInfo, ModuleRestApi, SafeVec, SizedSafeString, Spec, StateMap, StateValue,
-    StateVec, TxState,
+    AccessoryStateMap, AccessoryStateValue, Context, CryptoSpec, DaSpec, GenesisState,
+    MeteredBorshDeserialize, MeteredHasher, MeteredSignature, Module, ModuleId, ModuleInfo,
+    ModuleRestApi, SafeVec, SizedSafeString, Spec, StateMap, StateValue, StateVec, TxState,
 };
 use strum::{EnumDiscriminants, EnumIs, VariantArray};
 
@@ -20,41 +19,6 @@ use strum::{EnumDiscriminants, EnumIs, VariantArray};
 pub const MAX_VEC_LEN_BENCH: usize = 100_000;
 /// Max length of a string for a bench pattern call message
 pub const MAX_STR_LEN_BENCH: usize = 1_024;
-
-/// A newtype struct that deserializes into a string and charges gas.
-#[derive(BorshSerialize, BorshDeserialize, Debug, Clone)]
-pub struct MeteredBorshDeserializeString(pub String);
-
-impl<S: Spec> MeteredBorshDeserialize<S> for MeteredBorshDeserializeString {
-    fn deserialize(
-        buf: &mut &[u8],
-        meter: &mut impl sov_modules_api::GasMeter<Spec = S>,
-    ) -> Result<
-        Self,
-        sov_modules_api::MeteredBorshDeserializeError<<S as sov_modules_api::GasSpec>::Gas>,
-    > {
-        sov_modules_api::charge_gas_to_deserialize(
-            <S as GasSpec>::string_bias_borsh_deserialization(),
-            <S as GasSpec>::string_gas_to_charge_per_byte_borsh_deserialization(),
-            buf.len(),
-            meter,
-        )?;
-
-        <MeteredBorshDeserializeString as BorshDeserialize>::deserialize(buf)
-            .map_err(MeteredBorshDeserializeError::IOError)
-    }
-
-    #[cfg(feature = "native")]
-    fn unmetered_deserialize(
-        buf: &mut &[u8],
-    ) -> Result<
-        Self,
-        sov_modules_api::MeteredBorshDeserializeError<<S as sov_modules_api::GasSpec>::Gas>,
-    > {
-        <MeteredBorshDeserializeString as BorshDeserialize>::deserialize(buf)
-            .map_err(MeteredBorshDeserializeError::IOError)
-    }
-}
 
 /// Call message to specify storage access patterns.
 #[derive(Debug, Clone, JsonSchema, EnumDiscriminants, EnumIs, Derivative, UniversalWallet)]
@@ -384,21 +348,24 @@ impl<S: Spec> AccessPattern<S> {
                     .iter(state)?
                     .collect::<Result<Vec<_>, _>>()?;
 
-                let deserialized_string: MeteredBorshDeserializeString =
-                    MeteredBorshDeserialize::deserialize(&mut serialized_bytes.as_ref(), state)
+                let deserialized_string: String = MeteredBorshDeserialize::deserialize_from_slice(
+                    &mut serialized_bytes.as_ref(),
+                    state,
+                )
+                .with_context(|| {
+                    "access-pattern: Impossible to deserialize the input bytes to string"
+                })?;
+
+                self.deserialized_bytes.set(&deserialized_string, state)?;
+            }
+            AccessPatternMessages::DeserializeCustomString { input } => {
+                let deserialized_string: String =
+                    MeteredBorshDeserialize::deserialize_from_slice(&mut input.as_ref(), state)
                         .with_context(|| {
                             "access-pattern: Impossible to deserialize the input bytes to string"
                         })?;
 
-                self.deserialized_bytes.set(&deserialized_string.0, state)?;
-            }
-            AccessPatternMessages::DeserializeCustomString { input } => {
-                let deserialized_string: MeteredBorshDeserializeString =
-                    MeteredBorshDeserialize::deserialize(&mut input.as_ref(), state).with_context(
-                        || "access-pattern: Impossible to deserialize the input bytes to string",
-                    )?;
-
-                self.deserialized_bytes.set(&deserialized_string.0, state)?;
+                self.deserialized_bytes.set(&deserialized_string, state)?;
             }
             AccessPatternMessages::StoreSerializedString { input } => {
                 self.serialized_bytes.clear(state)?;

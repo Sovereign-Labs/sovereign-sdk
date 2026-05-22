@@ -188,7 +188,7 @@ where
         let kernel = crate::MigrationKernel {
             chain_state: &*chain_state,
         };
-        sov_modules_api::StateCheckpoint::new(storage, &kernel, None)
+        sov_modules_api::StateCheckpoint::new(storage, &kernel)
     };
     let migration_report = apply(accounts, chain_state, migration_data, &mut checkpoint)?;
 
