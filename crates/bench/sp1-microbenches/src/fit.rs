@@ -1,8 +1,4 @@
 //! Ordinary least squares fit of the cost model `cost = bias + per_byte * input_size`.
-//!
-//! Host-only post-processing of benchmark results — never compiled into the zkVM guest, so
-//! the workspace `clippy::float_arithmetic` deny (which exists to prevent native/zkVM
-//! divergence) doesn't apply here.
 
 #![allow(clippy::float_arithmetic)]
 
@@ -10,13 +6,13 @@ use crate::BenchResult;
 
 #[derive(Debug, Clone)]
 pub struct LinearFit {
-    /// Intercept of the fitted line: estimated per-call fixed overhead (cost at input_size = 0).
+    /// Intercept: per-call fixed overhead (cost at input_size = 0).
     pub bias: f64,
-    /// Slope of the fitted line: estimated marginal cost per byte of input.
+    /// Slope: marginal cost per byte.
     pub per_byte: f64,
-    /// Coefficient of determination; 1.0 means the line explains the data perfectly, 0.0 means it explains none of the variation.
+    /// Coefficient of determination (1.0 = perfect fit).
     pub r_squared: f64,
-    /// Largest absolute deviation between any measured point and the fitted line, in the cost's units.
+    /// Largest absolute deviation from the fitted line.
     pub max_residual: f64,
 }
 
@@ -27,20 +23,8 @@ pub fn fit_prover_gas_per_byte(results: &[BenchResult]) -> anyhow::Result<Linear
     fit_linear(&input_sizes, &prover_gas)
 }
 
-/// Given a list of `(input_size, measured_cost)` points, find the straight line that best
-/// describes their relationship.
-///
-/// We use this to extract the two numbers our gas model needs: a per-call fixed overhead
-/// (the line's intercept, surfaced as `bias`) and a per-byte marginal cost (the line's slope,
-/// surfaced as `per_byte`). Together they let us charge gas with one formula:
-/// `cost = bias + per_byte × size`.
-///
-/// "Best" means ordinary least squares: pick the line that minimises the sum of the squared
-/// vertical distances from each data point to the line.
-///
-/// Implemented ourselves rather than pulled from `linregress` or `linfa`: single-regressor OLS
-/// is a few lines of closed-form arithmetic, we don't need confidence intervals or p-values,
-/// and avoiding the dependency keeps `ndarray` and friends out of the build graph.
+/// Ordinary least squares fit of `cost = bias + per_byte * input_size`. Hand-rolled
+/// (single-regressor OLS is closed-form) to avoid pulling in `ndarray`-heavy regression crates.
 pub fn fit_linear(inputs: &[f64], measurements: &[f64]) -> anyhow::Result<LinearFit> {
     if inputs.len() < 2 {
         anyhow::bail!(
@@ -99,9 +83,7 @@ mod tests {
 
     #[test]
     fn recovers_line_and_residual_on_noisy_data() {
-        // y = 2x with a +1 perturbation at x=mean_x. Perturbing at the mean leaves slope
-        // unaffected (the (x-mean_x)(y-mean_y) covariance term is zero there), so we get a
-        // clean closed-form check: slope=2, bias=0.2, max_residual=0.8.
+        // y = 2x perturbed +1 at the mean x (keeps the slope clean): slope=2, bias=0.2, residual=0.8.
         let xs = [0.0, 1.0, 2.0, 3.0, 4.0];
         let ys = [0.0, 2.0, 5.0, 6.0, 8.0];
 
@@ -123,7 +105,6 @@ mod tests {
 
     #[test]
     fn constant_y_uses_zero_variance_branch() {
-        // total_sum_of_squares == 0; the implementation special-cases this to R²=1 instead of NaN.
         let fit = fit_linear(&[0.0, 1.0, 2.0], &[5.0, 5.0, 5.0]).unwrap();
         assert!(
             close(fit.r_squared, 1.0),
@@ -145,7 +126,6 @@ mod tests {
 
     #[test]
     fn errors_on_identical_x() {
-        // Zero variance in x — slope is undefined; must bail rather than NaN out.
         assert!(fit_linear(&[3.0, 3.0, 3.0], &[1.0, 2.0, 3.0]).is_err());
     }
 }

@@ -1,5 +1,4 @@
-// Host-only benchmark harness; the workspace `clippy::float_arithmetic` deny exists to prevent
-// native/zkVM divergence, which doesn't apply here.
+// Host-only harness; the workspace `clippy::float_arithmetic` deny targets zkVM code, not this.
 #![allow(clippy::float_arithmetic)]
 
 pub mod cmd;
@@ -37,8 +36,7 @@ pub fn load_guest_elf(path: &str) -> anyhow::Result<Elf> {
     Ok(Elf::from(bytes))
 }
 
-/// Rounds a calibrated cost to the single metered gas dimension (the other dimension is 0),
-/// never flooring a positive cost to zero.
+/// Rounds a cost for the single metered dimension, never flooring a positive cost to zero.
 pub fn round_at_least_one(total: f64) -> u64 {
     let rounded = total.round() as u64;
     if total > 0.0 && rounded == 0 {

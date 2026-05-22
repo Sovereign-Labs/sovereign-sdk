@@ -17,8 +17,7 @@ const MODE_READER_BYTES: u8 = 0;
 const MODE_READER_COUNT: u8 = 1;
 const MODE_DECODE_VEC: u8 = 2;
 
-// Source buffers in reader-bytes / reader-count are sized to these regardless of the sweep
-// point so guest setup cost (vec alloc + init) is N-independent.
+// Sized to the sweep max regardless of n, so setup cost stays N-independent.
 const MAX_BYTES: usize = 65536;
 const MAX_READS: usize = 512;
 

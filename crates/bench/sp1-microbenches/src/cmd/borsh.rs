@@ -29,9 +29,7 @@ pub struct BorshArgs {
     pub baseline_iterations: u32,
 }
 
-/// Runs the three borsh sweeps in sequence and prints the final calibrated constants. The
-/// constants are coupled — `per_read_bias` and `bias_borsh_deserialization` are derived by
-/// subtracting the earlier sweeps' slopes — so they are always calibrated together.
+/// Runs the three borsh sweeps in order; each constant nets out the earlier sweeps' costs.
 pub fn run(args: BorshArgs) -> anyhow::Result<()> {
     let BorshArgs {
         iterations,
@@ -99,7 +97,9 @@ pub fn run(args: BorshArgs) -> anyhow::Result<()> {
         fit_decode.per_byte
     );
 
-    println!("\nSuggested constants.toml values (full value charged to a single dimension, rounded ≥1):");
+    println!(
+        "\nSuggested constants.toml values (full value charged to a single dimension, rounded ≥1):"
+    );
     let pbr = round_at_least_one(per_byte_read);
     let prb = round_at_least_one(per_read_bias);
     let bbd = round_at_least_one(bias_borsh_deserialization);
@@ -110,14 +110,8 @@ pub fn run(args: BorshArgs) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Runs the high/low iteration sweep, differences out setup cost, fits a line, and prints the
-/// raw + differential tables. `run` calls this once per sweep (reader-bytes, reader-count,
-/// decode-vec) with its mode-specific stdin payload via `write_payload`.
-///
-/// `write_payload` writes the per-sweep-point payload to `stdin` (after the common mode and
-/// iteration-count writes) and returns the `input_size` to record in the `BenchResult`. For
-/// reader-bytes/reader-count this is just the sweep value; for decode-vec it's the encoded
-/// buffer length.
+/// Runs the high/low-iteration sweep, differences out per-execution setup, fits a line, and
+/// prints the tables. `write_payload` writes each point's stdin payload and returns its input size.
 fn run_sweep<W>(
     name: &str,
     sizes: &[u32],
