@@ -444,10 +444,9 @@ fn get_saved_root_hash(
 
     let ledger_db = LedgerDb::with_reader(ledger_state)?;
 
-    ledger_db
+    Ok(ledger_db
         .get_head_slot()?
-        .map(|(number, _)| stf_state.get_root_hash(number))
-        .transpose()
+        .and_then(|(number, _)| stf_state.get_root_hash(number)))
 }
 
 fn get_expected_execution_hash_from(

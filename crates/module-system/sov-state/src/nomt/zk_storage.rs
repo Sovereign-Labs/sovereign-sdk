@@ -217,11 +217,11 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
         unimplemented!("The NomtVerifierStorage should not be used to generate merkle proofs! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 
-    fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
+    fn get_root_hash(&self, version: SlotNumber) -> Option<Self::Root> {
         self.get_root_hash_unbound(version)
     }
 
-    fn get_root_hash_unbound(&self, _version: SlotNumber) -> anyhow::Result<Self::Root> {
+    fn get_root_hash_unbound(&self, _version: SlotNumber) -> Option<Self::Root> {
         unimplemented!("The NomtVerifierStorage should not be used to get root hash! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 

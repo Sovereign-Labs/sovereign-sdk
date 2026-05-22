@@ -883,18 +883,17 @@ where
         }
     }
 
-    fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
-        let version_to_use = match self.get_version_to_use(Some(version)) {
-            None => {
-                // Keep the historical error message stable.
-                anyhow::bail!("Root node not found for version {}.", version)
-            }
-            Some(v) => v,
-        }
-        .unwrap_or(self.latest_version());
+    fn get_root_hash(&self, version: SlotNumber) -> Option<Self::Root> {
+        let version_to_use = self
+            .get_version_to_use(Some(version))?
+            .unwrap_or(self.latest_version());
         let storage_root_historical = self.get_root_hash_unbound(version_to_use)?;
+
         if self.should_check_dbs_sync(version_to_use) {
-            let session_container = self.state_session_builder.begin_both_sessions(false)?;
+            let session_container = self
+                .state_session_builder
+                .begin_both_sessions(false)
+                .expect("Failed to open NOMT sessions for dbs-sync check");
             let user_root = session_container.user.prev_root();
             let kernel_root = session_container.kernel.prev_root();
             drop(session_container);
@@ -905,18 +904,18 @@ where
             );
         }
 
-        Ok(storage_root_historical)
+        Some(storage_root_historical)
     }
 
-    fn get_root_hash_unbound(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
+    fn get_root_hash_unbound(&self, version: SlotNumber) -> Option<Self::Root> {
         let raw_root = self
             .historical_state
-            .get_serialized_root_hash(version)?
-            .context(format!("Root hash not found for version {version}."))?;
-        let storage_root_historical =
+            .get_serialized_root_hash(version)
+            .expect("Failed to read root hash from historical state")?;
+        let storage_root_historical: Self::Root =
             borsh::from_slice(&raw_root).expect("Failed to deserialize root hash");
         tracing::trace!(%version, root_hash = %storage_root_historical, "Got unbound root hash");
-        Ok(storage_root_historical)
+        Some(storage_root_historical)
     }
 
     fn get_unbound<N: CompileTimeNamespace>(&self, key: SlotKey) -> Option<SlotValue> {

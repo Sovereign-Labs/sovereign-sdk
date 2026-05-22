@@ -396,20 +396,29 @@ pub trait NativeStorage: Storage {
     ) -> anyhow::Result<ProofOutput<Self>>;
 
     /// Get the *global* root hash of the tree at the requested version.
-    /// Returns an error if storage is empty or the requests version is not yet available.
-    fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root>;
+    ///
+    /// `version` is interpreted as a post-commit version: the returned root is the state
+    /// *after* the X-th commit was applied. Returns `Some(root)` iff a root has been committed
+    /// at `version`, else `None`.
+    ///
+    /// Note: [`Self::PRE_GENESIS_ROOT`] is a separately-managed sentinel for "before any commits";
+    /// it is not retrievable through this method. Callers that want a pre-genesis fallback should
+    /// use `.unwrap_or(Self::PRE_GENESIS_ROOT)`.
+    fn get_root_hash(&self, version: SlotNumber) -> Option<Self::Root>;
 
     /// Get the *global* root hash of the tree at the requested version.
-    /// Requested version won't be checked against latest version of this instance of the storage.
-    fn get_root_hash_unbound(&self, version: SlotNumber) -> anyhow::Result<Self::Root>;
+    ///
+    /// The requested version is not checked against the latest version of this instance.
+    /// Returns `Some(root)` iff a root has been committed for that version, else `None`.
+    fn get_root_hash_unbound(&self, version: SlotNumber) -> Option<Self::Root>;
 
-    /// Get a root hash at the latest version
-    fn get_latest_root_hash(&self) -> anyhow::Result<Self::Root> {
+    /// Get the root hash at the latest version.
+    fn get_latest_root_hash(&self) -> Option<Self::Root> {
         self.get_root_hash(self.latest_version())
     }
 
-    /// Get a root hash at the latest version
-    fn get_latest_root_hash_unbound(&self) -> anyhow::Result<Self::Root> {
+    /// Get the root hash at the latest version (unbound).
+    fn get_latest_root_hash_unbound(&self) -> Option<Self::Root> {
         self.get_root_hash_unbound(self.latest_version_unbound())
     }
     /// Get the latest committed value for the given key, regardless of the version number associated with this storage.

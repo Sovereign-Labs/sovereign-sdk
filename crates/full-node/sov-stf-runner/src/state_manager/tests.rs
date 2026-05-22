@@ -3,6 +3,7 @@ use std::num::NonZero;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
+use anyhow::Context as _;
 use futures::StreamExt;
 use proptest::prelude::*;
 use rand::{Rng, SeedableRng};
@@ -336,7 +337,9 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
             )
             .await?;
             let received_storage = state_update_receiver.borrow().storage.clone();
-            let received_storage_root = received_storage.get_latest_root_hash()?;
+            let received_storage_root = received_storage
+                .get_latest_root_hash()
+                .context("received storage must have a root")?;
             assert_eq!(current_state_root, received_storage_root);
             post_state_roots.push(current_state_root);
             hash_to_post_state_root.insert(block_hash, current_state_root);
@@ -373,7 +376,9 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
                 "Expected (left) state root does not match actual(right) from KnownContinuation. All state roots: {post_state_roots:?}");
 
             // State update is not called during re-org detection. So we process transition first
-            let _returned_storage_prev_root = prover_storage.get_latest_root_hash()?;
+            let _returned_storage_prev_root = prover_storage
+                .get_latest_root_hash()
+                .context("prover storage must have a root")?;
             // TODO: Should we check this prev_root against something
 
             let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
@@ -399,7 +404,10 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
             check_internal_consistency(&state_manager, finality as usize);
 
             let received_update_info = state_update_receiver.borrow().clone();
-            let received_storage_root = received_update_info.storage.get_latest_root_hash()?;
+            let received_storage_root = received_update_info
+                .storage
+                .get_latest_root_hash()
+                .context("received update info storage must have a root")?;
             assert_eq!(final_state_root, received_storage_root);
         }
     }
