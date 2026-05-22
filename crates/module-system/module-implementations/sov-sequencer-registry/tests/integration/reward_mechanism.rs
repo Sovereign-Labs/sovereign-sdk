@@ -85,7 +85,7 @@ fn reward_mechanism_test(
             .with_max_priority_fee_bips(max_priority_fee),
         assert: Box::new(move |result, state| {
             let gas_price = state.gas_price();
-            let sequencer_burn = S::gas_to_charge_per_byte_borsh_deserialization()
+            let sequencer_burn = S::gas_to_charge_per_byte_borsh_read()
                 .checked_scalar_product(result.blob_info.size as u64)
                 .unwrap()
                 .checked_value(gas_price)

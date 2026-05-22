@@ -36,7 +36,7 @@ fn check_txs(tx_statuses: Vec<TxStatus>, priority_fee_bips: PriorityFeeBips) {
         runner.config.sequencer_da_address,
     );
     // The gas amount burned by the sequencer to submit the blob. See #2491
-    let seq_burn_gas = <S as GasSpec>::gas_to_charge_per_byte_borsh_deserialization()
+    let seq_burn_gas = <S as GasSpec>::gas_to_charge_per_byte_borsh_read()
         .checked_scalar_product(mock_blob.total_len() as u64)
         .unwrap();
 
@@ -203,7 +203,7 @@ fn non_existing_seq_da_tests() {
 #[test]
 fn sequencer_run_out_of_gas() {
     env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION",
+        "SOV_TEST_CONST_OVERRIDE_BORSH_PER_BYTE_READ",
         "[100000, 100000]",
     );
 
