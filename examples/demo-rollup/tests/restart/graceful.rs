@@ -718,7 +718,7 @@ async fn try_to_clog_channel_instant_finality(operating_mode: OperatingMode) -> 
     // We assume that each restart we produce 1 extra STF info with 10% probability
     let restarts = 50;
     // Submission to MockDa is faster than processing single slot
-    // and with more data in StateDb single slot processing time should slightly degrade
+    // and with more data in storage, single slot processing time should slightly degrade
     let blocks_per_start = 30;
 
     // Never produce aggregated proof
@@ -762,7 +762,7 @@ async fn flaky_try_to_clog_db_zk_instant_finality() -> anyhow::Result<()> {
     // We assume that each restart we produce 1 extra STF info with 10% probability
     let restarts = 50;
     // Submission to MockDa is faster than processing a single slot,
-    // and with more data in StateDb single slot processing time should slightly degrade
+    // and with more data in storage, single slot processing time should slightly degrade
     let blocks_per_start = 30;
 
     // Never produce aggregated proof

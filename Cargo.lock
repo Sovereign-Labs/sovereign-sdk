@@ -4987,15 +4987,6 @@ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hashbrown"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
-dependencies = [
- "ahash",
-]
-
-[[package]]
-name = "hashbrown"
 version = "0.14.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e5274423e17b7c9fc20b6e7e208532f9b19825d82dfd615708b70edd83df41f1"
@@ -5749,27 +5740,6 @@ name = "itoa"
 version = "1.0.15"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4a5f13b858c8d314ee3e8f639011f7ccefe71f97f96e50151fb991f267928e2c"
-
-[[package]]
-name = "jmt"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b37ade62ca224945201e0c6d65e7a389ada90217895f7aa281470212ce4dddb0"
-dependencies = [
- "anyhow",
- "borsh",
- "digest 0.10.7",
- "hashbrown 0.13.2",
- "hex",
- "itertools 0.10.5",
- "mirai-annotations",
- "num-derive 0.3.3",
- "num-traits",
- "serde",
- "sha2 0.10.9",
- "thiserror 1.0.69",
- "tracing",
-]
 
 [[package]]
 name = "jni"
@@ -6679,12 +6649,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mirai-annotations"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9be0862c1b3f26a88803c4a49de6889c10e608b3ee9344e6ef5b45fb37ad3d1"
-
-[[package]]
 name = "module-template"
 version = "0.3.0"
 dependencies = [
@@ -6930,17 +6894,6 @@ name = "num-conv"
 version = "0.2.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c6673768db2d862beb9b39a78fdcb1a69439615d5794a1be50caa9bc92c81967"
-
-[[package]]
-name = "num-derive"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "876a53fff98e03a936a674b29568b0e605f06b29372c2489ff4de23f1949743d"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
 
 [[package]]
 name = "num-derive"
@@ -9228,7 +9181,7 @@ dependencies = [
  "gdbstub",
  "gdbstub_arch",
  "malachite",
- "num-derive 0.4.2",
+ "num-derive",
  "num-traits",
  "paste",
  "postcard",
@@ -11362,7 +11315,6 @@ dependencies = [
  "digest 0.10.7",
  "futures",
  "hex",
- "jmt",
  "nomt",
  "parking_lot",
  "proptest",
@@ -12595,7 +12547,6 @@ dependencies = [
  "derivative",
  "derive_more 2.0.1",
  "hex",
- "jmt",
  "nomt",
  "nomt-core",
  "proptest",
@@ -12607,7 +12558,6 @@ dependencies = [
  "sov-db-types",
  "sov-metrics",
  "sov-mock-da",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-universal-wallet",
  "tempfile",

@@ -258,7 +258,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
         .await
     }
 
-    /// Creates a new [`TestSequencerSetup`]. Instantiates a new [`TestOptimisticRuntime`], [`NativeStorageManager`], executes genesis
+    /// Creates a new [`TestSequencerSetup`]. Instantiates a new [`TestOptimisticRuntime`], executes genesis
     /// and then builds a new [`StdSequencer`]. Instantiates an Axum server in a separate thread.
     pub async fn with_real_sequencer() -> anyhow::Result<Self> {
         Self::with_real_sequencer_and_mempool_max_txs_count(NonZero::new(usize::MAX).unwrap()).await

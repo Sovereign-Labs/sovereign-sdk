@@ -23,10 +23,10 @@ use sov_rollup_interface::reexports::digest::Digest;
 use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
-    Accessory, CompileTimeNamespace, Kernel, MerkleProofSpec, Namespace, NativeStorage, NodeLeaf,
+    Accessory, CompileTimeNamespace, MerkleProofSpec, Namespace, NativeStorage, NodeLeaf,
     NodeLeafAndMaybeValue, OrderedReadsAndWrites, ProvableCompileTimeNamespace, ProvableNamespace,
     SlotKey, SlotValue, StateAccesses, StateRoot, StateUpdate, Storage, StorageProof, StorageRoot,
-    User, Witness,
+    Witness,
 };
 
 type NomtSession<H> = nomt::Session<BinaryHasher<H>>;
@@ -183,24 +183,88 @@ where
             && version_to_use == self.latest_version()
     }
 
+    fn read_provable_value_unbound(
+        &self,
+        namespace: ProvableNamespace,
+        key: &SlotKey,
+    ) -> Option<SlotValue> {
+        match namespace {
+            ProvableNamespace::User => self
+                .historical_state
+                .get_user_value_option_by_key_unbound(key)
+                .expect("Unable to read from UserDb"),
+            ProvableNamespace::Kernel => self
+                .historical_state
+                .get_kernel_value_option_by_key_unbound(key)
+                .expect("Unable to read from KernelDb"),
+        }
+    }
+
+    fn begin_provable_session_without_witness(
+        &self,
+        namespace: ProvableNamespace,
+    ) -> anyhow::Result<NomtSession<S::Hasher>> {
+        match namespace {
+            ProvableNamespace::User => self
+                .state_session_builder
+                .begin_user_session_without_witness(),
+            ProvableNamespace::Kernel => self
+                .state_session_builder
+                .begin_kernel_session_without_witness(),
+        }
+    }
+
     /// Reads the latest value for the given key without trying to preserve the illusion that this `Storage` instance is backed by a snapshot.
     /// If the underlying DB has advanced beyond the snapshot, this method will read from the live DB.
     fn read_value_unbound<N: CompileTimeNamespace>(&self, key: &SlotKey) -> Option<SlotValue> {
         match N::NAMESPACE {
-            Namespace::User => self
-                .historical_state
-                .get_user_value_option_by_key_unbound(key)
-                .expect("Unable to read from UserDb"),
-            Namespace::Kernel => self
-                .historical_state
-                .get_kernel_value_option_by_key_unbound(key)
-                .expect("Unable to read from KernelDb"),
+            Namespace::User => self.read_provable_value_unbound(ProvableNamespace::User, key),
+            Namespace::Kernel => self.read_provable_value_unbound(ProvableNamespace::Kernel, key),
             Namespace::Accessory => self
                 .accessory
                 .get_value_option(key, SlotNumber::MAX)
                 .expect("Unable to read from AccessoryDb")
                 .map(Into::into),
         }
+    }
+
+    /// Looks up a value in a provable namespace, optionally cross-checking the historical DB
+    /// against a fresh NOMT session in debug+strict mode.
+    fn read_provable_value(
+        &self,
+        namespace: ProvableNamespace,
+        key: &SlotKey,
+        resolved_version: Option<SlotNumber>,
+    ) -> Result<Option<SlotValue>, HistoricalValueError> {
+        let historical_value = match (namespace, resolved_version) {
+            (ProvableNamespace::User, Some(version)) => self
+                .historical_state
+                .get_user_value_option_by_key_historical(key, version)?,
+            (ProvableNamespace::User, None) => {
+                self.historical_state.get_user_value_option_by_key(key)?
+            }
+            (ProvableNamespace::Kernel, Some(version)) => self
+                .historical_state
+                .get_kernel_value_option_by_key_historical(key, version)?,
+            (ProvableNamespace::Kernel, None) => {
+                self.historical_state.get_kernel_value_option_by_key(key)?
+            }
+        };
+
+        let version_to_check = resolved_version.unwrap_or(self.latest_version());
+        if self.should_check_dbs_sync(version_to_check) {
+            let key_path = S::Hasher::digest(key.as_ref()).into();
+            let nomt_session = self
+                .begin_provable_session_without_witness(namespace)
+                .unwrap_or_else(|err| panic!("Failed to build {namespace:?} session: {err:?}"));
+            let nomt_value = nomt_session.read(key_path).unwrap();
+            drop(nomt_session);
+            let historical_value_hash = historical_value
+                .as_ref()
+                .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
+            assert_eq!(nomt_value, historical_value_hash);
+        }
+        Ok(historical_value)
     }
 
     fn read_value<N: CompileTimeNamespace>(
@@ -218,53 +282,10 @@ where
         let _span = tracing::debug_span!("NomtProverStorage::read_value", ?resolved_version, passed_version = ?version).entered();
         let val = match N::NAMESPACE {
             Namespace::User => {
-                let historical_value = if let Some(version) = resolved_version {
-                    self.historical_state
-                        .get_user_value_option_by_key_historical(key, version)?
-                } else {
-                    self.historical_state.get_user_value_option_by_key(key)?
-                };
-                let version_to_check = resolved_version.unwrap_or(self.latest_version());
-                if self.should_check_dbs_sync(version_to_check) {
-                    let key_path = S::Hasher::digest(key.as_ref()).into();
-
-                    let nomt_session = self
-                        .state_session_builder
-                        .begin_user_session_without_witness()
-                        .expect("Failed to build user session");
-                    let nomt_value = nomt_session.read(key_path).unwrap();
-                    drop(nomt_session);
-                    let historical_value_hash = historical_value
-                        .as_ref()
-                        .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
-                    assert_eq!(nomt_value, historical_value_hash);
-                }
-
-                historical_value
+                self.read_provable_value(ProvableNamespace::User, key, resolved_version)?
             }
             Namespace::Kernel => {
-                let historical_value = if let Some(version) = version {
-                    self.historical_state
-                        .get_kernel_value_option_by_key_historical(key, version)?
-                } else {
-                    self.historical_state.get_kernel_value_option_by_key(key)?
-                };
-                let version_to_check = resolved_version.unwrap_or(self.latest_version());
-                if self.should_check_dbs_sync(version_to_check) {
-                    let key_path = S::Hasher::digest(key.as_ref()).into();
-                    let nomt_session = self
-                        .state_session_builder
-                        .begin_kernel_session_without_witness()
-                        .expect("Failed to build kernel session");
-                    let nomt_value = nomt_session.read(key_path).unwrap();
-                    drop(nomt_session);
-                    let historical_value_hash = historical_value
-                        .as_ref()
-                        .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
-                    assert_eq!(nomt_value, historical_value_hash);
-                }
-
-                historical_value
+                self.read_provable_value(ProvableNamespace::Kernel, key, resolved_version)?
             }
             Namespace::Accessory => self
                 .accessory
@@ -307,7 +328,11 @@ where
         Ok(node_leaf_with_fetched_value)
     }
 
-    fn materialize_changes_with_version(
+    /// Materializes a state update at an explicit version.
+    ///
+    /// This is used both for the normal append-a-new-version path (`materialize_changes`) and
+    /// for offline migration tooling that updates state in-place at the current head version.
+    pub fn materialize_changes_at_version(
         self,
         state_update: NomtStateUpdate<S>,
         version: SlotNumber,
@@ -359,18 +384,6 @@ where
             accessory: accessory_batch,
             pinned_cache,
         }
-    }
-
-    /// Materializes a state update at an explicit version.
-    ///
-    /// This is intended for offline migration tooling that updates state in-place at the
-    /// current head version instead of appending a new version.
-    pub fn materialize_changes_at_version(
-        self,
-        state_update: NomtStateUpdate<S>,
-        version: SlotNumber,
-    ) -> NomtChangeSet {
-        self.materialize_changes_with_version(state_update, version)
     }
 
     /// Get the latest root hash available in the live db. This could be the newest root hash from the underlying db, or the root hash from the latest delta in memory - whichever is newer.
@@ -426,10 +439,7 @@ where
             })?;
         let pre_fetch_state_root = pre_fetch_state_root.namespace_root(namespace);
         // Read the value from the newest delta or the live table, whichever is newer.
-        let value = match namespace {
-            ProvableNamespace::User => self.read_value_unbound::<User>(&proven_key),
-            ProvableNamespace::Kernel => self.read_value_unbound::<Kernel>(&proven_key),
-        };
+        let value = self.read_provable_value_unbound(namespace, &proven_key);
         // Fetch the latest root hash again. As before, uses the newest delta or the live table, whichever is newer.
         let (committed_slot_number, post_fetch_state_root) = self
             .latest_root_and_version_unbound()
@@ -437,16 +447,9 @@ where
         let post_fetch_state_root_namespace = post_fetch_state_root.namespace_root(namespace);
 
         let key_path: KeyPath = S::Hasher::digest(proven_key.as_ref()).into();
-        let session = match namespace {
-            ProvableNamespace::User => self
-                .state_session_builder
-                .begin_user_session_without_witness()
-                .map_err(GetWithProofError::from)?,
-            ProvableNamespace::Kernel => self
-                .state_session_builder
-                .begin_kernel_session_without_witness()
-                .map_err(GetWithProofError::from)?,
-        };
+        let session = self
+            .begin_provable_session_without_witness(namespace)
+            .map_err(GetWithProofError::from)?;
 
         if pre_fetch_state_root != post_fetch_state_root_namespace
             || post_fetch_state_root_namespace != session.prev_root().as_ref()
@@ -533,8 +536,9 @@ fn compute_state_update_namespace<S: MerkleProofSpec>(
     write_witness: bool,
 ) -> anyhow::Result<FinishedSession> {
     tracing::trace!(accesses = accesses.len(), "compute state update");
+    let has_accesses = !accesses.is_empty();
     let mut finished = session.finish(accesses)?;
-    if write_witness {
+    if write_witness && has_accesses {
         let nomt_witness = finished.take_witness().expect("Witness cannot be missing");
         let nomt::Witness {
             path_proofs,
@@ -543,10 +547,8 @@ fn compute_state_update_namespace<S: MerkleProofSpec>(
         // Note, we discard `p.path`, but maybe there's a way to use to have more efficient verification?
         let mut path_proofs_inner = path_proofs.into_iter().map(|p| p.inner).collect::<Vec<_>>();
 
-        // Sort them as required by
-        // Note that the path proofs produced within a crate::witness::Witness are not guaranteed to be ordered,
-        // so the input should be sorted lexicographically by the terminal path prior to calling this function.
-        // https://github.com/thrumdev/nomt/issues/904
+        // `MultiProof::from_path_proofs` requires lexicographic order by terminal path,
+        // but NOMT's witness path_proofs are not guaranteed sorted — see https://github.com/thrumdev/nomt/issues/904
         path_proofs_inner.sort_by(|a, b| a.terminal.path().cmp(b.terminal.path()));
 
         let multi_proof = MultiProof::from_path_proofs(path_proofs_inner);
@@ -583,7 +585,11 @@ where
     }
 }
 
-#[allow(missing_docs)]
+/// Output of [`NomtProverStorage::compute_state_update`]: the finished NOMT sessions
+/// for both provable namespaces, the accessory writes accumulated by the STF, the inputs
+/// that produced this update, the new combined root, and any pinned cache carried forward.
+/// Pass this to [`NomtProverStorage::materialize_changes`] (or `_at_version`) to turn it into
+/// a [`NomtChangeSet`] the storage manager can commit.
 pub struct NomtStateUpdate<S: MerkleProofSpec> {
     user: FinishedSession,
     kernel: FinishedSession,
@@ -785,7 +791,7 @@ where
 
     fn materialize_changes(self, state_update: Self::StateUpdate) -> Self::ChangeSet {
         let next_version = self.historical_state.get_next_version();
-        self.materialize_changes_with_version(state_update, next_version)
+        self.materialize_changes_at_version(state_update, next_version)
     }
 
     fn open_proof(
@@ -880,7 +886,7 @@ where
     fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
         let version_to_use = match self.get_version_to_use(Some(version)) {
             None => {
-                // Mimic error from jmt, historical reasons.
+                // Keep the historical error message stable.
                 anyhow::bail!("Root node not found for version {}.", version)
             }
             Some(v) => v,
@@ -1006,8 +1012,11 @@ mod tests {
 
     use super::{GetWithProofError, NomtProverStorage};
     use crate::cache::{OrderedReadsAndWrites, StateAccesses};
+    use crate::nomt::zk_storage::NomtVerifierStorage;
     use crate::storage::{NativeStorage, StateUpdate, Storage};
-    use crate::{DefaultStorageSpec, SlotKey, SlotValue, User};
+    use crate::{
+        DefaultStorageSpec, ProvableNamespace, SlotKey, SlotValue, StateRoot, User, Witness,
+    };
 
     type TestStorage = NomtProverStorage<DefaultStorageSpec<Sha256>, MockHash>;
     type TestStorageManager = NomtStorageManager<MockDaSpec, Sha256, TestStorage>;
@@ -1088,6 +1097,75 @@ mod tests {
             storage.get_accessory_unbound(accessory_key.clone(), Some(slot_number)),
             Some(expected_value.clone())
         );
+    }
+
+    fn kernel_only_accesses(kernel_key: SlotKey, value: SlotValue) -> StateAccesses {
+        StateAccesses {
+            user: OrderedReadsAndWrites::default(),
+            kernel: OrderedReadsAndWrites {
+                ordered_reads: Vec::new(),
+                ordered_writes: vec![(kernel_key, Some(value))],
+            },
+        }
+    }
+
+    #[test]
+    fn verifier_carries_untouched_non_empty_namespace_forward() {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut storage_manager = TestStorageManager::new(
+            RollupDbConfig::default_in_path(tmpdir.path().to_path_buf()),
+            true,
+        )
+        .unwrap();
+        let user_key = SlotKey::from_slice(b"user-counter");
+        let accessory_key = SlotKey::from_slice(b"accessory-counter");
+
+        let first_header = MockBlockHeader::from_height(1);
+        let first_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &first_header,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+        assert_ne!(
+            first_root.namespace_root(ProvableNamespace::User),
+            nomt::trie::TERMINATOR
+        );
+
+        let second_header = MockBlockHeader::from_height(2);
+        let (prover_storage, _ledger_storage) =
+            storage_manager.create_state_for(&second_header).unwrap();
+        let kernel_key = SlotKey::from_slice(b"kernel-only-counter");
+        let kernel_value = SlotValue::from(vec![2]);
+        let witness = Default::default();
+        let (prover_root, _state_update) = prover_storage
+            .compute_state_update(
+                kernel_only_accesses(kernel_key.clone(), kernel_value.clone()),
+                &witness,
+                first_root,
+                None,
+            )
+            .unwrap();
+
+        let verifier_storage = NomtVerifierStorage::<DefaultStorageSpec<Sha256>>::new();
+        let (verifier_root, _state_update) = verifier_storage
+            .compute_state_update(
+                kernel_only_accesses(kernel_key, kernel_value),
+                &witness,
+                first_root,
+                None,
+            )
+            .unwrap();
+
+        assert_eq!(verifier_root, prover_root);
+        assert_eq!(
+            verifier_root.namespace_root(ProvableNamespace::User),
+            first_root.namespace_root(ProvableNamespace::User)
+        );
+        assert!(witness.is_empty());
     }
 
     #[test]
@@ -1352,10 +1430,12 @@ mod tests {
         let err = result.expect_err(
             "get_with_proof should observe a root mismatch once the paused commit finishes",
         );
-        assert!(
-            matches!(err, GetWithProofError::StateRootMismatch),
-            "unexpected error after releasing paused commit: {err:?}"
-        );
+        // `GetWithProofError::Other` wraps `anyhow::Error`, which doesn't implement `PartialEq`,
+        // so we destructure rather than `assert_eq!`.
+        match err {
+            GetWithProofError::StateRootMismatch => {}
+            other => panic!("unexpected error after releasing paused commit: {other:?}"),
+        }
     }
 
     #[test]

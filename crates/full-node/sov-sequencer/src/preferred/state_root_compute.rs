@@ -359,36 +359,14 @@ mod tests {
     use sov_rollup_interface::storage::HierarchicalStorageManager;
     use sov_state::SlotKey;
     use sov_state::StateUpdate;
-    use sov_test_utils::storage::{
-        ForklessStorageManager, SimpleJmtStorageManager, SimpleStorageManager,
-    };
-    use sov_test_utils::{
-        generate_optimistic_runtime, TestHasher, TestJmtSpec, TestSpec, TestStorageSpec,
-    };
+    use sov_test_utils::storage::{ForklessStorageManager, SimpleStorageManager};
+    use sov_test_utils::{generate_optimistic_runtime, TestHasher, TestSpec, TestStorageSpec};
     use tokio::task::JoinHandle;
     use uuid::Uuid;
 
     generate_optimistic_runtime!(TestRuntime <=);
 
     use super::*;
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_jmt_new_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleJmtStorageManager::<TestStorageSpec>::new();
-        new_rollup_height_state_root_on_stale_storage::<TestJmtSpec, _, TestRuntime<TestJmtSpec>>(
-            storage_manager,
-        )
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_jmt_known_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleJmtStorageManager::<TestStorageSpec>::new();
-        known_rollup_height_state_root_on_stale_storage::<TestJmtSpec, _, TestRuntime<TestJmtSpec>>(
-            storage_manager,
-        )
-        .await;
-    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_new_rollup_height_state_root_on_stale_storage() {

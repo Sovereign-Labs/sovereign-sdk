@@ -6,16 +6,8 @@ use sov_modules_api::*;
 use sov_state::nomt::zk_storage::NomtVerifierStorage;
 use sov_state::{ArrayWitness, BorshCodec, Prefix, StateAccesses, Storage};
 use sov_test_utils::storage::SimpleStorageManager;
-use sov_test_utils::TestStorage;
+use sov_test_utils::{write_kernel_marker, TestStorage};
 use unwrap_infallible::UnwrapInfallible;
-
-/// Helper to write a dummy value to the kernel namespace.
-/// NOMT requires both user and kernel namespaces to be written together.
-fn write_kernel_marker<S: Spec>(state: &mut StateCheckpoint<S>) {
-    let mut kernel_val: KernelStateValue<u8> =
-        KernelStateValue::with_codec(Prefix::new(255, 0), BorshCodec);
-    kernel_val.set(&0u8, state).unwrap_infallible();
-}
 
 pub trait StateThing {
     type Value: core::fmt::Debug + Eq + PartialEq;
@@ -241,7 +233,7 @@ fn test_witness_round_trip() -> Result<(), Infallible> {
             &ArrayWitness::default(),
             <<TestSpec as Spec>::Storage as Storage>::PRE_GENESIS_ROOT,
         )
-        .expect("Native jmt validation should succeed");
+        .expect("Native storage validation should succeed");
         storage_manager.commit(genesis_change_set);
         // Actual
         let mut mock_kernel = MockKernel::<TestSpec>::default();
@@ -252,11 +244,11 @@ fn test_witness_round_trip() -> Result<(), Infallible> {
         state_value.set(&11, &mut state)?;
         let _ = state_value.get(&mut state);
         state_value.set(&22, &mut state)?;
-        write_kernel_marker(&mut state);
+        write_kernel_marker(&mut state).unwrap_infallible();
         let (cache_log, _, witness) = state.freeze();
 
         let _ = validate_and_materialize(storage, cache_log, &witness, root)
-            .expect("Native jmt validation should succeed");
+            .expect("Native storage validation should succeed");
         (witness, root)
     };
 
@@ -271,7 +263,7 @@ fn test_witness_round_trip() -> Result<(), Infallible> {
         state_value.set(&11, &mut state_checkpoint)?;
         let _ = state_value.get(&mut state_checkpoint);
         state_value.set(&22, &mut state_checkpoint)?;
-        write_kernel_marker(&mut state_checkpoint);
+        write_kernel_marker(&mut state_checkpoint).unwrap_infallible();
         let (cache_log, _, witness) = state_checkpoint.freeze();
 
         let _ = validate_and_materialize(storage, cache_log, &witness, root)

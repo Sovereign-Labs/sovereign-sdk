@@ -6,23 +6,9 @@ use sov_state::{
     Storage, User,
 };
 use sov_test_utils::storage::{
-    ForklessStorageManager, NativeStorageManager, NomtStorageManager, NonCommitingStorageManager,
-    SimpleJmtStorageManager, SimpleStorageManager,
+    ForklessStorageManager, NomtStorageManager, NonCommitingStorageManager, SimpleStorageManager,
 };
-use sov_test_utils::{TestHasher, TestJmtSpec, TestSpec};
-
-#[test]
-fn jmt_concurrent_prover_storages() {
-    let storage_manager = SimpleJmtStorageManager::new();
-    concurrent_prover_storages::<TestJmtSpec, _>(storage_manager);
-}
-
-#[test]
-fn jmt_concurrent_prover_in_memory_storages() {
-    let storage_manager =
-        NonCommitingStorageManager::<NativeStorageManager<MockDaSpec, _>, _>::new();
-    concurrent_prover_storages::<TestJmtSpec, _>(storage_manager);
-}
+use sov_test_utils::{TestHasher, TestSpec};
 
 #[test]
 fn nomt_concurrent_prover_storages() {
@@ -36,19 +22,6 @@ fn nomt_concurrent_prover_in_memory_storages() {
     let storage_manager =
         NonCommitingStorageManager::<NomtStorageManager<MockDaSpec, TestHasher, _>, _>::new();
     concurrent_prover_storages::<TestSpec, _>(storage_manager);
-}
-
-#[test]
-fn jmt_node_sequencer_concurrent_state_update() {
-    let storage_manager = SimpleJmtStorageManager::new();
-    node_sequencer_compute_state_update_concurrency::<TestJmtSpec, _>(storage_manager);
-}
-
-#[test]
-fn jmt_node_sequencer_concurrent_state_update_in_memory() {
-    let storage_manager =
-        NonCommitingStorageManager::<NativeStorageManager<MockDaSpec, _>, _>::new();
-    node_sequencer_compute_state_update_concurrency::<TestJmtSpec, _>(storage_manager);
 }
 
 #[test]
@@ -71,7 +44,7 @@ fn nomt_node_sequencer_concurrent_state_update_in_memory() {
 /// It should not be able to see data at `next_version` or any future version passed as a parameter.
 /// This test is important because of the leaky abstraction in `StorageManager`.
 /// Data with a newer version can be written to the RocksDB/NOMT,
-/// while an instance of `ProverStorage` in the HTTP API hasn't been updated.
+/// while an instance of storage in the HTTP API hasn't been updated.
 /// The HTTP API must serve consistent data during the request/response lifecycle,
 /// even if data in RocksDB is being updated.
 /// Notes:
@@ -611,24 +584,4 @@ fn nomt_pinned_cache_without_witness_succeeds() {
     storage_manager.set_pinned_cache(PinnedCache::default());
     // This should succeed because with_witness=false.
     let _storage = storage_manager.create_storage();
-}
-
-#[test]
-#[should_panic(expected = "JMT ProverStorage does not support pinned cache")]
-fn jmt_pinned_cache_panics() {
-    use sov_state::pinned_cache::PinnedCache;
-
-    let storage_manager = SimpleJmtStorageManager::<NomtSpec>::new();
-    let storage = storage_manager.create_storage();
-    let state_accesses = StateAccesses {
-        user: Default::default(),
-        kernel: Default::default(),
-    };
-    // This should panic because pinned_cache is Some.
-    let _ = storage.compute_state_update(
-        state_accesses,
-        &Default::default(),
-        <sov_state::ProverStorage<NomtSpec> as Storage>::PRE_GENESIS_ROOT,
-        Some(PinnedCache::default()),
-    );
 }

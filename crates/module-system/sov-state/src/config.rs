@@ -2,7 +2,7 @@
 
 use std::path::PathBuf;
 
-/// Configuration options for [`ProverStorage`](crate::ProverStorage)
+/// Configuration options for native storage
 /// initialization.
 #[derive(serde::Deserialize, Debug, Clone, PartialEq, Eq)]
 pub struct Config {
