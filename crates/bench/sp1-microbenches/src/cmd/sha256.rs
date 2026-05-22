@@ -3,7 +3,7 @@ use clap::Args;
 use sp1_sdk::blocking::{Prover, ProverClient, SP1Stdin};
 
 use crate::fit::fit_prover_gas_per_byte;
-use crate::{load_guest_elf, BenchResult};
+use crate::{load_guest_elf, round_at_least_one, BenchResult};
 
 const GUEST_ELF_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -84,14 +84,14 @@ pub fn run(args: Sha256Args) -> anyhow::Result<()> {
     println!("  R²           = {:.6}", gas_fit.r_squared);
     println!("  max residual = {:.2} prover gas", gas_fit.max_residual);
 
-    println!("\n=== suggested constants.toml values (raw SP1 prover gas, 1:1) ===");
+    println!("\n=== suggested constants.toml values (full value charged to a single dimension, rounded ≥1) ===");
     println!(
-        "  GAS_TO_CHARGE_HASH_UPDATE[1]          ≈ {}",
-        gas_fit.bias.round() as i64
+        "  GAS_TO_CHARGE_HASH_UPDATE          = [{}, 0]",
+        round_at_least_one(gas_fit.bias)
     );
     println!(
-        "  GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE[1] ≈ {}",
-        gas_fit.per_byte.round() as i64
+        "  GAS_TO_CHARGE_PER_BYTE_HASH_UPDATE = [{}, 0]",
+        round_at_least_one(gas_fit.per_byte)
     );
 
     Ok(())

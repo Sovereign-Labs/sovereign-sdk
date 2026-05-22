@@ -3,7 +3,7 @@ use clap::Args;
 use sp1_sdk::blocking::{Prover, ProverClient, SP1Stdin};
 
 use crate::fit::{fit_linear, LinearFit};
-use crate::{load_guest_elf, BenchResult};
+use crate::{load_guest_elf, round_at_least_one, BenchResult};
 
 const GUEST_ELF_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -99,28 +99,15 @@ pub fn run(args: BorshArgs) -> anyhow::Result<()> {
         fit_decode.per_byte
     );
 
-    println!("\nSuggested constants.toml values (X/2 split per dimension, rounded ≥1):");
-    let pbr = split_half(per_byte_read);
-    let prb = split_half(per_read_bias);
-    let bbd = split_half(bias_borsh_deserialization);
-    println!("  BORSH_PER_BYTE_READ          = [{pbr}, {pbr}]");
-    println!("  BORSH_PER_READ_BIAS          = [{prb}, {prb}]");
-    println!("  BIAS_BORSH_DESERIALIZATION   = [{bbd}, {bbd}]");
+    println!("\nSuggested constants.toml values (full value charged to a single dimension, rounded ≥1):");
+    let pbr = round_at_least_one(per_byte_read);
+    let prb = round_at_least_one(per_read_bias);
+    let bbd = round_at_least_one(bias_borsh_deserialization);
+    println!("  BORSH_PER_BYTE_READ          = [{pbr}, 0]");
+    println!("  BORSH_PER_READ_BIAS          = [{prb}, 0]");
+    println!("  BIAS_BORSH_DESERIALIZATION   = [{bbd}, 0]");
 
     Ok(())
-}
-
-/// Splits a total cost across the two gas dimensions (compute, memory) using the X/2
-/// convention. Returns at least 1 for any positive value to avoid zero-charging.
-fn split_half(total: f64) -> u64 {
-    let half = total / 2.0;
-    if half >= 1.0 {
-        half.round() as u64
-    } else if total > 0.0 {
-        1
-    } else {
-        0
-    }
 }
 
 /// Runs the high/low iteration sweep, differences out setup cost, fits a line, and prints the

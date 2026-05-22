@@ -36,3 +36,14 @@ pub fn load_guest_elf(path: &str) -> anyhow::Result<Elf> {
     }
     Ok(Elf::from(bytes))
 }
+
+/// Rounds a calibrated cost to the single metered gas dimension (the other dimension is 0),
+/// never flooring a positive cost to zero.
+pub fn round_at_least_one(total: f64) -> u64 {
+    let rounded = total.round() as u64;
+    if total > 0.0 && rounded == 0 {
+        1
+    } else {
+        rounded
+    }
+}
