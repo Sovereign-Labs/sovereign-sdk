@@ -15,7 +15,7 @@ use crate::{
     StateWriter,
 };
 
-/// A growable array of values stored as authenticated state.
+/// A growable array of values stored as merklized state.
 #[derive(
     Debug,
     Clone,

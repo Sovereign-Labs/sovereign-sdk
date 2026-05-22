@@ -717,7 +717,7 @@ impl SlotValue {
 }
 
 /// Combines the value hash with its size.
-// We return `Vec<u8>` here because NOMT stores the authenticated value hash and size as bytes.
+// We return `Vec<u8>` here because NOMT stores the value hash and size as bytes.
 pub fn val_hash_and_size_inner(val_hash: [u8; 32], size: u32) -> Vec<u8> {
     let mut val_hash_and_size = Vec::with_capacity(40);
     let size_bytes = size.to_le_bytes();

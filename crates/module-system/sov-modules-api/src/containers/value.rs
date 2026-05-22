@@ -43,10 +43,10 @@ type ValueOrError<V, N> = Result<V, StateValueError<N>>;
 
 /// A container for a single user-space value.
 pub type StateValue<V, Codec = BorshCodec> = NamespacedStateValue<User, V, Codec>;
-/// A Container for a single value which is only accesible in the kernel.
+/// A Container for a single value which is only accessible in the kernel.
 pub type KernelStateValue<V, Codec = BorshCodec> = NamespacedStateValue<Kernel, V, Codec>;
-/// A Container for a single value stored as "accessory" state, outside of the
-/// authenticated state.
+/// A Container for a single value stored as "accessory" state,
+/// outside merklized state.
 pub type AccessoryStateValue<V, Codec = BorshCodec> = NamespacedStateValue<Accessory, V, Codec>;
 
 // Implement all other functions generically over codecs

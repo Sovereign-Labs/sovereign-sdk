@@ -13,6 +13,6 @@ The `LedgerDb` also implements the `LedgerStateProvider` trait, allowing it to e
 State storage is intended to be used with the NOMT-backed storage implementation provided by the Module System.
 If you aren't using the Module System, chances are that you'll want to implement your own state database.
 
-The database stores the authenticated NOMT state alongside flat `(Key, Version)` historical state used by native queries.
+The database stores the merklized state (backed by NOMT) alongside flat `(Key, Version)` historical state used by native queries.
 
 In the Module System, state storage is abstracted behind the `Storage` interface, so you won't interact with it directly.

@@ -159,4 +159,4 @@ pub fn balance_of(
 }
 ```
 
-- NOTE: `set_archival_version` handles configuring `WorkingSet` for both authenticated state and accessory state
+- NOTE: `set_archival_version` handles configuring `WorkingSet` for both merklized state and accessory state

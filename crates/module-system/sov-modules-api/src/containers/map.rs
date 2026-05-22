@@ -73,8 +73,8 @@ type RawMapEntriesVec<K> = Vec<(K, Option<Vec<u8>>)>;
 /// - a  [`Codec`](`sov_state::StateItemCodec`).
 pub type StateMap<K, V, Codec = BorshCodec> = NamespacedStateMap<User, K, V, Codec>;
 
-/// A container that maps keys to values stored as "accessory" state, outside of
-/// authenticated state.
+/// A container that maps keys to values stored as "accessory" state,
+/// outside merklized state.
 ///
 /// # Type parameters
 /// [`AccessoryStateMap`] is generic over:

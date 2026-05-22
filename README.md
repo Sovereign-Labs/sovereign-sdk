@@ -42,7 +42,7 @@ of pre-build modules for common functionality. Some examples include...
 
 The `full-node` folder provides components for the full-node - including the database, APIs, the soft-confirming sequencer, and the full node itself.
 
-The full node is responsible for downloading transactions from the DA layer and executing them to produce the rollup state. State is stored in an authenticated key-value
+The full node is responsible for downloading transactions from the DA layer and executing them to produce the rollup state. State is stored in a merklized key-value
 store backed by a [Nearly Optimal Merkle Tree](https://sovereign.mirror.xyz/jfx_cJ_15saejG9ZuQWjnGnG-NfahbazQH98i1J3NN8).
 
 The sequencer is responsible for accepting new transactions, providing instant soft-confirmations, and then placing bundles of confirmed transactions  onto the DA layer for
