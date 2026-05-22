@@ -3,7 +3,7 @@ use std::marker::PhantomData;
 use std::ops::Range;
 
 use axum::extract::{Request, State, WebSocketUpgrade};
-use axum::http::StatusCode;
+use axum::http::{header, HeaderValue, StatusCode};
 use axum::middleware::Next;
 use axum::response::{IntoResponse, Response};
 use axum::routing::get;
@@ -34,6 +34,7 @@ use sov_rollup_interface::node::ledger_api::{
 };
 use sov_rollup_interface::stf::TxReceiptContents;
 use tokio::sync::watch;
+use tower_http::set_header::SetResponseHeaderLayer;
 
 type PathMap = Path<HashMap<String, NumberOrHash>>;
 
@@ -42,6 +43,7 @@ type PathMap = Path<HashMap<String, NumberOrHash>>;
 /// from event 0 on every page. Until prefix iteration is pushed down into the
 /// storage layer, deeper cursors are rejected with 400.
 const PREFIX_MAX_START: u64 = 10_000;
+const NO_STORE: HeaderValue = HeaderValue::from_static("no-store");
 
 /// Error to be returned when our bespoke path captures parser fails.
 fn bad_path_error(key: &str) -> Response {
@@ -115,10 +117,11 @@ where
             ledger,
             shutdown_receiver,
         };
+        let no_store = SetResponseHeaderLayer::if_not_present(header::CACHE_CONTROL, NO_STORE);
         let routes = axum::Router::<LedgerState<T>>::new()
             .route(
                 "/aggregated-proofs/latest",
-                get(Self::get_latest_aggregated_proof),
+                get(Self::get_latest_aggregated_proof).layer(no_store.clone()),
             )
             .route(
                 "/aggregated-proofs/latest/ws",
@@ -132,10 +135,12 @@ where
             )
             .nest(
                 "/slots/latest",
-                Self::router_slot(state.clone()).route_layer(middleware::from_fn_with_state(
-                    state.clone(),
-                    Self::resolve_latest_slot,
-                )),
+                Self::router_slot(state.clone())
+                    .route_layer(middleware::from_fn_with_state(
+                        state.clone(),
+                        Self::resolve_latest_slot,
+                    ))
+                    .layer(no_store.clone()),
             )
             .nest(
                 "/slots/finalized",

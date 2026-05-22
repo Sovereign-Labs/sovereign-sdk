@@ -26,6 +26,7 @@ sov-modules-api = { workspace = true, features = ["native"] }
 sov-rest-utils = { workspace = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 tokio = { workspace = true, features = ["macros"] }
+tower-http = { workspace = true, features = ["set-header"] }
 tracing = { workspace = true }
 
 [dev-dependencies]

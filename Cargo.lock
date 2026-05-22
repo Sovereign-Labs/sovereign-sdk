@@ -11792,6 +11792,7 @@ dependencies = [
  "sov-test-utils",
  "tempfile",
  "tokio",
+ "tower-http",
  "tracing",
 ]
 
