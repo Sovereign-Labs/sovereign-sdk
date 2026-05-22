@@ -1,5 +1,5 @@
 //! Utilities for discovering cluster nodes from PostgreSQL and persisting snapshots.
-use crate::node_discovery_metrics::ClusterUpdateFailureMetric;
+use crate::node_discovery_metrics::{ClusterUpdateFailureMetric, ClusterUpdateMetric};
 use anyhow::Result;
 use async_trait::async_trait;
 use sqlx::postgres::{PgListener, PgPool};
@@ -303,6 +303,10 @@ impl NodeDiscovery {
         if !(membership_changed || leader_changed) {
             return Ok(());
         }
+        let update_metric = ClusterUpdateMetric {
+            current_leader: leader_id.clone(),
+            followers: followers.iter().cloned().collect(),
+        };
 
         // Log membership changes
         for node_id in followers.difference(&self.prev_followers) {
@@ -332,6 +336,9 @@ impl NodeDiscovery {
         self.prev_followers = followers;
         self.prev_leader_id = leader_id;
         let _ = self.sender.send(info);
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(update_metric);
+        });
 
         Ok(())
     }
