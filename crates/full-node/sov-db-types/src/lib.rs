@@ -700,6 +700,12 @@ impl SlotValue {
         &self.value
     }
 
+    /// Consumes the value, returning the inner `Vec<u8>`. Avoids cloning when the
+    /// underlying `Arc<Vec<u8>>` has strong count 1; otherwise falls back to cloning.
+    pub fn into_bytes(self) -> Vec<u8> {
+        Arc::try_unwrap(self.value).unwrap_or_else(|arc| (*arc).clone())
+    }
+
     /// The size of the `SlotValue` in bytes.
     /// Panics if size can't be represented as u32.
     pub fn size(&self) -> u32 {
@@ -724,4 +730,23 @@ pub fn val_hash_and_size_inner(val_hash: [u8; 32], size: u32) -> Vec<u8> {
     val_hash_and_size.extend_from_slice(&val_hash);
     val_hash_and_size.extend_from_slice(&size_bytes);
     val_hash_and_size
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn slot_value_into_bytes_unique_arc() {
+        let value = SlotValue::from(vec![0x12, 0x34, 0x56, 0x78]);
+        assert_eq!(value.into_bytes(), vec![0x12, 0x34, 0x56, 0x78]);
+    }
+
+    #[test]
+    fn slot_value_into_bytes_shared_arc_falls_back_to_clone() {
+        let original = SlotValue::from(vec![0xDE, 0xAD, 0xBE, 0xEF]);
+        let shared = original.clone();
+        assert_eq!(shared.into_bytes(), vec![0xDE, 0xAD, 0xBE, 0xEF]);
+        assert_eq!(original.value(), &[0xDE, 0xAD, 0xBE, 0xEF]);
+    }
 }

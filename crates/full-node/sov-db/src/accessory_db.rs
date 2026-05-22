@@ -9,7 +9,7 @@ use crate::schema::tables::{
     AccessoryKeysByVersion, ModuleAccessoryState, StateRootHashes, ACCESSORY_TABLES,
 };
 use crate::schema::types::slot_key::SlotKey;
-use crate::schema::types::{AccessoryKey, AccessoryStateValue};
+use crate::schema::types::AccessoryStateValue;
 use crate::{ensure_version_is_correct, DbOptions};
 
 /// Specifies a particular version of the Accessory state.
@@ -50,21 +50,22 @@ impl AccessoryDb {
             key.as_ref(),
             version,
             self.db
-                .get_prev::<ModuleAccessoryState>(&(key.as_ref().to_vec(), version))?,
+                .get_prev::<ModuleAccessoryState>(&(key.as_ref(), version))?,
         )
     }
 
     /// Collects a sequence of key-value pairs into [`SchemaBatch`].
-    pub fn materialize_values(
-        key_value_pairs: impl IntoIterator<Item = (AccessoryKey, AccessoryStateValue)>,
+    pub fn materialize_values<K: AsRef<[u8]> + core::fmt::Debug>(
+        key_value_pairs: impl IntoIterator<Item = (K, AccessoryStateValue)>,
         version: SlotNumber,
     ) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
+            let key_bytes = key.as_ref();
             // We always .put and not .delete to keep archival data.
-            batch.put::<ModuleAccessoryState>(&(key.clone(), version), &value)?;
+            batch.put::<ModuleAccessoryState>(&(key_bytes, version), &value)?;
             // Also update the secondary index for efficient rollback
-            batch.put::<AccessoryKeysByVersion>(&(version, key), &())?;
+            batch.put::<AccessoryKeysByVersion>(&(version, key_bytes), &())?;
         }
         Ok(batch)
     }
@@ -152,7 +153,7 @@ impl AccessoryDb {
             assert_eq!(slot_number, version);
 
             // Delete from both the main table and the secondary index
-            schema_batch.delete::<ModuleAccessoryState>(&(key.clone(), slot_number))?;
+            schema_batch.delete::<ModuleAccessoryState>(&(key.as_slice(), slot_number))?;
             schema_batch.delete::<AccessoryKeysByVersion>(&(slot_number, key))?;
             keys_deleted += 1;
         }
@@ -173,6 +174,7 @@ impl AccessoryDb {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::types::AccessoryKey;
     use sov_rollup_interface::common::IntoSlotNumber;
     use std::{collections::HashMap, sync::Arc};
 

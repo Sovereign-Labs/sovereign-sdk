@@ -365,14 +365,8 @@ where
         let accessory_batch = AccessoryDb::materialize_values(
             accessory_writes
                 .ordered_writes
-                .iter()
-                // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-                .map(|(k, v_opt)| {
-                    (
-                        k.as_ref().to_vec(),
-                        v_opt.as_ref().map(|v| v.value().to_vec()),
-                    )
-                }),
+                .into_iter()
+                .map(|(k, v_opt)| (k, v_opt.map(|v| v.into_bytes()))),
             version,
         )
         .expect("accessory db materialization must succeed");
