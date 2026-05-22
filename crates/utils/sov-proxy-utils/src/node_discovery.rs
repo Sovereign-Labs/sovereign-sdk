@@ -88,9 +88,13 @@ impl HandleClusterUpdateError {
     }
 }
 
+/// Default upper bound on how long to wait before re-polling cluster info.
+pub(crate) const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(3);
+
 /// Client for querying cluster information from the database.
 pub struct NodeDiscovery {
     max_age: Duration,
+    poll_interval: Duration,
     pool: PgPool,
     listener: PgListener,
     prev_followers: BTreeSet<String>,
@@ -110,6 +114,7 @@ impl NodeDiscovery {
     pub async fn connect(
         connection_string: &str,
         max_age: Duration,
+        poll_interval: Duration,
         notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     ) -> Result<Self> {
         tracing::info!("Connecting to database.");
@@ -129,6 +134,7 @@ impl NodeDiscovery {
 
         Ok(Self {
             max_age,
+            poll_interval,
             pool,
             listener,
             prev_followers: BTreeSet::new(),
@@ -205,8 +211,8 @@ impl NodeDiscovery {
                     tokio::time::sleep(Duration::from_millis(1000)).await;
                 }
 
-                // Wait for at least one notification.
-                self.listener.recv().await?;
+                // Wait for the next change signal, or re-poll after poll_interval.
+                self.recv_notification().await;
 
                 // Drain any additional pending notifications.
                 while self.listener.next_buffered().is_some() {}
@@ -214,6 +220,42 @@ impl NodeDiscovery {
         });
 
         NodeDiscoveryTask { receiver, handle }
+    }
+
+    /// Waits once for the next cluster change signal before returning to the
+    /// caller's loop, which always re-polls cluster info.
+    async fn recv_notification(&mut self) {
+        let poll_interval = self.poll_interval;
+        match tokio::time::timeout(poll_interval, self.listener.try_recv()).await {
+            // A notification arrived — re-poll.
+            Ok(Ok(Some(_))) => {}
+            // The listener connection dropped and was re-established. Any
+            // notifications sent before LISTEN was restored may have been lost,
+            // so re-poll cluster info immediately instead of waiting for the
+            // next poll interval.
+            Ok(Ok(None)) => {
+                tracing::debug!(
+                    "Cluster notification listener reconnected after connection loss, re-polling"
+                );
+            }
+            // No notification arrived within `poll_interval`. This is expected
+            // when the cluster is quiet; we re-poll anyway to bound staleness.
+            Err(_) => {
+                tracing::debug!(
+                    ?poll_interval,
+                    "No cluster notification received within the poll interval, re-polling"
+                );
+            }
+            Ok(Err(error)) => {
+                tracing::warn!(?error, "Failed to receive cluster notification, retrying");
+                sov_metrics::track_metrics(|tracker| {
+                    tracker.submit(ClusterUpdateFailureMetric {
+                        stage: "recv_notification",
+                    });
+                });
+                tokio::time::sleep(Duration::from_millis(1000)).await;
+            }
+        }
     }
 
     async fn handle_cluster_update(&mut self) -> Result<(), HandleClusterUpdateError> {

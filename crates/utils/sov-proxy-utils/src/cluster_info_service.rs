@@ -4,6 +4,7 @@ use crate::node_discovery::ClusterInfo;
 use crate::node_discovery::ClusterUpdateNotifier;
 use crate::node_discovery::NodeDiscovery;
 use crate::node_discovery::NodeDiscoveryTask;
+use crate::node_discovery::DEFAULT_POLL_INTERVAL;
 use anyhow::{Context, Result};
 use std::time::Duration;
 
@@ -20,7 +21,11 @@ impl ClusterInfoService {
         max_age: Duration,
         notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     ) -> Result<Self> {
-        let node_discovery = NodeDiscovery::connect(connection_string, max_age, notifier).await?;
+        install_panic_handler();
+
+        let node_discovery =
+            NodeDiscovery::connect(connection_string, max_age, DEFAULT_POLL_INTERVAL, notifier)
+                .await?;
         let node_checker = NodeChecker::new(node_discovery.receiver.clone())?;
 
         let node_discovery_task = node_discovery.spawn();
@@ -58,4 +63,25 @@ impl ClusterInfoService {
         self.node_discovery_task.handle.await??;
         Ok(())
     }
+}
+
+/// Installs a process-wide panic hook that terminates the process on any panic.
+///
+/// `tokio::spawn` catches panics at the task boundary: a panicking discovery
+/// task would silently stop while the rest of the process keeps running, with
+/// the failure surfacing only as a `JoinError` nobody awaits. This hook makes
+/// such a panic fatal — it still runs the default hook (so the panic message
+/// and backtrace are printed) and then exits with a non-zero status.
+///
+/// Installed only once, even if [`ClusterInfoService::spawn`] is called
+/// repeatedly.
+fn install_panic_handler() {
+    static INSTALL: std::sync::Once = std::sync::Once::new();
+    INSTALL.call_once(|| {
+        let default_hook = std::panic::take_hook();
+        std::panic::set_hook(Box::new(move |info| {
+            default_hook(info);
+            std::process::exit(1);
+        }));
+    });
 }
