@@ -95,9 +95,9 @@ fn test_admin_bypass_outer_vk_hash_records_upgrade() {
     // value that round-trips losslessly under from_hash/to_hash.
     let new_outer_commitment = sov_mock_zkvm::MockCodeCommitment([0xcd; 8]);
     let new_outer_vk_hash = {
-        let mut bytes = vec![0u8; 32];
+        let mut bytes = [0u8; CodeCommitmentHash::HASH_LEN];
         bytes[..8].copy_from_slice(&[0xcd; 8]);
-        CodeCommitmentHash(bytes)
+        CodeCommitmentHash::from_u8_array(bytes)
     };
     aggregated_proof.outer_vk_hash = new_outer_vk_hash.clone();
     let expected_slot = aggregated_proof.final_slot_number;
@@ -139,9 +139,9 @@ fn test_admin_bypass_inner_vkey_hash_records_upgrade() {
     // MockCodeCommitment is 8 bytes wide and zero-pads to 32 in `to_hash`, so we use a
     // value that round-trips losslessly under from_hash/to_hash.
     let new_inner_vkey_hash = {
-        let mut bytes = vec![0u8; 32];
+        let mut bytes = [0u8; CodeCommitmentHash::HASH_LEN];
         bytes[..8].copy_from_slice(&[0xab; 8]);
-        CodeCommitmentHash(bytes)
+        CodeCommitmentHash::from_u8_array(bytes)
     };
     aggregated_proof.inner_vkey_hash = new_inner_vkey_hash.clone();
     let expected_slot = aggregated_proof.final_slot_number;
@@ -204,6 +204,7 @@ fn test_admin_matching_proof_does_not_record_upgrade() {
 #[test]
 fn test_admin_upgrade_not_recorded_on_penalized_proof() {
     let (mut runner, prover, mut first_proof) = prepare_admin_proof();
+    let last_valid_outputs = first_proof.clone();
     // First proof for slots 1->2: a normal (no-op) admin proof that claims the
     // reward and pins last_claimed_reward to slot 2.
     runner.execute_proof::<TestProverIncentives>(ProofTestCase {
@@ -249,6 +250,11 @@ fn test_admin_upgrade_not_recorded_on_penalized_proof() {
                     .unwrap()
                     .is_none(),
                 "Penalized admin proof must not write an admin_upgrades entry",
+            );
+            assert_eq!(
+                module.latest_proof_succesfully_verified.get(state).unwrap(),
+                Some(last_valid_outputs.clone()),
+                "Penalized proof must not replace the latest accepted proof",
             );
             // The admin is penalized (loses bond), not slashed; they remain
             // bonded after the deduction.
@@ -392,9 +398,9 @@ fn test_admin_upgrade_at_same_slot_is_slashed() {
         .unwrap();
     let new_outer_commitment = sov_mock_zkvm::MockCodeCommitment([0xef; 8]);
     second_proof.outer_vk_hash = {
-        let mut bytes = vec![0u8; 32];
+        let mut bytes = [0u8; CodeCommitmentHash::HASH_LEN];
         bytes[..8].copy_from_slice(&[0xef; 8]);
-        CodeCommitmentHash(bytes)
+        CodeCommitmentHash::from_u8_array(bytes)
     };
     let prover_address = prover.user_info.address();
 

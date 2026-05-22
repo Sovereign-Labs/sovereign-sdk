@@ -50,7 +50,8 @@ where
         let public_data =
             V::verify_with_pub_values::<AggregatedProofPublicData<Address, Da, Root>>(
                 &prev_outer_proof_witness.public_values,
-                &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(outer_vkey_hash.clone()),
+                &<V::CodeCommitment as CodeCommitmentTrait>::try_from_hash(outer_vkey_hash.clone())
+                    .expect("outer_vkey_hash must be a canonical CodeCommitmentHash"),
             )
             .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
 
@@ -153,7 +154,8 @@ where
         let stf_public_data =
             V::verify_with_pub_values::<StateTransitionPublicData<Address, Da, Root>>(
                 &proof_input.public_values,
-                &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(vkey_hash.clone()),
+                &<V::CodeCommitment as CodeCommitmentTrait>::try_from_hash(vkey_hash.clone())
+                    .expect("vkey_hash must be a canonical CodeCommitmentHash"),
             )
             .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
 
