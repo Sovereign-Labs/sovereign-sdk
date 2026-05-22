@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use rockbound::cache::delta_reader::DeltaReader;
-use rockbound::schema::ValueCodec;
 use rockbound::{rocksdb, SchemaBatch};
 use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
 
@@ -9,7 +8,7 @@ use crate::historical_state::STATE_ROOT_HASH_SINGLETON;
 use crate::schema::tables::{
     AccessoryKeysByVersion, ModuleAccessoryState, StateRootHashes, ACCESSORY_TABLES,
 };
-use crate::schema::types::slot_key::SlotKey;
+use crate::schema::types::slot_key::{SlotKey, SlotValue};
 use crate::schema::types::AccessoryStateValue;
 use crate::{ensure_version_is_correct, DbOptions};
 
@@ -56,14 +55,10 @@ impl AccessoryDb {
     }
 
     /// Collects a sequence of key-value pairs into [`SchemaBatch`].
-    pub fn materialize_values<K, V>(
-        key_value_pairs: impl IntoIterator<Item = (K, V)>,
+    pub fn materialize_values<K: AsRef<[u8]> + core::fmt::Debug>(
+        key_value_pairs: impl IntoIterator<Item = (K, Option<SlotValue>)>,
         version: SlotNumber,
-    ) -> anyhow::Result<SchemaBatch>
-    where
-        K: AsRef<[u8]> + core::fmt::Debug,
-        V: ValueCodec<ModuleAccessoryState>,
-    {
+    ) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
             let key_bytes = key.as_ref();
@@ -224,7 +219,7 @@ mod tests {
         let key = b"foo".to_vec();
         let value = b"bar".to_vec();
         let changes1 = AccessoryDb::materialize_values(
-            vec![(key.clone(), Some(value.clone()))],
+            vec![(key.clone(), Some(SlotValue::from(value.clone())))],
             0.to_slot_number(),
         )
         .unwrap();
@@ -237,7 +232,7 @@ mod tests {
 
         let value2 = b"baz".to_vec();
         let changes2 = AccessoryDb::materialize_values(
-            vec![(key.clone(), Some(value2.clone()))],
+            vec![(key.clone(), Some(SlotValue::from(value2.clone())))],
             1.to_slot_number(),
         )
         .unwrap();
@@ -263,7 +258,7 @@ mod tests {
         let key = b"deleted".to_vec();
         let value = b"baz".to_vec();
         let changes1 = AccessoryDb::materialize_values(
-            vec![(key.clone(), Some(value.clone()))],
+            vec![(key.clone(), Some(SlotValue::from(value.clone())))],
             0.to_slot_number(),
         )
         .unwrap();
@@ -274,11 +269,8 @@ mod tests {
             Some(value.clone())
         );
 
-        let changes2 = AccessoryDb::materialize_values(
-            vec![(key.clone(), AccessoryStateValue::None)],
-            0.to_slot_number(),
-        )
-        .unwrap();
+        let changes2 =
+            AccessoryDb::materialize_values(vec![(key.clone(), None)], 0.to_slot_number()).unwrap();
         rocksdb.write_schemas(&changes2).unwrap();
         assert_eq!(
             db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number())
@@ -385,26 +377,35 @@ mod tests {
     }
 
     struct TestData {
-        map: HashMap<u64, Vec<(AccessoryKey, AccessoryStateValue)>>,
+        map: HashMap<u64, Vec<(AccessoryKey, Option<SlotValue>)>>,
     }
 
     impl TestData {
         fn new() -> Self {
             let mut map = HashMap::new();
-            map.insert(0, vec![(b"key0".to_vec(), Some(b"value0".to_vec()))]);
+            map.insert(
+                0,
+                vec![(b"key0".to_vec(), Some(SlotValue::from(b"value0".to_vec())))],
+            );
             map.insert(
                 1,
                 vec![
-                    (b"key1".to_vec(), Some(b"value1".to_vec())),
-                    (b"key11".to_vec(), Some(b"value11".to_vec())),
+                    (b"key1".to_vec(), Some(SlotValue::from(b"value1".to_vec()))),
+                    (
+                        b"key11".to_vec(),
+                        Some(SlotValue::from(b"value11".to_vec())),
+                    ),
                 ],
             );
 
             map.insert(
                 2,
                 vec![
-                    (b"key2".to_vec(), Some(b"value12".to_vec())),
-                    (b"key11".to_vec(), Some(b"value12".to_vec())),
+                    (b"key2".to_vec(), Some(SlotValue::from(b"value12".to_vec()))),
+                    (
+                        b"key11".to_vec(),
+                        Some(SlotValue::from(b"value12".to_vec())),
+                    ),
                     (b"key0".to_vec(), None),
                 ],
             );
@@ -417,12 +418,12 @@ mod tests {
                 assert_eq!(
                     db.get_value_option(&SlotKey::from_slice(&k), u64::MAX.to_slot_number())
                         .unwrap(),
-                    v
+                    v.map(|sv| sv.value().to_vec())
                 );
             }
         }
 
-        fn for_version(&self, version: u64) -> Vec<(AccessoryKey, AccessoryStateValue)> {
+        fn for_version(&self, version: u64) -> Vec<(AccessoryKey, Option<SlotValue>)> {
             self.map.get(&version).unwrap().clone()
         }
     }
