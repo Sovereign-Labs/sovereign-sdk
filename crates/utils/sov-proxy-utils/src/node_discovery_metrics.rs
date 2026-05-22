@@ -16,11 +16,7 @@ impl sov_metrics::Metric for ClusterUpdateMetric {
         // Leader and follower IDs are fields, not tags, because each distinct
         // tag value creates a new InfluxDB series and cluster membership can
         // change often enough to cause high-cardinality storage/query overhead.
-        write!(
-            buffer,
-            "{} count=1,current_leader=\"",
-            self.measurement_name(),
-        )?;
+        write!(buffer, "{} current_leader=\"", self.measurement_name(),)?;
         write_escaped_field_value(buffer, self.current_leader.as_deref().unwrap_or(""))?;
         write!(buffer, "\",followers=\"")?;
         write_escaped_field_value(buffer, &format!("{:?}", self.followers))?;
