@@ -270,7 +270,7 @@ impl NodeDiscovery {
         let membership_changed = self.prev_followers != followers;
         let leader_changed = self.prev_leader_id != leader_id;
 
-        tracing::trace!(info = ?info, membership_changed, leader_changed, "Last cluster info");
+        tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
 
         if !(membership_changed || leader_changed) {
             return Ok(());
