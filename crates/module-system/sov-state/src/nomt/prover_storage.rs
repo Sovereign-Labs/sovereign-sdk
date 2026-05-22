@@ -566,7 +566,7 @@ where
 
 /// Output of [`NomtProverStorage::compute_state_update`]: the finished NOMT sessions
 /// for both provable namespaces, the accessory writes accumulated by the STF, the inputs
-/// that produced this update, the new combined root, and any pinned cache carried forward.
+/// that produced this update, and the new combined root.
 /// Pass this to [`NomtProverStorage::materialize_changes`] (or `_at_version`) to turn it into
 /// a [`NomtChangeSet`] the storage manager can commit.
 pub struct NomtStateUpdate<S: MerkleProofSpec> {
@@ -1117,7 +1117,6 @@ mod tests {
                 kernel_only_accesses(kernel_key.clone(), kernel_value.clone()),
                 &witness,
                 first_root,
-                None,
             )
             .unwrap();
 
@@ -1127,7 +1126,6 @@ mod tests {
                 kernel_only_accesses(kernel_key, kernel_value),
                 &witness,
                 first_root,
-                None,
             )
             .unwrap();
 
