@@ -94,7 +94,10 @@ pub fn run(args: BorshArgs) -> anyhow::Result<()> {
     println!("  per_byte_read              = {per_byte_read:.4}");
     println!("  per_read_bias              = {per_read_bias:.4}  (per_read slope - per_byte_read)");
     println!("  bias_borsh_deserialization = {bias_borsh_deserialization:.2}  (decode intercept - 2·per_read_bias - 4·per_byte_read)");
-    println!("  Sanity: decode-vec slope = {:.4} vs per_byte_read = {per_byte_read:.4}", fit_decode.per_byte);
+    println!(
+        "  Sanity: decode-vec slope = {:.4} vs per_byte_read = {per_byte_read:.4}",
+        fit_decode.per_byte
+    );
 
     println!("\nSuggested constants.toml values (X/2 split per dimension, rounded ≥1):");
     let pbr = split_half(per_byte_read);
