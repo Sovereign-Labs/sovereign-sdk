@@ -135,7 +135,7 @@ fn assert_migrated_state(
         .create_state_for_migration()
         .context("failed to create post-migration storage view")?;
     let mut runtime = DemoRuntime::<DemoRollupSpec>::default();
-    let mut checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+    let mut checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
 
     let state_version = runtime
         .chain_state
@@ -187,7 +187,7 @@ fn rewrite_head(
 
     let mut runtime = DemoRuntime::<DemoRollupSpec>::default();
     let kernel_roundtrip = kernel_roundtrip(&runtime.chain_state, &storage)?;
-    let mut checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+    let mut checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
     apply(&mut runtime, &mut checkpoint)?;
     StateWriter::<Kernel>::set(
         &mut checkpoint,

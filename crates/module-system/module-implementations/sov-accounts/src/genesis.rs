@@ -110,7 +110,7 @@ mod tests {
     fn fresh_state() -> StateCheckpoint<TestSpec> {
         let kernel = MockKernel::<TestSpec>::default();
         let storage = SimpleStorageManager::new().create_storage();
-        StateCheckpoint::<TestSpec>::new(storage, &kernel, None)
+        StateCheckpoint::<TestSpec>::new(storage, &kernel)
     }
 
     fn account_data(
