@@ -60,7 +60,7 @@ impl ClusterInfoService {
     // Waits for the background cluster-info tasks to finish.
     pub async fn join(self) -> anyhow::Result<()> {
         self.node_checker_task.handle.await?;
-        self.node_discovery_task.handle.await??;
+        self.node_discovery_task.handle.await?;
         Ok(())
     }
 }
