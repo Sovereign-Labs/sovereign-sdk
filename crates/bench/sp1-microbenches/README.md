@@ -45,15 +45,16 @@ primitive call that the metered path eventually makes. Results calibrate
 `DEFAULT_FIXED_GAS_TO_CHARGE_PER_SIGNATURE_VERIFICATION` and
 `DEFAULT_GAS_TO_CHARGE_PER_BYTE_SIGNATURE_VERIFICATION`.
 
-**Borsh** — three sub-commands isolate the three borsh deserialization
-constants independently. `reader-bytes` calibrates `BORSH_PER_BYTE_READ` by
-sweeping read length at one read per iteration. `reader-count` calibrates
-`BORSH_PER_READ_BIAS` by sweeping read count at one byte per read.
-`decode-vec` calibrates `BIAS_BORSH_DESERIALIZATION` by running full
-`MeteredBorshDeserialize::deserialize_from_slice::<Vec<u8>>` and subtracting
-out the reader-level contributions. Borsh decode is cheap per cycle (no
-precompiles), so this bench uses two-iteration differencing — see
-"Methodology choice" below.
+**Borsh** — `borsh` runs three internal sweeps to calibrate the three borsh
+deserialization constants. A `reader-bytes` sweep (read length at one read per
+iteration) calibrates `BORSH_PER_BYTE_READ`; a `reader-count` sweep (read count
+at one byte per read) calibrates `BORSH_PER_READ_BIAS`; a `decode-vec` sweep
+(full `MeteredBorshDeserialize::deserialize_from_slice::<Vec<u8>>`) calibrates
+`BIAS_BORSH_DESERIALIZATION`, subtracting out the reader-level contributions.
+The latter two are derived by subtracting the earlier sweeps' slopes, so the
+constants are coupled and always calibrated together in one run. Borsh decode
+is cheap per cycle (no precompiles), so this bench uses two-iteration
+differencing — see "Methodology choice" below.
 
 ## Run
 
@@ -62,17 +63,11 @@ cargo run --release -p sp1-microbenches -- sha256
 cargo run --release -p sp1-microbenches -- ed25519
 ```
 
-Borsh has three chained sub-commands (each later one needs the slope/bias
-from the previous), plus an `all` wrapper that runs them in sequence:
+`borsh` runs its three sweeps in sequence and prints the final calibrated
+constants:
 
 ```sh
-# Run the three steps in one command (recommended)
-cargo run --release -p sp1-microbenches -- borsh all
-
-# Or run them individually, copying values between steps
-cargo run --release -p sp1-microbenches -- borsh reader-bytes
-cargo run --release -p sp1-microbenches -- borsh reader-count --per-byte-read <X>
-cargo run --release -p sp1-microbenches -- borsh decode-vec --per-byte-read <X> --per-read-bias <Y>
+cargo run --release -p sp1-microbenches -- borsh
 ```
 
 Optional override:

@@ -26,7 +26,7 @@ impl BenchCmd {
         match self {
             BenchCmd::Sha256(args) => sha256::run(args),
             BenchCmd::Ed25519(args) => ed25519::run(args),
-            BenchCmd::Borsh(args) => args.run(),
+            BenchCmd::Borsh(args) => borsh::run(args),
         }
     }
 }

@@ -16,7 +16,6 @@ pub struct BenchResult {
     pub prover_gas: u64,
     pub total_cycles: u64,
     pub region_cycles: u64,
-    pub invocations: u64,
 }
 
 impl BenchResult {

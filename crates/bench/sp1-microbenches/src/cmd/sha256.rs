@@ -41,11 +41,6 @@ pub fn run(args: Sha256Args) -> anyhow::Result<()> {
             .context("prover gas not available; ProverClient may have disabled gas calculation")?;
         let total_cycles = report.total_instruction_count();
         let region_cycles = report.cycle_tracker.get("hash_loop").copied().unwrap_or(0);
-        let invocations = report
-            .invocation_tracker
-            .get("hash_loop")
-            .copied()
-            .unwrap_or(0);
 
         results.push(BenchResult {
             input_size: size,
@@ -53,7 +48,6 @@ pub fn run(args: Sha256Args) -> anyhow::Result<()> {
             prover_gas,
             total_cycles,
             region_cycles,
-            invocations,
         });
     }
 

@@ -57,11 +57,6 @@ pub fn run(args: Ed25519Args) -> anyhow::Result<()> {
             .get("verify_loop")
             .copied()
             .unwrap_or(0);
-        let invocations = report
-            .invocation_tracker
-            .get("verify_loop")
-            .copied()
-            .unwrap_or(0);
 
         results.push(BenchResult {
             input_size: size,
@@ -69,7 +64,6 @@ pub fn run(args: Ed25519Args) -> anyhow::Result<()> {
             prover_gas,
             total_cycles,
             region_cycles,
-            invocations,
         });
     }
 
