@@ -560,12 +560,7 @@ fn on_revert<S: Spec>(
     #[cfg(feature = "native")]
     let preferred_sequencer_publish_reverted_txs = EVM_EXECUTION_CONFIG
         .get()
-        .map(|conf| {
-            conf.read()
-                .expect("Mutex must not be poisoned")
-                .contents
-                .preferred_sequencer_publish_reverted_txs
-        })
+        .map(|conf| conf.preferred_sequencer_publish_reverted_txs)
         .unwrap_or(false);
     #[cfg(not(feature = "native"))]
     let preferred_sequencer_publish_reverted_txs = false;

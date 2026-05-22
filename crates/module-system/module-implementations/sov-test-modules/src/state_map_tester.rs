@@ -54,7 +54,7 @@ pub struct ValueRange {
     pub value: u32,
 }
 
-/// A module for testing the block-level cache.
+/// A module for testing state map access patterns.
 #[derive(Clone, ModuleInfo, ModuleRestApi)]
 pub struct StateMapTester<S: Spec> {
     /// The ID of the module.

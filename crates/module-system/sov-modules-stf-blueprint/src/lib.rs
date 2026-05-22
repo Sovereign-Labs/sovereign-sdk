@@ -415,7 +415,6 @@ where
 {
     /// Run a state transition using the STF blueprint.
     // Similar to `apply_slot`, but enables the injection of a custom `InjectedControlFlow`.
-    // Danger! Note that the semantics of cloning `pre_state` are messy. They are guaranteed not to change the state that the rollup sees.
     #[allow(clippy::too_many_arguments)]
     pub fn apply_slot_with_control_flow<CF: InjectedControlFlow<S> + Clone>(
         &self,
