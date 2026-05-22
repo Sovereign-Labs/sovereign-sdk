@@ -64,13 +64,13 @@ impl HashStf {
             kernel: kernel_reads_writes,
         };
 
-        let (jmt_root_hash, state_update) = storage
+        let (state_root_hash, state_update) = storage
             .compute_state_update(state_accesses, witness, root)
             .unwrap();
 
         let change_set = storage.materialize_changes(state_update);
 
-        (jmt_root_hash, change_set)
+        (state_root_hash, change_set)
     }
 }
 

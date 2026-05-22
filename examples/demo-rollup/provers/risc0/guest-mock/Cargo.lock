@@ -43,7 +43,7 @@ dependencies = [
  "serde",
  "serde_json",
  "serde_with",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -56,7 +56,7 @@ dependencies = [
  "alloy-rlp",
  "crc",
  "serde",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -83,7 +83,7 @@ dependencies = [
  "k256",
  "serde",
  "serde_with",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -97,7 +97,7 @@ dependencies = [
  "borsh",
  "once_cell",
  "serde",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -907,7 +907,7 @@ version = "0.3.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0fa961b519f0b462e3a3b4a34b64d119eeaca1d59af726fe450bbba07a9fc0a1"
 dependencies = [
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -1643,15 +1643,6 @@ checksum = "8a9ee70c43aaf417c914396645a0fa852624801b24ebb7ae78fe8272889ac888"
 
 [[package]]
 name = "hashbrown"
-version = "0.13.2"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "43a3c133739dddd0d2990f9a4bdf8eb4b21ef50e4851ca85ab661199821d510e"
-dependencies = [
- "ahash",
-]
-
-[[package]]
-name = "hashbrown"
 version = "0.15.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
@@ -1930,27 +1921,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "92ecc6618181def0457392ccd0ee51198e065e016d1d527a7ac1b6dc7c1f09d2"
 
 [[package]]
-name = "jmt"
-version = "0.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b37ade62ca224945201e0c6d65e7a389ada90217895f7aa281470212ce4dddb0"
-dependencies = [
- "anyhow",
- "borsh",
- "digest 0.10.7",
- "hashbrown 0.13.2",
- "hex",
- "itertools 0.10.5",
- "mirai-annotations",
- "num-derive",
- "num-traits",
- "serde",
- "sha2",
- "thiserror 1.0.69",
- "tracing",
-]
-
-[[package]]
 name = "js-sys"
 version = "0.3.85"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2075,12 +2045,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "mirai-annotations"
-version = "1.12.0"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "c9be0862c1b3f26a88803c4a49de6889c10e608b3ee9344e6ef5b45fb37ad3d1"
-
-[[package]]
 name = "nearly-linear"
 version = "0.3.0"
 
@@ -2163,17 +2127,6 @@ name = "num-conv"
 version = "0.2.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf97ec579c3c42f953ef76dbf8d55ac91fb219dde70e49aa4a6b7d74e9919050"
-
-[[package]]
-name = "num-derive"
-version = "0.3.3"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "876a53fff98e03a936a674b29568b0e605f06b29372c2489ff4de23f1949743d"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 1.0.109",
-]
 
 [[package]]
 name = "num-integer"
@@ -3490,7 +3443,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "thiserror 2.0.18",
+ "thiserror",
  "tracing",
 ]
 
@@ -3508,7 +3461,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-state",
  "strum",
- "thiserror 2.0.18",
+ "thiserror",
  "tracing",
 ]
 
@@ -3570,7 +3523,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "thiserror 2.0.18",
+ "thiserror",
  "tracing",
 ]
 
@@ -3634,7 +3587,7 @@ dependencies = [
  "sov-state",
  "sov-uniqueness",
  "sov-universal-wallet",
- "thiserror 2.0.18",
+ "thiserror",
  "tracing",
 ]
 
@@ -3717,7 +3670,7 @@ dependencies = [
  "sha2",
  "sov-rollup-interface",
  "sov-universal-wallet",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -3743,7 +3696,7 @@ dependencies = [
  "sov-state",
  "sov-universal-wallet",
  "strum",
- "thiserror 2.0.18",
+ "thiserror",
  "toml",
  "tracing",
  "unwrap-infallible",
@@ -3782,7 +3735,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "thiserror 2.0.18",
+ "thiserror",
  "tracing",
 ]
 
@@ -3829,7 +3782,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-state",
- "thiserror 2.0.18",
+ "thiserror",
  "tracing",
 ]
 
@@ -3844,7 +3797,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-sequencer-registry",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -3866,7 +3819,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-universal-wallet",
  "sov-zkvm-utils",
- "thiserror 2.0.18",
+ "thiserror",
  "tracing",
  "tracing-subscriber 0.3.22",
 ]
@@ -3888,7 +3841,7 @@ dependencies = [
  "serde_json",
  "serde_with",
  "sov-universal-wallet",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
@@ -3902,7 +3855,7 @@ dependencies = [
  "sov-bank",
  "sov-modules-api",
  "sov-state",
- "thiserror 2.0.18",
+ "thiserror",
  "tracing",
 ]
 
@@ -3931,13 +3884,11 @@ dependencies = [
  "derivative",
  "derive_more",
  "hex",
- "jmt",
  "nomt-core",
  "serde",
  "serde-big-array",
  "sov-db-types",
  "sov-metrics",
- "sov-modules-macros",
  "sov-rollup-interface",
  "sov-universal-wallet",
 ]
@@ -3986,7 +3937,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "alloy-primitives",
  "arrayvec",
@@ -4001,12 +3952,12 @@ dependencies = [
  "serde_json",
  "sha2",
  "sov-universal-wallet-macros",
- "thiserror 2.0.18",
+ "thiserror",
 ]
 
 [[package]]
 name = "sov-universal-wallet-macro-helpers"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "bech32",
  "borsh",
@@ -4020,7 +3971,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macros"
-version = "0.3.0"
+version = "0.4.0"
 dependencies = [
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.114",
@@ -4159,31 +4110,11 @@ dependencies = [
 
 [[package]]
 name = "thiserror"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "b6aaf5339b578ea85b50e080feb250a3e8ae8cfcdff9a461c9ec2904bc923f52"
-dependencies = [
- "thiserror-impl 1.0.69",
-]
-
-[[package]]
-name = "thiserror"
 version = "2.0.18"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "4288b5bcbc7920c07a1149a35cf9590a2aa808e0bc1eafaade0b80947865fbc4"
 dependencies = [
- "thiserror-impl 2.0.18",
-]
-
-[[package]]
-name = "thiserror-impl"
-version = "1.0.69"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4fee6c4efc90059e10f81e6d42c60a18f76588c3d74cb83a0b242a2b6c7504c1"
-dependencies = [
- "proc-macro2",
- "quote",
- "syn 2.0.114",
+ "thiserror-impl",
 ]
 
 [[package]]

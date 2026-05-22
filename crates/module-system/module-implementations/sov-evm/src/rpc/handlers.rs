@@ -35,9 +35,10 @@ pub struct GetProofResponse<S: Spec> {
 }
 
 #[rpc_gen(client, server)]
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     /// Handler for `net_version`
     #[rpc_method(name = "net_version")]
@@ -439,9 +440,18 @@ where
         let evm_db = self.db(maybe_archival_state.deref_mut());
 
         let mut inspector = AccessListInspector::new(initial_access_list);
-        let execution =
-            crate::executor::inspect(evm_db, &block_env, tx_env, cfg_env, &mut inspector)
-                .map_err(EthApiError::from)?;
+        let precompiles = self
+            .precompile_provider(None)
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+        let execution = crate::executor::inspect(
+            evm_db,
+            &block_env,
+            tx_env,
+            cfg_env,
+            &mut inspector,
+            precompiles,
+        )
+        .map_err(EthApiError::from)?;
 
         let (gas_used, error) = match execution.result {
             ExecutionResult::Success { gas_used, .. } => (U256::from(gas_used), None),
@@ -597,9 +607,10 @@ where
 /// Methods that are NOT auto-registered via `#[rpc_gen]`.
 /// `eth_estimate_gas` is registered by `sov-ethereum` which wraps it with
 /// paymaster-aware affordability checks.
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     /// Validates request-shape and base-fee rules for `eth_estimateGas` before any
     /// transport-specific affordability checks run.
@@ -668,14 +679,15 @@ where
     }
 }
 
-fn get_transaction_for_block_index<S: Spec>(
-    evm: &Evm<S>,
+fn get_transaction_for_block_index<S: Spec, P>(
+    evm: &Evm<S, P>,
     block: crate::MaybeSealedBlock,
     index: u64,
     state: &mut ApiStateAccessor<S>,
 ) -> Result<Option<Transaction>, EthApiError>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     let tx_count = block
         .transactions_end()

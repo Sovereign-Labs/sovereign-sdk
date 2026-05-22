@@ -27,11 +27,9 @@ sov-rollup-interface = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 sov-db = { workspace = true, optional = true }
 hex = { workspace = true }
-jmt = { workspace = true, features = ["std", "sha2"] }
 nomt-core = { workspace = true }
 nomt = { workspace = true, optional = true }
 sov-metrics = { workspace = true }
-sov-modules-macros = { workspace = true, optional = true }
 tracing = { workspace = true, optional = true }
 sov-db-types = { workspace = true }
 
@@ -50,17 +48,15 @@ arbitrary = [
 	"dep:proptest",
 	"sov-db?/arbitrary",
 	"sov-rollup-interface/arbitrary",
-	"sov-modules-macros?/arbitrary",
 	"sov-db-types/arbitrary",
 	"sov-mock-da/arbitrary"
 ]
-bench = ["dep:sov-modules-macros", "sov-modules-macros/bench"]
+bench = []
 default = []
 native = [
 	"sov-db",
 	"sov-rollup-interface/native",
 	"sov-metrics/native",
-	"sov-modules-macros?/native",
 	"sov-db-types/native",
 	"dep:nomt",
 	"dep:tracing",

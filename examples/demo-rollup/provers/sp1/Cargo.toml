@@ -27,7 +27,7 @@ float_arithmetic = "deny"              # Can cause subtle bugs due to different 
 [build-dependencies]
 anyhow = { workspace = true }
 sov-zkvm-utils = { workspace = true }
-sp1-build = { version = "6.1.0", default-features = false }
+sp1-build = { workspace = true }
 
 [features]
 bench = []

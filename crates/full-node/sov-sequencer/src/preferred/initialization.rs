@@ -24,6 +24,7 @@ where
 {
     da: Da,
     config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+    max_concurrent_proof_blobs: usize,
     _phantom: PhantomData<(S, Rt)>,
 }
 
@@ -37,10 +38,12 @@ where
     pub fn new(
         da: Da,
         config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+        max_concurrent_proof_blobs: usize,
     ) -> Self {
         Self {
             da,
             config,
+            max_concurrent_proof_blobs,
             _phantom: PhantomData,
         }
     }
@@ -165,6 +168,7 @@ where
             tx_queue_id.clone(),
             batch_execution_time_limit_micros,
             config.clone(),
+            self.max_concurrent_proof_blobs,
             shutdown_receiver.clone(),
             shutdown_sender.clone(),
             executor_events_sender,

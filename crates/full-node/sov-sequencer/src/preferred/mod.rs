@@ -154,13 +154,14 @@ where
         state_update_receiver: StateUpdateReceiver<S::Storage>,
         storage_path: &Path,
         config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+        max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        Builder::new(da, config)
+        Builder::new(da, config, max_concurrent_proof_blobs)
             .build(
                 state_update_receiver,
                 storage_path,

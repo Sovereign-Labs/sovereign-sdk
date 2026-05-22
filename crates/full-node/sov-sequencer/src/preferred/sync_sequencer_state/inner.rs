@@ -74,6 +74,7 @@ where
 {
     pub(crate) seq_role: SequencerRole,
     pub(crate) seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+    pub(crate) max_concurrent_proof_blobs: usize,
     pub(crate) shutdown_receiver: watch::Receiver<()>,
     pub(crate) shutdown_sender: watch::Sender<()>,
 
@@ -554,7 +555,7 @@ where
     pub(crate) fn proof_blob_sender_status(&self) -> BlobSenderStatus {
         BlobSenderStatus {
             in_flight: self.in_flight_proof_blobs.load(Ordering::Relaxed),
-            max_concurrent: self.seq_config.max_concurrent_proof_blobs,
+            max_concurrent: self.max_concurrent_proof_blobs,
         }
     }
 

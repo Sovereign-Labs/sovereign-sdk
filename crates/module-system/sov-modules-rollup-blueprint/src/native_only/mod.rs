@@ -6,6 +6,7 @@ mod wallet;
 use anyhow::Context;
 use async_trait::async_trait;
 pub use endpoints::*;
+use futures::future;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, RollupHeight};
@@ -215,6 +216,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
     /// Creates a new sequencer and provides a [`SequencerCreationReceipt`] with
     /// some information about said sequencer.
+    ///
+    #[allow(clippy::too_many_arguments)]
     async fn create_sequencer(
         &self,
         state_update_receiver: watch::Receiver<StateUpdateInfo<<Self::Spec as Spec>::Storage>>,
@@ -228,6 +231,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<SequencerCreationReceipt<Self::Spec>> {
+        let max_concurrent_proof_blobs = rollup_config
+            .proof_manager
+            .as_ref()
+            .map(|p| p.max_concurrent_proof_blobs)
+            .unwrap_or(0);
+
         match &rollup_config.sequencer.sequencer_kind_config {
             SequencerKindConfig::Standard(seq_config) => {
                 let (sequencer, background_handles) =
@@ -237,6 +246,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         da_sync_state,
                         &rollup_config.storage.path,
                         &rollup_config.sequencer.with_seq_config(seq_config.clone()),
+                        max_concurrent_proof_blobs,
                         ledger_db.clone(),
                         api_ledger_db.clone(),
                         shutdown_sender,
@@ -265,6 +275,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
                     da_address,
+                    is_replica: false,
                 })
             }
             SequencerKindConfig::Preferred(seq_config) => {
@@ -277,6 +288,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                             .sequencer
                             .with_seq_config(seq_config.clone())
                             .clone(),
+                        max_concurrent_proof_blobs,
                         ledger_db.clone(),
                         api_ledger_db.clone(),
                         shutdown_sender.clone(),
@@ -284,6 +296,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         bind_addr,
                     )
                     .await?;
+                let seq_role = sequencer.sequencer_role().await?;
 
                 let da_address = da_service.get_signer().await.context(
                     "Full node with preferred sequencer require DaService with signer support",
@@ -307,6 +320,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
                     da_address,
+                    is_replica: seq_role.is_replica(),
                 })
             }
         }
@@ -362,6 +376,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
             panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
+        }
+
+        if operating_mode != OperatingMode::Operator && rollup_config.proof_manager.is_none() {
+            anyhow::bail!(
+                "Missing `[proof_manager]` section in rollup config: it is required for `{operating_mode:?}` rollups.",
+            );
         }
 
         let da_service = self
@@ -501,12 +521,29 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
         let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
         let axum_socket_addr = axum_tcp.local_addr()?;
+        let mut sequencer = self
+            .create_sequencer(
+                state_update_receiver.clone(),
+                da_sync_state.clone(),
+                &rollup_config,
+                &ledger_db,
+                &api_ledger_db,
+                &da_service,
+                main_shutdown_receiver.clone(),
+                main_shutdown_sender.clone(),
+                stop_at_rollup_height,
+                axum_socket_addr,
+            )
+            .await?;
+
+        let proof_pipeline_enabled =
+            should_enable_proof_pipeline(prover_config, sequencer.is_replica);
 
         // The prover service validates the latest aggregated proof persisted in
         // the ledger DB and returns its `final_slot_number`. We pass this slot
         // into the runner so the STF-info stream resumes at `final_slot + 1`.
-        let (prover_service, latest_proof_final_slot) = if prover_config.is_enabled() {
-            let (svc, slot) = self
+        let (prover_service, latest_proof_final_slot) = if proof_pipeline_enabled {
+            let create_prover_service_result = self
                 .create_prover_service(
                     prover_config,
                     &rollup_config,
@@ -514,17 +551,30 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     &ledger_db,
                     start_fresh_outer_proof_on_resync,
                 )
-                .await?;
-            (Some(svc), slot)
+                .await;
+
+            match create_prover_service_result {
+                Ok((svc, slot)) => (Some(svc), slot),
+                Err(error) => {
+                    cleanup_failed_startup(
+                        &main_shutdown_sender,
+                        &secondary_shutdown_sender,
+                        &mut background_handles,
+                        &mut sequencer,
+                    )
+                    .await;
+                    return Err(error);
+                }
+            }
         } else {
             (None, None)
         };
 
-        let mut runner = StateTransitionRunner::new(
+        let runner_result = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             axum_tcp,
-            if prover_config.is_enabled() {
-                Some(rollup_config.proof_manager)
+            if proof_pipeline_enabled {
+                rollup_config.proof_manager
             } else {
                 None
             },
@@ -543,32 +593,46 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             genesis_da_height,
             latest_proof_final_slot,
         )
-        .await?;
-
-        let sequencer = self
-            .create_sequencer(
-                state_update_receiver.clone(),
-                da_sync_state,
-                &rollup_config,
-                &ledger_db,
-                &api_ledger_db,
-                &da_service,
-                main_shutdown_receiver.clone(),
-                main_shutdown_sender.clone(),
-                stop_at_rollup_height,
-                axum_socket_addr,
-            )
-            .await?;
+        .await;
+        let mut runner = match runner_result {
+            Ok(runner) => runner,
+            Err(error) => {
+                cleanup_failed_startup(
+                    &main_shutdown_sender,
+                    &secondary_shutdown_sender,
+                    &mut background_handles,
+                    &mut sequencer,
+                )
+                .await;
+                return Err(error);
+            }
+        };
 
         if let Some(stf_info_receiver) = runner.take_stf_info_receiver() {
             let prover_service = prover_service
                 .expect("prover service must be present when stf_info_receiver is Some");
-            let proof_sender =
-                Box::new(self.create_proof_sender(&rollup_config, sequencer.proof_sender.clone())?);
+            let proof_sender: Box<dyn ProofSender> =
+                match self.create_proof_sender(&rollup_config, sequencer.proof_sender.clone()) {
+                    Ok(proof_sender) => Box::new(proof_sender),
+                    Err(error) => {
+                        let _ = runner.shutdown_before_run().await;
+                        cleanup_failed_startup(
+                            &main_shutdown_sender,
+                            &secondary_shutdown_sender,
+                            &mut background_handles,
+                            &mut sequencer,
+                        )
+                        .await;
+                        return Err(error);
+                    }
+                };
+            let proof_manager = rollup_config
+                .proof_manager
+                .expect("proof_manager must be set when prover is enabled");
 
-            let workflow_task_handle = match operating_mode {
+            let workflow_task_handle_result = match operating_mode {
                 OperatingMode::Optimistic => {
-                    let prover_address = rollup_config.proof_manager.prover_address;
+                    let prover_address = proof_manager.prover_address;
                     let bonding_proof_service = Self::Runtime::default()
                         .proof_processor()
                         .create_bonding_proof_service::<Self::Runtime>(
@@ -582,16 +646,14 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         secondary_shutdown_receiver,
                         stf_info_receiver,
                     )
-                    .await?
+                    .await
                 }
                 OperatingMode::Zk => {
                     start_zk_workflow_in_background(
                         prover_service,
-                        rollup_config.proof_manager.aggregated_proof_block_jump,
-                        rollup_config.proof_manager.eager_proof_submission,
-                        rollup_config
-                            .proof_manager
-                            .max_number_of_aggregated_proofs_in_memory,
+                        proof_manager.aggregated_proof_block_jump,
+                        proof_manager.eager_proof_submission,
+                        proof_manager.max_number_of_aggregated_proofs_in_memory,
                         proof_sender,
                         stf_info_receiver,
                         runner.da_sync_state(),
@@ -599,17 +661,31 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         main_shutdown_sender.clone(),
                         start_fresh_outer_proof_on_resync,
                     )
-                    .await?
+                    .await
                 }
                 OperatingMode::Operator => {
-                    start_operator_workflow_in_background(secondary_shutdown_receiver).await
+                    Ok(start_operator_workflow_in_background(secondary_shutdown_receiver).await)
+                }
+            };
+            let workflow_task_handle = match workflow_task_handle_result {
+                Ok(handle) => handle,
+                Err(error) => {
+                    let _ = runner.shutdown_before_run().await;
+                    cleanup_failed_startup(
+                        &main_shutdown_sender,
+                        &secondary_shutdown_sender,
+                        &mut background_handles,
+                        &mut sequencer,
+                    )
+                    .await;
+                    return Err(error);
                 }
             };
 
             background_handles.push(workflow_task_handle);
         }
 
-        let endpoints = self
+        let endpoints_result = self
             .create_endpoints(
                 state_update_receiver,
                 sync_status_receiver,
@@ -619,7 +695,21 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 &da_service,
                 &rollup_config,
             )
-            .await?;
+            .await;
+        let endpoints = match endpoints_result {
+            Ok(endpoints) => endpoints,
+            Err(error) => {
+                let _ = runner.shutdown_before_run().await;
+                cleanup_failed_startup(
+                    &main_shutdown_sender,
+                    &secondary_shutdown_sender,
+                    &mut background_handles,
+                    &mut sequencer,
+                )
+                .await;
+                return Err(error);
+            }
+        };
 
         let endpoints = NodeEndpointsContainer {
             inner: endpoints,
@@ -638,6 +728,39 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             background_handles,
             genesis_slot_number: genesis_da_height,
         })
+    }
+}
+
+async fn cleanup_failed_startup<S: Spec>(
+    main_shutdown_sender: &watch::Sender<()>,
+    secondary_shutdown_sender: &watch::Sender<()>,
+    background_handles: &mut Vec<JoinHandle<()>>,
+    sequencer: &mut SequencerCreationReceipt<S>,
+) {
+    let _ = main_shutdown_sender.send(());
+    let _ = secondary_shutdown_sender.send(());
+
+    // Drain handles concurrently rather than serially.
+    let background_handles_to_join = std::mem::take(background_handles);
+    let sequencer_background_handles = std::mem::take(&mut sequencer.background_handles);
+    let endpoint_background_handles = std::mem::take(&mut sequencer.endpoints.background_handles);
+
+    let drain = async move {
+        let _ = tokio::join!(
+            future::join_all(background_handles_to_join),
+            future::join_all(sequencer_background_handles),
+            future::join_all(endpoint_background_handles),
+        );
+    };
+
+    if tokio::time::timeout(std::time::Duration::from_secs(30), drain)
+        .await
+        .is_err()
+    {
+        tracing::warn!(
+            "Timed out waiting for background tasks to drain after a failed startup; \
+             some tasks may still hold storage references"
+        );
     }
 }
 
@@ -838,4 +961,10 @@ pub struct SequencerCreationReceipt<S: Spec> {
     pub background_handles: Vec<JoinHandle<()>>,
     #[allow(missing_docs)]
     pub da_address: <S::Da as DaSpec>::Address,
+    /// Whether the resolved sequencer role is a replica role.
+    pub is_replica: bool,
+}
+
+fn should_enable_proof_pipeline(prover_config: RollupProverConfig, is_replica: bool) -> bool {
+    prover_config.is_enabled() && !is_replica
 }

@@ -9,27 +9,17 @@ mod event;
 pub mod namespaces;
 pub mod nomt;
 #[cfg(feature = "native")]
-mod prover_storage;
-#[cfg(feature = "native")]
 /// Defines data structures for managing state in the sequencer.
 pub mod sequencer_state;
 pub mod storage;
 /// Defines the data structures needed by both the zk-storage and the prover storage.
 mod storage_internals;
 mod witness;
-mod zk_storage;
 
-pub mod jmt {
-    //! Re-export the [`jellyfish-merkle-tree`](https://github.com/penumbra-zone/jmt) crate.
-    pub use jmt::{KeyHash, RootHash, Version};
-}
 pub use event::TypeErasedEvent;
-#[cfg(feature = "native")]
-pub use prover_storage::ProverStorage;
 use sov_rollup_interface::reexports::digest;
 use sov_rollup_interface::reexports::digest::Digest;
-pub use storage_internals::{SparseMerkleProof, StorageRoot};
-pub use zk_storage::ZkStorage;
+pub use storage_internals::StorageRoot;
 
 pub use crate::cache::*;
 pub use crate::codec::*;
@@ -51,7 +41,7 @@ pub trait MerkleProofSpec: Send + Sync {
 
 /// The default [`MerkleProofSpec`] implementation.
 ///
-/// This type is typically found as a type parameter for [`ProverStorage`].
+/// This type is typically found as a type parameter for NOMT-backed storage.
 #[derive(Clone)]
 pub struct DefaultStorageSpec<H: Digest<OutputSize = digest::typenum::U32> + Send + Sync> {
     _marker: std::marker::PhantomData<H>,

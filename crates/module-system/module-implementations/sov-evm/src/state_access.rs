@@ -31,7 +31,10 @@ use crate::{
 
 /// Non-trivial state reads
 #[cfg(feature = "native")]
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     /// Gets block by number. Fails if prunned or in the future
     pub fn block<Accessor: AccessoryStateReaderAndWriter>(
         &self,
@@ -77,7 +80,10 @@ impl<S: Spec> Evm<S> {
 }
 
 /// User state reads
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     /// Get a EvmDb instance for the supplied state.
     pub fn db<'a, Ws: StateReader<User>>(&self, state: &'a mut Ws) -> EvmDb<'a, Ws, S> {
         EvmDb::new(
@@ -154,7 +160,10 @@ impl<S: Spec> Evm<S> {
 }
 
 /// Accessory state reads
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     /// Access the pending Ethereum transactions.
     pub fn pending_transactions<Accessor: InfallibleStateReaderAndWriter<User>>(
         &self,
@@ -213,7 +222,10 @@ impl<S: Spec> Evm<S> {
 }
 
 /// Reads on accessory state set in genesis
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     /// Access the Ethereum blocks.
     pub fn block_numbers<Accessor: AccessoryStateReaderAndWriter>(
         &self,

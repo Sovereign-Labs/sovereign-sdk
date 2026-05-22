@@ -194,9 +194,9 @@ sov-rpc-eth-types = { path = "crates/utils/sov-rpc-eth-types", default-features 
 sov-db = { path = "crates/full-node/sov-db", default-features = false, version = "0.3" }
 sov-db-types = { path = "crates/full-node/sov-db-types", version = "0.3" }
 rest-api-load-testing = { path = "crates/utils/rest-api-load-testing" }
-sov-universal-wallet = { path = "crates/universal-wallet/schema", version = "0.3" }
-sov-universal-wallet-macros = { path = "crates/universal-wallet/macros", version = "0.3" }
-sov-universal-wallet-macro-helpers = { path = "crates/universal-wallet/macro-helpers", version = "0.3" }
+sov-universal-wallet = { path = "crates/universal-wallet/schema", version = "0.4" }
+sov-universal-wallet-macros = { path = "crates/universal-wallet/macros", version = "0.4" }
+sov-universal-wallet-macro-helpers = { path = "crates/universal-wallet/macro-helpers", version = "0.4" }
 sov-zkvm-utils = { path = "crates/utils/sov-zkvm-utils" }
 sov-build = { path = "crates/utils/sov-build" }
 sovereign-web3 = { path = "crates/web3", default-features = false }
@@ -204,7 +204,6 @@ workspace-hack = { path = "crates/utils/workspace-hack" }
 nearly-linear = { path = "crates/utils/nearly-linear", version = "0.3" }
 sov-proxy-utils = { path = "crates/utils/sov-proxy-utils", version = "0.3" }
 # Dependencies maintained by Sovereign
-jmt = { version = "0.12.0", default-features = false }
 reltester = { git = "https://github.com/sovereign-labs/reltester.git", rev = "d6209abff72929f5ba41614f5cea3e4a748428c3" }
 rockbound = { git = "https://github.com/sovereign-labs/rockbound", rev = "d8b270d399d0d355a19fbeedf9af009baee8ae66" }
 nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
@@ -272,7 +271,7 @@ thiserror = "2"
 tower = { version = "0.5", default-features = false }
 tower-http = "0.6"
 tower-request-id = "0.3"
-tracing = { version = "0.1.40", default-features = false }
+tracing = { version = "0.1.40", default-features = false, features = ["attributes"] }
 tracing-subscriber = { version = "0.3.18" } # There's hardly any reason to disable its default features.
 tracing-test = { version = "0.2.5", features = [
     "no-env-filter",
@@ -302,6 +301,22 @@ ruint = { version = "1", default-features = false }
 risc0-zkvm = { version = "3.0", default-features = false }
 risc0-zkvm-platform = "2.2"
 risc0-build = "3.0"
+# All sp1-* and slop-* crates ship from the same SP1 release and must be upgraded
+# in lockstep. Self-rooted zkvm-guest workspaces
+# (examples/demo-rollup/provers/sp1/guest-* and crates/adapters/sp1/fibonacci-program)
+# pin their own sp1-zkvm version explicitly because [patch.crates-io] requires
+# a workspace root and prevents `workspace = true` inheritance. See also the
+# sha2 / ed25519-dalek pinning notes above.
+slop-algebra = { version = "6.2.1", default-features = false }
+sp1-build = { version = "6.2.1", default-features = false }
+sp1-lib = { version = "6.2.1", default-features = false }
+sp1-primitives = { version = "6.2.1", default-features = false }
+sp1-recursion-executor = { version = "6.2.1", default-features = false }
+sp1-sdk = { version = "6.2.1", default-features = false }
+sp1-verifier = { version = "6.2.1", default-features = false }
+# sp1-zkvm keeps default features (`libm`, `lib`) because sov-sp1-adapter
+# relies on them via the guest-side `verify` feature dependency chain.
+sp1-zkvm = { version = "6.2.1" }
 flume = { version = "0.11.1", features = ["async"] }
 tokio-metrics = { version = "0.4.0" }
 

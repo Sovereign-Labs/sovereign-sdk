@@ -14,7 +14,6 @@ workspace = true
 
 [dependencies]
 # Maintained by sovereign labs
-jmt = { workspace = true }
 rockbound = { workspace = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 nomt = { workspace = true }
@@ -74,19 +73,6 @@ arbitrary = [
 ]
 migration-script = []
 test-utils = ["dep:rand", "strum"]
-
-[[bench]]
-name = "state_db_single_snapshot"
-path = "benches/state_db_bench.rs"
-harness = false
-required-features = ["test-utils"]
-
-[[bench]]
-name = "native_storage_manager"
-path = "benches/native_storage_manager.rs"
-harness = false
-required-features = ["test-utils"]
-
 
 [[bench]]
 name = "pruner"

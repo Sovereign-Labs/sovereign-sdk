@@ -54,9 +54,10 @@ pub enum CallMessage<S: Spec> {
     UpdateRuntimeConfig(EvmRuntimeConfigUpdate<S>),
 }
 
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     pub(crate) fn fetch_state(
         &mut self,
@@ -248,6 +249,7 @@ where
             self.fetch_state(context, state, tx)?;
 
         save_elapsed!(fetch_state_time SINCE fetch_state);
+        let precompiles = self.precompile_provider(Some(context))?;
         let db = self.db(state);
         let mut db = MetricsDb::new(db);
 
@@ -255,7 +257,7 @@ where
         let ExecResultAndState {
             result,
             state: state_changes,
-        } = match transact(&mut db, &block, tx_env, cfg_env) {
+        } = match transact(&mut db, &block, tx_env, cfg_env, precompiles) {
             Ok(result) => result,
             Err(err) => return on_error(*tx.signed_transaction.hash(), err),
         };

@@ -35,7 +35,10 @@ pub struct EvmExecutionConfig {
     pub location: std::path::PathBuf,
 }
 
-impl<S: Spec> ExecutionInit for Evm<S> {
+impl<S: Spec, P> ExecutionInit for Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     type Config = EvmExecutionConfig;
     // Do nothing; the configure function handles everything we need.
     fn init(_config: &Self::Config) -> Result<(), Box<dyn std::error::Error>> {

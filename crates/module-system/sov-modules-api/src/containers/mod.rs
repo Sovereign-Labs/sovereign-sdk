@@ -234,16 +234,14 @@ mod test {
     use sov_mock_da::MockDaSpec;
     use sov_mock_zkvm::MockZkvm;
     use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
-    use sov_state::namespaces::User;
-    use sov_state::{
-        DefaultStorageSpec, NativeStorage, ProverStorage, SlotKey, SlotValue, Storage,
-    };
-    use sov_test_utils::storage::SimpleJmtStorageManager;
+    use sov_state::namespaces::{Kernel, User};
+    use sov_state::{DefaultStorageSpec, NativeStorage, SlotKey, SlotValue, Storage};
+    use sov_test_utils::storage::SimpleStorageManager;
     use sov_test_utils::validate_and_materialize;
 
     use crate::capabilities::mocks::MockKernel;
     use crate::execution_mode::Native;
-    use crate::{CryptoSpec, StateWriter, WorkingSet};
+    use crate::{CryptoSpec, Spec, StateWriter, WorkingSet};
 
     type StorageSpec = DefaultStorageSpec<TestHasher>;
     type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
@@ -282,9 +280,9 @@ mod test {
     }
 
     #[test]
-    fn test_jmt_storage() -> anyhow::Result<()> {
-        let mut storage_manager = SimpleJmtStorageManager::<StorageSpec>::new();
-        let mut prev_root = <ProverStorage<StorageSpec> as Storage>::PRE_GENESIS_ROOT;
+    fn test_nomt_storage() -> anyhow::Result<()> {
+        let mut storage_manager = SimpleStorageManager::<StorageSpec>::new();
+        let mut prev_root = <<TestSpec as Spec>::Storage as Storage>::PRE_GENESIS_ROOT;
         let tests = create_tests();
         {
             let mut kernel = MockKernel::<TestSpec>::default();
@@ -294,6 +292,11 @@ mod test {
                     let mut working_set: WorkingSet<TestSpec> =
                         WorkingSet::new_with_kernel(storage.clone(), &kernel);
                     StateWriter::<User>::set(&mut working_set, &test.key, test.value.clone())?;
+                    StateWriter::<Kernel>::set(
+                        &mut working_set,
+                        &SlotKey::from_slice(b"kernel_marker"),
+                        SlotValue::from(test.version.get().to_le_bytes().to_vec()),
+                    )?;
                     let (scratchpad, _gas_meter, _) = working_set.finalize();
                     let checkpoint = scratchpad.commit();
                     let (cache, _, witness) = checkpoint.freeze();
@@ -332,7 +335,7 @@ mod test {
 
     #[test]
     fn test_restart_lifecycle() -> anyhow::Result<()> {
-        let mut storage_manager = SimpleJmtStorageManager::new();
+        let mut storage_manager = SimpleStorageManager::new();
         {
             let storage = storage_manager.create_storage();
             assert!(storage.is_empty());
@@ -347,12 +350,17 @@ mod test {
             let mut working_set: WorkingSet<TestSpec> =
                 WorkingSet::new_with_kernel(storage.clone(), &MockKernel::<TestSpec>::default());
             StateWriter::<User>::set(&mut working_set, &key, value.clone())?;
+            StateWriter::<Kernel>::set(
+                &mut working_set,
+                &SlotKey::from_slice(b"kernel_marker"),
+                SlotValue::from("kernel_value"),
+            )?;
             let (cache, _, witness) = working_set.finalize().0.commit().freeze();
             let (_, change_set) = validate_and_materialize(
                 storage,
                 cache,
                 &witness,
-                <ProverStorage<StorageSpec> as Storage>::PRE_GENESIS_ROOT,
+                <<TestSpec as Spec>::Storage as Storage>::PRE_GENESIS_ROOT,
             )
             .expect("storage is valid");
             storage_manager.commit(change_set);

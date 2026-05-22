@@ -99,6 +99,7 @@ where
     api_state: ApiState<S>,
     da_address: <S::Da as DaSpec>::Address,
     config: SequencerConfig<S::Address, StdSequencerConfig>,
+    max_concurrent_proof_blobs: usize,
     api_ledger_db: LedgerDb,
 }
 
@@ -130,6 +131,7 @@ where
         _da_sync_state: Arc<DaSyncState>,
         storage_path: &Path,
         config: &SequencerConfig<S::Address, StdSequencerConfig>,
+        max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
@@ -202,6 +204,7 @@ where
             runtime: Rt::default(),
             checkpoint_sender,
             config: config.clone(),
+            max_concurrent_proof_blobs,
             api_ledger_db,
             da_address,
         }));
@@ -786,7 +789,7 @@ where
             .nb_of_concurrent_proof_blob_submissions();
         Ok(BlobSenderStatus {
             in_flight,
-            max_concurrent: self.config.max_concurrent_proof_blobs,
+            max_concurrent: self.max_concurrent_proof_blobs,
         })
     }
 

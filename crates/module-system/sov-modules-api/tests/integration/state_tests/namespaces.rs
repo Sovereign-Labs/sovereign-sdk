@@ -6,16 +6,15 @@ use sov_modules_api::{
     KernelStateValue, Spec, StateCheckpoint, StateMap, StateValue, VersionedStateValue,
 };
 use sov_state::{BorshCodec, Prefix, ProvableNamespace, StateRoot};
-use sov_test_utils::storage::{SimpleJmtStorageManager, SimpleStorageManager};
-use sov_test_utils::{TestJmtSpec, TestSpec};
+use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::{write_kernel_marker, TestSpec};
 
 use crate::state_tests::{commit_to_storage, ForklessStorageManager};
 
 #[test]
-fn test_jmt_state_value_user_namespace() -> Result<(), Infallible> {
-    let mut storage_manager = SimpleJmtStorageManager::new();
-    storage_manager.genesis();
-    test_state_value_user_namespace::<TestJmtSpec, _>(storage_manager)
+fn test_nomt_state_value_user_namespace() -> Result<(), Infallible> {
+    let storage_manager = SimpleStorageManager::new();
+    test_state_value_user_namespace::<TestSpec, _>(storage_manager)
 }
 
 // TODO: Do we want to unify these 2 tests? The only differ by value passed. Probably
@@ -34,6 +33,7 @@ where
     // Native execution
     let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel);
     state_value.set(&11, &mut state)?;
+    write_kernel_marker(&mut state)?;
     commit_to_storage(state, storage, &mut kernel, &mut storage_manager, prev_root);
 
     let (storage, root) = storage_manager.create_storage_with_root();
@@ -46,6 +46,7 @@ where
     let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel);
     let _ = state_value.get(&mut state);
     state_value.set(&22, &mut state)?;
+    write_kernel_marker(&mut state)?;
     commit_to_storage(state, storage, &mut kernel, &mut storage_manager, root);
     let new_root = storage_manager.current_root();
 
@@ -56,12 +57,6 @@ where
     assert_ne!(new_kernel_root_hash, new_user_root_hash);
 
     Ok(())
-}
-
-#[test]
-fn test_jmt_state_value_kernel_namespace() -> Result<(), Infallible> {
-    let storage_manager = SimpleJmtStorageManager::new();
-    test_state_value_kernel_namespace::<TestJmtSpec, _>(storage_manager)
 }
 
 #[test]
@@ -112,9 +107,9 @@ where
 }
 
 #[test]
-fn test_jmt_state_map_user_namespace() -> Result<(), Infallible> {
-    let storage_manager = SimpleJmtStorageManager::new();
-    test_state_map_user_namespace::<TestJmtSpec, _>(storage_manager)
+fn test_nomt_state_map_user_namespace() -> Result<(), Infallible> {
+    let storage_manager = SimpleStorageManager::new();
+    test_state_map_user_namespace::<TestSpec, _>(storage_manager)
 }
 
 /// Test that the state maps with a standard working set get written to the user space
@@ -131,6 +126,7 @@ where
     // Native execution
     let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel);
     state_value.set(&11, &0, &mut state)?;
+    write_kernel_marker(&mut state)?;
 
     // Committing data at height 0
     commit_to_storage(state, storage, &mut kernel, &mut storage_manager, prev_root);
@@ -145,6 +141,7 @@ where
     state_value.set(&11, &0, &mut state)?;
     let _ = state_value.get(&0, &mut state);
     state_value.set(&22, &0, &mut state)?;
+    write_kernel_marker(&mut state)?;
     // Committing at height = 1
     commit_to_storage(state, storage, &mut kernel, &mut storage_manager, root);
     let new_root = storage_manager.current_root();
@@ -156,12 +153,6 @@ where
     assert_ne!(user_root_hash, new_user_root_hash);
 
     Ok(())
-}
-
-#[test]
-fn test_jmt_versioned_state_value_kernel_namespace() -> Result<(), Infallible> {
-    let storage_manager = SimpleJmtStorageManager::new();
-    test_versioned_state_value_kernel_namespace::<TestJmtSpec, _>(storage_manager)
 }
 
 #[test]

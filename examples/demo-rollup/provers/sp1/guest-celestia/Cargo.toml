@@ -8,7 +8,7 @@ resolver = "2"
 [workspace]
 
 [dependencies]
-sp1-zkvm = { version = "6.1.0" }
+sp1-zkvm = { version = "6.2.1" }
 demo-stf = { path = "../../../stf" }
 sov-sp1-adapter = { path = "../../../../../crates/adapters/sp1" }
 sov-celestia-adapter = { path = "../../../../../crates/adapters/celestia" }

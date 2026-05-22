@@ -18,7 +18,6 @@ pub use crypto::*;
 pub use error::*;
 pub use module_utils::*;
 use serde::{Deserialize, Serialize};
-pub use sov_state::jmt::Version;
 
 /// The type of sequencer that published a blob.
 #[derive(

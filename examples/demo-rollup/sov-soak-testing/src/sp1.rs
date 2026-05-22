@@ -101,13 +101,17 @@ impl ProverFactory<SP1Spec> for ParallelProverFactory {
         .expect("SP1AggregationHost setup task panicked");
 
         let da_verifier = Default::default();
-        let num_threads = rollup_config.proof_manager.prover_thread_count();
+        let proof_manager = rollup_config
+            .proof_manager
+            .as_ref()
+            .expect("proof_manager must be set when prover is enabled");
+        let num_threads = proof_manager.prover_thread_count();
 
         ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             da_verifier,
-            rollup_config.proof_manager.prover_address,
+            proof_manager.prover_address,
             num_threads,
         )
     }

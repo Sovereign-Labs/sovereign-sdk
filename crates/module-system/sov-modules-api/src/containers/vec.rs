@@ -15,7 +15,7 @@ use crate::{
     StateWriter,
 };
 
-/// A growable array of values stored as JMT-backed state.
+/// A growable array of values stored as merklized state.
 #[derive(
     Debug,
     Clone,
@@ -646,7 +646,7 @@ mod test {
     use crate::capabilities::mocks::MockKernel;
     use crate::StateCheckpoint;
 
-    type TestSpec = crate::default_spec::DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
     fn double_ended_iterator_from_back() {
