@@ -160,7 +160,7 @@ where
                     tracing::warn!(bucket_id = ?bucket_id, limit = ?limit, error = ?e, "EVM Failed to load bucket into pinned cache");
                 }
                 Ok(LoadBucketOutcome::NotSupportedByStorage) => {
-                    panic!("EVM Failed to load bucket into pinned cache because the storage doesn't support iteration. This means that pinning is configured but the rollup doesnt support it. Adjust your config or switch to NOMT");
+                    panic!("EVM Failed to load bucket into pinned cache because the storage doesn't support iteration. This means that pinning is configured but the rollup doesn't support it. Adjust your config or switch to NOMT");
                 }
                 Ok(LoadBucketOutcome::AlreadyPresent)
                 | Ok(LoadBucketOutcome::Loaded)
