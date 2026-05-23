@@ -28,16 +28,26 @@ pub(crate) fn track_rejected_proof(execution_context: ExecutionContext, error: &
     implementation::track_rejected_proof(execution_context, error);
 }
 
-pub(crate) fn track_admin_upgrade_success(slot: SlotNumber) {
+pub(crate) fn track_admin_upgrade_success(slot: SlotNumber, execution_context: ExecutionContext) {
     implementation::track_admin_upgrade(
         slot,
+        execution_context,
         AdminUpgradeMetricStatus::Success,
         AdminUpgradeMetricReason::Recorded,
     );
 }
 
-pub(crate) fn track_admin_upgrade_failure(slot: SlotNumber, reason: AdminUpgradeMetricReason) {
-    implementation::track_admin_upgrade(slot, AdminUpgradeMetricStatus::Failed, reason);
+pub(crate) fn track_admin_upgrade_failure(
+    slot: SlotNumber,
+    execution_context: ExecutionContext,
+    reason: AdminUpgradeMetricReason,
+) {
+    implementation::track_admin_upgrade(
+        slot,
+        execution_context,
+        AdminUpgradeMetricStatus::Failed,
+        reason,
+    );
 }
 
 #[cfg(feature = "native")]
@@ -97,6 +107,7 @@ mod implementation {
 
     #[derive(Debug)]
     struct AdminUpgradeMetric {
+        execution_context: &'static str,
         status: AdminUpgradeMetricStatus,
         reason: AdminUpgradeMetricReason,
         slot: u64,
@@ -110,8 +121,9 @@ mod implementation {
         fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
             write!(
                 buffer,
-                "{},status={},reason={} count=1i,slot={}i",
+                "{},context={},status={},reason={} count=1i,slot={}i",
                 self.measurement_name(),
+                self.execution_context,
                 self.status.as_str(),
                 self.reason.as_str(),
                 self.slot,
@@ -145,11 +157,13 @@ mod implementation {
 
     pub(super) fn track_admin_upgrade(
         slot: SlotNumber,
+        execution_context: ExecutionContext,
         status: AdminUpgradeMetricStatus,
         reason: AdminUpgradeMetricReason,
     ) {
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(AdminUpgradeMetric {
+                execution_context: execution_context.str(),
                 status,
                 reason,
                 slot: slot.get(),
@@ -170,25 +184,23 @@ mod implementation {
         fn as_str(&self) -> &'static str {
             match self {
                 Self::Recorded => "recorded",
-                Self::StaleAdminUpgrade => "stale_admin_upgrade",
-                Self::InvalidAdminUpgradeVkeyHash => "invalid_admin_upgrade_vkey_hash",
-                Self::ProverPenalized => "prover_penalized",
+                Self::StaleAdminUpgrade => "stale",
+                Self::InvalidAdminUpgradeVkeyHash => "bad_vkey",
+                Self::ProverPenalized => "penalized",
             }
         }
     }
 
     fn rejected_proof_reason(error: &ProcessProofError) -> &'static str {
         match error {
-            ProcessProofError::TransferFailure(_) => "transfer_failure",
-            ProcessProofError::ProverSlashedNoRevert(_) => "prover_slashed",
-            ProcessProofError::ProverPenalizedNoRevert(_) => "prover_penalized",
-            ProcessProofError::ProverNotBonded => "prover_not_bonded",
-            ProcessProofError::BondNotHighEnough => "bond_not_high_enough",
-            ProcessProofError::StateAccessorError(_) => "state_accessor_error",
-            ProcessProofError::InvalidOperatingMode => "invalid_operating_mode",
-            ProcessProofError::ProofPrecedesLatestAdminUpgrade { .. } => {
-                "proof_precedes_latest_admin_upgrade"
-            }
+            ProcessProofError::TransferFailure(_) => "transfer",
+            ProcessProofError::ProverSlashedNoRevert(_) => "slashed",
+            ProcessProofError::ProverPenalizedNoRevert(_) => "penalized",
+            ProcessProofError::ProverNotBonded => "unbonded",
+            ProcessProofError::BondNotHighEnough => "low_bond",
+            ProcessProofError::StateAccessorError(_) => "state",
+            ProcessProofError::InvalidOperatingMode => "bad_mode",
+            ProcessProofError::ProofPrecedesLatestAdminUpgrade { .. } => "stale_proof",
         }
     }
 }
@@ -217,9 +229,10 @@ mod implementation {
 
     pub(super) fn track_admin_upgrade(
         slot: SlotNumber,
+        execution_context: ExecutionContext,
         status: AdminUpgradeMetricStatus,
         reason: AdminUpgradeMetricReason,
     ) {
-        let _ = (slot, status, reason);
+        let _ = (slot, execution_context, status, reason);
     }
 }

@@ -279,6 +279,7 @@ impl<S: Spec> ProverIncentives<S> {
             prover_address,
             &ctx,
             is_admin,
+            execution_context,
             state,
         )?;
 
@@ -292,6 +293,7 @@ impl<S: Spec> ProverIncentives<S> {
                 if pending_admin_upgrade.is_some() {
                     crate::metrics::track_admin_upgrade_failure(
                         public_outputs.final_slot_number,
+                        execution_context,
                         crate::metrics::AdminUpgradeMetricReason::ProverPenalized,
                     );
                 }
@@ -305,7 +307,12 @@ impl<S: Spec> ProverIncentives<S> {
 
                 // Persist the upgrade only after the proof is fully accepted.
                 if let Some(upgrade) = pending_admin_upgrade {
-                    self.apply_admin_upgrade(public_outputs.final_slot_number, upgrade, state)?;
+                    self.apply_admin_upgrade(
+                        public_outputs.final_slot_number,
+                        upgrade,
+                        execution_context,
+                        state,
+                    )?;
                 }
 
                 // Only expose proofs that were fully accepted.
@@ -518,6 +525,7 @@ impl<S: Spec> ProverIncentives<S> {
         prover_address: &S::Address,
         ctx: &ProofContext<S>,
         is_admin: bool,
+        execution_context: ExecutionContext,
         state: &mut ST,
     ) -> Result<Option<AdminUpgrade<S>>, ProcessProofError> {
         if !ctx.is_admin_upgrade(public_outputs, is_admin) {
@@ -534,6 +542,7 @@ impl<S: Spec> ProverIncentives<S> {
             self.slash_prover(prover_address, state)?;
             crate::metrics::track_admin_upgrade_failure(
                 upgrade_slot,
+                execution_context,
                 crate::metrics::AdminUpgradeMetricReason::StaleAdminUpgrade,
             );
             return Err(ProcessProofError::ProverSlashedNoRevert(format!(
@@ -546,13 +555,27 @@ impl<S: Spec> ProverIncentives<S> {
             public_outputs.outer_vk_hash.clone(),
         ) {
             Ok(commitment) => commitment,
-            Err(_) => return self.slash_admin_for_invalid_vkey_hash(public_outputs, prover_address, state),
+            Err(_) => {
+                return self.slash_admin_for_invalid_vkey_hash(
+                    public_outputs,
+                    prover_address,
+                    execution_context,
+                    state,
+                );
+            }
         };
         let inner_code_commitment = match <<<S as Spec>::InnerZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment::try_from_hash(
             public_outputs.inner_vkey_hash.clone(),
         ) {
             Ok(commitment) => commitment,
-            Err(_) => return self.slash_admin_for_invalid_vkey_hash(public_outputs, prover_address, state),
+            Err(_) => {
+                return self.slash_admin_for_invalid_vkey_hash(
+                    public_outputs,
+                    prover_address,
+                    execution_context,
+                    state,
+                );
+            }
         };
 
         Ok(Some(AdminUpgrade::<S> {
@@ -570,6 +593,7 @@ impl<S: Spec> ProverIncentives<S> {
             <S::Storage as Storage>::Root,
         >,
         prover_address: &S::Address,
+        execution_context: ExecutionContext,
         state: &mut ST,
     ) -> Result<Option<AdminUpgrade<S>>, ProcessProofError> {
         tracing::debug!(
@@ -581,6 +605,7 @@ impl<S: Spec> ProverIncentives<S> {
         self.slash_prover(prover_address, state)?;
         crate::metrics::track_admin_upgrade_failure(
             public_outputs.final_slot_number,
+            execution_context,
             crate::metrics::AdminUpgradeMetricReason::InvalidAdminUpgradeVkeyHash,
         );
         Err(ProcessProofError::ProverSlashedNoRevert(format!(
@@ -593,6 +618,7 @@ impl<S: Spec> ProverIncentives<S> {
         &mut self,
         slot: SlotNumber,
         upgrade: AdminUpgrade<S>,
+        execution_context: ExecutionContext,
         state: &mut ST,
     ) -> Result<(), anyhow::Error> {
         self.admin_upgrades.set(&slot, &upgrade, state)?;
@@ -605,7 +631,7 @@ impl<S: Spec> ProverIncentives<S> {
             "Admin upgrade recorded"
         );
 
-        crate::metrics::track_admin_upgrade_success(slot);
+        crate::metrics::track_admin_upgrade_success(slot, execution_context);
 
         Ok(())
     }
