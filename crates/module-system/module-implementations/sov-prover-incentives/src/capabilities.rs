@@ -128,6 +128,51 @@ impl<S: Spec> ProverIncentives<S> {
         AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
         ProcessProofError,
     > {
+        let result = self.process_proof_inner(proof, prover_address, execution_context, state);
+        if let Err(error) = &result {
+            Self::log_process_proof_error(prover_address, error);
+            crate::metrics::track_rejected_proof(execution_context, error);
+        }
+        result
+    }
+
+    fn log_process_proof_error(prover_address: &S::Address, error: &ProcessProofError) {
+        match error {
+            ProcessProofError::ProverSlashedNoRevert(reason) => {
+                tracing::warn!(
+                    %prover_address,
+                    %reason,
+                    "Prover slashed while processing proof"
+                );
+            }
+            ProcessProofError::ProverPenalizedNoRevert(reason) => {
+                tracing::warn!(
+                    %prover_address,
+                    %reason,
+                    "Prover penalized while processing proof"
+                );
+            }
+            _ => {
+                tracing::debug!(
+                    %prover_address,
+                    %error,
+                    "Proof rejected while processing proof"
+                );
+            }
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn process_proof_inner<ST: TxState<S> + GetGasPrice<Spec = S>>(
+        &mut self,
+        proof: &SerializedAggregatedProof,
+        prover_address: &S::Address,
+        execution_context: ExecutionContext,
+        state: &mut ST,
+    ) -> Result<
+        AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
+        ProcessProofError,
+    > {
         if !self.should_reward_fees(state) {
             return Err(ProcessProofError::InvalidOperatingMode);
         }
@@ -211,8 +256,6 @@ impl<S: Spec> ProverIncentives<S> {
             %public_outputs.final_slot_number,
             "Processing aggregated proof"
         );
-        #[cfg(not(feature = "native"))]
-        let _ = execution_context;
 
         // The expected origin state root and inner VK hash were already resolved
         // into `ctx` above; this binds the inner circuit (so a prover cannot
@@ -246,6 +289,12 @@ impl<S: Spec> ProverIncentives<S> {
         )? {
             Paycheck::Penalized => {
                 self.penalize_prover(old_balance, prover_address, state)?;
+                if pending_admin_upgrade.is_some() {
+                    crate::metrics::track_admin_upgrade_failure(
+                        public_outputs.final_slot_number,
+                        crate::metrics::AdminUpgradeMetricReason::ProverPenalized,
+                    );
+                }
                 // The state won't be reverted.
                 Err(ProcessProofError::ProverPenalizedNoRevert(
                     "Prover penalized".to_string(),
@@ -264,13 +313,10 @@ impl<S: Spec> ProverIncentives<S> {
                     .set(&public_outputs, state)
                     .map_err(Into::<anyhow::Error>::into)?;
 
-                #[cfg(feature = "native")]
-                sov_metrics::track_metrics(|tracker| {
-                    tracker.submit(crate::metrics::LatestVerifiedProofMetric {
-                        final_slot_number: public_outputs.final_slot_number.get(),
-                        execution_context: execution_context.str(),
-                    });
-                });
+                crate::metrics::track_latest_verified_proof(
+                    public_outputs.final_slot_number,
+                    execution_context,
+                );
 
                 Ok(public_outputs)
             }
@@ -486,6 +532,10 @@ impl<S: Spec> ProverIncentives<S> {
                 "Slashing admin: upgrade slot is not newer than latest recorded upgrade"
             );
             self.slash_prover(prover_address, state)?;
+            crate::metrics::track_admin_upgrade_failure(
+                upgrade_slot,
+                crate::metrics::AdminUpgradeMetricReason::StaleAdminUpgrade,
+            );
             return Err(ProcessProofError::ProverSlashedNoRevert(format!(
                 "Invalid output {}",
                 SlashingReason::StaleAdminUpgrade
@@ -529,6 +579,10 @@ impl<S: Spec> ProverIncentives<S> {
             "Slashing admin: upgrade proof committed to a malformed VK hash"
         );
         self.slash_prover(prover_address, state)?;
+        crate::metrics::track_admin_upgrade_failure(
+            public_outputs.final_slot_number,
+            crate::metrics::AdminUpgradeMetricReason::InvalidAdminUpgradeVkeyHash,
+        );
         Err(ProcessProofError::ProverSlashedNoRevert(format!(
             "Invalid output {}",
             SlashingReason::InvalidAdminUpgradeVkeyHash
@@ -550,6 +604,8 @@ impl<S: Spec> ProverIncentives<S> {
             inner_vkey_hash = ?upgrade.inner_code_commitment.to_hash(),
             "Admin upgrade recorded"
         );
+
+        crate::metrics::track_admin_upgrade_success(slot);
 
         Ok(())
     }
