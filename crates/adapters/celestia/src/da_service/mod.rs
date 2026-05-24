@@ -571,38 +571,48 @@ pub(crate) fn get_extraction_proof(
     block: &FilteredCelestiaBlock,
     blobs: &RelevantBlobs<BlobWithSender>,
 ) -> RelevantProofs<Vec<BlobProof>, Option<NamespaceBoundaryProof>> {
+    build_extraction_proof(block, blobs)
+        .unwrap_or_else(|err| panic!("failed to build extraction proof: {err}"))
+}
+
+pub(crate) fn build_extraction_proof(
+    block: &FilteredCelestiaBlock,
+    blobs: &RelevantBlobs<BlobWithSender>,
+) -> Result<
+    RelevantProofs<Vec<BlobProof>, Option<NamespaceBoundaryProof>>,
+    crate::types::ExtractionProofError,
+> {
     let batch = {
-        let inclusion_proof = proofs::new_inclusion_proof(
+        let inclusion_proof = proofs::build_inclusion_proof(
             &block.header,
             &block.rollup_batch_data,
             &blobs.batch_blobs,
-        );
+        )?;
 
         DaProof {
             inclusion_proof,
-            completeness_proof: NamespaceBoundaryProof::from_namespace_data(
+            completeness_proof: NamespaceBoundaryProof::build_from_namespace_data(
                 &block.rollup_batch_data,
-            ),
+            )?,
         }
     };
 
     let proof = {
-        // Note: The second call to new_inclusion_proof merklizes and parse the executable transactions namespace again.
-        let inclusion_proof = proofs::new_inclusion_proof(
+        let inclusion_proof = proofs::build_inclusion_proof(
             &block.header,
             &block.rollup_proof_data,
             &blobs.proof_blobs,
-        );
+        )?;
 
         DaProof {
             inclusion_proof,
-            completeness_proof: NamespaceBoundaryProof::from_namespace_data(
+            completeness_proof: NamespaceBoundaryProof::build_from_namespace_data(
                 &block.rollup_proof_data,
-            ),
+            )?,
         }
     };
 
-    RelevantProofs { proof, batch }
+    Ok(RelevantProofs { proof, batch })
 }
 
 fn flatten_timeout<T>(

@@ -180,8 +180,9 @@ impl CelestiaVerifier {
                     blob_row_proof.verify_left_boundary(block_header, namespace)?
                 } else {
                     // Checking continuity with the previous blob
-                    let last_from_previous_blob = last_validated_share_idx
-                        .expect("Bug: caller didn't set last_validated_share_idx");
+                    let last_from_previous_blob = last_validated_share_idx.ok_or(
+                        InvalidRowProof(RowProofError::ProofError(ProofError::Corrupted)),
+                    )?;
                     blob_row_proof.verify_continuity(last_from_previous_blob)?
                 };
                 // Continuity inside this blob proofs
@@ -216,8 +217,15 @@ impl CelestiaVerifier {
             // prover-trusted coordinate.
             last_validated_share_idx = Some(match last_validated_share_idx {
                 // blob_proof_range_start is used to keep indexes aligned full row, not just relative to namespace.
-                None => blob_proof_range_start + shares_checked - 1,
-                Some(prev_idx) => prev_idx + shares_checked,
+                None => blob_proof_range_start
+                    .checked_add(shares_checked)
+                    .and_then(|idx| idx.checked_sub(1))
+                    .ok_or(InvalidRowProof(RowProofError::ProofError(
+                        ProofError::Corrupted,
+                    )))?,
+                Some(prev_idx) => prev_idx.checked_add(shares_checked).ok_or(InvalidRowProof(
+                    RowProofError::ProofError(ProofError::Corrupted),
+                ))?,
             });
 
             blob_idx += 1;
@@ -232,8 +240,9 @@ impl CelestiaVerifier {
             "Blob proofs iterator should be exhausted"
         );
 
-        let last_proven_share_idx =
-            last_validated_share_idx.expect("At least 1 share should be proven by this point");
+        let last_proven_share_idx = last_validated_share_idx.ok_or(InvalidRowProof(
+            RowProofError::ProofError(ProofError::Missing),
+        ))?;
 
         check_namespace_end_boundary(
             block_header,
@@ -376,7 +385,9 @@ fn authenticate_blob_data(
     // Verifying row by row
     for (range_idx, sub_proof) in blob_row_proof.range_proofs.into_iter().enumerate() {
         let row_number = block_header.calculate_row_number_for_share(sub_proof.start_share_idx);
-        let row_root = namespace_row_roots[row_number];
+        let row_root = namespace_row_roots.get(row_number).ok_or(InvalidRowProof(
+            RowProofError::ProofError(ProofError::Corrupted),
+        ))?;
 
         // Subrange verification
         {
@@ -433,17 +444,21 @@ fn authenticate_blob_data(
     // Because the number of shares in each range proof has been compared with the number of shares
     // needed to prove bytes read by blob.
     // This failure means a bug in the preceding code.
-    assert_eq!(
-        shares_proven, num_shares_to_prove,
-        "Bug. Wrong number of shares proven."
-    );
+    if shares_proven != num_shares_to_prove {
+        return Err(InvalidRowProof(RowProofError::WrongNumberOfShares {
+            expected: num_shares_to_prove,
+            actual: shares_proven,
+        }));
+    }
     // There should be always at least 1 share per blob,
     // so a signer should always be validated by this point.
-    // Failure means a bug.
-    debug_assert!(signer_checked, "Bug. Signer checking has been skipped");
-    let sequence_length = sequence_length.expect("sequence length should be set by this point");
+    if !signer_checked {
+        return Err(InvalidBlobData(BlobDataError::NonMatchingShare));
+    }
+    let sequence_length =
+        sequence_length.ok_or(InvalidBlobData(BlobDataError::NonMatchingShare))?;
     let shares_occupied_total =
-        shares_needed_for_bytes_with_signer(sequence_length as usize, has_signer);
+        shares_needed_for_bytes_with_signer(sequence_length as usize, has_signer).max(1);
     Ok(shares_occupied_total)
 }
 
@@ -465,17 +480,17 @@ fn verify_skipped_blob(
     };
 
     if sequence_length == 0 {
-        let payload_all_zeros = first_share.payload().map(|p| p.iter().all(|b| *b == 0));
-        assert!(
-            payload_all_zeros.is_some(),
-            "Padding share has payload with non-zero bytes",
-        );
-    } else {
-        assert_ne!(
-            info_byte.version(),
-            SUPPORTED_SHARE_VERSION,
-            "Bug. `verify_skipped_blob` should only be called for blobs with non supported version."
-        );
+        let payload_all_zeros = first_share
+            .payload()
+            .map(|p| p.iter().all(|b| *b == 0))
+            .unwrap_or(false);
+        if !payload_all_zeros {
+            return Err(InvalidBlobData(BlobDataError::NonMatchingShare));
+        }
+    } else if info_byte.version() == SUPPORTED_SHARE_VERSION {
+        return Err(InvalidRowProof(RowProofError::ProofError(
+            ProofError::Corrupted,
+        )));
     }
 
     // If there is more than one blob row proof, we ignore them, as we need single share.
@@ -485,7 +500,12 @@ fn verify_skipped_blob(
     };
 
     let row_number = block_header.calculate_row_number_for_share(sub_proof.start_share_idx);
-    let row_root = namespace_row_roots[row_number];
+    let row_root =
+        namespace_row_roots
+            .get(row_number)
+            .ok_or(InvalidRowProof(RowProofError::ProofError(
+                ProofError::Corrupted,
+            )))?;
     let RangeProof { shares, proof, .. } = sub_proof;
     let raw_leaves = shares.iter().map(|s| s.data().as_ref()).collect::<Vec<_>>();
     proof
@@ -495,7 +515,8 @@ fn verify_skipped_blob(
     let shares_occupied_total = shares_needed_for_bytes_with_signer(
         sequence_length as usize,
         first_share.signer().is_some(),
-    );
+    )
+    .max(1);
 
     Ok(shares_occupied_total)
 }
@@ -531,11 +552,21 @@ fn check_namespace_end_boundary(
     last_proven_share_idx: usize,
     namespace_boundary_proof: Option<NamespaceBoundaryProof>,
 ) -> Result<(), NamespaceValidationError> {
-    let last_share_last_row_idx = namespace_row_roots.len() * block_header.row_length() - 1;
+    let last_share_last_row_idx = namespace_row_roots
+        .len()
+        .checked_mul(block_header.row_length())
+        .and_then(|len| len.checked_sub(1))
+        .ok_or(IncompleteNamespace(
+            IncompleteNamespaceError::corrupted_proof(),
+        ))?;
     // if the last proven share ended exactly on the last index of the last row,
     // meaning there are no shares from this namespace anymore,
     // because the next row does not contain given namespace at all.
-    assert!(last_proven_share_idx <= last_share_last_row_idx, "bad math");
+    if last_proven_share_idx > last_share_last_row_idx {
+        return Err(IncompleteNamespace(
+            IncompleteNamespaceError::corrupted_proof(),
+        ));
+    }
     if last_proven_share_idx < last_share_last_row_idx {
         // Verifying the completeness of the namespace.
         let Some(NamespaceBoundaryProof {
@@ -625,12 +656,14 @@ fn check_namespace_end_boundary(
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
     use crate::test_helper::files::{
-        from_testnet_no_shares, from_testnet_with_tail_padding,
+        from_mocha_invalid_row_proof, from_testnet_no_shares, from_testnet_with_tail_padding,
         with_mixed_v0_and_v1_multi_v1_parity_boundary, with_namespace_padding,
         with_parity_boundary_followed_by_namespace, with_rollup_batch_data,
     };
     use crate::types::FilteredCelestiaBlock;
+    use sov_rollup_interface::da::BlobReaderTrait;
 
     fn fixture_with_multiple_candidate_row_roots() -> (FilteredCelestiaBlock, Namespace) {
         let candidates = [
@@ -745,6 +778,47 @@ mod tests {
     }
 
     #[test]
+    fn prevalidate_returns_early_when_namespace_has_no_candidate_rows_and_no_blobs() {
+        let output = prevalidate_blobs(
+            &[],
+            &Vec::<BlobWithSender>::new(),
+            with_rollup_batch_data::ROLLUP_PARAMS.rollup_batch_namespace,
+            &Vec::<BlobProof>::new(),
+            &None,
+        )
+        .expect("empty namespace without blobs should return early");
+
+        assert!(
+            matches!(output, PreValidationOutput::EarlyReturn),
+            "Expected EarlyReturn, got: {output:?}"
+        );
+    }
+
+    #[test]
+    fn prevalidate_rejects_unexpected_blobs_when_namespace_has_no_candidate_rows() {
+        let block = with_rollup_batch_data::filtered_block();
+        let blobs = extract_relevant_blobs(&block).batch_blobs;
+        assert!(
+            !blobs.is_empty(),
+            "fixture should contain at least one batch blob"
+        );
+
+        let err = prevalidate_blobs(
+            &[],
+            &blobs,
+            Namespace::const_v0(*b"missing-ns"),
+            &Vec::<BlobProof>::new(),
+            &None,
+        )
+        .expect_err("unexpected blobs without candidate rows must be rejected");
+
+        assert!(
+            matches!(err, InvalidBlobData(BlobDataError::UnexpectedBlobs)),
+            "Expected UnexpectedBlobs, got: {err:?}"
+        );
+    }
+
+    #[test]
     fn prevalidate_continues_when_inclusion_proofs_are_present_even_if_no_blobs() {
         let (block, namespace) = fixture_with_multiple_candidate_row_roots();
         let namespace_row_roots = block
@@ -808,6 +882,51 @@ mod tests {
                 IncompleteNamespace(IncompleteNamespaceError::ProofError(ProofError::Missing))
             ),
             "Expected ProofError::Missing, got: {err:?}"
+        );
+    }
+
+    #[test]
+    fn left_boundary_rejects_non_smaller_left_sibling_namespace() {
+        let block = from_mocha_invalid_row_proof::filtered_block();
+        let mut relevant_blobs = extract_relevant_blobs(&block);
+        for blob in &mut relevant_blobs.batch_blobs {
+            let total_len = blob.total_len();
+            blob.advance(total_len);
+        }
+        for blob in &mut relevant_blobs.proof_blobs {
+            let total_len = blob.total_len();
+            blob.advance(total_len);
+        }
+        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+        let first_blob_proof = relevant_proofs
+            .batch
+            .inclusion_proof
+            .first()
+            .expect("fixture should have at least one inclusion proof");
+        let first_sub_proof = first_blob_proof
+            .range_proofs
+            .first()
+            .expect("blob proof should contain at least one range proof");
+        assert!(
+            first_sub_proof.proof.start_idx() > 0,
+            "fixture should start mid-row to exercise left sibling boundary logic"
+        );
+        let forged_namespace = first_sub_proof
+            .proof
+            .rightmost_left_sibling()
+            .expect("mid-row proof should have left sibling")
+            .max_namespace();
+
+        let err = first_blob_proof
+            .verify_left_boundary(&block.header, forged_namespace.into())
+            .expect_err("non-smaller left sibling namespace must be rejected");
+
+        assert!(
+            matches!(
+                err,
+                IncompleteNamespace(IncompleteNamespaceError::MissingBlobs)
+            ),
+            "Expected MissingBlobs, got: {err:?}"
         );
     }
 

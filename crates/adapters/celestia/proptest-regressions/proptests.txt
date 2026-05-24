@@ -1,0 +1,7 @@
+# Seeds for failure cases proptest has generated in the past. It is
+# automatically read and these particular cases re-run before any
+# novel cases are generated.
+#
+# It is recommended to check this file in to source control so that
+# everyone who runs the test benefits from these saved cases.
+cc 2cbe96892780f448fbcfe76c281fdde69a41c17f2d9a1dd37b870e55693a6fd1 # shrinks to case = SingleRowMidRowCase { ods_width: 4, prefix_rows: 0, prefix_len: 1, batch_len: 1, suffix_rows: 3, seed: 2 }
