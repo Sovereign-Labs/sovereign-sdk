@@ -4,7 +4,6 @@ mod call;
 mod capabilities;
 mod event;
 mod genesis;
-#[cfg(feature = "native")]
 mod metrics;
 mod registration;
 
