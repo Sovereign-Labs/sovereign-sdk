@@ -68,7 +68,6 @@ fn test_simple_transfer() {
 
 #[test]
 fn test_receipt_fee_matches_balance_delta() {
-    set_receipt_actual_fee_height(0);
     let (mut runner, from, to, _) = setup();
     let value = 1u128;
     let transfer = create_transfer_tx_with_fee_params(
@@ -110,7 +109,6 @@ fn test_receipt_fee_matches_balance_delta() {
 
 #[test]
 fn test_block_receipt_fee_matches_balance_delta() {
-    set_receipt_actual_fee_height(0);
     let (mut runner, from, to, _) = setup();
     let value = 1u128;
     let transfer = create_transfer_tx_with_fee_params(
@@ -150,47 +148,6 @@ fn test_block_receipt_fee_matches_balance_delta() {
                 actual_fee,
                 implied_fee,
                 receipt.effective_gas_price,
-            );
-        }),
-    });
-}
-
-#[test]
-fn test_receipt_uses_eip1559_formula_before_activation_height() {
-    set_receipt_actual_fee_height(1_000_000);
-    let (mut runner, from, to, _) = setup();
-    let value = 1u128;
-    let transfer = create_transfer_tx_with_fee_params(
-        0,
-        &from,
-        &to,
-        value,
-        MIN_PROTOCOL_BASE_FEE as u128 * 2,
-        0,
-    );
-
-    let evm = Evm::<S>::default();
-    runner.execute_transaction(TransactionTestCase {
-        input: transfer.tx,
-        assert: Box::new(move |_ctx, state| {
-            let sender_balance_after = evm.get_balance(from.address(), None, state).unwrap();
-            let receipt = evm
-                .get_transaction_receipt(transfer.hash, state)
-                .unwrap()
-                .expect("receipt should exist");
-
-            let implied_fee =
-                U256::from(receipt.gas_used) * U256::from(receipt.effective_gas_price);
-            let actual_fee = U256::from(TEST_DEFAULT_USER_BALANCE.0)
-                .checked_sub(U256::from(value))
-                .and_then(|balance_after_value| {
-                    balance_after_value.checked_sub(sender_balance_after)
-                })
-                .expect("sender balance should decrease by transfer value and a fee");
-
-            assert_ne!(
-                actual_fee, implied_fee,
-                "before activation height receipts should follow legacy EIP-1559 projection",
             );
         }),
     });
