@@ -323,7 +323,7 @@ impl<S: Spec> TransactionAuthorizer<S> for PruningCapabilities<'_, S> {
         auth_data: &AuthorizationData<S>,
         sequencer: &<S::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
         sequencing_data: Option<sov_rollup_interface::Bytes>,
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
@@ -343,7 +343,7 @@ impl<S: Spec> TransactionAuthorizer<S> for PruningCapabilities<'_, S> {
         &mut self,
         auth_data: &AuthorizationData<S>,
         sequencer: &<S::Da as DaSpec>::Address,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
         self.standard
@@ -355,7 +355,7 @@ impl<S: Spec> TransactionAuthorizer<S> for PruningCapabilities<'_, S> {
         auth_data: &AuthorizationData<S>,
         context: &Context<S>,
         execution_context: &ExecutionContext,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()> {
         self.standard
             .check_uniqueness(auth_data, context, execution_context, state)
