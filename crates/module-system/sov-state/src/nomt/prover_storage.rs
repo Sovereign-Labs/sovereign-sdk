@@ -362,20 +362,9 @@ where
             version,
         )
         .expect("historical state db materialization must succeed");
-        let accessory_batch = AccessoryDb::materialize_values(
-            accessory_writes
-                .ordered_writes
-                .iter()
-                // TODO(@preston-evans98) Skip the useless to_vec here. https://github.com/Sovereign-Labs/sovereign-sdk/issues/1824
-                .map(|(k, v_opt)| {
-                    (
-                        k.as_ref().to_vec(),
-                        v_opt.as_ref().map(|v| v.value().to_vec()),
-                    )
-                }),
-            version,
-        )
-        .expect("accessory db materialization must succeed");
+        let accessory_batch =
+            AccessoryDb::materialize_values(accessory_writes.ordered_writes, version)
+                .expect("accessory db materialization must succeed");
         // Erase the type of the pinned cache since the storage manager isn't aware of it.
         let pinned_cache = pinned_cache.map(|c| Box::new(c) as Box<dyn Any + Send + Sync>);
         NomtChangeSet {
