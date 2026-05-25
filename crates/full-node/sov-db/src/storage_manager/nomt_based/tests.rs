@@ -62,7 +62,10 @@ impl TestableStorage for TestNomtStorage {
             kernel_session.warm_up(key_path);
             user_session.warm_up(key_path);
             state_writes.push((key_path, nomt::KeyReadWrite::Write(value.clone())));
-            accessory_writes.push((key.clone(), value.clone()));
+            accessory_writes.push((
+                key.clone(),
+                value.as_ref().map(|v| SlotValue::from(v.clone())),
+            ));
         }
 
         state_writes.sort_by_key(|(k, _)| *k);
@@ -81,10 +84,10 @@ impl TestableStorage for TestNomtStorage {
         let historical_change_set = HistoricalStateReader::materialize_values(
             accessory_writes
                 .iter()
-                .map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
+                .map(|(k, v)| (SlotKey::from_slice(k), v.clone())),
             accessory_writes
                 .iter()
-                .map(|(k, v)| (SlotKey::from_slice(k), v.as_ref().map(|v| v.clone().into()))),
+                .map(|(k, v)| (SlotKey::from_slice(k), v.clone())),
             // Not used at the moment,
             root_hash.clone(),
             SlotNumber::new(version),

@@ -12136,6 +12136,7 @@ dependencies = [
  "reqwest 0.13.3",
  "serde",
  "sov-metrics",
+ "sov-test-utils",
  "sqlx",
  "thiserror 2.0.18",
  "time",

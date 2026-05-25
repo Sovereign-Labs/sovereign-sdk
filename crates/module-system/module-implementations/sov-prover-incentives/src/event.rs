@@ -42,6 +42,11 @@ pub enum SlashingReason {
     /// than the most recent recorded admin upgrade. Accepting it would rewind the
     /// canonical commitments.
     StaleAdminUpgrade,
+
+    /// An admin-submitted upgrade proof committed to a verification key hash that
+    /// the verifier cannot decode (e.g. wrong length). A well-formed inner circuit
+    /// never emits such a hash.
+    InvalidAdminUpgradeVkeyHash,
 }
 
 #[derive(Debug, PartialEq, Clone, schemars::JsonSchema)]

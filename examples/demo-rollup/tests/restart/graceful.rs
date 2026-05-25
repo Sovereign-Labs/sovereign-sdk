@@ -107,7 +107,7 @@ fn build_sleep_schedule(
     schedule
 }
 
-fn known_restart_warnings() -> [(Level, String); 9] {
+fn known_restart_warnings() -> [(Level, String); 10] {
     [
         // https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1878:
         (
@@ -149,6 +149,11 @@ fn known_restart_warnings() -> [(Level, String); 9] {
         (
             Level::ERROR,
             "Error accepting transaction".to_string(),
+        ),
+        // Duplicate proof blobs can be replayed around restart boundaries.
+        (
+            Level::WARN,
+            "Prover penalized while processing proof".to_string(),
         ),
     ]
 }
