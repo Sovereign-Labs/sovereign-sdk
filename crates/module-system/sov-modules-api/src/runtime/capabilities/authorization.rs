@@ -10,8 +10,10 @@ use sov_rollup_interface::stf::ExecutionContext;
 use sov_rollup_interface::{Bytes, TxHash};
 use sov_universal_wallet::UniversalWallet;
 
+use sov_state::User;
+
 use crate::transaction::Credentials;
-use crate::{Context, SequencerType, Spec, StateAccessor};
+use crate::{Context, SequencerType, Spec, StateAccessor, StateReader};
 
 /// Authorizes transactions to be executed.
 pub trait TransactionAuthorizer<S: Spec> {
@@ -21,7 +23,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
         sequencing_data: Option<Bytes>,
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
@@ -32,7 +34,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         &mut self,
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>>;
 
@@ -42,7 +44,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         auth_data: &AuthorizationData<S>,
         context: &Context<S>,
         execution_context: &ExecutionContext,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
     ) -> anyhow::Result<()>;
 
     /// Marks a transaction as having been executed, preventing it from executing again.
