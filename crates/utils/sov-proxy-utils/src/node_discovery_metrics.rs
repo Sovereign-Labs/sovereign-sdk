@@ -17,7 +17,7 @@ impl sov_metrics::Metric for ClusterUpdateMetric {
         // tag value creates a new InfluxDB series and cluster membership can
         // change often enough to cause high-cardinality storage/query overhead.
         write!(buffer, "{} current_leader=\"", self.measurement_name(),)?;
-        write_escaped_field_value(buffer, self.current_leader.as_deref().unwrap_or(""))?;
+        write_escaped_field_value(buffer, self.current_leader.as_deref().unwrap_or("none"))?;
         write!(buffer, "\",followers=\"")?;
         write_escaped_field_value(buffer, &format!("{:?}", self.followers))?;
         buffer.write_all(b"\"")
