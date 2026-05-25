@@ -1,5 +1,5 @@
 //! Utilities for discovering cluster nodes from PostgreSQL and persisting snapshots.
-use crate::node_discovery_metrics::ClusterUpdateFailureMetric;
+use crate::node_discovery_metrics::{ClusterUpdateFailureMetric, ClusterUpdateMetric};
 use anyhow::Result;
 use async_trait::async_trait;
 use sqlx::postgres::{PgListener, PgPool};
@@ -11,6 +11,11 @@ use std::time::Duration;
 pub use time::OffsetDateTime;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+
+/// Re-emit the cluster update metric every Nth successful check even if the                                                                                                                                                                
+/// cluster is unchanged, so the absence of samples can be alerted on if the                                                                                                                                                                
+/// polling task dies silently.                                                                                                                                                                                                             
+const LIVENESS_INTERVAL: u64 = 5;
 
 /// Information about a registered node.
 #[derive(Debug, Clone, FromRow, PartialEq, Eq)]
@@ -124,6 +129,7 @@ pub struct NodeDiscovery {
     notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     sender: watch::Sender<ClusterInfo>,
     pub(crate) receiver: watch::Receiver<ClusterInfo>,
+    iter: u64,
 }
 
 impl NodeDiscovery {
@@ -179,6 +185,7 @@ impl NodeDiscovery {
             notifier,
             sender,
             receiver,
+            iter: 0,
         })
     }
 
@@ -297,41 +304,57 @@ impl NodeDiscovery {
 
         let membership_changed = self.prev_followers != followers;
         let leader_changed = self.prev_leader_id != leader_id;
+        let cluster_changed = membership_changed || leader_changed;
+        self.iter = self.iter.wrapping_add(1);
+
+        let liveness_due = self.iter.is_multiple_of(LIVENESS_INTERVAL);
 
         tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
 
-        if !(membership_changed || leader_changed) {
+        if !(cluster_changed || liveness_due) {
             return Ok(());
         }
 
-        // Log membership changes
-        for node_id in followers.difference(&self.prev_followers) {
-            tracing::info!(node_id, "Node joined the followers");
-        }
-        for node_id in self.prev_followers.difference(&followers) {
-            tracing::info!(node_id, "Node left the followers");
+        let update_metric = ClusterUpdateMetric {
+            current_leader: leader_id.clone(),
+            followers: followers.iter().cloned().collect(),
+            cluster_changed,
+        };
+
+        if cluster_changed {
+            // Log membership changes
+            for node_id in followers.difference(&self.prev_followers) {
+                tracing::info!(node_id, "Node joined the followers");
+            }
+            for node_id in self.prev_followers.difference(&followers) {
+                tracing::info!(node_id, "Node left the followers");
+            }
+
+            // Log leader change
+            if leader_changed {
+                tracing::info!(
+                    old_leader = ?self.prev_leader_id,
+                    new_leader = ?leader_id,
+                    "Leader changed"
+                );
+            }
+
+            // Notify watchers that the cluster was updated.
+            if let Some(notifier) = &mut self.notifier {
+                notifier
+                    .on_cluster_update(&info)
+                    .await
+                    .map_err(HandleClusterUpdateError::Notify)?;
+            }
+
+            self.prev_followers = followers;
+            self.prev_leader_id = leader_id;
+            let _ = self.sender.send(info);
         }
 
-        // Log leader change
-        if leader_changed {
-            tracing::info!(
-                old_leader = ?self.prev_leader_id,
-                new_leader = ?leader_id,
-                "Leader changed"
-            );
-        }
-
-        // Notify watchers that the cluster was updated.
-        if let Some(notifier) = &mut self.notifier {
-            notifier
-                .on_cluster_update(&info)
-                .await
-                .map_err(HandleClusterUpdateError::Notify)?;
-        }
-
-        self.prev_followers = followers;
-        self.prev_leader_id = leader_id;
-        let _ = self.sender.send(info);
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(update_metric);
+        });
 
         Ok(())
     }
