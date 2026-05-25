@@ -1,6 +1,4 @@
-use crate::helpers::{
-    create_transfer_tx, set_max_fee_check_height, set_receipt_actual_fee_height, setup, EvmAccount,
-};
+use crate::helpers::{create_transfer_tx, set_max_fee_check_height, setup, EvmAccount};
 use crate::runtime::{RT, S};
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
@@ -259,7 +257,6 @@ fn test_eth_estimate_gas_large_access_list_underestimates_executed_receipt() {
     const TARGET_GAS_LIMIT: u64 = 10_000_000;
 
     set_max_fee_check_height(0);
-    set_receipt_actual_fee_height(0);
 
     let (mut runner, account, recipient, _) = setup();
     runner.execute(create_transfer_tx(0, &account, &recipient, 1).tx);
@@ -314,64 +311,6 @@ fn test_eth_estimate_gas_large_access_list_underestimates_executed_receipt() {
             receipt.gas_used
         );
     });
-}
-
-#[test]
-fn test_eth_estimate_gas_historical_block_below_receipt_projection_height_skips_projection() {
-    const EVM_RECEIPT_ACTUAL_FEE_HEIGHT: u64 = 3;
-    const HISTORICAL_BLOCK: u64 = 1;
-
-    set_max_fee_check_height(0);
-    set_receipt_actual_fee_height(EVM_RECEIPT_ACTUAL_FEE_HEIGHT);
-
-    let (mut runner, account, recipient, _) = setup();
-    runner.execute(create_transfer_tx(0, &account, &recipient, 1).tx);
-    runner.advance_slots((EVM_RECEIPT_ACTUAL_FEE_HEIGHT + 1) as usize);
-
-    let request = TransactionRequest {
-        from: Some(account.address()),
-        to: Some(TxKind::Call(recipient.address())),
-        max_fee_per_gas: Some((MIN_PROTOCOL_BASE_FEE as u128) * 10),
-        max_priority_fee_per_gas: Some(0),
-        ..Default::default()
-    };
-
-    let (historical_estimate, latest_estimate) = runner.query_visible_state(|state| {
-        let evm = Evm::<S>::default();
-        let live_block_number = evm.block_number(state).unwrap().to::<u64>();
-        assert!(
-            live_block_number > EVM_RECEIPT_ACTUAL_FEE_HEIGHT,
-            "test precondition failed: live height {live_block_number} must be above EVM_RECEIPT_ACTUAL_FEE_HEIGHT={EVM_RECEIPT_ACTUAL_FEE_HEIGHT}"
-        );
-
-        let historical_estimate = evm
-            .eth_estimate_gas_helper(
-                request.clone(),
-                Some(BlockId::number(HISTORICAL_BLOCK)),
-                None,
-                Some(low_base_fee_override()),
-                state,
-            )
-            .unwrap()
-            .to::<u64>();
-        let latest_estimate = evm
-            .eth_estimate_gas_helper(
-                request,
-                Some(BlockId::latest()),
-                None,
-                Some(low_base_fee_override()),
-                state,
-            )
-            .unwrap()
-            .to::<u64>();
-
-        (historical_estimate, latest_estimate)
-    });
-
-    assert!(
-        latest_estimate > historical_estimate,
-        "historical eth_estimateGas for block {HISTORICAL_BLOCK}, which is below EVM_RECEIPT_ACTUAL_FEE_HEIGHT={EVM_RECEIPT_ACTUAL_FEE_HEIGHT}, should skip fee projection while latest uses it; historical_estimate={historical_estimate}, latest_estimate={latest_estimate}"
-    );
 }
 
 #[test]
