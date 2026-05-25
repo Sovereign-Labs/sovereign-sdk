@@ -309,7 +309,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         auth_data: &AuthorizationData<S>,
         sequencer: &<S::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
         sequencing_data: Option<Bytes>,
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
@@ -331,7 +331,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         &mut self,
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
         // On the unregistered path the sender pays its own sequencing, so the
@@ -375,7 +375,7 @@ impl<S: Spec, T> StandardProvenRollupCapabilities<'_, S, T> {
     fn resolve_authorized_sender(
         &mut self,
         auth_data: &AuthorizationData<S>,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
     ) -> anyhow::Result<S::Address> {
         match auth_data.address_override {
             Some(address_override) => {
