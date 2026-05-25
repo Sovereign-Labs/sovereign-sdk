@@ -171,12 +171,9 @@ where
         );
         let fee_paid = self.receipt_fee(tx_idx, state);
         if let Some((receipt, _)) = self.receipt(tx_idx, state) {
-            if let Some(actual_effective_gas_price) = maybe_actual_effective_gas_price(
-                block_number,
-                receipt.gas_used,
-                fee_paid,
-                base_fee_per_gas,
-            ) {
+            if let Some(actual_effective_gas_price) =
+                maybe_actual_effective_gas_price(receipt.gas_used, fee_paid, base_fee_per_gas)
+            {
                 tx_rpc.effective_gas_price = Some(actual_effective_gas_price);
             }
         }
