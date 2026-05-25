@@ -299,7 +299,7 @@ fn correct_signature_is_accepted() {
 #[test]
 fn duplicate_tx_is_rejected() {
     let (mut runner, admin) = setup();
-    let call = encode_message::<_, RT>();
+    let call = encode_message::<_, RT>(1);
     let tx = create_tx::<_, RT>(call, &admin);
     let tx_clone = tx.clone();
 
