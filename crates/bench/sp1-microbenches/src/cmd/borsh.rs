@@ -85,13 +85,15 @@ pub fn run(args: BorshArgs) -> anyhow::Result<()> {
         },
     )?;
     print_fit(&fit_decode, "byte");
-    let bias_borsh_deserialization = fit_decode.bias - 2.0 * per_read_bias - 4.0 * per_byte_read;
+    // x is buf_len (4-byte prefix included), so the slope already prices the prefix bytes; the
+    // intercept only carries the entry cost + the 2 fixed read biases.
+    let bias_borsh_deserialization = fit_decode.bias - 2.0 * per_read_bias;
 
     println!("\n========== SUMMARY ==========");
     println!("Raw fitted values (prover gas):");
     println!("  per_byte_read              = {per_byte_read:.4}");
     println!("  per_read_bias              = {per_read_bias:.4}  (per_read slope - per_byte_read)");
-    println!("  bias_borsh_deserialization = {bias_borsh_deserialization:.2}  (decode intercept - 2·per_read_bias - 4·per_byte_read)");
+    println!("  bias_borsh_deserialization = {bias_borsh_deserialization:.2}  (decode intercept - 2·per_read_bias)");
     println!(
         "  Sanity: decode-vec slope = {:.4} vs per_byte_read = {per_byte_read:.4}",
         fit_decode.per_byte
