@@ -62,7 +62,7 @@ pub trait ClusterUpdateNotifier: Send + Sync + 'static {
 /// Handle returned when subscribing to cluster updates.
 pub struct NodeDiscoveryTask {
     pub receiver: watch::Receiver<ClusterInfo>,
-    pub(crate) handle: JoinHandle<anyhow::Result<()>>,
+    pub(crate) handle: JoinHandle<()>,
 }
 
 impl NodeDiscoveryTask {
@@ -73,24 +73,50 @@ impl NodeDiscoveryTask {
 
 #[derive(Debug, thiserror::Error)]
 enum HandleClusterUpdateError {
+    #[error("Failed to connect to the cluster database")]
+    Connect(#[source] anyhow::Error),
     #[error("Failed to fetch cluster info")]
     GetClusterInfo(#[source] anyhow::Error),
     #[error("Failed to notify on cluster update")]
     Notify(#[source] anyhow::Error),
+    #[error("Failed to receive cluster notification")]
+    RecvNotification(#[source] anyhow::Error),
 }
 
 impl HandleClusterUpdateError {
     fn stage(&self) -> &'static str {
         match self {
+            Self::Connect(_) => "connect",
             Self::GetClusterInfo(_) => "get_cluster_info",
             Self::Notify(_) => "notify",
+            Self::RecvNotification(_) => "recv_notification",
         }
     }
+
+    /// Logs the failure and records a failure metric.
+    fn report(&self) {
+        let stage = self.stage();
+        tracing::warn!(stage, error = ?self, "Cluster update failed");
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(ClusterUpdateFailureMetric { stage });
+        });
+    }
+
+    /// Logs the failure, records a failure metric, and backs off before the
+    /// caller's next retry.
+    async fn report_and_backoff(&self) {
+        self.report();
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+    }
 }
+
+/// Default upper bound on how long to wait before re-polling cluster info.
+pub(crate) const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(3);
 
 /// Client for querying cluster information from the database.
 pub struct NodeDiscovery {
     max_age: Duration,
+    poll_interval: Duration,
     pool: PgPool,
     listener: PgListener,
     prev_followers: BTreeSet<String>,
@@ -110,6 +136,22 @@ impl NodeDiscovery {
     pub async fn connect(
         connection_string: &str,
         max_age: Duration,
+        poll_interval: Duration,
+        notifier: Option<Box<dyn ClusterUpdateNotifier>>,
+    ) -> Result<Self> {
+        Self::try_connect(connection_string, max_age, poll_interval, notifier)
+            .await
+            .map_err(|error| {
+                let error = HandleClusterUpdateError::Connect(error);
+                error.report();
+                anyhow::Error::new(error)
+            })
+    }
+
+    async fn try_connect(
+        connection_string: &str,
+        max_age: Duration,
+        poll_interval: Duration,
         notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     ) -> Result<Self> {
         tracing::info!("Connecting to database.");
@@ -129,6 +171,7 @@ impl NodeDiscovery {
 
         Ok(Self {
             max_age,
+            poll_interval,
             pool,
             listener,
             prev_followers: BTreeSet::new(),
@@ -196,17 +239,13 @@ impl NodeDiscovery {
         let handle = tokio::spawn(async move {
             loop {
                 if let Err(error) = self.handle_cluster_update().await {
-                    let stage = error.stage();
-
-                    tracing::warn!(stage, ?error, "Cluster update failed");
-                    sov_metrics::track_metrics(|tracker| {
-                        tracker.submit(ClusterUpdateFailureMetric { stage });
-                    });
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                    error.report_and_backoff().await;
                 }
 
-                // Wait for at least one notification.
-                self.listener.recv().await?;
+                // Wait for the next change signal, or re-poll after poll_interval.
+                if let Err(error) = self.recv_notification().await {
+                    error.report_and_backoff().await;
+                }
 
                 // Drain any additional pending notifications.
                 while self.listener.next_buffered().is_some() {}
@@ -214,6 +253,37 @@ impl NodeDiscovery {
         });
 
         NodeDiscoveryTask { receiver, handle }
+    }
+
+    /// Waits once for the next cluster change signal before returning to the
+    /// caller's loop, which always re-polls cluster info.
+    async fn recv_notification(&mut self) -> Result<(), HandleClusterUpdateError> {
+        let poll_interval = self.poll_interval;
+        match tokio::time::timeout(poll_interval, self.listener.try_recv()).await {
+            // A notification arrived — re-poll.
+            Ok(Ok(Some(_))) => {}
+            // The listener connection dropped and was re-established. Any
+            // notifications sent before LISTEN was restored may have been lost,
+            // so re-poll cluster info immediately instead of waiting for the
+            // next poll interval.
+            Ok(Ok(None)) => {
+                tracing::debug!(
+                    "Cluster notification listener reconnected after connection loss, re-polling"
+                );
+            }
+            // No notification arrived within `poll_interval`. This is expected
+            // when the cluster is quiet; we re-poll anyway to bound staleness.
+            Err(_) => {
+                tracing::debug!(
+                    ?poll_interval,
+                    "No cluster notification received within the poll interval, re-polling"
+                );
+            }
+            Ok(Err(error)) => {
+                return Err(HandleClusterUpdateError::RecvNotification(error.into()));
+            }
+        }
+        Ok(())
     }
 
     async fn handle_cluster_update(&mut self) -> Result<(), HandleClusterUpdateError> {
@@ -228,7 +298,7 @@ impl NodeDiscovery {
         let membership_changed = self.prev_followers != followers;
         let leader_changed = self.prev_leader_id != leader_id;
 
-        tracing::trace!(info = ?info, membership_changed, leader_changed, "Last cluster info");
+        tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
 
         if !(membership_changed || leader_changed) {
             return Ok(());
