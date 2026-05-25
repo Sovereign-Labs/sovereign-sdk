@@ -160,7 +160,7 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
     subscriber.init();
 
     let deps = create_deps().await;
-    let (status_sender, mut status_reciever) = broadcast::channel(100);
+    let (status_sender, mut status_receiver) = broadcast::channel(100);
 
     let (mut blob_sender, handle) = create_blob_sender(
         Duration::from_secs(20),
@@ -180,7 +180,7 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
     };
 
     // Wait for the blob task to start.
-    status_reciever.recv().await.unwrap();
+    status_receiver.recv().await.unwrap();
     deps.shutdown_sender.send(()).unwrap();
     handle.await.unwrap();
 
