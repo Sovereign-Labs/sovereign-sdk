@@ -1,5 +1,4 @@
-// Host-only benchmark harness; the workspace `clippy::float_arithmetic` deny exists to prevent
-// native/zkVM divergence, which doesn't apply here.
+// Host-only harness; the workspace `clippy::float_arithmetic` deny targets zkVM code, not this.
 #![allow(clippy::float_arithmetic)]
 
 pub mod cmd;
@@ -16,7 +15,6 @@ pub struct BenchResult {
     pub prover_gas: u64,
     pub total_cycles: u64,
     pub region_cycles: u64,
-    pub invocations: u64,
 }
 
 impl BenchResult {
@@ -36,4 +34,14 @@ pub fn load_guest_elf(path: &str) -> anyhow::Result<Elf> {
         anyhow::bail!("guest ELF at {path} is empty");
     }
     Ok(Elf::from(bytes))
+}
+
+/// Rounds a cost for the single metered dimension, never flooring a positive cost to zero.
+pub fn round_at_least_one(total: f64) -> u64 {
+    let rounded = total.round() as u64;
+    if total > 0.0 && rounded == 0 {
+        1
+    } else {
+        rounded
+    }
 }
