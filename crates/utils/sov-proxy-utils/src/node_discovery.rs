@@ -307,7 +307,7 @@ impl NodeDiscovery {
         let cluster_changed = membership_changed || leader_changed;
         self.iter = self.iter.wrapping_add(1);
 
-        let liveness_due = self.iter % LIVENESS_INTERVAL == 0;
+        let liveness_due = self.iter.is_multiple_of(LIVENESS_INTERVAL);
 
         tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
 
