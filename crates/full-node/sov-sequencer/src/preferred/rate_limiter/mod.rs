@@ -226,11 +226,10 @@ fn limits<S: Spec>(
 fn all_supernets(ip_addr: IpAddr) -> impl Iterator<Item = ipnet::IpNet> {
     let max_prefix: u8 = if ip_addr.is_ipv4() { 32 } else { 128 };
     (0..=max_prefix).rev().map(move |prefix| match ip_addr {
-        IpAddr::V4(ip_v4_addr) => ipnet::Ipv4Net::new(ip_v4_addr, prefix)
-            .unwrap()
+        IpAddr::V4(ip_v4_addr) => ipnet::Ipv4Net::new_assert(ip_v4_addr, prefix)
             .trunc()
             .into(),
-        IpAddr::V6(ip_v6_addr) => ipnet::Ipv6Net::new(ip_v6_addr, prefix)
+        IpAddr::V6(ip_v6_addr) => ipnet::Ipv6Net::new_assert(ip_v6_addr, prefix)
             .unwrap()
             .trunc()
             .into(),
