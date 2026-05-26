@@ -30,6 +30,7 @@ pub(crate) enum ResourceLimitExceededError<S: Spec> {
         address: S::Address,
         reason: LimitExceeded<S::Gas>,
     },
+    // TODO: Add optional network if prefix is not /32
     #[error("Resource limit exceeded for IP: {ip}, {reason:?}")]
     Ip {
         ip: IpAddr,
@@ -59,7 +60,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
                 addrs,
             ),
             by_ip_net_rate_limiter: RateLimiter::new(
-                "limiter_by_ip_network",
+                "limiter_by_ip_net",
                 max_nb_of_concurrent_users_in_rate_limiter,
                 ttl_in_millis,
                 config,
@@ -80,7 +81,11 @@ impl<S: Spec> SovRateLimiterInner<S> {
             Err(reason) => return Err(ResourceLimitExceededError::Address { address, reason }),
         };
 
-        // Check
+        // The only way actual subnet (< /32) can get into bucket is from special config.
+        // We start from smallest to largest subnets, so if IP is matching 2 subnets,
+        // it get counted into smallest first
+        // TODO: What if it is blocked into smallest, but larger still has pool?
+        // TODO: Do we even allow overlapping networks?
         let ip_key = all_supernets(ip)
             .into_iter()
             .find(|ip_net| self.by_ip_net_rate_limiter.contains_special_config(ip_net))
