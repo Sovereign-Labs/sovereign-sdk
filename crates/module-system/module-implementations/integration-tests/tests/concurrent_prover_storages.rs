@@ -412,7 +412,6 @@ where
         sequencer_state_accesses,
         &<S::Storage as Storage>::Witness::default(),
         sequencer_root_hash,
-        None,
     );
     let (sequencer_root, _) = result.unwrap();
 
@@ -439,7 +438,7 @@ fn materialize_writes<S: Storage>(
     };
 
     let (root, mut state_update) = storage
-        .compute_state_update(state_accesses, &S::Witness::default(), prev_root, None)
+        .compute_state_update(state_accesses, &S::Witness::default(), prev_root)
         .unwrap();
 
     state_update.add_accessory_items(accessory_writes);
@@ -556,32 +555,4 @@ fn assert_root_hashes<S: NativeStorage>(storage: &S, expected_root_hashes: Vec<S
         .unwrap_err();
     let expected_error = format!("Root node not found for version {next_version}.");
     assert_eq!(expected_error, future_root.to_string());
-}
-
-// Regression tests for #2514: pinned cache is incompatible with witness generation.
-
-use sov_state::DefaultStorageSpec;
-type NomtSpec = DefaultStorageSpec<TestHasher>;
-
-#[test]
-#[should_panic(expected = "Pinned cache is incompatible with witness generation")]
-fn nomt_pinned_cache_with_witness_panics() {
-    use sov_state::pinned_cache::PinnedCache;
-
-    let storage_manager = SimpleStorageManager::<NomtSpec>::new();
-    // Inject a pinned cache and ensure witness generation is enabled (the default).
-    storage_manager.set_pinned_cache(PinnedCache::default());
-    // This should panic because with_witness=true and pinned_cache is Some.
-    let _storage = storage_manager.create_storage();
-}
-
-#[test]
-fn nomt_pinned_cache_without_witness_succeeds() {
-    use sov_state::pinned_cache::PinnedCache;
-
-    let mut storage_manager = SimpleStorageManager::<NomtSpec>::new();
-    storage_manager.set_witness_generation(false);
-    storage_manager.set_pinned_cache(PinnedCache::default());
-    // This should succeed because with_witness=false.
-    let _storage = storage_manager.create_storage();
 }

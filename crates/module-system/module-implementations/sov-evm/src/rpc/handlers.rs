@@ -17,7 +17,6 @@ use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::state::PinnedCacheAccessor;
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
 use sov_state::{NativeStorage, Storage, StorageProof, User};

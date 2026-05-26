@@ -373,7 +373,7 @@ pub fn validate_and_materialize<ST: Storage>(
     prev_state_root: ST::Root,
 ) -> anyhow::Result<(ST::Root, ST::ChangeSet)> {
     let (root_hash, node_batch) =
-        storage.compute_state_update(state_accesses, witness, prev_state_root, None)?;
+        storage.compute_state_update(state_accesses, witness, prev_state_root)?;
 
     let change_set = storage.materialize_changes(node_batch);
     Ok((root_hash, change_set))

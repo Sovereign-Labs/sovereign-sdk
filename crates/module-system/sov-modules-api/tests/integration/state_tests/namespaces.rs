@@ -31,7 +31,7 @@ where
     let mut kernel = MockKernel::<S>::default();
 
     // Native execution
-    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel, None);
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel);
     state_value.set(&11, &mut state)?;
     write_kernel_marker(&mut state)?;
     commit_to_storage(state, storage, &mut kernel, &mut storage_manager, prev_root);
@@ -43,7 +43,7 @@ where
     let user_root_hash = root.namespace_root(ProvableNamespace::User);
     assert_ne!(kernel_root_hash, user_root_hash);
 
-    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel, None);
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel);
     let _ = state_value.get(&mut state);
     state_value.set(&22, &mut state)?;
     write_kernel_marker(&mut state)?;
@@ -78,7 +78,7 @@ where
     let mut state_value = KernelStateValue::with_codec(Prefix::new(0, 0), BorshCodec);
 
     // Native execution
-    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel, None);
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel);
     let mut kernel_working_set = kernel.accessor(&mut state);
     state_value.set(&11, &mut kernel_working_set)?;
 
@@ -90,7 +90,7 @@ where
     let user_root_hash = root.namespace_root(ProvableNamespace::User);
     assert_ne!(kernel_root_hash, user_root_hash);
 
-    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel, None);
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel);
     let mut kernel_working_set = kernel.accessor(&mut state);
     let _ = state_value.get(&mut kernel_working_set);
     state_value.set(&22, &mut kernel_working_set)?;
@@ -124,7 +124,7 @@ where
     let mut kernel = MockKernel::<S>::default();
 
     // Native execution
-    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel, None);
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel);
     state_value.set(&11, &0, &mut state)?;
     write_kernel_marker(&mut state)?;
 
@@ -137,7 +137,7 @@ where
     // In the first version the user and the kernel root hashes are different
     assert_ne!(kernel_root_hash, user_root_hash);
 
-    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel, None);
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), &kernel);
     state_value.set(&11, &0, &mut state)?;
     let _ = state_value.get(&0, &mut state);
     state_value.set(&22, &0, &mut state)?;
@@ -176,7 +176,7 @@ where
     let mut kernel = MockKernel::<S>::default();
 
     // Native execution
-    let mut state = StateCheckpoint::new(storage.clone(), &kernel, None);
+    let mut state = StateCheckpoint::new(storage.clone(), &kernel);
     let mut kernel_working_set = kernel.accessor(&mut state);
     state_value
         .set_true_current(&11, &mut kernel_working_set)
@@ -190,7 +190,7 @@ where
     let user_root_hash = root.namespace_root(ProvableNamespace::User);
     assert_ne!(kernel_root_hash, user_root_hash);
 
-    let mut state = StateCheckpoint::new(storage.clone(), &kernel, None);
+    let mut state = StateCheckpoint::new(storage.clone(), &kernel);
     let mut kernel_working_set = kernel.accessor(&mut state);
     let _ = state_value.get_current(&mut kernel_working_set);
     state_value
@@ -207,7 +207,7 @@ where
 
     // Check that we can get the current value with a standard working set
     let mut kernel_reset = MockKernel::<S>::default();
-    let mut state = StateCheckpoint::new(storage.clone(), &kernel_reset, None);
+    let mut state = StateCheckpoint::new(storage.clone(), &kernel_reset);
     let val_0 = state_value
         .get_current(&mut state)?
         .expect("We should be able to retrieve the state value");
@@ -215,7 +215,7 @@ where
 
     kernel_reset.increase_heights();
 
-    let mut state = StateCheckpoint::new(storage.clone(), &kernel_reset, None);
+    let mut state = StateCheckpoint::new(storage.clone(), &kernel_reset);
     let val_0 = state_value
         .get_current(&mut state)?
         .expect("We should be able to retrieve the state value");

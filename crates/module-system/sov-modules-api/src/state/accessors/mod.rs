@@ -47,7 +47,6 @@ pub use temp_cache::BorshSerializedSize;
 use self::seal::UniversalStateAccessor;
 use super::traits::PerBlockCache;
 use super::{StateReaderAndWriter, VersionReader};
-use crate::state::traits::PinnedCacheAccessor;
 use crate::Spec;
 
 pub(super) mod seal {
@@ -90,7 +89,6 @@ pub trait StateProvider<S: Spec>:
     + VersionReader
     + PerBlockCache
     + StateMetricsProvider
-    + PinnedCacheAccessor<S>
 {
     /// Transforms this [`StateProvider`] into a [`TxScratchpad`].
     fn to_tx_scratchpad(self) -> TxScratchpad<S, Self>;

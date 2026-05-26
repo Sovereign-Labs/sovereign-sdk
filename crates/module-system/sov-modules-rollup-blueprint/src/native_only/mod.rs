@@ -490,7 +490,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 .await?;
 
         let mut rt = Self::Runtime::default();
-        let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel(), None);
+        let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
         let current_height = checkpoint.rollup_height_to_access();
 
         validate_heights(
