@@ -12,9 +12,9 @@ pub use time::OffsetDateTime;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-/// Re-emit the cluster update metric at least every `LIVENESS_POLL_MULTIPLIER
-/// * poll_interval` even if the cluster is unchanged, so the absence of
-/// samples can be alerted on if the polling task dies silently.
+/// Re-emit the cluster update metric at least every
+/// `poll_interval * LIVENESS_POLL_MULTIPLIER` even if the cluster is unchanged,
+/// so the absence of samples can be alerted on if the polling task dies silently.
 const LIVENESS_POLL_MULTIPLIER: u32 = 5;
 
 /// Information about a registered node.
