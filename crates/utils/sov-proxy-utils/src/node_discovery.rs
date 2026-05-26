@@ -244,15 +244,24 @@ impl NodeDiscovery {
     pub fn spawn(mut self) -> NodeDiscoveryTask {
         let receiver = self.receiver.clone();
         let handle = tokio::spawn(async move {
+            // First iteration is the cold-start poll — treat it as timer-driven
+            // so the initial sample participates in liveness accounting.
+            let mut triggered_by_timer = true;
             loop {
-                if let Err(error) = self.handle_cluster_update().await {
+                if let Err(error) = self.handle_cluster_update(triggered_by_timer).await {
                     error.report_and_backoff().await;
                 }
 
                 // Wait for the next change signal, or re-poll after poll_interval.
-                if let Err(error) = self.recv_notification().await {
-                    error.report_and_backoff().await;
-                }
+                triggered_by_timer = match self.recv_notification().await {
+                    Ok(value) => value,
+                    Err(error) => {
+                        error.report_and_backoff().await;
+                        // After a recv error we re-poll on the next loop turn;
+                        // treat that turn as timer-driven for liveness.
+                        true
+                    }
+                };
 
                 // Drain any additional pending notifications.
                 while self.listener.next_buffered().is_some() {}
@@ -264,11 +273,15 @@ impl NodeDiscovery {
 
     /// Waits once for the next cluster change signal before returning to the
     /// caller's loop, which always re-polls cluster info.
-    async fn recv_notification(&mut self) -> Result<(), HandleClusterUpdateError> {
+    ///
+    /// Returns `true` when the wakeup was not an actual NOTIFY — i.e., the
+    /// `poll_interval` timer elapsed or the listener reconnected. The caller
+    /// uses this to count only timer-driven ticks toward [`LIVENESS_INTERVAL`].
+    async fn recv_notification(&mut self) -> Result<bool, HandleClusterUpdateError> {
         let poll_interval = self.poll_interval;
         match tokio::time::timeout(poll_interval, self.listener.try_recv()).await {
             // A notification arrived — re-poll.
-            Ok(Ok(Some(_))) => {}
+            Ok(Ok(Some(_))) => Ok(false),
             // The listener connection dropped and was re-established. Any
             // notifications sent before LISTEN was restored may have been lost,
             // so re-poll cluster info immediately instead of waiting for the
@@ -277,23 +290,19 @@ impl NodeDiscovery {
                 tracing::debug!(
                     "Cluster notification listener reconnected after connection loss, re-polling"
                 );
+                Ok(true)
             }
             // No notification arrived within `poll_interval`. This is expected
             // when the cluster is quiet; we re-poll anyway to bound staleness.
-            Err(_) => {
-                tracing::debug!(
-                    ?poll_interval,
-                    "No cluster notification received within the poll interval, re-polling"
-                );
-            }
-            Ok(Err(error)) => {
-                return Err(HandleClusterUpdateError::RecvNotification(error.into()));
-            }
+            Err(_) => Ok(true),
+            Ok(Err(error)) => Err(HandleClusterUpdateError::RecvNotification(error.into())),
         }
-        Ok(())
     }
 
-    async fn handle_cluster_update(&mut self) -> Result<(), HandleClusterUpdateError> {
+    async fn handle_cluster_update(
+        &mut self,
+        triggered_by_timer: bool,
+    ) -> Result<(), HandleClusterUpdateError> {
         let info = self
             .get_cluster_info()
             .await
@@ -305,15 +314,19 @@ impl NodeDiscovery {
         let membership_changed = self.prev_followers != followers;
         let leader_changed = self.prev_leader_id != leader_id;
         let cluster_changed = membership_changed || leader_changed;
-        self.iter = self.iter.wrapping_add(1);
 
-        let liveness_due = self.iter.is_multiple_of(LIVENESS_INTERVAL);
-
-        tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
+        // Only timer-driven ticks count toward liveness, so a quiet cluster
+        // still emits a periodic sample and a chatty one doesn't spam.
+        if triggered_by_timer {
+            self.iter = self.iter.wrapping_add(1);
+        }
+        let liveness_due = triggered_by_timer && self.iter.is_multiple_of(LIVENESS_INTERVAL);
 
         if !(cluster_changed || liveness_due) {
             return Ok(());
         }
+
+        tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
 
         let update_metric = ClusterUpdateMetric {
             current_leader: leader_id.clone(),
