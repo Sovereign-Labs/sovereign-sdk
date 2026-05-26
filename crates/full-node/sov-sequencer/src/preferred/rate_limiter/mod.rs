@@ -117,11 +117,11 @@ fn calculate_limits<S: Spec>(
         req_counter: max_requests_per_second
             .checked_mul(batch_execution_time_limit_millis)
             .expect("Overflow converting max_requests_per_second to max requests per batch"),
-        // The expect is justified because we will never have batches larger than u64::MAX bytes.
+        // The `expect` is justified because we will never have batches larger than u64::MAX bytes.
         space_in_bytes: max_batch_size_bytes
             .try_into()
-            .expect("Alowed batch size overflows u64::MAX"),
-        // The expect is justified because batches will never take longer than u64::MAX microseconds.
+            .expect("Allowed batch size overflows u64::MAX"),
+        // The `expect` is justified because batches will never take longer than u64::MAX microseconds.
         execution_time_micros: batch_execution_time_limit_millis.checked_mul(1000).expect(
             "Converting batch_execution_time_limit_millis to microseconds would overflow u64::MAX.",
         ),
@@ -403,6 +403,21 @@ mod tests {
                 )
             });
             Self { inner }
+        }
+    }
+
+    fn all_supernets(ip: Ipv4Addr) -> Vec<ipnet::Ipv4Net> {
+        (0..=32)
+            .rev()
+            .map(|prefix| ipnet::Ipv4Net::new(ip, prefix).unwrap().trunc())
+            .collect()
+    }
+
+    #[test]
+    fn ip_to_network() {
+        let ip: Ipv4Addr = "192.168.1.5".parse().unwrap();
+        for net in all_supernets(ip) {
+            println!("{}", net);
         }
     }
 }

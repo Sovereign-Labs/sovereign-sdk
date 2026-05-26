@@ -43,7 +43,7 @@ impl<G: Gas> ResourceUsed<G> {
                 // This cast is safe because a single transaction can never use more than u64::MAX bytes.
                 space_in_bytes: tx_size_in_bytes
                     .try_into()
-                    .expect("Alowed transactions size overflows u64::MAX"),
+                    .expect("Allowed transactions size overflows u64::MAX"),
                 execution_time_micros,
                 gas_used,
             },
@@ -125,13 +125,13 @@ impl<G: Gas> Throttler<G> {
         refill_rate: &RefillRatePerMillis<G>,
     ) -> Result<Self, LimitExceeded<G>> {
         let how_much_to_fill = {
-            let since_last_refil = now
+            let since_last_refill = now
                 .duration_since(self.last_refill)
                 .as_millis()
                 .try_into()
                 .expect("The throttler has not been evicted from the RateLimiter for more than u64::MAX milliseconds. This is a bug");
 
-            refill_rate.mul_by_millis(since_last_refil)
+            refill_rate.mul_by_millis(since_last_refill)
         };
 
         let total_resource_used_after_refill =
@@ -151,7 +151,7 @@ impl<G: Gas> Throttler<G> {
         let used = match self.total_resource_used.combine(&resource_used) {
             Some(used) => used,
             None => {
-                // On overflow we issue an error but we won't panic.
+                // On overflow, we issue an error, but we won't panic.
                 tracing::error!(
                     "Throttler for {:?} overflowed: Initial total resource used {:?}, resource increase {:?}",
                     key,
@@ -402,7 +402,7 @@ mod tests {
                 .unwrap();
         }
 
-        // New address has fresh rate limiter throtler.
+        // New address has fresh rate limiter throttler.
         let addr_2 = <TestSpec as Spec>::Address::from([2; 28]);
         let now = Instant::now();
         {
@@ -413,7 +413,7 @@ mod tests {
     }
 
     #[test]
-    fn test_rate_limiter_happy_path_sepcial_address() {
+    fn test_rate_limiter_happy_path_special_address() {
         let resource_used_per_run = small_resource_used_per_run();
         let default_config = RateLimiterConfig::<TestSpec> {
             max_allowed_resources: TotalResources {
@@ -468,7 +468,7 @@ mod tests {
                 .unwrap();
         }
 
-        // After two runs, the standard addr is rate limitied but special_addr has higher limits.
+        // After two runs, the standard addr is rate limited but special_addr has higher limits.
         {
             let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(3);
             rollup_simulator

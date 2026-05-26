@@ -61,10 +61,10 @@ impl<G: Gas> Resource<G> {
             execution_time_micros: self
                 .execution_time_micros
                 .saturating_sub(tokens.execution_time_micros),
-            gas_used: match self.gas_used.checked_sub(tokens.gas_used) {
-                Some(gas) => gas,
-                None => Gas::zero(),
-            },
+            gas_used: self
+                .gas_used
+                .checked_sub(tokens.gas_used)
+                .unwrap_or_else(|| Gas::zero()),
         }
     }
 
@@ -174,7 +174,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resouce_saturating_sub() {
+    fn test_resource_saturating_sub() {
         {
             let zero: Resource<_> = Resource::<Gas>::zero();
             let r1 = Resource::from(1);
@@ -192,7 +192,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resouce_addition() {
+    fn test_resource_addition() {
         let r1 = Resource::from(1);
         {
             let r2 = Resource::from(2);
@@ -206,7 +206,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resouce_multiplication() {
+    fn test_resource_multiplication() {
         let r1 = Resource::from(3);
 
         assert_eq!(r1.saturating_mul_by_scalar(2), Resource::from(6));
@@ -218,7 +218,7 @@ mod tests {
     }
 
     #[test]
-    fn test_resouce_exceeding() {
+    fn test_resource_exceeding() {
         let r1 = Resource::from(1);
         let r2 = Resource::from(2);
 
