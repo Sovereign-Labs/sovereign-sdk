@@ -389,13 +389,13 @@ where
         .collect()
 }
 
-/// Parses an IP network from config text. CIDR notation is used as-is; a bare
-/// IP address falls back to a host network via [`IpNet::from`] (`/32` for IPv4,
-/// `/128` for IPv6).
-/// Return string for serde's custo erros
+/// Parses an IP network from config text. CIDR notation is canonicalized; a
+/// bare IP address falls back to a host network via [`IpNet::from`] (`/32` for
+/// IPv4, `/128` for IPv6).
+/// Return string for serde's custom errors.
 fn parse_ip_net_or_host(s: &str) -> Result<ipnet::IpNet, String> {
     match s.parse::<ipnet::IpNet>() {
-        Ok(net) => Ok(net),
+        Ok(net) => Ok(net.trunc()),
         // Not CIDR notation; treat a bare address as a host network.
         Err(_) => s
             .parse::<IpAddr>()
@@ -412,4 +412,25 @@ pub struct Limits {
     /// The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.
     /// Values between 1 and 20 are recommended starting points.
     pub refill_rate: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_ip_net_or_host_truncates_cidr_host_bits() {
+        assert_eq!(
+            parse_ip_net_or_host("10.0.0.5/24").unwrap(),
+            "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap()
+        );
+    }
+
+    #[test]
+    fn parse_ip_net_or_host_treats_bare_ip_as_host_network() {
+        assert_eq!(
+            parse_ip_net_or_host("10.0.0.5").unwrap(),
+            "10.0.0.5/32".parse::<ipnet::IpNet>().unwrap()
+        );
+    }
 }

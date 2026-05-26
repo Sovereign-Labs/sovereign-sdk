@@ -12,7 +12,10 @@ use sov_modules_api::{CredentialId, Spec};
 use sov_rollup_interface::common::RollupHeight;
 use std::collections::HashMap;
 use std::hash::Hash;
-use std::{net::IpAddr, time::Instant};
+use std::{
+    net::IpAddr,
+    time::{Duration, Instant},
+};
 
 #[derive(Debug)]
 pub(crate) struct LimiterToken<S: Spec> {
@@ -87,11 +90,9 @@ impl<S: Spec> SovRateLimiterInner<S> {
             Err(reason) => return Err(ResourceLimitExceededError::Address { address, reason }),
         };
 
-        // The only way actual subnet (< /32) can get into bucket is from special config.
-        // We start from smallest to largest subnets, so if IP is matching 2 subnets,
-        // it get counted into smallest first
-        // TODO: What if it is blocked into smallest, but larger still has pool?
-        // TODO: Do we even allow overlapping networks?
+        // Overlapping subnets are rejected at startup, so an IP falls into at most
+        // one configured subnet; probe the configured prefix lengths (longest
+        // first) and fall back to the host network if none match.
         let ip_key = self
             .ip_subnet_prefixes
             .candidate_supernets(ip)
@@ -123,11 +124,19 @@ const TTL_MULTIPLIER: u64 = 5;
 fn calculate_limits<S: Spec>(
     limits: Limits,
     max_requests_per_second: u64,
-    batch_execution_time_limit_millis: u64,
+    batch_execution_time_limit: Duration,
     max_batch_size_bytes: usize,
     height_for_gas_limit_computation: RollupHeight,
 ) -> RateLimiterConfig<S> {
     let max_gas = comfortable_gas_limit_for_height::<S>(height_for_gas_limit_computation);
+    let batch_execution_time_limit_millis = batch_execution_time_limit
+        .as_millis()
+        .try_into()
+        .expect("Batch execution time limit overflows u64 milliseconds");
+    let batch_execution_time_limit_micros = batch_execution_time_limit
+        .as_micros()
+        .try_into()
+        .expect("Batch execution time limit overflows u64 microseconds");
 
     let max_resources_per_batch = Resource {
         req_counter: max_requests_per_second
@@ -137,10 +146,7 @@ fn calculate_limits<S: Spec>(
         space_in_bytes: max_batch_size_bytes
             .try_into()
             .expect("Allowed batch size overflows u64::MAX"),
-        // The `expect` is justified because batches will never take longer than u64::MAX microseconds.
-        execution_time_micros: batch_execution_time_limit_millis.checked_mul(1000).expect(
-            "Converting batch_execution_time_limit_millis to microseconds would overflow u64::MAX.",
-        ),
+        execution_time_micros: batch_execution_time_limit_micros,
         gas_used: max_gas,
     };
 
@@ -170,7 +176,7 @@ pub(crate) struct SovRateLimiter<S: Spec> {
 
 fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
     max_requests_per_second: u64,
-    batch_execution_time_limit_millis: u64,
+    batch_execution_time_limit: Duration,
     max_batch_size_bytes: usize,
     height_for_gas_limit_computation: RollupHeight,
     v: Vec<(K, Limits)>,
@@ -182,7 +188,7 @@ fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
                 calculate_limits::<S>(
                     limits,
                     max_requests_per_second,
-                    batch_execution_time_limit_millis,
+                    batch_execution_time_limit,
                     max_batch_size_bytes,
                     height_for_gas_limit_computation,
                 ),
@@ -201,25 +207,26 @@ fn limits<S: Spec>(
     HashMap<S::Address, RateLimiterConfig<S>>,
     HashMap<ipnet::IpNet, RateLimiterConfig<S>>,
 ) {
+    let batch_execution_time_limit = Duration::from_millis(batch_execution_time_limit_millis);
     let default_config = calculate_limits::<S>(
         sov_config.default_limits,
         sov_config.max_requests_per_second,
-        batch_execution_time_limit_millis,
+        batch_execution_time_limit,
         max_batch_size_bytes,
         sov_config.height_for_gas_limit_computation,
     );
 
     let addrs = to_limiter_config_map::<S::Address, S>(
-        batch_execution_time_limit_millis,
         sov_config.max_requests_per_second,
+        batch_execution_time_limit,
         max_batch_size_bytes,
         sov_config.height_for_gas_limit_computation,
         sov_config.address_custom_limits,
     );
 
     let ip_networks = to_limiter_config_map::<ipnet::IpNet, S>(
-        batch_execution_time_limit_millis,
         sov_config.max_requests_per_second,
+        batch_execution_time_limit,
         max_batch_size_bytes,
         sov_config.height_for_gas_limit_computation,
         sov_config.ip_custom_limits,
@@ -282,6 +289,20 @@ impl SubnetPrefixes {
     }
 }
 
+/// Panics if any two configured subnets overlap (one contains the other).
+/// Overlapping subnets are forbidden: an IP inside both would have no
+/// unambiguous bucket.
+fn assert_no_overlapping_subnets(networks: &[ipnet::IpNet]) {
+    for (i, a) in networks.iter().enumerate() {
+        for b in &networks[i + 1..] {
+            assert!(
+                !(a.contains(b) || b.contains(a)),
+                "rate limiter config contains overlapping IP subnets: {a} and {b}"
+            );
+        }
+    }
+}
+
 impl<S: Spec> SovRateLimiter<S> {
     pub(crate) fn new(
         config: Option<SovRateLimiterConfig<S::Address>>,
@@ -301,6 +322,15 @@ impl<S: Spec> SovRateLimiter<S> {
             let ttl_in_millis = batch_execution_time_limit_millis * TTL_MULTIPLIER;
             let max_nb_of_concurrent_users_in_rate_limiter =
                 sov_config.max_nb_of_concurrent_users_in_rate_limiter;
+
+            // Overlapping (and duplicate) subnets are forbidden. Check the raw
+            // config list before `limits` collapses duplicate keys into a map.
+            let configured_networks: Vec<ipnet::IpNet> = sov_config
+                .ip_custom_limits
+                .iter()
+                .map(|(net, _)| *net)
+                .collect();
+            assert_no_overlapping_subnets(&configured_networks);
 
             let (config, addrs, ips) = limits(
                 sov_config,
@@ -368,7 +398,7 @@ mod tests {
         let rate_limiter_config = calculate_limits::<TestSpec>(
             limits,
             10000,
-            max_batch_exec_time,
+            Duration::from_millis(max_batch_exec_time),
             6000000,
             RollupHeight::GENESIS,
         );
@@ -477,11 +507,43 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "overlapping IP subnets")]
+    fn overlapping_subnet_config_panics() {
+        let config = SovRateLimiterConfig {
+            max_requests_per_second: 1000,
+            max_nb_of_concurrent_users_in_rate_limiter: 1000,
+            default_limits: Limits {
+                resources_per_bucket: 5,
+                refill_rate: 1,
+            },
+            height_for_gas_limit_computation: RollupHeight::GENESIS,
+            address_custom_limits: Vec::default(),
+            ip_custom_limits: vec![
+                (
+                    "10.0.0.0/8".parse().unwrap(),
+                    Limits {
+                        resources_per_bucket: 5,
+                        refill_rate: 1,
+                    },
+                ),
+                (
+                    "10.0.0.0/24".parse().unwrap(),
+                    Limits {
+                        resources_per_bucket: 5,
+                        refill_rate: 1,
+                    },
+                ),
+            ],
+        };
+        let _ = SovRateLimiter::<TestSpec>::new(Some(config), 3000, 1_000_000);
+    }
+
+    #[test]
     fn candidate_supernets_probes_only_configured_prefix_lengths() {
         let prefixes = SubnetPrefixes::from_networks(
             [
                 "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap(),
-                "10.0.0.0/16".parse::<ipnet::IpNet>().unwrap(),
+                "172.16.0.0/16".parse::<ipnet::IpNet>().unwrap(),
             ]
             .iter(),
         );
