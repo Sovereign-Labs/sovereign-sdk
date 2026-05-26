@@ -7,15 +7,15 @@ use sqlx::FromRow;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 pub use time::OffsetDateTime;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
 
-/// Re-emit the cluster update metric every Nth successful check even if the                                                                                                                                                                
-/// cluster is unchanged, so the absence of samples can be alerted on if the                                                                                                                                                                
-/// polling task dies silently.                                                                                                                                                                                                             
-const LIVENESS_INTERVAL: u64 = 5;
+/// Re-emit the cluster update metric at least every
+/// `poll_interval * LIVENESS_POLL_MULTIPLIER` even if the cluster is unchanged,
+/// so the absence of samples can be alerted on if the polling task dies silently.
+const LIVENESS_POLL_MULTIPLIER: u32 = 5;
 
 /// Information about a registered node.
 #[derive(Debug, Clone, FromRow, PartialEq, Eq)]
@@ -122,6 +122,7 @@ pub(crate) const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(3);
 pub struct NodeDiscovery {
     max_age: Duration,
     poll_interval: Duration,
+    liveness_interval: Duration,
     pool: PgPool,
     listener: PgListener,
     prev_followers: BTreeSet<String>,
@@ -129,7 +130,7 @@ pub struct NodeDiscovery {
     notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     sender: watch::Sender<ClusterInfo>,
     pub(crate) receiver: watch::Receiver<ClusterInfo>,
-    iter: u64,
+    last_metric_at: Option<Instant>,
 }
 
 impl NodeDiscovery {
@@ -178,6 +179,7 @@ impl NodeDiscovery {
         Ok(Self {
             max_age,
             poll_interval,
+            liveness_interval: poll_interval * LIVENESS_POLL_MULTIPLIER,
             pool,
             listener,
             prev_followers: BTreeSet::new(),
@@ -185,7 +187,7 @@ impl NodeDiscovery {
             notifier,
             sender,
             receiver,
-            iter: 0,
+            last_metric_at: None,
         })
     }
 
@@ -305,15 +307,20 @@ impl NodeDiscovery {
         let membership_changed = self.prev_followers != followers;
         let leader_changed = self.prev_leader_id != leader_id;
         let cluster_changed = membership_changed || leader_changed;
-        self.iter = self.iter.wrapping_add(1);
 
-        let liveness_due = self.iter.is_multiple_of(LIVENESS_INTERVAL);
-
-        tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
+        // Liveness is keyed off wall-clock time, not the wake-up source, so a
+        // chatty cluster (frequent NOTIFY traffic) still emits periodic samples
+        // and missing-sample alerts only fire if the polling task actually
+        // stops making progress.
+        let liveness_due = self
+            .last_metric_at
+            .is_none_or(|t| t.elapsed() >= self.liveness_interval);
 
         if !(cluster_changed || liveness_due) {
             return Ok(());
         }
+
+        tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
 
         let update_metric = ClusterUpdateMetric {
             current_leader: leader_id.clone(),
@@ -355,6 +362,7 @@ impl NodeDiscovery {
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(update_metric);
         });
+        self.last_metric_at = Some(Instant::now());
 
         Ok(())
     }
