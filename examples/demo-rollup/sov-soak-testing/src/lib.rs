@@ -1,9 +1,13 @@
+use std::path::{Path, PathBuf};
+
+use anyhow::Context as _;
 use demo_stf::MultiAddressEvmSolana;
 use sov_celestia_adapter::verifier::CelestiaSpec;
 use sov_mock_da::{BlockProducingConfig, MockDaSpec};
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
-use sov_modules_api::Amount;
+use sov_modules_api::prelude::serde_json;
+use sov_modules_api::{Amount, CryptoSpec as ModuleCryptoSpec, Spec};
 use sov_paymaster::{
     PayeePolicy, PayerGenesisConfig, Paymaster, PaymasterConfig, PaymasterPolicyInitializer,
     SafeVec,
@@ -20,14 +24,15 @@ use sov_test_utils::{
     generate_runtime, RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser,
     TEST_DEFAULT_USER_BALANCE,
 };
-use std::path::PathBuf;
+use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
-pub const DEFAULT_BLOCK_TIME_MS: u64 = 200;
+pub const DEFAULT_BLOCK_TIME_MS: u64 = 6000;
 pub const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::Periodic {
     block_time_ms: DEFAULT_BLOCK_TIME_MS,
 };
 
 pub const DEFAULT_FINALIZATION_BLOCKS: u32 = 5;
+pub const VALUE_SETTER_ADMIN_PRIVATE_KEY_FILE: &str = "tx_signer_private_key.json";
 
 pub type TestRT = TestRuntime<TestSpec>;
 pub type RollupBlueprint = RtAgnosticBlueprint<TestSpec, TestRT>;
@@ -45,7 +50,11 @@ pub type DemoMockRT = demo_stf::runtime::Runtime<MockDemoRollupSpec>;
 
 generate_runtime! {
     name: TestRuntime,
-    modules: [paymaster: Paymaster<S>, synthetic_load: SyntheticLoad<S>],
+    modules: [
+        paymaster: Paymaster<S>,
+        synthetic_load: SyntheticLoad<S>,
+        value_setter: ValueSetter<S>
+    ],
     operating_mode: sov_modules_api::runtime::OperatingMode::Zk,
     minimal_genesis_config_type: MinimalZkGenesisConfig<S>,
     gas_enforcer: paymaster: Paymaster<S>,
@@ -77,9 +86,18 @@ pub fn setup_roles_and_config() -> Setup {
             .checked_mul(Amount::new(10))
             .unwrap(),
     );
+    let value_setter_admin_private_key = read_value_setter_admin_private_key::<TestSpec>()
+        .expect("failed to read value setter admin private key");
+    let value_setter_admin = TestUser::new(
+        value_setter_admin_private_key.clone(),
+        TEST_DEFAULT_USER_BALANCE,
+    );
     genesis_config
         .additional_accounts_mut()
         .push(paymaster.clone());
+    genesis_config
+        .additional_accounts_mut()
+        .push(value_setter_admin.clone());
 
     let users: Vec<TestUser<TestSpec>> = vec![TestUser::generate_with_default_balance(); 20];
 
@@ -107,6 +125,9 @@ pub fn setup_roles_and_config() -> Setup {
             .unwrap(),
         },
         (),
+        ValueSetterConfig {
+            admin: value_setter_admin.address(),
+        },
     );
     Setup {
         paymaster,
@@ -114,6 +135,28 @@ pub fn setup_roles_and_config() -> Setup {
         prover,
         genesis_config,
     }
+}
+
+pub fn read_value_setter_admin_private_key<S>(
+) -> anyhow::Result<<<S as Spec>::CryptoSpec as ModuleCryptoSpec>::PrivateKey>
+where
+    S: Spec,
+    <<S as Spec>::CryptoSpec as ModuleCryptoSpec>::PrivateKey: serde::de::DeserializeOwned,
+{
+    let private_key_path = Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join("../../test-data/keys")
+        .join(VALUE_SETTER_ADMIN_PRIVATE_KEY_FILE);
+    let data = std::fs::read_to_string(&private_key_path)
+        .with_context(|| format!("unable to read {}", private_key_path.display()))?;
+    let value: serde_json::Value = serde_json::from_str(&data)
+        .with_context(|| format!("unable to parse {}", private_key_path.display()))?;
+
+    let private_key = value
+        .get("private_key")
+        .cloned()
+        .context("private key file is missing `private_key`")?;
+    serde_json::from_value(private_key)
+        .context("unable to deserialize value setter admin private key")
 }
 
 pub async fn setup_rollup(
@@ -151,7 +194,7 @@ pub async fn setup_rollup(
         if let SequencerKindConfig::Preferred(preferred_sequencer_config) =
             &mut config.sequencer_config
         {
-            preferred_sequencer_config.batch_execution_time_limit_millis = 400;
+            preferred_sequencer_config.batch_execution_time_limit_millis = 3000;
         }
     })
     .set_da_config(|da_config| {

@@ -3,15 +3,16 @@ use std::time::Duration;
 use clap::Parser;
 use sov_bank::Bank;
 use sov_modules_api::prelude::tracing;
-use sov_modules_api::{EncodeCall, Runtime, Spec};
+use sov_modules_api::{CryptoSpec as ModuleCryptoSpec, EncodeCall, Runtime, Spec};
 use sov_soak_testing::{
-    CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT, MockDemoRollupSpec, SoakTestRunner, TestRT,
-    ValidityProfile,
+    read_value_setter_admin_private_key, CelestiaRollupSpec, DemoCelestiaRT, DemoMockRT,
+    MockDemoRollupSpec, SoakTestRunner, TestRT, ValidityProfile,
 };
 use sov_synthetic_load::SyntheticLoad;
 use sov_test_utils::TestSpec;
 use sov_transaction_generator::interface::MessageValidity;
 use sov_transaction_generator::Distribution;
+use sov_value_setter::ValueSetter;
 use tokio::signal::unix::SignalKind;
 use tokio::sync::watch::Receiver;
 use tokio::task::JoinSet;
@@ -53,8 +54,12 @@ struct Args {
     tx_type: TxType,
 
     /// After that many seconds main loop will restart with salt incremented by number of workerAs
-    #[arg(long, default_value = "None")]
+    #[arg(long)]
     restart_after_seconds: Option<u64>,
+
+    #[arg(long)]
+    /// Milliseconds passed to sov-value-setter SetValueAndSleep transactions.
+    value_setter_sleep_millis: Option<u64>,
 }
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
@@ -65,6 +70,8 @@ pub enum TxType {
     Bank,
     /// Mixed [`SyntheticLoad`] and [`Bank`] transactions
     Mixed,
+    /// Only sov-value-setter `SetValueAndSleep` transactions
+    ValueSetterSleep,
 }
 
 /// Helper to create the Runner for any demo runtime.
@@ -88,9 +95,34 @@ where
         TxType::Bank => runner.with_bank(),
         TxType::SyntheticLoad => runner.with_synthetic_load(),
         TxType::Mixed => runner.with_bank().with_synthetic_load(),
+        TxType::ValueSetterSleep => {
+            anyhow::bail!("value-setter-sleep requires a runtime with sov-value-setter")
+        }
     };
 
     runner
+        .run(client, rx, worker_id, num_workers, validity, restart_after)
+        .await
+}
+
+async fn run_value_setter_sleep_soak_test<R, S>(
+    client: sov_api_spec::Client,
+    rx: Receiver<bool>,
+    worker_id: u128,
+    num_workers: u32,
+    validity: Distribution<MessageValidity>,
+    sleep_millis: u64,
+    restart_after: Option<std::time::Duration>,
+) -> anyhow::Result<()>
+where
+    R: Runtime<S> + EncodeCall<ValueSetter<S>> + Clone,
+    S: Spec,
+    <<S as Spec>::CryptoSpec as ModuleCryptoSpec>::PrivateKey: serde::de::DeserializeOwned,
+{
+    let admin_key = read_value_setter_admin_private_key::<S>()?;
+
+    SoakTestRunner::<R, S>::new()
+        .with_value_setter_sleep(admin_key, sleep_millis)
         .run(client, rx, worker_id, num_workers, validity, restart_after)
         .await
 }
@@ -104,21 +136,40 @@ async fn worker_task(
     validity_profile: ValidityProfile,
     tx_type: TxType,
     restart_after: Option<std::time::Duration>,
+    value_setter_sleep_millis: Option<u64>,
 ) -> anyhow::Result<()> {
     let validity = validity_profile.get_validity();
 
     let result = match runtime {
         SelectedRuntime::Test => {
-            run_soak_test_with_demo_runtime::<TestRT, TestSpec>(
-                client,
-                rx,
-                worker_id,
-                num_workers,
-                validity,
-                tx_type,
-                restart_after,
-            )
-            .await
+            if let TxType::ValueSetterSleep = tx_type {
+                let sleep_millis = value_setter_sleep_millis.ok_or_else(|| {
+                    anyhow::anyhow!(
+                        "--value-setter-sleep-millis is required with --tx-type value-setter-sleep"
+                    )
+                })?;
+                run_value_setter_sleep_soak_test::<TestRT, TestSpec>(
+                    client,
+                    rx,
+                    worker_id,
+                    num_workers,
+                    validity,
+                    sleep_millis,
+                    restart_after,
+                )
+                .await
+            } else {
+                run_soak_test_with_demo_runtime::<TestRT, TestSpec>(
+                    client,
+                    rx,
+                    worker_id,
+                    num_workers,
+                    validity,
+                    tx_type,
+                    restart_after,
+                )
+                .await
+            }
         }
         SelectedRuntime::DemoCelestia => {
             run_soak_test_with_demo_runtime::<DemoCelestiaRT, CelestiaRollupSpec>(
@@ -156,6 +207,17 @@ async fn worker_task(
 #[tokio::main]
 async fn main() -> Result<(), anyhow::Error> {
     let args = Args::parse();
+    if let TxType::ValueSetterSleep = args.tx_type {
+        if args.value_setter_sleep_millis.is_none() {
+            anyhow::bail!(
+                "--value-setter-sleep-millis is required with --tx-type value-setter-sleep"
+            );
+        }
+        if !matches!(args.runtime, SelectedRuntime::Test) {
+            anyhow::bail!("--tx-type value-setter-sleep is only supported with --runtime test");
+        }
+    }
+
     let _guard = sov_modules_rollup_blueprint::logging::initialize_logging();
     let mut worker_set = JoinSet::new();
     let (tx, rx) = tokio::sync::watch::channel(false);
@@ -180,6 +242,7 @@ async fn main() -> Result<(), anyhow::Error> {
             args.validity_profile,
             args.tx_type,
             restart_after,
+            args.value_setter_sleep_millis,
         ));
     }
 

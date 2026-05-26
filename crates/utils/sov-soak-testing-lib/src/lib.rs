@@ -1,15 +1,14 @@
-use std::collections::HashMap;
-use std::sync::Arc;
-use std::time::Duration;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::{Arc, OnceLock};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rand::Rng;
 use sov_bank::Bank;
 use sov_bank::CallMessageDiscriminants::Transfer;
-use sov_modules_api::capabilities::config_chain_id;
-use sov_modules_api::macros::config_value;
-use sov_modules_api::prelude::arbitrary::{self, Unstructured};
+use sov_modules_api::capabilities::{config_chain_id, UniquenessData};
+use sov_modules_api::prelude::arbitrary::{self, Arbitrary, Unstructured};
 use sov_modules_api::prelude::tracing;
-use sov_modules_api::transaction::TxDetails;
+use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction};
 use sov_modules_api::{CryptoSpec, DispatchCall, EncodeCall, PrivateKey, Runtime, Spec};
 use sov_synthetic_load::CallMessageDiscriminants::{
     ReadAndSetHeavyState, ReadAndSetManyIndividualValues, RunCPUHeavyOperation,
@@ -28,14 +27,25 @@ use sov_transaction_generator::generators::state_consistency::{
 use sov_transaction_generator::generators::synthetic_load::{
     SyntheticLoadHarness, SyntheticLoadMessageGenerator,
 };
+use sov_transaction_generator::generators::value_setter::ValueSetterChangeLogEntry;
 use sov_transaction_generator::interface::rng_utils::{get_random_bytes, randomize_buffer};
 use sov_transaction_generator::interface::MessageValidity;
-use sov_transaction_generator::{Distribution, GeneratedMessage, Percent, State};
+use sov_transaction_generator::{
+    Distribution, GeneratedMessage, HarnessModule, MessageOutcome, Percent, State,
+};
+use sov_value_setter::ValueSetter;
 use tokio::sync::watch::Receiver;
 
 pub const BUFFER_SIZE: usize = 100_000;
 // The minimum randomness needed to guarantee successful transaction generation
 pub const SAFE_MIN_RANDOMNESS: usize = 1_000;
+const TX_SEND_RETRY_ATTEMPTS: u32 = 5000;
+const TX_SEND_RETRY_DELAY: Duration = Duration::from_millis(50);
+const TX_ATTEMPT_STATS_INTERVAL: Duration = Duration::from_secs(1);
+
+static TX_ACCEPTED_ATTEMPTS: AtomicU64 = AtomicU64::new(0);
+static TX_REJECTED_ATTEMPTS: AtomicU64 = AtomicU64::new(0);
+static TX_ATTEMPT_STATS_LOGGER: OnceLock<()> = OnceLock::new();
 
 pub fn plain_tx_with_default_details<R: Runtime<S>, S: Spec>(
     gen_output: &GeneratedMessage<S, <R as DispatchCall>::Decodable, BasicChangeLogEntry<S>>,
@@ -50,6 +60,64 @@ pub fn plain_tx_with_default_details<R: Runtime<S>, S: Spec>(
             chain_id: config_chain_id(),
         },
     }
+}
+
+fn current_timestamp_micros() -> anyhow::Result<u64> {
+    let micros = SystemTime::now().duration_since(UNIX_EPOCH)?.as_micros();
+    Ok(u64::try_from(micros)?)
+}
+
+fn sign_with_current_generation<R: Runtime<S>, S: Spec>(
+    message: <R as DispatchCall>::Decodable,
+    key: <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    details: TxDetails<S>,
+) -> anyhow::Result<Transaction<R, S>> {
+    Ok(Transaction::<R, S>::new_signed_tx(
+        &key,
+        &R::CHAIN_HASH,
+        UnsignedTransaction::new(
+            message,
+            details.chain_id,
+            details.max_priority_fee_bips,
+            details.max_fee,
+            UniquenessData::Generation(current_timestamp_micros()?),
+            details.gas_limit,
+        ),
+    ))
+}
+
+fn record_tx_attempt(accepted: bool) {
+    if accepted {
+        TX_ACCEPTED_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
+    } else {
+        TX_REJECTED_ATTEMPTS.fetch_add(1, Ordering::Relaxed);
+    }
+}
+
+fn start_tx_attempt_stats_logger() {
+    TX_ATTEMPT_STATS_LOGGER.get_or_init(|| {
+        tokio::spawn(async {
+            loop {
+                tokio::time::sleep(TX_ATTEMPT_STATS_INTERVAL).await;
+
+                let accepted_attempts = TX_ACCEPTED_ATTEMPTS.swap(0, Ordering::Relaxed);
+                let rejected_attempts = TX_REJECTED_ATTEMPTS.swap(0, Ordering::Relaxed);
+                let total_attempts = accepted_attempts + rejected_attempts;
+                let rejection_rate = if total_attempts == 0 {
+                    0.0
+                } else {
+                    rejected_attempts as f64 * 100.0 / total_attempts as f64
+                };
+
+                tracing::info!(
+                    accepted_attempts,
+                    rejected_attempts,
+                    rejection_rate_pct = rejection_rate,
+                    "Soak transaction attempt stats"
+                );
+            }
+        });
+    });
 }
 
 #[derive(Clone, Copy, Debug, clap::ValueEnum)]
@@ -115,8 +183,8 @@ where
         }
     }
 
-    /// By default, all transactions that are intended to succeed are submitted with retries using
-    /// exponential backoff.
+    /// By default, all transactions that are intended to succeed are submitted with retries using a
+    /// fixed 50ms delay.
     /// When opted out, transactions are sent using a single request and fail-fast if they're not
     /// successful on the first try.
     pub fn without_retries(mut self) -> Self {
@@ -179,6 +247,24 @@ where
         self
     }
 
+    /// Add a `ValueSetter` module harness that only emits `SetValueAndSleep` calls.
+    ///
+    /// This method is only available if your Runtime implements `EncodeCall<ValueSetter<S>>`.
+    pub fn with_value_setter_sleep(
+        mut self,
+        admin_key: <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+        sleep_millis: u64,
+    ) -> Self
+    where
+        R: EncodeCall<ValueSetter<S>>,
+    {
+        self.modules.push(Arc::new(ValueSetterSleepHarness::new(
+            admin_key,
+            sleep_millis,
+        )));
+        self
+    }
+
     /// Run the soak test with the configured modules.
     ///
     /// # Parameters
@@ -236,6 +322,65 @@ where
 
             return result;
         }
+    }
+}
+
+#[derive(Debug, Clone)]
+struct ValueSetterSleepHarness<S: Spec> {
+    admin_key: <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    sleep_millis: u64,
+}
+
+impl<S: Spec> ValueSetterSleepHarness<S> {
+    fn new(
+        admin_key: <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+        sleep_millis: u64,
+    ) -> Self {
+        Self {
+            admin_key,
+            sleep_millis,
+        }
+    }
+}
+
+impl<R, S> HarnessModule<S, R, BasicTag, BasicChangeLogEntry<S>> for ValueSetterSleepHarness<S>
+where
+    R: EncodeCall<ValueSetter<S>>,
+    S: Spec,
+{
+    fn generate_setup_messages(
+        &self,
+        _u: &mut Unstructured<'_>,
+        _generator_state: &mut State<S, BasicTag>,
+    ) -> arbitrary::Result<
+        Vec<GeneratedMessage<S, <R as DispatchCall>::Decodable, BasicChangeLogEntry<S>>>,
+    > {
+        Ok(Vec::new())
+    }
+
+    fn generate_call_message(
+        &self,
+        u: &mut Unstructured<'_>,
+        _generator_state: &mut State<S, BasicTag>,
+        _validity: MessageValidity,
+    ) -> arbitrary::Result<
+        GeneratedMessage<S, <R as DispatchCall>::Decodable, BasicChangeLogEntry<S>>,
+    > {
+        let value = u32::arbitrary(u)?;
+        let message = sov_value_setter::CallMessage::SetValueAndSleep {
+            value,
+            sleep_millis: self.sleep_millis,
+        };
+
+        Ok(GeneratedMessage::new(
+            <R as EncodeCall<ValueSetter<S>>>::to_decodable(message),
+            self.admin_key.clone(),
+            MessageOutcome::Successful {
+                changes: vec![BasicChangeLogEntry::ValueSetter(
+                    ValueSetterChangeLogEntry::ValueUpdated { new_value: value },
+                )],
+            },
+        ))
     }
 }
 
@@ -321,15 +466,13 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
     validity: Distribution<MessageValidity>,
     use_retries: bool,
 ) -> anyhow::Result<()> {
-    let mut nonces: HashMap<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey, u64> =
-        Default::default();
+    start_tx_attempt_stats_logger();
 
     let modules = Distribution::with_equiprobable_values(modules);
     let random_bytes = get_random_bytes(100_000_000, worker_id);
     let u = &mut Unstructured::new(&random_bytes[..]);
 
     let mut generator: TestGenerator<R, S> = setup_harness::<R, _>(worker_id);
-    let past_transaction_generations = config_value!("PAST_TRANSACTION_GENERATIONS") + 1;
     let worker_start = std::time::Instant::now();
     let mut total_txns = 0;
 
@@ -351,7 +494,12 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
         let mut txns = vec![];
         for _ in 0..txn_count {
             let validity = validity.select_value(u)?;
-            let msg = generator.generate(&modules, *validity);
+            let message_validity = if *validity == MessageValidity::Invalid {
+                MessageValidity::Valid
+            } else {
+                *validity
+            };
+            let msg = generator.generate(&modules, message_validity);
             let tx = plain_tx_with_default_details::<R, S>(&msg);
             let signed_tx = {
                 let TransactionType::Plain {
@@ -363,65 +511,91 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
                     panic!("The method `plain_tx_with_default_details` should return a plain transaction!");
                 };
 
-                let pub_key = key.clone().pub_key();
-                let nonce = nonces.get(&pub_key).unwrap_or(&0);
-
-                // If message is invalid, create a future nonce and send it to the sequencer
-                // The sequencer should reject the transaction as invalid, and more importantly, the sequencer should not update the nonce for the given account.
-                if *validity == MessageValidity::Invalid {
-                    let mut future_nonce = HashMap::from([(pub_key, nonce + 1000)]);
-                    let invalid_tx = TransactionType::<R, S>::sign(
-                        message.clone(),
-                        key.clone(),
-                        &R::CHAIN_HASH,
-                        details.clone(),
-                        &mut future_nonce,
-                    );
-                    txns.push((invalid_tx, true));
-                    continue;
-                }
-
-                // Create an outdated but valid transaction (using the valid transaction that was just generated)
-                if *nonce != 0 && *nonce % past_transaction_generations == 0 {
-                    let mut outdated_nonce =
-                        HashMap::from([(pub_key, nonce - past_transaction_generations)]);
-                    let outdated_tx = TransactionType::<R, S>::sign(
-                        message.clone(),
-                        key.clone(),
-                        &R::CHAIN_HASH,
-                        details.clone(),
-                        &mut outdated_nonce,
-                    );
-                    txns.push((outdated_tx, true));
-                }
-
-                TransactionType::<R, S>::sign(message, key, &R::CHAIN_HASH, details, &mut nonces)
+                sign_with_current_generation::<R, S>(message, key, details)?
             };
+
+            if *validity == MessageValidity::Invalid {
+                txns.push((signed_tx.clone(), false));
+                txns.push((signed_tx, true));
+                continue;
+            }
+
             txns.push((signed_tx, false));
         }
 
         let start = std::time::Instant::now();
         for (tx, is_invalid) in &txns {
             if *is_invalid {
-                if client.send_tx_to_sequencer(tx).await.is_ok() {
-                    anyhow::bail!("Outdated transaction should have failed");
+                match client.send_tx_to_sequencer(tx).await {
+                    Ok(_) => {
+                        record_tx_attempt(true);
+                        tracing::debug!(
+                            id = %worker_id,
+                            attempt = 1,
+                            expected_rejection = true,
+                            "Transaction accepted"
+                        );
+                        anyhow::bail!("Duplicate generation transaction should have failed");
+                    }
+                    Err(err) => {
+                        record_tx_attempt(false);
+                        tracing::debug!(
+                            id = %worker_id,
+                            attempt = 1,
+                            expected_rejection = true,
+                            ?err,
+                            "Transaction rejected"
+                        );
+                        if sov_api_spec::is_stop_height_error(&err) {
+                            tracing::info!(
+                                "Sequencer reached stop height, gracefully stopping soak worker"
+                            );
+                            return Ok(());
+                        }
+                    }
                 }
             } else {
-                let result = if use_retries {
-                    client.send_tx_to_sequencer_with_retry(tx).await
+                let max_attempts = if use_retries {
+                    TX_SEND_RETRY_ATTEMPTS
                 } else {
-                    client.send_tx_to_sequencer(tx).await
+                    1
                 };
 
-                if let Err(err) = result {
-                    if sov_api_spec::is_stop_height_error(&err) {
-                        tracing::info!(
-                            "Sequencer reached stop height, gracefully stopping soak worker"
-                        );
-                        return Ok(());
-                    }
+                for attempt in 1..=max_attempts {
+                    match client.send_tx_to_sequencer(tx).await {
+                        Ok(_) => {
+                            record_tx_attempt(true);
+                            tracing::debug!(
+                                id = %worker_id,
+                                attempt,
+                                expected_rejection = false,
+                                "Transaction accepted"
+                            );
+                            break;
+                        }
+                        Err(err) => {
+                            record_tx_attempt(false);
+                            tracing::debug!(
+                                id = %worker_id,
+                                attempt,
+                                expected_rejection = false,
+                                ?err,
+                                "Transaction rejected"
+                            );
+                            if sov_api_spec::is_stop_height_error(&err) {
+                                tracing::info!(
+                                    "Sequencer reached stop height, gracefully stopping soak worker"
+                                );
+                                return Ok(());
+                            }
 
-                    return Err(err.into());
+                            if attempt == max_attempts {
+                                return Err(err.into());
+                            }
+
+                            tokio::time::sleep(TX_SEND_RETRY_DELAY).await;
+                        }
+                    }
                 }
             }
             total_txns += 1;
