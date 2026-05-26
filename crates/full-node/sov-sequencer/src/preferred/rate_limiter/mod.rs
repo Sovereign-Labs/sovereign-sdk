@@ -33,12 +33,25 @@ pub(crate) enum ResourceLimitExceededError<S: Spec> {
         address: S::Address,
         reason: LimitExceeded<S::Gas>,
     },
-    // TODO: Add optional network if prefix is not /32
-    #[error("Resource limit exceeded for IP: {ip}, {reason:?}")]
+    #[error("Resource limit exceeded for IP: {ip}{}, {reason:?}", subnet_suffix(.ip_net))]
     Ip {
         ip: IpAddr,
+        /// Bucket the IP resolved to: its own host network, or the configured
+        /// subnet that contains it.
+        ip_net: ipnet::IpNet,
         reason: LimitExceeded<S::Gas>,
     },
+}
+
+/// Renders the matched subnet for [`ResourceLimitExceededError::Ip`]: empty for a
+/// host network (`/32` or `/128`, where `{ip}` already says everything) and
+/// ` (subnet <net>)` when the IP was limited via a wider configured subnet.
+fn subnet_suffix(ip_net: &ipnet::IpNet) -> String {
+    if ip_net.prefix_len() == ip_net.max_prefix_len() {
+        String::new()
+    } else {
+        format!(" (subnet {ip_net})")
+    }
 }
 
 struct SovRateLimiterInner<S: Spec> {
@@ -98,10 +111,14 @@ impl<S: Spec> SovRateLimiterInner<S> {
             .candidate_supernets(ip)
             .find(|ip_net| self.by_ip_net_rate_limiter.contains_special_config(ip_net))
             .unwrap_or_else(|| ip.into());
-        let throttler_for_ip = self
-            .by_ip_net_rate_limiter
-            .allow(now, &ip_key)
-            .map_err(|reason| ResourceLimitExceededError::Ip { ip, reason })?;
+        let throttler_for_ip =
+            self.by_ip_net_rate_limiter
+                .allow(now, &ip_key)
+                .map_err(|reason| ResourceLimitExceededError::Ip {
+                    ip,
+                    ip_net: ip_key,
+                    reason,
+                })?;
 
         Ok(LimiterToken {
             address,
