@@ -631,7 +631,7 @@ mod tests {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(10, 10);
         let mut map = StateMap::<u64, u32>::with_codec(prefix, BorshCodec);
@@ -657,7 +657,7 @@ mod tests {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(11, 11);
         let mut map = StateMap::<u64, u32>::with_codec(prefix, BorshCodec);
@@ -680,7 +680,7 @@ mod tests {
         let mut storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(12, 12);
         let mut map = StateMap::<u64, u32>::with_codec(prefix, BorshCodec);
@@ -715,7 +715,7 @@ mod tests {
         let mut storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(13, 13);
         let mut map = KernelStateMap::<u64, u32>::with_codec(prefix, BorshCodec);
@@ -750,7 +750,7 @@ mod tests {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(14, 14);
         let mut map = AccessoryStateMap::<u64, u32>::with_codec(prefix, BorshCodec);

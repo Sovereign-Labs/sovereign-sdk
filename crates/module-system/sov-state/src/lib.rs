@@ -8,7 +8,6 @@ pub mod config;
 mod event;
 pub mod namespaces;
 pub mod nomt;
-pub mod pinned_cache;
 #[cfg(feature = "native")]
 /// Defines data structures for managing state in the sequencer.
 pub mod sequencer_state;

@@ -1291,7 +1291,7 @@ fn produce_synthetic_changes<Da: DaSpec>(
         .push((SlotKey::from_slice(&data), Some(SlotValue::from(data))));
     sov_test_utils::push_kernel_marker(&mut accesses);
     let (state_root, state_update) = prover_storage
-        .compute_state_update(accesses, &ArrayWitness::default(), pre_state_root, None)
+        .compute_state_update(accesses, &ArrayWitness::default(), pre_state_root)
         .unwrap();
     let change_set = prover_storage.materialize_changes(state_update);
 

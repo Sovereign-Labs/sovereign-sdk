@@ -8,8 +8,8 @@ use crate::historical_state::STATE_ROOT_HASH_SINGLETON;
 use crate::schema::tables::{
     AccessoryKeysByVersion, ModuleAccessoryState, StateRootHashes, ACCESSORY_TABLES,
 };
-use crate::schema::types::slot_key::SlotKey;
-use crate::schema::types::{AccessoryKey, AccessoryStateValue};
+use crate::schema::types::slot_key::{SlotKey, SlotValue};
+use crate::schema::types::AccessoryStateValue;
 use crate::{ensure_version_is_correct, DbOptions};
 
 /// Specifies a particular version of the Accessory state.
@@ -50,21 +50,22 @@ impl AccessoryDb {
             key.as_ref(),
             version,
             self.db
-                .get_prev::<ModuleAccessoryState>(&(key.as_ref().to_vec(), version))?,
+                .get_prev::<ModuleAccessoryState>(&(key.as_ref(), version))?,
         )
     }
 
     /// Collects a sequence of key-value pairs into [`SchemaBatch`].
-    pub fn materialize_values(
-        key_value_pairs: impl IntoIterator<Item = (AccessoryKey, AccessoryStateValue)>,
+    pub fn materialize_values<K: AsRef<[u8]> + core::fmt::Debug>(
+        key_value_pairs: impl IntoIterator<Item = (K, Option<SlotValue>)>,
         version: SlotNumber,
     ) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::default();
         for (key, value) in key_value_pairs {
+            let key_bytes = key.as_ref();
             // We always .put and not .delete to keep archival data.
-            batch.put::<ModuleAccessoryState>(&(key.clone(), version), &value)?;
+            batch.put::<ModuleAccessoryState>(&(key_bytes, version), &value)?;
             // Also update the secondary index for efficient rollback
-            batch.put::<AccessoryKeysByVersion>(&(version, key), &())?;
+            batch.put::<AccessoryKeysByVersion>(&(version, key_bytes), &())?;
         }
         Ok(batch)
     }
@@ -152,7 +153,7 @@ impl AccessoryDb {
             assert_eq!(slot_number, version);
 
             // Delete from both the main table and the secondary index
-            schema_batch.delete::<ModuleAccessoryState>(&(key.clone(), slot_number))?;
+            schema_batch.delete::<ModuleAccessoryState>(&(key.as_slice(), slot_number))?;
             schema_batch.delete::<AccessoryKeysByVersion>(&(slot_number, key))?;
             keys_deleted += 1;
         }
@@ -173,8 +174,36 @@ impl AccessoryDb {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::schema::types::slot_key::SlotValue;
+    use crate::schema::types::AccessoryKey;
     use sov_rollup_interface::common::IntoSlotNumber;
     use std::{collections::HashMap, sync::Arc};
+
+    #[test]
+    fn materialize_with_slot_value_round_trips() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let rocksdb = Arc::new(
+            AccessoryDb::get_rockbound_options()
+                .default_setup_db_as_subdir(tempdir.path())
+                .unwrap(),
+        );
+        let reader = DeltaReader::new(rocksdb.clone(), Vec::new());
+        let db = AccessoryDb::with_reader(reader).unwrap();
+
+        let key = b"sv-key".to_vec();
+        let value = vec![0x12, 0x34, 0x56, 0x78];
+        let changes = AccessoryDb::materialize_values(
+            vec![(key.clone(), Some(SlotValue::from(value.clone())))],
+            0.to_slot_number(),
+        )
+        .unwrap();
+        rocksdb.write_schemas(&changes).unwrap();
+        assert_eq!(
+            db.get_value_option(&SlotKey::from_slice(&key), 0.to_slot_number())
+                .unwrap(),
+            Some(value)
+        );
+    }
 
     #[test]
     fn get_after_set() {
@@ -190,7 +219,7 @@ mod tests {
         let key = b"foo".to_vec();
         let value = b"bar".to_vec();
         let changes1 = AccessoryDb::materialize_values(
-            vec![(key.clone(), Some(value.clone()))],
+            vec![(key.clone(), Some(SlotValue::from(value.clone())))],
             0.to_slot_number(),
         )
         .unwrap();
@@ -203,7 +232,7 @@ mod tests {
 
         let value2 = b"baz".to_vec();
         let changes2 = AccessoryDb::materialize_values(
-            vec![(key.clone(), Some(value2.clone()))],
+            vec![(key.clone(), Some(SlotValue::from(value2.clone())))],
             1.to_slot_number(),
         )
         .unwrap();
@@ -229,7 +258,7 @@ mod tests {
         let key = b"deleted".to_vec();
         let value = b"baz".to_vec();
         let changes1 = AccessoryDb::materialize_values(
-            vec![(key.clone(), Some(value.clone()))],
+            vec![(key.clone(), Some(SlotValue::from(value.clone())))],
             0.to_slot_number(),
         )
         .unwrap();
@@ -348,26 +377,35 @@ mod tests {
     }
 
     struct TestData {
-        map: HashMap<u64, Vec<(AccessoryKey, AccessoryStateValue)>>,
+        map: HashMap<u64, Vec<(AccessoryKey, Option<SlotValue>)>>,
     }
 
     impl TestData {
         fn new() -> Self {
             let mut map = HashMap::new();
-            map.insert(0, vec![(b"key0".to_vec(), Some(b"value0".to_vec()))]);
+            map.insert(
+                0,
+                vec![(b"key0".to_vec(), Some(SlotValue::from(b"value0".to_vec())))],
+            );
             map.insert(
                 1,
                 vec![
-                    (b"key1".to_vec(), Some(b"value1".to_vec())),
-                    (b"key11".to_vec(), Some(b"value11".to_vec())),
+                    (b"key1".to_vec(), Some(SlotValue::from(b"value1".to_vec()))),
+                    (
+                        b"key11".to_vec(),
+                        Some(SlotValue::from(b"value11".to_vec())),
+                    ),
                 ],
             );
 
             map.insert(
                 2,
                 vec![
-                    (b"key2".to_vec(), Some(b"value12".to_vec())),
-                    (b"key11".to_vec(), Some(b"value12".to_vec())),
+                    (b"key2".to_vec(), Some(SlotValue::from(b"value12".to_vec()))),
+                    (
+                        b"key11".to_vec(),
+                        Some(SlotValue::from(b"value12".to_vec())),
+                    ),
                     (b"key0".to_vec(), None),
                 ],
             );
@@ -380,12 +418,12 @@ mod tests {
                 assert_eq!(
                     db.get_value_option(&SlotKey::from_slice(&k), u64::MAX.to_slot_number())
                         .unwrap(),
-                    v
+                    v.map(|sv| sv.value().to_vec())
                 );
             }
         }
 
-        fn for_version(&self, version: u64) -> Vec<(AccessoryKey, AccessoryStateValue)> {
+        fn for_version(&self, version: u64) -> Vec<(AccessoryKey, Option<SlotValue>)> {
             self.map.get(&version).unwrap().clone()
         }
     }

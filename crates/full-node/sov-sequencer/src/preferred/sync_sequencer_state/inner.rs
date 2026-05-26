@@ -37,7 +37,6 @@ use sov_modules_api::{
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_interface::stf::BlobSenderStatus;
-use sov_state::pinned_cache::PinnedCache;
 use sov_state::{NativeStorage, Storage};
 use std::num::NonZero;
 use std::ops::Deref;
@@ -265,7 +264,7 @@ where
 
         // Replace API state
         let mut rt = Rt::default();
-        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None); // The api state doesn't need a copy of the pinned cache.
+        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
         self.executor_events_sender
             .force_update_api_state(checkpoint)
             .await;
@@ -289,9 +288,8 @@ where
         // Creates a new executor for recovery. This must *not* be called to create executors
         // under other circumstances, since it causes side effects on the transaction cache.
 
-        // Since we're entering recovery, we don't re-use any of the uncommitted changes
-        // Since we'll replace the executor when we exit recovery, we don't need to populate the pinned cache.
-        let recovery_executor = self.new_executor_with_empty_uncommitted_changes(info, None);
+        // Since we're entering recovery, we don't re-use any of the uncommitted changes.
+        let recovery_executor = self.new_executor_with_empty_uncommitted_changes(info);
 
         self.force_overwrite_state(info.clone(), recovery_executor)
             .await;
@@ -537,7 +535,6 @@ where
     pub(crate) fn new_executor_with_empty_uncommitted_changes(
         &self,
         info: &StateUpdateInfo<S::Storage>,
-        pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
         let transaction_cache_write_handle = self.tx_cache_writer.clone();
         RollupBlockExecutor::<_, Rt>::new_with_tx_cache_writer(
@@ -546,7 +543,6 @@ where
             self.rollup_exec_config.clone(),
             self.seq_config.clone(),
             Default::default(),
-            pinned_cache,
         )
     }
 
@@ -636,7 +632,7 @@ where
         let old_checkpoint = self
             .executor
             .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
+            .clone_with_empty_witness_dropping_temp_cache();
 
         self.executor
             .start_rollup_block(start_block_data.clone())
@@ -665,7 +661,7 @@ where
                 sequence_number,
                 self.executor
                     .checkpoint
-                    .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
+                    .clone_with_empty_witness_dropping_temp_cache(),
             )
             .await;
 
@@ -780,7 +776,7 @@ where
         let checkpoint = self
             .executor
             .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
+            .clone_with_empty_witness_dropping_temp_cache();
         self.sequence_number_of_open_batch = None;
         self.executor_events_sender
             .close_batch(checkpoint, forced_txs)

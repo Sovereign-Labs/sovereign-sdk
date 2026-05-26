@@ -192,7 +192,7 @@ async fn compute_state_root<S: Spec, Rt: Runtime<S>>(
                 }
 
                 storage
-                    .compute_state_update(state_accesses, &Default::default(), prev_root, None)
+                    .compute_state_update(state_accesses, &Default::default(), prev_root)
                     .expect("Failed to compute state update").0
             })
     });
@@ -405,7 +405,7 @@ mod tests {
     ) -> Arc<RawStateChanges> {
         let mut rt = Rt::default();
         let mut kernel = rt.kernel();
-        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
+        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
         let mut state_with_partially_stale_heights =
             KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
         let height = header.height;
@@ -485,7 +485,7 @@ mod tests {
     {
         let mut rt = Rt::default();
         let mut kernel = rt.kernel();
-        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
+        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
         let mut state_with_partially_stale_heights =
             KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
         let height = header.height;
@@ -604,7 +604,7 @@ mod tests {
         let writes_on_the_node = writes_only_kernel::<S, Rt>(&node_storage);
         let prev_root = <S::Storage as Storage>::PRE_GENESIS_ROOT;
         let (node_new_root, changes) = node_storage
-            .compute_state_update(writes_on_the_node, &Default::default(), prev_root, None)
+            .compute_state_update(writes_on_the_node, &Default::default(), prev_root)
             .unwrap();
         storage_manager.commit_state_update(node_storage, changes, node_new_root);
     }
@@ -633,7 +633,6 @@ mod tests {
                 writes_on_the_node.to_state_accesses_for_sequencer_state_root_computation(),
                 &Default::default(),
                 prev_root,
-                None,
             )
             .unwrap();
 
@@ -772,7 +771,7 @@ mod tests {
         let writes_on_the_node = writes_only_kernel::<S, Rt>(&node_storage);
         let mut prev_root = <S::Storage as Storage>::PRE_GENESIS_ROOT;
         let (node_new_root, changes) = node_storage
-            .compute_state_update(writes_on_the_node, &Default::default(), prev_root, None)
+            .compute_state_update(writes_on_the_node, &Default::default(), prev_root)
             .unwrap();
         prev_root = node_new_root;
         let to_commit = node_storage.materialize_changes(changes);
@@ -810,7 +809,6 @@ mod tests {
                     raw_state_changes.to_state_accesses_for_sequencer_state_root_computation(),
                     &Default::default(),
                     prev_root,
-                    None,
                 )
                 .unwrap();
             changes.add_accessory_items(
@@ -931,7 +929,6 @@ mod tests {
                 writes_on_the_node.to_state_accesses_for_sequencer_state_root_computation(),
                 &Default::default(),
                 prev_root,
-                None,
             )
             .unwrap();
 
