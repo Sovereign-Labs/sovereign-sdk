@@ -291,7 +291,7 @@ async fn test_zero_limit_ip() {
 
         address_custom_limits: Vec::default(),
         ip_custom_limits: vec![(
-            IpAddr::from_str(x_forwarded_for).unwrap(),
+            IpAddr::from_str(x_forwarded_for).unwrap().into(),
             Limits {
                 resources_per_bucket: 0,
                 refill_rate: 0,
