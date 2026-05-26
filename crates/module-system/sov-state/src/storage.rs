@@ -407,7 +407,10 @@ pub trait NativeStorage: Storage {
     /// Get the *global* root hash of the tree at the requested version.
     ///
     /// The requested version is not checked against the latest version of this instance.
-    /// Returns `Some(root)` iff a root has been committed for that version, else `None`.
+    /// Returns the root committed at the largest committed version `<= version`, or `None` if
+    /// no version `<= version` has been committed or it has been pruned. In particular,
+    /// requesting a version beyond the latest committed one yields the latest committed root,
+    /// not `None`.
     fn get_root_hash_unbound(&self, version: SlotNumber) -> Option<Self::Root>;
 
     /// Get the root hash at the latest version.
