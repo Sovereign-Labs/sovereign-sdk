@@ -122,6 +122,7 @@ pub(crate) const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(3);
 pub struct NodeDiscovery {
     max_age: Duration,
     poll_interval: Duration,
+    liveness_interval: Duration,
     pool: PgPool,
     listener: PgListener,
     prev_followers: BTreeSet<String>,
@@ -178,6 +179,7 @@ impl NodeDiscovery {
         Ok(Self {
             max_age,
             poll_interval,
+            liveness_interval: poll_interval * LIVENESS_POLL_MULTIPLIER,
             pool,
             listener,
             prev_followers: BTreeSet::new(),
@@ -310,10 +312,9 @@ impl NodeDiscovery {
         // chatty cluster (frequent NOTIFY traffic) still emits periodic samples
         // and missing-sample alerts only fire if the polling task actually
         // stops making progress.
-        let liveness_interval = self.poll_interval * LIVENESS_POLL_MULTIPLIER;
         let liveness_due = self
             .last_metric_at
-            .is_none_or(|t| t.elapsed() >= liveness_interval);
+            .is_none_or(|t| t.elapsed() >= self.liveness_interval);
 
         if !(cluster_changed || liveness_due) {
             return Ok(());
