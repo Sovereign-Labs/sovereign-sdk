@@ -87,7 +87,6 @@ impl<S: Spec> SovRateLimiterInner<S> {
         // TODO: What if it is blocked into smallest, but larger still has pool?
         // TODO: Do we even allow overlapping networks?
         let ip_key = all_supernets(ip)
-            .into_iter()
             .find(|ip_net| self.by_ip_net_rate_limiter.contains_special_config(ip_net))
             .unwrap_or_else(|| ip.into());
         let throttler_for_ip = self
@@ -221,28 +220,21 @@ fn limits<S: Spec>(
     (default_config, addrs, ip_networks)
 }
 
-// TODO: Optimize into iterator
-fn all_supernets(ip_addr: IpAddr) -> Vec<ipnet::IpNet> {
-    match ip_addr {
-        IpAddr::V4(ip_v4_addr) => (0..=32)
-            .rev()
-            .map(|prefix| {
-                ipnet::Ipv4Net::new(ip_v4_addr, prefix)
-                    .unwrap()
-                    .trunc()
-                    .into()
-            })
-            .collect(),
-        IpAddr::V6(ip_v6_addr) => (0..=128)
-            .rev()
-            .map(|prefix| {
-                ipnet::Ipv6Net::new(ip_v6_addr, prefix)
-                    .unwrap()
-                    .trunc()
-                    .into()
-            })
-            .collect(),
-    }
+/// Yields every supernet of `ip_addr`, from the most specific (`/32` or `/128`)
+/// down to `/0`. Lazy and allocation-free: the V4/V6 branch lives inside the
+/// closure so both arms share one concrete iterator type.
+fn all_supernets(ip_addr: IpAddr) -> impl Iterator<Item = ipnet::IpNet> {
+    let max_prefix: u8 = if ip_addr.is_ipv4() { 32 } else { 128 };
+    (0..=max_prefix).rev().map(move |prefix| match ip_addr {
+        IpAddr::V4(ip_v4_addr) => ipnet::Ipv4Net::new(ip_v4_addr, prefix)
+            .unwrap()
+            .trunc()
+            .into(),
+        IpAddr::V6(ip_v6_addr) => ipnet::Ipv6Net::new(ip_v6_addr, prefix)
+            .unwrap()
+            .trunc()
+            .into(),
+    })
 }
 
 impl<S: Spec> SovRateLimiter<S> {
