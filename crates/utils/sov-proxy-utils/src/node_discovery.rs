@@ -280,7 +280,12 @@ impl NodeDiscovery {
             }
             // No notification arrived within `poll_interval`. This is expected
             // when the cluster is quiet; we re-poll anyway to bound staleness.
-            Err(_) => {}
+            Err(_) => {
+                tracing::debug!(
+                    ?poll_interval,
+                    "No cluster notification received within the poll interval, re-polling"
+                );
+            }
             Ok(Err(error)) => {
                 return Err(HandleClusterUpdateError::RecvNotification(error.into()));
             }
