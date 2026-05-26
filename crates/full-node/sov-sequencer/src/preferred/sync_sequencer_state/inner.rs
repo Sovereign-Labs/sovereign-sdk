@@ -1,3 +1,5 @@
+use anyhow::Context as _;
+
 use crate::metrics::{
     track_sequence_number, track_sequence_number_delta, PreferredSequencerChannelMetrics,
     PreferredSequencerChannelMetricsBatch,
@@ -563,6 +565,12 @@ where
         self.latest_info
             .storage
             .get_root_hash(self.latest_info.slot_number)
+            .with_context(|| {
+                format!(
+                    "missing root hash for committed slot {}",
+                    self.latest_info.slot_number
+                )
+            })
     }
 
     fn current_height(&self) -> RollupHeight {

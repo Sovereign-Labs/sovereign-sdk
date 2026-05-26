@@ -550,9 +550,9 @@ fn assert_root_hashes<S: NativeStorage>(storage: &S, expected_root_hashes: Vec<S
                 .unwrap()
         );
     }
-    let future_root = storage
-        .get_root_hash(SlotNumber::new_dangerous(next_version))
-        .unwrap_err();
-    let expected_error = format!("Root node not found for version {next_version}.");
-    assert_eq!(expected_error, future_root.to_string());
+    let future_root = storage.get_root_hash(SlotNumber::new_dangerous(next_version));
+    assert_eq!(
+        future_root, None,
+        "future and uncommitted versions must return None (mirrors get_historical's Option semantics)"
+    );
 }

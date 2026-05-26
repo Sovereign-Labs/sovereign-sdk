@@ -417,10 +417,14 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         // REST APIs view of the ledger.
         let api_ledger_db = LedgerDb::with_shared_notifications(&ledger_db);
 
-        let prev_root = ledger_db
-            .get_head_slot()?
-            .map(|(number, _)| prover_storage.get_root_hash(number))
-            .transpose()?;
+        let prev_root = match ledger_db.get_head_slot()? {
+            Some((number, _)) => {
+                Some(prover_storage.get_root_hash(number).with_context(|| {
+                    format!("missing root hash for committed head slot {number}")
+                })?)
+            }
+            None => None,
+        };
 
         info!(
             ?prev_root,
@@ -469,7 +473,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             }
             // LedgerDb contains previous state root, initialization already has been done.
             Some(prev_state_root) => {
-                let genesis_state_root = prover_storage.get_root_hash(SlotNumber::GENESIS)?;
+                let genesis_state_root = prover_storage
+                    .get_root_hash(SlotNumber::GENESIS)
+                    .context("genesis root must exist when storage has prior state")?;
                 // (prev_state_root, genesis_state_root)
                 (prover_storage, prev_state_root, genesis_state_root)
             }
