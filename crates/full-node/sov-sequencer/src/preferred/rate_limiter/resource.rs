@@ -64,7 +64,7 @@ impl<G: Gas> Resource<G> {
             gas_used: self
                 .gas_used
                 .checked_sub(tokens.gas_used)
-                .unwrap_or_else(|| Gas::zero()),
+                .unwrap_or_else(G::zero),
         }
     }
 

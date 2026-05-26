@@ -235,11 +235,13 @@ fn limits<S: Spec>(
     (default_config, addrs, ip_networks)
 }
 
-/// Distinct prefix lengths of the *subnet* entries in the IP rate-limiter
-/// config, split by address family and kept **descending** (longest-prefix
-/// first). Built once at startup. An empty family means "no subnet configs" for
-/// it, so an IP of that family resolves straight to its host network with zero
-/// map lookups (the common case).
+/// Distinct prefix lengths of the configured IP rate-limiter networks, split by
+/// address family and kept **descending** (longest-prefix first). Built once at
+/// startup. When a family has no configured networks, an IP of that family
+/// probes nothing and resolves straight to its own host network. A configured
+/// bare IP counts as a host network (`/32` or `/128`) and contributes its prefix
+/// length here too, so once any entry of a family exists, every IP of that
+/// family performs at least one map probe.
 ///
 /// The invariants — per-family, deduplicated, descending, and in range for the
 /// family (`v4 <= 32`, `v6 <= 128`) — are established by [`Self::from_networks`]
@@ -353,6 +355,9 @@ impl<S: Spec> SovRateLimiter<S> {
         ip: IpAddr,
         address: S::Address,
     ) -> Result<Option<LimiterToken<S>>, ResourceLimitExceededError<S>> {
+        // Canonicalize IPv4-mapped IPv6 (`::ffff:a.b.c.d`) to IPv4 so a client
+        // can't dodge a configured IPv4 subnet limit by sending the mapped form.
+        let ip = ip.to_canonical();
         let res = self
             .inner
             .as_mut()
@@ -569,6 +574,37 @@ mod tests {
 
         let ipv4: IpAddr = "10.0.0.1".parse().unwrap();
         assert_eq!(prefixes.candidate_supernets(ipv4).count(), 0);
+    }
+
+    #[test]
+    fn allow_canonicalizes_ipv4_mapped_ipv6() {
+        // Generous limits so the request is allowed and we can read back the bucket key.
+        let config = RateLimiterConfig::<TestSpec> {
+            max_allowed_resources: TotalResources {
+                inner: Resource {
+                    req_counter: 100000,
+                    space_in_bytes: 5000,
+                    execution_time_micros: 100000,
+                    gas_used: Gas::from([0, 0]),
+                },
+            },
+            refill_rate: RefillRatePerMillis {
+                token_resource_per_ms: Resource {
+                    req_counter: 0,
+                    space_in_bytes: 0,
+                    execution_time_micros: 0,
+                    gas_used: Gas::from([0, 0]),
+                },
+            },
+        };
+        let mut rate_limiter = SovRateLimiter::new_for_test(1000, 1_000_000, Some(config));
+        let addr = <TestSpec as Spec>::Address::from([1; 28]);
+
+        // `::ffff:10.0.0.5` must be charged to the IPv4 host network, not a V6 /128,
+        // so it cannot dodge an IPv4 subnet limit by arriving in mapped form.
+        let mapped: IpAddr = "::ffff:10.0.0.5".parse().unwrap();
+        let token = rate_limiter.allow(mapped, addr).unwrap().unwrap();
+        assert_eq!(token.ip_net, "10.0.0.5/32".parse::<ipnet::IpNet>().unwrap());
     }
 }
 
