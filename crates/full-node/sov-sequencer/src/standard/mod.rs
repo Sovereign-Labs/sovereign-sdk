@@ -99,6 +99,7 @@ where
     api_state: ApiState<S>,
     da_address: <S::Da as DaSpec>::Address,
     config: SequencerConfig<S::Address, StdSequencerConfig>,
+    max_concurrent_proof_blobs: usize,
     api_ledger_db: LedgerDb,
 }
 
@@ -130,6 +131,7 @@ where
         _da_sync_state: Arc<DaSyncState>,
         storage_path: &Path,
         config: &SequencerConfig<S::Address, StdSequencerConfig>,
+        max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
@@ -141,7 +143,7 @@ where
         let latest_state_update = state_update_receiver.borrow().clone();
         let checkpoint = Arc::new(
             ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
-                StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None),
+                StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel()),
                 latest_state_update.latest_finalized_slot_number,
             ),
         );
@@ -156,7 +158,7 @@ where
 
         let txsm = TxStatusManager::default();
         let checkpoint =
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
 
         let da_address = da.get_signer().await.context(
             "Standard sequencer require DaService to be configured with submitting support",
@@ -202,6 +204,7 @@ where
             runtime: Rt::default(),
             checkpoint_sender,
             config: config.clone(),
+            max_concurrent_proof_blobs,
             api_ledger_db,
             da_address,
         }));
@@ -680,7 +683,7 @@ where
             latest_finalized_slot_number,
             ..
         } = &state_update_info;
-        let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel(), None);
+        let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel());
 
         tracing::debug!(
             %slot_number,
@@ -693,9 +696,7 @@ where
                 .send(Arc::new(
                     // Standard sequencer preserves true finality as reported by the node.
                     ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
-                        checkpoint
-                            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(
-                            ),
+                        checkpoint.clone_with_empty_witness_dropping_temp_cache(),
                         *latest_finalized_slot_number,
                     ),
                 ))
@@ -788,7 +789,7 @@ where
             .nb_of_concurrent_proof_blob_submissions();
         Ok(BlobSenderStatus {
             in_flight,
-            max_concurrent: self.config.max_concurrent_proof_blobs,
+            max_concurrent: self.max_concurrent_proof_blobs,
         })
     }
 

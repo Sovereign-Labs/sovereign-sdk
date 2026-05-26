@@ -314,6 +314,23 @@ where
         Ok(())
     }
 
+    /// Shuts down any background work spawned during initialization before the
+    /// runner enters its main loop.
+    pub async fn shutdown_before_run(mut self) -> anyhow::Result<()> {
+        if let Err(e) = self.secondary_shutdown_sender.send(()) {
+            tracing::warn!(
+                error = ?e,
+                "Failed to send secondary shutdown signal while aborting runner startup"
+            );
+        }
+
+        // Drain concurrently.
+        let background_handles = std::mem::take(&mut self.background_handles);
+        futures::future::join_all(background_handles).await;
+
+        Ok(())
+    }
+
     /// Spawn a [`tokio::task`] that updates the sync status every `polling_interval`.
     fn spawn_sync_status_updater(
         &self,
@@ -700,6 +717,9 @@ where
             let point = RunnerMetrics {
                 sync_distance: target_da_height as i64 - synced_da_height as i64,
                 da_height: next_da_height,
+                rollup_height: slot_result.rollup_height.get(),
+                start_at_rollup_height: start_at_rollup_height.as_ref().map(|h| h.get()),
+                stop_at_rollup_height: stop_at_rollup_height.as_ref().map(|h| h.get()),
                 get_block_time,
                 batches_processed: batch_count,
                 batch_bytes_processed,

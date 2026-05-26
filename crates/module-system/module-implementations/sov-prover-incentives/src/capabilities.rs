@@ -128,6 +128,51 @@ impl<S: Spec> ProverIncentives<S> {
         AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
         ProcessProofError,
     > {
+        let result = self.process_proof_inner(proof, prover_address, execution_context, state);
+        if let Err(error) = &result {
+            Self::log_process_proof_error(prover_address, error);
+            crate::metrics::track_rejected_proof(execution_context, error);
+        }
+        result
+    }
+
+    fn log_process_proof_error(prover_address: &S::Address, error: &ProcessProofError) {
+        match error {
+            ProcessProofError::ProverSlashedNoRevert(reason) => {
+                tracing::warn!(
+                    %prover_address,
+                    %reason,
+                    "Prover slashed while processing proof"
+                );
+            }
+            ProcessProofError::ProverPenalizedNoRevert(reason) => {
+                tracing::warn!(
+                    %prover_address,
+                    %reason,
+                    "Prover penalized while processing proof"
+                );
+            }
+            _ => {
+                tracing::debug!(
+                    %prover_address,
+                    %error,
+                    "Proof rejected while processing proof"
+                );
+            }
+        }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn process_proof_inner<ST: TxState<S> + GetGasPrice<Spec = S>>(
+        &mut self,
+        proof: &SerializedAggregatedProof,
+        prover_address: &S::Address,
+        execution_context: ExecutionContext,
+        state: &mut ST,
+    ) -> Result<
+        AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
+        ProcessProofError,
+    > {
         if !self.should_reward_fees(state) {
             return Err(ProcessProofError::InvalidOperatingMode);
         }
@@ -206,20 +251,6 @@ impl<S: Spec> ProverIncentives<S> {
             }
         };
 
-        self.latest_proof_succesfully_verified
-            .set(&public_outputs, state)
-            .map_err(Into::<anyhow::Error>::into)?;
-
-        #[cfg(feature = "native")]
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(crate::metrics::LatestVerifiedProofMetric {
-                final_slot_number: public_outputs.final_slot_number.get(),
-                execution_context: execution_context.str(),
-            });
-        });
-        #[cfg(not(feature = "native"))]
-        let _ = execution_context;
-
         tracing::debug!(
             %public_outputs.initial_slot_number,
             %public_outputs.final_slot_number,
@@ -243,11 +274,12 @@ impl<S: Spec> ProverIncentives<S> {
             )));
         }
 
-        let is_admin_upgrade = self.check_admin_upgrade_or_slash(
+        let pending_admin_upgrade = self.check_admin_upgrade_or_slash(
             &public_outputs,
             prover_address,
             &ctx,
             is_admin,
+            execution_context,
             state,
         )?;
 
@@ -258,6 +290,13 @@ impl<S: Spec> ProverIncentives<S> {
         )? {
             Paycheck::Penalized => {
                 self.penalize_prover(old_balance, prover_address, state)?;
+                if pending_admin_upgrade.is_some() {
+                    crate::metrics::track_admin_upgrade_failure(
+                        public_outputs.final_slot_number,
+                        execution_context,
+                        crate::metrics::AdminUpgradeMetricReason::ProverPenalized,
+                    );
+                }
                 // The state won't be reverted.
                 Err(ProcessProofError::ProverPenalizedNoRevert(
                     "Prover penalized".to_string(),
@@ -267,9 +306,24 @@ impl<S: Spec> ProverIncentives<S> {
                 self.reward_prover(total_reward, prover_address, state)?;
 
                 // Persist the upgrade only after the proof is fully accepted.
-                if is_admin_upgrade {
-                    self.apply_admin_upgrade(&public_outputs, state)?;
+                if let Some(upgrade) = pending_admin_upgrade {
+                    self.apply_admin_upgrade(
+                        public_outputs.final_slot_number,
+                        upgrade,
+                        execution_context,
+                        state,
+                    )?;
                 }
+
+                // Only expose proofs that were fully accepted.
+                self.latest_proof_succesfully_verified
+                    .set(&public_outputs, state)
+                    .map_err(Into::<anyhow::Error>::into)?;
+
+                crate::metrics::track_latest_verified_proof(
+                    public_outputs.final_slot_number,
+                    execution_context,
+                );
 
                 Ok(public_outputs)
             }
@@ -332,9 +386,9 @@ impl<S: Spec> ProverIncentives<S> {
     /// prover claims in the proof's public outputs (extracted without cryptographic
     /// verification). Returns `None` for non-admin proofs, admin proofs whose bytes
     /// are too malformed to extract public outputs, or admin proofs whose claimed
-    /// `outer_vk_hash` is the wrong length for [`CodeCommitmentTrait::from_hash`] -
-    /// the caller then falls back to the currently-authorized commitment so
-    /// verification fails via the usual path rather than panicking.
+    /// `outer_vk_hash` fails [`CodeCommitmentTrait::try_from_hash`] - the caller
+    /// then falls back to the currently-authorized commitment so verification
+    /// fails via the usual path rather than panicking.
     #[allow(clippy::type_complexity)]
     fn admin_claimed_outer_commitment(
         claimed_outputs: Option<
@@ -347,17 +401,10 @@ impl<S: Spec> ProverIncentives<S> {
         }
         let claimed = claimed_outputs?;
 
-        // Production verifiers (SP1, Risc0) reconstruct their commitment via
-        // `to_u32_array`, which asserts a 32-byte hash. Reject malformed lengths
-        // here so we slash on `Verification failed` instead of panicking the STF.
-        if claimed.outer_vk_hash.0.len() != CodeCommitmentHash::HASH_LEN {
-            return None;
-        }
-        Some(
-            <<<S as Spec>::OuterZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment::from_hash(
-                claimed.outer_vk_hash.clone(),
-            ),
+        <<<S as Spec>::OuterZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment::try_from_hash(
+            claimed.outer_vk_hash.clone(),
         )
+        .ok()
     }
 
     /// Resolve every admin-state-derived value needed by the rest of
@@ -462,11 +509,12 @@ impl<S: Spec> ProverIncentives<S> {
             .expect("The genesis hash should be set at genesis"))
     }
 
-    /// Classifies an admin proof. Returns `true` if it is an upgrade (some
-    /// commitment or origin state root differs from current effective values) and
-    /// the target slot is strictly newer than the most recent recorded upgrade.
-    /// Returns `false` if the proof's outputs match current effective values
-    /// (i.e. it's a normal admin proof, not an upgrade).
+    /// Classifies an admin proof. Returns `Some(upgrade)` with the decoded
+    /// commitments ready to persist if the proof requests an upgrade and all
+    /// gates pass (target slot strictly newer than the latest recorded upgrade;
+    /// hash lengths decode under the verifier). Returns `None` for normal admin
+    /// proofs whose outputs already match current effective values. Slashes and
+    /// returns `Err` for stale upgrade slots or malformed VK hashes.
     fn check_admin_upgrade_or_slash<ST: TxState<S>>(
         &mut self,
         public_outputs: &AggregatedProofPublicData<
@@ -477,10 +525,11 @@ impl<S: Spec> ProverIncentives<S> {
         prover_address: &S::Address,
         ctx: &ProofContext<S>,
         is_admin: bool,
+        execution_context: ExecutionContext,
         state: &mut ST,
-    ) -> Result<bool, ProcessProofError> {
+    ) -> Result<Option<AdminUpgrade<S>>, ProcessProofError> {
         if !ctx.is_admin_upgrade(public_outputs, is_admin) {
-            return Ok(false);
+            return Ok(None);
         }
 
         let upgrade_slot = public_outputs.final_slot_number;
@@ -491,52 +540,98 @@ impl<S: Spec> ProverIncentives<S> {
                 "Slashing admin: upgrade slot is not newer than latest recorded upgrade"
             );
             self.slash_prover(prover_address, state)?;
+            crate::metrics::track_admin_upgrade_failure(
+                upgrade_slot,
+                execution_context,
+                crate::metrics::AdminUpgradeMetricReason::StaleAdminUpgrade,
+            );
             return Err(ProcessProofError::ProverSlashedNoRevert(format!(
                 "Invalid output {}",
                 SlashingReason::StaleAdminUpgrade
             )));
         }
 
-        Ok(true)
+        let outer_code_commitment = match <<<S as Spec>::OuterZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment::try_from_hash(
+            public_outputs.outer_vk_hash.clone(),
+        ) {
+            Ok(commitment) => commitment,
+            Err(_) => {
+                return self.slash_admin_for_invalid_vkey_hash(
+                    public_outputs,
+                    prover_address,
+                    execution_context,
+                    state,
+                );
+            }
+        };
+        let inner_code_commitment = match <<<S as Spec>::InnerZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment::try_from_hash(
+            public_outputs.inner_vkey_hash.clone(),
+        ) {
+            Ok(commitment) => commitment,
+            Err(_) => {
+                return self.slash_admin_for_invalid_vkey_hash(
+                    public_outputs,
+                    prover_address,
+                    execution_context,
+                    state,
+                );
+            }
+        };
+
+        Ok(Some(AdminUpgrade::<S> {
+            outer_code_commitment,
+            inner_code_commitment,
+            origin_state_root: public_outputs.origin_state_root.clone(),
+        }))
     }
 
-    /// Record the admin proof's claimed public outputs as a new upgrade entry in this
-    /// module's slot-keyed history. The proof has already been verified against the VK
-    /// it claims (reconstructed via `from_hash`), so these values become canonical for
-    /// proofs at or after this slot that pass the stale-proof cutoff. chain_state is
-    /// left untouched; effective values are read from this module's `admin_*` maps
-    /// when `latest_admin_upgrade_slot` is set.
-    fn apply_admin_upgrade<ST: TxState<S>>(
+    fn slash_admin_for_invalid_vkey_hash<ST: TxState<S>>(
         &mut self,
         public_outputs: &AggregatedProofPublicData<
             S::Address,
             S::Da,
             <S::Storage as Storage>::Root,
         >,
+        prover_address: &S::Address,
+        execution_context: ExecutionContext,
+        state: &mut ST,
+    ) -> Result<Option<AdminUpgrade<S>>, ProcessProofError> {
+        tracing::debug!(
+            outer_vk_hash_len = public_outputs.outer_vk_hash.len(),
+            inner_vkey_hash_len = public_outputs.inner_vkey_hash.len(),
+            expected = CodeCommitmentHash::HASH_LEN,
+            "Slashing admin: upgrade proof committed to a malformed VK hash"
+        );
+        self.slash_prover(prover_address, state)?;
+        crate::metrics::track_admin_upgrade_failure(
+            public_outputs.final_slot_number,
+            execution_context,
+            crate::metrics::AdminUpgradeMetricReason::InvalidAdminUpgradeVkeyHash,
+        );
+        Err(ProcessProofError::ProverSlashedNoRevert(format!(
+            "Invalid output {}",
+            SlashingReason::InvalidAdminUpgradeVkeyHash
+        )))
+    }
+
+    fn apply_admin_upgrade<ST: TxState<S>>(
+        &mut self,
+        slot: SlotNumber,
+        upgrade: AdminUpgrade<S>,
+        execution_context: ExecutionContext,
         state: &mut ST,
     ) -> Result<(), anyhow::Error> {
-        let slot = public_outputs.final_slot_number;
-
-        let upgrade = AdminUpgrade::<S> {
-            outer_code_commitment:
-                <<<S as Spec>::OuterZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment::from_hash(
-                    public_outputs.outer_vk_hash.clone(),
-                ),
-            inner_code_commitment:
-                <<<S as Spec>::InnerZkvm as Zkvm>::Verifier as ZkVerifier>::CodeCommitment::from_hash(
-                    public_outputs.inner_vkey_hash.clone(),
-                ),
-            origin_state_root: public_outputs.origin_state_root.clone(),
-        };
         self.admin_upgrades.set(&slot, &upgrade, state)?;
         self.latest_admin_upgrade_slot.set(&slot, state)?;
 
         tracing::info!(
             %slot,
-            ?public_outputs.outer_vk_hash,
-            ?public_outputs.inner_vkey_hash,
+            outer_vk_hash = ?upgrade.outer_code_commitment.to_hash(),
+            inner_vkey_hash = ?upgrade.inner_code_commitment.to_hash(),
             "Admin upgrade recorded"
         );
+
+        crate::metrics::track_admin_upgrade_success(slot, execution_context);
 
         Ok(())
     }
@@ -572,33 +667,31 @@ impl<S: Spec> ProverIncentives<S> {
 
         // Here the final rollup height is inclusive
         for slot_num in first_claimed_reward.range_inclusive(final_slot_num) {
-            // Check if the reward was already claimed
-
-            // If not, reward the prover with the block reward
-            // `get_historical_transitions` should always return `Some` because we are iterating over the range of `init_slot_num..=final_slot_num`
-            // whose integrity was checked beforehand.
-            if let Some(transition) = self
+            // `slot_at_height` must return `Some`: `check_proof_outputs`
+            // verified `final_slot_num` exists, and chain_state slot heights
+            // are contiguous, so every slot in this range must exist. A `None`
+            // here means that invariant has broken and reward accounting would
+            // silently under-pay — fail loud instead of skipping the slot.
+            let transition = self
                 .chain_state
                 .slot_at_height(slot_num, state)
                 .map_err(Into::<anyhow::Error>::into)?
-            {
-                // SAFETY: this cannot overflow, because that would require more than the entire token supply to be spent on gas
-                // *before* the prover claimed their reward, but gas fees are locked until the prover claims them.
-                let curr_reward = transition.gas_used().value(transition.gas_price());
-                total_reward = total_reward
-                    .checked_add(curr_reward)
-                    .expect("Gas token Overflow");
-            }
-        }
+                .expect("slot must exist: range bounded by verified final_slot_num");
 
-        // We need to remove the reward once it is claimed
-        self.last_claimed_reward
-            .set(&max(first_available_reward, final_slot_num), state)
-            .map_err(Into::<anyhow::Error>::into)?;
+            // SAFETY: this cannot overflow, because that would require more than the entire token supply to be spent on gas
+            // *before* the prover claimed their reward, but gas fees are locked until the prover claims them.
+            let curr_reward = transition.gas_used().value(transition.gas_price());
+            total_reward = total_reward
+                .checked_add(curr_reward)
+                .expect("Gas token Overflow");
+        }
 
         if first_claimed_reward > final_slot_num {
             Ok(Paycheck::Penalized)
         } else {
+            self.last_claimed_reward
+                .set(&final_slot_num, state)
+                .map_err(Into::<anyhow::Error>::into)?;
             Ok(Paycheck::Rewarded(total_reward))
         }
     }

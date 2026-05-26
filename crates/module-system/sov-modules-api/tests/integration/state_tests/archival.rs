@@ -7,16 +7,10 @@ use sov_modules_api::{
     ApiStateAccessor, ConcurrentStateCheckpoint, KernelStateValue, StateCheckpoint,
 };
 use sov_state::{BorshCodec, Prefix};
-use sov_test_utils::storage::{SimpleJmtStorageManager, SimpleStorageManager};
-use sov_test_utils::{TestJmtSpec, TestSpec};
+use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::TestSpec;
 
 use crate::state_tests::*;
-
-#[test]
-fn test_jmt_archival_state_updates_correctly() -> Result<(), Infallible> {
-    let storage_manager = SimpleJmtStorageManager::new();
-    archival_state_updates_correctly::<TestJmtSpec, _>(storage_manager)
-}
 
 #[test]
 fn test_nomt_archival_state_updates_correctly() -> Result<(), Infallible> {
@@ -35,7 +29,7 @@ where
 
     for current_height in 0..100 {
         let (storage, prev_root) = storage_manager.create_storage_with_root();
-        let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
+        let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
         let api_accessor = ApiStateAccessor::new(
             Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
                 state_checkpoint,
@@ -61,7 +55,7 @@ where
             prev_root,
         );
         let storage = storage_manager.create_prover_storage();
-        let state_checkpoint = StateCheckpoint::new(storage, &kernel, None);
+        let state_checkpoint = StateCheckpoint::new(storage, &kernel);
         let api_accessor = ApiStateAccessor::new(
             Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
                 state_checkpoint,

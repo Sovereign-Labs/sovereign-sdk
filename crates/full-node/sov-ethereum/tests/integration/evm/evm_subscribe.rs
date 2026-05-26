@@ -63,7 +63,8 @@ async fn evm_test_log_subscription() {
         // Verify that the block timestamp increases along with the block number.
         if block_nr_from_log > block_nr {
             let block_timestamp_from_log = log.block_timestamp.unwrap();
-            assert!(block_timestamp_from_log > time_stamp);
+            // More relaxed that standard Ethereum L1, as Sovereign Rollup might create batches faster than 1 second.
+            assert!(block_timestamp_from_log >= time_stamp);
             time_stamp = block_timestamp_from_log;
             block_nr = block_nr_from_log;
         }

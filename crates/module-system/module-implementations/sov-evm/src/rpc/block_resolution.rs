@@ -43,9 +43,10 @@ pub enum PendingOrBlock {
     },
 }
 
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     fn get_block_transactions(
         &self,

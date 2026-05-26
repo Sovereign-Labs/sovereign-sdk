@@ -23,6 +23,13 @@ use sov_modules_api::{Base58Address, DispatchCall, Event, Genesis, Hooks, Messag
 /// The hyperlane mailbox type, parameterized with Warp as the recipient.
 pub type Mailbox<S> = RawMailbox<S, Warp<S>>;
 
+sov_evm::generate_precompile_set! {
+    pub struct DemoEvmPrecompiles<S> {
+        bank_balance: sov_evm::precompiles::BankBalancePrecompile<S>,
+        sequencing_timestamp: sov_evm::precompiles::SequencingTimestampPrecompile<S>,
+    }
+}
+
 /// The runtime defines the logic of the rollup.
 ///
 /// At a high level, the rollup node receives serialized "call messages" from the DA layer and
@@ -96,7 +103,7 @@ where
     pub warp: Warp<S>,
     #[cfg_attr(feature = "native", cli_skip)]
     /// The EVM module.
-    pub evm: sov_evm::Evm<S>,
+    pub evm: sov_evm::Evm<S, DemoEvmPrecompiles<S>>,
     /// A module used in benchmarks to generate a wide range of transaction access patterns.
     pub access_pattern: sov_test_modules::access_pattern::AccessPattern<S>,
     /// A module for synthetic load testing and state operations.

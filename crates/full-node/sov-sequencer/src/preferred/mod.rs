@@ -154,13 +154,14 @@ where
         state_update_receiver: StateUpdateReceiver<S::Storage>,
         storage_path: &Path,
         config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+        max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        Builder::new(da, config)
+        Builder::new(da, config, max_concurrent_proof_blobs)
             .build(
                 state_update_receiver,
                 storage_path,
@@ -602,7 +603,7 @@ fn current_visible_slot_number_according_to_node<S: Spec, Rt: Runtime<S>>(
     info: &StateUpdateInfo<S::Storage>,
 ) -> SlotNumber {
     let mut runtime = Rt::default();
-    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &runtime.kernel(), None);
+    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &runtime.kernel());
     node_checkpoint.current_visible_slot_number().as_true()
 }
 
@@ -1037,8 +1038,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    let mut checkpoint =
-        StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
+    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
 
     runtime.kernel().next_sequence_number(&mut state)

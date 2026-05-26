@@ -4,7 +4,6 @@ mod call;
 mod capabilities;
 mod event;
 mod genesis;
-#[cfg(feature = "native")]
 mod metrics;
 mod registration;
 
@@ -82,7 +81,7 @@ pub struct ProverIncentives<S: Spec> {
     #[module]
     pub(crate) chain_state: sov_chain_state::ChainState<S>,
 
-    /// Public data from the most recently verified aggregated proof.
+    /// Public data from the most recently accepted aggregated proof.
     #[state]
     #[allow(clippy::type_complexity)]
     pub latest_proof_succesfully_verified:

@@ -15,7 +15,7 @@ use crate::{
     StateWriter,
 };
 
-/// A growable array of values stored as JMT-backed state.
+/// A growable array of values stored as merklized state.
 #[derive(
     Debug,
     Clone,
@@ -646,14 +646,14 @@ mod test {
     use crate::capabilities::mocks::MockKernel;
     use crate::StateCheckpoint;
 
-    type TestSpec = crate::default_spec::DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
     fn double_ended_iterator_from_back() {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(0, 0);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
@@ -675,7 +675,7 @@ mod test {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(1, 1);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
@@ -698,7 +698,7 @@ mod test {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(2, 2);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
@@ -713,7 +713,7 @@ mod test {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(3, 3);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);
@@ -757,7 +757,7 @@ mod test {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(4, 4);
         let mut state_vec = StateVec::<u32>::with_codec(prefix, BorshCodec);

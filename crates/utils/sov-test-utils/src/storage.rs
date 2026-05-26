@@ -1,4 +1,3 @@
-use std::marker::PhantomData;
 use std::path::Path;
 use std::sync::{Arc, Mutex};
 
@@ -11,111 +10,19 @@ use sov_db::historical_state::HistoricalStateReader;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::namespaces::{KernelNamespace, UserNamespace};
 use sov_db::schema::namespace::NomtStateValues;
-use sov_db::state_db::StateDb;
 use sov_db::state_db_nomt::get_session_builder_from_committed;
-use sov_db::storage_manager::{
-    FlatStateDb, InitializableNativeNomtStorage, InitializableNativeStorage, WitnessMode,
-};
-pub use sov_db::storage_manager::{
-    NativeChangeSet, NativeStorageManager, NomtChangeSet, NomtStorageManager,
-};
+use sov_db::storage_manager::{FlatStateDb, InitializableNativeNomtStorage, WitnessMode};
+pub use sov_db::storage_manager::{NomtChangeSet, NomtStorageManager};
 use sov_db::DbCache;
 use sov_mock_da::{MockBlockHeader, MockDaSpec};
 use sov_modules_api::digest;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::pinned_cache::PinnedCache;
-use sov_state::{
-    MerkleProofSpec, NativeStorage, ProverStorage, StateAccesses, Storage, StorageRoot,
-};
+use sov_state::{MerkleProofSpec, NativeStorage, Storage, StorageRoot};
 use tempfile::TempDir;
 
 use crate::TestSlotHash;
-
-/// Implementation of [`HierarchicalStorageManager`] that provides [`ProverStorage`]
-/// and commits changes directly to the underlying database.
-pub struct SimpleJmtStorageManager<S: MerkleProofSpec> {
-    state: Arc<rockbound::DB>,
-    accessory: Arc<rockbound::DB>,
-    phantom_mp_spec: PhantomData<S>,
-    // Holds ownership of [`Tempdir`] so it is not removed prematurely
-    _dir: TempDir,
-    root: StorageRoot<S>,
-}
-
-impl<S: MerkleProofSpec> Default for SimpleJmtStorageManager<S> {
-    fn default() -> Self {
-        Self::new()
-    }
-}
-
-impl<S: MerkleProofSpec> SimpleJmtStorageManager<S> {
-    /// Initialize new instance in temporary folder.
-    pub fn new() -> Self {
-        let dir = tempfile::tempdir().unwrap();
-        let state_rocksdb = StateDb::get_rockbound_options()
-            .default_setup_db_as_subdir(dir.path())
-            .unwrap();
-        let accessory_rocksdb = AccessoryDb::get_rockbound_options()
-            .default_setup_db_as_subdir(dir.path())
-            .unwrap();
-        Self {
-            state: Arc::new(state_rocksdb),
-            accessory: Arc::new(accessory_rocksdb),
-            phantom_mp_spec: Default::default(),
-            _dir: dir,
-            root: <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
-        }
-    }
-
-    /// Do JMT genesis;
-    pub fn genesis(&mut self) {
-        if self.root != <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT {
-            panic!("Cannot call genesis on non empty storage");
-        }
-        let prover_storage = self.create_storage();
-        let witness = S::Witness::default();
-        let state_accesses_genesis = StateAccesses {
-            user: Default::default(),
-            kernel: Default::default(),
-        };
-
-        let (root, change_set) = prover_storage
-            .compute_state_update(
-                state_accesses_genesis,
-                &witness,
-                <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
-                None,
-            )
-            .expect("state update computation must succeed");
-
-        let changes = prover_storage.materialize_changes(change_set);
-        self.commit(changes);
-        self.root = root;
-    }
-
-    /// Create a new [` ProverStorage `] that has a view only on data written to disc.
-    pub fn create_storage(&self) -> ProverStorage<S> {
-        let state_reader = DeltaReader::new(self.state.clone(), Vec::new());
-        let state_db = StateDb::with_delta_reader(state_reader).unwrap();
-
-        let accessory_reader = DeltaReader::new(self.accessory.clone(), Vec::new());
-        let accessory_db = AccessoryDb::with_reader(accessory_reader).unwrap();
-        ProverStorage::with_db_handles(state_db, accessory_db)
-    }
-
-    /// Saves changes directly to disk.
-    // If we want it faster, can keep in memory
-    pub fn commit(&mut self, stf_change_set: NativeChangeSet) {
-        let NativeChangeSet {
-            state_change_set,
-            accessory_change_set,
-        } = stf_change_set;
-        self.state.write_schemas(&state_change_set).unwrap();
-        self.accessory.write_schemas(&accessory_change_set).unwrap();
-    }
-}
 
 /// Storage manager suitable for [`LedgerDb`].
 pub struct SimpleLedgerStorageManager {
@@ -163,8 +70,6 @@ pub struct SimpleStorageManager<S: MerkleProofSpec> {
     accessory: Arc<rockbound::DB>,
     root: StorageRoot<S>,
     is_strict_mode: bool,
-    with_witness: bool,
-    pinned_cache: Mutex<Option<PinnedCache>>,
 }
 
 impl<S: MerkleProofSpec> SimpleStorageManager<S> {
@@ -174,7 +79,7 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
         let config = RollupDbConfig::default_in_path(dir.path().to_path_buf());
 
         let state_db = sov_db::state_db_nomt::NomtStateDb::new(config)
-            .expect("Failed to initialize StateDb for NOMT");
+            .expect("Failed to initialize NOMT state DB");
         let historical_state = FlatStateDb::new(dir.path().to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
         let accessory_rocksdb = AccessoryDb::get_rockbound_options()
             .default_setup_db_as_subdir(dir.path())
@@ -187,24 +92,12 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             accessory: Arc::new(accessory_rocksdb),
             root: <NomtProverStorage<S, TestSlotHash> as Storage>::PRE_GENESIS_ROOT,
             is_strict_mode: true,
-            with_witness: true,
-            pinned_cache: Mutex::new(None),
         }
     }
 
     /// Change in which mode storage is going to be created.
     pub fn set_strict_mode(&mut self, use_strict_mode: bool) {
         self.is_strict_mode = use_strict_mode;
-    }
-
-    /// Set witness generation independently from strict mode.
-    pub fn set_witness_generation(&mut self, with_witness: bool) {
-        self.with_witness = with_witness;
-    }
-
-    /// Inject a pinned cache that will be passed to the next `create_storage` call.
-    pub fn set_pinned_cache(&self, cache: PinnedCache) {
-        *self.pinned_cache.lock().unwrap() = Some(cache);
     }
 
     /// Create a new [`NomtProverStorage`] that has a view only on data written to disc.
@@ -235,14 +128,12 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             AccessoryDb::with_reader(DeltaReader::new(self.accessory.clone(), Vec::new()))
                 .expect("Failed to create accessory db");
 
-        let pinned_cache = self.pinned_cache.lock().unwrap().take();
-        let witness_mode = WitnessMode::new_with_assert(self.with_witness, pinned_cache);
         NomtProverStorage::create(
             state_session_builder,
             historical_state_reader,
             accessory_db,
             self.is_strict_mode,
-            witness_mode,
+            WitnessMode::On,
         )
     }
 
@@ -252,14 +143,11 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
             state,
             historical_state,
             accessory,
-            pinned_cache,
         } = stf_change_set;
 
         self.state.commit_change_set(state).unwrap();
         self.accessory.write_schemas(&accessory).unwrap();
         self.historical_state.commit(historical_state).unwrap();
-
-        *self.pinned_cache.lock().unwrap() = pinned_cache.map(|c| *c.downcast().expect("Failed to downcast the pinned_cache argument to `NomtProverStorage`. This is a bug. Please report it."));
     }
 }
 
@@ -302,31 +190,6 @@ pub trait ForklessStorageManager {
     );
 }
 
-impl<S: MerkleProofSpec> ForklessStorageManager for SimpleJmtStorageManager<S> {
-    type Storage = ProverStorage<S>;
-
-    fn new_in_tempdir() -> Self {
-        Self::new()
-    }
-
-    fn current_root(&self) -> <Self::Storage as Storage>::Root {
-        self.root
-    }
-
-    fn create_prover_storage(&self) -> Self::Storage {
-        self.create_storage()
-    }
-
-    fn commit_change_set(
-        &mut self,
-        change_set: <Self::Storage as Storage>::ChangeSet,
-        new_root: <Self::Storage as Storage>::Root,
-    ) {
-        self.commit(change_set);
-        self.root = new_root;
-    }
-}
-
 impl<S: MerkleProofSpec> ForklessStorageManager for SimpleStorageManager<S> {
     type Storage = NomtProverStorage<S, TestSlotHash>;
 
@@ -358,12 +221,6 @@ pub trait PathInitializer {
     fn new_in_path(path: impl AsRef<std::path::Path>) -> Self;
 }
 
-impl<Da: DaSpec, S: InitializableNativeStorage> PathInitializer for NativeStorageManager<Da, S> {
-    fn new_in_path(path: impl AsRef<Path>) -> Self {
-        Self::new(path.as_ref()).unwrap()
-    }
-}
-
 impl<Da, H, S> PathInitializer for NomtStorageManager<Da, H, S>
 where
     Da: DaSpec,
@@ -376,7 +233,7 @@ where
     }
 }
 
-/// Using [`HierarchicalStorageManager`] to mimic [`SimpleJmtStorageManager`],
+/// Using [`HierarchicalStorageManager`] to mimic [`SimpleStorageManager`],
 /// but instead of committing all data on disk, it just appends it to the following block.
 /// Emulates fork-less DA.
 ///

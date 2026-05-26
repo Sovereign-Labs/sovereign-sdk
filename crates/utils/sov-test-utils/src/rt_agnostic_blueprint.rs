@@ -5,7 +5,7 @@ use async_trait::async_trait;
 use rockbound::SchemaBatch;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::DeltaReader;
-use sov_db::storage_manager::{NativeStorageManager, NomtStorageManager};
+use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockDaSpec, MockHash};
 use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
@@ -24,7 +24,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::ZkvmGuest;
 use sov_sequencer::{ProofBlobSender, Sequencer};
 use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::{DefaultStorageSpec, ProverStorage, Storage};
+use sov_state::{DefaultStorageSpec, Storage};
 use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
@@ -85,11 +85,15 @@ where
         let inner_vm = MockZkvmHost::new_non_blocking();
         let outer_vm = MockZkvmHost::new_non_blocking();
 
+        let proof_manager = rollup_config
+            .proof_manager
+            .as_ref()
+            .expect("proof_manager must be set when prover is enabled");
         ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             Default::default(),
-            rollup_config.proof_manager.prover_address,
+            proof_manager.prover_address,
             5,
         )
     }
@@ -276,20 +280,6 @@ trait StorageManagerInitializer<S: Spec, Da: DaService>: Sized {
         config: &RollupConfig<S::Address, Da>,
         witness_generation: bool,
     ) -> anyhow::Result<Self>;
-}
-
-impl<S: Spec> StorageManagerInitializer<S, StorableMockDaService>
-    for NativeStorageManager<
-        MockDaSpec,
-        ProverStorage<DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>>,
-    >
-{
-    fn from_config(
-        config: &RollupConfig<<S as Spec>::Address, StorableMockDaService>,
-        _witness_generation: bool,
-    ) -> anyhow::Result<Self> {
-        NativeStorageManager::new(&config.storage.path)
-    }
 }
 
 impl<S: Spec> StorageManagerInitializer<S, StorableMockDaService>

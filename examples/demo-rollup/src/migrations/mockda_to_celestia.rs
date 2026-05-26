@@ -353,7 +353,7 @@ fn run() -> anyhow::Result<()> {
         module_discriminants.sequencer_registry,
         OldSequencerRegistry::KNOWN_SEQUENCERS_ITEM_DISCRIMINANT,
     );
-    let mut checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+    let mut checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
     apply_sequencer_registry_updates(
         &mut checkpoint,
         &sequencer_context.plan,

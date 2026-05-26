@@ -635,8 +635,8 @@ where
         // Note that we use `StateCheckpoint::new(info.storage.clone(), ...)` *without* passing any intermediate state. This
         // is because we want to see what the height of the checkpoint we just received is, not the height of the sequencer's intermediate state.
         let mut rt = Rt::default();
-        let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None)
-            .rollup_height_to_access();
+        let new_rollup_height =
+            StateCheckpoint::new(info.storage.clone(), &rt.kernel()).rollup_height_to_access();
 
         inner
             .executor
@@ -655,7 +655,7 @@ where
         // Only prune state roots for heights that are finalized on the DA layer.
         let finalized_rollup_height = {
             let concurrent_checkpoint = Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-                StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None),
+                StateCheckpoint::new(info.storage.clone(), &rt.kernel()),
             ));
             let kernel_with_slot_mapping = rt.kernel_with_slot_mapping();
 
@@ -745,7 +745,7 @@ where
         }
 
         inner.executor_rebase_height =
-            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
+            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
                 .rollup_height_to_access();
 
         inner.is_ready = Ok(());
@@ -754,7 +754,7 @@ where
         let checkpoint = inner
             .executor
             .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
+            .clone_with_empty_witness_dropping_temp_cache();
         inner
             .executor_events_sender
             .force_update_api_state(checkpoint)
@@ -792,8 +792,7 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
 
         // Since we're entering recovery, we don't re-use any of the uncommitted changes.
-        // We don't need to populate the pinned cache because we'll replace the executor when we exit recovery before going back to normal operation.
-        let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info, None);
+        let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info);
 
         inner
             .force_overwrite_state(info.clone(), recovery_executor)
@@ -828,7 +827,7 @@ where
 
         inner.latest_info = info.clone();
         // We update the API state, so users can query node state as it syncs.
-        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None);
+        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
         inner
             .executor_events_sender
             .update_state_for_recovery(checkpoint)

@@ -2,6 +2,7 @@ use std::num::NonZero;
 use std::sync::Arc;
 
 use crate::helpers::hash_stf::HashStf;
+use anyhow::Context;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
@@ -281,11 +282,7 @@ pub async fn initialize_runner_with_stop_at(
     let mut runner = StateTransitionRunner::new(
         rollup_config.runner.clone(),
         axum_tcp,
-        if nb_of_prover_threads.is_some() {
-            Some(rollup_config.proof_manager)
-        } else {
-            None
-        },
+        nb_of_prover_threads.and(rollup_config.proof_manager),
         da_service.clone(),
         ledger_db.clone(),
         stf,
@@ -313,13 +310,14 @@ pub async fn initialize_runner_with_stop_at(
                 nb_of_prover_threads.unwrap(),
                 MockAddress::new([0u8; 32]),
             );
+        let proof_manager = rollup_config
+            .proof_manager
+            .expect("proof_manager must be set when prover is enabled");
         let handle = start_zk_workflow_in_background::<_>(
             prover_service,
-            rollup_config.proof_manager.aggregated_proof_block_jump,
-            rollup_config.proof_manager.eager_proof_submission,
-            rollup_config
-                .proof_manager
-                .max_number_of_aggregated_proofs_in_memory,
+            proof_manager.aggregated_proof_block_jump,
+            proof_manager.eager_proof_submission,
+            proof_manager.max_number_of_aggregated_proofs_in_memory,
             Box::new(MockProofSender {
                 da: da_service.clone(),
             }),
@@ -402,7 +400,9 @@ where
             } => {
                 let (prover_storage, _ledger_state) =
                     storage_manager.create_state_after(&last_finalized_block_header)?;
-                let genesis_state_root = prover_storage.get_root_hash(SlotNumber::GENESIS)?;
+                let genesis_state_root = prover_storage
+                    .get_root_hash(SlotNumber::GENESIS)
+                    .context("genesis root must exist for an initialized rollup")?;
 
                 (prev_state_root, genesis_state_root)
             }
@@ -445,7 +445,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             save_tx_bodies: false,
         },
         da: da_config,
-        proof_manager: ProofManagerConfig {
+        proof_manager: Some(ProofManagerConfig {
             aggregated_proof_block_jump: NonZero::new(aggregated_proof_block_jump).unwrap(),
             prover_address: MockAddress::new([0u8; 32]),
             max_number_of_transitions_in_db: NonZero::new(1000).unwrap(),
@@ -453,7 +453,8 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             eager_proof_submission: true,
             prover_thread_count_override: None,
             max_number_of_aggregated_proofs_in_memory: NonZero::new(5).unwrap(),
-        },
+            max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
+        }),
         sequencer: SequencerConfig {
             automatic_batch_production: true,
             max_allowed_node_distance_behind: 10,
@@ -467,7 +468,6 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             }),
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
             max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
-            max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
             blob_processing_timeout_secs: TEST_BLOB_PROCESSING_TIMEOUT,
             extension: None,
         },

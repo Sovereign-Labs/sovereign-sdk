@@ -216,10 +216,9 @@ access the `Address` field from `Spec` - meaning that your bank logic doesn't ch
 
 Similarly, since each of the banks helper functions is automatically generic over a context, it's easy to define logic which
 can abstract away the distinctions between `zk` and `native` execution. For example, when a rollup is running in native mode
-its `Storage` type will almost certainly be [`ProverStorage`](./sov-state/src/prover_storage.rs), which holds its data in a
-Merkle tree backed by RocksDB. But if you're running in zk mode the `Storage` type will instead be [`ZkStorage`](./sov-state/src/zk_storage.rs), which reads
-its data from a set of "hints" provided by the prover. Because all the rollups modules are generic, none of them need to worry
-about this distinction.
+its `Storage` type will almost certainly be `NomtProverStorage`, which holds its data in NOMT-backed native state storage.
+But if you're running in zk mode the `Storage` type will instead be `NomtVerifierStorage`, which reads its data from a set of
+"hints" provided by the prover. Because all the rollups modules are generic, none of them need to worry about this distinction.
 
 For more information on `Context` and `Spec`, and to see some example implementations, check out the [`sov_modules_api`](./sov-modules-api/README.md) docs.
 

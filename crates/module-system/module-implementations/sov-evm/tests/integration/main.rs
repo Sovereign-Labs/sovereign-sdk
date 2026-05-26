@@ -5,6 +5,7 @@ mod contracts;
 mod genesis;
 mod helpers;
 mod max_fee;
+mod precompiles;
 mod pruning;
 mod request_preflight;
 mod rpc_basefee;
