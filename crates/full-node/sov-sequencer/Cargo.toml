@@ -49,11 +49,11 @@ strum = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["sync", "rt"] }
 tokio-stream = { workspace = true }
-uuid = { workspace = true, features = ["std", "v7", "serde",] }
+uuid = { workspace = true, features = ["std", "v7", "serde", ] }
 backon = { workspace = true }
 flume = { workspace = true }
 time = "0.3"
-ipnet = "2.12"
+ipnet = { workspace = true }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }

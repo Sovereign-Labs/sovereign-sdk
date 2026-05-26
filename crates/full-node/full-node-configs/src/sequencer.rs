@@ -1,4 +1,4 @@
-use std::{net::IpAddr, num::NonZero};
+use std::num::NonZero;
 
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
@@ -60,7 +60,7 @@ pub struct SequencerConfig<Address: Copy, Sc = SequencerKindConfig<Address>> {
     pub rollup_address: Address,
     /// The list of addresses that are allowed to perform admin operations on
     /// the sequencer.
-    // The custom "default" is equivalent to Serde's default default, but
+    // The custom "default" is equivalent to Serde's default, but
     // without the bound `Address: Default`.
     #[serde(default = "Vec::<Address>::new")]
     pub admin_addresses: Vec<Address>,
@@ -258,7 +258,7 @@ pub struct PreferredSequencerConfig<Address: Copy> {
     /// Configuration for rate-limiting the sequencer.
     #[serde(default = "default_rate_limiter::<Address>")]
     pub rate_limiter: Option<SovRateLimiterConfig<Address>>,
-    /// The fartherst nonce into the future that the sequencer will accept and queue. This directly
+    /// The farthest nonce into the future that the sequencer will accept and queue. This directly
     /// impacts the maximum "batch" of transactions that can be simultaneously sent to the
     /// sequencer out of order.
     #[serde(default = "default_maximum_future_nonce_delta")]
@@ -344,7 +344,7 @@ pub struct SovRateLimiterConfig<Address: Copy> {
     /// Default limits.
     pub default_limits: Limits,
     pub address_custom_limits: Vec<(Address, Limits)>,
-    pub ip_custom_limits: Vec<(IpAddr, Limits)>,
+    pub ip_custom_limits: Vec<(ipnet::IpNet, Limits)>,
     /// Rate limiting on gas is currently disabled, so this param has no impact on runtime behavior.
     ///
     /// This height is used to statically compute the gas limit for the rate limiter. (If this value is less than or equal to CHANGE_GAS_LIMIT_AFTER_HEIGHT in constants.toml,

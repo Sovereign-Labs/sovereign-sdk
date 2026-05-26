@@ -304,6 +304,44 @@
         "bind_port"
       ]
     },
+    "IpNet": {
+      "title": "IP network",
+      "description": "An IPv4 or IPv6 address with prefix length",
+      "examples": [
+        "192.168.0.0/24",
+        "fd00::/32"
+      ],
+      "oneOf": [
+        {
+          "$ref": "#/$defs/Ipv4Net"
+        },
+        {
+          "$ref": "#/$defs/Ipv6Net"
+        }
+      ]
+    },
+    "Ipv4Net": {
+      "title": "IPv4 network",
+      "description": "An IPv4 address with prefix length",
+      "type": "string",
+      "examples": [
+        "0.0.0.0/0",
+        "192.168.0.0/24"
+      ],
+      "maxLength": 18,
+      "pattern": "^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\/(?:3[0-2]|[1-2][0-9]|[0-9])$"
+    },
+    "Ipv6Net": {
+      "title": "IPv6 network",
+      "description": "An IPv6 address with prefix length",
+      "type": "string",
+      "examples": [
+        "::/0",
+        "fd00::/32"
+      ],
+      "maxLength": 43,
+      "pattern": "^[0-9A-Fa-f:\\.]+\\/(?:[0-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8])$"
+    },
     "LeaderElectionConfig": {
       "description": "Configuration for leader election timing.",
       "type": "object",
@@ -521,7 +559,7 @@
           "minimum": 0
         },
         "maximum_future_nonce_delta": {
-          "description": "The fartherst nonce into the future that the sequencer will accept and queue. This directly\nimpacts the maximum \"batch\" of transactions that can be simultaneously sent to the\nsequencer out of order.",
+          "description": "The farthest nonce into the future that the sequencer will accept and queue. This directly\nimpacts the maximum \"batch\" of transactions that can be simultaneously sent to the\nsequencer out of order.",
           "type": "integer",
           "format": "uint64",
           "default": 100,
@@ -1161,8 +1199,7 @@
             "minItems": 2,
             "prefixItems": [
               {
-                "type": "string",
-                "format": "ip"
+                "$ref": "#/$defs/IpNet"
               },
               {
                 "$ref": "#/$defs/Limits"

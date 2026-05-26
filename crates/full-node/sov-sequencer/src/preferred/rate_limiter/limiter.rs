@@ -330,6 +330,11 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
     fn get_config(&self, k: &K) -> &RateLimiterConfig<S> {
         self.special_configs.get(k).unwrap_or(&self.default_config)
     }
+
+    #[inline]
+    pub(crate) fn contains_special_config(&self, k: &K) -> bool {
+        self.special_configs.contains_key(k)
+    }
 }
 
 #[cfg(test)]

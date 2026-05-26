@@ -2,6 +2,7 @@
 mod limiter;
 mod resource;
 
+use crate::preferred::sync_sequencer_state::comfortable_gas_limit_for_height;
 pub(crate) use limiter::ResourceUsed;
 use limiter::*;
 use resource::*;
@@ -13,14 +14,12 @@ use std::collections::HashMap;
 use std::hash::Hash;
 use std::{net::IpAddr, time::Instant};
 
-use crate::preferred::sync_sequencer_state::comfortable_gas_limit_for_height;
-
 #[derive(Debug)]
 pub(crate) struct LimiterToken<S: Spec> {
     address: S::Address,
     throttler_for_addr: Throttler<S::Gas>,
 
-    ip: IpAddr,
+    ip_net: ipnet::IpNet,
     throttler_for_ip: Throttler<S::Gas>,
 }
 
@@ -40,7 +39,7 @@ pub(crate) enum ResourceLimitExceededError<S: Spec> {
 
 struct SovRateLimiterInner<S: Spec> {
     by_addr_rate_limiter: RateLimiter<S::Address, S>,
-    by_ip_rate_limiter: RateLimiter<IpAddr, S>,
+    by_ip_net_rate_limiter: RateLimiter<ipnet::IpNet, S>,
 }
 
 impl<S: Spec> SovRateLimiterInner<S> {
@@ -49,7 +48,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
         ttl_in_millis: u64,
         config: RateLimiterConfig<S>,
         addrs: HashMap<S::Address, RateLimiterConfig<S>>,
-        ips: HashMap<IpAddr, RateLimiterConfig<S>>,
+        ip_networks: HashMap<ipnet::IpNet, RateLimiterConfig<S>>,
     ) -> Self {
         Self {
             by_addr_rate_limiter: RateLimiter::new(
@@ -59,12 +58,12 @@ impl<S: Spec> SovRateLimiterInner<S> {
                 config.clone(),
                 addrs,
             ),
-            by_ip_rate_limiter: RateLimiter::new(
-                "limiter_by_ip",
+            by_ip_net_rate_limiter: RateLimiter::new(
+                "limiter_by_ip_network",
                 max_nb_of_concurrent_users_in_rate_limiter,
                 ttl_in_millis,
                 config,
-                ips,
+                ip_networks,
             ),
         }
     }
@@ -81,15 +80,20 @@ impl<S: Spec> SovRateLimiterInner<S> {
             Err(reason) => return Err(ResourceLimitExceededError::Address { address, reason }),
         };
 
+        // Check
+        let ip_key = all_supernets(ip)
+            .into_iter()
+            .find(|ip_net| self.by_ip_net_rate_limiter.contains_special_config(ip_net))
+            .unwrap_or_else(|| addr_into_minimal_net(ip));
         let throttler_for_ip = self
-            .by_ip_rate_limiter
-            .allow(now, &ip)
+            .by_ip_net_rate_limiter
+            .allow(now, &ip_key)
             .map_err(|reason| ResourceLimitExceededError::Ip { ip, reason })?;
 
         Ok(LimiterToken {
             address,
             throttler_for_addr,
-            ip,
+            ip_net: ip_key,
             throttler_for_ip,
         })
     }
@@ -97,8 +101,8 @@ impl<S: Spec> SovRateLimiterInner<S> {
     fn update(&mut self, token: LimiterToken<S>, resource_used: ResourceUsed<S::Gas>) {
         self.by_addr_rate_limiter
             .update(token.address, token.throttler_for_addr, resource_used);
-        self.by_ip_rate_limiter
-            .update(token.ip, token.throttler_for_ip, resource_used);
+        self.by_ip_net_rate_limiter
+            .update(token.ip_net, token.throttler_for_ip, resource_used);
     }
 }
 
@@ -183,7 +187,7 @@ fn limits<S: Spec>(
 ) -> (
     RateLimiterConfig<S>,
     HashMap<S::Address, RateLimiterConfig<S>>,
-    HashMap<IpAddr, RateLimiterConfig<S>>,
+    HashMap<ipnet::IpNet, RateLimiterConfig<S>>,
 ) {
     let default_config = calculate_limits::<S>(
         sov_config.default_limits,
@@ -201,7 +205,7 @@ fn limits<S: Spec>(
         sov_config.address_custom_limits,
     );
 
-    let ips = to_limiter_config_map::<IpAddr, S>(
+    let ip_networks = to_limiter_config_map::<ipnet::IpNet, S>(
         batch_execution_time_limit_millis,
         sov_config.max_requests_per_second,
         max_batch_size_bytes,
@@ -209,7 +213,38 @@ fn limits<S: Spec>(
         sov_config.ip_custom_limits,
     );
 
-    (default_config, addrs, ips)
+    (default_config, addrs, ip_networks)
+}
+
+fn addr_into_minimal_net(ip_addr: IpAddr) -> ipnet::IpNet {
+    match ip_addr {
+        IpAddr::V4(ip_v4_addr) => ipnet::Ipv4Net::new_assert(ip_v4_addr, 32).into(),
+        IpAddr::V6(ip_v6_addr) => ipnet::Ipv6Net::new_assert(ip_v6_addr, 128).into(),
+    }
+}
+
+// TODO: Optimize into iterator
+fn all_supernets(ip_addr: IpAddr) -> Vec<ipnet::IpNet> {
+    match ip_addr {
+        IpAddr::V4(ip_v4_addr) => (0..=32)
+            .rev()
+            .map(|prefix| {
+                ipnet::Ipv4Net::new(ip_v4_addr, prefix)
+                    .unwrap()
+                    .trunc()
+                    .into()
+            })
+            .collect(),
+        IpAddr::V6(ip_v6_addr) => (0..=128)
+            .rev()
+            .map(|prefix| {
+                ipnet::Ipv6Net::new(ip_v6_addr, prefix)
+                    .unwrap()
+                    .trunc()
+                    .into()
+            })
+            .collect(),
+    }
 }
 
 impl<S: Spec> SovRateLimiter<S> {
@@ -406,17 +441,10 @@ mod tests {
         }
     }
 
-    fn all_supernets(ip: Ipv4Addr) -> Vec<ipnet::Ipv4Net> {
-        (0..=32)
-            .rev()
-            .map(|prefix| ipnet::Ipv4Net::new(ip, prefix).unwrap().trunc())
-            .collect()
-    }
-
     #[test]
     fn ip_to_network() {
         let ip: Ipv4Addr = "192.168.1.5".parse().unwrap();
-        for net in all_supernets(ip) {
+        for net in all_supernets(ip.into()) {
             println!("{}", net);
         }
     }
