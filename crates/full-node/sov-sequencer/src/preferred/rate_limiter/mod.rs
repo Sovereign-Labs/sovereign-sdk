@@ -89,7 +89,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
         let ip_key = all_supernets(ip)
             .into_iter()
             .find(|ip_net| self.by_ip_net_rate_limiter.contains_special_config(ip_net))
-            .unwrap_or_else(|| addr_into_minimal_net(ip));
+            .unwrap_or_else(|| ip.into());
         let throttler_for_ip = self
             .by_ip_net_rate_limiter
             .allow(now, &ip_key)
@@ -219,13 +219,6 @@ fn limits<S: Spec>(
     );
 
     (default_config, addrs, ip_networks)
-}
-
-fn addr_into_minimal_net(ip_addr: IpAddr) -> ipnet::IpNet {
-    match ip_addr {
-        IpAddr::V4(ip_v4_addr) => ipnet::Ipv4Net::new_assert(ip_v4_addr, 32).into(),
-        IpAddr::V6(ip_v6_addr) => ipnet::Ipv6Net::new_assert(ip_v6_addr, 128).into(),
-    }
 }
 
 // TODO: Optimize into iterator

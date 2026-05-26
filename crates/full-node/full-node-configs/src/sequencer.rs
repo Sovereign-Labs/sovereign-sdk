@@ -1,8 +1,8 @@
-use std::num::NonZero;
-
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::RollupHeight;
+use std::net::IpAddr;
+use std::num::NonZero;
 
 /// See [`SequencerConfig::sequencer_kind_config`].
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
@@ -344,6 +344,11 @@ pub struct SovRateLimiterConfig<Address: Copy> {
     /// Default limits.
     pub default_limits: Limits,
     pub address_custom_limits: Vec<(Address, Limits)>,
+    /// Per-network rate limits. Accepts CIDR notation (`10.0.0.0/8`) or a bare
+    /// IP address (`192.168.1.5`); a bare address is treated as a host network
+    /// (`/32` for IPv4, `/128` for IPv6).
+    #[serde(deserialize_with = "deserialize_ip_custom_limits")]
+    #[schemars(with = "Vec<(String, Limits)>")]
     pub ip_custom_limits: Vec<(ipnet::IpNet, Limits)>,
     /// Rate limiting on gas is currently disabled, so this param has no impact on runtime behavior.
     ///
@@ -363,6 +368,40 @@ fn default_height_for_gas_limit_computation() -> RollupHeight {
 
 fn height_is_max(height: &RollupHeight) -> bool {
     *height == RollupHeight::MAX
+}
+
+/// Deserializes [`SovRateLimiterConfig::ip_custom_limits`], accepting each key
+/// as CIDR notation or a bare IP address (treated as a host network) so that
+/// configs written before CIDR support keep working.
+fn deserialize_ip_custom_limits<'de, D>(
+    deserializer: D,
+) -> Result<Vec<(ipnet::IpNet, Limits)>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Vec::<(String, Limits)>::deserialize(deserializer)?;
+    raw.into_iter()
+        .map(|(net, limits)| {
+            parse_ip_net_or_host(&net)
+                .map(|net| (net, limits))
+                .map_err(serde::de::Error::custom)
+        })
+        .collect()
+}
+
+/// Parses an IP network from config text. CIDR notation is used as-is; a bare
+/// IP address falls back to a host network via [`IpNet::from`] (`/32` for IPv4,
+/// `/128` for IPv6).
+/// Return string for serde's custo erros
+fn parse_ip_net_or_host(s: &str) -> Result<ipnet::IpNet, String> {
+    match s.parse::<ipnet::IpNet>() {
+        Ok(net) => Ok(net),
+        // Not CIDR notation; treat a bare address as a host network.
+        Err(_) => s
+            .parse::<IpAddr>()
+            .map(ipnet::IpNet::from)
+            .map_err(|e| format!("`{s}` is not a valid IP address or CIDR network: {e}")),
+    }
 }
 
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
