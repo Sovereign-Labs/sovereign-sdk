@@ -41,6 +41,9 @@ pub(crate) enum ResourceLimitExceededError<S: Spec> {
 struct SovRateLimiterInner<S: Spec> {
     by_addr_rate_limiter: RateLimiter<S::Address, S>,
     by_ip_net_rate_limiter: RateLimiter<ipnet::IpNet, S>,
+    /// Prefix lengths of the configured IP subnets, used to resolve an incoming
+    /// IP to its bucket key by probing only those lengths.
+    ip_subnet_prefixes: SubnetPrefixes,
 }
 
 impl<S: Spec> SovRateLimiterInner<S> {
@@ -51,6 +54,8 @@ impl<S: Spec> SovRateLimiterInner<S> {
         addrs: HashMap<S::Address, RateLimiterConfig<S>>,
         ip_networks: HashMap<ipnet::IpNet, RateLimiterConfig<S>>,
     ) -> Self {
+        // Computed before `ip_networks` is moved into the limiter below.
+        let ip_subnet_prefixes = SubnetPrefixes::from_networks(ip_networks.keys());
         Self {
             by_addr_rate_limiter: RateLimiter::new(
                 "limiter_by_addr",
@@ -66,6 +71,7 @@ impl<S: Spec> SovRateLimiterInner<S> {
                 config,
                 ip_networks,
             ),
+            ip_subnet_prefixes,
         }
     }
 
@@ -86,7 +92,9 @@ impl<S: Spec> SovRateLimiterInner<S> {
         // it get counted into smallest first
         // TODO: What if it is blocked into smallest, but larger still has pool?
         // TODO: Do we even allow overlapping networks?
-        let ip_key = all_supernets(ip)
+        let ip_key = self
+            .ip_subnet_prefixes
+            .candidate_supernets(ip)
             .find(|ip_net| self.by_ip_net_rate_limiter.contains_special_config(ip_net))
             .unwrap_or_else(|| ip.into());
         let throttler_for_ip = self
@@ -220,20 +228,58 @@ fn limits<S: Spec>(
     (default_config, addrs, ip_networks)
 }
 
-/// Yields every supernet of `ip_addr`, from the most specific (`/32` or `/128`)
-/// down to `/0`. Lazy and allocation-free: the V4/V6 branch lives inside the
-/// closure so both arms share one concrete iterator type.
-fn all_supernets(ip_addr: IpAddr) -> impl Iterator<Item = ipnet::IpNet> {
-    let max_prefix: u8 = if ip_addr.is_ipv4() { 32 } else { 128 };
-    (0..=max_prefix).rev().map(move |prefix| match ip_addr {
-        IpAddr::V4(ip_v4_addr) => ipnet::Ipv4Net::new_assert(ip_v4_addr, prefix)
-            .trunc()
-            .into(),
-        IpAddr::V6(ip_v6_addr) => ipnet::Ipv6Net::new_assert(ip_v6_addr, prefix)
-            .unwrap()
-            .trunc()
-            .into(),
-    })
+/// Distinct prefix lengths of the *subnet* entries in the IP rate-limiter
+/// config, split by address family and kept **descending** (longest-prefix
+/// first). Built once at startup. An empty family means "no subnet configs" for
+/// it, so an IP of that family resolves straight to its host network with zero
+/// map lookups (the common case).
+///
+/// The invariants — per-family, deduplicated, descending, and in range for the
+/// family (`v4 <= 32`, `v6 <= 128`) — are established by [`Self::from_networks`]
+/// from already-validated [`ipnet::IpNet`] keys and never change afterwards.
+#[derive(Debug, Default)]
+struct SubnetPrefixes {
+    v4: Box<[u8]>,
+    v6: Box<[u8]>,
+}
+
+impl SubnetPrefixes {
+    fn from_networks<'a>(nets: impl Iterator<Item = &'a ipnet::IpNet>) -> Self {
+        let mut v4 = Vec::new();
+        let mut v6 = Vec::new();
+        for net in nets {
+            match net {
+                ipnet::IpNet::V4(_) => v4.push(net.prefix_len()),
+                ipnet::IpNet::V6(_) => v6.push(net.prefix_len()),
+            }
+        }
+        // Distinct and descending (longest-prefix-match order); built once at startup.
+        for prefixes in [&mut v4, &mut v6] {
+            prefixes.sort_unstable();
+            prefixes.dedup();
+            prefixes.reverse();
+        }
+        Self {
+            v4: v4.into(),
+            v6: v6.into(),
+        }
+    }
+
+    /// The supernets of `ip` worth probing, longest-prefix first: only the
+    /// prefix lengths actually present in the config for `ip`'s address family.
+    /// Empty when none are configured.
+    fn candidate_supernets(&self, ip: IpAddr) -> impl Iterator<Item = ipnet::IpNet> + '_ {
+        let prefixes = match ip {
+            IpAddr::V4(_) => &self.v4,
+            IpAddr::V6(_) => &self.v6,
+        };
+        prefixes.iter().map(move |&prefix| {
+            // `prefix` came from a same-family config network, so it is in range.
+            ipnet::IpNet::new(ip, prefix)
+                .expect("config prefix length is valid for this address family")
+                .trunc()
+        })
+    }
 }
 
 impl<S: Spec> SovRateLimiter<S> {
@@ -431,11 +477,36 @@ mod tests {
     }
 
     #[test]
-    fn ip_to_network() {
-        let ip: Ipv4Addr = "192.168.1.5".parse().unwrap();
-        for net in all_supernets(ip.into()) {
-            println!("{}", net);
-        }
+    fn candidate_supernets_probes_only_configured_prefix_lengths() {
+        let prefixes = SubnetPrefixes::from_networks(
+            [
+                "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap(),
+                "10.0.0.0/16".parse::<ipnet::IpNet>().unwrap(),
+            ]
+            .iter(),
+        );
+
+        let ip: IpAddr = "10.0.5.7".parse().unwrap();
+        let candidates: Vec<ipnet::IpNet> = prefixes.candidate_supernets(ip).collect();
+
+        // Only the configured prefix lengths (24, 16), longest first, truncated.
+        assert_eq!(
+            candidates,
+            vec![
+                "10.0.5.0/24".parse().unwrap(),
+                "10.0.0.0/16".parse().unwrap(),
+            ]
+        );
+    }
+
+    #[test]
+    fn candidate_supernets_are_empty_for_other_family() {
+        let prefixes = SubnetPrefixes::from_networks(
+            ["2001:db8::/32".parse::<ipnet::IpNet>().unwrap()].iter(),
+        );
+
+        let ipv4: IpAddr = "10.0.0.1".parse().unwrap();
+        assert_eq!(prefixes.candidate_supernets(ipv4).count(), 0);
     }
 }
 
