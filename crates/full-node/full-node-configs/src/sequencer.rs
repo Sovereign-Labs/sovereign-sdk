@@ -1,8 +1,8 @@
+use std::{net::IpAddr, num::NonZero};
+
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::RollupHeight;
-use std::net::IpAddr;
-use std::num::NonZero;
 
 /// See [`SequencerConfig::sequencer_kind_config`].
 #[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
