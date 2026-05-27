@@ -156,9 +156,12 @@ fn calculate_limits<S: Spec>(
         .expect("Batch execution time limit overflows u64 microseconds");
 
     let max_resources_per_batch = Resource {
+        // requests-per-batch = rate (per second) × batch duration (seconds).
+        // Multiply by milliseconds first, then divide by 1000, to keep sub-second precision.
         req_counter: max_requests_per_second
             .checked_mul(batch_execution_time_limit_millis)
-            .expect("Overflow converting max_requests_per_second to max requests per batch"),
+            .expect("Overflow converting max_requests_per_second to max requests per batch")
+            / 1000,
         // The `expect` is justified because we will never have batches larger than u64::MAX bytes.
         space_in_bytes: max_batch_size_bytes
             .try_into()
@@ -168,9 +171,15 @@ fn calculate_limits<S: Spec>(
     };
 
     // A single sender is limited to 1/max_threshold_per_key_to_batch_capacity_ratio of resources of a single batch.
-    let max_per_key = max_resources_per_batch
+    let mut max_per_key = max_resources_per_batch
         .saturating_mul_by_scalar(limits.resources_per_bucket)
         .div_by_scalar(1000);
+    // A non-zero rate must not silently round down to a zero request budget (which
+    // would reject all traffic). `resources_per_bucket == 0` is the intentional
+    // "block everything" sentinel, so leave that untouched.
+    if limits.resources_per_bucket > 0 {
+        max_per_key.req_counter = max_per_key.req_counter.max(1);
+    }
 
     // The refill rate is defined as 0.1% of max_per_key. After one second, the system refills max_per_key tokens.
     let refill_rate = max_per_key
@@ -241,12 +250,18 @@ fn limits<S: Spec>(
         sov_config.address_custom_limits,
     );
 
+    let ip_custom_limits = sov_config
+        .ip_custom_limits
+        .into_iter()
+        .map(|(net, limits)| (net.trunc(), limits))
+        .collect();
+
     let ip_networks = to_limiter_config_map::<ipnet::IpNet, S>(
         sov_config.max_requests_per_second,
         batch_execution_time_limit,
         max_batch_size_bytes,
         sov_config.height_for_gas_limit_computation,
-        sov_config.ip_custom_limits,
+        ip_custom_limits,
     );
 
     (default_config, addrs, ip_networks)
@@ -440,6 +455,57 @@ mod tests {
     }
 
     #[test]
+    fn calculate_limits_scales_req_counter_to_requests_per_batch() {
+        // 1000 req/s over a 6 s batch = 6000 requests/batch; resources_per_bucket = 10
+        // (1% of a batch) => 60 requests per key.
+        let config = calculate_limits::<TestSpec>(
+            Limits {
+                resources_per_bucket: 10,
+                refill_rate: 0,
+            },
+            1000,
+            Duration::from_millis(6000),
+            6_000_000,
+            RollupHeight::GENESIS,
+        );
+        assert_eq!(config.max_allowed_resources.inner.req_counter, 60);
+    }
+
+    #[test]
+    fn calculate_limits_floors_req_counter_for_subsecond_batch() {
+        // 1000 req/s over a 100 ms batch = 100 requests/batch; resources_per_bucket = 5
+        // would round the per-key budget to 0 (100 * 5 / 1000). The guard floors it at 1.
+        let config = calculate_limits::<TestSpec>(
+            Limits {
+                resources_per_bucket: 5,
+                refill_rate: 0,
+            },
+            1000,
+            Duration::from_millis(100),
+            6_000_000,
+            RollupHeight::GENESIS,
+        );
+        assert_eq!(config.max_allowed_resources.inner.req_counter, 1);
+    }
+
+    #[test]
+    fn calculate_limits_keeps_zero_budget_for_zero_resources_per_bucket() {
+        // `resources_per_bucket == 0` is the intentional "block everything" sentinel:
+        // the guard must not floor it up to 1.
+        let config = calculate_limits::<TestSpec>(
+            Limits {
+                resources_per_bucket: 0,
+                refill_rate: 0,
+            },
+            1000,
+            Duration::from_millis(100),
+            6_000_000,
+            RollupHeight::GENESIS,
+        );
+        assert_eq!(config.max_allowed_resources.inner.req_counter, 0);
+    }
+
+    #[test]
     fn test_sov_test_limiter() {
         let resource_used_per_run = ResourceUsed {
             inner: Resource {
@@ -622,6 +688,36 @@ mod tests {
         let mapped: IpAddr = "::ffff:10.0.0.5".parse().unwrap();
         let token = rate_limiter.allow(mapped, addr).unwrap().unwrap();
         assert_eq!(token.ip_net, "10.0.0.5/32".parse::<ipnet::IpNet>().unwrap());
+    }
+
+    #[test]
+    fn programmatic_noncanonical_ip_custom_limit_is_normalized() {
+        let config = SovRateLimiterConfig {
+            max_requests_per_second: 1000,
+            max_nb_of_concurrent_users_in_rate_limiter: 1000,
+            default_limits: Limits {
+                resources_per_bucket: 5,
+                refill_rate: 0,
+            },
+            height_for_gas_limit_computation: RollupHeight::GENESIS,
+            address_custom_limits: Vec::default(),
+            ip_custom_limits: vec![(
+                "10.0.0.5/24".parse().unwrap(),
+                Limits {
+                    resources_per_bucket: 0,
+                    refill_rate: 0,
+                },
+            )],
+        };
+        let mut rate_limiter = SovRateLimiter::<TestSpec>::new(Some(config), 3000, 1_000_000);
+        let addr = <TestSpec as Spec>::Address::from([1; 28]);
+        let ip: IpAddr = "10.0.0.42".parse().unwrap();
+
+        let err = rate_limiter.allow(ip, addr).unwrap_err();
+        let ResourceLimitExceededError::Ip { ip_net, .. } = err else {
+            panic!("expected IP rate-limit error");
+        };
+        assert_eq!(ip_net, "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap());
     }
 }
 

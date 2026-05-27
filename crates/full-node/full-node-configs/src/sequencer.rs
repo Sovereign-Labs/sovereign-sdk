@@ -348,7 +348,7 @@ pub struct SovRateLimiterConfig<Address: Copy> {
     /// IP address (`192.168.1.5`); a bare address is treated as a host network
     /// (`/32` for IPv4, `/128` for IPv6).
     #[serde(deserialize_with = "deserialize_ip_custom_limits")]
-    #[schemars(with = "Vec<(String, Limits)>")]
+    #[schemars(with = "Vec<(IpAddrOrNet, Limits)>")]
     pub ip_custom_limits: Vec<(ipnet::IpNet, Limits)>,
     /// Rate limiting on gas is currently disabled, so this param has no impact on runtime behavior.
     ///
@@ -368,6 +368,20 @@ fn default_height_for_gas_limit_computation() -> RollupHeight {
 
 fn height_is_max(height: &RollupHeight) -> bool {
     *height == RollupHeight::MAX
+}
+
+/// Schema-only mirror of the wire form accepted by [`deserialize_ip_custom_limits`]: a bare IP
+/// address or a CIDR network, IPv4 or IPv6. Exists solely to give
+/// [`SovRateLimiterConfig::ip_custom_limits`] an accurate `anyOf` JSON Schema instead of a bare
+/// `string`. Never constructed.
+#[derive(schemars::JsonSchema)]
+#[schemars(untagged)]
+#[allow(dead_code)]
+enum IpAddrOrNet {
+    V4(std::net::Ipv4Addr),
+    V4Net(ipnet::Ipv4Net),
+    V6(std::net::Ipv6Addr),
+    V6Net(ipnet::Ipv6Net),
 }
 
 /// Deserializes [`SovRateLimiterConfig::ip_custom_limits`], accepting each key

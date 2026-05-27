@@ -304,6 +304,47 @@
         "bind_port"
       ]
     },
+    "IpAddrOrNet": {
+      "description": "Schema-only mirror of the wire form accepted by [`deserialize_ip_custom_limits`]: a bare IP\naddress or a CIDR network, IPv4 or IPv6. Exists solely to give\n[`SovRateLimiterConfig::ip_custom_limits`] an accurate `anyOf` JSON Schema instead of a bare\n`string`. Never constructed.",
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "ipv4"
+        },
+        {
+          "$ref": "#/$defs/Ipv4Net"
+        },
+        {
+          "type": "string",
+          "format": "ipv6"
+        },
+        {
+          "$ref": "#/$defs/Ipv6Net"
+        }
+      ]
+    },
+    "Ipv4Net": {
+      "title": "IPv4 network",
+      "description": "An IPv4 address with prefix length",
+      "type": "string",
+      "examples": [
+        "0.0.0.0/0",
+        "192.168.0.0/24"
+      ],
+      "maxLength": 18,
+      "pattern": "^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\/(?:3[0-2]|[1-2][0-9]|[0-9])$"
+    },
+    "Ipv6Net": {
+      "title": "IPv6 network",
+      "description": "An IPv6 address with prefix length",
+      "type": "string",
+      "examples": [
+        "::/0",
+        "fd00::/32"
+      ],
+      "maxLength": 43,
+      "pattern": "^[0-9A-Fa-f:\\.]+\\/(?:[0-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8])$"
+    },
     "LeaderElectionConfig": {
       "description": "Configuration for leader election timing.",
       "type": "object",
@@ -1162,7 +1203,7 @@
             "minItems": 2,
             "prefixItems": [
               {
-                "type": "string"
+                "$ref": "#/$defs/IpAddrOrNet"
               },
               {
                 "$ref": "#/$defs/Limits"

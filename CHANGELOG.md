@@ -1,5 +1,6 @@
 # 2026-05-26
 - #2918 Adds support for CIDR based rate limiting in preferred sequencer. Existing configs are backwards compatible.
+  * **Breaking (behavior)**: corrects a unit bug in the preferred sequencer rate limiter where the per-request budget (`req_counter`) was computed 1000× too large (per-second rate × milliseconds). It now enforces the true requests-per-batch, consistent with the size/execution-time/gas limits. Configs are unchanged; in typical setups the request-count dimension still doesn't bind, but the request-count limit is now 1000× tighter.
 
 # 2026-05-20
 - #2893 Adds a new interface for providing custom EVM precompiles that can access sov-state (read-only). Precompiles must implement the `EvmPrecopmile` trait. The `sov-evm::Evm` module is now generic on `EvmPrecompileSet`; a Set can be generated from several `EvmPrecopmile`s using the `generate_precompile_set!` macro. See e.g. `BankBalancePrecompile` or `SequencingTimestampPrecompile` for implementation examples, and the demo-rollup changes for a usage example.
