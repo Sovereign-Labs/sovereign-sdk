@@ -13,12 +13,12 @@ use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::default_spec::DefaultSpec;
 use sov_modules_api::execution_mode::Zk;
-use sov_modules_api::{CryptoSpec, Spec};
+use sov_modules_api::{Spec, Storage};
 
 type MicrobenchSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Zk>;
-// Same hasher the production NOMT verifier uses (`BinaryHasher<S::Hasher>`), so the swept
-// per-depth cost is the real, SP1-accelerated sha256 the prover pays.
-type Hasher = BinaryHasher<<<MicrobenchSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher>;
+// Resolve the hasher off the spec's Storage — the same `NomtVerifierStorage` the prover
+// verifies with — so the bench can't drift from production's `BinaryHasher<S::Hasher>`.
+type Hasher = BinaryHasher<<<MicrobenchSpec as Spec>::Storage as Storage>::Hasher>;
 
 // Mode flags must match cmd/storage.rs.
 const MODE_READ: u8 = 0;
