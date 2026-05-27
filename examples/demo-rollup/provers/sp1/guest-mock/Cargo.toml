@@ -8,7 +8,7 @@ resolver = "2"
 [workspace]
 
 [dependencies]
-sp1-zkvm = { version = "6.2.1" }
+sp1-zkvm = { version = "6.2.2" }
 sov-mock-da = { path = "../../../../../crates/adapters/mock-da" }
 demo-stf = { path = "../../../stf" }
 sov-metrics = { path = "../../../../../crates/full-node/sov-metrics", optional = true }

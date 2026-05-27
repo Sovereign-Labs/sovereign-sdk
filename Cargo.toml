@@ -307,16 +307,16 @@ risc0-build = "3.0"
 # pin their own sp1-zkvm version explicitly because [patch.crates-io] requires
 # a workspace root and prevents `workspace = true` inheritance. See also the
 # sha2 / ed25519-dalek pinning notes above.
-slop-algebra = { version = "6.2.1", default-features = false }
-sp1-build = { version = "6.2.1", default-features = false }
-sp1-lib = { version = "6.2.1", default-features = false }
-sp1-primitives = { version = "6.2.1", default-features = false }
-sp1-recursion-executor = { version = "6.2.1", default-features = false }
-sp1-sdk = { version = "6.2.1", default-features = false }
-sp1-verifier = { version = "6.2.1", default-features = false }
+slop-algebra = { version = "6.2.2", default-features = false }
+sp1-build = { version = "6.2.2", default-features = false }
+sp1-lib = { version = "6.2.2", default-features = false }
+sp1-primitives = { version = "6.2.2", default-features = false }
+sp1-recursion-executor = { version = "6.2.2", default-features = false }
+sp1-sdk = { version = "6.2.2", default-features = false }
+sp1-verifier = { version = "6.2.2", default-features = false }
 # sp1-zkvm keeps default features (`libm`, `lib`) because sov-sp1-adapter
 # relies on them via the guest-side `verify` feature dependency chain.
-sp1-zkvm = { version = "6.2.1" }
+sp1-zkvm = { version = "6.2.2" }
 flume = { version = "0.11.1", features = ["async"] }
 tokio-metrics = { version = "0.4.0" }
 
