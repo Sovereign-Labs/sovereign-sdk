@@ -430,9 +430,49 @@ mod tests {
     use super::*;
     use crate::config::Limits;
     use sov_test_utils::TestSpec;
+    use std::collections::HashMap;
     use std::net::Ipv4Addr;
 
     type Gas = <TestSpec as Spec>::Gas;
+
+    fn test_addr(byte: u8) -> <TestSpec as Spec>::Address {
+        <TestSpec as Spec>::Address::from([byte; 28])
+    }
+
+    fn req_count_config(max_req_count: u64) -> RateLimiterConfig<TestSpec> {
+        let mut max_allowed_resources = Resource::max();
+        max_allowed_resources.req_counter = max_req_count;
+
+        RateLimiterConfig::<TestSpec> {
+            max_allowed_resources: TotalResources {
+                inner: max_allowed_resources,
+            },
+            refill_rate: RefillRatePerMillis {
+                token_resource_per_ms: Resource::zero(),
+            },
+        }
+    }
+
+    fn one_request() -> ResourceUsed<Gas> {
+        ResourceUsed {
+            inner: Resource {
+                req_counter: 1,
+                ..Resource::zero()
+            },
+        }
+    }
+
+    fn rate_limiter_with_ip_networks(
+        default_config: RateLimiterConfig<TestSpec>,
+        ip_networks: &[&str],
+    ) -> SovRateLimiter<TestSpec> {
+        let ip_networks: HashMap<ipnet::IpNet, RateLimiterConfig<TestSpec>> = ip_networks
+            .iter()
+            .map(|ip_net| (ip_net.parse().unwrap(), default_config.clone()))
+            .collect();
+
+        SovRateLimiter::new_for_test_with_ip_networks(1000, 1_000_000, default_config, ip_networks)
+    }
 
     #[test]
     fn test_calculate_limits() {
@@ -602,6 +642,85 @@ mod tests {
             });
             Self { inner }
         }
+
+        fn new_for_test_with_ip_networks(
+            max_nb_of_concurrent_users: u64,
+            ttl_in_millis: u64,
+            config: RateLimiterConfig<S>,
+            ip_networks: HashMap<ipnet::IpNet, RateLimiterConfig<S>>,
+        ) -> Self {
+            Self {
+                inner: Some(SovRateLimiterInner::new(
+                    max_nb_of_concurrent_users,
+                    ttl_in_millis,
+                    config,
+                    Default::default(),
+                    ip_networks,
+                )),
+            }
+        }
+    }
+
+    #[test]
+    fn allow_falls_back_to_host_bucket_with_subnets_configured() {
+        let mut rate_limiter = rate_limiter_with_ip_networks(req_count_config(2), &["10.0.0.0/24"]);
+        let resource_used = one_request();
+        let fallback_ip: IpAddr = "192.0.2.10".parse().unwrap();
+
+        for byte in [1, 2] {
+            let token = rate_limiter.allow(fallback_ip, test_addr(byte)).unwrap();
+            rate_limiter.update(token, resource_used);
+        }
+
+        let err = rate_limiter.allow(fallback_ip, test_addr(3)).unwrap_err();
+        let ResourceLimitExceededError::Ip { ip_net, .. } = err else {
+            panic!("expected IP rate-limit error");
+        };
+        assert_eq!(ip_net, "192.0.2.10/32".parse().unwrap());
+
+        let token = rate_limiter
+            .allow("192.0.2.11".parse().unwrap(), test_addr(4))
+            .unwrap()
+            .unwrap();
+        assert_eq!(token.ip_net, "192.0.2.11/32".parse().unwrap());
+
+        let token = rate_limiter
+            .allow("10.0.0.7".parse().unwrap(), test_addr(5))
+            .unwrap()
+            .unwrap();
+        assert_eq!(token.ip_net, "10.0.0.0/24".parse().unwrap());
+    }
+
+    #[test]
+    fn allow_matches_configured_subnet_after_longer_prefix_miss() {
+        let mut rate_limiter =
+            rate_limiter_with_ip_networks(req_count_config(2), &["10.0.0.0/24", "172.16.0.0/16"]);
+
+        let token = rate_limiter
+            .allow("172.16.2.3".parse().unwrap(), test_addr(1))
+            .unwrap()
+            .unwrap();
+        assert_eq!(token.ip_net, "172.16.0.0/16".parse().unwrap());
+
+        let token = rate_limiter
+            .allow("10.0.0.42".parse().unwrap(), test_addr(2))
+            .unwrap()
+            .unwrap();
+        assert_eq!(token.ip_net, "10.0.0.0/24".parse().unwrap());
+    }
+
+    #[test]
+    fn subnet_suffix_renders_only_wider_subnets() {
+        assert_eq!(subnet_suffix(&"10.0.0.1/32".parse().unwrap()), "");
+        assert_eq!(subnet_suffix(&"2001:db8::1/128".parse().unwrap()), "");
+        assert_eq!(
+            subnet_suffix(&"10.0.0.0/24".parse().unwrap()),
+            " (subnet 10.0.0.0/24)"
+        );
+        assert_eq!(
+            subnet_suffix(&"2001:db8::/64".parse().unwrap()),
+            " (subnet 2001:db8::/64)"
+        );
     }
 
     #[test]
