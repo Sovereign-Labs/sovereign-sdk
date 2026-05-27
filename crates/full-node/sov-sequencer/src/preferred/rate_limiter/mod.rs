@@ -278,7 +278,7 @@ fn limits<S: Spec>(
 /// The invariants — per-family, deduplicated, descending, and in range for the
 /// family (`v4 <= 32`, `v6 <= 128`) — are established by [`Self::from_networks`]
 /// from already-validated [`ipnet::IpNet`] keys and never change afterwards.
-#[derive(Debug, Default)]
+#[derive(Debug)]
 struct SubnetPrefixes {
     v4: Box<[u8]>,
     v6: Box<[u8]>,
@@ -338,6 +338,16 @@ fn assert_no_overlapping_subnets(networks: &[ipnet::IpNet]) {
 }
 
 impl<S: Spec> SovRateLimiter<S> {
+    /// Builds the rate limiter from `config`; a `None` config disables rate
+    /// limiting entirely.
+    ///
+    /// # Panics
+    ///
+    /// Panics on invalid configuration so operator mistakes surface loudly at
+    /// startup rather than silently mis-limiting traffic:
+    /// - `batch_execution_time_limit_millis` or `max_batch_size_bytes` is zero;
+    /// - any two configured `ip_custom_limits` subnets overlap or duplicate one
+    ///   another (an IP inside both would have no unambiguous bucket).
     pub(crate) fn new(
         config: Option<SovRateLimiterConfig<S::Address>>,
         batch_execution_time_limit_millis: u64,
