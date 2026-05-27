@@ -57,11 +57,6 @@ impl<S: Spec> EvmPrecompileSet<S> for NoCustomPrecompiles<S> {
     }
 }
 
-#[doc(hidden)]
-pub mod __private {
-    pub use sov_modules_api::{Spec, TxState};
-}
-
 /// Generates an [`EvmPrecompileSet`] from a flat list of individual [`EvmPrecompile`]s.
 ///
 /// The generated set owns one instance of each listed precompile and derives its static address
@@ -76,20 +71,20 @@ macro_rules! generate_precompile_set {
     ) => {
         $(#[$meta])*
         #[derive(Clone, Default)]
-        $vis struct $name<$spec: $crate::precompiles::__private::Spec> {
+        $vis struct $name<$spec: ::sov_modules_api::Spec> {
             $($field: $precompile,)*
         }
 
         impl<$spec> $crate::precompiles::EvmPrecompileSet<$spec> for $name<$spec>
         where
-            $spec: $crate::precompiles::__private::Spec,
+            $spec: ::sov_modules_api::Spec,
             $($precompile: $crate::precompiles::EvmPrecompile<$spec>,)*
         {
             const ADDRESSES: &'static [$crate::precompiles::Address] = &[
                 $(<$precompile as $crate::precompiles::EvmPrecompile<$spec>>::ADDRESS,)*
             ];
 
-            fn execute<ST: $crate::precompiles::__private::TxState<$spec>>(
+            fn execute<ST: ::sov_modules_api::TxState<$spec>>(
                 &self,
                 address: $crate::precompiles::Address,
                 input: &[u8],
