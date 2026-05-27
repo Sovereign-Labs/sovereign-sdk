@@ -425,6 +425,7 @@ pub struct Limits {
     pub resources_per_bucket: u64,
     /// The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.
     /// Values between 1 and 20 are recommended starting points.
+    /// Note: at small per-key request budgets this has little effect on the request-count dimension, which refills coarsely — when the per-millisecond request refill rounds down to zero the request count becomes a hard per-window cap rather than a smooth rate.
     pub refill_rate: u64,
 }
 

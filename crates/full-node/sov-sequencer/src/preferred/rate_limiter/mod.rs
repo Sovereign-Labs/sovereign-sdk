@@ -181,7 +181,18 @@ fn calculate_limits<S: Spec>(
         max_per_key.req_counter = max_per_key.req_counter.max(1);
     }
 
-    // The refill rate is defined as 0.1% of max_per_key. After one second, the system refills max_per_key tokens.
+    // Refill per millisecond: over one batch the bucket refills `refill_rate`
+    // times its capacity (`max_per_key * limits.refill_rate`), spread across
+    // `batch_execution_time_limit_millis`.
+    //
+    // This per-ms rate is an integer. When
+    // `max_per_key.req_counter * limits.refill_rate < batch_execution_time_limit_millis`
+    // the request refill truncates to 0, so the request dimension acts as a hard
+    // cap of `max_per_key.req_counter` that resets only when the throttler is
+    // evicted (~`ttl_in_millis` after the key's last successful request) rather
+    // than refilling smoothly. This surfaces only under floods of unusually cheap
+    // requests; otherwise the size/execution-time limits bind first. Smooth
+    // sub-token request refill is a possible follow-up.
     let refill_rate = max_per_key
         .saturating_mul_by_scalar(limits.refill_rate)
         .div_by_scalar(batch_execution_time_limit_millis);
