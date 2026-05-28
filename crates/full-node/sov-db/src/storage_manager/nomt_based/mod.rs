@@ -4,7 +4,6 @@ mod groups;
 #[cfg(test)]
 mod tests;
 
-use std::any::Any;
 use std::collections::HashMap;
 use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
@@ -27,24 +26,18 @@ use crate::storage_manager::nomt_based::groups::{CommitGroup, DbGroup, PrunerJob
 pub use groups::PrunerJobOutput;
 pub(crate) use groups::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 
-/// Controls witness generation and pinned cache for storage creation.
-///
-/// Witness generation and pinned cache are mutually exclusive: pinned cache
-/// serves reads from RAM, bypassing witness hint recording.
-pub enum WitnessMode<Cache = Box<dyn Any + Send + Sync>> {
-    /// Record witness hints for ZK proving. Pinned cache is not used.
+/// Controls witness generation for storage creation.
+pub enum WitnessMode {
+    /// Record witness hints for ZK proving.
     On,
-    /// No witness generation. May include a pinned cache for faster reads.
-    Off {
-        #[allow(missing_docs)]
-        pinned_cache: Option<Cache>,
-    },
+    /// No witness generation.
+    Off,
 }
 
-impl<Cache> WitnessMode<Cache> {
-    /// Creates a [`WitnessMode::Off`] variant with no pinned cache.
+impl WitnessMode {
+    /// Creates a [`WitnessMode::Off`] variant.
     pub fn off() -> Self {
-        Self::Off { pinned_cache: None }
+        Self::Off
     }
 
     /// Returns `true` if witness generation is enabled.
@@ -52,31 +45,12 @@ impl<Cache> WitnessMode<Cache> {
         matches!(self, Self::On)
     }
 
-    /// Takes the pinned cache out of the `Off` variant, leaving `None` in its place.
-    /// Returns `None` if witness mode is `On` or no cache is present.
-    pub fn take_pinned_cache(&mut self) -> Option<Cache> {
-        match self {
-            Self::Off { pinned_cache } => pinned_cache.take(),
-            Self::On => None,
-        }
-    }
-
-    /// Constructs a [`WitnessMode`] from separate `with_witness` and `pinned_cache` values.
-    ///
-    /// # Panics
-    ///
-    /// Panics if `with_witness` is true and `pinned_cache` is `Some`, since pinned cache
-    /// serves reads from RAM, bypassing witness hint recording.
-    pub fn new_with_assert(with_witness: bool, pinned_cache: Option<Cache>) -> Self {
+    /// Constructs a [`WitnessMode`] from a witness flag.
+    pub fn from_bool(with_witness: bool) -> Self {
         if with_witness {
-            assert!(
-                pinned_cache.is_none(),
-                "Pinned cache is incompatible with witness generation: pinned cache serves reads \
-                 from RAM, bypassing witness hint recording."
-            );
             Self::On
         } else {
-            Self::Off { pinned_cache }
+            Self::Off
         }
     }
 }
@@ -108,9 +82,6 @@ pub struct NomtChangeSet {
     pub state: StateFinishedSession,
     pub historical_state: StateChanges,
     pub accessory: SchemaBatch,
-    /// Use type erasure because the `pinned_cache` type is defined in sov-state, which depends on this crate.
-    /// No type other than `PinnedCache` makes sense here.
-    pub pinned_cache: Option<Box<dyn Any + Send + Sync>>,
 }
 
 #[cfg(test)]
@@ -134,7 +105,6 @@ impl Default for NomtChangeSet {
             },
             historical_state: Default::default(),
             accessory: Default::default(),
-            pinned_cache: None,
         }
     }
 }
@@ -164,8 +134,6 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
 
     rockbound_snapshots: HashMap<Da::SlotHash, SnapshotGroup>,
     nomt_snapshots: Arc<RwLock<HashMap<Da::SlotHash, StateOverlay>>>,
-    pinned_caches: HashMap<Da::SlotHash, Box<dyn Any + Send + Sync>>,
-
     db_group: DbGroup<H, Da::SlotHash>,
 
     // If pruner is running.
@@ -176,7 +144,6 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
     pruner_max_batch_size: usize,
 
     /// When true, `create_state_for` will generate witness hints for ZK proving.
-    /// This disables pinned cache since it bypasses witness recording.
     witness_generation_enabled: bool,
 
     _phantom_s: PhantomData<S>,
@@ -191,8 +158,7 @@ where
     /// Create a new [` NomtStorageManager`].
     ///
     /// `witness_generation` controls whether `create_state_for` will generate witness hints
-    /// for ZK proving. When enabled, pinned cache is disabled since it bypasses witness
-    /// recording.
+    /// for ZK proving.
     pub fn new(config: RollupDbConfig, witness_generation: bool) -> anyhow::Result<Self> {
         Self::new_with_custom_config(config.into(), witness_generation)
     }
@@ -218,7 +184,6 @@ where
             blocks_to_parent: Default::default(),
             rockbound_snapshots: Default::default(),
             nomt_snapshots: Arc::new(Default::default()),
-            pinned_caches: Default::default(),
             db_group,
             pruner: None,
             last_pruner_finish_at_height: None,
@@ -323,7 +288,6 @@ where
             state,
             historical_state,
             accessory,
-            pinned_cache: _,
         } = stf_change_set;
 
         let state_overlay = state.into_state_overlay();
@@ -396,9 +360,7 @@ where
         // Storage created "for" a block implies node context,
         // and we expect a change set from this storage to be saved.
         // That's why it is created in strict mode.
-        let pinned_cache = self.pinned_caches.remove(&block_header.prev_hash());
-        let witness_mode =
-            WitnessMode::new_with_assert(self.witness_generation_enabled, pinned_cache);
+        let witness_mode = WitnessMode::from_bool(self.witness_generation_enabled);
         let state = self.create_state_up_to(block_header.prev_hash(), true, witness_mode)?;
 
         Ok(state)
@@ -451,7 +413,6 @@ where
             state,
             historical_state,
             accessory,
-            pinned_cache,
         } = stf_change_set;
 
         let state_overlay = state.into_state_overlay();
@@ -468,9 +429,6 @@ where
             .write()
             .expect("Failed to lock snapshots");
         nomt_snapshots.insert(block_hash.clone(), state_overlay);
-        if let Some(pinned_cache) = pinned_cache {
-            self.pinned_caches.insert(block_hash.clone(), pinned_cache);
-        }
         self.rockbound_snapshots
             .insert(block_hash, rockbound_snapshot);
 

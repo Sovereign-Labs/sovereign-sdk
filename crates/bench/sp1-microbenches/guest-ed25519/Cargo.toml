@@ -8,7 +8,7 @@ resolver = "2"
 [workspace]
 
 [dependencies]
-sp1-zkvm = { version = "6.2.1" }
+sp1-zkvm = { version = "6.2.2" }
 sov-sp1-adapter = { path = "../../../adapters/sp1" }
 sov-rollup-interface = { path = "../../../rollup-interface", default-features = false }
 

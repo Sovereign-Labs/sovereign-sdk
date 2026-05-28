@@ -19,7 +19,6 @@ mod evm_no_gas_limit;
 mod evm_oog_error;
 mod evm_paymaster_balance_check;
 mod evm_publish_reverted_txs;
-mod evm_ram_pinning;
 mod evm_rate_limit;
 mod evm_rpc_compliance_validation;
 mod evm_rpc_compliance_validation_2;

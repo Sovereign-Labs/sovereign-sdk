@@ -12,11 +12,34 @@ use sov_state::DefaultStorageSpec;
 use crate::higher_kinded_types::{Generic, HigherKindedHelper};
 use crate::{CryptoSpecExt, GasUnit, Spec};
 
+// Internal helper that lets the `Storage =` default depend on both `Da` and
+// `StorageSpec`, even in the Zk variant where the resulting storage type
+// happens not to mention `Da`. A direct `type` alias would fail E0091 in the
+// Zk variant because `Da` would be unused on the right-hand side.
+#[doc(hidden)]
+pub struct DefaultStorageMarker<Da, StorageSpec>(PhantomData<(Da, StorageSpec)>);
+
+#[doc(hidden)]
+pub trait DefaultStorageOf {
+    type Storage;
+}
+
 #[cfg(feature = "native")]
-type DefaultStorage<StorageSpec> = sov_state::ProverStorage<StorageSpec>;
+impl<Da: DaSpec, StorageSpec: sov_state::MerkleProofSpec> DefaultStorageOf
+    for DefaultStorageMarker<Da, StorageSpec>
+{
+    type Storage = sov_state::nomt::prover_storage::NomtProverStorage<StorageSpec, Da::SlotHash>;
+}
 
 #[cfg(not(feature = "native"))]
-type DefaultStorage<StorageSpec> = sov_state::ZkStorage<StorageSpec>;
+impl<Da, StorageSpec: sov_state::MerkleProofSpec> DefaultStorageOf
+    for DefaultStorageMarker<Da, StorageSpec>
+{
+    type Storage = sov_state::nomt::zk_storage::NomtVerifierStorage<StorageSpec>;
+}
+
+type DefaultStorage<Da, StorageSpec> =
+    <DefaultStorageMarker<Da, StorageSpec> as DefaultStorageOf>::Storage;
 
 /// A default implementation of the [`Spec`] trait. Used for testing but can also be a good
 /// starting point for implementing a custom rollup.
@@ -36,7 +59,7 @@ pub struct ConfigurableSpec<
     Address,
     Mode,
     CryptoSpec = <<InnerZkvm as Zkvm>::Verifier as ZkVerifier>::CryptoSpec,
-    Storage = DefaultStorage<DefaultStorageSpec<<CryptoSpec as CryptoSpecTrait>::Hasher>>,
+    Storage = DefaultStorage<Da, DefaultStorageSpec<<CryptoSpec as CryptoSpecTrait>::Hasher>>,
 >(PhantomData<(Da, InnerZkvm, OuterZkvm, CryptoSpec, Address, Mode, Storage)>);
 
 impl<Da, InnerZkvm, OuterZkvm, Address, Mode, CryptoSpec, Storage> Default
@@ -100,54 +123,41 @@ mod default_impls {
     }
 }
 
+// Native and WitnessGeneration share an identical `Spec` impl; expand it for each via macro
+// to avoid coherence conflicts with the Zk impl below when `test-utils` is enabled.
 #[cfg(feature = "native")]
-impl<
-        Da: DaSpec,
-        InnerZkvm: Zkvm,
-        OuterZkvm: Zkvm,
-        CryptoSpec: CryptoSpecExt,
-        Address: BasicAddress,
-        Storage: sov_state::Storage + sov_state::NativeStorage + Send + Sync + 'static,
-    > Spec
-    for ConfigurableSpec<Da, InnerZkvm, OuterZkvm, Address, WitnessGeneration, CryptoSpec, Storage>
-where
-    Address: From<CredentialId>,
-{
-    type Da = Da;
-    type Gas = GasUnit<2>;
-    type Address = Address;
+macro_rules! impl_configurable_spec_native {
+    ($mode:ty) => {
+        impl<
+                Da: DaSpec,
+                InnerZkvm: Zkvm,
+                OuterZkvm: Zkvm,
+                CryptoSpec: CryptoSpecExt,
+                Address: BasicAddress,
+                Storage: sov_state::Storage + sov_state::NativeStorage + Send + Sync + 'static,
+            > Spec
+            for ConfigurableSpec<Da, InnerZkvm, OuterZkvm, Address, $mode, CryptoSpec, Storage>
+        where
+            Address: From<CredentialId>,
+        {
+            type Da = Da;
+            type Gas = GasUnit<2>;
+            type Address = Address;
 
-    type Storage = Storage;
+            type Storage = Storage;
 
-    type InnerZkvm = InnerZkvm;
-    type OuterZkvm = OuterZkvm;
+            type InnerZkvm = InnerZkvm;
+            type OuterZkvm = OuterZkvm;
 
-    type CryptoSpec = CryptoSpec;
+            type CryptoSpec = CryptoSpec;
+        }
+    };
 }
 
 #[cfg(feature = "native")]
-impl<
-        Da: DaSpec,
-        InnerZkvm: Zkvm,
-        OuterZkvm: Zkvm,
-        CryptoSpec: CryptoSpecExt,
-        Address: BasicAddress,
-        Storage: sov_state::Storage + sov_state::NativeStorage + Send + Sync + 'static,
-    > Spec for ConfigurableSpec<Da, InnerZkvm, OuterZkvm, Address, Native, CryptoSpec, Storage>
-where
-    Address: From<CredentialId>,
-{
-    type Da = Da;
-    type Gas = GasUnit<2>;
-    type Address = Address;
-
-    type Storage = Storage;
-
-    type InnerZkvm = InnerZkvm;
-    type OuterZkvm = OuterZkvm;
-
-    type CryptoSpec = CryptoSpec;
-}
+impl_configurable_spec_native!(Native);
+#[cfg(feature = "native")]
+impl_configurable_spec_native!(WitnessGeneration);
 
 #[cfg(not(feature = "native"))]
 impl<

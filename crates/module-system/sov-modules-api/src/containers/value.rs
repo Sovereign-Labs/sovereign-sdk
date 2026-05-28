@@ -43,10 +43,10 @@ type ValueOrError<V, N> = Result<V, StateValueError<N>>;
 
 /// A container for a single user-space value.
 pub type StateValue<V, Codec = BorshCodec> = NamespacedStateValue<User, V, Codec>;
-/// A Container for a single value which is only accesible in the kernel.
+/// A Container for a single value which is only accessible in the kernel.
 pub type KernelStateValue<V, Codec = BorshCodec> = NamespacedStateValue<Kernel, V, Codec>;
-/// A Container for a single value stored as "accessory" state, outside of the
-/// JMT.
+/// A Container for a single value stored as "accessory" state,
+/// outside merklized state.
 pub type AccessoryStateValue<V, Codec = BorshCodec> = NamespacedStateValue<Accessory, V, Codec>;
 
 // Implement all other functions generically over codecs
@@ -306,14 +306,14 @@ mod tests {
     use crate::capabilities::mocks::MockKernel;
     use crate::{StateCheckpoint, StateValue};
 
-    type TestSpec = crate::default_spec::DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
     fn state_value_raw_roundtrip_and_remove() {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(7, 7);
         let mut value = StateValue::<u32>::with_codec(prefix, BorshCodec);
@@ -338,7 +338,7 @@ mod tests {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(8, 8);
         let mut value = StateValue::<u32>::with_codec(prefix, BorshCodec);

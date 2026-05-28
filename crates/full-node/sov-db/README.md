@@ -1,19 +1,18 @@
 # Sovereign DB
 
-This package provides a high-level interface to a [Schema DB](https://github.com/sovereign-Labs/rockbound) designed specifically for use with the Sovereign SDK.
-It exposes two db types: `LedgerDb`, and `StateDb`.
+This package provides high-level database interfaces designed specifically for use with the Sovereign SDK.
+It exposes `LedgerDb`, NOMT state storage, and flat historical/accessory state storage.
 
 ## LedgerDb
 
 As the name implies, the `LedgerDb` is designed to store ledger history. It has tables for slots, batches, transactions, and events.
 The `LedgerDb` also implements the `LedgerStateProvider` trait, allowing it to easily serve chain history over RPC.
 
-## StateDb
+## State Storage
 
-The StateDb is intended to be used with the Jellyfish Merkle Tree provided by the Module System. If you aren't using the
-Module System, chances are that you'll want to implement your own State Database.
+State storage is intended to be used with the NOMT-backed storage implementation provided by the Module System.
+If you aren't using the Module System, chances are that you'll want to implement your own state database.
 
-StateDb is designed to store Jellyfish Merkle Tree data efficiently. It maintains a flat store mapping `(Key, Version)` tuples
-to values, as well as a mapping from JMT `NodeKey`s to JMT `Nodes`.
+The database stores the merklized state (backed by NOMT) alongside flat `(Key, Version)` historical state used by native queries.
 
-In the Module System, StateDb is abstracted behind the Storage interface, so you won't interact with it directly.
+In the Module System, state storage is abstracted behind the `Storage` interface, so you won't interact with it directly.

@@ -1,5 +1,5 @@
 //! Utilities for discovering cluster nodes from PostgreSQL and persisting snapshots.
-use crate::node_discovery_metrics::ClusterUpdateFailureMetric;
+use crate::node_discovery_metrics::{ClusterUpdateFailureMetric, ClusterUpdateMetric};
 use anyhow::Result;
 use async_trait::async_trait;
 use sqlx::postgres::{PgListener, PgPool};
@@ -7,10 +7,15 @@ use sqlx::FromRow;
 use std::collections::btree_map::Entry;
 use std::collections::{BTreeMap, BTreeSet};
 use std::net::SocketAddr;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 pub use time::OffsetDateTime;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
+
+/// Re-emit the cluster update metric at least every
+/// `poll_interval * LIVENESS_POLL_MULTIPLIER` even if the cluster is unchanged,
+/// so the absence of samples can be alerted on if the polling task dies silently.
+const LIVENESS_POLL_MULTIPLIER: u32 = 5;
 
 /// Information about a registered node.
 #[derive(Debug, Clone, FromRow, PartialEq, Eq)]
@@ -62,7 +67,7 @@ pub trait ClusterUpdateNotifier: Send + Sync + 'static {
 /// Handle returned when subscribing to cluster updates.
 pub struct NodeDiscoveryTask {
     pub receiver: watch::Receiver<ClusterInfo>,
-    pub(crate) handle: JoinHandle<anyhow::Result<()>>,
+    pub(crate) handle: JoinHandle<()>,
 }
 
 impl NodeDiscoveryTask {
@@ -73,24 +78,51 @@ impl NodeDiscoveryTask {
 
 #[derive(Debug, thiserror::Error)]
 enum HandleClusterUpdateError {
+    #[error("Failed to connect to the cluster database")]
+    Connect(#[source] anyhow::Error),
     #[error("Failed to fetch cluster info")]
     GetClusterInfo(#[source] anyhow::Error),
     #[error("Failed to notify on cluster update")]
     Notify(#[source] anyhow::Error),
+    #[error("Failed to receive cluster notification")]
+    RecvNotification(#[source] anyhow::Error),
 }
 
 impl HandleClusterUpdateError {
     fn stage(&self) -> &'static str {
         match self {
+            Self::Connect(_) => "connect",
             Self::GetClusterInfo(_) => "get_cluster_info",
             Self::Notify(_) => "notify",
+            Self::RecvNotification(_) => "recv_notification",
         }
     }
+
+    /// Logs the failure and records a failure metric.
+    fn report(&self) {
+        let stage = self.stage();
+        tracing::warn!(stage, error = ?self, "Cluster update failed");
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(ClusterUpdateFailureMetric { stage });
+        });
+    }
+
+    /// Logs the failure, records a failure metric, and backs off before the
+    /// caller's next retry.
+    async fn report_and_backoff(&self) {
+        self.report();
+        tokio::time::sleep(Duration::from_millis(1000)).await;
+    }
 }
+
+/// Default upper bound on how long to wait before re-polling cluster info.
+pub(crate) const DEFAULT_POLL_INTERVAL: Duration = Duration::from_secs(3);
 
 /// Client for querying cluster information from the database.
 pub struct NodeDiscovery {
     max_age: Duration,
+    poll_interval: Duration,
+    liveness_interval: Duration,
     pool: PgPool,
     listener: PgListener,
     prev_followers: BTreeSet<String>,
@@ -98,6 +130,7 @@ pub struct NodeDiscovery {
     notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     sender: watch::Sender<ClusterInfo>,
     pub(crate) receiver: watch::Receiver<ClusterInfo>,
+    last_metric_at: Option<Instant>,
 }
 
 impl NodeDiscovery {
@@ -110,6 +143,22 @@ impl NodeDiscovery {
     pub async fn connect(
         connection_string: &str,
         max_age: Duration,
+        poll_interval: Duration,
+        notifier: Option<Box<dyn ClusterUpdateNotifier>>,
+    ) -> Result<Self> {
+        Self::try_connect(connection_string, max_age, poll_interval, notifier)
+            .await
+            .map_err(|error| {
+                let error = HandleClusterUpdateError::Connect(error);
+                error.report();
+                anyhow::Error::new(error)
+            })
+    }
+
+    async fn try_connect(
+        connection_string: &str,
+        max_age: Duration,
+        poll_interval: Duration,
         notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     ) -> Result<Self> {
         tracing::info!("Connecting to database.");
@@ -129,6 +178,8 @@ impl NodeDiscovery {
 
         Ok(Self {
             max_age,
+            poll_interval,
+            liveness_interval: poll_interval * LIVENESS_POLL_MULTIPLIER,
             pool,
             listener,
             prev_followers: BTreeSet::new(),
@@ -136,6 +187,7 @@ impl NodeDiscovery {
             notifier,
             sender,
             receiver,
+            last_metric_at: None,
         })
     }
 
@@ -196,17 +248,13 @@ impl NodeDiscovery {
         let handle = tokio::spawn(async move {
             loop {
                 if let Err(error) = self.handle_cluster_update().await {
-                    let stage = error.stage();
-
-                    tracing::warn!(stage, ?error, "Cluster update failed");
-                    sov_metrics::track_metrics(|tracker| {
-                        tracker.submit(ClusterUpdateFailureMetric { stage });
-                    });
-                    tokio::time::sleep(Duration::from_millis(1000)).await;
+                    error.report_and_backoff().await;
                 }
 
-                // Wait for at least one notification.
-                self.listener.recv().await?;
+                // Wait for the next change signal, or re-poll after poll_interval.
+                if let Err(error) = self.recv_notification().await {
+                    error.report_and_backoff().await;
+                }
 
                 // Drain any additional pending notifications.
                 while self.listener.next_buffered().is_some() {}
@@ -214,6 +262,37 @@ impl NodeDiscovery {
         });
 
         NodeDiscoveryTask { receiver, handle }
+    }
+
+    /// Waits once for the next cluster change signal before returning to the
+    /// caller's loop, which always re-polls cluster info.
+    async fn recv_notification(&mut self) -> Result<(), HandleClusterUpdateError> {
+        let poll_interval = self.poll_interval;
+        match tokio::time::timeout(poll_interval, self.listener.try_recv()).await {
+            // A notification arrived — re-poll.
+            Ok(Ok(Some(_))) => {}
+            // The listener connection dropped and was re-established. Any
+            // notifications sent before LISTEN was restored may have been lost,
+            // so re-poll cluster info immediately instead of waiting for the
+            // next poll interval.
+            Ok(Ok(None)) => {
+                tracing::debug!(
+                    "Cluster notification listener reconnected after connection loss, re-polling"
+                );
+            }
+            // No notification arrived within `poll_interval`. This is expected
+            // when the cluster is quiet; we re-poll anyway to bound staleness.
+            Err(_) => {
+                tracing::debug!(
+                    ?poll_interval,
+                    "No cluster notification received within the poll interval, re-polling"
+                );
+            }
+            Ok(Err(error)) => {
+                return Err(HandleClusterUpdateError::RecvNotification(error.into()));
+            }
+        }
+        Ok(())
     }
 
     async fn handle_cluster_update(&mut self) -> Result<(), HandleClusterUpdateError> {
@@ -227,41 +306,63 @@ impl NodeDiscovery {
 
         let membership_changed = self.prev_followers != followers;
         let leader_changed = self.prev_leader_id != leader_id;
+        let cluster_changed = membership_changed || leader_changed;
 
-        tracing::trace!(info = ?info, membership_changed, leader_changed, "Last cluster info");
+        // Liveness is keyed off wall-clock time, not the wake-up source, so a
+        // chatty cluster (frequent NOTIFY traffic) still emits periodic samples
+        // and missing-sample alerts only fire if the polling task actually
+        // stops making progress.
+        let liveness_due = self
+            .last_metric_at
+            .is_none_or(|t| t.elapsed() >= self.liveness_interval);
 
-        if !(membership_changed || leader_changed) {
+        if !(cluster_changed || liveness_due) {
             return Ok(());
         }
 
-        // Log membership changes
-        for node_id in followers.difference(&self.prev_followers) {
-            tracing::info!(node_id, "Node joined the followers");
-        }
-        for node_id in self.prev_followers.difference(&followers) {
-            tracing::info!(node_id, "Node left the followers");
+        tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
+
+        let update_metric = ClusterUpdateMetric {
+            current_leader: leader_id.clone(),
+            followers: followers.iter().cloned().collect(),
+            cluster_changed,
+        };
+
+        if cluster_changed {
+            // Log membership changes
+            for node_id in followers.difference(&self.prev_followers) {
+                tracing::info!(node_id, "Node joined the followers");
+            }
+            for node_id in self.prev_followers.difference(&followers) {
+                tracing::info!(node_id, "Node left the followers");
+            }
+
+            // Log leader change
+            if leader_changed {
+                tracing::info!(
+                    old_leader = ?self.prev_leader_id,
+                    new_leader = ?leader_id,
+                    "Leader changed"
+                );
+            }
+
+            // Notify watchers that the cluster was updated.
+            if let Some(notifier) = &mut self.notifier {
+                notifier
+                    .on_cluster_update(&info)
+                    .await
+                    .map_err(HandleClusterUpdateError::Notify)?;
+            }
+
+            self.prev_followers = followers;
+            self.prev_leader_id = leader_id;
+            let _ = self.sender.send(info);
         }
 
-        // Log leader change
-        if leader_changed {
-            tracing::info!(
-                old_leader = ?self.prev_leader_id,
-                new_leader = ?leader_id,
-                "Leader changed"
-            );
-        }
-
-        // Notify watchers that the cluster was updated.
-        if let Some(notifier) = &mut self.notifier {
-            notifier
-                .on_cluster_update(&info)
-                .await
-                .map_err(HandleClusterUpdateError::Notify)?;
-        }
-
-        self.prev_followers = followers;
-        self.prev_leader_id = leader_id;
-        let _ = self.sender.send(info);
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(update_metric);
+        });
+        self.last_metric_at = Some(Instant::now());
 
         Ok(())
     }

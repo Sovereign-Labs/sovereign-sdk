@@ -1,3 +1,4 @@
+use anyhow::Context as _;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{Runtime, Spec};
 use sov_rollup_interface::node::da::DaService;
@@ -59,7 +60,13 @@ where
         // Now that we're not locking on the sequencer state anymore, we can replay all the batches.
 
         let node_state_root = tracing::trace_span!("root_hash")
-            .in_scope(|| info.storage.get_root_hash(info.slot_number))?;
+            .in_scope(|| info.storage.get_root_hash(info.slot_number))
+            .with_context(|| {
+                format!(
+                    "missing node state root for committed slot {}",
+                    info.slot_number
+                )
+            })?;
 
         // Repeatedly fetch all completed batches from the database that haven't yet been played on this sequencer and replay them
         let mut unprocessed_proofs = BTreeMap::new();

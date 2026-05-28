@@ -89,7 +89,6 @@ pub fn default_rust_log_value() -> String {
         "reqwest=info",
         "tungstenite=info",
         "hyper=info",
-        "jmt=info",
         "rustls=info",
         "jsonrpsee-server=info",
         "jsonrpsee-client=info",

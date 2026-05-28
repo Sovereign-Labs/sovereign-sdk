@@ -77,7 +77,7 @@ where
         });
         let (state_sender, _rec) =
             watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-                StateCheckpoint::new(storage, &runtime.kernel(), None),
+                StateCheckpoint::new(storage, &runtime.kernel()),
             )));
         let tx_status_manager = TxStatusManager::default();
 
@@ -161,7 +161,7 @@ where
     fn get_tx_hash(&self, tx: &FullyBakedTx, storage: S::Storage) -> TxHash {
         let mut runtime = R::default();
 
-        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
         let mut tx_scratchpad = checkpoint.to_working_set_unmetered();
 
         match R::Auth::authenticate(tx, &mut tx_scratchpad) {
