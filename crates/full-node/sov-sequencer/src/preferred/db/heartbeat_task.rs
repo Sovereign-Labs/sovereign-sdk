@@ -105,7 +105,7 @@ impl HeartBeatTask {
 
         match tokio::time::timeout(
             SHUTDOWN_DEREGISTER_TIMEOUT,
-            self.backend.delete_node_registration(),
+            self.backend.deregister_node_on_shutdown(),
         )
         .await
         {
@@ -135,7 +135,7 @@ impl HeartBeatTask {
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        info!("Shutdown signal received, stopping heartbeat task and removing registration");
+                        info!("Shutdown signal received, stopping heartbeat task and deregistering node");
                         self.deregister_on_shutdown().await;
                         return;
                     }
@@ -181,7 +181,7 @@ impl HeartBeatTask {
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        info!("Shutdown signal received, stopping election task.");
+                        info!("Shutdown signal received, stopping election task and deregistering node.");
                         self.deregister_on_shutdown().await;
                         return;
                     }
@@ -192,6 +192,10 @@ impl HeartBeatTask {
                                     node_id = %self.node_id,
                                     "Replica acquired leadership! Exiting to restart as leader."
                                 );
+                                // Intentionally no `deregister_on_shutdown` here: this node
+                                // will restart as leader with the same node_id and re-UPSERT
+                                // the same row, so we want the registration to persist across
+                                // the restart instead of being briefly deleted and re-inserted.
                                 let _ = self.shutdown_sender.send(());
                                 break;
                             }
@@ -227,7 +231,7 @@ impl HeartBeatTask {
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        info!("Shutdown signal received, stopping registration task.");
+                        info!("Shutdown signal received, stopping registration task and deregistering node.");
                         self.deregister_on_shutdown().await;
                         return;
                     }

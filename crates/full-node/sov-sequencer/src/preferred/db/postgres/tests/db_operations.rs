@@ -353,7 +353,7 @@ async fn test_retry_sensitive_writes_are_idempotent() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_delete_node_registration_removes_only_target() {
+async fn test_shutdown_deregistration_removes_only_target() {
     let Some(postgres) = setup_test_postgres().await else {
         return;
     };
@@ -375,7 +375,7 @@ async fn test_delete_node_registration_removes_only_target() {
         "Both replicas should be registered after their heartbeats."
     );
 
-    alice.backend.delete_node_registration().await.unwrap();
+    alice.backend.deregister_node_on_shutdown().await.unwrap();
     assert_eq!(
         count_nodes(&alice).await,
         1,
@@ -391,7 +391,7 @@ async fn test_delete_node_registration_removes_only_target() {
     );
 
     // Idempotent: deleting an already-absent row is a no-op.
-    alice.backend.delete_node_registration().await.unwrap();
+    alice.backend.deregister_node_on_shutdown().await.unwrap();
     assert_eq!(
         count_nodes(&alice).await,
         1,

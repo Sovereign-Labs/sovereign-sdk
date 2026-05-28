@@ -269,3 +269,94 @@ async fn test_leader_grace_period() {
     );
     assert_eq!(result.unwrap().node_id, "node_2");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_shutdown_deregistration_clears_leader_before_removing_node() {
+    let Some(postgres) = setup_test_postgres().await else {
+        return;
+    };
+
+    let db_1 = DB::new(
+        &postgres,
+        String::from("node_1"),
+        ConfiguredNodeRole::Leader,
+    )
+    .await;
+    let db_2 = DB::new(
+        &postgres,
+        String::from("node_2"),
+        ConfiguredNodeRole::Replica,
+    )
+    .await;
+
+    db_1.maybe_update_leader().await.unwrap();
+    assert!(db_2.maybe_update_leader().await.is_none());
+
+    db_1.backend.deregister_node_on_shutdown().await.unwrap();
+
+    assert_eq!(db_2.get_sequencer_leader().await.unwrap(), None);
+    assert!(!node_exists(&db_2, "node_1").await);
+    assert!(node_exists(&db_2, "node_2").await);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_shutdown_deregistration_keeps_other_leader() {
+    let Some(postgres) = setup_test_postgres().await else {
+        return;
+    };
+
+    let leader = DB::new(
+        &postgres,
+        String::from("leader"),
+        ConfiguredNodeRole::Leader,
+    )
+    .await;
+    let replica = DB::new(
+        &postgres,
+        String::from("replica"),
+        ConfiguredNodeRole::Replica,
+    )
+    .await;
+
+    leader.maybe_update_leader().await.unwrap();
+    assert!(replica.maybe_update_leader().await.is_none());
+
+    replica.backend.deregister_node_on_shutdown().await.unwrap();
+
+    assert_eq!(
+        leader.get_sequencer_leader().await.unwrap(),
+        Some(String::from("leader"))
+    );
+    assert!(node_exists(&leader, "leader").await);
+    assert!(!node_exists(&leader, "replica").await);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_shutdown_deregistration_is_idempotent() {
+    let Some(postgres) = setup_test_postgres().await else {
+        return;
+    };
+
+    let db = DB::new(
+        &postgres,
+        String::from("node_1"),
+        ConfiguredNodeRole::Leader,
+    )
+    .await;
+
+    db.maybe_update_leader().await.unwrap();
+
+    db.backend.deregister_node_on_shutdown().await.unwrap();
+    db.backend.deregister_node_on_shutdown().await.unwrap();
+
+    assert_eq!(db.get_sequencer_leader().await.unwrap(), None);
+    assert!(!node_exists(&db, "node_1").await);
+}
+
+async fn node_exists(db: &DB, node_id: &str) -> bool {
+    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM nodes WHERE node_id = $1)")
+        .bind(node_id)
+        .fetch_one(&db.backend.pool)
+        .await
+        .unwrap()
+}

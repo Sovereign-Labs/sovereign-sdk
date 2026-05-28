@@ -348,31 +348,31 @@ impl PostgresBackend {
         Ok(())
     }
 
-    /// Deletes this node's row from the `nodes` table.
-    ///
-    /// Used during graceful shutdown to remove the node from discovery immediately,
-    /// rather than waiting for its heartbeat to age out via the `last_updated`
-    /// staleness filter. The existing `notify_nodes_changes` trigger propagates the
-    /// DELETE to `node_discovery` subscribers, so departure is observed in real time.
-    ///
-    /// Uses a deliberately short retry budget (2 retries, ~110ms total of sleeps)
-    /// rather than the shared `self.backoff_policy` so a DB outage cannot stall
-    /// graceful shutdown. The staleness filter in node discovery is the backstop
-    /// when this call ultimately fails.
-    pub(crate) async fn delete_node_registration(&self) -> anyhow::Result<()> {
-        let shutdown_backoff = ExponentialBuilder::default()
-            .with_min_delay(Duration::from_millis(10))
-            .with_max_delay(Duration::from_millis(100))
-            .with_factor(10.0)
-            .with_max_times(2);
-
+    pub(crate) async fn deregister_node_on_shutdown(&self) -> anyhow::Result<()> {
         run_with_retries!(
-            &shutdown_backoff,
-            sqlx::query("DELETE FROM nodes WHERE node_id = $1")
-                .bind(&self.node_id)
-                .execute(&self.pool),
-            "postgres_db_backend_delete_node_registration"
-        )?;
+            &self.backoff_policy,
+            self.deregister_node_on_shutdown_in_tx(),
+            "postgres_db_backend_deregister_node_on_shutdown"
+        )
+    }
+
+    async fn deregister_node_on_shutdown_in_tx(&self) -> anyhow::Result<()> {
+        let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
+
+        sqlx::query(
+            "DELETE FROM sequencer_leader
+             WHERE singleton = 1 AND node_id = $1",
+        )
+        .bind(&self.node_id)
+        .execute(&mut *tx)
+        .await?;
+
+        sqlx::query("DELETE FROM nodes WHERE node_id = $1")
+            .bind(&self.node_id)
+            .execute(&mut *tx)
+            .await?;
+
+        tx.commit().await?;
         Ok(())
     }
 
