@@ -36,6 +36,7 @@ use sov_state::Storage;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
 use std::sync::Arc;
+use std::time::Duration;
 pub(crate) use sync_state::*;
 use tokio::sync::broadcast;
 use tokio::sync::{mpsc, oneshot, watch};
@@ -195,9 +196,11 @@ where
 
     let rate_limiter = SovRateLimiter::new(
         seq_config.sequencer_kind_config.rate_limiter.clone(),
-        seq_config
-            .sequencer_kind_config
-            .batch_execution_time_limit_millis,
+        Duration::from_millis(
+            seq_config
+                .sequencer_kind_config
+                .batch_execution_time_limit_millis,
+        ),
         seq_config.max_batch_size_bytes,
     );
 

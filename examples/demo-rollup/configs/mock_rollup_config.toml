@@ -125,10 +125,15 @@ ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintai
 
 
 # [sequencer.preferred.rate_limiter] # Setting related to rate limiter.
-# max_nb_of_concurrent_users_in_rate_limiter = 100000 # Limit on how many concurrent users the rate limiter can handle.
+# max_nb_of_concurrent_users_in_rate_limiter = 100000 # The cache size for the rate limiter.
 # max_requests_per_second = 10000 # Limit on requests per second.
-# address_custom_limits = [] 
-# ip_custom_limits = []
+# Per-address overrides; each entry is [rollup_address, limits].
+# address_custom_limits = [["sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf", { resources_per_bucket = 50, refill_rate = 10 }]]
+# Per-network rate limits; each entry is [network, limits]. Accepts CIDR ("10.0.0.0/8") or a bare IP ("192.168.1.5", treated as a host network).
+# ip_custom_limits = [
+#     ["10.0.0.0/8", { resources_per_bucket = 10, refill_rate = 2 }],
+#     ["192.168.1.5", { resources_per_bucket = 8, refill_rate = 2 }],
+# ]
 # [sequencer.preferred.rate_limiter.default_limits]
 # resources_per_bucket = 20 # The resources allocated per user per rate-limiting bucket, defined in units of 1/1000th of a full batch. E.g. resources_per_bucket = 10 would mean each bucket allows the user to use 1% of a full batch capacity.
 # refill_rate = 5 # The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.
