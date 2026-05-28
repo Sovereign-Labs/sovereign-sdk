@@ -348,6 +348,34 @@ impl PostgresBackend {
         Ok(())
     }
 
+    /// Deletes this node's row from the `nodes` table.
+    ///
+    /// Used during graceful shutdown to remove the node from discovery immediately,
+    /// rather than waiting for its heartbeat to age out via the `last_updated`
+    /// staleness filter. The existing `notify_nodes_changes` trigger propagates the
+    /// DELETE to `node_discovery` subscribers, so departure is observed in real time.
+    ///
+    /// Uses a deliberately short retry budget (2 retries, ~110ms total of sleeps)
+    /// rather than the shared `self.backoff_policy` so a DB outage cannot stall
+    /// graceful shutdown. The staleness filter in node discovery is the backstop
+    /// when this call ultimately fails.
+    pub(crate) async fn delete_node_registration(&self) -> anyhow::Result<()> {
+        let shutdown_backoff = ExponentialBuilder::default()
+            .with_min_delay(Duration::from_millis(10))
+            .with_max_delay(Duration::from_millis(100))
+            .with_factor(10.0)
+            .with_max_times(2);
+
+        run_with_retries!(
+            &shutdown_backoff,
+            sqlx::query("DELETE FROM nodes WHERE node_id = $1")
+                .bind(&self.node_id)
+                .execute(&self.pool),
+            "postgres_db_backend_delete_node_registration"
+        )?;
+        Ok(())
+    }
+
     async fn prune_inner(
         &self,
         prune_up_to_including: SequenceNumber,

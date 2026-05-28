@@ -352,6 +352,68 @@ async fn test_retry_sensitive_writes_are_idempotent() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_delete_node_registration_removes_only_target() {
+    let Some(postgres) = setup_test_postgres().await else {
+        return;
+    };
+
+    // Two replicas registered side-by-side; only the targeted row should be removed.
+    let alice = DB::new(
+        &postgres,
+        String::from("alice"),
+        ConfiguredNodeRole::Replica,
+    )
+    .await;
+    let bob = DB::new(&postgres, String::from("bob"), ConfiguredNodeRole::Replica).await;
+
+    alice.backend.heartbeat(None).await.unwrap();
+    bob.backend.heartbeat(None).await.unwrap();
+    assert_eq!(
+        count_nodes(&alice).await,
+        2,
+        "Both replicas should be registered after their heartbeats."
+    );
+
+    alice.backend.delete_node_registration().await.unwrap();
+    assert_eq!(
+        count_nodes(&alice).await,
+        1,
+        "Only one row should remain after alice deregisters."
+    );
+    assert!(
+        !node_exists(&alice, "alice").await,
+        "Alice's row should be removed."
+    );
+    assert!(
+        node_exists(&alice, "bob").await,
+        "Bob's row should be untouched."
+    );
+
+    // Idempotent: deleting an already-absent row is a no-op.
+    alice.backend.delete_node_registration().await.unwrap();
+    assert_eq!(
+        count_nodes(&alice).await,
+        1,
+        "Second delete should be a no-op."
+    );
+}
+
+async fn count_nodes(db: &DB) -> i64 {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM nodes")
+        .fetch_one(&db.backend.pool)
+        .await
+        .unwrap()
+}
+
+async fn node_exists(db: &DB, node_id: &str) -> bool {
+    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM nodes WHERE node_id = $1)")
+        .bind(node_id)
+        .fetch_one(&db.backend.pool)
+        .await
+        .unwrap()
+}
+
 async fn count_events(db: &DB, sequence_number: SequenceNumber, event_type: &str) -> i64 {
     sqlx::query_scalar(
         "SELECT COUNT(*)

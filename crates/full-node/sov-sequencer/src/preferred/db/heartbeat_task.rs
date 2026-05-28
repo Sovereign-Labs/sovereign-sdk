@@ -92,6 +92,37 @@ impl HeartBeatTask {
         Ok(())
     }
 
+    // Best-effort: deletes this node's row from the `nodes` table on graceful shutdown
+    // so discovery learns of its departure immediately instead of waiting for the
+    // `last_updated` staleness filter to expire. Errors and timeouts are logged, never
+    // propagated — the task is already exiting and the staleness filter is the backstop
+    // for cases where this can't run (SIGKILL, OOM, DB unreachable, etc.).
+    //
+    // Hard-bounded by `SHUTDOWN_DEREGISTER_TIMEOUT` so a stalled DB connection cannot
+    // delay graceful shutdown, regardless of the inner retry budget.
+    async fn deregister_on_shutdown(&self) {
+        const SHUTDOWN_DEREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
+
+        match tokio::time::timeout(
+            SHUTDOWN_DEREGISTER_TIMEOUT,
+            self.backend.delete_node_registration(),
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => warn!(
+                node_id = %self.node_id,
+                error = ?e,
+                "Failed to delete node registration on shutdown; row will age out via staleness filter."
+            ),
+            Err(_) => warn!(
+                node_id = %self.node_id,
+                timeout_ms = SHUTDOWN_DEREGISTER_TIMEOUT.as_millis() as u64,
+                "Timed out deleting node registration on shutdown; row will age out via staleness filter."
+            ),
+        }
+    }
+
     // Spawns a task for the current leader to maintain leadership.
     //
     // Periodically refreshes leadership. If leadership is lost or the database
@@ -104,7 +135,8 @@ impl HeartBeatTask {
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        info!("Shutdown signal received, stopping heartbeat task");
+                        info!("Shutdown signal received, stopping heartbeat task and removing registration");
+                        self.deregister_on_shutdown().await;
                         return;
                     }
                     FutureOrShutdownOutput::Output(_) => {
@@ -150,6 +182,7 @@ impl HeartBeatTask {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
                         info!("Shutdown signal received, stopping election task.");
+                        self.deregister_on_shutdown().await;
                         return;
                     }
                     FutureOrShutdownOutput::Output(_) => {
@@ -195,6 +228,7 @@ impl HeartBeatTask {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
                         info!("Shutdown signal received, stopping registration task.");
+                        self.deregister_on_shutdown().await;
                         return;
                     }
                     FutureOrShutdownOutput::Output(_) => match self.register_node().await {
