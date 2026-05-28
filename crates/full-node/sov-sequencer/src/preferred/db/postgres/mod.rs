@@ -367,14 +367,6 @@ impl PostgresBackend {
     async fn deregister_node_on_shutdown_in_tx(&self) -> anyhow::Result<()> {
         let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
 
-        sqlx::query(
-            "DELETE FROM sequencer_leader
-             WHERE singleton = 1 AND node_id = $1",
-        )
-        .bind(&self.node_id)
-        .execute(&mut *tx)
-        .await?;
-
         sqlx::query("DELETE FROM nodes WHERE node_id = $1")
             .bind(&self.node_id)
             .execute(&mut *tx)

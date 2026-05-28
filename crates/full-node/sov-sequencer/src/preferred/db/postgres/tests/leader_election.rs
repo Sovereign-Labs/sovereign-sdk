@@ -271,7 +271,7 @@ async fn test_leader_grace_period() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_shutdown_deregistration_clears_leader_before_removing_node() {
+async fn test_shutdown_deregistration_preserves_leader() {
     let Some(postgres) = setup_test_postgres().await else {
         return;
     };
@@ -294,7 +294,10 @@ async fn test_shutdown_deregistration_clears_leader_before_removing_node() {
 
     db_1.backend.deregister_node_on_shutdown().await.unwrap();
 
-    assert_eq!(db_2.get_sequencer_leader().await.unwrap(), None);
+    assert_eq!(
+        db_2.get_sequencer_leader().await.unwrap(),
+        Some(String::from("node_1"))
+    );
     assert!(!node_exists(&db_2, "node_1").await);
     assert!(node_exists(&db_2, "node_2").await);
 }
@@ -349,7 +352,10 @@ async fn test_shutdown_deregistration_is_idempotent() {
     db.backend.deregister_node_on_shutdown().await.unwrap();
     db.backend.deregister_node_on_shutdown().await.unwrap();
 
-    assert_eq!(db.get_sequencer_leader().await.unwrap(), None);
+    assert_eq!(
+        db.get_sequencer_leader().await.unwrap(),
+        Some(String::from("node_1"))
+    );
     assert!(!node_exists(&db, "node_1").await);
 }
 
