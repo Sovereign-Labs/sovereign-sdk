@@ -67,6 +67,7 @@ where
             .get_signer()
             .await
             .context("Sequencer must have DaService configured with submit support")?;
+        let approximate_block_time = self.da.get_approximate_block_time().await;
 
         // Early check: verify that this node's DA signer matches the preferred
         // sequencer registered in the runtime.
@@ -180,6 +181,7 @@ where
             cached_txs.write_handle(),
             cache_warm_up_executor,
             start_replica_task_notifier,
+            approximate_block_time,
         );
 
         let test_only_state_update_notification_receiver = synchronized_state
