@@ -30,6 +30,9 @@ export type SolanaOffchainSigningPayloadV0<RuntimeCall> = Omit<
   "address_override"
 > & {
   chain_name: string;
+  /**
+   * Message format version. Must be 0 for V0 payloads.
+   */
   version: 0;
   /**
    * Signer-declared address override.
@@ -44,8 +47,7 @@ export type SolanaOffchainSigningPayloadV1<
 > = Omit<SolanaOffchainSigningPayloadV0<RuntimeCall>, "version"> & {
   multisig_id: MultisigId;
   /**
-   * Signer-declared address override.
-   * See `AuthorizationData::address_override` (Rust) for routing semantics.
+   * Message format version. Must be 1 for V1 payloads.
    */
   version: 1;
 };
