@@ -349,8 +349,16 @@ impl PostgresBackend {
     }
 
     pub(crate) async fn deregister_node_on_shutdown(&self) -> anyhow::Result<()> {
+        // Deliberately tight: graceful shutdown must not stall on a slow DB.
+        // The staleness filter in node discovery is the backstop if we fail.
+        let shutdown_backoff = ExponentialBuilder::default()
+            .with_min_delay(Duration::from_millis(10))
+            .with_max_delay(Duration::from_millis(100))
+            .with_factor(10.0)
+            .with_max_times(2);
+
         run_with_retries!(
-            &self.backoff_policy,
+            &shutdown_backoff,
             self.deregister_node_on_shutdown_in_tx(),
             "postgres_db_backend_deregister_node_on_shutdown"
         )

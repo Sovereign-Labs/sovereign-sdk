@@ -539,6 +539,7 @@ impl SequencerRole {
 pub(crate) struct PreferredSequencerDb {
     backend: Option<Box<dyn DbBackend>>,
     shutdown_sender: watch::Sender<()>,
+    shutdown_receiver: watch::Receiver<()>,
 }
 
 impl PreferredSequencerDb {
@@ -593,10 +594,12 @@ impl PreferredSequencerDb {
                 )
             }
         };
+        let shutdown_receiver = shutdown_sender.subscribe();
         Ok((
             Self {
                 backend,
                 shutdown_sender,
+                shutdown_receiver,
             },
             role,
         ))
@@ -638,6 +641,19 @@ impl PreferredSequencerDb {
                     self_node_id,
                     operation,
                 }) => {
+                    // See `check_replica_err`: a ReplicaDisallowed observed after
+                    // shutdown was signaled is the expected aftermath of leader
+                    // deregistration, not a genuine leadership loss.
+                    if self.shutdown_receiver.has_changed().unwrap_or(true) {
+                        tracing::debug!(
+                            %self_node_id,
+                            %operation,
+                            "Initial DB read rejected after leader deregistration during graceful shutdown.",
+                        );
+                        return Err(anyhow::anyhow!(
+                            "Initial DB read rejected during shutdown (operation: {operation})"
+                        ));
+                    }
                     tracing::error!(
                         %self_node_id,
                         %operation,
@@ -724,6 +740,20 @@ impl PreferredSequencerDb {
                 self_node_id,
                 operation,
             } => {
+                // During graceful shutdown the leader heartbeat task deletes the
+                // `sequencer_leader` row, which causes any in-flight write guarded
+                // by `is_leader($node_id)` to land as `ReplicaDisallowed`. Treat
+                // this as an expected drain symptom instead of a leadership loss.
+                if self.shutdown_receiver.has_changed().unwrap_or(true) {
+                    tracing::debug!(
+                        %self_node_id,
+                        %operation,
+                        "DB write rejected after leader deregistration during graceful shutdown.",
+                    );
+                    return anyhow::anyhow!(
+                        "DB write rejected during shutdown (operation: {operation})"
+                    );
+                }
                 tracing::error!(
                     %self_node_id,
                     %operation,

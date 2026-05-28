@@ -92,14 +92,20 @@ impl HeartBeatTask {
         Ok(())
     }
 
-    // Best-effort: deletes this node's row from the `nodes` table on graceful shutdown
-    // so discovery learns of its departure immediately instead of waiting for the
-    // `last_updated` staleness filter to expire. Errors and timeouts are logged, never
-    // propagated — the task is already exiting and the staleness filter is the backstop
-    // for cases where this can't run (SIGKILL, OOM, DB unreachable, etc.).
+    // Best-effort: deletes this node's rows from `sequencer_leader` and `nodes` on
+    // graceful shutdown so replicas can take over without waiting for the staleness
+    // filter / leader timeout to expire. Errors and timeouts are logged, never
+    // propagated — the task is already exiting and the staleness filter is the
+    // backstop for cases where this can't run (SIGKILL, OOM, DB unreachable, etc.).
     //
     // Hard-bounded by `SHUTDOWN_DEREGISTER_TIMEOUT` so a stalled DB connection cannot
     // delay graceful shutdown, regardless of the inner retry budget.
+    //
+    // Deleting `sequencer_leader` opens a brief window where in-flight writes from
+    // the block executor (guarded by `is_leader($node_id)` in SQL) can land as
+    // `ReplicaDisallowed`. This is benign — the node is already shutting down — and
+    // `PreferredSequencerDb::check_replica_err` downgrades those errors during
+    // shutdown so they don't surface as "primary has become a replica".
     async fn deregister_on_shutdown(&self) {
         const SHUTDOWN_DEREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
 
