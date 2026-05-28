@@ -154,7 +154,7 @@ where
     ) -> Option<ProofOfBond<<Self as BondingProofService>::StateProof>> {
         let storage = self.storage_receiver.borrow().clone();
         let mut kernel = K::default();
-        let checkpoint = StateCheckpoint::new(storage, &kernel.kernel(), None);
+        let checkpoint = StateCheckpoint::new(storage, &kernel.kernel());
         let checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
 
         let mut state = ApiStateAccessor::<S>::new_with_true_slot_number_dangerous(

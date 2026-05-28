@@ -1,10 +1,8 @@
 //! Implementations of [`sov_rollup_interface::storage::HierarchicalStorageManager`].
-mod delta_reader_based;
 mod nomt_based;
 #[cfg(test)]
 pub mod tests;
 
-pub use delta_reader_based::*;
 pub(crate) use nomt_based::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 pub use nomt_based::{
     FlatStateDb, InitializableNativeNomtStorage, NomtChangeSet, NomtStorageManager,

@@ -21,6 +21,10 @@ serde = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 thiserror = { workspace = true }
 
+[dev-dependencies]
+sov-test-utils = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+
 
 [lints]
 workspace = true

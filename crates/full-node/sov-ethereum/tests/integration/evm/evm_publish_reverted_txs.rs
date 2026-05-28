@@ -1,6 +1,6 @@
 use alloy::signers::local::PrivateKeySigner;
 use alloy_provider::Provider;
-use sov_evm::execution_config::{EvmExecutionConfig, EvmExecutionConfigContents};
+use sov_evm::execution_config::EvmExecutionConfig;
 use sov_evm_test_utils::SimpleStorage;
 use sov_modules_api::ModuleExecutionConfig;
 
@@ -20,13 +20,12 @@ async fn do_revert_tx_test(preferred_sequencer_publish_reverted_txs: bool) -> an
     let temp_dir = tempfile::tempdir()?;
     let exec_config_path = temp_dir.path().join("evm_execution_config.json");
     let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
-    let exec_config_contents = EvmExecutionConfigContents {
+    let exec_config = EvmExecutionConfig {
         preferred_sequencer_publish_reverted_txs,
-        ..Default::default()
     };
     std::fs::write(
         &exec_config_path,
-        serde_json::to_string_pretty(&exec_config_contents)?,
+        serde_json::to_string_pretty(&exec_config)?,
     )?;
     <EvmExecutionConfig as ModuleExecutionConfig>::configure(&exec_config_path)
         .expect("configure EVM execution config");
@@ -42,7 +41,7 @@ async fn do_revert_tx_test(preferred_sequencer_publish_reverted_txs: bool) -> an
     assert_eq!(rpc_nonce_before, 0);
     assert_eq!(nonce, 1);
     assert_eq!(rpc_nonce_after_deploy, 1);
-    let exec_config: EvmExecutionConfigContents =
+    let exec_config: EvmExecutionConfig =
         serde_json::from_str(&std::fs::read_to_string(&exec_config_path)?)?;
     assert_eq!(
         exec_config.preferred_sequencer_publish_reverted_txs,

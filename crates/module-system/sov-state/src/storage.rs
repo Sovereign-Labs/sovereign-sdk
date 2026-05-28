@@ -4,7 +4,6 @@ use core::fmt;
 use std::fmt::Display;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use jmt::KeyHash;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 #[cfg(feature = "native")]
@@ -14,14 +13,11 @@ use sov_universal_wallet::UniversalWallet;
 
 use crate::codec::EncodeLike;
 use crate::namespaces::{ProvableCompileTimeNamespace, ProvableNamespace};
-use crate::pinned_cache::PinnedCache;
 #[cfg(feature = "native")]
 use crate::sequencer_state::MaybePresentValue;
 #[cfg(feature = "native")]
 use crate::{CompileTimeNamespace, Namespace};
-use crate::{
-    MerkleProofSpec, SparseMerkleProof, StateAccesses, StateItemDecoder, StorageRoot, Witness,
-};
+use crate::{StateAccesses, StateItemDecoder, Witness};
 
 pub use sov_db_types::val_hash_and_size_inner;
 pub use sov_db_types::Prefix;
@@ -336,7 +332,6 @@ pub trait Storage: Clone + core::fmt::Debug {
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
-        pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)>;
 
     /// Materializes changes from given [`Self::StateUpdate`] into [`Self::ChangeSet`].
@@ -399,20 +394,32 @@ pub trait NativeStorage: Storage {
     ) -> anyhow::Result<ProofOutput<Self>>;
 
     /// Get the *global* root hash of the tree at the requested version.
-    /// Returns an error if storage is empty or the requests version is not yet available.
-    fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root>;
+    ///
+    /// `version` is interpreted as a post-commit version: the returned root is the state
+    /// *after* the X-th commit was applied. Returns `Some(root)` iff a root has been committed
+    /// at `version`, else `None`.
+    ///
+    /// Note: [`Self::PRE_GENESIS_ROOT`] is a separately-managed sentinel for "before any commits";
+    /// it is not retrievable through this method. Callers that want a pre-genesis fallback should
+    /// use `.unwrap_or(Self::PRE_GENESIS_ROOT)`.
+    fn get_root_hash(&self, version: SlotNumber) -> Option<Self::Root>;
 
     /// Get the *global* root hash of the tree at the requested version.
-    /// Requested version won't be checked against latest version of this instance of the storage.
-    fn get_root_hash_unbound(&self, version: SlotNumber) -> anyhow::Result<Self::Root>;
+    ///
+    /// The requested version is not checked against the latest version of this instance.
+    /// Returns the root committed at the largest committed version `<= version`, or `None` if
+    /// no version `<= version` has been committed or it has been pruned. In particular,
+    /// requesting a version beyond the latest committed one yields the latest committed root,
+    /// not `None`.
+    fn get_root_hash_unbound(&self, version: SlotNumber) -> Option<Self::Root>;
 
-    /// Get a root hash at the latest version
-    fn get_latest_root_hash(&self) -> anyhow::Result<Self::Root> {
+    /// Get the root hash at the latest version.
+    fn get_latest_root_hash(&self) -> Option<Self::Root> {
         self.get_root_hash(self.latest_version())
     }
 
-    /// Get a root hash at the latest version
-    fn get_latest_root_hash_unbound(&self) -> anyhow::Result<Self::Root> {
+    /// Get the root hash at the latest version (unbound).
+    fn get_latest_root_hash_unbound(&self) -> Option<Self::Root> {
         self.get_root_hash_unbound(self.latest_version_unbound())
     }
     /// Get the latest committed value for the given key, regardless of the version number associated with this storage.
@@ -440,43 +447,4 @@ pub trait NativeStorage: Storage {
         prefix: SlotKey,
         cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>>;
-
-    /// Takes the pinned cache if one is present in this storage. See [`PinnedCache`] for more details.
-    ///
-    /// In the full node only, the pinned cache is passed from block to block through the storage manager.
-    /// On saving the previous block, the storage manager takes its pinned block; then when it creates the storage for the *first* child block,
-    /// that storage is passed along with it.
-    /// If a block has multiple children (i.e. the chain has a fork at some height), the pinned cache is only passed to the first child block to be created; other children have to rebuild it from db.
-    ///
-    /// Note that the sequencer passes the pinned cache directly between executors without this hack, so this method is only used in the full node.
-    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache>;
-}
-
-pub(crate) fn open_merkle_proof<S: MerkleProofSpec>(
-    state_root: StorageRoot<S>,
-    state_proof: StorageProof<SparseMerkleProof<S::Hasher>>,
-) -> anyhow::Result<(SlotKey, Option<SlotValue>)> {
-    let StorageProof {
-        key,
-        value,
-        proof,
-        namespace,
-    } = state_proof;
-    let key_hash = KeyHash::with::<S::Hasher>(key.as_ref());
-
-    // The proof leaves contain hash(combine(val_hash, val_len)).
-    // The outer hashing is handled by the verify method, so we need to pass combine(val_hash, val_len).
-    let val_hash_and_size = value
-        .as_ref()
-        .map(SlotValue::combine_val_hash_and_size::<S::Hasher>);
-
-    proof.inner().verify(
-        // We need to verify the proof against the correct root hash.
-        // Hence we match the key against its namespace
-        jmt::RootHash(state_root.namespace_root(namespace)),
-        key_hash,
-        val_hash_and_size,
-    )?;
-
-    Ok((key, value))
 }

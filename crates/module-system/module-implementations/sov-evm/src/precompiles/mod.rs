@@ -16,7 +16,7 @@ pub use bank_balance::{BankBalancePrecompile, BANK_BALANCE_PRECOMPILE_ADDRESS};
 pub use sequencing_timestamp::{
     SequencingTimestampPrecompile, SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
 };
-pub use traits::{EvmPrecompile, EvmPrecompileSet, NoCustomPrecompiles, __private};
+pub use traits::{EvmPrecompile, EvmPrecompileSet, NoCustomPrecompiles};
 
 /// Result type for Sovereign precompile execution.
 pub type PrecompileResult = Result<PrecompileOutput, PrecompileError>;

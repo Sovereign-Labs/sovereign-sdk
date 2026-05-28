@@ -20,11 +20,6 @@ threads-required = 3
 filter = 'not test(heavy_)'
 
 [[profile.default.overrides]]
-filter = 'package(sov-sequencer) & test(/pinned_cache::/)'
-priority = 90                                                        # try to run it first, so it doesn't add up at the end
-threads-required = 3
-
-[[profile.default.overrides]]
 filter = 'package(sov-sequencer) & test(/seq_behind_deferred_slots_count|test_no_crashes_on_resync|sequencer_back_pressure|heavy_blob_submission/)'
 test-group = 'heavy-sequencer-tests'
 priority = 85                                                        # Start long-running tests early to reduce tail latency

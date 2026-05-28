@@ -34,4 +34,3 @@ Once a proof for a given batch has been posted on chain, the batch is subjective
 - Batch: a group of 1 or more rollup transactions which are submitted as a single data blob on the DA chain.
 - Batch Header: A summary of a given batch, posted on the L1 alongside the transactions. Rollups may define this header
   to contain any relevant information, but may also choose to omit it entirely.
-- JMT: Jellyfish Merkle Tree - an optimized sparse merkle tree invented by Diem and used in many modern blockchains.

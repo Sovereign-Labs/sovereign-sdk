@@ -8,7 +8,7 @@ publish = false
 
 [dependencies]
 demo-stf = { path = "../../../stf", default-features = false }
-sp1-zkvm = "6.2.1"
+sp1-zkvm = "6.2.2"
 
 sov-mock-da = { path = "../../../../../crates/adapters/mock-da", default-features = false }
 sov-modules-api = { path = "../../../../../crates/module-system/sov-modules-api", default-features = false }

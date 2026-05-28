@@ -2,6 +2,7 @@ use std::num::NonZero;
 use std::sync::Arc;
 
 use crate::helpers::hash_stf::HashStf;
+use anyhow::Context;
 use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
@@ -399,7 +400,9 @@ where
             } => {
                 let (prover_storage, _ledger_state) =
                     storage_manager.create_state_after(&last_finalized_block_header)?;
-                let genesis_state_root = prover_storage.get_root_hash(SlotNumber::GENESIS)?;
+                let genesis_state_root = prover_storage
+                    .get_root_hash(SlotNumber::GENESIS)
+                    .context("genesis root must exist for an initialized rollup")?;
 
                 (prev_state_root, genesis_state_root)
             }

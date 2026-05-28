@@ -122,7 +122,11 @@ pub trait CodeCommitmentTrait:
     fn to_hash(&self) -> aggregated_proof::CodeCommitmentHash;
 
     /// Constructs the code commitment from its canonical hash.
-    fn from_hash(hash: aggregated_proof::CodeCommitmentHash) -> Self;
+    fn try_from_hash(
+        hash: aggregated_proof::CodeCommitmentHash,
+    ) -> Result<Self, aggregated_proof::CodeCommitmentDecodeError>
+    where
+        Self: Sized;
 }
 
 /// A Zk proof system capable of proving and verifying arbitrary Rust code

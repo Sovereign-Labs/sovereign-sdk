@@ -5,6 +5,8 @@ PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
                examples/demo-rollup/provers/sp1/guest-mock \
                examples/demo-rollup/provers/sp1/guest-aggregation-mock \
                examples/demo-rollup/provers/sp1/guest-celestia \
+               crates/bench/sp1-microbenches/guest-sha256 \
+               crates/bench/sp1-microbenches/guest-ed25519
 
 # Absolutely all dirs
 ALL_DIRS := $(PROVER_DIRS) \

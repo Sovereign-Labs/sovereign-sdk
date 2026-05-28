@@ -43,11 +43,8 @@ impl tracing::field::Visit for FieldVisitor {
 
 /// Initialize
 pub fn init_logging(provided_filter: Option<tracing_subscriber::filter::Targets>) {
-    let filter = provided_filter.unwrap_or(
-        tracing_subscriber::filter::Targets::new()
-            .with_default(Level::DEBUG)
-            .with_target("jmt", Level::WARN),
-    );
+    let filter = provided_filter
+        .unwrap_or(tracing_subscriber::filter::Targets::new().with_default(Level::DEBUG));
     Registry::default()
         .with(Risc0LogLayer.with_filter(filter))
         .init();

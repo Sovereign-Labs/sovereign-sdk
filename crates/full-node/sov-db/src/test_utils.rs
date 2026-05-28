@@ -4,34 +4,13 @@ use std::collections::HashSet;
 use std::sync::{Condvar, LazyLock, Mutex};
 use std::time::Duration;
 
-use jmt::{JellyfishMerkleTree, KeyHash, SimpleHasher};
 use rand::{Rng, SeedableRng};
-use rockbound::{SchemaBatch, SchemaValue};
-use sov_rollup_interface::common::SlotNumber;
 
+#[cfg(test)]
 use crate::accessory_db::AccessoryDb;
-use crate::namespaces::Namespace;
 use crate::schema::tables::ModuleAccessoryState;
-use crate::state_db::{JmtHandler, StateDb, StateTreeChanges};
-use crate::storage_manager::InitializableNativeStorage;
-
-/// Simple container for unlocking testing of NativeStorage without need of ProverStorage.
-#[derive(Debug, Clone)]
-pub struct TestNativeStorage {
-    #[allow(missing_docs)]
-    pub state: StateDb,
-    #[allow(missing_docs)]
-    pub accessory_db: AccessoryDb,
-}
-
-impl InitializableNativeStorage for TestNativeStorage {
-    fn new(db: StateDb, accessory_db: AccessoryDb) -> Self {
-        Self {
-            state: db,
-            accessory_db,
-        }
-    }
-}
+use rockbound::SchemaBatch;
+use sov_rollup_interface::common::SlotNumber;
 
 #[cfg(test)]
 #[allow(missing_docs)]
@@ -115,22 +94,6 @@ pub fn generate_more_random_bytes<R: Rng>(
         }
     }
     samples
-}
-
-/// Helper for building proper [`StateTreeChanges`]
-pub fn build_data_to_materialize<N: Namespace, H: SimpleHasher>(
-    jmt_handler: &JmtHandler<N>,
-    next_version: jmt::Version,
-    batch: Vec<(KeyHash, Option<SchemaValue>)>,
-) -> StateTreeChanges {
-    let jmt = JellyfishMerkleTree::<JmtHandler<N>, H>::new(jmt_handler);
-    let (_new_root, _update_proof, tree_update) =
-        jmt.put_value_set_with_proof(batch, next_version).unwrap();
-
-    StateTreeChanges {
-        original_write_values: tree_update.node_batch.values().clone(),
-        node_batch: tree_update.node_batch,
-    }
 }
 
 /// Describes how versions should be distributed across keys.
