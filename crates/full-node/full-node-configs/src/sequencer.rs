@@ -60,8 +60,8 @@ pub struct SequencerConfig<Address: Copy, Sc = SequencerKindConfig<Address>> {
     pub rollup_address: Address,
     /// The list of addresses that are allowed to perform admin operations on
     /// the sequencer.
-    // The custom "default" is equivalent to Serde's default, but
-    // without the bound `Address: Default`.
+    // Equivalent to a `Default::default()` call, but avoids the
+    // `Address: Default` bound that bare `#[serde(default)]` would impose.
     #[serde(default = "Vec::<Address>::new")]
     pub admin_addresses: Vec<Address>,
     /// Sequencer-type specific configuration.
@@ -425,7 +425,7 @@ pub struct Limits {
     pub resources_per_bucket: u64,
     /// The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.
     /// Values between 1 and 20 are recommended starting points.
-    /// Note: at small per-key request budgets this has little effect on the request-count dimension, which refills coarsely — when the per-millisecond request refill rounds down to zero the request count becomes a hard per-window cap rather than a smooth rate.
+    /// At small per-key request budgets the request-count dimension acts as a hard per-window cap rather than refilling smoothly.
     pub refill_rate: u64,
 }
 

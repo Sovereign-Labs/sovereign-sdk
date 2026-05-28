@@ -376,7 +376,7 @@
       "type": "object",
       "properties": {
         "refill_rate": {
-          "description": "The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.\nValues between 1 and 20 are recommended starting points.\nNote: at small per-key request budgets this has little effect on the request-count dimension, which refills coarsely — when the per-millisecond request refill rounds down to zero the request count becomes a hard per-window cap rather than a smooth rate.",
+          "description": "The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.\nValues between 1 and 20 are recommended starting points.\nAt small per-key request budgets the request-count dimension acts as a hard per-window cap rather than refilling smoothly.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0

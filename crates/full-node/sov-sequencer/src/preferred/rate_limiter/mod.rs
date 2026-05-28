@@ -891,4 +891,53 @@ mod tests {
         };
         assert_eq!(ip_net, "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap());
     }
+
+    #[test]
+    fn address_and_ip_throttlers_charge_independently() {
+        // Tight custom limits on both a specific address and an IP subnet, with a
+        // loose default. A single admission charges both throttlers, so either
+        // side can later reject — verified by exhausting one side at a time.
+        let limited_addr = test_addr(7);
+        let subnet: ipnet::IpNet = "10.0.0.0/24".parse().unwrap();
+        let tight = Limits {
+            resources_per_bucket: 1,
+            refill_rate: 0,
+        };
+        let loose = Limits {
+            resources_per_bucket: 1000,
+            refill_rate: 0,
+        };
+        let config = SovRateLimiterConfig {
+            max_requests_per_second: 1000,
+            max_nb_of_concurrent_users_in_rate_limiter: 1000,
+            default_limits: loose,
+            height_for_gas_limit_computation: RollupHeight::GENESIS,
+            address_custom_limits: vec![(limited_addr, tight)],
+            ip_custom_limits: vec![(subnet, tight)],
+        };
+        let mut rate_limiter =
+            SovRateLimiter::<TestSpec>::new(Some(config), Duration::from_millis(1000), 1_000_000);
+        let ip_in_subnet: IpAddr = "10.0.0.1".parse().unwrap();
+
+        // Both throttlers have budget; the admission charges both.
+        let token = rate_limiter.allow(ip_in_subnet, limited_addr).unwrap();
+        rate_limiter.update(token, one_request());
+
+        // Same custom address: address throttler is exhausted; the address-side
+        // rejects.
+        let err = rate_limiter.allow(ip_in_subnet, limited_addr).unwrap_err();
+        let ResourceLimitExceededError::Address { address, .. } = err else {
+            panic!("expected Address rejection, got {err:?}");
+        };
+        assert_eq!(address, limited_addr);
+
+        // Different address (loose default) but same subnet: the address-side is
+        // fresh, so the IP throttler is the one that rejects — proving it was
+        // charged by the first admission alongside the address throttler.
+        let err = rate_limiter.allow(ip_in_subnet, test_addr(8)).unwrap_err();
+        let ResourceLimitExceededError::Ip { ip_net, .. } = err else {
+            panic!("expected Ip rejection, got {err:?}");
+        };
+        assert_eq!(ip_net, subnet);
+    }
 }
