@@ -29,7 +29,6 @@ use crate::preferred::{AcceptTxError, PreferredBlobToReplay};
 use crate::{
     PreferredProofDataBytes, SequencerNotReadyDetails, SerializedProofWithDetailsBytes, TxHash,
 };
-use rand::Rng;
 use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
@@ -878,7 +877,7 @@ where
     // Takes the current rate limits and returns the next byte and execution-time rates, along with the offered rates.
     // This implements the P and I parts of a PID controller; this function is responsible for both updating the P term (every tick interval) and combining
     // it with the I term to get the current rate. (The I term is updated on each batch close.)
-    fn tick_rate_limiter(&mut self) -> (f64, f64, f64, f64) {
+    fn tick_rate_limiter(&mut self) -> (f64, f64, f64, f64, f64) {
         let minimum_tick_size = Duration::from_millis(10);
         let now = std::time::Instant::now();
         let time_since_last_tick = now.duration_since(self.inner.last_tick_time);
@@ -891,29 +890,39 @@ where
                     .current_tx_accept_rate_execution_time_micros_per_second,
                 self.inner.execution_time_offered_weighted_average.max(1.0)
                     / minimum_tick_size.as_secs_f64(),
+                self.inner
+                    .batch_execution_time_limit_micros
+                    .checked_div(20)
+                    .and_then(|x| x.checked_mul(19))
+                    .unwrap_or(0) as f64
+                    / self.inner.approximate_block_time.as_secs_f64(),
             );
         }
         let current_rate = self.inner.current_tx_accept_rate_bytes_per_second;
         let current_execution_time_rate = self
             .inner
             .current_tx_accept_rate_execution_time_micros_per_second;
+        let tick_count = time_since_last_tick.as_secs_f64() / minimum_tick_size.as_secs_f64();
+        let average_decay = 0.5_f64.powf(tick_count);
+        let current_sample_weight = 1.0 - average_decay;
 
         // Normalize for the time window. If it's actually been 120 ms since the last tick, divide by 100 /120 to get the average bytes over the current window.
         let normalized_bytes_since_last_tick = self.inner.bytes_offered_since_last_tick as f64
             * (minimum_tick_size.as_secs_f64() / time_since_last_tick.as_secs_f64());
         self.inner.bytes_offered_since_last_tick = 0;
-        self.inner.bytes_offered_weighted_average += normalized_bytes_since_last_tick as u64;
         self.inner.bytes_offered_weighted_average =
-            std::cmp::max(self.inner.bytes_offered_weighted_average / 2, 1);
+            (self.inner.bytes_offered_weighted_average as f64 * average_decay
+                + normalized_bytes_since_last_tick * current_sample_weight)
+                .max(1.0) as u64;
 
         let normalized_execution_time_since_last_tick =
             self.inner.execution_time_offered_since_last_tick
                 * (minimum_tick_size.as_secs_f64() / time_since_last_tick.as_secs_f64());
         self.inner.execution_time_offered_since_last_tick = 0.0;
-        self.inner.execution_time_offered_weighted_average +=
-            normalized_execution_time_since_last_tick;
         self.inner.execution_time_offered_weighted_average =
-            (self.inner.execution_time_offered_weighted_average / 2.0).max(1.0);
+            (self.inner.execution_time_offered_weighted_average * average_decay
+                + normalized_execution_time_since_last_tick * current_sample_weight)
+                .max(1.0);
 
         self.inner.last_tick_time = now;
 
@@ -931,7 +940,16 @@ where
         let target_rate = target_size / self.inner.approximate_block_time.as_secs_f64();
         let target_execution_time_rate =
             target_execution_time_micros / self.inner.approximate_block_time.as_secs_f64();
-        let elapsed = self.inner.batch_start_time.elapsed();
+        let offered_execution_time_rate =
+            self.inner.execution_time_offered_weighted_average / minimum_tick_size.as_secs_f64();
+        if offered_execution_time_rate <= target_execution_time_rate {
+            self.inner.execution_time_limit_bias = self.inner.execution_time_limit_bias.max(0.0);
+        }
+        let elapsed = if self.inner.executor.has_in_progress_batch() {
+            self.inner.batch_start_time.elapsed()
+        } else {
+            Duration::ZERO
+        };
         let remaining = if elapsed < self.inner.approximate_block_time {
             std::cmp::max(
                 self.inner.approximate_block_time - elapsed,
@@ -944,10 +962,10 @@ where
         let goal_rate = (target_size - self.inner.batch_size_tracker.current_batch_size as f64)
             .max(0.0)
             / remaining.as_secs_f64();
-        let goal_execution_time_rate = (target_execution_time_micros
-            - self.inner.batch_size_tracker.batch_execution_time_micros as f64)
-            .max(0.0)
-            / remaining.as_secs_f64();
+        // Execution time is noisy and can hit the hard cap abruptly. Avoid trying to
+        // spend/cut the remaining per-batch execution budget inside one batch; the batch-close
+        // bias handles sustained under/overfill without creating a boundary sawtooth.
+        let goal_execution_time_rate = target_execution_time_rate;
 
         // Slew limits (TODO, extract constants). We don't open the gates by more than 25% per of our total budget per second, and we don't close them by more than 100% per second.
         let rate_up_per_sec = target_rate * 0.25;
@@ -984,7 +1002,8 @@ where
             actual_next_rate,
             self.inner.bytes_offered_weighted_average as f64 / minimum_tick_size.as_secs_f64(),
             actual_next_execution_time_rate,
-            self.inner.execution_time_offered_weighted_average / minimum_tick_size.as_secs_f64(),
+            offered_execution_time_rate,
+            target_execution_time_rate,
         )
     }
 
@@ -1001,11 +1020,17 @@ where
             offered_bps,
             accept_execution_time_micros_per_second,
             offered_execution_time_micros_per_second,
+            target_execution_time_micros_per_second,
         ) = self.tick_rate_limiter();
         let accept_probability_batch_size = (accept_bps / offered_bps).clamp(0.0, 1.0);
-        let accept_probability_execution_time = (accept_execution_time_micros_per_second
-            / offered_execution_time_micros_per_second)
-            .clamp(0.0, 1.0);
+        let accept_probability_execution_time = if offered_execution_time_micros_per_second
+            <= target_execution_time_micros_per_second
+        {
+            1.0
+        } else {
+            (accept_execution_time_micros_per_second / offered_execution_time_micros_per_second)
+                .clamp(0.0, 1.0)
+        };
 
         // 2. Probability based on sync distance.
         //
@@ -1089,8 +1114,10 @@ where
             .allow(ip_and_credential.ip_addr, ip_and_credential.address)
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
 
-        // Probabilistically shed load based on sync distance.
-        if !rand::thread_rng().gen_bool(load_based_accept_probability) {
+        // Shape probabilistic load shedding into a smooth accept stream. Independent random draws
+        // create accepted-transaction clusters, which is especially noisy when accepted txs are
+        // slow and rejected txs are cheap.
+        if !inner.should_accept_load_shed_tx(load_based_accept_probability) {
             return Err(AcceptTxError::SequencerOverloaded503);
         }
 

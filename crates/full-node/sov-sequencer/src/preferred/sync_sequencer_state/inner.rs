@@ -116,6 +116,7 @@ where
     pub(crate) execution_time_offered_since_last_tick: f64,
     pub(crate) execution_time_offered_weighted_average: f64,
     pub(crate) current_tx_accept_rate_execution_time_micros_per_second: f64,
+    pub(crate) load_shed_rejection_debt: f64,
 }
 
 // We submit metrics when this guard is dropped.
@@ -787,14 +788,54 @@ where
 
         let target_execution_time_micros = target_execution_time_micros as f64;
         let target_rate = target_execution_time_micros / self.approximate_block_time.as_secs_f64();
-        let err_frac = (target_execution_time_micros
-            - self.batch_size_tracker.batch_execution_time_micros as f64)
+        let elapsed_secs = self
+            .batch_start_time
+            .elapsed()
+            .min(self.approximate_block_time)
+            .as_secs_f64();
+        let expected_execution_time_micros =
+            (target_rate * elapsed_secs).min(target_execution_time_micros);
+        let actual_execution_time_micros =
+            self.batch_size_tracker.batch_execution_time_micros as f64;
+        let err_frac = (expected_execution_time_micros - actual_execution_time_micros)
             / target_execution_time_micros;
-        let k_i = 0.1; // Tune this constant to make the bias evolve faster or slower. Faster will oscillate more
+        // Bias above the target rate should accumulate slowly because it can make the sequencer
+        // burn through finalized-slot headroom. Bias below the target can react faster to an
+        // over-full batch, which damps the hard-cap overshoot.
+        let k_i = if err_frac.is_sign_negative() {
+            0.2
+        } else {
+            0.02
+        };
         let next_bias = self.execution_time_limit_bias + k_i * err_frac * target_rate;
         let bias_min = -0.5 * target_rate;
-        let bias_max = 0.5 * target_rate;
+        let bias_max = 0.1 * target_rate;
         self.execution_time_limit_bias = next_bias.clamp(bias_min, bias_max);
+    }
+
+    fn reset_current_accept_rates_on_batch_close(&mut self) {
+        // The slew-limited rates can be near zero when a batch closes. A fresh batch has a fresh
+        // resource budget, so start it from the biased target rate instead of carrying the
+        // exhausted-batch rate forward.
+        let target_size = (self.batch_size_tracker.max_batch_size as u64)
+            .checked_div(20)
+            .and_then(|x| x.checked_mul(19))
+            .unwrap_or(0) as f64;
+        let target_rate = target_size / self.approximate_block_time.as_secs_f64();
+        self.current_tx_accept_rate_bytes_per_second =
+            (target_rate + self.size_limit_bias).max(0.0);
+
+        let Some(target_execution_time_micros) = self
+            .batch_execution_time_limit_micros
+            .checked_div(20)
+            .and_then(|x| x.checked_mul(19))
+        else {
+            return;
+        };
+        let target_execution_time_rate =
+            target_execution_time_micros as f64 / self.approximate_block_time.as_secs_f64();
+        self.current_tx_accept_rate_execution_time_micros_per_second =
+            (target_execution_time_rate + self.execution_time_limit_bias).max(0.0);
     }
 
     pub(crate) fn update_estimated_tx_execution_time_micros(&mut self, execution_time_micros: u64) {
@@ -813,6 +854,25 @@ where
             self.estimated_tx_execution_time_micros * 0.75 + execution_time_micros * 0.25;
     }
 
+    pub(crate) fn should_accept_load_shed_tx(&mut self, accept_probability: f64) -> bool {
+        let accept_probability = accept_probability.clamp(0.0, 1.0);
+        if accept_probability >= 1.0 {
+            self.load_shed_rejection_debt = 0.0;
+            return true;
+        }
+        if accept_probability <= 0.0 {
+            return false;
+        }
+
+        self.load_shed_rejection_debt += 1.0 - accept_probability;
+        if self.load_shed_rejection_debt >= 1.0 {
+            self.load_shed_rejection_debt -= 1.0;
+            false
+        } else {
+            true
+        }
+    }
+
     /// Closes the current batch.
     ///
     /// This should be called only when...
@@ -829,6 +889,7 @@ where
         self.update_size_limit_bias_on_batch_close();
         self.update_execution_time_limit_bias_on_batch_close();
         self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
+        self.reset_current_accept_rates_on_batch_close();
         let checkpoint = self
             .executor
             .checkpoint

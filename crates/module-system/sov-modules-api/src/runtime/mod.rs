@@ -141,9 +141,12 @@ pub trait Runtime<S: Spec>:
     /// The sequencer assigns a baseline probability of accepting each transaction given the current load.
     /// When load is low, the probability is `1`. As load increases, the probability decreases to 0 in increments of about .1.
     /// This function allows a modifier be applied to the probability given the priority of the transaction and the current acceptance probability.
-    fn accept_tx_probability(&self, priority: u32, current_baseline_acceptance_probability: f64) -> f64 {
+    fn accept_tx_probability(
+        &self,
+        priority: u32,
+        current_baseline_acceptance_probability: f64,
+    ) -> f64 {
         match priority {
-            0 => current_baseline_acceptance_probability * current_baseline_acceptance_probability,
             _ => current_baseline_acceptance_probability
         }
     }

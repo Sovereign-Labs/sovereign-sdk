@@ -244,6 +244,7 @@ where
         current_tx_accept_rate_execution_time_micros_per_second: batch_execution_time_limit_micros
             as f64
             / approximate_block_time.as_secs_f64(),
+        load_shed_rejection_debt: 0.0,
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
