@@ -175,9 +175,10 @@ fn calculate_limits<S: Spec>(
         .saturating_mul_by_scalar(limits.resources_per_bucket)
         .div_by_scalar(1000);
     // A non-zero rate must not silently round down to a zero request budget (which
-    // would reject all traffic). `resources_per_bucket == 0` is the intentional
-    // "block everything" sentinel, so leave that untouched.
-    if limits.resources_per_bucket > 0 {
+    // would reject all traffic). `resources_per_bucket == 0` and
+    // `max_requests_per_second == 0` are intentional "block everything" sentinels,
+    // so leave those untouched.
+    if limits.resources_per_bucket > 0 && max_requests_per_second > 0 {
         max_per_key.req_counter = max_per_key.req_counter.max(1);
     }
 
