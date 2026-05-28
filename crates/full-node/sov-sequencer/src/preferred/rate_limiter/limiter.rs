@@ -25,12 +25,6 @@ pub(crate) struct ResourceUsed<G: Gas> {
 }
 
 impl<G: Gas> ResourceUsed<G> {
-    pub(crate) fn zero() -> Self {
-        Self {
-            inner: Resource::zero(),
-        }
-    }
-
     pub(crate) fn new(
         req_counter: u64,
         tx_size_in_bytes: usize,

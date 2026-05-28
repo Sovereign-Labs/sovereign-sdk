@@ -15,6 +15,8 @@ pub(crate) enum LimitExceeded<G: Gas> {
         total_accumulated: u64,
         max_allowed: u64,
     },
+    // TODO: https://github.com/Sovereign-Labs/sovereign-sdk/issues/2922
+    #[allow(dead_code)]
     Gas {
         total_accumulated: G,
         max_allowed: G,

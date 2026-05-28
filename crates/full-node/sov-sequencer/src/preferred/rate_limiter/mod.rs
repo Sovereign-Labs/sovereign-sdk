@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 mod limiter;
 mod resource;
 
@@ -35,25 +34,18 @@ pub(crate) enum ResourceLimitExceededError<S: Spec> {
         address: S::Address,
         reason: LimitExceeded<S::Gas>,
     },
-    #[error("Resource limit exceeded for IP: {ip}{}, {reason:?}", subnet_suffix(.ip_net))]
+    #[error("Resource limit exceeded for IP: {ip}, {reason:?}")]
     Ip {
         ip: IpAddr,
-        /// Bucket the IP resolved to: its own host network, or the configured
-        /// subnet that contains it.
-        ip_net: ipnet::IpNet,
         reason: LimitExceeded<S::Gas>,
     },
-}
-
-/// Renders the matched subnet for [`ResourceLimitExceededError::Ip`]: empty for a
-/// host network (`/32` or `/128`, where `{ip}` already says everything) and
-/// ` (subnet <net>)` when the IP was limited via a wider configured subnet.
-fn subnet_suffix(ip_net: &ipnet::IpNet) -> String {
-    if ip_net.prefix_len() == ip_net.max_prefix_len() {
-        String::new()
-    } else {
-        format!(" (subnet {ip_net})")
-    }
+    #[error("Resource limit exceeded for IP: {ip} (subnet {subnet}), {reason:?}")]
+    IpSubnet {
+        ip: IpAddr,
+        /// Configured subnet that contains `ip`.
+        subnet: ipnet::IpNet,
+        reason: LimitExceeded<S::Gas>,
+    },
 }
 
 struct SovRateLimiterInner<S: Spec> {
@@ -116,10 +108,16 @@ impl<S: Spec> SovRateLimiterInner<S> {
         let throttler_for_ip =
             self.by_ip_net_rate_limiter
                 .allow(now, &ip_key)
-                .map_err(|reason| ResourceLimitExceededError::Ip {
-                    ip,
-                    ip_net: ip_key,
-                    reason,
+                .map_err(|reason| {
+                    if ip_key.prefix_len() == ip_key.max_prefix_len() {
+                        ResourceLimitExceededError::Ip { ip, reason }
+                    } else {
+                        ResourceLimitExceededError::IpSubnet {
+                            ip,
+                            subnet: ip_key,
+                            reason,
+                        }
+                    }
                 })?;
 
         Ok(LimiterToken {
@@ -278,6 +276,8 @@ fn limits<S: Spec>(
         sov_config.address_custom_limits,
     );
 
+    let configured_ip_custom_count = sov_config.ip_custom_limits.len();
+
     let ip_custom_limits = sov_config
         .ip_custom_limits
         .into_iter()
@@ -291,6 +291,17 @@ fn limits<S: Spec>(
         sov_config.height_for_gas_limit_computation,
         ip_custom_limits,
     );
+
+    // Defense in depth: `assert_no_overlapping_subnets` should already have
+    // panicked on identical canonicalized networks before we get here, so this
+    // warning should never fire in practice.
+    if ip_networks.len() < configured_ip_custom_count {
+        tracing::warn!(
+            configured = configured_ip_custom_count,
+            retained = ip_networks.len(),
+            "ip_custom_limits contained duplicate canonicalized subnets; later entries overrode earlier ones"
+        );
+    }
 
     (default_config, addrs, ip_networks)
 }
@@ -731,10 +742,12 @@ mod tests {
         }
 
         let err = rate_limiter.allow(fallback_ip, test_addr(3)).unwrap_err();
-        let ResourceLimitExceededError::Ip { ip_net, .. } = err else {
-            panic!("expected IP rate-limit error");
+        // Host-network fallback: `Ip` variant (not `IpSubnet`) means we landed in
+        // the host bucket, not in any configured subnet bucket.
+        let ResourceLimitExceededError::Ip { ip, .. } = err else {
+            panic!("expected host-network IP rate-limit error, got {err:?}");
         };
-        assert_eq!(ip_net, "192.0.2.10/32".parse().unwrap());
+        assert_eq!(ip, fallback_ip);
 
         let token = rate_limiter
             .allow("192.0.2.11".parse().unwrap(), test_addr(4))
@@ -768,16 +781,35 @@ mod tests {
     }
 
     #[test]
-    fn subnet_suffix_renders_only_wider_subnets() {
-        assert_eq!(subnet_suffix(&"10.0.0.1/32".parse().unwrap()), "");
-        assert_eq!(subnet_suffix(&"2001:db8::1/128".parse().unwrap()), "");
-        assert_eq!(
-            subnet_suffix(&"10.0.0.0/24".parse().unwrap()),
-            " (subnet 10.0.0.0/24)"
+    fn ip_error_renders_without_subnet_suffix() {
+        let err = ResourceLimitExceededError::<TestSpec>::Ip {
+            ip: "10.0.0.1".parse().unwrap(),
+            reason: LimitExceeded::RequestCount {
+                total_accumulated: 5,
+                max_allowed: 4,
+            },
+        };
+        assert!(
+            err.to_string()
+                .starts_with("Resource limit exceeded for IP: 10.0.0.1,"),
+            "host-network error must not include a ` (subnet …)` suffix, got: {err}"
         );
-        assert_eq!(
-            subnet_suffix(&"2001:db8::/64".parse().unwrap()),
-            " (subnet 2001:db8::/64)"
+    }
+
+    #[test]
+    fn ip_subnet_error_renders_with_subnet_suffix() {
+        let err = ResourceLimitExceededError::<TestSpec>::IpSubnet {
+            ip: "10.0.0.5".parse().unwrap(),
+            subnet: "10.0.0.0/24".parse().unwrap(),
+            reason: LimitExceeded::RequestCount {
+                total_accumulated: 5,
+                max_allowed: 4,
+            },
+        };
+        assert!(
+            err.to_string()
+                .starts_with("Resource limit exceeded for IP: 10.0.0.5 (subnet 10.0.0.0/24),"),
+            "subnet error must include the matched subnet, got: {err}"
         );
     }
 
@@ -926,10 +958,10 @@ mod tests {
         let ip: IpAddr = "10.0.0.42".parse().unwrap();
 
         let err = rate_limiter.allow(ip, addr).unwrap_err();
-        let ResourceLimitExceededError::Ip { ip_net, .. } = err else {
-            panic!("expected IP rate-limit error");
+        let ResourceLimitExceededError::IpSubnet { subnet, .. } = err else {
+            panic!("expected subnet IP rate-limit error, got {err:?}");
         };
-        assert_eq!(ip_net, "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap());
+        assert_eq!(subnet, "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap());
     }
 
     #[test]
@@ -957,10 +989,10 @@ mod tests {
         let ip: IpAddr = "10.0.0.5".parse().unwrap();
 
         let err = rate_limiter.allow(ip, addr).unwrap_err();
-        let ResourceLimitExceededError::Ip { ip_net, .. } = err else {
-            panic!("expected IP rate-limit error");
+        let ResourceLimitExceededError::IpSubnet { subnet, .. } = err else {
+            panic!("expected subnet IP rate-limit error, got {err:?}");
         };
-        assert_eq!(ip_net, "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap());
+        assert_eq!(subnet, "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap());
     }
 
     #[test]
@@ -1006,9 +1038,13 @@ mod tests {
         // fresh, so the IP throttler is the one that rejects — proving it was
         // charged by the first admission alongside the address throttler.
         let err = rate_limiter.allow(ip_in_subnet, test_addr(8)).unwrap_err();
-        let ResourceLimitExceededError::Ip { ip_net, .. } = err else {
-            panic!("expected Ip rejection, got {err:?}");
+        let ResourceLimitExceededError::IpSubnet {
+            subnet: matched_subnet,
+            ..
+        } = err
+        else {
+            panic!("expected IpSubnet rejection, got {err:?}");
         };
-        assert_eq!(ip_net, subnet);
+        assert_eq!(matched_subnet, subnet);
     }
 }
