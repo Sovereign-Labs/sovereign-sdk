@@ -235,6 +235,23 @@ fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
         .collect()
 }
 
+fn canonicalize_ip_net(net: ipnet::IpNet) -> ipnet::IpNet {
+    match net {
+        ipnet::IpNet::V4(_) => net.trunc(),
+        ipnet::IpNet::V6(net) => {
+            if net.prefix_len() >= 96 {
+                if let Some(ipv4) = net.addr().to_ipv4_mapped() {
+                    return ipnet::IpNet::new(IpAddr::V4(ipv4), net.prefix_len() - 96)
+                        .expect("IPv4-mapped IPv6 prefix is a valid IPv4 prefix")
+                        .trunc();
+                }
+            }
+
+            ipnet::IpNet::V6(net.trunc())
+        }
+    }
+}
+
 #[allow(clippy::type_complexity)]
 fn limits<S: Spec>(
     sov_config: SovRateLimiterConfig<S::Address>,
@@ -264,7 +281,7 @@ fn limits<S: Spec>(
     let ip_custom_limits = sov_config
         .ip_custom_limits
         .into_iter()
-        .map(|(net, limits)| (net.trunc(), limits))
+        .map(|(net, limits)| (canonicalize_ip_net(net), limits))
         .collect();
 
     let ip_networks = to_limiter_config_map::<ipnet::IpNet, S>(
@@ -380,12 +397,13 @@ impl<S: Spec> SovRateLimiter<S> {
             let max_nb_of_concurrent_users_in_rate_limiter =
                 sov_config.max_nb_of_concurrent_users_in_rate_limiter;
 
-            // Overlapping (and duplicate) subnets are forbidden. Check the raw
-            // config list before `limits` collapses duplicate keys into a map.
+            // Overlapping (and duplicate) subnets are forbidden. Check the
+            // canonicalized config list before `limits` collapses duplicate
+            // keys into a map.
             let configured_networks: Vec<ipnet::IpNet> = sov_config
                 .ip_custom_limits
                 .iter()
-                .map(|(net, _)| *net)
+                .map(|(net, _)| canonicalize_ip_net(*net))
                 .collect();
             assert_no_overlapping_subnets(&configured_networks);
 
@@ -797,6 +815,28 @@ mod tests {
     }
 
     #[test]
+    #[should_panic(expected = "overlapping IP subnets")]
+    fn overlapping_ipv4_mapped_ipv6_subnet_config_panics() {
+        let limits = Limits {
+            resources_per_bucket: 5,
+            refill_rate: 1,
+        };
+        let config = SovRateLimiterConfig {
+            max_requests_per_second: 1000,
+            max_nb_of_concurrent_users_in_rate_limiter: 1000,
+            default_limits: limits,
+            height_for_gas_limit_computation: RollupHeight::GENESIS,
+            address_custom_limits: Vec::default(),
+            ip_custom_limits: vec![
+                ("10.0.0.0/24".parse().unwrap(), limits),
+                ("::ffff:10.0.0.0/120".parse().unwrap(), limits),
+            ],
+        };
+        let _ =
+            SovRateLimiter::<TestSpec>::new(Some(config), Duration::from_millis(3000), 1_000_000);
+    }
+
+    #[test]
     fn candidate_supernets_probes_only_configured_prefix_lengths() {
         let prefixes = SubnetPrefixes::from_networks(
             [
@@ -884,6 +924,37 @@ mod tests {
             SovRateLimiter::<TestSpec>::new(Some(config), Duration::from_millis(3000), 1_000_000);
         let addr = <TestSpec as Spec>::Address::from([1; 28]);
         let ip: IpAddr = "10.0.0.42".parse().unwrap();
+
+        let err = rate_limiter.allow(ip, addr).unwrap_err();
+        let ResourceLimitExceededError::Ip { ip_net, .. } = err else {
+            panic!("expected IP rate-limit error");
+        };
+        assert_eq!(ip_net, "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap());
+    }
+
+    #[test]
+    fn configured_ipv4_mapped_ipv6_subnet_is_normalized() {
+        let config = SovRateLimiterConfig {
+            max_requests_per_second: 1000,
+            max_nb_of_concurrent_users_in_rate_limiter: 1000,
+            default_limits: Limits {
+                resources_per_bucket: 5,
+                refill_rate: 0,
+            },
+            height_for_gas_limit_computation: RollupHeight::GENESIS,
+            address_custom_limits: Vec::default(),
+            ip_custom_limits: vec![(
+                "::ffff:10.0.0.42/120".parse().unwrap(),
+                Limits {
+                    resources_per_bucket: 0,
+                    refill_rate: 0,
+                },
+            )],
+        };
+        let mut rate_limiter =
+            SovRateLimiter::<TestSpec>::new(Some(config), Duration::from_millis(3000), 1_000_000);
+        let addr = <TestSpec as Spec>::Address::from([1; 28]);
+        let ip: IpAddr = "10.0.0.5".parse().unwrap();
 
         let err = rate_limiter.allow(ip, addr).unwrap_err();
         let ResourceLimitExceededError::Ip { ip_net, .. } = err else {
