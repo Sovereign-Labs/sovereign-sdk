@@ -17,6 +17,8 @@ use std::{
     time::{Duration, Instant},
 };
 
+const TTL_MULTIPLIER: u32 = 5;
+
 #[derive(Debug)]
 pub(crate) struct LimiterToken<S: Spec> {
     address: S::Address,
@@ -65,7 +67,7 @@ struct SovRateLimiterInner<S: Spec> {
 impl<S: Spec> SovRateLimiterInner<S> {
     fn new(
         max_nb_of_concurrent_users_in_rate_limiter: u64,
-        ttl_in_millis: u64,
+        ttl: Duration,
         config: RateLimiterConfig<S>,
         addrs: HashMap<S::Address, RateLimiterConfig<S>>,
         ip_networks: HashMap<ipnet::IpNet, RateLimiterConfig<S>>,
@@ -76,14 +78,14 @@ impl<S: Spec> SovRateLimiterInner<S> {
             by_addr_rate_limiter: RateLimiter::new(
                 "limiter_by_addr",
                 max_nb_of_concurrent_users_in_rate_limiter,
-                ttl_in_millis,
+                ttl,
                 config.clone(),
                 addrs,
             ),
             by_ip_net_rate_limiter: RateLimiter::new(
                 "limiter_by_ip_net",
                 max_nb_of_concurrent_users_in_rate_limiter,
-                ttl_in_millis,
+                ttl,
                 config,
                 ip_networks,
             ),
@@ -135,8 +137,6 @@ impl<S: Spec> SovRateLimiterInner<S> {
             .update(token.ip_net, token.throttler_for_ip, resource_used);
     }
 }
-
-const TTL_MULTIPLIER: u64 = 5;
 
 fn calculate_limits<S: Spec>(
     limits: Limits,
@@ -238,14 +238,13 @@ fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
 #[allow(clippy::type_complexity)]
 fn limits<S: Spec>(
     sov_config: SovRateLimiterConfig<S::Address>,
-    batch_execution_time_limit_millis: u64,
+    batch_execution_time_limit: Duration,
     max_batch_size_bytes: usize,
 ) -> (
     RateLimiterConfig<S>,
     HashMap<S::Address, RateLimiterConfig<S>>,
     HashMap<ipnet::IpNet, RateLimiterConfig<S>>,
 ) {
-    let batch_execution_time_limit = Duration::from_millis(batch_execution_time_limit_millis);
     let default_config = calculate_limits::<S>(
         sov_config.default_limits,
         sov_config.max_requests_per_second,
@@ -362,10 +361,10 @@ impl<S: Spec> SovRateLimiter<S> {
     ///   another (an IP inside both would have no unambiguous bucket).
     pub(crate) fn new(
         config: Option<SovRateLimiterConfig<S::Address>>,
-        batch_execution_time_limit_millis: u64,
+        batch_execution_time_limit: Duration,
         max_batch_size_bytes: usize,
     ) -> Self {
-        if batch_execution_time_limit_millis == 0 {
+        if batch_execution_time_limit.as_millis() == 0 {
             panic!("SovRateLimiter: batch_execution_time_limit_millis must be greater than zero");
         }
 
@@ -375,7 +374,9 @@ impl<S: Spec> SovRateLimiter<S> {
 
         let inner = config.map(|sov_config| {
             // All entries older than this value are evicted from the rate limiter.
-            let ttl_in_millis = batch_execution_time_limit_millis * TTL_MULTIPLIER;
+            let ttl = batch_execution_time_limit
+                .checked_mul(TTL_MULTIPLIER)
+                .expect("Batch execution time limit overflow when TTL multiplier applied");
             let max_nb_of_concurrent_users_in_rate_limiter =
                 sov_config.max_nb_of_concurrent_users_in_rate_limiter;
 
@@ -388,14 +389,11 @@ impl<S: Spec> SovRateLimiter<S> {
                 .collect();
             assert_no_overlapping_subnets(&configured_networks);
 
-            let (config, addrs, ips) = limits(
-                sov_config,
-                batch_execution_time_limit_millis,
-                max_batch_size_bytes,
-            );
+            let (config, addrs, ips) =
+                limits(sov_config, batch_execution_time_limit, max_batch_size_bytes);
             SovRateLimiterInner::new(
                 max_nb_of_concurrent_users_in_rate_limiter,
-                ttl_in_millis,
+                ttl,
                 config,
                 addrs,
                 ips,
@@ -435,6 +433,13 @@ impl<S: Spec> SovRateLimiter<S> {
             inner.update(token, resource_used);
         }
     }
+}
+
+#[derive(Clone, Copy, Debug)]
+pub struct IpAndCredentialId<Address: BasicAddress> {
+    pub address: Address,
+    pub credential_id: CredentialId,
+    pub ip_addr: IpAddr,
 }
 
 #[cfg(test)]
@@ -483,7 +488,12 @@ mod tests {
             .map(|ip_net| (ip_net.parse().unwrap(), default_config.clone()))
             .collect();
 
-        SovRateLimiter::new_for_test_with_ip_networks(1000, 1_000_000, default_config, ip_networks)
+        SovRateLimiter::new_for_test_with_ip_networks(
+            1000,
+            Duration::from_millis(1_000_000),
+            default_config,
+            ip_networks,
+        )
     }
 
     #[test]
@@ -568,6 +578,23 @@ mod tests {
     }
 
     #[test]
+    fn calculate_limits_keeps_zero_budget_for_zero_max_requests_per_second() {
+        // `max_requests_per_second == 0` is the intentional "block everything" sentinel:
+        // the guard must not floor it up to 1, even when `resources_per_bucket > 0`.
+        let config = calculate_limits::<TestSpec>(
+            Limits {
+                resources_per_bucket: 5,
+                refill_rate: 0,
+            },
+            0,
+            Duration::from_millis(100),
+            6_000_000,
+            RollupHeight::GENESIS,
+        );
+        assert_eq!(config.max_allowed_resources.inner.req_counter, 0);
+    }
+
+    #[test]
     fn test_sov_test_limiter() {
         let resource_used_per_run = ResourceUsed {
             inner: Resource {
@@ -609,7 +636,8 @@ mod tests {
         let ip1 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 1));
         let ip2 = IpAddr::V4(Ipv4Addr::new(127, 0, 0, 2));
 
-        let mut rate_limiter = SovRateLimiter::new_for_test(1000, 1000000, Some(config));
+        let mut rate_limiter =
+            SovRateLimiter::new_for_test(1000, Duration::from_millis(1_000_000), Some(config));
 
         // Update rate limiter for (ip1, cred1)
         {
@@ -640,13 +668,13 @@ mod tests {
     impl<S: Spec> SovRateLimiter<S> {
         fn new_for_test(
             max_nb_of_concurrent_users: u64,
-            ttl_in_millis: u64,
+            ttl: Duration,
             config: Option<RateLimiterConfig<S>>,
         ) -> Self {
             let inner = config.map(|c| {
                 SovRateLimiterInner::new(
                     max_nb_of_concurrent_users,
-                    ttl_in_millis,
+                    ttl,
                     c,
                     Default::default(),
                     Default::default(),
@@ -657,14 +685,14 @@ mod tests {
 
         fn new_for_test_with_ip_networks(
             max_nb_of_concurrent_users: u64,
-            ttl_in_millis: u64,
+            ttl: Duration,
             config: RateLimiterConfig<S>,
             ip_networks: HashMap<ipnet::IpNet, RateLimiterConfig<S>>,
         ) -> Self {
             Self {
                 inner: Some(SovRateLimiterInner::new(
                     max_nb_of_concurrent_users,
-                    ttl_in_millis,
+                    ttl,
                     config,
                     Default::default(),
                     ip_networks,
@@ -764,7 +792,8 @@ mod tests {
                 ),
             ],
         };
-        let _ = SovRateLimiter::<TestSpec>::new(Some(config), 3000, 1_000_000);
+        let _ =
+            SovRateLimiter::<TestSpec>::new(Some(config), Duration::from_millis(3000), 1_000_000);
     }
 
     #[test]
@@ -802,7 +831,7 @@ mod tests {
 
     #[test]
     fn allow_canonicalizes_ipv4_mapped_ipv6() {
-        // Generous limits so the request is allowed and we can read back the bucket key.
+        // Generous limits so the request is allowed, and we can read back the bucket key.
         let config = RateLimiterConfig::<TestSpec> {
             max_allowed_resources: TotalResources {
                 inner: Resource {
@@ -821,7 +850,8 @@ mod tests {
                 },
             },
         };
-        let mut rate_limiter = SovRateLimiter::new_for_test(1000, 1_000_000, Some(config));
+        let mut rate_limiter =
+            SovRateLimiter::new_for_test(1000, Duration::from_millis(1_000_000), Some(config));
         let addr = <TestSpec as Spec>::Address::from([1; 28]);
 
         // `::ffff:10.0.0.5` must be charged to the IPv4 host network, not a V6 /128,
@@ -850,7 +880,8 @@ mod tests {
                 },
             )],
         };
-        let mut rate_limiter = SovRateLimiter::<TestSpec>::new(Some(config), 3000, 1_000_000);
+        let mut rate_limiter =
+            SovRateLimiter::<TestSpec>::new(Some(config), Duration::from_millis(3000), 1_000_000);
         let addr = <TestSpec as Spec>::Address::from([1; 28]);
         let ip: IpAddr = "10.0.0.42".parse().unwrap();
 
@@ -860,11 +891,4 @@ mod tests {
         };
         assert_eq!(ip_net, "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap());
     }
-}
-
-#[derive(Clone, Copy, Debug)]
-pub struct IpAndCredentialId<Address: BasicAddress> {
-    pub address: Address,
-    pub credential_id: CredentialId,
-    pub ip_addr: IpAddr,
 }

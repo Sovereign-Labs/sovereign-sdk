@@ -65,7 +65,7 @@ impl<G: Gas> RefillRatePerMillis<G> {
     }
 }
 
-/// The total resource usage for a given key (see [`Throttler`] bellow]).
+/// The total resource usage for a given key (see [`Throttler`] bellow).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TotalResources<G: Gas> {
     pub(crate) inner: Resource<G>,
@@ -248,13 +248,12 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
     pub(crate) fn new(
         limiter_type: &'static str,
         max_nb_of_concurrent_users: u64,
-        ttl_in_millis: u64,
+        ttl: Duration,
         default_config: RateLimiterConfig<S>,
         special_configs: HashMap<K, RateLimiterConfig<S>>,
     ) -> Self {
-        let data: Cache<K, Throttler<<S as Spec>::Gas>> = Cache::builder()
-            .time_to_live(Duration::from_millis(ttl_in_millis))
-            .build();
+        let data: Cache<K, Throttler<<S as Spec>::Gas>> =
+            Cache::builder().time_to_live(ttl).build();
 
         Self {
             limiter_type,
@@ -350,7 +349,7 @@ mod tests {
     const MAX_REQ_COUNT: u64 = 10_000;
     const MAX_SPACE_IN_BYTES: u64 = 100_0000;
     const MAX_EXECUTION_TIME_MICROS: u64 = 1_000_000;
-    const TTL_IN_MILLIS: u64 = 1_000_000;
+    const TTL: Duration = Duration::from_millis(1_000_000);
     const MAX_NB_OF_CONCURRENT_USERS: u64 = 10_000;
 
     #[test]
@@ -366,7 +365,7 @@ mod tests {
 
         let mut rollup_simulator = Simulator::new(
             MAX_NB_OF_CONCURRENT_USERS,
-            TTL_IN_MILLIS,
+            TTL,
             config,
             resource_used_per_run,
             Default::default(),
@@ -445,7 +444,7 @@ mod tests {
 
         let mut rollup_simulator = Simulator::new(
             MAX_NB_OF_CONCURRENT_USERS,
-            TTL_IN_MILLIS,
+            TTL,
             default_config,
             resource_used_per_run,
             special_keys,
@@ -499,7 +498,7 @@ mod tests {
 
         let mut rollup_simulator = Simulator::new(
             MAX_NB_OF_CONCURRENT_USERS,
-            TTL_IN_MILLIS,
+            TTL,
             config,
             resource_used_per_run,
             Default::default(),
@@ -580,7 +579,7 @@ mod tests {
 
         let mut rollup_simulator = Simulator::new(
             MAX_NB_OF_CONCURRENT_USERS,
-            2,
+            Duration::from_millis(2),
             config,
             resource_used_per_run,
             Default::default(),
@@ -617,7 +616,7 @@ mod tests {
 
         let mut rollup_simulator = Simulator::new(
             max_nb_of_concurrent_users,
-            2,
+            std::time::Duration::from_millis(2),
             config,
             resource_used_per_run,
             Default::default(),
@@ -661,7 +660,7 @@ mod tests {
     impl Simulator {
         fn new(
             max_nb_of_concurrent_users: u64,
-            ttl_in_millis: u64,
+            ttl: Duration,
             config: RateLimiterConfig<TestSpec>,
             resource_used_per_run: ResourceUsed<Gas>,
             special_configs: HashMap<<TestSpec as Spec>::Address, RateLimiterConfig<TestSpec>>,
@@ -669,7 +668,7 @@ mod tests {
             let rate_limiter = RateLimiter::new(
                 "by_addr",
                 max_nb_of_concurrent_users,
-                ttl_in_millis,
+                ttl,
                 config,
                 special_configs,
             );
