@@ -217,7 +217,7 @@ impl HyperlaneBuilder {
 
         // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/sovereign-lander-integration-for-multisig
         let docker_image = docker_image.unwrap_or_else(|_| {
-            "ghcr.io/citizen-stig/hyperlane-agent:multisig-upgrade-address-override-2".into()
+            "ghcr.io/theodorebugnet/hyperlane-agent:multisig_upgrade-3".into()
         });
         let (name, tag) = docker_image
             .split_once(':')
