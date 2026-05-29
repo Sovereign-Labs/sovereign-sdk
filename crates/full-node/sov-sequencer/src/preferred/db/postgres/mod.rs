@@ -298,7 +298,9 @@ impl PostgresBackend {
 
         // Leadership update logic:
         // 1. Same node can always refresh its heartbeat
-        // 2. Different node can only take over if BOTH:
+        // 2. Different node can take over immediately if the current leader has
+        //    gracefully deregistered its node row.
+        // 3. Otherwise, different node can only take over if BOTH:
         //    - The current leader has timed out (no heartbeat within leader_timeout)
         //    - The grace period since leader_acquired_at has passed (prevents rapid flapping)
         let res = sqlx::query_as::<_, SequencerLeader>(
@@ -315,6 +317,9 @@ impl PostgresBackend {
                         END
                     WHERE
                         sequencer_leader.node_id = EXCLUDED.node_id
+                        OR NOT EXISTS (
+                            SELECT 1 FROM nodes WHERE nodes.node_id = sequencer_leader.node_id
+                        )
                         OR (
                             sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
                             AND sequencer_leader.leader_acquired_at < EXCLUDED.last_updated - ($3 * INTERVAL '1 millisecond')

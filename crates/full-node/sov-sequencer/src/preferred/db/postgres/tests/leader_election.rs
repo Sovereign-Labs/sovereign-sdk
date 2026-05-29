@@ -271,7 +271,7 @@ async fn test_leader_grace_period() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn test_shutdown_deregistration_preserves_leader() {
+async fn test_shutdown_deregistration_allows_immediate_takeover_without_clearing_leader() {
     let Some(postgres) = setup_test_postgres().await else {
         return;
     };
@@ -285,7 +285,7 @@ async fn test_shutdown_deregistration_preserves_leader() {
     let db_2 = DB::new(
         &postgres,
         String::from("node_2"),
-        ConfiguredNodeRole::Replica,
+        ConfiguredNodeRole::DbElected,
     )
     .await;
 
@@ -300,6 +300,13 @@ async fn test_shutdown_deregistration_preserves_leader() {
     );
     assert!(!node_exists(&db_2, "node_1").await);
     assert!(node_exists(&db_2, "node_2").await);
+
+    let leader_2 = db_2.maybe_update_leader().await.unwrap();
+    assert_eq!(leader_2.node_id, "node_2");
+    assert_eq!(
+        db_2.get_sequencer_leader().await.unwrap(),
+        Some(String::from("node_2"))
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

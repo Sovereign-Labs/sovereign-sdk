@@ -230,12 +230,6 @@ impl NodeDiscovery {
             }
         }
 
-        if let Some(leader_id) = &leader_id {
-            if leader.is_none() {
-                anyhow::bail!("Leader is missing from the Nodes table. leader_id: {leader_id}, followers: {followers:?}");
-            }
-        }
-
         Ok(ClusterInfo { leader, followers })
     }
 
@@ -425,7 +419,7 @@ mod tests {
     }
 
     #[test]
-    fn cluster_errors_when_leader_not_in_nodes() {
+    fn cluster_treats_missing_leader_node_as_no_routable_leader() {
         let ts = test_timestamp();
         let result = NodeDiscovery::cluster(
             Some("missing_leader".to_string()),
@@ -435,10 +429,10 @@ mod tests {
             ],
         );
 
-        let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Leader is missing from the Nodes table."));
+        let cluster = result.unwrap();
+        assert!(cluster.leader.is_none());
+        assert!(cluster.has_follower("node1"));
+        assert!(cluster.has_follower("node2"));
     }
 
     #[test]
