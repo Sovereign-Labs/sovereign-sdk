@@ -142,7 +142,11 @@ fn execute_and_collect(
         .gas()
         .context("prover gas not available; ProverClient may have disabled gas calculation")?;
     let total_cycles = report.total_instruction_count();
-    let region_cycles = report.cycle_tracker.get("storage_loop").copied().unwrap_or(0);
+    let region_cycles = report
+        .cycle_tracker
+        .get("storage_loop")
+        .copied()
+        .unwrap_or(0);
     Ok(BenchResult {
         input_size: depth,
         iterations,
