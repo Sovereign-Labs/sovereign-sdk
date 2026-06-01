@@ -15,7 +15,7 @@ use sov_evm::{
 use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::capabilities::{config_chain_id, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::macros::config_value;
-use sov_modules_api::transaction::{Transaction, UnsignedTransactionV0};
+use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_api::{EncodeCall, RawTx};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{Runtime, TestRunner, ValueSetter, ValueSetterConfig};
@@ -102,7 +102,7 @@ pub(crate) fn generate_value_setter_uniqueness_tx(
             gas: None,
         });
 
-    let transaction = UnsignedTransactionV0::new(
+    let transaction = UnsignedTransaction::new(
         runtime_msg,
         config_chain_id(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,

@@ -12,13 +12,17 @@ use crate::{
     Amount, CryptoSpecExt, Multisig, Spec,
 };
 
-/// V0 unsigned transaction (single-sig). This is the consumer-facing builder type used
+use super::signing_payload::{
+    TransactionSigningPayload, TransactionSigningPayloadV0, TransactionSigningPayloadV1,
+};
+
+/// Unsigned transaction payload. This is the consumer-facing builder type used
 /// to construct transactions before signing.
 #[derive(
     derive_more::Debug, Serialize, Deserialize, BorshSerialize, BorshDeserialize, UniversalWallet,
 )]
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
-pub struct UnsignedTransactionV0<R: TransactionCallable, S: Spec> {
+pub struct UnsignedTransaction<R: TransactionCallable, S: Spec> {
     /// The runtime call
     #[borsh(bound(
         serialize = "R::Call: BorshSerialize",
@@ -36,7 +40,7 @@ pub struct UnsignedTransactionV0<R: TransactionCallable, S: Spec> {
 }
 
 // Manually implemented to ensure correct trait bounds (derive would require R: Clone/PartialEq)
-impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV0<R, S> {
+impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransaction<R, S> {
     fn clone(&self) -> Self {
         Self {
             runtime_call: self.runtime_call.clone(),
@@ -46,7 +50,7 @@ impl<R: TransactionCallable, S: Spec> Clone for UnsignedTransactionV0<R, S> {
         }
     }
 }
-impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransactionV0<R, S> {
+impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransaction<R, S> {
     fn eq(&self, other: &Self) -> bool {
         self.runtime_call == other.runtime_call
             && self.uniqueness == other.uniqueness
@@ -54,11 +58,11 @@ impl<R: TransactionCallable, S: Spec> PartialEq for UnsignedTransactionV0<R, S> 
             && self.address_override == other.address_override
     }
 }
-impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransactionV0<R, S> {}
+impl<R: TransactionCallable, S: Spec> Eq for UnsignedTransaction<R, S> {}
 
 #[cfg(feature = "native")]
-impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
-    /// Signs the [`UnsignedTransactionV0`] and returns the resulting [`Transaction`].
+impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
+    /// Signs the [`UnsignedTransaction`] and returns the resulting [`Transaction`].
     pub fn sign(
         self,
         private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
@@ -70,8 +74,8 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
     }
 }
 
-impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
-    /// Creates a new [`UnsignedTransactionV0`] with the given arguments.
+impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
+    /// Creates a new [`UnsignedTransaction`] with the given arguments.
     pub const fn new(
         runtime_call: R::Call,
         chain_id: u64,
@@ -109,7 +113,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
         }
     }
 
-    /// Creates a new [`Transaction`] from this [`UnsignedTransactionV0`] when given a signature
+    /// Creates a new [`Transaction`] from this [`UnsignedTransaction`] when given a signature
     /// and a public key.
     pub fn to_signed_tx<C: CryptoSpecExt>(
         self,
@@ -145,8 +149,61 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransactionV0<R, S> {
         }
     }
 
+    fn signing_payload_v0(&self, chain_hash: [u8; 32]) -> TransactionSigningPayload<R, S> {
+        TransactionSigningPayload::V0(TransactionSigningPayloadV0 {
+            runtime_call: self.runtime_call.clone(),
+            uniqueness: self.uniqueness,
+            details: self.details.clone(),
+            address_override: self.address_override,
+            chain_hash,
+        })
+    }
+
+    pub(crate) fn signing_payload_v1_with_credential(
+        &self,
+        credential_address: S::Address,
+        chain_hash: [u8; 32],
+    ) -> TransactionSigningPayload<R, S> {
+        TransactionSigningPayload::V1(TransactionSigningPayloadV1 {
+            runtime_call: self.runtime_call.clone(),
+            uniqueness: self.uniqueness,
+            details: self.details.clone(),
+            credential_address,
+            address_override: self.address_override,
+            chain_hash,
+        })
+    }
+
+    /// Serializes the V0 transaction signing payload for this unsigned transaction.
+    pub fn to_signing_bytes_v0(&self, chain_hash: [u8; 32]) -> Vec<u8> {
+        self.signing_payload_v0(chain_hash).to_bytes()
+    }
+
+    /// Serializes the V1 transaction signing payload for this unsigned transaction.
+    pub fn to_signing_bytes_v1(
+        &self,
+        multisig: &Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
+        chain_hash: [u8; 32],
+    ) -> Vec<u8> {
+        let credential_address = multisig
+            .credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>()
+            .into();
+        self.signing_payload_v1_with_credential(credential_address, chain_hash)
+            .to_bytes()
+    }
+
     /// Returns a reference to the runtime call.
     pub fn runtime_call(&self) -> &R::Call {
         &self.runtime_call
+    }
+
+    /// Returns the transaction uniqueness data.
+    pub fn uniqueness(&self) -> UniquenessData {
+        self.uniqueness
+    }
+
+    /// Returns the transaction details.
+    pub fn details(&self) -> &TxDetails<S> {
+        &self.details
     }
 }

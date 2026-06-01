@@ -6,7 +6,7 @@ use sov_bank::IntoPayable;
 use sov_mock_da::{MockAddress, MockBlob};
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::macros::config_value;
-use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransactionV0};
+use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
 use sov_modules_api::{
     Amount, ApiStateAccessor, DaSpec, FullyBakedTx, Gas, GasArray, ModuleInfo, RawTx, Rewards,
     Spec, TxEffect,
@@ -249,7 +249,7 @@ mod helpers {
         chain_id: u64,
         message: IntegTestRuntimeCall<S>,
     ) -> Transaction<IntegTestRuntime<S>, S> {
-        let utx = UnsignedTransactionV0::new(
+        let utx = UnsignedTransaction::new(
             message,
             chain_id,
             max_priority_fee_bips,
@@ -284,7 +284,7 @@ mod helpers {
                 .unwrap(),
         );
 
-        let utx = UnsignedTransactionV0::new(
+        let utx = UnsignedTransaction::new(
             encoded_message,
             chain_id,
             max_priority_fee_bips,

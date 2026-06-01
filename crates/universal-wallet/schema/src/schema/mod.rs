@@ -179,7 +179,7 @@ impl ItemId {
 #[derive(Debug, Copy, Clone)]
 pub enum RollupRoots {
     Transaction = 0,
-    UnsignedTransaction = 1,
+    TransactionSigningPayload = 1,
     RuntimeCall = 2,
     Address = 3,
 }
@@ -281,13 +281,13 @@ impl Schema {
     }
 
     /// Instantiate a schema for a standard set of rollup types: its complete transaction, its
-    /// unsigned transaction, and its call message type.
+    /// transaction signing payload, and its call message type.
     /// The types will be accessible using the indices stored in root_type_indices (in the above
     /// order); they can also be queried using the `RollupRoots` enum through the `_rollup`-tagged
     /// functions on the schema
     pub fn of_rollup_types_with_chain_data<
         Transaction: UniversalWallet,
-        UnsignedTransaction: UniversalWallet,
+        TransactionSigningPayload: UniversalWallet,
         RuntimeCall: UniversalWallet,
         Address: UniversalWallet,
     >(
@@ -298,7 +298,7 @@ impl Schema {
             ..Self::default()
         };
         Transaction::make_root_of(&mut schema);
-        UnsignedTransaction::make_root_of(&mut schema);
+        TransactionSigningPayload::make_root_of(&mut schema);
         RuntimeCall::make_root_of(&mut schema);
         Address::make_root_of(&mut schema);
 

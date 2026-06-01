@@ -4,7 +4,7 @@ import { type Signer, isLedgerSolanaSigner } from "@sovereign-sdk/signers";
 import type {
   Transaction,
   TransactionV1,
-  UnsignedTransactionV0,
+  UnsignedTransaction,
 } from "@sovereign-sdk/types";
 import type { HexString } from "@sovereign-sdk/utils";
 import {
@@ -25,8 +25,8 @@ import {
   standardTypeBuilder,
 } from "./standard-rollup";
 
-export type SolanaOffchainUnsignedTransaction<RuntimeCall> = Omit<
-  UnsignedTransactionV0<RuntimeCall>,
+export type SolanaOffchainSigningPayloadV0<RuntimeCall> = Omit<
+  UnsignedTransaction<RuntimeCall>,
   "address_override"
 > & {
   chain_name: string;
@@ -37,10 +37,10 @@ export type SolanaOffchainUnsignedTransaction<RuntimeCall> = Omit<
   address_override?: string;
 };
 
-export type SolanaOffchainUnsignedTransactionV1<
+export type SolanaOffchainSigningPayloadV1<
   RuntimeCall,
   MultisigId = unknown,
-> = Omit<SolanaOffchainUnsignedTransaction<RuntimeCall>, "address_override"> & {
+> = Omit<SolanaOffchainSigningPayloadV0<RuntimeCall>, "address_override"> & {
   multisig_id: MultisigId;
   /**
    * Signer-declared address override.
@@ -50,19 +50,19 @@ export type SolanaOffchainUnsignedTransactionV1<
   version: number;
 };
 
-export type SolanaOffchainSimpleMessage = {
+export type SolanaOffchainSimpleEnvelope = {
   signed_message: Uint8Array;
   chain_hash: Uint8Array;
   pubkey: Uint8Array;
   signature: Uint8Array;
 };
 
-export type SolanaOffchainSpecCompliantMessage = {
+export type SolanaOffchainSpecCompliantEnvelope = {
   signed_message_with_preamble: Uint8Array;
   signature: Uint8Array;
 };
 
-export type SolanaOffchainSimpleMultisigMessage = {
+export type SolanaOffchainSimpleMultisigEnvelope = {
   /** Wire format: [0x80][JSON payload]. The 0x80 prefix is a parsing discriminator only. */
   wire_bytes: Uint8Array;
   chain_hash: Uint8Array;
@@ -71,7 +71,7 @@ export type SolanaOffchainSimpleMultisigMessage = {
   min_signers: number;
 };
 
-export type SolanaOffchainSpecCompliantMultisigMessage = {
+export type SolanaOffchainSpecCompliantMultisigEnvelope = {
   signed_message_with_preamble: Uint8Array;
   signatures: Uint8Array[];
   signer_bitfield: number;
@@ -212,7 +212,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Submits a Solana offchain message to the rollup.
    */
   private async submitSolanaMessage(
-    solanaMessage: SolanaOffchainSimpleMessage,
+    solanaMessage: SolanaOffchainSimpleEnvelope,
     options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
     const serializedMessage = this.serializeSolanaMessage(solanaMessage);
@@ -223,7 +223,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Submits a Solana spec-compliant message to the rollup.
    */
   private async submitSolanaSpecMessage(
-    solanaMessage: SolanaOffchainSpecCompliantMessage,
+    solanaMessage: SolanaOffchainSpecCompliantEnvelope,
     options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
     const serializedMessage = this.serializeSolanaSpecMessage(solanaMessage);
@@ -234,7 +234,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Submits a Solana spec-compliant multisig message to the rollup.
    */
   private async submitSolanaSpecMultisigMessage(
-    solanaMessage: SolanaOffchainSpecCompliantMultisigMessage,
+    solanaMessage: SolanaOffchainSpecCompliantMultisigEnvelope,
     options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
     const serializedMessage =
@@ -247,7 +247,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    */
   private async buildTransactionResult(
     response: SovereignClient.Sequencer.TxCreateResponse,
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     pubkey: Uint8Array,
     signature: Uint8Array,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
@@ -308,16 +308,16 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
-   * Helper to create and serialize a SolanaOffchainUnsignedTransaction to JSON bytes.
+   * Helper to create and serialize a SolanaOffchainSigningPayloadV0 to JSON bytes.
    */
   private async createSolanaJsonBytes(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
   ): Promise<Uint8Array> {
     const serializer = await this.inner.serializer();
     const schema = serializer.schema;
     const chainName = schema.chain_data.chain_name || "";
 
-    const solanaUnsignedTx: SolanaOffchainUnsignedTransaction<RuntimeCall> = {
+    const solanaSigningPayload: SolanaOffchainSigningPayloadV0<RuntimeCall> = {
       runtime_call: unsignedTx.runtime_call,
       uniqueness: unsignedTx.uniqueness,
       details: unsignedTx.details,
@@ -329,7 +329,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     };
 
     // JSON serialize the Solana unsigned transaction
-    return new TextEncoder().encode(JSON.stringify(solanaUnsignedTx));
+    return new TextEncoder().encode(JSON.stringify(solanaSigningPayload));
   }
 
   /**
@@ -337,7 +337,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Returns the transaction result in the same format as standard rollup.
    */
   private async signWithSolanaSimpleAndSubmit(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     signer: Signer,
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
@@ -349,7 +349,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     const signature = await signer.sign(jsonBytes);
 
     // Build and submit result
-    const solanaMessage: SolanaOffchainSimpleMessage = {
+    const solanaMessage: SolanaOffchainSimpleEnvelope = {
       signed_message: jsonBytes,
       chain_hash: chainHash,
       pubkey: pubkey,
@@ -365,7 +365,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Returns the transaction result in the same format as standard rollup.
    */
   private async signWithSolanaSpecAndSubmit(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     signer: Signer,
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
@@ -387,7 +387,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     const signature = await signer.sign(signedMessageWithPreamble);
 
     // Build and submit result
-    const solanaMessage: SolanaOffchainSpecCompliantMessage = {
+    const solanaMessage: SolanaOffchainSpecCompliantEnvelope = {
       signed_message_with_preamble: signedMessageWithPreamble,
       signature: signature,
     };
@@ -409,7 +409,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     params: {
       signer: Signer;
       authenticator: Authenticator;
-      overrides?: DeepPartial<UnsignedTransactionV0<RuntimeCall>>;
+      overrides?: DeepPartial<UnsignedTransaction<RuntimeCall>>;
     },
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
@@ -469,7 +469,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * @returns The transaction result
    */
   async signAndSubmitTransaction(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     params: { signer: Signer; authenticator: Authenticator },
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
@@ -506,8 +506,8 @@ export class SolanaSignableRollup<RuntimeCall> {
 
   async buildUnsignedTransaction(
     runtimeCall: RuntimeCall,
-    params?: { overrides?: DeepPartial<UnsignedTransactionV0<RuntimeCall>> },
-  ): Promise<UnsignedTransactionV0<RuntimeCall>> {
+    params?: { overrides?: DeepPartial<UnsignedTransaction<RuntimeCall>> },
+  ): Promise<UnsignedTransaction<RuntimeCall>> {
     return this.inner.buildUnsignedTransaction(runtimeCall, params);
   }
 
@@ -516,18 +516,18 @@ export class SolanaSignableRollup<RuntimeCall> {
    * The resulting JSON is what each signer signs directly (no discriminator prefix).
    */
   private async createMultisigJsonBytes(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisigId: unknown,
   ): Promise<Uint8Array> {
     const serializer = await this.inner.serializer();
     const schema = serializer.schema;
     const chainName = schema.chain_data.chain_name || "";
 
-    // Field order matches the Rust `SolanaOffchainUnsignedTransactionV1` struct
+    // Field order matches the Rust `SolanaOffchainSigningPayloadV1` struct
     // (`crates/module-system/sov-solana-offchain-auth/src/authentication/payload.rs`):
     // `address_override` must sit between `multisig_id` and `version` so TS- and Rust-generated
     // JSON bytes are byte-identical; multisig signatures cover these bytes directly.
-    const solanaUnsignedTx: SolanaOffchainUnsignedTransactionV1<RuntimeCall> = {
+    const solanaSigningPayload: SolanaOffchainSigningPayloadV1<RuntimeCall> = {
       runtime_call: unsignedTx.runtime_call,
       uniqueness: unsignedTx.uniqueness,
       details: unsignedTx.details,
@@ -540,7 +540,7 @@ export class SolanaSignableRollup<RuntimeCall> {
       version: 1,
     };
 
-    return new TextEncoder().encode(JSON.stringify(solanaUnsignedTx));
+    return new TextEncoder().encode(JSON.stringify(solanaSigningPayload));
   }
 
   /**
@@ -591,7 +591,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    */
   private unsignedTxFromTransaction(
     tx: TransactionV1<RuntimeCall>["V1"],
-  ): UnsignedTransactionV0<RuntimeCall> {
+  ): UnsignedTransaction<RuntimeCall> {
     return {
       runtime_call: tx.runtime_call,
       uniqueness: tx.uniqueness,
@@ -604,7 +604,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    * Creates the preamble+JSON bytes signed by every signer in a spec-compliant multisig flow.
    */
   private async createSpecCompliantMultisigSignedMessage(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisig: Multisig,
   ): Promise<Uint8Array> {
     const jsonBytes = await this.createMultisigJsonBytes(
@@ -622,7 +622,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   async multisigSigningBytes(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisig: Multisig,
     authenticator: SubmissionAuthenticator,
   ): Promise<Uint8Array> {
@@ -650,7 +650,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   private buildSpecCompliantMultisigEnvelope(
     tx: TransactionV1<RuntimeCall>["V1"],
     signedMessageWithPreamble: Uint8Array,
-  ): SolanaOffchainSpecCompliantMultisigMessage {
+  ): SolanaOffchainSpecCompliantMultisigEnvelope {
     const multisigPubkeys = this.canonicalizeMultisigPubkeys([
       ...tx.signatures.map((signer) => signer.pub_key),
       ...tx.unused_pub_keys,
@@ -791,7 +791,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     authenticator: Exclude<SubmissionAuthenticator, "standard">,
     options?: SovereignClient.RequestOptions,
   ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
-    const unsignedTx: UnsignedTransactionV0<RuntimeCall> = {
+    const unsignedTx: UnsignedTransaction<RuntimeCall> = {
       runtime_call: transaction.runtime_call,
       uniqueness: transaction.uniqueness,
       details: transaction.details,
@@ -804,7 +804,7 @@ export class SolanaSignableRollup<RuntimeCall> {
       case "solanaSimple": {
         const signedMessage = await this.createSolanaJsonBytes(unsignedTx);
         const chainHash = await this.inner.chainHash();
-        const message: SolanaOffchainSimpleMessage = {
+        const message: SolanaOffchainSimpleEnvelope = {
           signed_message: signedMessage,
           chain_hash: chainHash,
           pubkey,
@@ -820,7 +820,7 @@ export class SolanaSignableRollup<RuntimeCall> {
           chainHash,
           signedMessage.length,
         );
-        const message: SolanaOffchainSpecCompliantMessage = {
+        const message: SolanaOffchainSpecCompliantEnvelope = {
           signed_message_with_preamble: this.combinePreambleAndMessage(
             preamble,
             signedMessage,
@@ -940,10 +940,10 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
-   * Helper method to serialize a SolanaOffchainSimpleMessage using borsh encoding.
+   * Helper method to serialize a SolanaOffchainSimpleEnvelope using borsh encoding.
    */
   private serializeSolanaMessage(
-    message: SolanaOffchainSimpleMessage,
+    message: SolanaOffchainSimpleEnvelope,
   ): Uint8Array {
     // Validate message field lengths
     if (message.chain_hash.length !== CHAIN_HASH_SIZE) {
@@ -997,10 +997,10 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
-   * Helper method to serialize a SolanaOffchainSpecCompliantMessage using borsh encoding.
+   * Helper method to serialize a SolanaOffchainSpecCompliantEnvelope using borsh encoding.
    */
   private serializeSolanaSpecMessage(
-    message: SolanaOffchainSpecCompliantMessage,
+    message: SolanaOffchainSpecCompliantEnvelope,
   ): Uint8Array {
     // Validate signature length
     if (message.signature.length !== SIGNATURE_SIZE) {
@@ -1032,7 +1032,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
-   * Serializes a SolanaOffchainSimpleMultisigMessage using borsh encoding.
+   * Serializes a SolanaOffchainSimpleMultisigEnvelope using borsh encoding.
    * Layout matches the Rust struct:
    *   [u32 LE: wire_bytes.len][wire_bytes]
    *   [32 bytes: chain_hash]
@@ -1043,7 +1043,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    *   [u8: min_signers]
    */
   private serializeSolanaMultisigMessage(
-    message: SolanaOffchainSimpleMultisigMessage,
+    message: SolanaOffchainSimpleMultisigEnvelope,
   ): Uint8Array {
     if (message.chain_hash.length !== CHAIN_HASH_SIZE) {
       throw new Error(
@@ -1118,7 +1118,7 @@ export class SolanaSignableRollup<RuntimeCall> {
   }
 
   /**
-   * Serializes a SolanaOffchainSpecCompliantMultisigMessage using borsh encoding.
+   * Serializes a SolanaOffchainSpecCompliantMultisigEnvelope using borsh encoding.
    * Layout matches the Rust struct:
    *   [u32 LE: signed_message_with_preamble.len][signed_message_with_preamble]
    *   [u32 LE: signatures.len]
@@ -1127,7 +1127,7 @@ export class SolanaSignableRollup<RuntimeCall> {
    *   [u8: min_signers]
    */
   private serializeSolanaSpecMultisigMessage(
-    message: SolanaOffchainSpecCompliantMultisigMessage,
+    message: SolanaOffchainSpecCompliantMultisigEnvelope,
   ): Uint8Array {
     const sigCount = message.signatures.length;
 
