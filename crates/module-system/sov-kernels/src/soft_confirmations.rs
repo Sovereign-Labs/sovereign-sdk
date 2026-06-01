@@ -140,15 +140,6 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for SoftConfirmationsKer
         self.chain_state.base_fee_per_gas(state).unwrap_infallible()
     }
 
-    fn block_gas_limit(
-        &self,
-        current_rollup_height: RollupHeight,
-        is_stale_height: bool,
-    ) -> S::Gas {
-        self.chain_state
-            .block_gas_limit(current_rollup_height, is_stale_height)
-    }
-
     fn visible_hash_for(
         &self,
         rollup_height: RollupHeight,

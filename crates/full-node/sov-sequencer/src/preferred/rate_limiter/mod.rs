@@ -8,7 +8,6 @@ use resource::*;
 use sov_full_node_configs::sequencer::{Limits, SovRateLimiterConfig};
 use sov_modules_api::BasicAddress;
 use sov_modules_api::{CredentialId, Spec};
-use sov_rollup_interface::common::RollupHeight;
 use std::collections::HashMap;
 use std::hash::Hash;
 use std::{
@@ -16,6 +15,7 @@ use std::{
     time::{Duration, Instant},
 };
 
+use crate::preferred::sync_sequencer_state::comfortable_gas_limit;
 const TTL_MULTIPLIER: u32 = 5;
 
 #[derive(Debug)]
@@ -141,9 +141,8 @@ fn calculate_limits<S: Spec>(
     max_requests_per_second: u64,
     batch_execution_time_limit: Duration,
     max_batch_size_bytes: usize,
-    height_for_gas_limit_computation: RollupHeight,
 ) -> RateLimiterConfig<S> {
-    let max_gas = comfortable_gas_limit_for_height::<S>(height_for_gas_limit_computation);
+    let max_gas = comfortable_gas_limit::<S>();
     let batch_execution_time_limit_millis = batch_execution_time_limit
         .as_millis()
         .try_into()
@@ -214,7 +213,6 @@ fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
     max_requests_per_second: u64,
     batch_execution_time_limit: Duration,
     max_batch_size_bytes: usize,
-    height_for_gas_limit_computation: RollupHeight,
     v: Vec<(K, Limits)>,
 ) -> HashMap<K, RateLimiterConfig<S>> {
     v.into_iter()
@@ -226,7 +224,6 @@ fn to_limiter_config_map<K: Eq + Hash, S: Spec>(
                     max_requests_per_second,
                     batch_execution_time_limit,
                     max_batch_size_bytes,
-                    height_for_gas_limit_computation,
                 ),
             )
         })
@@ -265,14 +262,12 @@ fn limits<S: Spec>(
         sov_config.max_requests_per_second,
         batch_execution_time_limit,
         max_batch_size_bytes,
-        sov_config.height_for_gas_limit_computation,
     );
 
     let addrs = to_limiter_config_map::<S::Address, S>(
         sov_config.max_requests_per_second,
         batch_execution_time_limit,
         max_batch_size_bytes,
-        sov_config.height_for_gas_limit_computation,
         sov_config.address_custom_limits,
     );
 
@@ -288,7 +283,6 @@ fn limits<S: Spec>(
         sov_config.max_requests_per_second,
         batch_execution_time_limit,
         max_batch_size_bytes,
-        sov_config.height_for_gas_limit_computation,
         ip_custom_limits,
     );
 
@@ -533,13 +527,8 @@ mod tests {
         };
 
         let max_batch_exec_time = 6000;
-        let rate_limiter_config = calculate_limits::<TestSpec>(
-            limits,
-            10000,
-            Duration::from_millis(max_batch_exec_time),
-            6000000,
-            RollupHeight::GENESIS,
-        );
+        let rate_limiter_config =
+            calculate_limits::<TestSpec>(limits, 10000, Duration::from_millis(max_batch_exec_time), 6000000);
 
         let max_allowed_resources_per_key = rate_limiter_config.max_allowed_resources;
 
