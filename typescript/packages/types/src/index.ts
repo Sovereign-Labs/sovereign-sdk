@@ -28,9 +28,9 @@ export type Window = { window: number };
 export type Uniqueness = Nonce | Generation | Window;
 
 /**
- * Common unsigned transaction fields shared by all unsigned transaction versions.
+ * Consumer-facing unsigned transaction payload.
  */
-type UnsignedTransactionFields<RuntimeCall> = {
+export type UnsignedTransaction<RuntimeCall> = {
   /** The specific runtime call/method being invoked on the rollup */
   runtime_call: RuntimeCall;
   /** Uniqueness mechanism to prevent replay attacks */
@@ -42,31 +42,37 @@ type UnsignedTransactionFields<RuntimeCall> = {
 };
 
 /**
- * Consumer-facing version 0 unsigned transaction.
- * Used for standard rollup transaction building and single-signature signing.
+ * Version 0 transaction signing payload.
+ * Used internally to produce single-signature signing bytes.
  */
-export type UnsignedTransactionV0<RuntimeCall> =
-  UnsignedTransactionFields<RuntimeCall>;
+export type TransactionSigningPayloadV0<RuntimeCall> =
+  UnsignedTransaction<RuntimeCall> & {
+    /** Chain hash binding the signature to the rollup schema and metadata */
+    chain_hash: number[];
+  };
 
 /**
- * Version 1 unsigned transaction.
+ * Version 1 transaction signing payload.
  * Used internally for multisig signing bytes and includes the credential commitment.
  */
-export type UnsignedTransactionV1<
+export type TransactionSigningPayloadV1<
   RuntimeCall,
   CredentialAddress = unknown,
-> = UnsignedTransactionFields<RuntimeCall> & {
+> = TransactionSigningPayloadV0<RuntimeCall> & {
   /** The multisig credential address in the rollup's native address format */
   credential_address: CredentialAddress;
 };
 
 /**
- * Versioned unsigned transaction envelope.
+ * Versioned transaction signing payload envelope.
  * This is the exact root object serialized for signing.
  */
-export type UnsignedTransaction<RuntimeCall, CredentialAddress = unknown> =
-  | { V0: UnsignedTransactionV0<RuntimeCall> }
-  | { V1: UnsignedTransactionV1<RuntimeCall, CredentialAddress> };
+export type TransactionSigningPayload<
+  RuntimeCall,
+  CredentialAddress = unknown,
+> =
+  | { V0: TransactionSigningPayloadV0<RuntimeCall> }
+  | { V1: TransactionSigningPayloadV1<RuntimeCall, CredentialAddress> };
 
 /**
  * Version 0 transaction format with single signature.
@@ -78,7 +84,7 @@ export type TransactionV0<RuntimeCall> = {
     pub_key: HexString;
     /** Cryptographic signature of the transaction in hex format */
     signature: HexString;
-  } & UnsignedTransactionV0<RuntimeCall>;
+  } & UnsignedTransaction<RuntimeCall>;
 };
 
 /**
@@ -104,7 +110,7 @@ export type TransactionV1<RuntimeCall> = {
     signatures: SignatureAndPubKey[];
     /** Minimum number of signatures required for transaction validity */
     min_signers: number;
-  } & UnsignedTransactionV0<RuntimeCall>;
+  } & UnsignedTransaction<RuntimeCall>;
 };
 
 /**

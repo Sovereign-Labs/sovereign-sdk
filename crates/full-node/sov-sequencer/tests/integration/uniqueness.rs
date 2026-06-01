@@ -3,7 +3,7 @@ use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::prelude::*;
-use sov_modules_api::transaction::{Transaction, UnsignedTransactionV0};
+use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_api::{Amount, EncodeCall, Runtime};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_rollup_interface::crypto::{PrivateKey, PublicKey};
@@ -99,7 +99,7 @@ async fn test_mixed_nonce_and_generation_transactions() {
 
     let construct_tx = |uniqueness: UniquenessData| {
         let unsigned_tx =
-            UnsignedTransactionV0::new_with_details(msg.clone(), uniqueness, details.clone(), None);
+            UnsignedTransaction::new_with_details(msg.clone(), uniqueness, details.clone(), None);
         Transaction::<RT, TestSpec>::new_signed_tx(
             &test_user.private_key,
             &RT::CHAIN_HASH,

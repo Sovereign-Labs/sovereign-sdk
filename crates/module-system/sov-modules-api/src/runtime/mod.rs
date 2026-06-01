@@ -245,7 +245,7 @@ pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'stat
 ) -> anyhow::Result<sov_universal_wallet::schema::Schema> {
     let schema = sov_universal_wallet::schema::Schema::of_rollup_types_with_chain_data::<
         crate::transaction::Transaction<R, S>,
-        crate::transaction::UnsignedTransaction<R, S>,
+        crate::transaction::TransactionSigningPayload<R, S>,
         R::Decodable,
         S::Address,
     >(sov_universal_wallet::schema::ChainData {

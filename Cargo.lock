@@ -11474,6 +11474,7 @@ dependencies = [
  "jsonrpsee",
  "serde_json",
  "sov-address",
+ "sov-eip712-auth",
  "sov-modules-api",
  "sov-state",
  "sov-universal-wallet",

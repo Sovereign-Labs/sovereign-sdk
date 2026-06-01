@@ -1,5 +1,5 @@
-import { describe, it, expect } from "vitest";
-import { Schema, KnownTypeId } from "@sovereign-sdk/universal-wallet-wasm";
+import { KnownTypeId, Schema } from "@sovereign-sdk/universal-wallet-wasm";
+import { describe, expect, it } from "vitest";
 import demoRollupSchema from "../../__fixtures__/demo-rollup-schema.json";
 import { bytesToHex, hexToBytes } from "./utils";
 
@@ -30,7 +30,7 @@ describe("Schema", () => {
   describe("chainHash", () => {
     it("should calculate the chain hash successfully", () => {
       const expected =
-        "09259df3baa3f9711d1077e2fab361e26aad7bdd332a5556d918afffdb193248";
+        "e64ed5648d8bacc17374a9b7b50c07e39a8c60b76f22fdb6ee64f8fe09a284be";
       const actual = bytesToHex(schema.chainHash);
 
       expect(actual).toEqual(expected);
@@ -39,7 +39,7 @@ describe("Schema", () => {
   describe("metadataHash", () => {
     it("should restore the metadata hash successfully", () => {
       const expected =
-        "66029fc01023cef431d739fe5a706536bb520a1b16de98d7a6d30f8b4b1f883c";
+        "8aadc8d732e3a50dae754a16309b5c32135d835170ddc5ab63bc087179faf2c1";
       const actual = bytesToHex(schema.metadataHash);
 
       expect(actual).toEqual(expected);
@@ -70,8 +70,8 @@ describe("Schema", () => {
       const actual = bytesToHex(
         schema.jsonToBorsh(
           schema.knownTypeIndex(KnownTypeId.RuntimeCall),
-          JSON.stringify(call)
-        )
+          JSON.stringify(call),
+        ),
       );
       const expected =
         "000007000000746f6b656e5f31010c204e000000000000000000000000000000f8ad2437a279e1c8932c07358c91dc4fe34864a98c6c25f298e2a0190100000000f8ad2437a279e1c8932c07358c91dc4fe34864a98c6c25f298e2a0190100e87648170000000000000000000000";
@@ -87,15 +87,15 @@ describe("Schema", () => {
       const doConversion = () =>
         schema.jsonToBorsh(
           schema.knownTypeIndex(KnownTypeId.RuntimeCall),
-          JSON.stringify(call)
+          JSON.stringify(call),
         );
       expect(doConversion).toThrow(
-        "Expected type or field __SovVirtualWallet_CallMessage_CreateToken.token_name, but it was not present"
+        "Expected type or field __SovVirtualWallet_CallMessage_CreateToken.token_name, but it was not present",
       );
     });
     it("should allow strings to serialize as u128", () => {
       const addr = hexToBytes(
-        "b7e23f9dc86a1547ee09d82a5c8f3610d975e2c84fb61038a719e524"
+        "b7e23f9dc86a1547ee09d82a5c8f3610d975e2c84fb61038a719e524",
       );
       const call = {
         bank: {
@@ -112,14 +112,14 @@ describe("Schema", () => {
       const doConversion = () =>
         schema.jsonToBorsh(
           schema.knownTypeIndex(KnownTypeId.RuntimeCall),
-          JSON.stringify(call)
+          JSON.stringify(call),
         );
       expect(doConversion).not.toThrow();
     });
   });
 
   describe("eip712Json", () => {
-    it("should generate EIP712 JSON for UnsignedTransaction", () => {
+    it("should generate EIP712 JSON for TransactionSigningPayload", () => {
       const call = {
         bank: {
           transfer: {
@@ -136,7 +136,7 @@ describe("Schema", () => {
         },
       };
 
-      const unsignedTransaction = {
+      const transactionSigningPayload = {
         V0: {
           runtime_call: call,
           uniqueness: { generation: "0" },
@@ -147,17 +147,18 @@ describe("Schema", () => {
             chain_id: "1",
           },
           address_override: null,
+          chain_hash: Array.from(schema.chainHash),
         },
       };
 
       const txBorsh = schema.jsonToBorsh(
-        schema.knownTypeIndex(KnownTypeId.UnsignedTransaction),
-        JSON.stringify(unsignedTransaction)
+        schema.knownTypeIndex(KnownTypeId.TransactionSigningPayload),
+        JSON.stringify(transactionSigningPayload),
       );
 
       const eip712Json = schema.eip712Json(
-        schema.knownTypeIndex(KnownTypeId.UnsignedTransaction),
-        txBorsh
+        schema.knownTypeIndex(KnownTypeId.TransactionSigningPayload),
+        txBorsh,
       );
 
       // Verify it's valid JSON
@@ -169,15 +170,15 @@ describe("Schema", () => {
       expect(parsed).toHaveProperty("primaryType");
       expect(parsed).toHaveProperty("types");
 
-      expect(parsed.primaryType).toBe("UnsignedTransaction");
+      expect(parsed.primaryType).toBe("TransactionSigningPayload");
       expect(JSON.stringify(parsed)).toEqual(
-        `{"domain":{"name":"TestChain","chainId":"0x10e1","salt":"0x09259df3baa3f9711d1077e2fab361e26aad7bdd332a5556d918afffdb193248"},"types":{"Bank":[{"type":"Transfer","name":"Transfer"}],"Coins":[{"type":"uint128","name":"amount"},{"type":"string","name":"token_id"}],"EIP712Domain":[{"type":"string","name":"name"},{"type":"uint256","name":"chainId"},{"type":"bytes32","name":"salt"}],"MultiAddressEvmSolana":[{"type":"string","name":"Standard"}],"RuntimeCall":[{"type":"Bank","name":"Bank"}],"Transfer":[{"type":"MultiAddressEvmSolana","name":"to"},{"type":"Coins","name":"coins"}],"TxDetails":[{"type":"uint64","name":"max_priority_fee_bips"},{"type":"uint128","name":"max_fee"},{"type":"uint64","name":"chain_id"}],"UniquenessData":[{"type":"uint64","name":"Generation"}],"UnsignedTransaction":[{"type":"V0","name":"V0"}],"V0":[{"type":"RuntimeCall","name":"runtime_call"},{"type":"UniquenessData","name":"uniqueness"},{"type":"TxDetails","name":"details"}]},"primaryType":"UnsignedTransaction","message":{"V0":{"details":{"chain_id":"1","max_fee":"10000","max_priority_fee_bips":"1000"},"runtime_call":{"Bank":{"Transfer":{"coins":{"amount":"1000","token_id":"token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"},"to":{"Standard":"sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"}}}},"uniqueness":{"Generation":"0"}}}}`
+        `{"domain":{"name":"TestChain","chainId":"0x10e1","salt":"0xe64ed5648d8bacc17374a9b7b50c07e39a8c60b76f22fdb6ee64f8fe09a284be"},"types":{"Bank":[{"type":"Transfer","name":"Transfer"}],"Coins":[{"type":"uint128","name":"amount"},{"type":"string","name":"token_id"}],"EIP712Domain":[{"type":"string","name":"name"},{"type":"uint256","name":"chainId"},{"type":"bytes32","name":"salt"}],"MultiAddressEvmSolana":[{"type":"string","name":"Standard"}],"RuntimeCall":[{"type":"Bank","name":"Bank"}],"TransactionSigningPayload":[{"type":"V0","name":"V0"}],"Transfer":[{"type":"MultiAddressEvmSolana","name":"to"},{"type":"Coins","name":"coins"}],"TxDetails":[{"type":"uint64","name":"max_priority_fee_bips"},{"type":"uint128","name":"max_fee"},{"type":"uint64","name":"chain_id"}],"UniquenessData":[{"type":"uint64","name":"Generation"}],"V0":[{"type":"RuntimeCall","name":"runtime_call"},{"type":"UniquenessData","name":"uniqueness"},{"type":"TxDetails","name":"details"}]},"primaryType":"TransactionSigningPayload","message":{"V0":{"details":{"chain_id":"1","max_fee":"10000","max_priority_fee_bips":"1000"},"runtime_call":{"Bank":{"Transfer":{"coins":{"amount":"1000","token_id":"token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"},"to":{"Standard":"sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"}}}},"uniqueness":{"Generation":"0"}}}}`,
       );
     });
   });
 
   describe("eip712SigningHash", () => {
-    it("should generate EIP712 signing hash for UnsignedTransaction", () => {
+    it("should generate EIP712 signing hash for TransactionSigningPayload", () => {
       const call = {
         bank: {
           transfer: {
@@ -194,7 +195,7 @@ describe("Schema", () => {
         },
       };
 
-      const unsignedTransaction = {
+      const transactionSigningPayload = {
         V0: {
           runtime_call: call,
           uniqueness: { generation: "0" },
@@ -205,23 +206,24 @@ describe("Schema", () => {
             chain_id: "1",
           },
           address_override: null,
+          chain_hash: Array.from(schema.chainHash),
         },
       };
 
       const txBorsh = schema.jsonToBorsh(
-        schema.knownTypeIndex(KnownTypeId.UnsignedTransaction),
-        JSON.stringify(unsignedTransaction)
+        schema.knownTypeIndex(KnownTypeId.TransactionSigningPayload),
+        JSON.stringify(transactionSigningPayload),
       );
 
       const signingHash = schema.eip712SigningHash(
-        schema.knownTypeIndex(KnownTypeId.UnsignedTransaction),
-        txBorsh
+        schema.knownTypeIndex(KnownTypeId.TransactionSigningPayload),
+        txBorsh,
       );
 
       // Should return a 32-byte hash
       expect(signingHash).toHaveLength(32);
       expect(bytesToHex(signingHash)).toEqual(
-        "92e719f0e0028291ff04bb724a298492440123bfafefb26722b31680809d9c35"
+        "da3a9abfab311287763f4a5edf6885de154090f316dda78705b54e7d1c5f0e9a",
       );
     });
   });

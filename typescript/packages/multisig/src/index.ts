@@ -2,7 +2,7 @@ import { sha256 } from "@noble/hashes/sha2";
 import type {
   SignatureAndPubKey,
   TransactionV1,
-  UnsignedTransactionV0,
+  UnsignedTransaction,
 } from "@sovereign-sdk/types";
 import type { HexString } from "@sovereign-sdk/utils";
 import { hexToBytes, normalizeHexString } from "@sovereign-sdk/utils";
@@ -105,7 +105,7 @@ export class Multisig {
   }
 
   toTransaction<RuntimeCall>(
-    unsignedTx: UnsignedTransactionV0<RuntimeCall>,
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
   ): TransactionV1<RuntimeCall> {
     if (!this.isComplete) {
       throw new MultisigError("Multisig transaction is incomplete");

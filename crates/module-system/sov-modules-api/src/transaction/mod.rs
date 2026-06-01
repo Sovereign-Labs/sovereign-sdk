@@ -2,12 +2,16 @@ mod data;
 mod rewards;
 use std::fmt::Debug;
 
+use crate::capabilities::UniquenessData;
 use crate::Multisig;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use data::{AuthenticatedTransactionData, Credentials, PriorityFeeBips, TxDetails};
 use derivative::Derivative;
 pub(crate) use rewards::transaction_consumption_helper;
 pub use rewards::{ProverReward, RemainingFunds, SequencerReward, TransactionConsumption};
+pub use signing_payload::{
+    TransactionSigningPayload, TransactionSigningPayloadV0, TransactionSigningPayloadV1,
+};
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
 use sov_rollup_interface::crypto::{SigVerificationError, Signature};
@@ -20,13 +24,14 @@ pub use types::{
     v0::Version0,
     v1::{PubKeyAndSignature, Version1},
 };
-pub use unsigned::{UnsignedTransaction, UnsignedTransactionV0, UnsignedTransactionV1};
+pub use unsigned::UnsignedTransaction;
 
 use crate::{
     CryptoSpecExt, DispatchCall, Gas, GasMeter, GasMeteringError, MeteredSigVerificationError,
     MeteredSignature, Spec,
 };
 
+mod signing_payload;
 #[cfg(test)]
 mod tests;
 mod types;
@@ -100,13 +105,12 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     pub fn new_signed_tx(
         priv_key: &C::PrivateKey,
         chain_hash: &[u8; 32],
-        unsigned_tx: UnsignedTransactionV0<R, S>,
+        unsigned_tx: UnsignedTransaction<R, S>,
     ) -> Self {
-        let utx_bytes = UnsignedTransaction::<R, S>::V0(unsigned_tx.clone())
-            .serialized_with_chain_hash(chain_hash);
+        let signing_bytes = unsigned_tx.to_signing_bytes_v0(*chain_hash);
 
         let pub_key = priv_key.pub_key();
-        let signature = priv_key.sign(&utx_bytes);
+        let signature = priv_key.sign(&signing_bytes);
 
         unsigned_tx.to_signed_tx(pub_key, signature)
     }
@@ -171,15 +175,32 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         }
     }
 
-    /// Serialize the transaction, appending the runtime's chain_hash.
+    /// Creates a new transaction with the provided metadata.
+    pub fn new_with_details_v0(
+        pub_key: C::PublicKey,
+        runtime_call: R::Call,
+        signature: C::Signature,
+        uniqueness: UniquenessData,
+        details: TxDetails<S>,
+        address_override: Option<S::Address>,
+    ) -> Self {
+        Self::V0(Version0 {
+            signature,
+            pub_key,
+            runtime_call,
+            uniqueness,
+            details,
+            address_override,
+        })
+    }
+
+    /// Serializes the transaction signing payload.
     /// This is the standard serialization for Sovereign signature signing.
-    pub fn serialized_with_chain_hash(
-        &self,
-        chain_hash: &[u8; 32],
-    ) -> Result<Vec<u8>, TransactionVerificationError<S::Gas>> {
-        Ok(self
-            .as_unsigned_transaction()
-            .serialized_with_chain_hash(chain_hash))
+    pub fn to_signing_bytes(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
+        match &self {
+            Transaction::V0(inner) => inner.to_signing_bytes(chain_hash),
+            Transaction::V1(inner) => inner.to_signing_bytes(chain_hash),
+        }
     }
 
     /// Charge gas for verifying the transaction signature against the given message.
@@ -233,13 +254,11 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         Ok(())
     }
 
-    /// Converts the transaction to a versioned unsigned transaction.
-    /// For V0, this extracts the common fields. For V1, this also computes the
-    /// `credential_address` from the multisig parameters.
-    pub fn as_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
+    /// Converts the transaction to an unsigned transaction payload.
+    pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
         match &self {
-            Transaction::V0(inner) => inner.as_unsigned(),
-            Transaction::V1(inner) => inner.as_unsigned(),
+            Transaction::V0(inner) => inner.to_unsigned_transaction(),
+            Transaction::V1(inner) => inner.to_unsigned_transaction(),
         }
     }
 }

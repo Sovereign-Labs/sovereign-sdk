@@ -4,7 +4,7 @@ use demo_stf::runtime::{Runtime, RuntimeCall};
 use sov_bank::{CallMessage, Coins, TokenId};
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::sov_universal_wallet::schema::{ChainData, RollupRoots, Schema};
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction, UnsignedTransactionV0};
+use sov_modules_api::transaction::{Transaction, TransactionSigningPayload, UnsignedTransaction};
 use sov_modules_api::{Address, Amount, DispatchCall, PrivateKey, Spec};
 use sov_modules_macros::config_value;
 use sov_test_utils::{
@@ -15,7 +15,7 @@ use crate::test_helpers::{DemoRollupSpec, CHAIN_HASH};
 
 type S = DemoRollupSpec;
 
-fn make_unsigned_tx() -> UnsignedTransactionV0<Runtime<S>, S> {
+fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
     let msg: RuntimeCall<S> = RuntimeCall::Bank(CallMessage::Mint {
         mint_to_address: <S as Spec>::Address::from_str(
             "sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv",
@@ -29,7 +29,7 @@ fn make_unsigned_tx() -> UnsignedTransactionV0<Runtime<S>, S> {
             .unwrap(),
         },
     });
-    UnsignedTransactionV0::<_, S>::new(
+    UnsignedTransaction::<_, S>::new(
         msg,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -64,7 +64,7 @@ fn test_transfer_template() {
     }"#;
     let schema = Schema::of_rollup_types_with_chain_data::<
         Transaction<Runtime<S>, S>,
-        UnsignedTransaction<Runtime<S>, S>,
+        TransactionSigningPayload<Runtime<S>, S>,
         RuntimeCall<S>,
         Address,
     >(ChainData {
@@ -85,11 +85,9 @@ fn test_transfer_template() {
 #[test]
 fn test_display_unsigned_tx() {
     let unsigned_tx = make_unsigned_tx();
-    let unsigned_enum = UnsignedTransaction::<Runtime<S>, S>::V0(unsigned_tx);
-    let unsigned_data = borsh::to_vec(&unsigned_enum).unwrap();
     let schema = Schema::of_rollup_types_with_chain_data::<
         Transaction<Runtime<S>, S>,
-        UnsignedTransaction<Runtime<S>, S>,
+        TransactionSigningPayload<Runtime<S>, S>,
         RuntimeCall<S>,
         Address,
     >(ChainData {
@@ -97,13 +95,14 @@ fn test_display_unsigned_tx() {
         chain_name: "TestChain".to_string(),
     })
     .unwrap();
+    let signing_payload_data = unsigned_tx.to_signing_bytes_v0(schema.chain_hash().unwrap());
     assert_eq!(
         schema
             .display(
                 schema
-                    .rollup_expected_index(RollupRoots::UnsignedTransaction)
+                    .rollup_expected_index(RollupRoots::TransactionSigningPayload)
                     .unwrap(),
-                &unsigned_data
+                &signing_payload_data
             )
             .unwrap(),
         r#"V0 { runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, uniqueness: Generation(0), details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 }, address_override: None }"#
@@ -119,7 +118,7 @@ fn test_display_signed_tx() {
     let signed_data = borsh::to_vec(&signed_tx).unwrap();
     let schema = Schema::of_rollup_types_with_chain_data::<
         Transaction<Runtime<S>, S>,
-        UnsignedTransaction<Runtime<S>, S>,
+        TransactionSigningPayload<Runtime<S>, S>,
         RuntimeCall<S>,
         Address,
     >(ChainData {
@@ -151,8 +150,8 @@ fn test_display_signed_tx() {
 #[test]
 fn detect_schema_has_breaking_change() {
     let current_hash: [u8; 32] = [
-        74, 149, 199, 110, 16, 200, 147, 125, 127, 159, 22, 86, 92, 21, 170, 211, 253, 129, 177,
-        244, 97, 119, 222, 182, 53, 36, 35, 136, 210, 84, 233, 38,
+        98, 116, 57, 236, 27, 86, 80, 121, 51, 169, 239, 1, 28, 214, 68, 105, 244, 38, 128, 96,
+        101, 7, 197, 134, 197, 62, 172, 74, 221, 40, 243, 239,
     ];
     assert_eq!(CHAIN_HASH, current_hash, "The chain hash changed. Update the \"current_hash\" value in this test but be aware: this is a breaking change for any production rollups.");
 }
