@@ -132,7 +132,7 @@ where
                         if let Message::AcceptTx { resp, .. } = lowest_priority_msg {
                             self.send_response(
                                 resp,
-                                Err(AcceptTxError::SequencerOverloaded503),
+                                Err(AcceptTxError::SequencerOverloaded503("Message heap full")),
                                 "accept_tx",
                             )
                             .await;
@@ -902,7 +902,9 @@ where
         let new_tx_queue_id = inner.tx_queue_id.load(Ordering::Acquire);
         if new_tx_queue_id != original_tx_queue_id {
             tracing::debug!(%tx_hash, "Transaction was queued before downtime. Dropping.");
-            return Err(AcceptTxError::SequencerOverloaded503);
+            return Err(AcceptTxError::SequencerOverloaded503(
+                "Transaction queued before downtime",
+            ));
         }
 
         inner
