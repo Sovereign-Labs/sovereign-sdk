@@ -40,7 +40,7 @@ function createMockClient(overrides?: {
 
 function createMockSerializer(overrides?: any) {
   return {
-    serializeUnsignedTx: vi.fn().mockReturnValue(new Uint8Array(10)),
+    serializeSigningPayload: vi.fn().mockReturnValue(new Uint8Array(10)),
     serializeTx: vi.fn().mockReturnValue(new Uint8Array(10)),
     serializeRuntimeCall: vi.fn().mockReturnValue(new Uint8Array(10)),
     schema: overrides?.schema || {},

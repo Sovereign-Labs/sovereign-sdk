@@ -14,7 +14,7 @@ import {
 const mockSerializer = {
   serialize: vi.fn().mockReturnValue(new Uint8Array([1, 2, 3])),
   serializeRuntimeCall: vi.fn().mockReturnValue(new Uint8Array([4, 5, 6])),
-  serializeUnsignedTx: vi.fn().mockReturnValue(new Uint8Array([7, 8, 9])),
+  serializeSigningPayload: vi.fn().mockReturnValue(new Uint8Array([7, 8, 9])),
   serializeTx: vi.fn().mockReturnValue(new Uint8Array([10, 11, 12])),
   schema: { chainHash: new Uint8Array([1, 2, 3, 4]) } as any,
 };
@@ -38,6 +38,7 @@ const testRollup = <S extends BaseTypeSpec, C extends RollupContext>(
     },
     {
       unsignedTransaction: vi.fn(),
+      transactionSigningPayload: vi.fn().mockResolvedValue({}),
       transaction: vi.fn(),
       ...builder,
     },
@@ -232,7 +233,11 @@ describe("Rollup", () => {
     };
 
     const mockTransaction = { type: "mock-tx" };
+    const mockSigningPayload = {
+      V0: { foo: "bar", chain_hash: [1, 2, 3, 4] },
+    };
     const mockTypeBuilder = {
+      transactionSigningPayload: vi.fn().mockResolvedValue(mockSigningPayload),
       transaction: vi.fn().mockResolvedValue(mockTransaction),
     };
 
@@ -248,13 +253,23 @@ describe("Rollup", () => {
 
       await rollup.signAndSubmitTransaction(unsignedTx, { signer: mockSigner });
 
-      // should be called with (serialized tx ++ chain hash)
-      expect(mockSigner.sign).toHaveBeenCalledWith(
-        new Uint8Array([7, 8, 9, 1, 2, 3, 4]),
+      expect(mockSigner.sign).toHaveBeenCalledWith(new Uint8Array([7, 8, 9]));
+      expect(mockSerializer.serializeSigningPayload).toHaveBeenCalledWith(
+        mockSigningPayload,
       );
-      expect(mockSerializer.serializeUnsignedTx).toHaveBeenCalledWith(
+    });
+
+    it("should build the transaction signing payload with the cached chain hash", async () => {
+      const { rollup } = testRollup({}, mockTypeBuilder);
+      rollup.submitTransaction = vi.fn();
+
+      await rollup.signAndSubmitTransaction(unsignedTx, { signer: mockSigner });
+
+      expect(mockTypeBuilder.transactionSigningPayload).toHaveBeenCalledWith({
         unsignedTx,
-      );
+        chainHash: new Uint8Array([1, 2, 3, 4]),
+        rollup,
+      });
     });
 
     it("should pass options to submitTransaction", async () => {
@@ -329,6 +344,9 @@ describe("Rollup", () => {
 
     const mockTypeBuilder = {
       unsignedTransaction: vi.fn().mockResolvedValue(mockUnsignedTx),
+      transactionSigningPayload: vi
+        .fn()
+        .mockResolvedValue({ V0: mockUnsignedTx }),
       transaction: vi.fn().mockResolvedValue(mockTransaction),
     };
 

@@ -6,7 +6,7 @@ use sov_cli::workflows::transactions::{TransactionLoadWorkflow, TransactionWorkf
 use sov_cli::UnsignedTransactionWithoutUniqueness;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::cli::{FileNameArg, JsonStringArg};
-use sov_modules_api::transaction::{Transaction, UnsignedTransactionV0};
+use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_api::{
     Amount, CryptoSpec, DispatchCall, MeteredBorshDeserialize, PrivateKey, Spec,
 };
@@ -95,7 +95,7 @@ fn transaction_is_serialized_correctly() {
         let tx_p = Transaction::<Runtime, TestSpec>::new_signed_tx(
             &key,
             &chain_hash,
-            UnsignedTransactionV0::new(
+            UnsignedTransaction::new(
                 runtime_call.clone(),
                 chain_id,
                 max_priority_fee_bips,
@@ -106,7 +106,7 @@ fn transaction_is_serialized_correctly() {
             ),
         );
 
-        tx.verify_signature_unmetered(&tx.serialized_with_chain_hash(&chain_hash).unwrap())
+        tx.verify_signature_unmetered(&tx.to_signing_bytes(&chain_hash))
             .expect("the computed signature is incorrect");
 
         assert_eq!(
@@ -194,9 +194,7 @@ fn transaction_signed_properly_from_file() {
         Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
     signed_tx
         .verify_signature_unmetered(
-            &signed_tx
-                .serialized_with_chain_hash(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
-                .unwrap(),
+            &signed_tx.to_signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH),
         )
         .unwrap();
 
@@ -250,9 +248,7 @@ fn transaction_signed_properly_from_json_string() {
         Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
     signed_tx
         .verify_signature_unmetered(
-            &signed_tx
-                .serialized_with_chain_hash(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
-                .unwrap(),
+            &signed_tx.to_signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH),
         )
         .unwrap();
     assert_eq!(&runtime_call, signed_tx.runtime_call());
@@ -312,9 +308,7 @@ fn transaction_signed_by_account_nickname() {
         Transaction::unmetered_deserialize(&mut raw_signed_tx.as_slice()).unwrap();
     signed_tx
         .verify_signature_unmetered(
-            &signed_tx
-                .serialized_with_chain_hash(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
-                .unwrap(),
+            &signed_tx.to_signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH),
         )
         .unwrap();
 
@@ -372,9 +366,7 @@ fn transaction_outputs_json() {
         Transaction::unmetered_deserialize(&mut raw_signed_tx).unwrap();
     signed_tx
         .verify_signature_unmetered(
-            &signed_tx
-                .serialized_with_chain_hash(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH)
-                .unwrap(),
+            &signed_tx.to_signing_bytes(&<Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH),
         )
         .unwrap();
 }

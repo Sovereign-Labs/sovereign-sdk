@@ -5,7 +5,6 @@ use sov_universal_wallet::UniversalWallet;
 use crate::capabilities::{AuthenticationError, AuthorizationData, UniquenessData};
 use crate::transaction::{
     hex_field_format, Credentials, Transaction, TransactionCallable, UnsignedTransaction,
-    UnsignedTransactionV0,
 };
 use crate::{metered_credential, CryptoSpecExt, GasMeter, Spec, TxHash};
 
@@ -48,14 +47,20 @@ pub struct Version0<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Sp
 }
 
 impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
-    /// Extracts the versioned unsigned transaction data from this signed envelope.
-    pub fn as_unsigned(&self) -> UnsignedTransaction<R, S> {
-        UnsignedTransaction::V0(UnsignedTransactionV0 {
-            runtime_call: self.runtime_call.clone(),
-            uniqueness: self.uniqueness,
-            details: self.details.clone(),
-            address_override: self.address_override,
-        })
+    /// Extracts the unsigned transaction payload from this signed envelope.
+    pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
+        UnsignedTransaction::new_with_details(
+            self.runtime_call.clone(),
+            self.uniqueness,
+            self.details.clone(),
+            self.address_override,
+        )
+    }
+
+    /// Serializes the V0 transaction signing payload for this signed envelope.
+    pub fn to_signing_bytes(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
+        self.to_unsigned_transaction()
+            .to_signing_bytes_v0(*chain_hash)
     }
 
     /// Extracts authorization data from this transaction.
