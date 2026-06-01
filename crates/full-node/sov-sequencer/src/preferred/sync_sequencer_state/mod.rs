@@ -262,7 +262,7 @@ type AcceptTxRet<S, Rt> =
 
 #[derive(Debug)]
 pub(crate) enum AcceptTxError<S: Spec> {
-    SequencerOverloaded503,
+    SequencerOverloaded503(&'static str),
     NotFullySynced(SequencerNotReadyDetails),
     BatchError {
         batch_creation_error: BatchCreationError,
