@@ -1,7 +1,7 @@
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::transaction::{Transaction, UnsignedTransactionV0};
+use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_api::{
     CredentialId, CryptoSpec, EncodeCall, HexHash, Multisig, PrivateKey, RawTx, Runtime, Spec,
     TxEffect,
@@ -156,7 +156,7 @@ fn send_tx_bad_generation_duplicate_with_malleated_v1_envelope() {
         TestUser::<S>::generate_with_default_balance().add_credential_id(multisig_credential_id),
     );
 
-    let mut original_tx = UnsignedTransactionV0::<RT, S>::new_with_details(
+    let mut original_tx = UnsignedTransaction::<RT, S>::new_with_details(
         runtime_msg,
         UniquenessData::Generation(0),
         default_test_tx_details::<S>(),
@@ -174,8 +174,8 @@ fn send_tx_bad_generation_duplicate_with_malleated_v1_envelope() {
     malleated_tx.unused_pub_keys.swap(0, 1);
 
     assert_eq!(
-        original_tx.serialize_for_signing(&RT::CHAIN_HASH),
-        malleated_tx.serialize_for_signing(&RT::CHAIN_HASH),
+        original_tx.to_signing_bytes(&RT::CHAIN_HASH),
+        malleated_tx.to_signing_bytes(&RT::CHAIN_HASH),
         "The signable payload should be unchanged by V1 envelope malleation"
     );
     assert_ne!(

@@ -27,7 +27,7 @@ use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaSpec};
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransactionV0};
+use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
 use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey as _;
 use sov_modules_api::{Amount, CryptoSpec, OperatingMode, RawTx, Runtime as RuntimeT, Spec};
@@ -110,7 +110,7 @@ fn build_register_sequencer_tx(
     Transaction::<Runtime<TestSpec>, TestSpec>::new_signed_tx(
         key,
         &CHAIN_HASH,
-        UnsignedTransactionV0::new(
+        UnsignedTransaction::new(
             msg,
             chain_id,
             max_priority_fee_bips,
@@ -493,7 +493,7 @@ fn build_state_heavy_tx(
     Transaction::<Runtime<TestSpec>, TestSpec>::new_signed_tx(
         key,
         &CHAIN_HASH,
-        UnsignedTransactionV0::new(
+        UnsignedTransaction::new(
             msg,
             chain_id,
             max_priority_fee_bips,
