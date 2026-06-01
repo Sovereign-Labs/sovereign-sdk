@@ -4,7 +4,7 @@ use std::rc::Rc;
 use borsh::BorshDeserialize;
 use sov_accounts::{AccountData, Accounts, CallMessage, Event};
 use sov_modules_api::digest::Digest;
-use sov_modules_api::transaction::{UnsignedTransactionV0, Version1};
+use sov_modules_api::transaction::{UnsignedTransaction, Version1};
 use sov_modules_api::{
     Amount, CredentialId, CryptoSpec, PrivateKey, PublicKey, RawTx, Runtime, SkippedTxContents,
     Spec, StoredEvent, TxEffect,
@@ -236,7 +236,7 @@ fn test_setup_multisig_and_act() {
     // - Submitting the transaction and asserting it is skipped
     let generate_multisig_tx = || {
         let key = TestPrivateKey::generate();
-        UnsignedTransactionV0::<RT, S>::new_with_details(
+        UnsignedTransaction::<RT, S>::new_with_details(
             TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(
                 key.pub_key().credential_id(),
             )),
@@ -573,7 +573,7 @@ fn make_v1_tx(
     address_override: Option<<S as Spec>::Address>,
 ) -> Version1<RT, S> {
     let details = default_test_tx_details::<S>();
-    UnsignedTransactionV0::<RT, S>::new(
+    UnsignedTransaction::<RT, S>::new(
         TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
         details.chain_id,
         details.max_priority_fee_bips,
@@ -592,7 +592,7 @@ fn make_v1_tx_with_call(
     address_override: Option<<S as Spec>::Address>,
     generation: u64,
 ) -> Version1<RT, S> {
-    UnsignedTransactionV0::<RT, S>::new_with_details(
+    UnsignedTransaction::<RT, S>::new_with_details(
         TestAccountsRuntimeCall::Accounts(call),
         sov_modules_api::capabilities::UniquenessData::Generation(generation),
         default_test_tx_details::<S>(),
@@ -606,7 +606,7 @@ fn make_v0_tx(
     inner_credential: sov_modules_api::CredentialId,
     address_override: Option<<S as Spec>::Address>,
 ) -> Transaction<RT, S> {
-    let utx = UnsignedTransactionV0::<RT, S>::new_with_details(
+    let utx = UnsignedTransaction::<RT, S>::new_with_details(
         TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
         sov_modules_api::capabilities::UniquenessData::Generation(0),
         default_test_tx_details::<S>(),
@@ -621,7 +621,7 @@ fn make_v0_tx_with_call(
     address_override: Option<<S as Spec>::Address>,
     generation: u64,
 ) -> Transaction<RT, S> {
-    let utx = UnsignedTransactionV0::<RT, S>::new_with_details(
+    let utx = UnsignedTransaction::<RT, S>::new_with_details(
         TestAccountsRuntimeCall::Accounts(call),
         sov_modules_api::capabilities::UniquenessData::Generation(generation),
         default_test_tx_details::<S>(),
@@ -2693,7 +2693,7 @@ fn test_create_synthetic_address_can_be_used_and_rotated() {
         );
     }
 
-    let mut fund_synthetic_address = UnsignedTransactionV0::<RT, S>::new_with_details(
+    let mut fund_synthetic_address = UnsignedTransaction::<RT, S>::new_with_details(
         TestAccountsRuntimeCall::Bank(sov_bank::CallMessage::Transfer {
             to: synthetic_address,
             coins: sov_bank::Coins {

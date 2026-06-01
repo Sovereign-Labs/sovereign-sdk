@@ -133,7 +133,7 @@ macro_rules! generate_runtime_without_capabilities {
                 use $crate::sov_rollup_apis::endpoints::schema::{SchemaEndpoint, StandardSchemaEndpoint};
                 use $crate::sov_universal_wallet::schema::{ChainData, Schema};
                 use ::sov_modules_api::macros::config_value;
-                use ::sov_modules_api::transaction::{Transaction, UnsignedTransaction};
+                use ::sov_modules_api::transaction::{Transaction, TransactionSigningPayload};
                 use ::sov_modules_api::rest::HasRestApi;
 
                 let axum_router = Self::default().rest_api(api_state.clone());
@@ -144,7 +144,7 @@ macro_rules! generate_runtime_without_capabilities {
 
                 let schema = Schema::of_rollup_types_with_chain_data::<
                 Transaction<Self, S>,
-                UnsignedTransaction<Self, S>,
+                TransactionSigningPayload<Self, S>,
                 <Self as ::sov_modules_api::DispatchCall>::Decodable,
                 S::Address,
                 >(ChainData {

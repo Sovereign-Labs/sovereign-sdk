@@ -13,16 +13,16 @@ class TestSerializer extends Serializer {
 }
 
 describe("Serializer", () => {
-  it("should pass versioned unsigned transactions through unchanged", () => {
+  it("should pass transaction signing payloads through unchanged", () => {
     const serializer = new TestSerializer({ root_type_indices: [0, 177, 3] });
-    const v0UnsignedTx = {
+    const v0SigningPayload = {
       V0: {
         runtime_call: { bank: "transfer" },
         uniqueness: { generation: 1 },
         details: { max_fee: "1000" },
       },
     };
-    const v1UnsignedTx = {
+    const v1SigningPayload = {
       V1: {
         runtime_call: { bank: "transfer" },
         uniqueness: { nonce: 1 },
@@ -30,16 +30,16 @@ describe("Serializer", () => {
       },
     };
 
-    serializer.serializeUnsignedTx(v0UnsignedTx);
-    expect(serializer.lastInput).toEqual(v0UnsignedTx);
+    serializer.serializeSigningPayload(v0SigningPayload);
+    expect(serializer.lastInput).toEqual(v0SigningPayload);
 
-    serializer.serializeUnsignedTx(v1UnsignedTx);
-    expect(serializer.lastInput).toEqual(v1UnsignedTx);
+    serializer.serializeSigningPayload(v1SigningPayload);
+    expect(serializer.lastInput).toEqual(v1SigningPayload);
   });
 
-  it("should convert Uint8Arrays nested in unsigned transactions", () => {
+  it("should convert Uint8Arrays nested in transaction signing payloads", () => {
     const serializer = new TestSerializer({ root_type_indices: [0, 177, 3] });
-    const unsignedTx = {
+    const signingPayload = {
       V0: {
         runtime_call: {
           bank: {
@@ -53,7 +53,7 @@ describe("Serializer", () => {
       },
     };
 
-    serializer.serializeUnsignedTx(unsignedTx);
+    serializer.serializeSigningPayload(signingPayload);
 
     expect(serializer.lastInput).toEqual({
       V0: {

@@ -14,7 +14,7 @@ use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
 use sov_mock_zkvm::crypto::Ed25519Signature;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
-use sov_modules_api::transaction::{PubKeyAndSignature, Transaction, UnsignedTransactionV0};
+use sov_modules_api::transaction::{PubKeyAndSignature, Transaction, UnsignedTransaction};
 use sov_modules_api::{prelude::*, Base58Address, PrivateKey, SafeVec};
 use sov_modules_api::{CryptoSpec, FullyBakedTx, RawTx, Runtime, Spec};
 use sov_modules_stf_blueprint::GenesisParams;
@@ -25,10 +25,9 @@ use sov_paymaster::{
 use sov_rollup_interface::execution_mode::Native;
 use sov_sequencer::rest_api::AcceptTx;
 use sov_solana_offchain_auth::authentication::{
-    SolanaOffchainSimpleMessage, SolanaOffchainSimpleMultisigMessage,
-    SolanaOffchainSpecCompliantMessage, SolanaOffchainSpecCompliantMultisigMessage,
-    SolanaOffchainUnsignedTransactionV0, SolanaOffchainUnsignedTransactionV1,
-    MULTISIG_SIMPLE_DISCRIMINATOR,
+    SolanaOffchainSigningPayloadV0, SolanaOffchainSigningPayloadV1, SolanaOffchainSimpleEnvelope,
+    SolanaOffchainSimpleMultisigEnvelope, SolanaOffchainSpecCompliantEnvelope,
+    SolanaOffchainSpecCompliantMultisigEnvelope, MULTISIG_SIMPLE_DISCRIMINATOR,
 };
 use sov_solana_offchain_auth::utils::{
     make_multisig_preamble_for_message, make_preamble_for_message,
@@ -235,7 +234,7 @@ fn create_transfer_tx_json_with_address_override(
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
-    let unsigned_tx = UnsignedTransactionV0::<RT, S>::new(
+    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         msg,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -244,7 +243,7 @@ fn create_transfer_tx_json_with_address_override(
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
         None,
     );
-    let solana_unsigned_tx = SolanaOffchainUnsignedTransactionV0::<RT, S> {
+    let solana_unsigned_tx = SolanaOffchainSigningPayloadV0::<RT, S> {
         runtime_call: unsigned_tx.runtime_call,
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
@@ -261,7 +260,7 @@ async fn submit_simple_json_tx(
     signer: &Ed25519PrivateKey,
 ) -> reqwest::Response {
     let signed_message = json.into_bytes();
-    let message = SolanaOffchainSimpleMessage::<S> {
+    let message = SolanaOffchainSimpleEnvelope::<S> {
         signed_message: signed_message.clone(),
         chain_hash: RT::CHAIN_HASH,
         pubkey: signer.pub_key(),
@@ -333,7 +332,7 @@ async fn test_submit_ledger_signed_transaction() {
         let pubkey = signer.pub_key();
         let signature = signer.sign(&encoded_tx);
 
-        let message = SolanaOffchainSimpleMessage::<S> {
+        let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx,
             chain_hash: RT::CHAIN_HASH,
             pubkey,
@@ -385,7 +384,7 @@ async fn test_submit_ledger_signed_transaction() {
         "Multisig message bytes changed - re-sign on ledger and update the hardcoded signature"
     );
 
-    let message = SolanaOffchainSpecCompliantMessage::<S> {
+    let message = SolanaOffchainSpecCompliantEnvelope::<S> {
         signed_message_with_preamble,
         signature,
     };
@@ -429,7 +428,7 @@ async fn test_submit_raw_signed_message_transaction() {
     let pubkey = signer.pub_key();
     let signature = signer.sign(&encoded_tx);
 
-    let message = SolanaOffchainSimpleMessage::<S> {
+    let message = SolanaOffchainSimpleEnvelope::<S> {
         signed_message: encoded_tx,
         chain_hash: RT::CHAIN_HASH,
         pubkey,
@@ -465,7 +464,7 @@ async fn test_submit_invalid_raw_signed_message_transaction() {
     signature_bytes[5] = signature_bytes[5].wrapping_add(1);
     let signature: Ed25519Signature = signature_bytes.as_slice().try_into().unwrap();
 
-    let message = SolanaOffchainSimpleMessage::<S> {
+    let message = SolanaOffchainSimpleEnvelope::<S> {
         signed_message: encoded_tx,
         chain_hash: RT::CHAIN_HASH,
         pubkey,
@@ -523,7 +522,7 @@ fn create_multisig_transfer_tx_json(
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
-    let unsigned_tx = UnsignedTransactionV0::<RT, S>::new(
+    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         msg,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -532,7 +531,7 @@ fn create_multisig_transfer_tx_json(
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
         None,
     );
-    let solana_unsigned_tx = SolanaOffchainUnsignedTransactionV1::<RT, S> {
+    let solana_unsigned_tx = SolanaOffchainSigningPayloadV1::<RT, S> {
         runtime_call: unsigned_tx.runtime_call,
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
@@ -583,7 +582,7 @@ async fn test_submit_multisig_simple_message_transaction() {
         let pubkey = signer.pub_key();
         let signature = signer.sign(&encoded_tx);
 
-        let message = SolanaOffchainSimpleMessage::<S> {
+        let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx,
             chain_hash: RT::CHAIN_HASH,
             pubkey,
@@ -612,7 +611,7 @@ async fn test_submit_multisig_simple_message_transaction() {
     let sig3 = key3.sign(json_bytes);
     let sig1 = key1.sign(json_bytes);
 
-    let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
+    let multisig_msg = SolanaOffchainSimpleMultisigEnvelope::<S> {
         wire_bytes,
         chain_hash: RT::CHAIN_HASH,
         signatures: vec![
@@ -687,7 +686,7 @@ async fn test_submit_multisig_insufficient_signatures() {
         let funding_json = create_transfer_tx_json(Amount(20_000), &multisig_address_str);
         let encoded_tx = funding_json.as_bytes().to_vec();
         let signer = admin.private_key();
-        let message = SolanaOffchainSimpleMessage::<S> {
+        let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx.clone(),
             chain_hash: RT::CHAIN_HASH,
             pubkey: signer.pub_key(),
@@ -704,7 +703,7 @@ async fn test_submit_multisig_insufficient_signatures() {
     let wire_bytes = create_multisig_simple_wire_bytes(&transfer_json);
     let sig1 = key1.sign(json_bytes);
 
-    let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
+    let multisig_msg = SolanaOffchainSimpleMultisigEnvelope::<S> {
         wire_bytes,
         chain_hash: RT::CHAIN_HASH,
         signatures: vec![PubKeyAndSignature {
@@ -752,7 +751,7 @@ async fn test_submit_multisig_invalid_signature() {
         let funding_json = create_transfer_tx_json(Amount(20_000), &multisig_address_str);
         let encoded_tx = funding_json.as_bytes().to_vec();
         let signer = admin.private_key();
-        let message = SolanaOffchainSimpleMessage::<S> {
+        let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx.clone(),
             chain_hash: RT::CHAIN_HASH,
             pubkey: signer.pub_key(),
@@ -772,7 +771,7 @@ async fn test_submit_multisig_invalid_signature() {
     sig2_bytes[10] = sig2_bytes[10].wrapping_add(1);
     let sig2: Ed25519Signature = sig2_bytes.as_slice().try_into().unwrap();
 
-    let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
+    let multisig_msg = SolanaOffchainSimpleMultisigEnvelope::<S> {
         wire_bytes,
         chain_hash: RT::CHAIN_HASH,
         signatures: vec![
@@ -832,7 +831,7 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
         let pubkey = signer.pub_key();
         let signature = signer.sign(&encoded_tx);
 
-        let message = SolanaOffchainSimpleMessage::<S> {
+        let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx,
             chain_hash: RT::CHAIN_HASH,
             pubkey,
@@ -884,7 +883,7 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
     }
     assert_eq!(signatures.len(), 2);
 
-    let multisig_msg = SolanaOffchainSpecCompliantMultisigMessage::<S> {
+    let multisig_msg = SolanaOffchainSpecCompliantMultisigEnvelope::<S> {
         signed_message_with_preamble,
         signatures: signatures.try_into().unwrap(),
         signer_bitfield,
@@ -947,7 +946,7 @@ async fn test_submit_spec_compliant_multisig_insufficient_signatures() {
         let funding_json = create_transfer_tx_json(Amount(20_000), &multisig_address_str);
         let encoded_tx = funding_json.as_bytes().to_vec();
         let signer = admin.private_key();
-        let message = SolanaOffchainSimpleMessage::<S> {
+        let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx.clone(),
             chain_hash: RT::CHAIN_HASH,
             pubkey: signer.pub_key(),
@@ -974,7 +973,7 @@ async fn test_submit_spec_compliant_multisig_insufficient_signatures() {
     let sig1 = key1.sign(&signed_message_with_preamble);
 
     // Only signer 0 signed → bitfield 0b001
-    let multisig_msg = SolanaOffchainSpecCompliantMultisigMessage::<S> {
+    let multisig_msg = SolanaOffchainSpecCompliantMultisigEnvelope::<S> {
         signed_message_with_preamble,
         signatures: vec![sig1].try_into().unwrap(),
         signer_bitfield: 0b001,
@@ -1016,7 +1015,7 @@ async fn test_submit_spec_compliant_multisig_invalid_signature() {
         let funding_json = create_transfer_tx_json(Amount(20_000), &multisig_address_str);
         let encoded_tx = funding_json.as_bytes().to_vec();
         let signer = admin.private_key();
-        let message = SolanaOffchainSimpleMessage::<S> {
+        let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx.clone(),
             chain_hash: RT::CHAIN_HASH,
             pubkey: signer.pub_key(),
@@ -1046,7 +1045,7 @@ async fn test_submit_spec_compliant_multisig_invalid_signature() {
     let sig2: Ed25519Signature = sig2_bytes.as_slice().try_into().unwrap();
 
     // Signers 0 and 1 → bitfield 0b011
-    let multisig_msg = SolanaOffchainSpecCompliantMultisigMessage::<S> {
+    let multisig_msg = SolanaOffchainSpecCompliantMultisigEnvelope::<S> {
         signed_message_with_preamble,
         signatures: vec![sig1, sig2].try_into().unwrap(),
         signer_bitfield: 0b011,
@@ -1104,7 +1103,7 @@ async fn test_submit_ledger_signed_multisig_transaction() {
         let pubkey = signer.pub_key();
         let signature = signer.sign(&encoded_tx);
 
-        let message = SolanaOffchainSimpleMessage::<S> {
+        let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx,
             chain_hash: RT::CHAIN_HASH,
             pubkey,
@@ -1156,7 +1155,7 @@ async fn test_submit_ledger_signed_multisig_transaction() {
     let sig2 = key2.sign(&signed_message_with_preamble);
 
     // Bitfield: signers 0 (Ledger) and 1 (key2) signed → 0b011
-    let multisig_msg = SolanaOffchainSpecCompliantMultisigMessage::<S> {
+    let multisig_msg = SolanaOffchainSpecCompliantMultisigEnvelope::<S> {
         signed_message_with_preamble,
         signatures: vec![ledger_signature, sig2].try_into().unwrap(),
         signer_bitfield: 0b011,
@@ -1252,7 +1251,7 @@ async fn test_submit_multisig_with_authorized_address_override() {
     // Two of three signers sign.
     let sig1 = key1.sign(json_bytes);
     let sig2 = key2.sign(json_bytes);
-    let multisig_msg = SolanaOffchainSimpleMultisigMessage::<S> {
+    let multisig_msg = SolanaOffchainSimpleMultisigEnvelope::<S> {
         wire_bytes,
         chain_hash: RT::CHAIN_HASH,
         signatures: vec![
@@ -1305,13 +1304,13 @@ async fn test_submit_multisig_with_authorized_address_override() {
     );
 }
 
-/// Helper: builds a `SolanaOffchainUnsignedTransactionV1` with an arbitrary recipient for the
+/// Helper: builds a `SolanaOffchainSigningPayloadV1` with an arbitrary recipient for the
 /// serde round-trip / byte-equivalence tests below.
 fn build_v1_payload(
     recipient: &str,
     multisig_id: <S as Spec>::Address,
     address_override: Option<<S as Spec>::Address>,
-) -> SolanaOffchainUnsignedTransactionV1<RT, S> {
+) -> SolanaOffchainSigningPayloadV1<RT, S> {
     let call: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
         coins: Coins {
@@ -1319,7 +1318,7 @@ fn build_v1_payload(
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
-    let unsigned_tx = UnsignedTransactionV0::<RT, S>::new(
+    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         call,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -1328,7 +1327,7 @@ fn build_v1_payload(
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
         None,
     );
-    SolanaOffchainUnsignedTransactionV1::<RT, S> {
+    SolanaOffchainSigningPayloadV1::<RT, S> {
         runtime_call: unsigned_tx.runtime_call,
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
@@ -1365,7 +1364,7 @@ fn test_v1_payload_without_address_override_field_deserializes_as_none() {
         "guard: the canonical None-payload already omits address_override"
     );
 
-    let parsed: SolanaOffchainUnsignedTransactionV1<RT, S> =
+    let parsed: SolanaOffchainSigningPayloadV1<RT, S> =
         serde_json::from_str(&canonical_json).expect("deserialize");
     assert_eq!(
         parsed.address_override, None,
@@ -1387,7 +1386,7 @@ fn test_v1_payload_with_address_override_round_trips() {
         "address_override must appear in JSON when it is Some; got: {json}"
     );
 
-    let parsed: SolanaOffchainUnsignedTransactionV1<RT, S> =
+    let parsed: SolanaOffchainSigningPayloadV1<RT, S> =
         serde_json::from_str(&json).expect("deserialize");
     assert_eq!(parsed.address_override, Some(target));
     assert_eq!(parsed.multisig_id, multisig_address);
@@ -1506,11 +1505,11 @@ async fn test_submit_single_sig_with_tampered_address_override_fails_signature()
         Some(delegated_address),
     );
     let signature = admin.private_key().sign(json.as_bytes());
-    let mut payload: SolanaOffchainUnsignedTransactionV0<RT, S> =
+    let mut payload: SolanaOffchainSigningPayloadV0<RT, S> =
         serde_json::from_str(&json).expect("deserialize");
     payload.address_override = Some(admin.address());
     let tampered_json = serde_json::to_string(&payload).expect("serialize");
-    let message = SolanaOffchainSimpleMessage::<S> {
+    let message = SolanaOffchainSimpleEnvelope::<S> {
         signed_message: tampered_json.into_bytes(),
         chain_hash: RT::CHAIN_HASH,
         pubkey: admin.private_key().pub_key(),
@@ -1534,7 +1533,7 @@ async fn test_submit_single_sig_with_tampered_address_override_fails_signature()
 fn build_v0_payload(
     recipient: &str,
     address_override: Option<<S as Spec>::Address>,
-) -> SolanaOffchainUnsignedTransactionV0<RT, S> {
+) -> SolanaOffchainSigningPayloadV0<RT, S> {
     let call: TestRuntimeCall<S> = TestRuntimeCall::Bank(BankCallMessage::Transfer {
         to: <S as Spec>::Address::from_str(recipient).unwrap(),
         coins: Coins {
@@ -1542,7 +1541,7 @@ fn build_v0_payload(
             token_id: config_value!("GAS_TOKEN_ID"),
         },
     });
-    let unsigned_tx = UnsignedTransactionV0::<RT, S>::new(
+    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         call,
         config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
@@ -1551,7 +1550,7 @@ fn build_v0_payload(
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
         None,
     );
-    SolanaOffchainUnsignedTransactionV0::<RT, S> {
+    SolanaOffchainSigningPayloadV0::<RT, S> {
         runtime_call: unsigned_tx.runtime_call,
         uniqueness: unsigned_tx.uniqueness,
         details: unsigned_tx.details,
@@ -1580,7 +1579,7 @@ fn test_v0_payload_without_address_override_field_deserializes_as_none() {
         "guard: the canonical None-payload already omits address_override"
     );
 
-    let parsed: SolanaOffchainUnsignedTransactionV0<RT, S> =
+    let parsed: SolanaOffchainSigningPayloadV0<RT, S> =
         serde_json::from_str(&canonical_json).expect("deserialize");
     assert_eq!(
         parsed.address_override, None,
@@ -1600,7 +1599,7 @@ fn test_v0_payload_with_address_override_round_trips() {
         "address_override must appear in JSON when it is Some; got: {json}"
     );
 
-    let parsed: SolanaOffchainUnsignedTransactionV0<RT, S> =
+    let parsed: SolanaOffchainSigningPayloadV0<RT, S> =
         serde_json::from_str(&json).expect("deserialize");
     assert_eq!(parsed.address_override, Some(target));
 }

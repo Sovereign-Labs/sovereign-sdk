@@ -18,12 +18,12 @@ npm install @sovereign-sdk/multisig
 ```typescript
 import { Multisig } from "@sovereign-sdk/multisig";
 import { createStandardRollup } from "@sovereign-sdk/web3";
-import type { UnsignedTransactionV0 } from "@sovereign-sdk/types";
+import type { UnsignedTransaction } from "@sovereign-sdk/types";
 import { bytesToHex } from "@sovereign-sdk/utils";
 
 const rollup = await createStandardRollup<YourRuntimeCall>();
 
-const unsignedTx: UnsignedTransactionV0<YourRuntimeCall> = {
+const unsignedTx: UnsignedTransaction<YourRuntimeCall> = {
   runtime_call: {
     // Your rollup-specific call data
   },
