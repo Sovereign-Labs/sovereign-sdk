@@ -154,12 +154,10 @@ fn calculate_limits<S: Spec>(
         .expect("Batch execution time limit overflows u64 microseconds");
 
     let max_resources_per_batch = Resource {
-        // requests-per-batch = rate (per second) × batch duration (seconds).
-        // Multiply by milliseconds first, then divide by 1000, to keep sub-second precision.
-        req_counter: max_requests_per_second
+        // milli-requests-per-batch = rate (per second) × batch duration (seconds).
+        milli_req_counter: max_requests_per_second
             .checked_mul(batch_execution_time_limit_millis)
-            .expect("Overflow converting max_requests_per_second to max requests per batch")
-            / 1000,
+            .expect("Overflow converting max_requests_per_second to max requests per batch"),
         // The `expect` is justified because we will never have batches larger than u64::MAX bytes.
         space_in_bytes: max_batch_size_bytes
             .try_into()
@@ -177,21 +175,12 @@ fn calculate_limits<S: Spec>(
     // `max_requests_per_second == 0` are intentional "block everything" sentinels,
     // so leave those untouched.
     if limits.resources_per_bucket > 0 && max_requests_per_second > 0 {
-        max_per_key.req_counter = max_per_key.req_counter.max(1);
+        max_per_key.milli_req_counter = max_per_key.milli_req_counter.max(1);
     }
 
     // Refill per millisecond: over one batch the bucket refills `refill_rate`
     // times its capacity (`max_per_key * limits.refill_rate`), spread across
     // `batch_execution_time_limit_millis`.
-    //
-    // This per-ms rate is an integer. When
-    // `max_per_key.req_counter * limits.refill_rate < batch_execution_time_limit_millis`
-    // the request refill truncates to 0, so the request dimension acts as a hard
-    // cap of `max_per_key.req_counter` that resets only when the throttler is
-    // evicted (~`ttl_in_millis` after the key's last successful request) rather
-    // than refilling smoothly. This surfaces only under floods of unusually cheap
-    // requests; otherwise the size/execution-time limits bind first. Smooth
-    // sub-token request refill is a possible follow-up.
     let refill_rate = max_per_key
         .saturating_mul_by_scalar(limits.refill_rate)
         .div_by_scalar(batch_execution_time_limit_millis);
@@ -487,7 +476,7 @@ mod tests {
 
     fn req_count_config(max_req_count: u64) -> RateLimiterConfig<TestSpec> {
         let mut max_allowed_resources = Resource::max();
-        max_allowed_resources.req_counter = max_req_count;
+        max_allowed_resources.milli_req_counter = max_req_count * 1000;
 
         RateLimiterConfig::<TestSpec> {
             max_allowed_resources: TotalResources {
@@ -502,7 +491,7 @@ mod tests {
     fn one_request() -> ResourceUsed<Gas> {
         ResourceUsed {
             inner: Resource {
-                req_counter: 1,
+                milli_req_counter: 1000,
                 ..Resource::zero()
             },
         }
@@ -569,24 +558,24 @@ mod tests {
             6_000_000,
             RollupHeight::GENESIS,
         );
-        assert_eq!(config.max_allowed_resources.inner.req_counter, 60);
+        assert_eq!(config.max_allowed_resources.inner.milli_req_counter, 60_000);
     }
 
     #[test]
     fn calculate_limits_floors_req_counter_for_subsecond_batch() {
-        // 1000 req/s over a 100 ms batch = 100 requests/batch; resources_per_bucket = 5
-        // would round the per-key budget to 0 (100 * 5 / 1000). The guard floors it at 1.
+        // 10 req/s over a 10 ms batch = 0.1 requests/batch; resources_per_bucket = 5
+        // would round the per-key budget to 0 (0.1 * 5). The guard floors it at 1.
         let config = calculate_limits::<TestSpec>(
             Limits {
                 resources_per_bucket: 5,
                 refill_rate: 0,
             },
-            1000,
-            Duration::from_millis(100),
+            10,
+            Duration::from_millis(10),
             6_000_000,
             RollupHeight::GENESIS,
         );
-        assert_eq!(config.max_allowed_resources.inner.req_counter, 1);
+        assert_eq!(config.max_allowed_resources.inner.milli_req_counter, 1);
     }
 
     #[test]
@@ -603,7 +592,7 @@ mod tests {
             6_000_000,
             RollupHeight::GENESIS,
         );
-        assert_eq!(config.max_allowed_resources.inner.req_counter, 0);
+        assert_eq!(config.max_allowed_resources.inner.milli_req_counter, 0);
     }
 
     #[test]
@@ -620,14 +609,14 @@ mod tests {
             6_000_000,
             RollupHeight::GENESIS,
         );
-        assert_eq!(config.max_allowed_resources.inner.req_counter, 0);
+        assert_eq!(config.max_allowed_resources.inner.milli_req_counter, 0);
     }
 
     #[test]
     fn test_sov_test_limiter() {
         let resource_used_per_run = ResourceUsed {
             inner: Resource {
-                req_counter: 10,
+                milli_req_counter: 10,
                 space_in_bytes: 3000,
                 execution_time_micros: 30,
                 gas_used: Gas::from([0, 0]),
@@ -637,7 +626,7 @@ mod tests {
         // This is enough to make 2 requests.
         let max_allowed_resources = TotalResources {
             inner: Resource {
-                req_counter: 100000,
+                milli_req_counter: 100000,
                 space_in_bytes: 5000,
                 execution_time_micros: 100000,
 
@@ -647,7 +636,7 @@ mod tests {
 
         let refill_rate = RefillRatePerMillis {
             token_resource_per_ms: Resource {
-                req_counter: 1,
+                milli_req_counter: 1,
                 space_in_bytes: 1,
                 execution_time_micros: 1,
                 gas_used: Gas::from([0, 0]),
@@ -907,7 +896,7 @@ mod tests {
         let config = RateLimiterConfig::<TestSpec> {
             max_allowed_resources: TotalResources {
                 inner: Resource {
-                    req_counter: 100000,
+                    milli_req_counter: 100000,
                     space_in_bytes: 5000,
                     execution_time_micros: 100000,
                     gas_used: Gas::from([0, 0]),
@@ -915,7 +904,7 @@ mod tests {
             },
             refill_rate: RefillRatePerMillis {
                 token_resource_per_ms: Resource {
-                    req_counter: 0,
+                    milli_req_counter: 0,
                     space_in_bytes: 0,
                     execution_time_micros: 0,
                     gas_used: Gas::from([0, 0]),

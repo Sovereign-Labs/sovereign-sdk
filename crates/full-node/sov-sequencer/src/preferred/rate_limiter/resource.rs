@@ -30,7 +30,7 @@ pub(crate) enum LimitExceeded<G: Gas> {
 // Represents a resource that requires rate limiting.
 #[derive(Debug, Clone, Copy, PartialEq)]
 pub(crate) struct Resource<G: Gas> {
-    pub(crate) req_counter: u64,
+    pub(crate) milli_req_counter: u64,
     pub(crate) space_in_bytes: u64,
     pub(crate) execution_time_micros: u64,
     pub(crate) gas_used: G,
@@ -39,7 +39,7 @@ pub(crate) struct Resource<G: Gas> {
 impl<G: Gas> Resource<G> {
     pub(crate) fn zero() -> Self {
         Self {
-            req_counter: 0,
+            milli_req_counter: 0,
             space_in_bytes: 0,
             execution_time_micros: 0,
             gas_used: Gas::zero(),
@@ -48,7 +48,7 @@ impl<G: Gas> Resource<G> {
 
     pub(crate) fn max() -> Self {
         Self {
-            req_counter: u64::MAX,
+            milli_req_counter: u64::MAX,
             space_in_bytes: u64::MAX,
             execution_time_micros: u64::MAX,
             gas_used: Gas::max(),
@@ -58,7 +58,7 @@ impl<G: Gas> Resource<G> {
     #[must_use]
     pub(crate) fn saturating_sub(&self, tokens: &Self) -> Self {
         Self {
-            req_counter: self.req_counter.saturating_sub(tokens.req_counter),
+            milli_req_counter: self.milli_req_counter.saturating_sub(tokens.milli_req_counter),
             space_in_bytes: self.space_in_bytes.saturating_sub(tokens.space_in_bytes),
             execution_time_micros: self
                 .execution_time_micros
@@ -73,7 +73,7 @@ impl<G: Gas> Resource<G> {
     #[must_use]
     pub(crate) fn checked_add(&self, other: &Self) -> Option<Self> {
         Some(Self {
-            req_counter: self.req_counter.checked_add(other.req_counter)?,
+            milli_req_counter: self.milli_req_counter.checked_add(other.milli_req_counter)?,
             space_in_bytes: self.space_in_bytes.checked_add(other.space_in_bytes)?,
             execution_time_micros: self
                 .execution_time_micros
@@ -90,7 +90,7 @@ impl<G: Gas> Resource<G> {
             .unwrap_or(G::max());
 
         Self {
-            req_counter: self.req_counter.saturating_mul(scalar),
+            milli_req_counter: self.milli_req_counter.saturating_mul(scalar),
             space_in_bytes: self.space_in_bytes.saturating_mul(scalar),
             execution_time_micros: self.execution_time_micros.saturating_mul(scalar),
             gas_used,
@@ -102,7 +102,7 @@ impl<G: Gas> Resource<G> {
         let gas_used = self.gas_used.scalar_division(scalar);
 
         Self {
-            req_counter: self.req_counter / scalar,
+            milli_req_counter: self.milli_req_counter / scalar,
             space_in_bytes: self.space_in_bytes / scalar,
             execution_time_micros: self.execution_time_micros / scalar,
             gas_used,
@@ -112,10 +112,10 @@ impl<G: Gas> Resource<G> {
     pub(crate) fn err_if_exceeding(&self, other: &Self) -> Result<(), LimitExceeded<G>> {
         // Error if the total accumulated is greater than or equal to the max allowed.
         // Using >= instead of > to ensure that a rate limit of zero prevents all requests.
-        if self.req_counter >= other.req_counter {
+        if self.milli_req_counter >= other.milli_req_counter {
             return Err(LimitExceeded::RequestCount {
-                total_accumulated: self.req_counter,
-                max_allowed: other.req_counter,
+                total_accumulated: self.milli_req_counter / 1000,
+                max_allowed: other.milli_req_counter / 1000,
             });
         }
 
@@ -158,7 +158,7 @@ mod tests {
             gas_used: Gas,
         ) -> Self {
             Self {
-                req_counter,
+                milli_req_counter: req_counter * 1000,
                 space_in_bytes,
                 execution_time_micros,
                 gas_used,
@@ -167,7 +167,7 @@ mod tests {
 
         fn from(n: u64) -> Self {
             Self {
-                req_counter: n,
+                milli_req_counter: n.saturating_mul(1000),
                 space_in_bytes: n,
                 execution_time_micros: n,
                 gas_used: Gas::from([n, n]),
@@ -236,14 +236,14 @@ mod tests {
         {
             let r1 = Resource::new(100, 101, 102, Gas::from([103, 104]));
             let r2 = Resource {
-                req_counter: 1,
+                milli_req_counter: 1000,
                 ..r1
             };
             assert_eq!(
                 r1.err_if_exceeding(&r2),
                 Err(LimitExceeded::RequestCount {
-                    total_accumulated: { r1.req_counter },
-                    max_allowed: { r2.req_counter },
+                    total_accumulated: { r1.milli_req_counter / 1000 },
+                    max_allowed: { r2.milli_req_counter / 1000 },
                 })
             );
         }
