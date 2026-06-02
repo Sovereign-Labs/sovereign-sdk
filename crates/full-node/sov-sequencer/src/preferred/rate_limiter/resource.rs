@@ -4,6 +4,7 @@ use sov_modules_api::Gas;
 #[derive(Debug, PartialEq)]
 pub(crate) enum LimitExceeded<G: Gas> {
     RequestCount {
+        // the numbers are in milli-requests to avoid rounding errors
         total_accumulated: u64,
         max_allowed: u64,
     },
@@ -118,8 +119,8 @@ impl<G: Gas> Resource<G> {
         // Using >= instead of > to ensure that a rate limit of zero prevents all requests.
         if self.milli_req_counter >= other.milli_req_counter {
             return Err(LimitExceeded::RequestCount {
-                total_accumulated: self.milli_req_counter / 1000,
-                max_allowed: other.milli_req_counter / 1000,
+                total_accumulated: self.milli_req_counter,
+                max_allowed: other.milli_req_counter,
             });
         }
 
@@ -246,8 +247,8 @@ mod tests {
             assert_eq!(
                 r1.err_if_exceeding(&r2),
                 Err(LimitExceeded::RequestCount {
-                    total_accumulated: { r1.milli_req_counter / 1000 },
-                    max_allowed: { r2.milli_req_counter / 1000 },
+                    total_accumulated: { r1.milli_req_counter },
+                    max_allowed: { r2.milli_req_counter },
                 })
             );
         }

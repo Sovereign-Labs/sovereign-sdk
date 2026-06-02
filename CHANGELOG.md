@@ -1,3 +1,6 @@
+# 2026-06-02
+- #2936 Request rate limiting uses milli-requests instead of always rounding down.
+  * Per-request budget (`milli_req_counter`) is now more fine-grained and will work even with single digit requests per second.
 # 2026-05-26
 - #2918 Adds support for CIDR based rate limiting in preferred sequencer. Existing configs are backwards compatible.
   * **Breaking (behavior)**: corrects a unit bug in the preferred sequencer rate limiter where the per-request budget (`req_counter`) was computed 1000× too large (per-second rate × milliseconds). It now enforces the true requests-per-batch, consistent with the size/execution-time/gas limits. Configs are unchanged; in typical setups the request-count dimension still doesn't bind, but the request-count limit is now 1000× tighter. At low configured request budgets, request-counter refill still uses integer per-millisecond refill and can round down to zero.
