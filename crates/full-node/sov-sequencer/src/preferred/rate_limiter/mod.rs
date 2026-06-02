@@ -1,7 +1,7 @@
 mod limiter;
 mod resource;
 
-use crate::preferred::sync_sequencer_state::comfortable_gas_limit_for_height;
+use crate::preferred::sync_sequencer_state::comfortable_gas_limit;
 pub(crate) use limiter::ResourceUsed;
 use limiter::*;
 use resource::*;
@@ -15,7 +15,6 @@ use std::{
     time::{Duration, Instant},
 };
 
-use crate::preferred::sync_sequencer_state::comfortable_gas_limit;
 const TTL_MULTIPLIER: u32 = 5;
 
 #[derive(Debug)]
@@ -527,8 +526,12 @@ mod tests {
         };
 
         let max_batch_exec_time = 6000;
-        let rate_limiter_config =
-            calculate_limits::<TestSpec>(limits, 10000, Duration::from_millis(max_batch_exec_time), 6000000);
+        let rate_limiter_config = calculate_limits::<TestSpec>(
+            limits,
+            10000,
+            Duration::from_millis(max_batch_exec_time),
+            6000000,
+        );
 
         let max_allowed_resources_per_key = rate_limiter_config.max_allowed_resources;
 
@@ -556,7 +559,6 @@ mod tests {
             1000,
             Duration::from_millis(6000),
             6_000_000,
-            RollupHeight::GENESIS,
         );
         assert_eq!(config.max_allowed_resources.inner.req_counter, 60);
     }
@@ -573,7 +575,6 @@ mod tests {
             1000,
             Duration::from_millis(100),
             6_000_000,
-            RollupHeight::GENESIS,
         );
         assert_eq!(config.max_allowed_resources.inner.req_counter, 1);
     }
@@ -590,7 +591,6 @@ mod tests {
             1000,
             Duration::from_millis(100),
             6_000_000,
-            RollupHeight::GENESIS,
         );
         assert_eq!(config.max_allowed_resources.inner.req_counter, 0);
     }
@@ -607,7 +607,6 @@ mod tests {
             0,
             Duration::from_millis(100),
             6_000_000,
-            RollupHeight::GENESIS,
         );
         assert_eq!(config.max_allowed_resources.inner.req_counter, 0);
     }
@@ -812,7 +811,6 @@ mod tests {
                 resources_per_bucket: 5,
                 refill_rate: 1,
             },
-            height_for_gas_limit_computation: RollupHeight::GENESIS,
             address_custom_limits: Vec::default(),
             ip_custom_limits: vec![
                 (
@@ -846,7 +844,6 @@ mod tests {
             max_requests_per_second: 1000,
             max_nb_of_concurrent_users_in_rate_limiter: 1000,
             default_limits: limits,
-            height_for_gas_limit_computation: RollupHeight::GENESIS,
             address_custom_limits: Vec::default(),
             ip_custom_limits: vec![
                 ("10.0.0.0/24".parse().unwrap(), limits),
@@ -931,7 +928,6 @@ mod tests {
                 resources_per_bucket: 5,
                 refill_rate: 0,
             },
-            height_for_gas_limit_computation: RollupHeight::GENESIS,
             address_custom_limits: Vec::default(),
             ip_custom_limits: vec![(
                 "10.0.0.5/24".parse().unwrap(),
@@ -962,7 +958,6 @@ mod tests {
                 resources_per_bucket: 5,
                 refill_rate: 0,
             },
-            height_for_gas_limit_computation: RollupHeight::GENESIS,
             address_custom_limits: Vec::default(),
             ip_custom_limits: vec![(
                 "::ffff:10.0.0.42/120".parse().unwrap(),
@@ -1003,7 +998,6 @@ mod tests {
             max_requests_per_second: 1000,
             max_nb_of_concurrent_users_in_rate_limiter: 1000,
             default_limits: loose,
-            height_for_gas_limit_computation: RollupHeight::GENESIS,
             address_custom_limits: vec![(limited_addr, tight)],
             ip_custom_limits: vec![(subnet, tight)],
         };

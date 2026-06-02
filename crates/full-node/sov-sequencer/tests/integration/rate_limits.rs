@@ -340,7 +340,6 @@ async fn assert_subnet_bucket_is_shared(subnet: &str, ip_a: &str, ip_b: &str) {
             resources_per_bucket: 5,
             refill_rate: 0,
         },
-        height_for_gas_limit_computation: RollupHeight::GENESIS,
         address_custom_limits: Vec::default(),
         ip_custom_limits: vec![(
             subnet.parse().unwrap(),
