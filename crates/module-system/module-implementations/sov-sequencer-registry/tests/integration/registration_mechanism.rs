@@ -1550,6 +1550,78 @@ fn test_non_preferred_update_da_address_during_own_batch_fails() {
     });
 }
 
+/// A rollup key may own more than one registered DA address (`register_staker`
+/// only enforces DA-address uniqueness). While producing a batch from `producing_da`,
+/// the caller rotates an *idle* sibling `idle_sibling_da -> new_da`. The rotation does
+/// not touch the producing DA, so the own-batch guard (keyed on the producing DA) does
+/// not fire and the rotation applies immediately.
+#[test]
+fn test_rotate_idle_sibling_da_during_own_batch_succeeds() {
+    let (
+        TestRoles {
+            additional_sequencer,
+            ..
+        },
+        mut runner,
+    ) = setup();
+
+    let rollup_address = additional_sequencer.address();
+    let producing_da: MockAddress = NON_DEFAULT_SEQUENCER_DA_ADDRESS.into();
+    let idle_sibling_da: MockAddress = ANOTHER_SEQUENCER_DA_ADDRESS.into();
+    let new_da: MockAddress = ROTATED_DA_ADDRESS.into();
+
+    runner.execute(
+        additional_sequencer.create_plain_message::<RT, TestSequencerRegistry>(
+            CallMessage::Register {
+                da_address: producing_da,
+                amount: SEQUENCE_STAKE,
+            },
+        ),
+    );
+    runner.execute(
+        additional_sequencer.create_plain_message::<RT, TestSequencerRegistry>(
+            CallMessage::Register {
+                da_address: idle_sibling_da,
+                amount: SEQUENCE_STAKE,
+            },
+        ),
+    );
+
+    // The caller produces this batch from `producing_da`...
+    runner.config.sequencer_da_address = producing_da;
+
+    // ...but rotates the *other* DA it owns. `old != sequencer_da_address`, so the
+    // own-batch guard does not apply and the rotation lands immediately.
+    runner.execute_transaction(TransactionTestCase {
+        input: additional_sequencer.create_plain_message::<RT, TestSequencerRegistry>(
+            CallMessage::UpdateDaAddress {
+                old_da_address: idle_sibling_da,
+                new_da_address: new_da,
+            },
+        ),
+        assert: Box::new(move |result, state| {
+            assert!(result.tx_receipt.is_successful());
+
+            assert!(
+                TestSequencerRegistry::default()
+                    .is_sender_known(&idle_sibling_da, state)
+                    .is_err(),
+                "Rotated-away sibling DA should no longer be known"
+            );
+
+            let new_entry = TestSequencerRegistry::default()
+                .is_sender_known(&new_da, state)
+                .expect("New sibling DA should be known after rotation");
+            assert_eq!(new_entry.address, rollup_address);
+
+            let producing_entry = TestSequencerRegistry::default()
+                .is_sender_known(&producing_da, state)
+                .expect("Producing DA must be untouched by a sibling rotation");
+            assert_eq!(producing_entry.address, rollup_address);
+        }),
+    });
+}
+
 /// F3 + F4 + G2: after rotation, `Deposit` on the new DA succeeds (balance
 /// increases as expected) and on the old DA fails (`IsNotRegistered`).
 #[test]

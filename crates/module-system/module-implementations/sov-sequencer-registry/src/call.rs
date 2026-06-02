@@ -310,9 +310,10 @@ impl<S: Spec> SequencerRegistry<S> {
     /// - If the caller's rollup key does not own the entry at `old_da_address`.
     /// - If another DA address update is already pending for this rollup block
     ///   (by any sequencer — at most one rotation may be pending per block).
-    /// - If the caller is the active non-preferred batch producer for this slot
-    ///   (`CannotUnregisterDuringOwnBatch`). Preferred sequencer self-rotation
-    ///   is deferred until the end of the rollup block.
+    /// - If `old_da_address` is the DA address the caller is actively sequencing from
+    ///   for this slot and the caller is not the preferred sequencer
+    ///   (`CannotUnregisterDuringOwnBatch`). The preferred sequencer may rotate its own
+    ///   producing DA; that rotation is deferred until the end of the rollup block.
     /// - If `new_da_address` is already registered.
     /// - If `new_da_address` was retired by a previous rotation.
     pub(crate) fn update_da_address<ST: TxState<S>>(
@@ -353,35 +354,32 @@ impl<S: Spec> SequencerRegistry<S> {
             return Err(RegistrationError::AlreadyRegistered(pending.sequencer));
         }
 
-        if &existing_sequencer.address == context.sequencer() {
-            if context.sequencer_is_preferred() && context.sequencer_da_address() == old_da_address
-            {
-                self.pending_da_address_update.set(
-                    &PendingDaAddressUpdate {
-                        sequencer: existing_sequencer.address,
-                        old_da_address: *old_da_address,
-                        new_da_address: *new_da_address,
-                    },
-                    state,
-                )?;
-
-                self.emit_event(
-                    state,
-                    Event::<S>::DaAddressUpdated {
-                        sequencer: existing_sequencer.address,
-                        old_da_address: *old_da_address,
-                        new_da_address: *new_da_address,
-                    },
-                );
-                return Ok(());
+        // Dispatch on whether `old_da_address` is the DA address producing the current
+        // batch. `context.sequencer_da_address()` is the authenticated DA address of the
+        // batch currently executing; its bond is reserved for the whole batch, so its
+        // registry entry must not be mutated mid-batch. The preferred sequencer is the
+        // sole exception: it may rotate its own producing DA, but the move is deferred to
+        // end-of-block (applied by `BlockHooks::end_rollup_block_hook`) to preserve batch
+        // ordering. Rotating any other DA the caller owns is unrelated to the current
+        // batch and applies immediately.
+        if old_da_address == context.sequencer_da_address() {
+            if !context.sequencer_is_preferred() {
+                return Err(RegistrationError::Custom(
+                    CustomError::CannotUnregisterDuringOwnBatch(*old_da_address),
+                ));
             }
 
-            return Err(RegistrationError::Custom(
-                CustomError::CannotUnregisterDuringOwnBatch(*old_da_address),
-            ));
+            self.pending_da_address_update.set(
+                &PendingDaAddressUpdate {
+                    sequencer: existing_sequencer.address,
+                    old_da_address: *old_da_address,
+                    new_da_address: *new_da_address,
+                },
+                state,
+            )?;
+        } else {
+            self.apply_da_rotation(old_da_address, new_da_address, &existing_sequencer, state)?;
         }
-
-        self.apply_da_rotation(old_da_address, new_da_address, &existing_sequencer, state)?;
 
         self.emit_event(
             state,
