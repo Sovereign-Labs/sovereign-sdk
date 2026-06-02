@@ -51,7 +51,10 @@ fi
 cd "$DAPP_DIR"
 pnpm --dir "$TS_DIR" install --frozen-lockfile
 pnpm --dir "$TS_DIR" --filter "${DAPP_PACKAGE}..." build
-pnpm exec playwright install --with-deps chromium
+# System deps + the pinned Chromium build are baked into the CI base image
+# (see docker/ci/Dockerfile). This resolves to a fast no-op there; the
+# --with-deps apt step is intentionally dropped.
+pnpm exec playwright install chromium
 
 CI=true \
 VITE_ROLLUP_URL=http://127.0.0.1:12346 \

@@ -126,7 +126,7 @@ install-risc0-toolchain:  ## install risc0 toolchain
 
 install-sp1-toolchain:  ## install SP1 toolchain
 	curl -L https://sp1up.succinct.xyz | bash
-	~/.sp1/bin/sp1up --version 6.0.2 $${GITHUB_TOKEN:+--token "$$GITHUB_TOKEN"}
+	~/.sp1/bin/sp1up $${GITHUB_TOKEN:+--token "$$GITHUB_TOKEN"} --version 6.2.2
 	~/.sp1/bin/cargo-prove prove --version
 	~/.sp1/bin/cargo-prove prove install-toolchain
 	@echo "SP1 toolchain version:"
