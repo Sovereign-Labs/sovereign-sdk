@@ -147,6 +147,7 @@ impl<S: Spec> SequencerRegistry<S> {
         }
     }
 
+    #[allow(clippy::type_complexity)]
     fn current_da_address_for_refund<
         Accessor: StateReader<Kernel, Error = Infallible> + StateReader<User, Error = Infallible>,
     >(
