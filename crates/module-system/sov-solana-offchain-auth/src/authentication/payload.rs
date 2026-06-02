@@ -33,6 +33,9 @@ pub struct SolanaOffchainSigningPayloadV0<R: TransactionCallable, S: Spec> {
     /// See [`sov_modules_api::capabilities::AuthorizationData::address_override`] for routing semantics.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub address_override: Option<S::Address>,
+    /// Message format version. Must be `0` for this struct.
+    #[serde(deserialize_with = "deserialize_version_0")]
+    pub version: u8,
 }
 
 impl<R, S> SolanaOffchainSigningPayloadV0<R, S>
@@ -89,6 +92,18 @@ pub struct SolanaOffchainSigningPayloadV1<R: TransactionCallable, S: Spec> {
     /// Message format version. Must be `1` for this struct.
     #[serde(deserialize_with = "deserialize_version_1")]
     pub version: u8,
+}
+
+fn deserialize_version_0<'de, D: serde::Deserializer<'de>>(
+    deserializer: D,
+) -> Result<u8, D::Error> {
+    let v = <u8 as serde::Deserialize>::deserialize(deserializer)?;
+    if v != 0 {
+        return Err(serde::de::Error::custom(format!(
+            "expected message version 0, got {v}"
+        )));
+    }
+    Ok(v)
 }
 
 fn deserialize_version_1<'de, D: serde::Deserializer<'de>>(
