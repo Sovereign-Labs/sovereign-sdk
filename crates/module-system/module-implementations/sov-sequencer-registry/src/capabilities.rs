@@ -90,15 +90,28 @@ impl<S: Spec> SequencerRegistry<S> {
         amount: Amount,
         state: &mut Accessor,
     ) -> anyhow::Result<()> {
+        let (sequencer, retired_sequencer) =
+            self.current_da_address_for_refund(sequencer, state)?;
         if let Some(KnownSequencer {
             address,
             balance,
             balance_state,
         }) = self
             .known_sequencers
-            .get(sequencer, state)
+            .get(&sequencer, state)
             .unwrap_infallible()
         {
+            if let Some(retired_sequencer) = retired_sequencer {
+                if address != retired_sequencer {
+                    anyhow::bail!(
+                        "Sequencer {} is registered to {}, not retired sequencer {}",
+                        sequencer,
+                        address,
+                        retired_sequencer
+                    );
+                }
+            }
+
             // Note that we don't check if the sequencer is active here, because the sequencer can get
             // refunded from escrow while their withdrawal is pending. In fact, that's the whole point of the
             // withdrawal period - to wait until all possible escrows involving the sequencer are resolved.
@@ -118,7 +131,7 @@ impl<S: Spec> SequencerRegistry<S> {
 
             self.known_sequencers
                 .set(
-                    sequencer,
+                    &sequencer,
                     &KnownSequencer {
                         address,
                         balance: new_balance,
@@ -132,5 +145,40 @@ impl<S: Spec> SequencerRegistry<S> {
         } else {
             anyhow::bail!("Sequencer {} is not registered", sequencer)
         }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn current_da_address_for_refund<
+        Accessor: StateReader<Kernel, Error = Infallible> + StateReader<User, Error = Infallible>,
+    >(
+        &self,
+        sequencer: &<S::Da as DaSpec>::Address,
+        state: &mut Accessor,
+    ) -> anyhow::Result<(<S::Da as DaSpec>::Address, Option<S::Address>)> {
+        let mut current_da_address = *sequencer;
+        let mut retired_sequencer = None;
+
+        while let Some(retired) = self
+            .retired_da_addresses
+            .get(&current_da_address, state)
+            .unwrap_infallible()
+        {
+            match retired_sequencer {
+                Some(expected_sequencer) if retired.sequencer != expected_sequencer => {
+                    anyhow::bail!(
+                        "Retired DA address {} points through DA address {} retired by sequencer {} instead of {}",
+                        sequencer,
+                        current_da_address,
+                        retired.sequencer,
+                        expected_sequencer
+                    );
+                }
+                Some(_) => {}
+                None => retired_sequencer = Some(retired.sequencer),
+            }
+            current_da_address = retired.current_da_address;
+        }
+
+        Ok((current_da_address, retired_sequencer))
     }
 }
