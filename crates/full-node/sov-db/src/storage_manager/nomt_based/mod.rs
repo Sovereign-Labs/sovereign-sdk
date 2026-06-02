@@ -18,7 +18,7 @@ use sov_rollup_interface::reexports::digest;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 
 use crate::accessory_db::AccessoryDb;
-use crate::config::{RollupDbConfig, RollupDbConfigWithCustomizations};
+use crate::config::{PrunerConfig, RollupDbConfig, RollupDbConfigWithCustomizations};
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::metrics::nomt::StorageManagerFinalizationMetric;
 use crate::state_db_nomt::{NomtSessionBuilder, StateOverlay};
@@ -124,6 +124,15 @@ where
     ) -> Self;
 }
 
+/// Parameters for the one-time startup prune, populated only when the configured
+/// [`PrunerConfig`] is [`PrunerConfig::OnceAtStartup`].
+#[derive(Debug, Clone, Copy)]
+struct StartupPruneParams {
+    versions_to_keep: usize,
+    max_batch_size: usize,
+    compact_after: bool,
+}
+
 /// Implementation of [`HierarchicalStorageManager`] based on NOMT.
 pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H, Da::SlotHash>> {
     // L1 forks representation
@@ -142,6 +151,15 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
     pruner_block_interval: Option<u64>,
     pruner_versions_to_keep: usize,
     pruner_max_batch_size: usize,
+    // Set only for `PrunerConfig::OnceAtStartup`; consumed by `prune_once_at_startup`.
+    startup_prune: Option<StartupPruneParams>,
+
+    /// Number of pruning batches committed so far. Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pruning_commits_count: u64,
+    /// Whether the most recently committed pruning batch hit the size limit. Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    last_pruning_hit_size_limit: bool,
 
     /// When true, `create_state_for` will generate witness hints for ZK proving.
     witness_generation_enabled: bool,
@@ -169,13 +187,52 @@ where
         witness_generation: bool,
     ) -> anyhow::Result<Self> {
         let config = custom_config.config();
-        let pruner_block_interval = config.get_pruner_interval();
-        let pruner_versions_to_keep = config.get_pruner_versions_to_keep();
-        let pruner_max_batch_size = config.get_pruner_max_batch_size();
-        assert!(
-            pruner_versions_to_keep >= 1,
-            "Pruner versions to keep should be at least 1, got {pruner_versions_to_keep}",
-        );
+        // Derive the periodic-pruning fields (used by `finalize`) and the optional
+        // startup-prune params from the pruning policy. `Off` and `OnceAtStartup` both leave
+        // `pruner_block_interval = None`, so `finalize` never spawns a periodic pruner for
+        // them; `OnceAtStartup` instead carries `startup_prune`, consumed once by
+        // `prune_once_at_startup`.
+        let (pruner_block_interval, pruner_versions_to_keep, pruner_max_batch_size, startup_prune) =
+            match config.pruner() {
+                PrunerConfig::Off => (None, 1usize, DEFAULT_MAX_PRUNING_BATCH_SIZE, None),
+                PrunerConfig::Periodic {
+                    block_interval,
+                    versions_to_keep,
+                    max_batch_size,
+                } => {
+                    assert!(
+                        versions_to_keep >= 1,
+                        "Pruner versions to keep should be at least 1, got {versions_to_keep}",
+                    );
+                    (
+                        Some(block_interval),
+                        versions_to_keep as usize,
+                        RollupDbConfig::resolve_max_batch_size(max_batch_size),
+                        None,
+                    )
+                }
+                PrunerConfig::OnceAtStartup {
+                    versions_to_keep,
+                    max_batch_size,
+                    compact_after,
+                } => {
+                    assert!(
+                        versions_to_keep >= 1,
+                        "Pruner versions to keep should be at least 1, got {versions_to_keep}",
+                    );
+                    let max_batch_size = RollupDbConfig::resolve_max_batch_size(max_batch_size);
+                    (
+                        None,
+                        versions_to_keep as usize,
+                        max_batch_size,
+                        Some(StartupPruneParams {
+                            versions_to_keep: versions_to_keep as usize,
+                            max_batch_size,
+                            compact_after,
+                        }),
+                    )
+                }
+            };
         let db_group = DbGroup::new(custom_config)?;
         db_group.update_ledger_finalized_height()?;
 
@@ -190,9 +247,41 @@ where
             pruner_block_interval,
             pruner_versions_to_keep,
             pruner_max_batch_size,
+            startup_prune,
+            #[cfg(any(test, feature = "test-utils"))]
+            pruning_commits_count: 0,
+            #[cfg(any(test, feature = "test-utils"))]
+            last_pruning_hit_size_limit: false,
             witness_generation_enabled: witness_generation,
             _phantom_s: Default::default(),
         })
+    }
+
+    /// Prunes synchronously to completion: repeatedly spawn a pruner, immediately join it,
+    /// and commit its delete batch, looping while the batch hit the size limit. Reuses the
+    /// periodic-pruning machinery ([`DbGroup::start_pruner`] / [`PrunerJob::join`] /
+    /// [`DbGroup::commit_pruning`]); joining immediately is fine here because there is no
+    /// concurrent finalize traffic during the startup prune.
+    fn prune_to_completion(
+        &mut self,
+        versions_to_keep: usize,
+        max_batch_size: usize,
+    ) -> anyhow::Result<()> {
+        loop {
+            let job = self.db_group.start_pruner(versions_to_keep, max_batch_size);
+            let prune_group = job.join()?;
+            let hit_size_limit = prune_group.hit_size_limit();
+            self.db_group.commit_pruning(prune_group)?;
+            #[cfg(any(test, feature = "test-utils"))]
+            {
+                self.pruning_commits_count += 1;
+                self.last_pruning_hit_size_limit = hit_size_limit;
+            }
+            if !hit_size_limit {
+                break;
+            }
+        }
+        Ok(())
     }
 
     // build a storage up to the given block_hash (inclusive).
@@ -326,6 +415,35 @@ where
     #[cfg(test)]
     pub(crate) fn blocks_to_parent_count(&self) -> usize {
         self.blocks_to_parent.len()
+    }
+
+    /// Number of pruning batches committed so far. Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn pruning_commits_count(&self) -> u64 {
+        self.pruning_commits_count
+    }
+
+    /// Whether the most recently committed pruning batch hit the size limit. Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn last_pruning_hit_size_limit(&self) -> bool {
+        self.last_pruning_hit_size_limit
+    }
+
+    /// Whether a pruner thread is currently in flight. Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn is_pruner_running(&self) -> bool {
+        self.pruner.is_some()
+    }
+
+    /// Blocks the current thread until any in-flight pruner thread has finished. Does NOT commit
+    /// the resulting batch (that happens on the next `finalize`). Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn wait_for_pruner_to_finish(&self) {
+        if let Some(pruner) = self.pruner.as_ref() {
+            while !pruner.is_finished() {
+                std::thread::yield_now();
+            }
+        }
     }
 }
 
@@ -582,6 +700,11 @@ where
             let hit_size_limit = prune_group.hit_size_limit();
             self.db_group.commit_pruning(prune_group)?;
             pruning_commit_time = Some(start.elapsed());
+            #[cfg(any(test, feature = "test-utils"))]
+            {
+                self.pruning_commits_count += 1;
+                self.last_pruning_hit_size_limit = hit_size_limit;
+            }
             // If the pruner didn't hit the size limit, we're done. Mark that the pruner finished at the current height.
             // Otherwise, we don't mark the run as finished, so the pruner will spawn another iteration.
             if !hit_size_limit {
@@ -613,6 +736,22 @@ where
                 pruning_commit_time,
             });
         });
+        Ok(())
+    }
+
+    fn prune_once_at_startup(&mut self) -> anyhow::Result<()> {
+        // `take` ensures the startup prune runs at most once, even if called repeatedly.
+        if let Some(params) = self.startup_prune.take() {
+            tracing::info!(
+                versions_to_keep = params.versions_to_keep,
+                compact_after = params.compact_after,
+                "Running one-time startup pruning to completion"
+            );
+            self.prune_to_completion(params.versions_to_keep, params.max_batch_size)?;
+            if params.compact_after {
+                self.db_group.compact_pruned_cfs()?;
+            }
+        }
         Ok(())
     }
 }

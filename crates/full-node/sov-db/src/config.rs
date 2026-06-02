@@ -79,6 +79,56 @@ impl std::fmt::Debug for RocksdbCfCustomization {
     }
 }
 
+/// State-version pruning policy: how (and whether) old historical versions of state keys
+/// are deleted.
+///
+/// Defaults to [`PrunerConfig::Off`] (full history retained). In config files, omitting the
+/// `pruner` section disables pruning; otherwise select a variant, e.g.
+/// `[storage.pruner.periodic]` or `[storage.pruner.once_at_startup]`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
+pub enum PrunerConfig {
+    /// Never prune; the node retains full history.
+    Off,
+    /// Prune exactly once, synchronously, at node startup (before block processing begins),
+    /// then never again during this run. This performs all pruning I/O up front, when there
+    /// is no live read/write traffic to compete with, instead of interfering on every
+    /// finalized block as [`PrunerConfig::Periodic`] does.
+    OnceAtStartup {
+        /// Number of recent versions to retain for historical querying (must be >= 1).
+        versions_to_keep: u64,
+        /// Maximum number of keys deleted per internal batch. `None` falls back to
+        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
+        #[serde(default)]
+        max_batch_size: Option<usize>,
+        /// If `true`, run a full RocksDB compaction on the pruned column families after the
+        /// startup prune completes, dropping the resulting tombstones and reclaiming disk
+        /// space. This is heavy (it rewrites the affected column families) and only sensible
+        /// for the one-time startup prune, so it is off by default.
+        #[serde(default)]
+        compact_after: bool,
+    },
+    /// Periodically prune in the background during finalization (the historical behavior):
+    /// roughly every `block_interval` finalized DA blocks a background pruner is spawned and
+    /// its delete batch is committed on a subsequent finalize.
+    Periodic {
+        /// Run the pruner roughly every `block_interval` finalized DA blocks.
+        block_interval: u64,
+        /// Number of recent versions to retain for historical querying (must be >= 1).
+        versions_to_keep: u64,
+        /// Maximum number of keys deleted per batch. `None` falls back to
+        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
+        #[serde(default)]
+        max_batch_size: Option<usize>,
+    },
+}
+
+impl Default for PrunerConfig {
+    fn default() -> Self {
+        PrunerConfig::Off
+    }
+}
+
 /// Configuration for Sovereign Rollup node database.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct RollupDbConfig {
@@ -133,14 +183,10 @@ pub struct RollupDbConfig {
     /// More details at [`Options::page_cache_upper_levels`]
     pub kernel_page_cache_upper_levels: Option<usize>,
 
-    /// Pruner
-    /// Defines how often pruner is going to be started.
-    /// Measure by DA blocks.
-    pub pruner_block_interval: Option<u64>,
-    /// These many versions will be available for historical querying.
-    pub pruner_versions_to_keep: Option<usize>,
-    /// Maximum number of keys to prune in a single batch.
-    pub pruner_max_batch_size: Option<usize>,
+    /// State-version pruning policy. Defaults to [`PrunerConfig::Off`] (full history
+    /// retained) when omitted from config.
+    #[serde(default)]
+    pub pruner: PrunerConfig,
 }
 
 impl RollupDbConfig {
@@ -167,9 +213,7 @@ impl RollupDbConfig {
             kernel_page_cache_size: Some(16),
             kernel_leaf_cache_size: Some(16),
             kernel_page_cache_upper_levels: None,
-            pruner_block_interval: None,
-            pruner_versions_to_keep: Some(20),
-            pruner_max_batch_size: None,
+            pruner: PrunerConfig::Off,
         }
     }
 
@@ -243,18 +287,14 @@ impl RollupDbConfig {
         opts
     }
 
-    pub(crate) fn get_pruner_interval(&self) -> Option<u64> {
-        self.pruner_block_interval
+    pub(crate) fn pruner(&self) -> PrunerConfig {
+        self.pruner
     }
 
-    pub(crate) fn get_pruner_versions_to_keep(&self) -> usize {
-        self.pruner_versions_to_keep
-            .expect("`pruner_versions_to_keep` must be set")
-    }
-
-    pub(crate) fn get_pruner_max_batch_size(&self) -> usize {
-        self.pruner_max_batch_size
-            .unwrap_or(DEFAULT_MAX_PRUNING_BATCH_SIZE)
+    /// Resolves an optional per-batch key cap to a concrete value, falling back to
+    /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
+    pub(crate) fn resolve_max_batch_size(max_batch_size: Option<usize>) -> usize {
+        max_batch_size.unwrap_or(DEFAULT_MAX_PRUNING_BATCH_SIZE)
     }
 }
 

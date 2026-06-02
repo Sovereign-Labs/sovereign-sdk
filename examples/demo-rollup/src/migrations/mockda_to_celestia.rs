@@ -12,7 +12,7 @@ use rockbound::SchemaBatch;
 use serde::Serialize;
 use sov_celestia_adapter::types::TmHash;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
-use sov_db::config::RollupDbConfig;
+use sov_db::config::{PrunerConfig, RollupDbConfig};
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::tables::{BatchByNumber, SlotByNumber};
 use sov_db::schema::types::{BatchNumber, DbBytes, StoredBatch};
@@ -981,9 +981,18 @@ fn apply_storage_defaults_and_overrides(config: &mut RollupDbConfig, notes: &mut
         config.kernel_preallocate_ht = Some(false);
         notes.push("storage.kernel_preallocate_ht missing; defaulted to false".to_string());
     }
-    if config.pruner_versions_to_keep.is_none() {
-        config.pruner_versions_to_keep = Some(20);
-        notes.push("storage.pruner_versions_to_keep missing; defaulted to 20".to_string());
+    if config.pruner == PrunerConfig::Off {
+        // Match the periodic pruning used by the fresh example configs so migrated prod nodes
+        // actually prune (a missing/off policy would otherwise leave pruning disabled).
+        config.pruner = PrunerConfig::Periodic {
+            block_interval: 100,
+            versions_to_keep: 20,
+            max_batch_size: None,
+        };
+        notes.push(
+            "storage.pruner missing/off; defaulted to periodic pruning (every 100 DA blocks, keep 20 versions)"
+                .to_string(),
+        );
     }
 }
 
