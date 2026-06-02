@@ -249,6 +249,7 @@ fn create_transfer_tx_json_with_address_override(
         details: unsigned_tx.details,
         chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
         address_override,
+        version: 0,
     };
 
     serde_json::to_string(&solana_unsigned_tx).unwrap()
@@ -354,7 +355,7 @@ async fn test_submit_ledger_signed_transaction() {
     // updated.)
     assert_eq!(
         transfer_json_tx,
-        r#"{"runtime_call":{"bank":{"transfer":{"to":"4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL","coins":{"amount":"5000","token_id":"token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"}}}},"uniqueness":{"generation":0},"details":{"max_priority_fee_bips":0,"max_fee":"100000000000","gas_limit":[1000000000,1000000000],"chain_id":4321},"chain_name":"TestChain"}"#,
+        r#"{"runtime_call":{"bank":{"transfer":{"to":"4zdwHNaEa5npHtRtaZ3RL1m6rptuQZ6RBLHG6cAyVHjL","coins":{"amount":"5000","token_id":"token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7"}}}},"uniqueness":{"generation":0},"details":{"max_priority_fee_bips":0,"max_fee":"100000000000","gas_limit":[1000000000,1000000000],"chain_id":4321},"chain_name":"TestChain","version":0}"#,
         "JSON changed - re-sign on Ledger and update the hardcoded signature"
     );
     let encoded_tx = transfer_json_tx.as_bytes().to_vec();
@@ -364,7 +365,7 @@ async fn test_submit_ledger_signed_transaction() {
         .try_into()
         .unwrap();
     let signature: Ed25519Signature = bs58::decode(
-        "3GBYQrmcKtUiXAQLz2bUR55Kh7YfgUy2g199ePXYSUHbRHLAsdjcTctSrt98oiA79nZVQU79AbBpiKU23Z2UTstQ",
+        "3kY989YQ614HgcoToFeZp4rWggqzkpQJPeusDNoVRLt74X1goAaoF6LH8wXB8dwrvmjnxBNvSJq1LFpG3MBh6fAd",
     )
     .into_vec()
     .unwrap()
@@ -380,8 +381,8 @@ async fn test_submit_ledger_signed_transaction() {
     let message_str = bs58::encode(&signed_message_with_preamble).into_string();
     assert_eq!(
         message_str,
-        "45bxAZgjJHtL6EmowbCZiBduiwEePySEehCCaCVVJouRB7hQRL3qsv4PNmQvE9NVDfFKmfmVNaNS5a32X1fpSmjJVk19Dk9VSqLyYXxeVuGCZR4jCx7JTx1qbLHD3amNkHvmCnhkgLbT8HgkPwHZWPMeapAo2cL9N3CRzPMZFM5ikWb8yJXzFpCzBjsL1fkCtkDz2BoZPHAtrh5Zvhdae6W9Qypme1iUys8iu4A4e3mk6Nh2us2iLgPcEJhK7xsNxm66CxogjGnwBW3ioTfjRby9LHVzJwQ2dFLJT8kugres5xGG6PxKFNkhFRV4bPgYJvh4ZUUUZSWKkVeW4Ep3nH4BTn1N5WkouYWjKvhy54FCasbM8AyWYAyCnSpX5e8jFEN12rBzmq4HEEJxJY51rTULCEK8Uq2ZJKAe5yTXUisQRw1hZo5bQGku5DwfGyupyfiE6b78vm7uJvQcipLFBoDByrrwPRGhYXK3m8axmcDUFm2PiCpRfYSMk7kGsNn1LLD7D2EwovWDCVERVEB5zftfj6gx9ZeFeZi1c2PdUYsvhZjHdVEa8JVFmts5Q8hD1Wf53DjQAmCFa8GzTK1cekDN47ENFfPaPQsLRFTEXn",
-        "Multisig message bytes changed - re-sign on ledger and update the hardcoded signature"
+        "FspUdENNoCTH4VASSjcgC8cLUmq79qrXg2NPyYx6h6fw1fQvwpCCNFEC4VH3wVWYU3FKv54nNKE1guEqUDJ9cBv2R5aUDFiTiSt1uyTQMiacVcB9tknHJTWDKKkoYwiAqeLYvK2yACXfd8XpajNMk8FexFqv6jWXcwHyEBp9TVnrwqxTvXJkVUhVRXv1pkSPHL2ZwUNtb4b98YzuwjcPXiKmqfXZz1FRARFJPSdWoSsKihj7VUB9SLuDmVvQpuK4AhQbeJCbZfhAnu3BccvCYjX6YEKwejDkSApzCNZEeuRHDHcw4WtfMeTREkW3qQr98N1ZZY8mx3zoZ59EMnfwdfgTAM5LH2hLRZk6FxtXz9oLXPDFBzaa1K5ikjYtqGvgf3vzDWrTCH4cYAZXP6xvs9rAs5JYyWcwm2ToCSKvS2Qxe867XhBf5pNnDtieLwZjSByQJLM27w2RXeJ2FR7T7p2KphFeKxYEdR76JDuA58aXWtw8NvRHoVULnxMuj65epCipxnvWkFqALsUaSAeQMQV1U3v9PF8MJDHWpyENBF9YG66ZZf2NwrA3kRNGVm3F8hCJgnuiN3jxiZWgAMuqxX1eeY26WKufP63SwBXQbkE3Yo7nx5yfEMApRi",
+        "Ledger message bytes changed - re-sign on ledger and update the hardcoded signature"
     );
 
     let message = SolanaOffchainSpecCompliantEnvelope::<S> {
@@ -391,6 +392,17 @@ async fn test_submit_ledger_signed_transaction() {
 
     let raw_tx_bytes = borsh::to_vec(&message).unwrap();
 
+    {
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob {
+                blob: raw_tx_bytes.clone(),
+            },
+        };
+        println!(
+            "SINGLE_SIG LEDGER PAYLOAD: {}",
+            serde_json::to_string(&request).unwrap()
+        );
+    }
     let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
     assert!(
         response.status().is_success(),
@@ -425,6 +437,7 @@ async fn test_submit_raw_signed_message_transaction() {
     let tx_str = create_transfer_tx_json(Amount(10_000), RECIPIENT_ADDRESS);
     let encoded_tx = tx_str.as_bytes().to_vec();
     let signer = admin.private_key();
+    println!("SINGLE SIG SIGNER KEY: {}", hex::encode(signer));
     let pubkey = signer.pub_key();
     let signature = signer.sign(&encoded_tx);
 
@@ -436,6 +449,17 @@ async fn test_submit_raw_signed_message_transaction() {
     };
     let raw_tx_bytes = borsh::to_vec(&message).unwrap();
 
+    {
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob {
+                blob: raw_tx_bytes.clone(),
+            },
+        };
+        println!(
+            "SINGLE_SIG PAYLOAD: {}",
+            serde_json::to_string(&request).unwrap()
+        );
+    }
     let response = submit_tx(test_rollup.api_client(), raw_tx_bytes).await;
 
     assert!(
@@ -1556,6 +1580,7 @@ fn build_v0_payload(
         details: unsigned_tx.details,
         chain_name: config_value!("CHAIN_NAME").to_string().try_into().unwrap(),
         address_override,
+        version: 0,
     }
 }
 

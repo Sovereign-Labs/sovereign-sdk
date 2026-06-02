@@ -230,6 +230,7 @@ describe("SolanaSignableRollup", () => {
     const message = JSON.parse(new TextDecoder().decode(jsonBytes));
 
     expect(message.chain_name).toBe(demoRollupSchema.chain_data.chain_name);
+    expect(message.version).toBe(0);
   });
 
   it("should include address_override in Solana signed JSON when present", async () => {
@@ -286,9 +287,9 @@ describe("SolanaSignableRollup", () => {
       // These values were generated using the test_submit_raw_signed_message_transaction() test from the sov-solana-offchain-auth crate.
       // The signer private key was logged, and the serde serialization of the AcceptTx was logged.
       const privateKeyHex =
-        "4096e0037e7dc13c28730b01e303ea4679a05e019f68a5ee8aec6c1968cac707";
+        "2bf7a34f197040d49014e026aa35a61b094ad6b32d5ae86e769e777a51a83c5d";
       const expectedJson =
-        '{"body":{"body":"cAEAAHsicnVudGltZV9jYWxsIjp7ImJhbmsiOnsidHJhbnNmZXIiOnsidG8iOiI0emR3SE5hRWE1bnBIdFJ0YVozUkwxbTZycHR1UVo2UkJMSEc2Y0F5VkhqTCIsImNvaW5zIjp7ImFtb3VudCI6IjEwMDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2lkIjo0MzIxfSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiJ9CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwuMdhE5OjziHniAzu9qaFH0I50R93Apv2VgyONYPuLm3nN3Cr4cJwZ5ii6YYXxr7LsW3qcL0NAJfIvmUZroK+fuM18D3Hj+NsFn+nmN9jCjiWhjbQO1/79i365l424Erwg="}}';
+        '{"body":{"body":"fAEAAHsicnVudGltZV9jYWxsIjp7ImJhbmsiOnsidHJhbnNmZXIiOnsidG8iOiI0emR3SE5hRWE1bnBIdFJ0YVozUkwxbTZycHR1UVo2UkJMSEc2Y0F5VkhqTCIsImNvaW5zIjp7ImFtb3VudCI6IjEwMDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2lkIjo0MzIxfSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiIsInZlcnNpb24iOjB9CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwt0I7oBLzTClR8+NiHHPE6LyyQfcVTjHex79N5keSD1gm4KQIi9Wdvph88C+u2Y1i/1eZF9j5q2tRUY+QPqVw2BnwF+uFCpwdsmpqQQgi1DfY4dMMCxQzUFuhz7krpMtQI="}}';
 
       const mockClient = createMockClient({
         chainId: 4321,
@@ -361,9 +362,9 @@ describe("SolanaSignableRollup", () => {
       const knownPubkeyHex =
         "70248c99a1d39769831c99706948b9851585cba907a677d112f9a3694cbcb4cd";
       const knownSignatureHex =
-        "71204c3487b8e637cffaa5e9dc409efe2f1e98db6b557041181a368f4c487bbd407f72c43f08aa44b75f219e6fb3ce4681785dd72ee3eebe4e641ade8289370d";
+        "89941ccebc40db1daf60b0b392121616868000d4799d930d18f4eaff266cd560cf61c6bf62c97955f64b33cc0640718427d0dc0180cf65e9746b7522d7f6d20e";
       const expectedJson =
-        '{"body":{"body":"xAEAAP9zb2xhbmEgb2ZmY2hhaW4ACwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsAAXAkjJmh05dpgxyZcGlIuYUVhcupB6Z30RL5o2lMvLTNbwF7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI1MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2lkIjo0MzIxfSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiJ9cSBMNIe45jfP+qXp3ECe/i8emNtrVXBBGBo2j0xIe71Af3LEPwiqRLdfIZ5vs85GgXhd1y7j7r5OZBregok3DQ=="}}';
+        '{"body":{"body":"0AEAAP9zb2xhbmEgb2ZmY2hhaW4ACwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsAAXAkjJmh05dpgxyZcGlIuYUVhcupB6Z30RL5o2lMvLTNewF7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI1MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2lkIjo0MzIxfSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiIsInZlcnNpb24iOjB9iZQczrxA2x2vYLCzkhIWFoaAANR5nZMNGPTq/yZs1WDPYca/Ysl5VfZLM8wGQHGEJ9DcAYDPZel0a3Ui1/bSDg=="}}';
 
       const mockClient = createMockClient({
         chainId: 4321,
