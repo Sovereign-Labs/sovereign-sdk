@@ -365,11 +365,3 @@ async fn test_shutdown_deregistration_is_idempotent() {
     );
     assert!(!node_exists(&db, "node_1").await);
 }
-
-async fn node_exists(db: &DB, node_id: &str) -> bool {
-    sqlx::query_scalar("SELECT EXISTS (SELECT 1 FROM nodes WHERE node_id = $1)")
-        .bind(node_id)
-        .fetch_one(&db.backend.pool)
-        .await
-        .unwrap()
-}

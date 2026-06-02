@@ -452,14 +452,6 @@ async fn count_nodes(db: &DB) -> i64 {
         .unwrap()
 }
 
-async fn node_exists(db: &DB, node_id: &str) -> bool {
-    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM nodes WHERE node_id = $1)")
-        .bind(node_id)
-        .fetch_one(&db.backend.pool)
-        .await
-        .unwrap()
-}
-
 async fn count_events(db: &DB, sequence_number: SequenceNumber, event_type: &str) -> i64 {
     sqlx::query_scalar(
         "SELECT COUNT(*)

@@ -230,6 +230,9 @@ impl NodeDiscovery {
             }
         }
 
+        // A `leader_id` with no matching node row is expected, not an error: a leader
+        // that gracefully shuts down deletes its `nodes` row while `sequencer_leader`
+        // still points at it. Callers treat `leader: None` as "no routable leader yet".
         Ok(ClusterInfo { leader, followers })
     }
 

@@ -127,6 +127,13 @@ impl HeartBeatTask {
         }
     }
 
+    // Logs the shutdown and best-effort deregisters this node. Shared by every task
+    // loop so all graceful-shutdown paths deregister in exactly one place.
+    async fn shutdown_and_deregister(&self, task: &str) {
+        info!(node_id = %self.node_id, task, "Shutdown signal received; stopping task and deregistering node");
+        self.deregister_on_shutdown().await;
+    }
+
     // Spawns a task for the current leader to maintain leadership.
     //
     // Periodically refreshes leadership. If leadership is lost or the database
@@ -139,8 +146,7 @@ impl HeartBeatTask {
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        info!("Shutdown signal received, stopping heartbeat task and deregistering node");
-                        self.deregister_on_shutdown().await;
+                        self.shutdown_and_deregister("leader heartbeat").await;
                         return;
                     }
                     FutureOrShutdownOutput::Output(_) => {
@@ -185,8 +191,7 @@ impl HeartBeatTask {
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        info!("Shutdown signal received, stopping election task and deregistering node.");
-                        self.deregister_on_shutdown().await;
+                        self.shutdown_and_deregister("replica election").await;
                         return;
                     }
                     FutureOrShutdownOutput::Output(_) => {
@@ -235,8 +240,7 @@ impl HeartBeatTask {
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        info!("Shutdown signal received, stopping registration task and deregistering node.");
-                        self.deregister_on_shutdown().await;
+                        self.shutdown_and_deregister("replica registration").await;
                         return;
                     }
                     FutureOrShutdownOutput::Output(_) => match self.register_node().await {

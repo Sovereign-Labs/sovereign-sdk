@@ -362,22 +362,14 @@ impl PostgresBackend {
             .with_factor(10.0)
             .with_max_times(2);
 
+        // Single statement → no explicit transaction (matches `begin_rollup_block`).
         run_with_retries!(
             &shutdown_backoff,
-            self.deregister_node_on_shutdown_in_tx(),
+            sqlx::query("DELETE FROM nodes WHERE node_id = $1")
+                .bind(&self.node_id)
+                .execute(&self.pool),
             "postgres_db_backend_deregister_node_on_shutdown"
-        )
-    }
-
-    async fn deregister_node_on_shutdown_in_tx(&self) -> anyhow::Result<()> {
-        let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
-
-        sqlx::query("DELETE FROM nodes WHERE node_id = $1")
-            .bind(&self.node_id)
-            .execute(&mut *tx)
-            .await?;
-
-        tx.commit().await?;
+        )?;
         Ok(())
     }
 
