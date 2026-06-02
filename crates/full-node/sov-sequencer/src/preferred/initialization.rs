@@ -11,7 +11,7 @@ use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{broadcast, mpsc, watch};
+use tokio::sync::{broadcast, mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tracing::debug;
 
@@ -130,6 +130,7 @@ where
 
         let (executor_events_sender, executor_events_receiver) =
             ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
+        let (side_effects_drained_sender, side_effects_drained_receiver) = oneshot::channel();
 
         let in_flight_batch_blobs = blob_sender.nb_of_in_flight_batch_blobs();
         let in_flight_proof_blobs = blob_sender.nb_of_in_flight_proof_blobs();
@@ -200,6 +201,7 @@ where
             api_ledger_db,
             shutdown_sender: shutdown_sender.clone(),
             transaction_cache: cached_txs.write_handle(),
+            side_effects_drained_sender,
         }
         .spawn();
         handles.push(side_effects_task);
@@ -258,6 +260,7 @@ where
                 shutdown_sender.clone(),
                 bind_addr,
                 postgres_config.leader_election.heartbeat_interval(),
+                side_effects_drained_receiver,
             )
             .await?;
             let heartbeat_handle = heartbeat_task.spawn(seq_role).await;

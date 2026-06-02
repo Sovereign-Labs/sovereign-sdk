@@ -103,6 +103,16 @@ where
         self.heap.len() >= Self::MAX_HEAP_SIZE
     }
 
+    async fn drain_side_effects_on_shutdown(&self) {
+        if self.inner.executor_events_sender.drain_and_shutdown().await {
+            tracing::debug!("Side effects drained before sequencer state shutdown");
+        } else {
+            tracing::warn!(
+                "Sequencer state shut down before side effects drain could be confirmed"
+            );
+        }
+    }
+
     pub(crate) async fn start(mut self) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut index = 0;
@@ -149,6 +159,7 @@ where
                     if let Err(e) = self.handle_next_message(msg).await {
                         match e {
                             SequencerStateUpdatorError::Shutdown => {
+                                self.drain_side_effects_on_shutdown().await;
                                 return;
                             }
                             SequencerStateUpdatorError::Unexpected => {
@@ -161,7 +172,17 @@ where
 
                 // If we don't have any more messages to process, yield until a message becomes available
                 if self.heap.is_empty() {
-                    let Some(msg) = self.message_receiver.recv().await else {
+                    let msg = tokio::select! {
+                        msg = self.message_receiver.recv() => msg,
+                        changed = self.inner.shutdown_receiver.changed() => {
+                            if changed.is_err() {
+                                tracing::debug!("Shutdown sender dropped while sequencer state was idle");
+                            }
+                            self.drain_side_effects_on_shutdown().await;
+                            return;
+                        }
+                    };
+                    let Some(msg) = msg else {
                         break;
                     };
                     assert!(

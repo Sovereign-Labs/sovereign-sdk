@@ -18,6 +18,7 @@ use crate::preferred::{PreferredBlobToReplay, PreferredProofToReplay};
 use crate::{PreferredProofDataBytes, SlotNumber};
 
 const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
+const SIDE_EFFECTS_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
 
 pub(crate) struct ExecutorEventsSender<S: Spec, Rt: Runtime<S>> {
     events_sender: mpsc::Sender<ExecutorEvent<S, Rt>>,
@@ -69,6 +70,59 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         sov_metrics::track_metrics(|t| {
             t.submit(metrics);
         });
+    }
+
+    pub(crate) async fn drain_and_shutdown(&self) -> bool {
+        let (ack_sender, ack_receiver) = oneshot::channel();
+        let event = ExecutorEvent::DrainAndShutdown { ack: ack_sender };
+
+        match self.events_sender.try_send(event) {
+            Ok(()) => {}
+            Err(TrySendError::Full(event)) => {
+                let send_result = tokio::time::timeout(
+                    SIDE_EFFECTS_DRAIN_TIMEOUT,
+                    self.events_sender.send(event),
+                )
+                .await;
+                match send_result {
+                    Ok(Ok(())) => {}
+                    Ok(Err(_)) => {
+                        tracing::warn!(
+                            "Side effects task exited before shutdown drain barrier was sent"
+                        );
+                        return false;
+                    }
+                    Err(_) => {
+                        tracing::warn!(
+                            timeout_ms = SIDE_EFFECTS_DRAIN_TIMEOUT.as_millis() as u64,
+                            "Timed out sending side effects drain barrier during shutdown"
+                        );
+                        return false;
+                    }
+                }
+            }
+            Err(TrySendError::Closed(_)) => {
+                tracing::warn!("Side effects task exited before shutdown drain barrier was sent");
+                return false;
+            }
+        }
+
+        match tokio::time::timeout(SIDE_EFFECTS_DRAIN_TIMEOUT, ack_receiver).await {
+            Ok(Ok(())) => true,
+            Ok(Err(_)) => {
+                tracing::warn!(
+                    "Side effects task exited before acknowledging shutdown drain barrier"
+                );
+                false
+            }
+            Err(_) => {
+                tracing::warn!(
+                    timeout_ms = SIDE_EFFECTS_DRAIN_TIMEOUT.as_millis() as u64,
+                    "Timed out waiting for side effects drain barrier acknowledgment"
+                );
+                false
+            }
+        }
     }
 
     /// Send a notification of an accepted tx. Return a receiver that will receive the confirmation.
@@ -378,6 +432,8 @@ where
         next_tx_number: u64,
         oneshot_sender: oneshot::Sender<()>,
     },
+    /// Stop the side effects task after all preceding events have been flushed.
+    DrainAndShutdown { ack: oneshot::Sender<()> },
 }
 
 pub(crate) struct AcceptedTxEventContents<S: Spec, Rt: Runtime<S>> {
@@ -386,4 +442,42 @@ pub(crate) struct AcceptedTxEventContents<S: Spec, Rt: Runtime<S>> {
     pub oneshot_sender: oneshot::Sender<AcceptedTx<Confirmation<S, Rt>>>,
     pub sequence_number: SequenceNumber,
     pub tx_idx_within_batch: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use sov_test_utils::{generate_optimistic_runtime, TestSpec as S};
+
+    use super::*;
+
+    generate_optimistic_runtime!(TestRuntime <= );
+
+    #[tokio::test]
+    async fn drain_and_shutdown_sends_barrier_and_waits_for_ack() {
+        let (shutdown_sender, _) = watch::channel(());
+        let cache = BlobsCache::new(Default::default(), None, shutdown_sender.clone());
+        let (executor_events_sender, mut executor_events_receiver) =
+            ExecutorEventsSender::<S, TestRuntime<S>>::new(shutdown_sender, cache);
+
+        let side_effects = tokio::spawn(async move {
+            match executor_events_receiver.recv().await.unwrap() {
+                ExecutorEvent::DrainAndShutdown { ack } => ack.send(()).unwrap(),
+                _ => panic!("Expected drain-and-shutdown barrier"),
+            }
+        });
+
+        assert!(executor_events_sender.drain_and_shutdown().await);
+        side_effects.await.unwrap();
+    }
+
+    #[tokio::test]
+    async fn drain_and_shutdown_returns_false_if_receiver_dropped() {
+        let (shutdown_sender, _) = watch::channel(());
+        let cache = BlobsCache::new(Default::default(), None, shutdown_sender.clone());
+        let (executor_events_sender, executor_events_receiver) =
+            ExecutorEventsSender::<S, TestRuntime<S>>::new(shutdown_sender, cache);
+        drop(executor_events_receiver);
+
+        assert!(!executor_events_sender.drain_and_shutdown().await);
+    }
 }

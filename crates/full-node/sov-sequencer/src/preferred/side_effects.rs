@@ -4,7 +4,7 @@ use anyhow::Result;
 use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use std::sync::Arc;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 use tokio::task::JoinHandle;
 use tracing::{debug, enabled, error, warn, Level};
 
@@ -32,6 +32,12 @@ where
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
     pub shutdown_sender: watch::Sender<()>,
     pub transaction_cache: TxResultWriter<S, Rt>,
+    pub side_effects_drained_sender: oneshot::Sender<()>,
+}
+
+enum SideEffectsEventOutcome {
+    Continue,
+    DrainedAndShutdown,
 }
 
 impl<S, Rt, Da> SideEffectsTask<S, Rt, Da>
@@ -154,14 +160,14 @@ where
     async fn handle_executor_event(
         &mut self,
         event_queue: &mut VecDeque<ExecutorEvent<S, Rt>>,
-    ) -> Result<()> {
+    ) -> Result<SideEffectsEventOutcome> {
         let queue_size_before = event_queue.len();
         let next_event = event_queue
             .pop_front()
             .expect("Tried to pop from empty event queue. This is a bug, please report it");
         let event_type: &'static str = (&next_event).into();
         let start_time = std::time::Instant::now();
-        match next_event {
+        let outcome = match next_event {
             ExecutorEvent::AcceptedTx(contents) => {
                 let sequence_number = contents.sequence_number;
                 let tx_idx_within_batch = contents.tx_idx_within_batch;
@@ -203,6 +209,7 @@ where
                     let _ = oneshot.send(tx.clone());
                     self.transaction_cache.insert(tx).await;
                 }
+                SideEffectsEventOutcome::Continue
             }
             ExecutorEvent::CloseBatch {
                 batch,
@@ -220,6 +227,7 @@ where
                 for tx in forced_txs {
                     self.transaction_cache.insert(tx).await;
                 }
+                SideEffectsEventOutcome::Continue
             }
             ExecutorEvent::StartBatch {
                 visible_slot_number_after_increase,
@@ -237,6 +245,7 @@ where
                     )
                     .await?;
                 self.update_api_state(new_checkpoint);
+                SideEffectsEventOutcome::Continue
             }
             ExecutorEvent::TriggerRecovery {
                 blobs_to_flush,
@@ -255,6 +264,7 @@ where
                 }
                 self.trigger_recovery(blobs_to_flush, recovery_strategy)
                     .await?;
+                SideEffectsEventOutcome::Continue
             }
             ExecutorEvent::PublishProofBlob(blob_id, data, sequence_number) => {
                 self.db
@@ -263,10 +273,12 @@ where
                 self.blob_sender
                     .publish_proof(data, sequence_number, blob_id)
                     .await?;
+                SideEffectsEventOutcome::Continue
             }
             ExecutorEvent::ForceUpdateApiState(new_checkpoint) => {
                 Self::maybe_delay_api_state_update_for_tests().await;
                 self.update_api_state(new_checkpoint);
+                SideEffectsEventOutcome::Continue
             }
             ExecutorEvent::UpdateApiLedger {
                 ledger_reader,
@@ -281,13 +293,16 @@ where
                     next_tx_number,
                 )
                 .await;
+                SideEffectsEventOutcome::Continue
             }
             ExecutorEvent::PruneDb(sequence_number) => {
                 self.db.prune_db(sequence_number).await?;
+                SideEffectsEventOutcome::Continue
             }
             ExecutorEvent::UpdateStateForRecovery(checkpoint) => {
                 Self::maybe_delay_api_state_update_for_tests().await;
                 self.update_api_state(checkpoint);
+                SideEffectsEventOutcome::Continue
             }
             ExecutorEvent::FlushTransactionsCache {
                 next_tx_number,
@@ -297,8 +312,13 @@ where
                     .clean_and_overwrite_next_tx_number(next_tx_number)
                     .await;
                 let _ = oneshot_sender.send(());
+                SideEffectsEventOutcome::Continue
             }
-        }
+            ExecutorEvent::DrainAndShutdown { ack } => {
+                let _ = ack.send(());
+                SideEffectsEventOutcome::DrainedAndShutdown
+            }
+        };
         let queue_size_after = event_queue.len();
         let batch_size = queue_size_before - queue_size_after;
         let duration = start_time.elapsed();
@@ -309,14 +329,14 @@ where
                 batch_size,
             });
         });
-        Ok(())
+        Ok(outcome)
     }
 
     async fn receive_and_process_events(
         &mut self,
         mut event_queue: VecDeque<ExecutorEvent<S, Rt>>,
         max_queue_size: usize,
-    ) {
+    ) -> bool {
         while let Some(event) = self.executor_events_receiver.recv().await {
             event_queue.push_back(event);
             while event_queue.len() < max_queue_size {
@@ -328,14 +348,19 @@ where
             }
 
             while !event_queue.is_empty() {
-                if let Err(e) = self.handle_executor_event(&mut event_queue).await {
-                    tracing::error!(error = ?e, "Error handling executor event");
-                    // If we've already started shutting down, this might fail - but then we're happy.
-                    let _ = self.shutdown_sender.send(());
-                    break;
+                match self.handle_executor_event(&mut event_queue).await {
+                    Ok(SideEffectsEventOutcome::Continue) => {}
+                    Ok(SideEffectsEventOutcome::DrainedAndShutdown) => return true,
+                    Err(e) => {
+                        tracing::error!(error = ?e, "Error handling executor event");
+                        // If we've already started shutting down, this might fail - but then we're happy.
+                        let _ = self.shutdown_sender.send(());
+                        return false;
+                    }
                 }
             }
         }
+        false
     }
 
     pub(crate) fn spawn(mut self) -> JoinHandle<()> {
@@ -343,8 +368,12 @@ where
         let max_queue_size = self.executor_events_receiver.max_capacity();
         let event_queue = VecDeque::with_capacity(max_queue_size);
         tokio::spawn(async move {
-            self.receive_and_process_events(event_queue, max_queue_size)
-                .await;
+            if self
+                .receive_and_process_events(event_queue, max_queue_size)
+                .await
+            {
+                let _ = self.side_effects_drained_sender.send(());
+            }
         })
     }
 }
@@ -457,6 +486,24 @@ mod tests {
             // We should get back the event that we passed and no others. The queue should be untouched
             assert_eq!(drained_txs.len(), 1);
             assert_eq!(event_queue.len(), 2);
+        }
+
+        // Test that a shutdown drain barrier is not batched with accepted txs.
+        {
+            let first_event = create_accepted_tx_event(0);
+            let second_event = create_accepted_tx_event(1);
+            let (ack, _) = oneshot::channel();
+            let mut event_queue =
+                vec![ExecutorEvent::DrainAndShutdown { ack }, second_event].into();
+            let drained_txs =
+                drain_consecutive_accepted_txs(extract_contents(first_event), &mut event_queue);
+
+            assert_eq!(drained_txs.len(), 1);
+            assert_eq!(event_queue.len(), 2);
+            match event_queue.pop_front().unwrap() {
+                ExecutorEvent::DrainAndShutdown { .. } => {}
+                _ => panic!("Expected drain-and-shutdown barrier"),
+            }
         }
 
         // test a large queue size

@@ -13,7 +13,7 @@ use std::time::Duration;
 use anyhow::Result;
 use sov_full_node_configs::sequencer::{ConfiguredNodeRole, PostgresConfig};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
-use tokio::sync::watch;
+use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
@@ -34,6 +34,7 @@ pub struct HeartBeatTask {
     shutdown_receiver: watch::Receiver<()>,
     postgres_config: PostgresConfig,
     heartbeat_interval: Duration,
+    side_effects_drained_receiver: Option<oneshot::Receiver<()>>,
 }
 
 impl HeartBeatTask {
@@ -42,6 +43,7 @@ impl HeartBeatTask {
         shutdown_sender: watch::Sender<()>,
         bind_addr: SocketAddr,
         heartbeat_interval: Duration,
+        side_effects_drained_receiver: oneshot::Receiver<()>,
     ) -> Result<Self> {
         let backend = PostgresBackend::connect(&postgres_config, bind_addr).await?;
         let shutdown_receiver = shutdown_sender.subscribe();
@@ -53,6 +55,7 @@ impl HeartBeatTask {
             shutdown_receiver,
             postgres_config,
             heartbeat_interval,
+            side_effects_drained_receiver: Some(side_effects_drained_receiver),
         })
     }
 
@@ -127,10 +130,28 @@ impl HeartBeatTask {
         }
     }
 
+    async fn wait_for_side_effects_to_drain(&mut self) -> bool {
+        const SIDE_EFFECTS_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
+
+        let Some(receiver) = self.side_effects_drained_receiver.take() else {
+            warn!(
+                node_id = %self.node_id,
+                "Side effects drain receiver already consumed; skipping node deregistration."
+            );
+            return false;
+        };
+
+        wait_for_side_effects_to_drain_signal(&self.node_id, receiver, SIDE_EFFECTS_DRAIN_TIMEOUT)
+            .await
+    }
+
     // Logs the shutdown and best-effort deregisters this node. Shared by every task
     // loop so all graceful-shutdown paths deregister in exactly one place.
-    async fn shutdown_and_deregister(&self, task: &str) {
-        info!(node_id = %self.node_id, task, "Shutdown signal received; stopping task and deregistering node");
+    async fn shutdown_and_deregister(mut self, task: &str) {
+        info!(node_id = %self.node_id, task, "Shutdown signal received; stopping task and waiting for side effects to drain before deregistering node");
+        if !self.wait_for_side_effects_to_drain().await {
+            return;
+        }
         self.deregister_on_shutdown().await;
     }
 
@@ -256,5 +277,57 @@ impl HeartBeatTask {
                 }
             }
         })
+    }
+}
+
+async fn wait_for_side_effects_to_drain_signal(
+    node_id: &str,
+    receiver: oneshot::Receiver<()>,
+    timeout: Duration,
+) -> bool {
+    match tokio::time::timeout(timeout, receiver).await {
+        Ok(Ok(())) => true,
+        Ok(Err(_)) => {
+            warn!(
+                node_id,
+                "Side effects task exited before confirming clean drain; skipping node deregistration."
+            );
+            false
+        }
+        Err(_) => {
+            warn!(
+                node_id,
+                timeout_ms = timeout.as_millis() as u64,
+                "Timed out waiting for side effects to drain; skipping node deregistration."
+            );
+            false
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    async fn side_effects_drain_signal_allows_deregistration() {
+        let (sender, receiver) = oneshot::channel();
+        sender.send(()).unwrap();
+
+        assert!(
+            wait_for_side_effects_to_drain_signal("node_id", receiver, Duration::from_millis(10),)
+                .await
+        );
+    }
+
+    #[tokio::test]
+    async fn dropped_side_effects_drain_signal_blocks_deregistration() {
+        let (sender, receiver) = oneshot::channel();
+        drop(sender);
+
+        assert!(
+            !wait_for_side_effects_to_drain_signal("node_id", receiver, Duration::from_millis(10),)
+                .await
+        );
     }
 }
