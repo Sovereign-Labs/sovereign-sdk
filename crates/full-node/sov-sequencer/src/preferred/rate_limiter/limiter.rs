@@ -33,7 +33,7 @@ impl<G: Gas> ResourceUsed<G> {
     ) -> Self {
         Self {
             inner: Resource {
-                req_counter,
+                milli_req_counter: req_counter * 1000,
                 // This cast is safe because a single transaction can never use more than u64::MAX bytes.
                 space_in_bytes: tx_size_in_bytes
                     .try_into()
@@ -130,7 +130,6 @@ impl<G: Gas> Throttler<G> {
 
         let total_resource_used_after_refill =
             self.total_resource_used.refill_tokens(&how_much_to_fill);
-
         total_resource_used_after_refill.allow(max_allowed_resources)?;
 
         Ok(Throttler {
@@ -416,7 +415,7 @@ mod tests {
         let default_config = RateLimiterConfig::<TestSpec> {
             max_allowed_resources: TotalResources {
                 inner: Resource {
-                    req_counter: resource_used_per_run.inner.req_counter + 1,
+                    milli_req_counter: resource_used_per_run.inner.milli_req_counter + 1,
                     space_in_bytes: resource_used_per_run.inner.space_in_bytes + 1,
                     execution_time_micros: resource_used_per_run.inner.execution_time_micros + 1,
                     gas_used: Gas::from([0, 0]),
@@ -722,7 +721,7 @@ mod tests {
     fn max_allowed_resources() -> TotalResources<Gas> {
         TotalResources {
             inner: Resource {
-                req_counter: MAX_REQ_COUNT,
+                milli_req_counter: MAX_REQ_COUNT,
                 space_in_bytes: MAX_SPACE_IN_BYTES,
                 execution_time_micros: MAX_EXECUTION_TIME_MICROS,
                 gas_used: Gas::from([0, 0]),
@@ -733,7 +732,7 @@ mod tests {
     fn small_resource_used_per_run() -> ResourceUsed<Gas> {
         ResourceUsed {
             inner: Resource {
-                req_counter: MAX_REQ_COUNT / 100,
+                milli_req_counter: MAX_REQ_COUNT / 100,
                 space_in_bytes: MAX_SPACE_IN_BYTES / 200,
                 execution_time_micros: MAX_EXECUTION_TIME_MICROS / 300,
                 gas_used: Gas::from([0, 0]),
@@ -744,7 +743,7 @@ mod tests {
     fn big_resource_used_per_run() -> ResourceUsed<Gas> {
         ResourceUsed {
             inner: Resource {
-                req_counter: MAX_REQ_COUNT / 2 + 10,
+                milli_req_counter: MAX_REQ_COUNT / 2 + 10,
                 space_in_bytes: MAX_SPACE_IN_BYTES / 3,
                 execution_time_micros: MAX_EXECUTION_TIME_MICROS / 4,
                 gas_used: Gas::from([0, 0]),
@@ -755,7 +754,7 @@ mod tests {
     fn refill_rate() -> RefillRatePerMillis<Gas> {
         RefillRatePerMillis {
             token_resource_per_ms: Resource {
-                req_counter: 2,
+                milli_req_counter: 2,
                 space_in_bytes: 30,
                 execution_time_micros: 400,
                 gas_used: Gas::from([0, 0]),
