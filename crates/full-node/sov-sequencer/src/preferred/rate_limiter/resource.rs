@@ -58,7 +58,9 @@ impl<G: Gas> Resource<G> {
     #[must_use]
     pub(crate) fn saturating_sub(&self, tokens: &Self) -> Self {
         Self {
-            milli_req_counter: self.milli_req_counter.saturating_sub(tokens.milli_req_counter),
+            milli_req_counter: self
+                .milli_req_counter
+                .saturating_sub(tokens.milli_req_counter),
             space_in_bytes: self.space_in_bytes.saturating_sub(tokens.space_in_bytes),
             execution_time_micros: self
                 .execution_time_micros
@@ -73,7 +75,9 @@ impl<G: Gas> Resource<G> {
     #[must_use]
     pub(crate) fn checked_add(&self, other: &Self) -> Option<Self> {
         Some(Self {
-            milli_req_counter: self.milli_req_counter.checked_add(other.milli_req_counter)?,
+            milli_req_counter: self
+                .milli_req_counter
+                .checked_add(other.milli_req_counter)?,
             space_in_bytes: self.space_in_bytes.checked_add(other.space_in_bytes)?,
             execution_time_micros: self
                 .execution_time_micros

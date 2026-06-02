@@ -118,7 +118,7 @@ impl<G: Gas> Throttler<G> {
         max_allowed_resources: &TotalResources<G>,
         refill_rate: &RefillRatePerMillis<G>,
     ) -> Result<Self, LimitExceeded<G>> {
-	 let how_much_to_fill = {
+        let how_much_to_fill = {
             let since_last_refill = now
                 .duration_since(self.last_refill)
                 .as_millis()

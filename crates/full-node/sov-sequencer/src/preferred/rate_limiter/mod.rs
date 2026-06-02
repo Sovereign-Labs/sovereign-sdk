@@ -154,7 +154,7 @@ fn calculate_limits<S: Spec>(
         .expect("Batch execution time limit overflows u64 microseconds");
 
     let max_resources_per_batch = Resource {
-        // milli-requests-per-batch = rate (per second) × batch duration (seconds).
+        // milli-requests-per-batch = rate (per second) × batch duration (milli-seconds).
         milli_req_counter: max_requests_per_second
             .checked_mul(batch_execution_time_limit_millis)
             .expect("Overflow converting max_requests_per_second to max requests per batch"),
