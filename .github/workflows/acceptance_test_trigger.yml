@@ -24,10 +24,10 @@ env:
 
 jobs:
   trigger:
-    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    runs-on: nscloud-ubuntu-24.04-amd64-2x4
     timeout-minutes: 10
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
         with:
           ref: ${{ env.DEV_BRANCH }}
           fetch-depth: 0
