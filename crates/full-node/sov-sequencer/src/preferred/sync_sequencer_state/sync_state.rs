@@ -35,6 +35,7 @@ use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
 use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint, VersionReader};
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use sov_state::Storage;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
@@ -172,12 +173,14 @@ where
 
                 // If we don't have any more messages to process, yield until a message becomes available
                 if self.heap.is_empty() {
-                    let msg = tokio::select! {
-                        msg = self.message_receiver.recv() => msg,
-                        changed = self.inner.shutdown_receiver.changed() => {
-                            if changed.is_err() {
-                                tracing::debug!("Shutdown sender dropped while sequencer state was idle");
-                            }
+                    let msg = match future_or_shutdown(
+                        self.message_receiver.recv(),
+                        &self.inner.shutdown_receiver,
+                    )
+                    .await
+                    {
+                        FutureOrShutdownOutput::Output(msg) => msg,
+                        FutureOrShutdownOutput::Shutdown => {
                             self.drain_side_effects_on_shutdown().await;
                             return;
                         }

@@ -20,6 +20,7 @@ use tracing::{error, info, warn};
 use super::SequencerRole;
 
 use super::postgres::PostgresBackend;
+use crate::preferred::executor_events::SIDE_EFFECTS_DRAIN_TIMEOUT;
 use crate::preferred::exit_rollup;
 
 /// Manages periodic heartbeat and optional leadership election for a sequencer node.
@@ -34,7 +35,7 @@ pub struct HeartBeatTask {
     shutdown_receiver: watch::Receiver<()>,
     postgres_config: PostgresConfig,
     heartbeat_interval: Duration,
-    side_effects_drained_receiver: Option<oneshot::Receiver<()>>,
+    side_effects_drained_receiver: oneshot::Receiver<()>,
 }
 
 impl HeartBeatTask {
@@ -55,7 +56,7 @@ impl HeartBeatTask {
             shutdown_receiver,
             postgres_config,
             heartbeat_interval,
-            side_effects_drained_receiver: Some(side_effects_drained_receiver),
+            side_effects_drained_receiver,
         })
     }
 
@@ -95,64 +96,20 @@ impl HeartBeatTask {
         Ok(())
     }
 
-    // Best-effort: deletes this node's row from `nodes` on graceful shutdown so
-    // DbElected replicas can take over without waiting for the leader timeout.
-    // Errors and timeouts are logged, never propagated — the task is already
-    // exiting and the staleness filter is the backstop for cases where this
-    // can't run (SIGKILL, OOM, DB unreachable, etc.).
-    //
-    // Hard-bounded by `SHUTDOWN_DEREGISTER_TIMEOUT` so a stalled DB connection cannot
-    // delay graceful shutdown, regardless of the inner retry budget.
-    //
-    // `sequencer_leader` is deliberately preserved until a replacement takes
-    // over, so in-flight writes guarded by `is_leader($node_id)` can still
-    // complete during the handoff window.
-    async fn deregister_on_shutdown(&self) {
-        const SHUTDOWN_DEREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
-
-        match tokio::time::timeout(
-            SHUTDOWN_DEREGISTER_TIMEOUT,
-            self.backend.deregister_node_on_shutdown(),
+    // Logs the shutdown, waits for the side effects task to confirm it has drained,
+    // then best-effort deregisters this node. Shared by every task loop so all
+    // graceful-shutdown paths deregister in exactly one place.
+    async fn shutdown_and_deregister(self, task: &str) {
+        info!(node_id = %self.node_id, task, "Shutdown signal received; stopping task and waiting for side effects to drain before deregistering node");
+        if wait_for_side_effects_to_drain_signal(
+            &self.node_id,
+            self.side_effects_drained_receiver,
+            SIDE_EFFECTS_DRAIN_TIMEOUT,
         )
         .await
         {
-            Ok(Ok(())) => {}
-            Ok(Err(e)) => warn!(
-                node_id = %self.node_id,
-                error = ?e,
-                "Failed to delete node registration on shutdown; row will age out via staleness filter."
-            ),
-            Err(_) => warn!(
-                node_id = %self.node_id,
-                timeout_ms = SHUTDOWN_DEREGISTER_TIMEOUT.as_millis() as u64,
-                "Timed out deleting node registration on shutdown; row will age out via staleness filter."
-            ),
+            deregister_on_shutdown(&self.backend, &self.node_id).await;
         }
-    }
-
-    async fn wait_for_side_effects_to_drain(&mut self) -> bool {
-        const SIDE_EFFECTS_DRAIN_TIMEOUT: Duration = Duration::from_secs(5);
-
-        let Some(receiver) = self.side_effects_drained_receiver.take() else {
-            warn!(
-                node_id = %self.node_id,
-                "Side effects drain receiver already consumed; skipping node deregistration."
-            );
-            return false;
-        };
-
-        wait_for_side_effects_to_drain_signal(&self.node_id, receiver, SIDE_EFFECTS_DRAIN_TIMEOUT)
-            .await
-    }
-
-    // Logs the shutdown and best-effort deregisters this node. Shared by every task
-    // loop so all graceful-shutdown paths deregister in exactly one place.
-    async fn shutdown_and_deregister(mut self, task: &str) {
-        info!(node_id = %self.node_id, task, "Shutdown signal received; stopping task and waiting for side effects to drain before deregistering node");
-        if !self.wait_for_side_effects_to_drain().await {
-            return;
-        }
-        self.deregister_on_shutdown().await;
     }
 
     // Spawns a task for the current leader to maintain leadership.
@@ -277,6 +234,41 @@ impl HeartBeatTask {
                 }
             }
         })
+    }
+}
+
+// Best-effort: deletes this node's row from `nodes` on graceful shutdown so
+// DbElected replicas can take over without waiting for the leader timeout.
+// Errors and timeouts are logged, never propagated — the task is already
+// exiting and the staleness filter is the backstop for cases where this
+// can't run (SIGKILL, OOM, DB unreachable, etc.).
+//
+// Hard-bounded by `SHUTDOWN_DEREGISTER_TIMEOUT` so a stalled DB connection cannot
+// delay graceful shutdown, regardless of the inner retry budget.
+//
+// `sequencer_leader` is deliberately preserved until a replacement takes
+// over, so in-flight writes guarded by `is_leader($node_id)` can still
+// complete during the handoff window.
+async fn deregister_on_shutdown(backend: &PostgresBackend, node_id: &str) {
+    const SHUTDOWN_DEREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
+
+    match tokio::time::timeout(
+        SHUTDOWN_DEREGISTER_TIMEOUT,
+        backend.deregister_node_on_shutdown(),
+    )
+    .await
+    {
+        Ok(Ok(())) => {}
+        Ok(Err(e)) => warn!(
+            node_id,
+            error = ?e,
+            "Failed to delete node registration on shutdown; row will age out via staleness filter."
+        ),
+        Err(_) => warn!(
+            node_id,
+            timeout_ms = SHUTDOWN_DEREGISTER_TIMEOUT.as_millis() as u64,
+            "Timed out deleting node registration on shutdown; row will age out via staleness filter."
+        ),
     }
 }
 

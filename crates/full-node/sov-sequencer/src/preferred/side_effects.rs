@@ -333,10 +333,10 @@ where
     }
 
     async fn receive_and_process_events(
-        &mut self,
+        mut self,
         mut event_queue: VecDeque<ExecutorEvent<S, Rt>>,
         max_queue_size: usize,
-    ) -> bool {
+    ) {
         while let Some(event) = self.executor_events_receiver.recv().await {
             event_queue.push_back(event);
             while event_queue.len() < max_queue_size {
@@ -350,30 +350,31 @@ where
             while !event_queue.is_empty() {
                 match self.handle_executor_event(&mut event_queue).await {
                     Ok(SideEffectsEventOutcome::Continue) => {}
-                    Ok(SideEffectsEventOutcome::DrainedAndShutdown) => return true,
+                    Ok(SideEffectsEventOutcome::DrainedAndShutdown) => {
+                        // The drain barrier is the last event we process: every
+                        // preceding side effect is now flushed, so signal the
+                        // heartbeat task that it is safe to deregister this node.
+                        let _ = self.side_effects_drained_sender.send(());
+                        return;
+                    }
                     Err(e) => {
                         tracing::error!(error = ?e, "Error handling executor event");
                         // If we've already started shutting down, this might fail - but then we're happy.
                         let _ = self.shutdown_sender.send(());
-                        return false;
+                        return;
                     }
                 }
             }
         }
-        false
     }
 
-    pub(crate) fn spawn(mut self) -> JoinHandle<()> {
+    pub(crate) fn spawn(self) -> JoinHandle<()> {
         // We use a queue so that we can batch insert txs.
         let max_queue_size = self.executor_events_receiver.max_capacity();
         let event_queue = VecDeque::with_capacity(max_queue_size);
         tokio::spawn(async move {
-            if self
-                .receive_and_process_events(event_queue, max_queue_size)
-                .await
-            {
-                let _ = self.side_effects_drained_sender.send(());
-            }
+            self.receive_and_process_events(event_queue, max_queue_size)
+                .await;
         })
     }
 }

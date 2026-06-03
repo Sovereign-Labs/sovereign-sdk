@@ -18,7 +18,12 @@ use crate::preferred::{PreferredBlobToReplay, PreferredProofToReplay};
 use crate::{PreferredProofDataBytes, SlotNumber};
 
 const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
-const SIDE_EFFECTS_DRAIN_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
+/// How long any shutdown path waits for the side effects task to process the
+/// [`ExecutorEvent::DrainAndShutdown`] barrier. Shared by the sender side here
+/// and by the heartbeat task that deregisters the node once the drain completes,
+/// so the two waits cannot silently drift apart.
+pub(crate) const SIDE_EFFECTS_DRAIN_TIMEOUT: std::time::Duration =
+    std::time::Duration::from_secs(5);
 
 pub(crate) struct ExecutorEventsSender<S: Spec, Rt: Runtime<S>> {
     events_sender: mpsc::Sender<ExecutorEvent<S, Rt>>,
