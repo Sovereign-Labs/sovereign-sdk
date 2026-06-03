@@ -16,6 +16,9 @@ use tokio::task::JoinHandle;
 /// `poll_interval * LIVENESS_POLL_MULTIPLIER` even if the cluster is unchanged,
 /// so the absence of samples can be alerted on if the polling task dies silently.
 const LIVENESS_POLL_MULTIPLIER: u32 = 5;
+const READY_ENDPOINT_PATH: &str = "/sequencer/ready";
+const READY_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+const READY_CONNECTION_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Information about a registered node.
 #[derive(Debug, Clone, FromRow, PartialEq, Eq)]
@@ -55,12 +58,11 @@ impl ClusterInfo {
 
 /// Trait for receiving notifications when cluster state changes.
 ///
-/// Implement this trait to define custom behavior when the cluster membership
-/// or leader changes. The notification is triggered after the cluster info file
-/// has been updated.
+/// Implement this trait to define custom behavior when the advertised cluster
+/// membership or leader changes.
 #[async_trait]
 pub trait ClusterUpdateNotifier: Send + Sync + 'static {
-    /// Called when cluster membership or leadership changes.
+    /// Called when advertised cluster membership or leadership changes.
     async fn on_cluster_update(&mut self, cluster_info: &ClusterInfo) -> anyhow::Result<()>;
 }
 
@@ -125,8 +127,11 @@ pub struct NodeDiscovery {
     liveness_interval: Duration,
     pool: PgPool,
     listener: PgListener,
+    http_client: reqwest::Client,
     prev_followers: BTreeSet<String>,
     prev_leader_id: Option<String>,
+    prev_advertised_followers: BTreeSet<String>,
+    prev_advertised_leader_id: Option<String>,
     notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     sender: watch::Sender<ClusterInfo>,
     pub(crate) receiver: watch::Receiver<ClusterInfo>,
@@ -175,6 +180,10 @@ impl NodeDiscovery {
         tracing::info!("Subscribed to nodes_changes and leader_changes channels");
 
         let (sender, receiver) = watch::channel(ClusterInfo::default());
+        let http_client = reqwest::Client::builder()
+            .connect_timeout(READY_CONNECTION_TIMEOUT)
+            .timeout(READY_REQUEST_TIMEOUT)
+            .build()?;
 
         Ok(Self {
             max_age,
@@ -182,8 +191,11 @@ impl NodeDiscovery {
             liveness_interval: poll_interval * LIVENESS_POLL_MULTIPLIER,
             pool,
             listener,
+            http_client,
             prev_followers: BTreeSet::new(),
             prev_leader_id: None,
+            prev_advertised_followers: BTreeSet::new(),
+            prev_advertised_leader_id: None,
             notifier,
             sender,
             receiver,
@@ -316,7 +328,28 @@ impl NodeDiscovery {
             .last_metric_at
             .is_none_or(|t| t.elapsed() >= self.liveness_interval);
 
-        if !(cluster_changed || liveness_due) {
+        let should_check_advertised_cluster = self.notifier.is_some();
+
+        if !(cluster_changed || liveness_due || should_check_advertised_cluster) {
+            return Ok(());
+        }
+
+        let advertised_info = if self.notifier.is_some() {
+            Some(self.advertised_cluster_info(&info).await)
+        } else {
+            None
+        };
+        let advertised_leader_id = advertised_info.as_ref().and_then(ClusterInfo::leader_id);
+        let advertised_followers: BTreeSet<String> = advertised_info
+            .as_ref()
+            .map(|info| info.followers.keys().cloned().collect())
+            .unwrap_or_default();
+
+        let advertised_cluster_changed = advertised_info.is_some()
+            && (self.prev_advertised_followers != advertised_followers
+                || self.prev_advertised_leader_id != advertised_leader_id);
+
+        if !(cluster_changed || liveness_due || advertised_cluster_changed) {
             return Ok(());
         }
 
@@ -345,15 +378,26 @@ impl NodeDiscovery {
                     "Leader changed"
                 );
             }
+        }
 
-            // Notify watchers that the cluster was updated.
+        if advertised_cluster_changed {
+            // Notify watchers that the advertised cluster was updated.
             if let Some(notifier) = &mut self.notifier {
                 notifier
-                    .on_cluster_update(&info)
+                    .on_cluster_update(
+                        advertised_info
+                            .as_ref()
+                            .expect("advertised_info is set when notifier is configured"),
+                    )
                     .await
                     .map_err(HandleClusterUpdateError::Notify)?;
             }
 
+            self.prev_advertised_followers = advertised_followers;
+            self.prev_advertised_leader_id = advertised_leader_id;
+        }
+
+        if cluster_changed {
             self.prev_followers = followers;
             self.prev_leader_id = leader_id;
             let _ = self.sender.send(info);
@@ -365,6 +409,47 @@ impl NodeDiscovery {
         self.last_metric_at = Some(Instant::now());
 
         Ok(())
+    }
+
+    async fn advertised_cluster_info(&self, info: &ClusterInfo) -> ClusterInfo {
+        let mut followers = BTreeMap::new();
+
+        for (node_id, node) in &info.followers {
+            if self.follower_is_ready(node).await {
+                followers.insert(node_id.clone(), node.clone());
+            }
+        }
+
+        ClusterInfo {
+            leader: info.leader.clone(),
+            followers,
+        }
+    }
+
+    async fn follower_is_ready(&self, node: &NodeInfo) -> bool {
+        let url = format!("http://{}{}", node.address, READY_ENDPOINT_PATH);
+
+        match self.http_client.get(url).send().await {
+            Ok(response) if response.status().is_success() => true,
+            Ok(response) => {
+                tracing::debug!(
+                    node_id = %node.node_id,
+                    address = %node.address,
+                    status = %response.status(),
+                    "Follower is not ready for proxy advertisement"
+                );
+                false
+            }
+            Err(error) => {
+                tracing::debug!(
+                    node_id = %node.node_id,
+                    address = %node.address,
+                    ?error,
+                    "Failed to check follower readiness for proxy advertisement"
+                );
+                false
+            }
+        }
     }
 
     async fn get_cluster_info_from_db(
