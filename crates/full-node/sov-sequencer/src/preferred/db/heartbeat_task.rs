@@ -13,7 +13,7 @@ use std::time::Duration;
 use anyhow::Result;
 use sov_full_node_configs::sequencer::{ConfiguredNodeRole, PostgresConfig};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
-use tokio::sync::watch;
+use tokio::sync::{oneshot, watch};
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
@@ -21,6 +21,29 @@ use super::SequencerRole;
 
 use super::postgres::PostgresBackend;
 use crate::preferred::exit_rollup;
+
+pub(crate) type HeartbeatStoppedSender = oneshot::Sender<()>;
+pub(crate) type HeartbeatStoppedReceiver = oneshot::Receiver<()>;
+
+pub(crate) fn heartbeat_stopped_channel() -> (HeartbeatStoppedSender, HeartbeatStoppedReceiver) {
+    oneshot::channel()
+}
+
+struct HeartbeatStoppedGuard(Option<HeartbeatStoppedSender>);
+
+impl HeartbeatStoppedGuard {
+    fn new(sender: Option<HeartbeatStoppedSender>) -> Self {
+        Self(sender)
+    }
+}
+
+impl Drop for HeartbeatStoppedGuard {
+    fn drop(&mut self) {
+        if let Some(sender) = self.0.take() {
+            let _ = sender.send(());
+        }
+    }
+}
 
 /// Manages periodic heartbeat and optional leadership election for a sequencer node.
 ///
@@ -34,6 +57,7 @@ pub struct HeartBeatTask {
     shutdown_receiver: watch::Receiver<()>,
     postgres_config: PostgresConfig,
     heartbeat_interval: Duration,
+    stopped_sender: Option<HeartbeatStoppedSender>,
 }
 
 impl HeartBeatTask {
@@ -42,6 +66,7 @@ impl HeartBeatTask {
         shutdown_sender: watch::Sender<()>,
         bind_addr: SocketAddr,
         heartbeat_interval: Duration,
+        stopped_sender: Option<HeartbeatStoppedSender>,
     ) -> Result<Self> {
         let backend = PostgresBackend::connect(&postgres_config, bind_addr).await?;
         let shutdown_receiver = shutdown_sender.subscribe();
@@ -53,6 +78,7 @@ impl HeartBeatTask {
             shutdown_receiver,
             postgres_config,
             heartbeat_interval,
+            stopped_sender,
         })
     }
 
@@ -96,8 +122,10 @@ impl HeartBeatTask {
     //
     // Periodically refreshes leadership. If leadership is lost or the database
     // becomes unreachable, triggers a graceful shutdown.  .
-    fn spawn_leader_heartbeat_task(self) -> JoinHandle<()> {
+    fn spawn_leader_heartbeat_task(mut self) -> JoinHandle<()> {
+        let stopped_sender = self.stopped_sender.take();
         tokio::spawn(async move {
+            let _stopped_guard = HeartbeatStoppedGuard::new(stopped_sender);
             info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting leader heartbeat task");
             let mut interval = tokio::time::interval(self.heartbeat_interval);
 
@@ -141,8 +169,10 @@ impl HeartBeatTask {
     //
     // Periodically attempts to acquire leadership. If successful, triggers
     // a shutdown so the node can restart as the new leader.
-    fn spawn_replica_heartbeat_task(self) -> JoinHandle<()> {
+    fn spawn_replica_heartbeat_task(mut self) -> JoinHandle<()> {
+        let stopped_sender = self.stopped_sender.take();
         tokio::spawn(async move {
+            let _stopped_guard = HeartbeatStoppedGuard::new(stopped_sender);
             info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting replica election task");
             let mut interval = tokio::time::interval(self.heartbeat_interval);
 
@@ -188,8 +218,10 @@ impl HeartBeatTask {
     //
     // Periodically updates the node's entry in the `nodes` table without
     // competing for leadership. Failures are logged but don't cause shutdown.
-    fn spawn_node_registration_task(self) -> JoinHandle<()> {
+    fn spawn_node_registration_task(mut self) -> JoinHandle<()> {
+        let stopped_sender = self.stopped_sender.take();
         tokio::spawn(async move {
+            let _stopped_guard = HeartbeatStoppedGuard::new(stopped_sender);
             info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting replica registration task.");
             let mut interval = tokio::time::interval(self.heartbeat_interval);
 
@@ -212,5 +244,21 @@ impl HeartBeatTask {
                 }
             }
         })
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn stopped_guard_notifies_receiver_on_drop() {
+        let (sender, mut receiver) = heartbeat_stopped_channel();
+
+        {
+            let _guard = HeartbeatStoppedGuard::new(Some(sender));
+        }
+
+        assert!(matches!(receiver.try_recv(), Ok(())));
     }
 }

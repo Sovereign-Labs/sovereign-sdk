@@ -10,6 +10,7 @@ use tracing::{debug, enabled, error, warn, Level};
 
 use super::executor_events::ExecutorEvent;
 use crate::metrics::PreferredSequencerExecutorEventMetrics;
+use crate::preferred::db::heartbeat_task::HeartbeatStoppedReceiver;
 use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::AcceptedTxEventContents;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -32,6 +33,7 @@ where
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
     pub shutdown_sender: watch::Sender<()>,
     pub transaction_cache: TxResultWriter<S, Rt>,
+    pub heartbeat_stopped_receiver: Option<HeartbeatStoppedReceiver>,
 }
 
 impl<S, Rt, Da> SideEffectsTask<S, Rt, Da>
@@ -337,8 +339,10 @@ where
             }
         }
 
+        tracing::debug!("Executor event sender dropped after side effects drained");
+        wait_for_heartbeat_task_to_stop(self.heartbeat_stopped_receiver.take()).await;
         tracing::debug!(
-            "Executor event sender dropped after side effects drained; deregistering node if applicable"
+            "Side effects drained and heartbeat stopped; deregistering node if applicable"
         );
         self.db.deregister_node_on_shutdown_best_effort().await;
     }
@@ -369,6 +373,17 @@ fn drain_consecutive_accepted_txs<S: Spec, Rt: Runtime<S>>(
         }
     }
     txs_to_insert
+}
+
+async fn wait_for_heartbeat_task_to_stop(
+    heartbeat_stopped_receiver: Option<HeartbeatStoppedReceiver>,
+) {
+    let Some(heartbeat_stopped_receiver) = heartbeat_stopped_receiver else {
+        return;
+    };
+
+    tracing::debug!("Waiting for heartbeat task to stop before deregistering node");
+    let _ = heartbeat_stopped_receiver.await;
 }
 
 #[cfg(test)]
@@ -425,6 +440,21 @@ mod tests {
                 _ => panic!("Expected AcceptedTx event"),
             }
         }
+    }
+
+    #[tokio::test]
+    async fn waits_for_heartbeat_stop_before_barrier_returns() {
+        let (sender, receiver) = oneshot::channel();
+        let wait = wait_for_heartbeat_task_to_stop(Some(receiver));
+        tokio::pin!(wait);
+
+        tokio::select! {
+            () = &mut wait => panic!("Heartbeat stop barrier returned before heartbeat stopped"),
+            () = tokio::task::yield_now() => {}
+        }
+
+        let _ = sender.send(());
+        wait.await;
     }
 
     #[tokio::test]
