@@ -8,11 +8,13 @@ permissions:
 
 jobs:
   dependency-review:
-    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    runs-on: nscloud-ubuntu-24.04-amd64-2x4
+    timeout-minutes: 10
     steps:
       - name: "Checkout Repository"
-        uses: actions/checkout@v3
+        uses: actions/checkout@v6
       - name: "Dependency Review"
-        uses: actions/dependency-review-action@v3
+        # This action publishes no floating major tag; pin a full version.
+        uses: actions/dependency-review-action@v4.9.0
         with:
           fail-on-severity: critical

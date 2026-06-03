@@ -65,7 +65,7 @@ concurrency:
 jobs:
   check-aggregate:
     # Follows the guide at <https://github.com/re-actors/alls-green>.
-    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    runs-on: nscloud-ubuntu-24.04-amd64-2x4
     timeout-minutes: 5
     if: always()
     needs:
@@ -107,7 +107,7 @@ jobs:
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -142,7 +142,7 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -162,7 +162,7 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=bench-1-93
     timeout-minutes: 120
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -192,7 +192,7 @@ jobs:
       CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
       CARGO_HACK_PARTITION_M: 3
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -223,7 +223,7 @@ jobs:
       CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
       CARGO_HACK_PARTITION_M: 3
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -243,7 +243,7 @@ jobs:
       SP1_PROVER: "mock"
       RUST_BACKTRACE: 1
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -263,7 +263,7 @@ jobs:
       SKIP_GUEST_BUILD: "1"
       SP1_SKIP_PROGRAM_BUILD: "true"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -285,7 +285,7 @@ jobs:
       RUST_BACKTRACE: 1
       CARGO_BUILD_JOBS: 4
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -304,10 +304,10 @@ jobs:
           fail_ci_if_error: false
 
   cargo-deny-check-licenses:
-    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    runs-on: nscloud-ubuntu-24.04-amd64-2x4
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: taiki-e/install-action@cargo-deny
         with:
           tool: cargo-deny@0.18.4
@@ -319,7 +319,7 @@ jobs:
   # Temporarily disabled until AWS credentials can be re-issued
   # cargo-doc-artifact:
   #   runs-on:
-  #     - nscloud-ubuntu-22.04-amd64-8x32-with-cache
+  #     - nscloud-ubuntu-24.04-amd64-8x32-with-cache
   #     - nscloud-cache-tag-cache-dev
   #     - nscloud-cache-size-100gb
   #   timeout-minutes: 90
@@ -330,7 +330,7 @@ jobs:
   #     S3_BUCKET_NAME: "sovlabs-ci-rustdoc-artifacts"
   #     AWS_REGION: "us-east-1"
   #   steps:
-  #     - uses: actions/checkout@v5
+  #     - uses: actions/checkout@v6
   #     - uses: namespacelabs/nscloud-cache-action@v1
   #       with:
   #         cache: rust
@@ -377,7 +377,7 @@ jobs:
   #         echo "Docs are available at https://${S3_BUCKET_NAME}.${AWS_REGION}.amazonaws.com/${TARGET_DIR}/index.html";
 
   # deploy-github-pages:
-  #   runs-on: nscloud-ubuntu-22.04-amd64-2x4
+  #   runs-on: nscloud-ubuntu-24.04-amd64-2x4
   #   needs: cargo-doc-artifact
   #   timeout-minutes: 5
   #   if: github.ref == 'refs/heads/stable'
@@ -395,10 +395,10 @@ jobs:
   #       uses: actions/deploy-pages@v4
 
   check-demo-rollup-table-of-contents:
-    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    runs-on: nscloud-ubuntu-24.04-amd64-2x4
     steps:
-      - uses: actions/checkout@v5
-      - uses: actions/setup-node@v3
+      - uses: actions/checkout@v6
+      - uses: actions/setup-node@v6
       - run: npm install -g doctoc
       - name: Update table of contents for mock-da
         run: doctoc README.md --github --notitle
@@ -421,7 +421,7 @@ jobs:
       SKIP_GUEST_BUILD: "risc0"
       RUST_LOG: "debug,sov_sequencer=trace,sov-celestia-adapter=trace,hyper=info,risc0_zkvm=warn,jsonrpsee-server=info,jsonrpsee-client=info,reqwest=info,sqlx=warn,tiny_http=warn,tower_http=info,tungstenite=info,risc0_circuit_rv32im=info,risc0_zkp::verify=info,h2=info,tower=info"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -448,7 +448,7 @@ jobs:
       SKIP_GUEST_BUILD: "risc0"
       RUST_LOG: "debug,sov_stf_runner=trace,sov_sequencer=trace,hyper=info,risc0_zkvm=warn,jsonrpsee-server=info,jsonrpsee-client=info,reqwest=info,sqlx=warn,tiny_http=warn,tower_http=info,tungstenite=info,risc0_circuit_rv32im=info,risc0_zkp::verify=info,h2=info,tower=info"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -464,16 +464,16 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=test-1-93
     timeout-minutes: 30
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
       - run: make check-constant-overriding-is-disabled-in-release-mode
 
   validate-packages-to-publish-yml:
-    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    runs-on: nscloud-ubuntu-24.04-amd64-2x4
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - run: ./scripts/validate_packages_to_publish_yml.sh
         shell: bash
         working-directory: .
@@ -481,7 +481,7 @@ jobs:
   cargo-switcheroo-default:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=switcheroo-1-93
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -499,7 +499,7 @@ jobs:
       SKIP_GUEST_BUILD: "1"
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: |
@@ -507,12 +507,7 @@ jobs:
             pnpm
           path: |
             ./typescript/.turbo
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20.x
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: ./typescript/package.json
+      # Node.js 20 + pnpm 9 are baked into the base image; no setup needed.
       - name: Run web3-js SDK tests against demo-rollup
         # See the script for more details about what to do if job
         run: |
@@ -529,7 +524,7 @@ jobs:
     env:
       RUSTFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -554,18 +549,14 @@ jobs:
       SKIP_GUEST_BUILD: "1"
       CARGO_NET_GIT_FETCH_WITH_CLI: true
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
+      # Node.js 20 + pnpm 9 are baked into the base image; the pnpm store is
+      # cached via the Namespace volume below (no setup-node/pnpm steps needed).
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          cache: rust
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: ./typescript/package.json
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 20.x
-          cache: "pnpm"
-          cache-dependency-path: typescript/pnpm-lock.yaml
+          cache: |
+            rust
+            pnpm
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
@@ -590,12 +581,14 @@ jobs:
 
   timing_check:
     name: timing_check
+    # Informational only — run on pushes to dev/nightly/stable, not on every PR.
+    if: github.event_name == 'push'
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=check-1-93
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
@@ -611,6 +604,8 @@ jobs:
 
   timing_nextest_all_features:
     name: timing_nextest_all_features
+    # Informational only — run on pushes to dev/nightly/stable, not on every PR.
+    if: github.event_name == 'push'
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=nextest_all_features-1-93
     timeout-minutes: 60
     env:
@@ -618,7 +613,7 @@ jobs:
       SP1_PROVER: "mock"
       RUST_BACKTRACE: 1
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust

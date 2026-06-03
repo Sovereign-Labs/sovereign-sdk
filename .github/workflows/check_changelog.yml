@@ -11,15 +11,16 @@ on:
 jobs:
   check-changelog:
     runs-on: ubuntu-latest
+    timeout-minutes: 10
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
+    env:
+      PR_NUMBER: ${{ github.event.pull_request.number }}
     steps:
-      - uses: actions/checkout@v5
+      - uses: actions/checkout@v6
       - name: Check for demo-rollup changes requiring changelog
         run: |
-          PR_NUMBER=$(echo $GITHUB_REF | sed 's/.*\/pull\/\([0-9]*\).*/\1/')
-
-          if !  grep -q "#${PR_NUMBER}" CHANGELOG.md; then
+          if ! grep -q "#${PR_NUMBER}" CHANGELOG.md; then
             echo "Error: Demo rollup was changed but no changelog entry found for PR #${PR_NUMBER}."
-            echo "If you've already checked in a changelog entry, make sure it contains the literal string `#${PR_NUMBER}`."
+            echo "If you've already added a changelog entry, ensure it contains the literal string #${PR_NUMBER}."
             exit 1
           fi

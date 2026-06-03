@@ -49,13 +49,13 @@ RUN mkdir -p /home/runner/.cargo \
     && echo 'linker = "clang"' >> /home/runner/.cargo/config.toml \
     && echo 'rustflags = ["-C", "link-arg=-fuse-ld=/usr/local/bin/mold"]' >> /home/runner/.cargo/config.toml
 
-# Install Node.js 20.x
-RUN curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - \
+# Install Node.js 24.x
+RUN curl -fsSL https://deb.nodesource.com/setup_24.x | sudo bash - \
     && sudo apt-get install -y --no-install-recommends nodejs \
     && sudo rm -rf /var/lib/apt/lists/*
 
-# Install pnpm and Node.js tools
-RUN sudo npm install -g pnpm@9 doctoc
+# Install pnpm, bun (used to compile the TS indexer), and doctoc
+RUN sudo npm install -g pnpm@9 doctoc bun@1.2.5
 
 # Install yq for YAML processing
 RUN sudo wget https://github.com/mikefarah/yq/releases/download/v4.53.2/yq_linux_amd64 -O /usr/bin/yq \
