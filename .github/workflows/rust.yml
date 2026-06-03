@@ -581,8 +581,6 @@ jobs:
 
   timing_check:
     name: timing_check
-    # Informational only — run on pushes to dev/nightly/stable, not on every PR.
-    if: github.event_name == 'push'
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=check-1-93
     timeout-minutes: 60
     env:
@@ -604,8 +602,6 @@ jobs:
 
   timing_nextest_all_features:
     name: timing_nextest_all_features
-    # Informational only — run on pushes to dev/nightly/stable, not on every PR.
-    if: github.event_name == 'push'
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=nextest_all_features-1-93
     timeout-minutes: 60
     env:
