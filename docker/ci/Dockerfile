@@ -6,7 +6,7 @@ FROM ${NAMESPACE_BASE_IMAGE_REF} AS base
 ENV DEBIAN_FRONTEND=noninteractive
 
 # Install system dependencies
-RUN sudo apt-get update && sudo apt-get install -y \
+RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends \
     build-essential \
     pkg-config \
     libssl-dev \
@@ -41,7 +41,6 @@ ENV RUSTUP_HOME=/home/runner/.rustup \
 RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0 --profile minimal \
     && . /home/runner/.cargo/env \
     && rustup component add clippy rustfmt rust-src llvm-tools-preview --toolchain 1.93.0 \
-    && rustup toolchain install nightly-2026-05-15 --component rustfmt --component rust-src --profile minimal \
     && rustup target add wasm32-unknown-unknown
 
 # Configure cargo to use mold linker
@@ -52,7 +51,7 @@ RUN mkdir -p /home/runner/.cargo \
 
 # Install Node.js 20.x
 RUN curl -fsSL https://deb.nodesource.com/setup_20.x | sudo bash - \
-    && sudo apt-get install -y nodejs \
+    && sudo apt-get install -y --no-install-recommends nodejs \
     && sudo rm -rf /var/lib/apt/lists/*
 
 # Install pnpm and Node.js tools
@@ -106,18 +105,15 @@ RUN . /home/runner/.cargo/env \
     && cargo install cargo-hack@0.6.37 --locked \
     && cargo install cargo-nextest@0.9.100 --locked \
     && cargo install cargo-llvm-cov@0.6.18 --locked \
-    && cargo install cargo-deny@0.18.4 --locked \
-    && cargo install cargo-insta@1.43.1 --locked \
     && cargo install cargo-machete@0.9.2 --locked \
     && cargo install zepter@1.78.2 --locked \
     && cargo install bashtestmd@0.5.0 --locked \
-    # Clear cargo cache to reduce image size
+    # Clear cargo caches in the same layer that created them (also removes
+    # .global-cache, which must be absent for the cache mount to work).
     && rm -rf /home/runner/.cargo/registry \
     && rm -rf /home/runner/.cargo/git \
+    && rm -rf /home/runner/.cargo/.global-cache \
     && rm -rf /tmp/cargo-*
-
-# Important step to make cache mountable
-RUN rm -rf /home/runner/.cargo/.global-cache
 
 ENV CARGO_NET_GIT_FETCH_WITH_CLI=true \
     PATH="/home/runner/.risc0/bin:/home/runner/.sp1/bin:/home/runner/.cargo/bin:${PATH}" \
