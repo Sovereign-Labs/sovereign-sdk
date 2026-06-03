@@ -481,8 +481,8 @@ where
                 Ok(result)
             }
             Err(e) => match e {
-                AcceptTxError::SequencerOverloaded503 => {
-                    return Err(sequencer_overloaded_503("Other"));
+                AcceptTxError::SequencerOverloaded503(reason) => {
+                    return Err(sequencer_overloaded_503(reason));
                 }
                 AcceptTxError::NotFullySynced(details) => {
                     return Err(error_not_fully_synced(details))

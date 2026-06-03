@@ -60,8 +60,8 @@ pub struct SequencerConfig<Address: Copy, Sc = SequencerKindConfig<Address>> {
     pub rollup_address: Address,
     /// The list of addresses that are allowed to perform admin operations on
     /// the sequencer.
-    // The custom "default" is equivalent to Serde's default default, but
-    // without the bound `Address: Default`.
+    // Equivalent to a `Default::default()` call, but avoids the
+    // `Address: Default` bound that bare `#[serde(default)]` would impose.
     #[serde(default = "Vec::<Address>::new")]
     pub admin_addresses: Vec<Address>,
     /// Sequencer-type specific configuration.
@@ -258,7 +258,7 @@ pub struct PreferredSequencerConfig<Address: Copy> {
     /// Configuration for rate-limiting the sequencer.
     #[serde(default = "default_rate_limiter::<Address>")]
     pub rate_limiter: Option<SovRateLimiterConfig<Address>>,
-    /// The fartherst nonce into the future that the sequencer will accept and queue. This directly
+    /// The farthest nonce into the future that the sequencer will accept and queue. This directly
     /// impacts the maximum "batch" of transactions that can be simultaneously sent to the
     /// sequencer out of order.
     #[serde(default = "default_maximum_future_nonce_delta")]
@@ -344,7 +344,12 @@ pub struct SovRateLimiterConfig<Address: Copy> {
     /// Default limits.
     pub default_limits: Limits,
     pub address_custom_limits: Vec<(Address, Limits)>,
-    pub ip_custom_limits: Vec<(IpAddr, Limits)>,
+    /// Per-network rate limits. Accepts CIDR notation (`10.0.0.0/8`) or a bare
+    /// IP address (`192.168.1.5`); a bare address is treated as a host network
+    /// (`/32` for IPv4, `/128` for IPv6).
+    #[serde(deserialize_with = "deserialize_ip_custom_limits")]
+    #[schemars(with = "Vec<(IpAddrOrNet, Limits)>")]
+    pub ip_custom_limits: Vec<(ipnet::IpNet, Limits)>,
     /// Rate limiting on gas is currently disabled, so this param has no impact on runtime behavior.
     ///
     /// This height is used to statically compute the gas limit for the rate limiter. (If this value is less than or equal to CHANGE_GAS_LIMIT_AFTER_HEIGHT in constants.toml,
@@ -365,6 +370,54 @@ fn height_is_max(height: &RollupHeight) -> bool {
     *height == RollupHeight::MAX
 }
 
+/// Schema-only mirror of the wire form accepted by [`deserialize_ip_custom_limits`]: a bare IP
+/// address or a CIDR network, IPv4 or IPv6. Exists solely to give
+/// [`SovRateLimiterConfig::ip_custom_limits`] an accurate `anyOf` JSON Schema instead of a bare
+/// `string`. Never constructed.
+#[derive(schemars::JsonSchema)]
+#[schemars(untagged)]
+#[allow(dead_code)]
+enum IpAddrOrNet {
+    V4(std::net::Ipv4Addr),
+    V4Net(ipnet::Ipv4Net),
+    V6(std::net::Ipv6Addr),
+    V6Net(ipnet::Ipv6Net),
+}
+
+/// Deserializes [`SovRateLimiterConfig::ip_custom_limits`], accepting each key
+/// as CIDR notation or a bare IP address (treated as a host network) so that
+/// configs written before CIDR support keep working.
+fn deserialize_ip_custom_limits<'de, D>(
+    deserializer: D,
+) -> Result<Vec<(ipnet::IpNet, Limits)>, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    let raw = Vec::<(String, Limits)>::deserialize(deserializer)?;
+    raw.into_iter()
+        .map(|(net, limits)| {
+            parse_ip_net_or_host(&net)
+                .map(|net| (net, limits))
+                .map_err(serde::de::Error::custom)
+        })
+        .collect()
+}
+
+/// Parses an IP network from config text. CIDR notation is canonicalized; a
+/// bare IP address falls back to a host network via [`IpNet::from`] (`/32` for
+/// IPv4, `/128` for IPv6).
+/// Return string for serde's custom errors.
+fn parse_ip_net_or_host(s: &str) -> Result<ipnet::IpNet, String> {
+    match s.parse::<ipnet::IpNet>() {
+        Ok(net) => Ok(net.trunc()),
+        // Not CIDR notation; treat a bare address as a host network.
+        Err(_) => s
+            .parse::<IpAddr>()
+            .map(ipnet::IpNet::from)
+            .map_err(|e| format!("`{s}` is not a valid IP address or CIDR network: {e}")),
+    }
+}
+
 #[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 pub struct Limits {
     /// Determines the threshold for rate-limiting requests.
@@ -372,5 +425,27 @@ pub struct Limits {
     pub resources_per_bucket: u64,
     /// The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.
     /// Values between 1 and 20 are recommended starting points.
+    /// At small per-key request budgets the request-count dimension acts as a hard per-window cap rather than refilling smoothly.
     pub refill_rate: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn parse_ip_net_or_host_truncates_cidr_host_bits() {
+        assert_eq!(
+            parse_ip_net_or_host("10.0.0.5/24").unwrap(),
+            "10.0.0.0/24".parse::<ipnet::IpNet>().unwrap()
+        );
+    }
+
+    #[test]
+    fn parse_ip_net_or_host_treats_bare_ip_as_host_network() {
+        assert_eq!(
+            parse_ip_net_or_host("10.0.0.5").unwrap(),
+            "10.0.0.5/32".parse::<ipnet::IpNet>().unwrap()
+        );
+    }
 }

@@ -98,14 +98,14 @@ expression: config
         ],
         "ip_custom_limits": [
           [
-            "157.180.14.244",
+            "157.180.14.244/32",
             {
               "resources_per_bucket": 10,
               "refill_rate": 2
             }
           ],
           [
-            "157.180.34.249",
+            "157.180.34.249/32",
             {
               "resources_per_bucket": 8,
               "refill_rate": 2

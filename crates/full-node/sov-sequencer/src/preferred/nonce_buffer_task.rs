@@ -464,7 +464,10 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         }
     }
 
-    fn drain_and_reject_all_txs(&mut self, reject_error: fn() -> TransactionReceiverResult<S, Rt>) {
+    fn drain_and_reject_all_txs(
+        &mut self,
+        reject_error: impl Fn() -> TransactionReceiverResult<S, Rt>,
+    ) {
         while let Ok(input) = self.buffer_input.try_recv() {
             match input {
                 NonceBufferInput::NewTx { result_sender, .. } => {
@@ -640,8 +643,9 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                             if self.execution_backend.get_current_executor_tx_queue_id()
                                                 > original_tx_queue_id
                                             {
-                                                let _ = result_sender.send(wipe_reject_error());
-                                                self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
+                                                let reason = "Executor queue advanced after downtime";
+                                                let _ = result_sender.send(wipe_reject_error(reason));
+                                                self.drain_and_reject_all_txs(|| wipe_reject_error::<S, Rt>(reason));
                                                 continue;
                                             }
                                             queue.non_persisted.mark_inflight(tx_nonce);
@@ -705,7 +709,11 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                     // sequencer anyway so we wipe everything.
                                     if is_notready_error(&tx_result) {
                                         let _ = result_sender.send(tx_result);
-                                        self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
+                                        self.drain_and_reject_all_txs(|| {
+                                            wipe_reject_error::<S, Rt>(
+                                                "Sequencer not ready; nonce buffer wiped",
+                                            )
+                                        });
                                         continue;
                                     }
 
@@ -796,11 +804,15 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                     match forced_tx_batch {
                         Ok(notification) => {
                             tracing::info!(?notification, "Wiping nonce buffer after forced batch execution");
-                            self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
+                            self.drain_and_reject_all_txs(|| {
+                                wipe_reject_error::<S, Rt>("Nonce buffer wiped after forced batch")
+                            });
                         }
                         Err(broadcast::error::RecvError::Lagged(skipped)) => {
                             tracing::warn!(skipped, "Forced batch notifications lagged; wiping nonce buffer");
-                            self.drain_and_reject_all_txs(wipe_reject_error::<S, Rt>);
+                            self.drain_and_reject_all_txs(|| {
+                                wipe_reject_error::<S, Rt>("Forced batch notifications lagged")
+                            });
                         }
                         Err(broadcast::error::RecvError::Closed) => {
                             wipe_closed = true;
@@ -1002,8 +1014,10 @@ fn err_invalid_nonce<S: Spec, Rt: Runtime<S>>(
     ))))
 }
 
-fn wipe_reject_error<S: Spec, Rt: Runtime<S>>() -> TransactionReceiverResult<S, Rt> {
-    Ok(Err(AcceptTxError::SequencerOverloaded503))
+fn wipe_reject_error<S: Spec, Rt: Runtime<S>>(
+    reason: &'static str,
+) -> TransactionReceiverResult<S, Rt> {
+    Ok(Err(AcceptTxError::SequencerOverloaded503(reason)))
 }
 
 fn shutdown_reject_error<S: Spec, Rt: Runtime<S>>() -> TransactionReceiverResult<S, Rt> {
@@ -1018,7 +1032,7 @@ fn is_notready_error<S: Spec, Rt: Runtime<S>>(result: &TransactionReceiverResult
             Err(accept_tx_error) => match accept_tx_error {
                 AcceptTxError::NotFullySynced(_) => true,
                 AcceptTxError::ReplicaMode
-                | AcceptTxError::SequencerOverloaded503
+                | AcceptTxError::SequencerOverloaded503(_)
                 | AcceptTxError::BatchError { .. }
                 | AcceptTxError::NewTxError(_)
                 | AcceptTxError::RateLimiter(_) => false,
@@ -1667,7 +1681,7 @@ mod tests {
                     let err = inner.expect_err(&format!("Expected tx {i} to fail with rejection"));
 
                     assert!(
-                        matches!(err, AcceptTxError::SequencerOverloaded503),
+                        matches!(err, AcceptTxError::SequencerOverloaded503(_)),
                         "Tx {i}: Expected SequencerOverloaded503 rejection, got: {err:?}"
                     );
                 }

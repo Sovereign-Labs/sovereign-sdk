@@ -304,6 +304,47 @@
         "bind_port"
       ]
     },
+    "IpAddrOrNet": {
+      "description": "Schema-only mirror of the wire form accepted by [`deserialize_ip_custom_limits`]: a bare IP\naddress or a CIDR network, IPv4 or IPv6. Exists solely to give\n[`SovRateLimiterConfig::ip_custom_limits`] an accurate `anyOf` JSON Schema instead of a bare\n`string`. Never constructed.",
+      "anyOf": [
+        {
+          "type": "string",
+          "format": "ipv4"
+        },
+        {
+          "$ref": "#/$defs/Ipv4Net"
+        },
+        {
+          "type": "string",
+          "format": "ipv6"
+        },
+        {
+          "$ref": "#/$defs/Ipv6Net"
+        }
+      ]
+    },
+    "Ipv4Net": {
+      "title": "IPv4 network",
+      "description": "An IPv4 address with prefix length",
+      "type": "string",
+      "examples": [
+        "0.0.0.0/0",
+        "192.168.0.0/24"
+      ],
+      "maxLength": 18,
+      "pattern": "^(?:(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\.){3}(?:25[0-5]|2[0-4][0-9]|1[0-9][0-9]|[1-9][0-9]|[0-9])\\/(?:3[0-2]|[1-2][0-9]|[0-9])$"
+    },
+    "Ipv6Net": {
+      "title": "IPv6 network",
+      "description": "An IPv6 address with prefix length",
+      "type": "string",
+      "examples": [
+        "::/0",
+        "fd00::/32"
+      ],
+      "maxLength": 43,
+      "pattern": "^[0-9A-Fa-f:\\.]+\\/(?:[0-9]|[1-9][0-9]|1[0-1][0-9]|12[0-8])$"
+    },
     "LeaderElectionConfig": {
       "description": "Configuration for leader election timing.",
       "type": "object",
@@ -335,7 +376,7 @@
       "type": "object",
       "properties": {
         "refill_rate": {
-          "description": "The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.\nValues between 1 and 20 are recommended starting points.",
+          "description": "The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.\nValues between 1 and 20 are recommended starting points.\nAt small per-key request budgets the request-count dimension acts as a hard per-window cap rather than refilling smoothly.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0
@@ -521,7 +562,7 @@
           "minimum": 0
         },
         "maximum_future_nonce_delta": {
-          "description": "The fartherst nonce into the future that the sequencer will accept and queue. This directly\nimpacts the maximum \"batch\" of transactions that can be simultaneously sent to the\nsequencer out of order.",
+          "description": "The farthest nonce into the future that the sequencer will accept and queue. This directly\nimpacts the maximum \"batch\" of transactions that can be simultaneously sent to the\nsequencer out of order.",
           "type": "integer",
           "format": "uint64",
           "default": 100,
@@ -1222,6 +1263,7 @@
           "$ref": "#/$defs/RollupHeight"
         },
         "ip_custom_limits": {
+          "description": "Per-network rate limits. Accepts CIDR notation (`10.0.0.0/8`) or a bare\nIP address (`192.168.1.5`); a bare address is treated as a host network\n(`/32` for IPv4, `/128` for IPv6).",
           "type": "array",
           "items": {
             "type": "array",
@@ -1229,8 +1271,7 @@
             "minItems": 2,
             "prefixItems": [
               {
-                "type": "string",
-                "format": "ip"
+                "$ref": "#/$defs/IpAddrOrNet"
               },
               {
                 "$ref": "#/$defs/Limits"
