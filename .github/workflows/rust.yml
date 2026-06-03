@@ -100,7 +100,7 @@ jobs:
 
   check:
     name: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=check-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=check-1-93
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
@@ -137,7 +137,7 @@ jobs:
     name: bench_check
     needs: check
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=bench-1-93
     timeout-minutes: 120
     env:
       RUSTFLAGS: "-D warnings"
@@ -159,7 +159,7 @@ jobs:
     name: rollup_tps_validation
     needs: check
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-bench-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=bench-1-93
     timeout-minutes: 120
     steps:
       - uses: actions/checkout@v5
@@ -180,7 +180,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-all-targets-1-93-p${{ matrix.partition }}
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=hack-all-targets-1-93-p${{ matrix.partition }}
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -211,7 +211,7 @@ jobs:
     # building dependencies, only checking them, so we can share caches
     # effectively.
     needs: check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=hack-default-targets-1-93-p${{ matrix.partition }}
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=hack-default-targets-1-93-p${{ matrix.partition }}
     strategy:
       matrix:
         partition: [1, 2, 3]
@@ -236,7 +236,7 @@ jobs:
   nextest_all_features:
     name: nextest_all_features
     # Privileged feature is needed for proper `io_uring` functionality needed by NOMT
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-all-features-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=nextest_all_features-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=nextest_all_features-1-93
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
@@ -256,7 +256,7 @@ jobs:
 
   doctests:
     name: doctests
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-300gb-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=test-1-93
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
@@ -277,7 +277,7 @@ jobs:
   coverage:
     name: coverage
     # TODO:try coverage 32x64
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-coverage-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=coverage-1-93
     timeout-minutes: 90
     env:
       SKIP_GUEST_BUILD: "1"
@@ -413,7 +413,7 @@ jobs:
         run: git diff --exit-code
 
   check-demo-rollup-bash-commands:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=demo-rollup-1-93
     needs:
       - check
     timeout-minutes: 60
@@ -440,7 +440,7 @@ jobs:
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
 
   check-demo-rollup-bash-commands-mock-da:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=demo-rollup-1-93
     needs:
       - check
     timeout-minutes: 60
@@ -461,7 +461,7 @@ jobs:
       - run: chmod +x demo-rollup-readme.sh && ./demo-rollup-readme.sh
 
   check-constant-overriding-is-disabled-in-release-mode:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-test-300gb-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=test-1-93
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v5
@@ -479,7 +479,7 @@ jobs:
         working-directory: .
 
   cargo-switcheroo-default:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=switcheroo-1-93
     steps:
       - uses: actions/checkout@v5
       - uses: namespacelabs/nscloud-cache-action@v1
@@ -490,7 +490,7 @@ jobs:
       - run: git diff --exit-code
 
   check-web3-js-sdk-integration:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=demo-rollup-1-93
     needs:
       - check
     timeout-minutes: 60
@@ -524,7 +524,7 @@ jobs:
   rollup_starter_lint:
     name: rollup_starter_lint
     if: ${{ github.event_name != 'merge_group' && (github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository) }}
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=rollup-starter-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=rollup-starter-1-93
     timeout-minutes: 90
     env:
       RUSTFLAGS: "-D warnings"
@@ -545,7 +545,7 @@ jobs:
         run: make lint
 
   check-demo-rollup-phantom-dapp-e2e:
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-demo-rollup-300gb-1-93;container.privileged=true;container.host-pid-namespace=true
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=demo-rollup-1-93
     needs:
       - check
     timeout-minutes: 60
@@ -590,7 +590,7 @@ jobs:
 
   timing_check:
     name: timing_check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-dev-300gb-1-93;overrides.cache-tag=check-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=check-1-93
     timeout-minutes: 60
     env:
       RUSTFLAGS: "-D warnings"
@@ -611,7 +611,7 @@ jobs:
 
   timing_nextest_all_features:
     name: timing_nextest_all_features
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-test-all-features-300gb-1-93;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=nextest_all_features-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=nextest_all_features-1-93
     timeout-minutes: 60
     env:
       RISC0_DEV_MODE: "true"
