@@ -85,10 +85,13 @@ impl std::fmt::Debug for RocksdbCfCustomization {
 /// Defaults to [`PrunerConfig::Off`] (full history retained). In config files, omitting the
 /// `pruner` section disables pruning; otherwise select a variant, e.g.
 /// `[storage.pruner.periodic]` or `[storage.pruner.once_at_startup]`.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, serde::Serialize, serde::Deserialize, JsonSchema)]
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, JsonSchema,
+)]
 #[serde(rename_all = "snake_case")]
 pub enum PrunerConfig {
     /// Never prune; the node retains full history.
+    #[default]
     Off,
     /// Prune exactly once, synchronously, at node startup (before block processing begins),
     /// then never again during this run. This performs all pruning I/O up front, when there
@@ -121,12 +124,6 @@ pub enum PrunerConfig {
         #[serde(default)]
         max_batch_size: Option<usize>,
     },
-}
-
-impl Default for PrunerConfig {
-    fn default() -> Self {
-        PrunerConfig::Off
-    }
 }
 
 /// Configuration for Sovereign Rollup node database.

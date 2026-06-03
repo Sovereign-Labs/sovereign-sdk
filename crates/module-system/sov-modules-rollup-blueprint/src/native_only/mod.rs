@@ -404,6 +404,10 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let mut storage_manager =
             self.create_storage_manager(&rollup_config, witness_generation)?;
 
+        // Run a one-time pruning pass before any state access, if the storage manager is
+        // configured for it (`PrunerConfig::OnceAtStartup`). No-op otherwise.
+        storage_manager.prune_once_at_startup()?;
+
         let (prover_storage, ledger_state) =
             storage_manager.create_state_after(&current_finalized_header)?;
 

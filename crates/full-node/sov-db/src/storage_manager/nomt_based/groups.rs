@@ -281,6 +281,26 @@ where
         Ok(())
     }
 
+    /// Runs a full RocksDB compaction on the column families that pruning deletes from, to
+    /// drop the resulting tombstones and reclaim disk space. Intended only for the one-time
+    /// startup prune (`PrunerConfig::OnceAtStartup` with `compact_after`), where rewriting
+    /// the affected column families is paid up front with no live read/write traffic.
+    ///
+    /// Compacts all three pruned regions: the accessory state column family (where the
+    /// accessory pruner's `delete_range` tombstones live) and the user and kernel archival
+    /// historical + pruning column families (where rockbound's `VersionedDB` writes its
+    /// pruning tombstones — point deletes for the scattered historical rows, a range delete
+    /// for the version-prefixed pruning CF). `VersionedDB::trigger_compaction` compacts the
+    /// user/kernel pair.
+    pub(crate) fn compact_pruned_cfs(&self) -> anyhow::Result<()> {
+        tracing::info!("Compacting pruned column families to reclaim disk space");
+        self.accessory
+            .trigger_compaction::<ModuleAccessoryState>()?;
+        self.flat_state.user.trigger_compaction()?;
+        self.flat_state.kernel.trigger_compaction()?;
+        Ok(())
+    }
+
     pub(crate) fn create_storage<S: InitializableNativeNomtStorage<H, K>>(
         &self,
         // Snapshot refs are in reveresed chronological order.

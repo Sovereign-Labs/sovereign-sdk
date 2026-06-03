@@ -430,10 +430,11 @@ async fn test_historical_state_with_pruning() {
     }
 }
 
-/// `PrunerConfig::OnceAtStartup` must, at startup, synchronously prune to completion (looping its
-/// internal batches until the backlog is drained) and then never spawn a periodic pruner for the
-/// rest of the run. We first build a prunable backlog with pruning disabled, then reopen the same
-/// DB with `OnceAtStartup` and a tiny `max_batch_size` to force multiple internal passes.
+/// `PrunerConfig::OnceAtStartup` must, when its one-time startup pass runs, synchronously prune to
+/// completion (looping its internal batches until the backlog is drained) and then never spawn a
+/// periodic pruner for the rest of the run. We build a prunable backlog with `OnceAtStartup`
+/// configured — finalization does not prune because the periodic interval is disabled — then
+/// invoke the startup prune with a tiny `max_batch_size` to force multiple internal passes.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_prune_once_at_startup_runs_to_completion() {
     let temp_dir = tempfile::TempDir::new().unwrap();
@@ -459,38 +460,6 @@ async fn test_prune_once_at_startup_runs_to_completion() {
         vec![u64::MAX],
     ];
 
-    // --- Phase 1: build a backlog with pruning OFF, then drop the manager (DBs persist). ---
-    {
-        let config = RollupDbConfig::default_in_path(db_path.clone());
-        assert_eq!(
-            config.pruner,
-            PrunerConfig::Off,
-            "default test config must leave pruning disabled"
-        );
-        let mut storage_manager =
-            NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
-
-        for height in 0u64..blocks {
-            let da_header = MockBlockHeader::from_height(height + 1);
-            let (stf_storage, _ledger_storage) =
-                storage_manager.create_state_for(&da_header).unwrap();
-            let mut values = vec![];
-            for key in keys_to_write[height as usize].iter() {
-                let user_key = vec![*key as u8, 0, 0]; // Keys must be at least 2 bytes long.
-                values.push((user_key, Some(height.to_be_bytes().to_vec())));
-            }
-            let (stf_changes, _) = stf_storage.materialize_from_key_values(&values, height);
-            storage_manager
-                .save_change_set(&da_header, stf_changes, SchemaBatch::default())
-                .unwrap();
-            storage_manager.finalize(&da_header).unwrap();
-        }
-
-        // With pruning off, nothing was pruned.
-        assert_eq!(storage_manager.pruning_commits_count(), 0);
-    }
-
-    // --- Phase 2: reopen with `OnceAtStartup` and a tiny batch, then prune at startup. ---
     let versions_to_keep = 5u64;
     let mut config = RollupDbConfig::default_in_path(db_path);
     config.pruner = PrunerConfig::OnceAtStartup {
@@ -502,10 +471,32 @@ async fn test_prune_once_at_startup_runs_to_completion() {
     let mut storage_manager =
         NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
 
+    // Build a prunable backlog. `OnceAtStartup` leaves periodic pruning disabled (the finalize
+    // interval is `None`), so finalization never prunes — the backlog accumulates until the
+    // explicit startup prune below.
+    for height in 0u64..blocks {
+        let da_header = MockBlockHeader::from_height(height + 1);
+        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+        let mut values = vec![];
+        for key in keys_to_write[height as usize].iter() {
+            let user_key = vec![*key as u8, 0, 0]; // Keys must be at least 2 bytes long.
+            values.push((user_key, Some(height.to_be_bytes().to_vec())));
+        }
+        let (stf_changes, _) = stf_storage.materialize_from_key_values(&values, height);
+        storage_manager
+            .save_change_set(&da_header, stf_changes, SchemaBatch::default())
+            .unwrap();
+        storage_manager.finalize(&da_header).unwrap();
+    }
+
+    // Finalization did not prune (periodic interval disabled), and no pruner is in flight.
+    assert_eq!(storage_manager.pruning_commits_count(), 0);
     assert!(
         !storage_manager.is_pruner_running(),
         "no pruner should be in flight before the startup prune"
     );
+
+    // Run the one-time startup prune.
     storage_manager.prune_once_at_startup().unwrap();
 
     // The tiny batch forces multiple commit passes (proving prune-to-completion), the run is
@@ -574,6 +565,86 @@ async fn test_prune_once_at_startup_runs_to_completion() {
         commits_before,
         "OnceAtStartup must not prune again after the one-time startup pass"
     );
+}
+
+/// `OnceAtStartup` with `compact_after: true` must run the post-prune compaction of every pruned
+/// column family — accessory plus the user/kernel archival historical + pruning CFs (via
+/// `DbGroup::compact_pruned_cfs` → `VersionedDB::trigger_compaction`) — without error, and reads
+/// must stay correct afterward. This guards the user/kernel compaction wiring added with the
+/// rockbound rev bump; `test_prune_once_at_startup_runs_to_completion` covers the same path with
+/// compaction off.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_prune_once_at_startup_compacts_pruned_cfs() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().to_path_buf();
+
+    // Key `k` (1..=6) is written at versions 1..=k with value == version, building a multi-version
+    // backlog so the startup prune has tombstones to compact away.
+    let blocks: u64 = 7;
+    let keys_to_write = [
+        vec![],
+        vec![1u64, 2, 3, 4, 5, 6],
+        vec![2, 3, 4, 5, 6],
+        vec![3, 4, 5, 6],
+        vec![4, 5, 6],
+        vec![5, 6],
+        vec![6],
+    ];
+
+    let versions_to_keep = 2u64;
+    let mut config = RollupDbConfig::default_in_path(db_path);
+    config.pruner = PrunerConfig::OnceAtStartup {
+        versions_to_keep,
+        max_batch_size: None,
+        compact_after: true,
+    };
+    let mut storage_manager =
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
+
+    for height in 0u64..blocks {
+        let da_header = MockBlockHeader::from_height(height + 1);
+        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+        let mut values = vec![];
+        for key in keys_to_write[height as usize].iter() {
+            let user_key = vec![*key as u8, 0, 0]; // Keys must be at least 2 bytes long.
+            values.push((user_key, Some(height.to_be_bytes().to_vec())));
+        }
+        let (stf_changes, _) = stf_storage.materialize_from_key_values(&values, height);
+        storage_manager
+            .save_change_set(&da_header, stf_changes, SchemaBatch::default())
+            .unwrap();
+        storage_manager.finalize(&da_header).unwrap();
+    }
+
+    // Prune to completion AND compact the pruned column families. The compaction step (accessory +
+    // user/kernel `trigger_compaction`) must not panic or error.
+    storage_manager.prune_once_at_startup().unwrap();
+
+    // Reads remain correct after compaction: live values survive, and the oldest version is pruned.
+    let (stf_storage, _ledger_storage) = storage_manager
+        .create_state_after(&MockBlockHeader::from_height(blocks))
+        .unwrap();
+    for key in 1..=6u64 {
+        let user_key = SlotKey::from_slice(&[key as u8, 0, 0]);
+        let live_value = stf_storage
+            .historical_state
+            .get_user_value_option_by_key(&user_key)
+            .unwrap()
+            .map(|v| v.as_ref().to_vec());
+        assert_eq!(
+            live_value,
+            Some(key.to_be_bytes().to_vec()),
+            "live value for key {key} should survive prune + compaction"
+        );
+
+        let oldest = stf_storage
+            .historical_state
+            .get_user_value_option_by_key_historical(&user_key, SlotNumber::new(0));
+        assert!(
+            oldest.is_err(),
+            "version 0 should be pruned for key {key} after compaction, found {oldest:?}"
+        );
+    }
 }
 
 /// Hot-key workload (the case #3018 cares about): write the SAME key in every block, far more

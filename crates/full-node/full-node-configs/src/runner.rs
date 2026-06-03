@@ -418,4 +418,65 @@ mod tests {
 
         assert_eq!(config.proof_manager, None);
     }
+
+    /// Locks in the externally-tagged TOML representation of `PrunerConfig`: an omitted section
+    /// (and an explicit `"off"`) means no pruning, while `periodic` / `once_at_startup` parse into
+    /// the matching variants.
+    #[test]
+    fn pruner_config_round_trips_through_toml() {
+        use sov_db::config::{PrunerConfig, RollupDbConfig};
+
+        // Omitted `pruner` defaults to `Off`.
+        let omitted: RollupDbConfig = toml::from_str(r#"path = "/tmp""#).unwrap();
+        assert_eq!(omitted.pruner, PrunerConfig::Off);
+
+        // Explicit `off`.
+        let off: RollupDbConfig = toml::from_str(
+            r#"
+            path = "/tmp"
+            pruner = "off"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(off.pruner, PrunerConfig::Off);
+
+        // Periodic (max_batch_size omitted -> None).
+        let periodic: RollupDbConfig = toml::from_str(
+            r#"
+            path = "/tmp"
+            [pruner.periodic]
+            block_interval = 100
+            versions_to_keep = 20
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            periodic.pruner,
+            PrunerConfig::Periodic {
+                block_interval: 100,
+                versions_to_keep: 20,
+                max_batch_size: None,
+            }
+        );
+
+        // OnceAtStartup with every knob set.
+        let once: RollupDbConfig = toml::from_str(
+            r#"
+            path = "/tmp"
+            [pruner.once_at_startup]
+            versions_to_keep = 500
+            max_batch_size = 4096
+            compact_after = true
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            once.pruner,
+            PrunerConfig::OnceAtStartup {
+                versions_to_keep: 500,
+                max_batch_size: Some(4096),
+                compact_after: true,
+            }
+        );
+    }
 }
