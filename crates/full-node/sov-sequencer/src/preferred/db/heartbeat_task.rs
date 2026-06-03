@@ -13,14 +13,13 @@ use std::time::Duration;
 use anyhow::Result;
 use sov_full_node_configs::sequencer::{ConfiguredNodeRole, PostgresConfig};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
-use tokio::sync::{oneshot, watch};
+use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn};
 
 use super::SequencerRole;
 
 use super::postgres::PostgresBackend;
-use crate::preferred::executor_events::SIDE_EFFECTS_DRAIN_TIMEOUT;
 use crate::preferred::exit_rollup;
 
 /// Manages periodic heartbeat and optional leadership election for a sequencer node.
@@ -35,7 +34,6 @@ pub struct HeartBeatTask {
     shutdown_receiver: watch::Receiver<()>,
     postgres_config: PostgresConfig,
     heartbeat_interval: Duration,
-    side_effects_drained_receiver: oneshot::Receiver<()>,
 }
 
 impl HeartBeatTask {
@@ -44,7 +42,6 @@ impl HeartBeatTask {
         shutdown_sender: watch::Sender<()>,
         bind_addr: SocketAddr,
         heartbeat_interval: Duration,
-        side_effects_drained_receiver: oneshot::Receiver<()>,
     ) -> Result<Self> {
         let backend = PostgresBackend::connect(&postgres_config, bind_addr).await?;
         let shutdown_receiver = shutdown_sender.subscribe();
@@ -56,7 +53,6 @@ impl HeartBeatTask {
             shutdown_receiver,
             postgres_config,
             heartbeat_interval,
-            side_effects_drained_receiver,
         })
     }
 
@@ -96,22 +92,6 @@ impl HeartBeatTask {
         Ok(())
     }
 
-    // Logs the shutdown, waits for the side effects task to confirm it has drained,
-    // then best-effort deregisters this node. Shared by every task loop so all
-    // graceful-shutdown paths deregister in exactly one place.
-    async fn shutdown_and_deregister(self, task: &str) {
-        info!(node_id = %self.node_id, task, "Shutdown signal received; stopping task and waiting for side effects to drain before deregistering node");
-        if wait_for_side_effects_to_drain_signal(
-            &self.node_id,
-            self.side_effects_drained_receiver,
-            SIDE_EFFECTS_DRAIN_TIMEOUT,
-        )
-        .await
-        {
-            deregister_on_shutdown(&self.backend, &self.node_id).await;
-        }
-    }
-
     // Spawns a task for the current leader to maintain leadership.
     //
     // Periodically refreshes leadership. If leadership is lost or the database
@@ -124,7 +104,7 @@ impl HeartBeatTask {
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        self.shutdown_and_deregister("leader heartbeat").await;
+                        info!(node_id = %self.node_id, task = "leader heartbeat", "Shutdown signal received; stopping task");
                         return;
                     }
                     FutureOrShutdownOutput::Output(_) => {
@@ -169,7 +149,7 @@ impl HeartBeatTask {
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        self.shutdown_and_deregister("replica election").await;
+                        info!(node_id = %self.node_id, task = "replica election", "Shutdown signal received; stopping task");
                         return;
                     }
                     FutureOrShutdownOutput::Output(_) => {
@@ -179,10 +159,8 @@ impl HeartBeatTask {
                                     node_id = %self.node_id,
                                     "Replica acquired leadership! Exiting to restart as leader."
                                 );
-                                // Intentionally no `deregister_on_shutdown` here: this node
-                                // will restart as leader with the same node_id and re-UPSERT
-                                // the same row, so we want the registration to persist across
-                                // the restart instead of being briefly deleted and re-inserted.
+                                // Keep this node row in place: this node will restart
+                                // as leader with the same node_id and re-UPSERT the same row.
                                 let _ = self.shutdown_sender.send(());
                                 break;
                             }
@@ -218,7 +196,7 @@ impl HeartBeatTask {
             loop {
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        self.shutdown_and_deregister("replica registration").await;
+                        info!(node_id = %self.node_id, task = "replica registration", "Shutdown signal received; stopping task");
                         return;
                     }
                     FutureOrShutdownOutput::Output(_) => match self.register_node().await {
@@ -234,92 +212,5 @@ impl HeartBeatTask {
                 }
             }
         })
-    }
-}
-
-// Best-effort: deletes this node's row from `nodes` on graceful shutdown so
-// DbElected replicas can take over without waiting for the leader timeout.
-// Errors and timeouts are logged, never propagated — the task is already
-// exiting and the staleness filter is the backstop for cases where this
-// can't run (SIGKILL, OOM, DB unreachable, etc.).
-//
-// Hard-bounded by `SHUTDOWN_DEREGISTER_TIMEOUT` so a stalled DB connection cannot
-// delay graceful shutdown, regardless of the inner retry budget.
-//
-// `sequencer_leader` is deliberately preserved until a replacement takes
-// over, so in-flight writes guarded by `is_leader($node_id)` can still
-// complete during the handoff window.
-async fn deregister_on_shutdown(backend: &PostgresBackend, node_id: &str) {
-    const SHUTDOWN_DEREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
-
-    match tokio::time::timeout(
-        SHUTDOWN_DEREGISTER_TIMEOUT,
-        backend.deregister_node_on_shutdown(),
-    )
-    .await
-    {
-        Ok(Ok(())) => {}
-        Ok(Err(e)) => warn!(
-            node_id,
-            error = ?e,
-            "Failed to delete node registration on shutdown; row will age out via staleness filter."
-        ),
-        Err(_) => warn!(
-            node_id,
-            timeout_ms = SHUTDOWN_DEREGISTER_TIMEOUT.as_millis() as u64,
-            "Timed out deleting node registration on shutdown; row will age out via staleness filter."
-        ),
-    }
-}
-
-async fn wait_for_side_effects_to_drain_signal(
-    node_id: &str,
-    receiver: oneshot::Receiver<()>,
-    timeout: Duration,
-) -> bool {
-    match tokio::time::timeout(timeout, receiver).await {
-        Ok(Ok(())) => true,
-        Ok(Err(_)) => {
-            warn!(
-                node_id,
-                "Side effects task exited before confirming clean drain; skipping node deregistration."
-            );
-            false
-        }
-        Err(_) => {
-            warn!(
-                node_id,
-                timeout_ms = timeout.as_millis() as u64,
-                "Timed out waiting for side effects to drain; skipping node deregistration."
-            );
-            false
-        }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[tokio::test]
-    async fn side_effects_drain_signal_allows_deregistration() {
-        let (sender, receiver) = oneshot::channel();
-        sender.send(()).unwrap();
-
-        assert!(
-            wait_for_side_effects_to_drain_signal("node_id", receiver, Duration::from_millis(10),)
-                .await
-        );
-    }
-
-    #[tokio::test]
-    async fn dropped_side_effects_drain_signal_blocks_deregistration() {
-        let (sender, receiver) = oneshot::channel();
-        drop(sender);
-
-        assert!(
-            !wait_for_side_effects_to_drain_signal("node_id", receiver, Duration::from_millis(10),)
-                .await
-        );
     }
 }

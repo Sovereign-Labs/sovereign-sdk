@@ -33,6 +33,7 @@ use std::net::SocketAddr;
 use std::num::NonZero;
 use std::path::Path;
 use std::sync::Arc;
+use std::time::Duration;
 use tokio::sync::{mpsc, watch};
 
 use crate::common::WithCachedTxHashes;
@@ -130,6 +131,10 @@ pub trait DbBackend: Send + Sync + 'static {
     /// This method exists because the sequencer has no use for data that is
     /// already finalized.
     async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError>;
+
+    async fn deregister_node_on_shutdown(&mut self) -> Result<()> {
+        Ok(())
+    }
 }
 
 /// The return type of `DbBackend::current_data()`.
@@ -778,6 +783,35 @@ impl PreferredSequencerDb {
             }
         }
         Ok(())
+    }
+
+    pub(crate) async fn deregister_node_on_shutdown_best_effort(&mut self) {
+        const SHUTDOWN_DEREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
+
+        let Some(backend) = &mut self.backend else {
+            return;
+        };
+
+        match tokio::time::timeout(
+            SHUTDOWN_DEREGISTER_TIMEOUT,
+            backend.deregister_node_on_shutdown(),
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(error)) => {
+                tracing::warn!(
+                    error = ?error,
+                    "Failed to delete node registration on shutdown; row will age out via staleness filter."
+                );
+            }
+            Err(_) => {
+                tracing::warn!(
+                    timeout_ms = SHUTDOWN_DEREGISTER_TIMEOUT.as_millis() as u64,
+                    "Timed out deleting node registration on shutdown; row will age out via staleness filter."
+                );
+            }
+        }
     }
 
     async fn debug_assert_in_progress_batch_is_none(

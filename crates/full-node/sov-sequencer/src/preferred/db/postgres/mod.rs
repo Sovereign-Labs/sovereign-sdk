@@ -632,6 +632,11 @@ impl DbBackend for PostgresBackend {
 
         Ok(())
     }
+
+    async fn deregister_node_on_shutdown(&mut self) -> anyhow::Result<()> {
+        PostgresBackend::deregister_node_on_shutdown(self).await
+    }
+
     async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>, DbError> {
         let mut tx = self.pool.begin().await?;
         let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;

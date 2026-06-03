@@ -104,16 +104,6 @@ where
         self.heap.len() >= Self::MAX_HEAP_SIZE
     }
 
-    async fn drain_side_effects_on_shutdown(&self) {
-        if self.inner.executor_events_sender.drain_and_shutdown().await {
-            tracing::debug!("Side effects drained before sequencer state shutdown");
-        } else {
-            tracing::warn!(
-                "Sequencer state shut down before side effects drain could be confirmed"
-            );
-        }
-    }
-
     pub(crate) async fn start(mut self) -> JoinHandle<()> {
         tokio::spawn(async move {
             let mut index = 0;
@@ -160,7 +150,6 @@ where
                     if let Err(e) = self.handle_next_message(msg).await {
                         match e {
                             SequencerStateUpdatorError::Shutdown => {
-                                self.drain_side_effects_on_shutdown().await;
                                 return;
                             }
                             SequencerStateUpdatorError::Unexpected => {
@@ -181,7 +170,6 @@ where
                     {
                         FutureOrShutdownOutput::Output(msg) => msg,
                         FutureOrShutdownOutput::Shutdown => {
-                            self.drain_side_effects_on_shutdown().await;
                             return;
                         }
                     };
