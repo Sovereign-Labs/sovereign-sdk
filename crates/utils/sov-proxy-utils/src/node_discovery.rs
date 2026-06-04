@@ -133,11 +133,8 @@ impl AdvertisedClusterInfo {
         );
     }
 
-    fn not_ready_followers_for_metric(&self) -> BTreeMap<String, u16> {
-        self.not_ready_followers
-            .iter()
-            .map(|(node_id, status)| (node_id.clone(), status.as_u16()))
-            .collect()
+    fn not_ready_followers_count(&self) -> usize {
+        self.not_ready_followers.len()
     }
 }
 
@@ -465,7 +462,7 @@ impl NodeDiscovery {
             cluster_changed: membership_change.has_changed(),
             advertised_membership: advertised_membership.clone(),
             advertised_cluster_changed: advertised_changed,
-            not_ready_followers: advertised_info.not_ready_followers_for_metric(),
+            not_ready_followers_count: advertised_info.not_ready_followers_count(),
         };
 
         if advertised_changed {

@@ -1,6 +1,5 @@
 use crate::node_discovery::ClusterMembership;
 use sov_metrics::write_escaped_field_value;
-use std::collections::BTreeMap;
 use std::io::Write;
 
 #[derive(Debug)]
@@ -11,7 +10,7 @@ pub(crate) struct ClusterUpdateMetric {
     pub cluster_changed: bool,
     pub advertised_membership: ClusterMembership,
     pub advertised_cluster_changed: bool,
-    pub not_ready_followers: BTreeMap<String, u16>,
+    pub not_ready_followers_count: usize,
 }
 
 impl sov_metrics::Metric for ClusterUpdateMetric {
@@ -50,9 +49,11 @@ impl sov_metrics::Metric for ClusterUpdateMetric {
             "\",advertised_cluster_changed={}",
             self.advertised_cluster_changed
         )?;
-        write!(buffer, ",not_ready_followers=\"")?;
-        write_escaped_field_value(buffer, &format!("{:?}", self.not_ready_followers))?;
-        write!(buffer, "\"")
+        write!(
+            buffer,
+            ",not_ready_followers_count={}",
+            self.not_ready_followers_count
+        )
     }
 }
 
