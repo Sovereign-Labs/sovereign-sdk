@@ -211,7 +211,12 @@ async fn not_ready_leader_is_still_advertised() {
     // leader row: the snapshot we assert on is guaranteed to carry the leader.
     insert_node(&writer, LEADER_NODE, &leader_endpoint.address().to_string()).await;
     set_leader(&writer, LEADER_NODE).await;
-    insert_node(&writer, READY_NODE, &follower_endpoint.address().to_string()).await;
+    insert_node(
+        &writer,
+        READY_NODE,
+        &follower_endpoint.address().to_string(),
+    )
+    .await;
 
     // Wait for the ready follower to appear, confirming the probe cycle ran.
     let advertised = recorder.wait_until_has_follower(READY_NODE).await;
