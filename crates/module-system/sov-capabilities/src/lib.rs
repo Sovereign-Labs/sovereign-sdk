@@ -21,7 +21,7 @@ use sov_modules_api::{
     InvalidProofError, ModuleInfo, OperatingMode, Rewards, SovAttestation,
     SovStateTransitionPublicData, Spec, StateAccessor, StateReader, StateWriter, Storage, TxState,
 };
-use sov_modules_api::{ExecutionContext, GasSpec, VersionReader};
+use sov_modules_api::{ExecutionContext, VersionReader};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::Bytes;
@@ -207,14 +207,7 @@ where
         sequencer: &<S::Da as DaSpec>::Address,
         state: &mut Accessor,
     ) {
-        // Only the preferred sequencer is allowed to bond zero tokens. After the gas limit change height, we no longer penalize the preferred sequencer.
-        let mut net_amount = if bond_amount == Amount::ZERO
-            && state.rollup_height_to_access() > <S as GasSpec>::change_gas_limit_after_height()
-        {
-            Amount::ZERO
-        } else {
-            bond_amount.checked_sub(reward.accumulated_penalty).expect("A sequencer can never be penalized more than the amount they have escrowed, regardless of reward accumulation!")
-        };
+        let mut net_amount = bond_amount.checked_sub(reward.accumulated_penalty).expect("A sequencer can never be penalized more than the amount they have escrowed, regardless of reward accumulation!");
         net_amount = net_amount.checked_add(reward.accumulated_reward).expect("Total sequencer reward + escrow amount is greater than the max possible token supply. This is a bug in gas accounting.");
 
         self.sequencer_registry.add_to_stake(

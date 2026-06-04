@@ -1,7 +1,7 @@
 //! Integration tests for the preferred sequencer that use [`RollupBuilder`] and
 //! thus test sequencer + node interactions.
 
-use crate::utils::{encode_call, tx_set_value_nonce, EventEmitterModule};
+use crate::utils::{encode_call, EventEmitterModule};
 use crate::utils::{
     generate_paymaster_tx, generate_txs, new_test_rollup, pause_update_state,
     tempdir_inside_codebase_dir, tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook,
@@ -900,7 +900,7 @@ async fn sequencer_filled_up_block() {
         .map(|x| (x * 10) / 9)
         .collect::<Vec<_>>();
     std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_INITIAL_GAS_LIMIT",
+        "SOV_TEST_CONST_OVERRIDE_BLOCK_GAS_LIMIT",
         format!("{gas_limit_array:?}"),
     );
     // Set very high initial balance for the admin.
@@ -1316,7 +1316,7 @@ async fn seq_out_of_gas_for_pre_checks() {
     let gas_limit = gas_limit.scalar_division(2);
     let gas_limit_array = gas_limit.as_ref();
     std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_INITIAL_GAS_LIMIT",
+        "SOV_TEST_CONST_OVERRIDE_BLOCK_GAS_LIMIT",
         format!("{gas_limit_array:?}"),
     );
     let price_array = config_value!("INITIAL_BASE_FEE_PER_GAS");
@@ -2378,146 +2378,6 @@ async fn seq_many_invalid_txs() {
     let _ = tokio::time::timeout(TEST_NORMAL_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
         .await
         .expect("Rollup shutdown properly");
-}
-
-/// Run a test gas limit update.
-///
-/// This test runs the rollup for ~20 blocks with the gas limit update scheduled for block 12.
-/// We update the limit to a tiny value (50_000) and send expensive txs so that we can observe the gas dynamics
-/// after the update.
-///
-/// A big part of this test is simply running the upgrade with state root assertions enabled (they're enabled by default in test_rollup).
-/// That assertion would catch the most likely issues with node-sequencer disagreement, and the successful execution of the test guarantees
-/// that we haven't hit any panics. The assertions we run here are just extra sanity checks.
-#[tokio::test(flavor = "multi_thread")]
-async fn test_gas_limit_update() {
-    // 1. Configure gas price update timing and params
-    const UPDATED_GAS_LIMIT: [u64; 2] = [50_000, 50_000];
-    const CHANGE_GAS_LIMIT_AFTER_HEIGHT: u32 = 12;
-    std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_UPDATED_GAS_LIMIT",
-        format!("{:?}", UPDATED_GAS_LIMIT),
-    );
-    std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_CHANGE_GAS_LIMIT_AFTER_HEIGHT",
-        CHANGE_GAS_LIMIT_AFTER_HEIGHT.to_string(),
-    );
-
-    // 2. Boilerplate test setup
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
-    test_rollup.produce_enough_finalized_slots().await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    // 3. Setup - initialize empty arrays/values for tracking data. Subscribe to slot notifications
-    let mut sequencer_receipts = vec![];
-    let mut ledger_receipts = vec![];
-    let mut rollup_height;
-    let mut nonce = 0;
-    let mut max_base_fee_per_gas_observed_after_update = 0;
-    let mut slot_subscription = test_rollup
-        .client
-        .client
-        .subscribe_slots_with_children(IncludeChildren::new(true))
-        .await
-        .unwrap();
-
-    // 4. Main loop Submit a tx and save the receipt. Then, force close the batch and produce a block.
-    for i in 0..20_u64 {
-        // 4.1 Submit a tx and save the receipt.
-        let receipt = test_rollup
-            .api_client()
-            .send_raw_tx_to_sequencer(&tx_set_value_nonce::<TestRuntime<TestSpec>>(
-                &admin.private_key,
-                nonce,
-                i,
-                Some(GasUnit::from_dimensions([33_000, 33_000])),
-            ))
-            .await;
-
-        if let Err(e) = &receipt {
-            panic!("Tx {i} failed with error: {e}");
-        } else {
-            nonce += 1;
-            sequencer_receipts.push(receipt.unwrap());
-        }
-
-        // 4.2 Force close the batch and produce a block.
-        let _ = test_rollup.force_close_batch().await;
-        test_rollup.tenderly_produce_blocks(1).await.unwrap();
-        let slot = slot_subscription.next().await.unwrap().unwrap();
-        for batch in slot.batches {
-            for tx in batch.txs {
-                ledger_receipts.push(tx);
-            }
-        }
-
-        // 4.3 Query the rollup hight. After the transition, save the largest base fee value that we observe.
-        rollup_height = test_rollup.height().await.get();
-        if rollup_height > CHANGE_GAS_LIMIT_AFTER_HEIGHT as u64 {
-            let base_fee_per_gas = test_rollup
-                .client
-                .http_get("/rollup/base-fee-per-gas/latest")
-                .await
-                .unwrap();
-            // Parse the integer price from a string like "[10, 10]"
-            let current_base_fee = base_fee_per_gas
-                .trim()
-                .trim_start_matches(r#"{"base_fee_per_gas":[""#)
-                .split('"')
-                .next()
-                .unwrap()
-                .parse::<u64>()
-                .unwrap_or_else(|_| panic!("Failed to parse base fee per gas: {base_fee_per_gas}"));
-            if current_base_fee > max_base_fee_per_gas_observed_after_update {
-                max_base_fee_per_gas_observed_after_update = current_base_fee;
-            }
-        }
-
-        // 4.4 Once we've observed several blocks after the transition, break the loop.
-        if rollup_height.saturating_sub(5) > CHANGE_GAS_LIMIT_AFTER_HEIGHT as u64 {
-            break;
-        }
-    }
-
-    // 5. Produce more blocks to ensure the ledger DB finishes populating. Save the ledger DB contents.
-    for _ in 0..10 {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        let slot = slot_subscription.next().await.unwrap().unwrap();
-        for batch in slot.batches {
-            for tx in batch.txs {
-                ledger_receipts.push(tx);
-            }
-        }
-    }
-
-    // 6. Assertions
-    // 6.1 Check that the gas price rose after the update. This verifies that our attempted change really did take effect.
-
-    // Before we update the gas limit, the gas price falls to the minimum possible value (7). After the update, assuming all went well,
-    // the price should start rising rapidly since our blocks are always full. Sanity check that.
-    assert!(
-        max_base_fee_per_gas_observed_after_update > 7,
-        "Max observed base fee per gas after update must be greater than 7"
-    );
-
-    // 6.2 Sanity check that the ledger DB agrees with the sequencer on the tx results.
-    assert_eq!(sequencer_receipts.len(), ledger_receipts.len());
-    for (sequencer_receipt, ledger_receipt) in sequencer_receipts
-        .into_iter()
-        .zip(ledger_receipts.into_iter())
-    {
-        let sequencer_receipt = sequencer_receipt.as_ref().receipt.as_ref().unwrap();
-        assert_eq!(sequencer_receipt.result, ledger_receipt.receipt.result);
-        assert_eq!(sequencer_receipt.data, ledger_receipt.receipt.data);
-    }
 }
 
 /// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.

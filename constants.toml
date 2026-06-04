@@ -159,10 +159,8 @@ GAS_TO_CHARGE_PER_PROOF_BYTE = [1, 1]
 FIXED_GAS_TO_CHARGE_PER_PROOF = [100, 100]
 
 # --- Gas fee adjustment parameters: See https://eips.ethereum.org/EIPS/eip-1559 for a detailed description ---
-# The initial gas limit of the rollup.
-INITIAL_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
-UPDATED_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
-CHANGE_GAS_LIMIT_AFTER_HEIGHT = 9223372036854775807
+# The gas limit applied to every rollup block.
+BLOCK_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
 # The initial "base fee" that every transaction emits when executed.
 INITIAL_BASE_FEE_PER_GAS = [10, 10]
 # The maximum change denominator of the base fee.
