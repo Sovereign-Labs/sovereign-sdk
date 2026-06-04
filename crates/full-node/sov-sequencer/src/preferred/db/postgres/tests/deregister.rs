@@ -16,8 +16,18 @@ async fn test_deregister_removes_only_own_nodes_row() {
         return;
     };
 
-    let node_a = DB::new(&postgres, String::from("node_a"), ConfiguredNodeRole::Replica).await;
-    let node_b = DB::new(&postgres, String::from("node_b"), ConfiguredNodeRole::Replica).await;
+    let node_a = DB::new(
+        &postgres,
+        String::from("node_a"),
+        ConfiguredNodeRole::Replica,
+    )
+    .await;
+    let node_b = DB::new(
+        &postgres,
+        String::from("node_b"),
+        ConfiguredNodeRole::Replica,
+    )
+    .await;
 
     // Register both nodes via a replica heartbeat (no leadership competition).
     node_a.backend.heartbeat(None).await.unwrap();
