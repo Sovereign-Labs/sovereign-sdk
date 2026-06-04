@@ -882,6 +882,7 @@ where
     // Takes the current rate limits and returns the next byte and execution-time rates, along with the offered rates.
     // This implements the P and I parts of a PID controller; this function is responsible for both updating the P term (every tick interval) and combining
     // it with the I term to get the current rate. (The I term is updated on each batch close.)
+    #[allow(clippy::float_arithmetic)]
     fn tick_rate_limiter(&mut self) -> RateLimitTick {
         let minimum_tick_size = Duration::from_millis(10);
         let minimum_offered_rate_per_second = 1.0 / minimum_tick_size.as_secs_f64();
@@ -1029,6 +1030,7 @@ where
     /// Get the acceptance probability for a given transaction based on...
     /// 1. the sync distance and the max allowed node distance behind.
     /// 2. the current batch size, target batch size and frequency, and the rate of offered transactions.
+    #[allow(clippy::float_arithmetic)]
     fn get_acceptance_probability(&mut self, baked_tx: &FullyBakedTx) -> f64 {
         // 1. Probability based on batch size and offered rate.
         self.inner.pi_controller.bytes_offered_since_last_tick += baked_tx.len() as u64;
@@ -1495,6 +1497,7 @@ fn completed_blobs_contain_batch(blobs: &[PreferredBlobToReplay]) -> bool {
         .any(|blob| matches!(blob, PreferredBlobToReplay::Batch(_)))
 }
 
+#[allow(clippy::float_arithmetic)]
 fn update_offered_rate_ewma(
     previous_rate_per_second: f64,
     offered_since_last_tick: f64,
@@ -1513,6 +1516,7 @@ fn update_offered_rate_ewma(
         .max(minimum_rate_per_second)
 }
 
+#[allow(clippy::float_arithmetic)]
 fn slew_limited_rate(
     goal_rate: f64,
     current_rate: f64,

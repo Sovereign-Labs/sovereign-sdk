@@ -142,6 +142,7 @@ pub trait Runtime<S: Spec>:
         priority: u32,
         current_baseline_acceptance_probability: f64,
     ) -> f64 {
+        #[allow(clippy::match_single_binding)]
         match priority {
             _ => current_baseline_acceptance_probability,
         }

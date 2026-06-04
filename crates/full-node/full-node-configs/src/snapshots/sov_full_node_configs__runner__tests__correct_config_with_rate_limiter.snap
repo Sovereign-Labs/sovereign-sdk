@@ -116,7 +116,8 @@ expression: config
         ]
       },
       "maximum_future_nonce_delta": 100,
-      "future_nonce_transaction_timeout_millis": 2000
+      "future_nonce_transaction_timeout_millis": 2000,
+      "use_pi_rate_limiter": false
     },
     "max_batch_size_bytes": 1048576,
     "max_concurrent_batch_blobs": 16,
