@@ -22,6 +22,7 @@ mod evm_publish_reverted_txs;
 mod evm_rate_limit;
 mod evm_rpc_compliance_validation;
 mod evm_rpc_compliance_validation_2;
+mod evm_sequencing_data_pruning;
 mod evm_simulation_and_send_consistency;
 mod evm_soft_conf;
 mod evm_subscribe;
