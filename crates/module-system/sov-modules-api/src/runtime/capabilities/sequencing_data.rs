@@ -1,7 +1,5 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::stf::FullyBakedTx;
-#[cfg(feature = "native")]
-use sov_rollup_interface::Bytes;
 
 use crate::{capabilities::HasCapabilities, Context, HDTimestamp, Runtime, Spec, TxState};
 
@@ -29,7 +27,7 @@ pub trait SequencingDataHandler<S: Spec> {
     fn finalize_sequencing_data(
         &mut self,
         data: Self::SequencingData,
-        _scratchpad: Option<Bytes>,
+        _scratchpad: Option<sov_rollup_interface::Bytes>,
     ) -> Self::SequencingData {
         data
     }

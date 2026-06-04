@@ -2,9 +2,6 @@
 
 use core::fmt::Debug;
 
-#[cfg(feature = "native")]
-use std::sync::{Arc, Mutex};
-
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::crypto::{CredentialId, Signature};
@@ -175,42 +172,10 @@ impl SequencingContext {
     pub fn data(&self) -> &Option<Bytes> {
         &self.data
     }
-
-    /// Returns the native sequencing scratchpad.
-    #[cfg(feature = "native")]
-    pub fn scratchpad(&self) -> SequencingScratchpad {
-        self.scratchpad.clone()
-    }
-}
-
-/// Native-only scratchpad for recording data while finalizing sequencing metadata.
-#[cfg(feature = "native")]
-#[derive(Clone, Debug, Default)]
-pub struct SequencingScratchpad {
-    inner: Arc<Mutex<Option<Bytes>>>,
 }
 
 #[cfg(feature = "native")]
-impl SequencingScratchpad {
-    /// Replaces the scratchpad contents.
-    pub fn set(&self, value: Bytes) {
-        self.with_value(|slot| *slot = Some(value));
-    }
-
-    /// Takes the scratchpad contents, leaving it empty.
-    pub fn take(&self) -> Option<Bytes> {
-        self.with_value(Option::take)
-    }
-
-    /// Mutates the scratchpad contents under the scratchpad lock.
-    pub fn with_value<R>(&self, f: impl FnOnce(&mut Option<Bytes>) -> R) -> R {
-        let mut guard = self
-            .inner
-            .lock()
-            .expect("sequencing scratchpad mutex was poisoned");
-        f(&mut guard)
-    }
-}
+pub use native_sequencing::SequencingScratchpad;
 
 /// The context in which a transaction executes
 
@@ -253,18 +218,6 @@ impl<S: Spec> Context<S> {
     /// Returns the sequencing data
     pub fn sequencing_data(&self) -> &Option<Bytes> {
         self.sequencing.data()
-    }
-
-    /// Returns the native sequencing scratchpad.
-    #[cfg(feature = "native")]
-    pub fn sequencing_scratchpad(&self) -> SequencingScratchpad {
-        self.sequencing.scratchpad()
-    }
-
-    /// Takes the native sequencing scratchpad contents.
-    #[cfg(feature = "native")]
-    pub fn take_sequencing_scratchpad(&self) -> Option<Bytes> {
-        self.sequencing.scratchpad().take()
     }
 
     /// Returns the rollup address which will receive any gas refund from the transaction.
@@ -340,6 +293,59 @@ impl<S: Spec> Context<S> {
     /// Returns the sender's credentials.
     pub fn get_sender_credential<T: core::any::Any>(&self) -> Option<&T> {
         self.sender_credentials.get::<T>()
+    }
+}
+
+#[cfg(feature = "native")]
+mod native_sequencing {
+    use std::sync::{Arc, Mutex};
+
+    use sov_rollup_interface::Bytes;
+
+    /// Native-only scratchpad for recording data while finalizing sequencing metadata.
+    #[derive(Clone, Debug, Default)]
+    pub struct SequencingScratchpad {
+        inner: Arc<Mutex<Option<Bytes>>>,
+    }
+
+    impl SequencingScratchpad {
+        /// Replaces the scratchpad contents.
+        pub fn set(&self, value: Bytes) {
+            self.with_value(|slot| *slot = Some(value));
+        }
+
+        /// Takes the scratchpad contents, leaving it empty.
+        pub fn take(&self) -> Option<Bytes> {
+            self.with_value(Option::take)
+        }
+
+        /// Mutates the scratchpad contents under the scratchpad lock.
+        pub fn with_value<R>(&self, f: impl FnOnce(&mut Option<Bytes>) -> R) -> R {
+            let mut guard = self
+                .inner
+                .lock()
+                .expect("sequencing scratchpad mutex was poisoned");
+            f(&mut guard)
+        }
+    }
+
+    impl super::SequencingContext {
+        /// Returns the native sequencing scratchpad.
+        pub fn scratchpad(&self) -> super::SequencingScratchpad {
+            self.scratchpad.clone()
+        }
+    }
+
+    impl<S: super::Spec> super::Context<S> {
+        /// Returns the native sequencing scratchpad.
+        pub fn sequencing_scratchpad(&self) -> super::SequencingScratchpad {
+            self.sequencing.scratchpad()
+        }
+
+        /// Takes the native sequencing scratchpad contents.
+        pub fn take_sequencing_scratchpad(&self) -> Option<Bytes> {
+            self.sequencing.scratchpad().take()
+        }
     }
 }
 
