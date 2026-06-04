@@ -22,6 +22,9 @@ const MIGRATIONS: &[&str] = &[
     include_str!(
         "../../../full-node/sov-sequencer/src/preferred/db/postgres/migrations/003_unique_tx_events.sql"
     ),
+    include_str!(
+        "../../../full-node/sov-sequencer/src/preferred/db/postgres/migrations/004_node_readiness.sql"
+    ),
 ];
 
 /// Spins up a Postgres container with [`MIGRATIONS`] applied.

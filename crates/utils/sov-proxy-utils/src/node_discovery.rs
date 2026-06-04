@@ -26,6 +26,9 @@ pub struct NodeInfo {
     pub address: SocketAddr,
     /// The last time the node updated its heartbeat.
     pub last_updated: OffsetDateTime,
+    /// Whether the node reported itself ready to serve traffic on its last
+    /// heartbeat. Only ready followers are advertised to the proxy.
+    pub ready: bool,
 }
 
 /// Result of querying cluster node information.
@@ -50,6 +53,33 @@ impl ClusterInfo {
 
     fn leader_id(&self) -> Option<String> {
         self.leader.as_ref().map(|l| l.node_id.clone())
+    }
+
+    /// Returns a view of the cluster suitable for advertising to the proxy:
+    /// the leader (always included, regardless of its readiness) plus only the
+    /// followers that reported themselves ready on their last heartbeat.
+    fn advertised(&self) -> ClusterInfo {
+        let followers = self
+            .followers
+            .iter()
+            .filter(|(_, node)| node.ready)
+            .map(|(node_id, node)| (node_id.clone(), node.clone()))
+            .collect();
+
+        ClusterInfo {
+            leader: self.leader.clone(),
+            followers,
+        }
+    }
+
+    /// Node ids of followers that reported themselves ready on their last
+    /// heartbeat.
+    fn ready_follower_ids(&self) -> BTreeSet<String> {
+        self.followers
+            .iter()
+            .filter(|(_, node)| node.ready)
+            .map(|(node_id, _)| node_id.clone())
+            .collect()
     }
 }
 
@@ -127,6 +157,10 @@ pub struct NodeDiscovery {
     listener: PgListener,
     prev_followers: BTreeSet<String>,
     prev_leader_id: Option<String>,
+    /// Followers that were ready (and therefore advertised) on the last update.
+    /// Tracked separately from `prev_followers` so readiness flips that don't
+    /// change raw membership still trigger a notification to the proxy.
+    prev_advertised_followers: BTreeSet<String>,
     notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     sender: watch::Sender<ClusterInfo>,
     pub(crate) receiver: watch::Receiver<ClusterInfo>,
@@ -184,6 +218,7 @@ impl NodeDiscovery {
             listener,
             prev_followers: BTreeSet::new(),
             prev_leader_id: None,
+            prev_advertised_followers: BTreeSet::new(),
             notifier,
             sender,
             receiver,
@@ -203,17 +238,18 @@ impl NodeDiscovery {
 
     fn cluster(
         leader_id: Option<String>,
-        all_nodes: Vec<(String, String, OffsetDateTime)>,
+        all_nodes: Vec<(String, String, OffsetDateTime, bool)>,
     ) -> anyhow::Result<ClusterInfo> {
         let mut leader = None;
         let mut followers = BTreeMap::new();
 
-        for (node_id, address, last_updated) in all_nodes {
+        for (node_id, address, last_updated, ready) in all_nodes {
             let address: SocketAddr = address.parse()?;
             let node = NodeInfo {
                 node_id,
                 address,
                 last_updated,
+                ready,
             };
 
             if Some(&node.node_id) == leader_id.as_ref() {
@@ -303,10 +339,16 @@ impl NodeDiscovery {
         let leader_id = info.leader_id();
 
         let followers: BTreeSet<_> = info.followers.keys().cloned().collect();
+        let advertised_followers = info.ready_follower_ids();
 
         let membership_changed = self.prev_followers != followers;
         let leader_changed = self.prev_leader_id != leader_id;
         let cluster_changed = membership_changed || leader_changed;
+
+        // The advertised set drives what the proxy routes to. The leader is
+        // always advertised, so a leader change is also an advertised change.
+        let advertised_membership_changed = self.prev_advertised_followers != advertised_followers;
+        let advertised_changed = advertised_membership_changed || leader_changed;
 
         // Liveness is keyed off wall-clock time, not the wake-up source, so a
         // chatty cluster (frequent NOTIFY traffic) still emits periodic samples
@@ -316,20 +358,33 @@ impl NodeDiscovery {
             .last_metric_at
             .is_none_or(|t| t.elapsed() >= self.liveness_interval);
 
-        if !(cluster_changed || liveness_due) {
+        if !(cluster_changed || advertised_changed || liveness_due) {
             return Ok(());
         }
 
-        tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
+        let not_ready_followers: Vec<String> =
+            followers.difference(&advertised_followers).cloned().collect();
+
+        tracing::debug!(
+            info = ?info,
+            membership_changed,
+            leader_changed,
+            advertised_changed,
+            not_ready_followers = ?not_ready_followers,
+            "Last cluster info"
+        );
 
         let update_metric = ClusterUpdateMetric {
             current_leader: leader_id.clone(),
             followers: followers.iter().cloned().collect(),
             cluster_changed,
+            advertised_followers: advertised_followers.iter().cloned().collect(),
+            advertised_changed,
+            not_ready_followers,
         };
 
         if cluster_changed {
-            // Log membership changes
+            // Log raw membership changes
             for node_id in followers.difference(&self.prev_followers) {
                 tracing::info!(node_id, "Node joined the followers");
             }
@@ -345,17 +400,33 @@ impl NodeDiscovery {
                     "Leader changed"
                 );
             }
+        }
 
-            // Notify watchers that the cluster was updated.
+        if advertised_changed {
+            // Log advertised (ready) membership changes
+            for node_id in advertised_followers.difference(&self.prev_advertised_followers) {
+                tracing::info!(node_id, "Node became ready and is now advertised");
+            }
+            for node_id in self.prev_advertised_followers.difference(&advertised_followers) {
+                tracing::info!(node_id, "Node is no longer advertised (not ready or gone)");
+            }
+
+            // Notify watchers with the ready-only view that the proxy should route to.
             if let Some(notifier) = &mut self.notifier {
                 notifier
-                    .on_cluster_update(&info)
+                    .on_cluster_update(&info.advertised())
                     .await
                     .map_err(HandleClusterUpdateError::Notify)?;
             }
 
+            self.prev_advertised_followers = advertised_followers;
+        }
+
+        if cluster_changed {
             self.prev_followers = followers;
             self.prev_leader_id = leader_id;
+            // The watch channel carries the raw cluster (all nodes, ready or
+            // not) for consumers like the node checker that probe every node.
             let _ = self.sender.send(info);
         }
 
@@ -369,13 +440,13 @@ impl NodeDiscovery {
 
     async fn get_cluster_info_from_db(
         &self,
-    ) -> Result<(Option<String>, Vec<(String, String, OffsetDateTime)>)> {
+    ) -> Result<(Option<String>, Vec<(String, String, OffsetDateTime, bool)>)> {
         let max_age_secs: i64 = self.max_age.as_secs().try_into()?;
 
         // Fetch nodes updated within max_age, always including the leader regardless of age.
         // The leader_id is included in each row via LEFT JOIN, allowing us to get it from the results.
-        let rows: Vec<(String, String, OffsetDateTime, Option<String>)> = sqlx::query_as(
-            "SELECT n.node_id, n.address, n.last_updated, l.node_id as leader_id \
+        let rows: Vec<(String, String, OffsetDateTime, bool, Option<String>)> = sqlx::query_as(
+            "SELECT n.node_id, n.address, n.last_updated, n.ready, l.node_id as leader_id \
              FROM nodes n \
              LEFT JOIN sequencer_leader l ON l.singleton = 1 \
              WHERE n.last_updated > NOW() - $1 * INTERVAL '1 second' \
@@ -387,12 +458,14 @@ impl NodeDiscovery {
         .await?;
 
         // Extract leader_id from first row (same in all rows due to LEFT JOIN)
-        let leader_id = rows.first().and_then(|(_, _, _, lid)| lid.clone());
+        let leader_id = rows.first().and_then(|(_, _, _, _, lid)| lid.clone());
 
         // Convert to the expected format without leader_id column
         let all_nodes = rows
             .into_iter()
-            .map(|(node_id, address, last_updated, _)| (node_id, address, last_updated))
+            .map(|(node_id, address, last_updated, ready, _)| {
+                (node_id, address, last_updated, ready)
+            })
             .collect();
 
         Ok((leader_id, all_nodes))
@@ -413,8 +486,8 @@ mod tests {
         let result = NodeDiscovery::cluster(
             None,
             vec![
-                ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
-                ("node1".to_string(), "127.0.0.1:8001".to_string(), ts),
+                ("node1".to_string(), "127.0.0.1:8000".to_string(), ts, true),
+                ("node1".to_string(), "127.0.0.1:8001".to_string(), ts, true),
             ],
         );
 
@@ -430,8 +503,8 @@ mod tests {
         let result = NodeDiscovery::cluster(
             Some("missing_leader".to_string()),
             vec![
-                ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
-                ("node2".to_string(), "127.0.0.1:8001".to_string(), ts),
+                ("node1".to_string(), "127.0.0.1:8000".to_string(), ts, true),
+                ("node2".to_string(), "127.0.0.1:8001".to_string(), ts, true),
             ],
         );
 
@@ -445,8 +518,8 @@ mod tests {
     fn leader_change_detected_when_membership_unchanged() {
         let ts = test_timestamp();
         let nodes = vec![
-            ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
-            ("node2".to_string(), "127.0.0.1:8001".to_string(), ts),
+            ("node1".to_string(), "127.0.0.1:8000".to_string(), ts, true),
+            ("node2".to_string(), "127.0.0.1:8001".to_string(), ts, true),
         ];
 
         // Initial state: node1 is leader
@@ -461,5 +534,87 @@ mod tests {
         // But leader_id should differ.
         assert_eq!(info1.leader_id(), Some("node1".to_string()));
         assert_eq!(info2.leader_id(), Some("node2".to_string()));
+    }
+
+    #[test]
+    fn advertised_excludes_not_ready_followers() {
+        let ts = test_timestamp();
+        let info = NodeDiscovery::cluster(
+            Some("leader1".to_string()),
+            vec![
+                (
+                    "leader1".to_string(),
+                    "127.0.0.1:8000".to_string(),
+                    ts,
+                    true,
+                ),
+                (
+                    "ready_follower".to_string(),
+                    "127.0.0.1:8001".to_string(),
+                    ts,
+                    true,
+                ),
+                (
+                    "not_ready_follower".to_string(),
+                    "127.0.0.1:8002".to_string(),
+                    ts,
+                    false,
+                ),
+            ],
+        )
+        .unwrap();
+
+        let advertised = info.advertised();
+
+        // The leader is always advertised; only ready followers are.
+        assert_eq!(advertised.leader_id(), Some("leader1".to_string()));
+        assert!(advertised.has_follower("ready_follower"));
+        assert!(!advertised.has_follower("not_ready_follower"));
+        assert_eq!(advertised.followers.len(), 1);
+    }
+
+    #[test]
+    fn advertised_includes_leader_even_when_not_ready() {
+        let ts = test_timestamp();
+        let info = NodeDiscovery::cluster(
+            Some("leader1".to_string()),
+            vec![(
+                "leader1".to_string(),
+                "127.0.0.1:8000".to_string(),
+                ts,
+                false,
+            )],
+        )
+        .unwrap();
+
+        // A leader that reports not-ready is still advertised: the proxy needs a
+        // leader to route writes to regardless of its readiness flag.
+        assert_eq!(info.advertised().leader_id(), Some("leader1".to_string()));
+    }
+
+    #[test]
+    fn ready_follower_ids_lists_only_ready_followers() {
+        let ts = test_timestamp();
+        let info = NodeDiscovery::cluster(
+            None,
+            vec![
+                (
+                    "ready_follower".to_string(),
+                    "127.0.0.1:8001".to_string(),
+                    ts,
+                    true,
+                ),
+                (
+                    "not_ready_follower".to_string(),
+                    "127.0.0.1:8002".to_string(),
+                    ts,
+                    false,
+                ),
+            ],
+        )
+        .unwrap();
+
+        let ready: Vec<_> = info.ready_follower_ids().into_iter().collect();
+        assert_eq!(ready, vec!["ready_follower".to_string()]);
     }
 }

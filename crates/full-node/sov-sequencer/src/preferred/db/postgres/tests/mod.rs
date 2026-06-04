@@ -96,7 +96,7 @@ impl DB {
             .unwrap();
 
         self.backend
-            .upsert_node_registration_inner(&mut tx)
+            .upsert_node_registration_inner(&mut tx, false)
             .await
             .unwrap();
         tx.commit().await.unwrap();

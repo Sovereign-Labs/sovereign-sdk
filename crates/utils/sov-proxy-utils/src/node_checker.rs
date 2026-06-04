@@ -556,6 +556,7 @@ mod tests {
                 .parse()
                 .expect("valid socket addr"),
             last_updated: OffsetDateTime::UNIX_EPOCH,
+            ready: true,
         }
     }
 

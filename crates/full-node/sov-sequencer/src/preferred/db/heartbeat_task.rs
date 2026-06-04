@@ -8,10 +8,13 @@
 //! - **Static replicas** run a heartbeat for registration only, never competing for leadership.
 
 use std::net::SocketAddr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use anyhow::Result;
 use sov_full_node_configs::sequencer::{ConfiguredNodeRole, PostgresConfig};
+use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::{Runtime, Spec};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -21,27 +24,47 @@ use super::SequencerRole;
 
 use super::postgres::PostgresBackend;
 use crate::preferred::exit_rollup;
+use crate::preferred::sync_sequencer_state::SequencerStateUpdator;
 
 /// Manages periodic heartbeat and optional leadership election for a sequencer node.
 ///
 /// This task maintains the node's presence in the cluster by periodically updating
 /// its registration in the database. Depending on the spawn method used, it may
-/// also compete for leadership.
-pub struct HeartBeatTask {
+/// also compete for leadership. On every heartbeat it queries the node's own
+/// readiness and persists it, so node discovery can advertise only ready nodes.
+pub struct HeartBeatTask<S, Rt>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+{
     backend: PostgresBackend,
     node_id: String,
     shutdown_sender: watch::Sender<()>,
     shutdown_receiver: watch::Receiver<()>,
     postgres_config: PostgresConfig,
     heartbeat_interval: Duration,
+    /// Used to query this node's own readiness on every heartbeat.
+    state_updator: Arc<SequencerStateUpdator<S, Rt>>,
+    /// Readiness-check argument, mirrors the sequencer's `is_ready`.
+    max_concurrent_batch_blobs: usize,
+    /// Readiness-check argument, mirrors the sequencer's `is_ready`.
+    stop_at_rollup_height: Option<RollupHeight>,
 }
 
-impl HeartBeatTask {
+impl<S, Rt> HeartBeatTask<S, Rt>
+where
+    S: Spec,
+    Rt: Runtime<S>,
+{
+    #[allow(clippy::too_many_arguments)]
     pub async fn new(
         postgres_config: PostgresConfig,
         shutdown_sender: watch::Sender<()>,
         bind_addr: SocketAddr,
         heartbeat_interval: Duration,
+        state_updator: Arc<SequencerStateUpdator<S, Rt>>,
+        max_concurrent_batch_blobs: usize,
+        stop_at_rollup_height: Option<RollupHeight>,
     ) -> Result<Self> {
         let backend = PostgresBackend::connect(&postgres_config, bind_addr).await?;
         let shutdown_receiver = shutdown_sender.subscribe();
@@ -53,6 +76,9 @@ impl HeartBeatTask {
             shutdown_receiver,
             postgres_config,
             heartbeat_interval,
+            state_updator,
+            max_concurrent_batch_blobs,
+            stop_at_rollup_height,
         })
     }
 
@@ -76,9 +102,10 @@ impl HeartBeatTask {
     // Sends a heartbeat that competes for leadership.
     // Returns `true` if this node is the current leader.
     async fn try_acquire_leadership(&self) -> Result<bool> {
+        let ready = self.is_ready().await;
         match self
             .backend
-            .heartbeat(Some(self.postgres_config.leader_election))
+            .heartbeat(Some(self.postgres_config.leader_election), ready)
             .await?
         {
             Some(leader) => Ok(leader.node_id == self.node_id),
@@ -88,8 +115,33 @@ impl HeartBeatTask {
 
     // Sends a heartbeat that only updates node registration (no leadership competition).
     async fn register_node(&self) -> Result<()> {
-        self.backend.heartbeat(None).await?;
+        let ready = self.is_ready().await;
+        self.backend.heartbeat(None, ready).await?;
         Ok(())
+    }
+
+    /// Queries this node's own readiness via the state updator, treating any
+    /// failure or timeout as "not ready".
+    ///
+    /// The query is bounded by the heartbeat interval so that a slow or wedged
+    /// state updator can never delay the heartbeat write long enough to risk
+    /// losing leadership (the leader timeout is configured well above the
+    /// heartbeat interval). A node that cannot confirm readiness within one
+    /// heartbeat is, by definition, not ready to serve.
+    async fn is_ready(&self) -> bool {
+        let readiness = tokio::time::timeout(
+            self.heartbeat_interval,
+            self.state_updator.check_readiness_msg(
+                self.max_concurrent_batch_blobs,
+                self.stop_at_rollup_height.clone(),
+                "heartbeat_readiness_check",
+            ),
+        )
+        .await;
+
+        // `Ok(Ok(Ok(())))` = responded within the timeout, no updator error, and
+        // the sequencer reported itself ready. Anything else is not-ready.
+        matches!(readiness, Ok(Ok(Ok(()))))
     }
 
     // Spawns a task for the current leader to maintain leadership.

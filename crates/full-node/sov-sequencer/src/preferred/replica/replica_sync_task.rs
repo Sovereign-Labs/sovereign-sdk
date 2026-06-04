@@ -420,7 +420,7 @@ mod tests {
             .unwrap();
 
         let _ = db
-            .heartbeat(Some(postgres_config.leader_election))
+            .heartbeat(Some(postgres_config.leader_election), false)
             .await
             .unwrap();
 
@@ -484,7 +484,7 @@ mod tests {
             .unwrap();
 
         let _ = db
-            .heartbeat(Some(postgres_config.leader_election))
+            .heartbeat(Some(postgres_config.leader_election), false)
             .await
             .unwrap();
 

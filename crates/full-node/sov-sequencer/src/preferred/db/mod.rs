@@ -555,16 +555,22 @@ impl PreferredSequencerDb {
                     ConfiguredNodeRole::Replica => (None, SequencerRole::PgSyncReplica),
                     ConfiguredNodeRole::Leader => {
                         let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
+                        // Initial registration during startup, before the node has
+                        // synced: not ready yet. The heartbeat task reports actual
+                        // readiness from here on.
                         let _ = backend
-                            .heartbeat(Some(postgres_config.leader_election))
+                            .heartbeat(Some(postgres_config.leader_election), false)
                             .await?;
 
                         (Some(Box::new(backend)), SequencerRole::BatchProducer)
                     }
                     ConfiguredNodeRole::DbElected => {
                         let backend = PostgresBackend::connect(postgres_config, bind_addr).await?;
+                        // Initial registration during startup, before the node has
+                        // synced: not ready yet. The heartbeat task reports actual
+                        // readiness from here on.
                         let maybe_leader = backend
-                            .heartbeat(Some(postgres_config.leader_election))
+                            .heartbeat(Some(postgres_config.leader_election), false)
                             .await?;
 
                         let is_leader = maybe_leader

@@ -249,16 +249,20 @@ impl PostgresBackend {
     ///
     /// This method always updates the node's entry in the `nodes` table with the current timestamp.
     ///
+    /// `ready` is the node's self-reported readiness; it is persisted so that
+    /// node discovery can advertise only ready followers to the proxy.
+    ///
     /// If `config` is `Some`, also attempts to acquire or refresh leadership using the provided timeouts.
     /// Returns `Some(leader)` if this node became or remains the leader.
     /// Returns `None` if another active leader exists or if leadership competition was skipped.
     pub(crate) async fn heartbeat(
         &self,
         config: Option<LeaderElectionConfig>,
+        ready: bool,
     ) -> anyhow::Result<Option<SequencerLeader>> {
         run_with_retries!(
             &self.backoff_policy,
-            self.heartbeat_in_tx(config),
+            self.heartbeat_in_tx(config, ready),
             "postgres_db_backend_heartbeat"
         )
     }
@@ -266,6 +270,7 @@ impl PostgresBackend {
     async fn heartbeat_in_tx(
         &self,
         config: Option<LeaderElectionConfig>,
+        ready: bool,
     ) -> anyhow::Result<Option<SequencerLeader>> {
         let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
         let result = if let Some(config) = config {
@@ -274,7 +279,7 @@ impl PostgresBackend {
         } else {
             None
         };
-        self.upsert_node_registration_inner(&mut tx).await?;
+        self.upsert_node_registration_inner(&mut tx, ready).await?;
         tx.commit().await?;
         Ok(result)
     }
@@ -333,16 +338,19 @@ impl PostgresBackend {
     pub(crate) async fn upsert_node_registration_inner(
         &self,
         conn: &mut PgConnection,
+        ready: bool,
     ) -> anyhow::Result<()> {
         sqlx::query(
-            "INSERT INTO nodes (node_id, address, last_updated)
-             VALUES ($1, $2, NOW())
+            "INSERT INTO nodes (node_id, address, last_updated, ready)
+             VALUES ($1, $2, NOW(), $3)
              ON CONFLICT (node_id) DO UPDATE
              SET address = EXCLUDED.address,
-                 last_updated = NOW()",
+                 last_updated = NOW(),
+                 ready = EXCLUDED.ready",
         )
         .bind(&self.node_id)
         .bind(&self.node_address)
+        .bind(ready)
         .execute(&mut *conn)
         .await?;
         Ok(())

@@ -244,7 +244,7 @@ where
         if let SequencerRole::PgSyncReplica = seq_role {
             if let Some(postgres_config) = &preferred_config.postgres_config {
                 let replica_task_handle = replica_task
-                    .start(synchronized_state_updator, postgres_config)
+                    .start(synchronized_state_updator.clone(), postgres_config)
                     .await;
                 handles.push(replica_task_handle.data_fetcher_handle);
                 handles.push(replica_task_handle.sync_task_handle);
@@ -258,6 +258,9 @@ where
                 shutdown_sender.clone(),
                 bind_addr,
                 postgres_config.leader_election.heartbeat_interval(),
+                synchronized_state_updator.clone(),
+                config.max_concurrent_batch_blobs,
+                stop_at_rollup_height,
             )
             .await?;
             let heartbeat_handle = heartbeat_task.spawn(seq_role).await;
