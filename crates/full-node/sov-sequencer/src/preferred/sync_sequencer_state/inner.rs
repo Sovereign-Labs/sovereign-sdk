@@ -57,6 +57,8 @@ const METRICS_BATCH_SIZE: usize = 32;
 /// The constant for the I part of the PID controller for the batch size limit.
 /// The larger this constant, the faster the bias will evolve, but the more likely we are to oscillate.
 const BATCH_SIZE_LIMIT_BIAS_K_I: f64 = 0.1;
+const EXECUTION_TIME_LIMIT_BIAS_POSITIVE_ERROR_K_I: f64 = 0.02; // Positive errors are slow to accumulate, because over-accepting txs early is not easily fixable
+const EXECUTION_TIME_LIMIT_BIAS_NEGATIVE_ERROR_K_I: f64 = 0.2; // Negative errors accumulate faster, because rejecting txs too aggressively is easy to fix by accepting more later.
 
 #[derive(Debug)]
 pub(crate) enum DoNewTxError<S: Spec> {
@@ -144,7 +146,6 @@ pub struct PIController {
     pub(crate) execution_time_limit_bias: f64,
     // The average time to execute a tx in microseconds. Computed as a EWMA over all txs since startup.
     pub(crate) estimated_tx_execution_time_micros: f64,
-    // pub(crate) has_estimated_tx_execution_time: bool, // TODO: Remove
     // The last time we ticked the PI controller.
     pub(crate) last_tick_time: std::time::Instant,
     pub(crate) bytes_offered_since_last_tick: u64, // How many bytes worth of tx data we would have accepted given 100% acceptance rate
@@ -168,6 +169,11 @@ impl PIController {
         max_batch_size: usize,
         batch_execution_time_limit_micros: u64,
     ) -> Self {
+        assert_ne!(
+            approximate_block_time,
+            std::time::Duration::ZERO,
+            "Approximate block time must be non-zero"
+        );
         Self {
             approximate_block_time,
             batch_start_time: std::time::Instant::now(),
@@ -893,9 +899,9 @@ where
         // Negative errors (we've been accepting too many transactions) can react faster to an
         // over-full batch, because rejecting a bit too aggressively only causes the loss of low value txs.
         let k_i = if error_fraction.is_sign_negative() {
-            0.2
+            EXECUTION_TIME_LIMIT_BIAS_NEGATIVE_ERROR_K_I
         } else {
-            0.02
+            EXECUTION_TIME_LIMIT_BIAS_POSITIVE_ERROR_K_I
         };
         // The next bias is old bias + (error fraction * target rate) * the "learning rate" constant "K"
         let next_bias = self.pi_controller.execution_time_limit_bias
@@ -968,10 +974,11 @@ where
 
     #[allow(clippy::float_arithmetic)]
     pub(crate) fn should_accept_load_shed_tx(&mut self, accept_probability: f64) -> bool {
-        let accept_probability = accept_probability.clamp(0.0, 1.0);
-        // If the accept probability is 1.0, we accept the tx and clear our rejection debt.
+        // If the accept probability is 1.0, we accept the tx but it has no impact on our rejection debt.
+        // This means that we will reject txs slightly more aggressively when the probability drops again,
+        // but it prevents bad behavior in case there are mixed probabilities of acceptance
+        // (i.e. high prio txs get a guaranteed 1 while lower prio txs only have a 0.5 chance).
         if accept_probability >= 1.0 {
-            self.pi_controller.load_shed_rejection_debt = 0.0;
             return true;
         }
         // If the accept probability is 0.0 or less, we reject the tx

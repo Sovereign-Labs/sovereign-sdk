@@ -47,6 +47,8 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::debug;
 
+/// The minimum interval between updates for the PI controller.
+const MINIMUM_TICK_SIZE: Duration = Duration::from_millis(10);
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Priority {
     priority: u64,
@@ -884,15 +886,14 @@ where
     // it with the I term to get the current rate. (The I term is updated on each batch close.)
     #[allow(clippy::float_arithmetic)]
     fn tick_rate_limiter(&mut self) -> RateLimitTick {
-        let minimum_tick_size = Duration::from_millis(10);
-        let minimum_offered_rate_per_second = 1.0 / minimum_tick_size.as_secs_f64();
+        let minimum_offered_rate_per_second = 1.0 / MINIMUM_TICK_SIZE.as_secs_f64();
         let now = std::time::Instant::now();
         let time_since_last_tick = now.duration_since(self.inner.pi_controller.last_tick_time);
         let (_, target_execution_time_rate) =
             self.inner.get_target_execution_time_and_growth_rate();
 
         // Early return if it's been less than 10 millis since our last tick
-        if time_since_last_tick < minimum_tick_size {
+        if time_since_last_tick < MINIMUM_TICK_SIZE {
             let pi_controller = &self.inner.pi_controller;
             return RateLimitTick {
                 current_accept_bytes_per_second: pi_controller
@@ -926,7 +927,7 @@ where
             self.inner.pi_controller.bytes_offered_per_second_ewma,
             self.inner.pi_controller.bytes_offered_since_last_tick as f64,
             time_since_last_tick,
-            minimum_tick_size,
+            MINIMUM_TICK_SIZE,
         );
         self.inner.pi_controller.bytes_offered_since_last_tick = 0;
         self.inner.pi_controller.bytes_offered_per_second_ewma = bytes_offered_per_second_ewma;
@@ -939,7 +940,7 @@ where
                 .pi_controller
                 .execution_time_offered_since_last_tick,
             time_since_last_tick,
-            minimum_tick_size,
+            MINIMUM_TICK_SIZE,
         );
         self.inner
             .pi_controller
@@ -963,10 +964,10 @@ where
             if time_since_batch_open < self.inner.pi_controller.approximate_block_time {
                 std::cmp::max(
                     self.inner.pi_controller.approximate_block_time - time_since_batch_open,
-                    minimum_tick_size,
+                    MINIMUM_TICK_SIZE,
                 )
             } else {
-                minimum_tick_size
+                MINIMUM_TICK_SIZE
             };
 
         // Compute the rate limit for the batch size controller
