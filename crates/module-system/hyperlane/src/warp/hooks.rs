@@ -12,12 +12,14 @@ impl<S: Spec> BlockHooks for Warp<S> {
 
 impl<S: Spec> Warp<S> {
     fn emit_rate_limiter_metrics(&self, state: &mut StateCheckpoint<S>) {
-        let route_ids = self.get_monitored_route_ids();
+        let monitored_routes = self.get_monitored_routes();
         let visible_slot = state.current_visible_slot_number();
 
-        for route_id in route_ids {
-            if let Ok(Some(route)) = self.warp_routes.get(route_id, state) {
-                let route_id = *route_id;
+        for monitored_route in monitored_routes {
+            if let Ok(Some(route)) = self.warp_routes.get(&monitored_route.id, state) {
+                let route_id = monitored_route.id;
+                let route_name = &monitored_route.name;
+                let decimals = route.token_source.local_decimals();
 
                 for &remote_domain in &route.enrolled_destinations {
                     let inbound_metrics = RateLimiterCapacityMetrics {
@@ -31,6 +33,8 @@ impl<S: Spec> Warp<S> {
                         direction: RateLimiterDirection::Inbound,
                         route_id,
                         remote_domain,
+                        route_name: route_name.clone(),
+                        decimals,
                     };
 
                     let outbound_metrics = RateLimiterCapacityMetrics {
@@ -44,6 +48,8 @@ impl<S: Spec> Warp<S> {
                         direction: RateLimiterDirection::Outbound,
                         route_id,
                         remote_domain,
+                        route_name: route_name.clone(),
+                        decimals,
                     };
 
                     sov_metrics::track_metrics(|tracker| {

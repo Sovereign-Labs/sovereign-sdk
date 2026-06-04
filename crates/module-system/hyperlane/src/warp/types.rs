@@ -180,6 +180,16 @@ impl StoredTokenKind {
             anyhow::anyhow!("Amount may not exceed 2^128 - 1 after scaling")
         })?))
     }
+
+    /// The number of decimals of this route's local token.
+    pub fn local_decimals(&self) -> u8 {
+        match self {
+            StoredTokenKind::Synthetic { local_decimals, .. } => *local_decimals,
+            // Bank derives every token id with its decimals encoded in the final byte.
+            StoredTokenKind::Collateral { token } => token.as_bytes()[31],
+            StoredTokenKind::Native => sov_bank::config_gas_token_id().as_bytes()[31],
+        }
+    }
 }
 
 impl TokenKind {
