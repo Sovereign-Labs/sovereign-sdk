@@ -1,4 +1,4 @@
-use std::env;
+use std::{env, fs};
 
 use futures::StreamExt;
 use sov_blob_sender::BlobSelectorStatus;
@@ -24,6 +24,8 @@ use crate::preferred_end_to_end::{
     TestingAction,
 };
 use crate::utils::{new_test_rollup, tempdir_inside_codebase_dir, MAX_BATCH_EXECUTION_TIME_MILLIS};
+
+const PREFERRED_SEQUENCER_DB_NAME: &str = "preferred_sequencer";
 
 async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
     let genesis_config =
@@ -71,6 +73,51 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
         .await,
         admin,
     )
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_startup_fails_if_blob_sender_db_is_ahead_of_preferred_db() {
+    sov_test_utils::initialize_logging();
+    let (test_rollup, admin) = create_test_rollup().await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let client = test_rollup.api_client().clone();
+    let tx = tx_set_many_values(&admin.private_key, 0, vec![7; 100]);
+    client.send_raw_tx_to_sequencer(&tx).await.unwrap();
+
+    // Pause DA submission after BlobSender persists the blob locally, before it can land on DA.
+    test_rollup.da_service.set_blob_submission_pause().await;
+    test_rollup.force_close_batch().await.unwrap();
+
+    let builder = test_rollup.shutdown().await.unwrap();
+    let storage_path = builder.storage_path();
+    let preferred_db_path = storage_path.path().join(PREFERRED_SEQUENCER_DB_NAME);
+    assert!(
+        preferred_db_path.exists(),
+        "Preferred sequencer DB should exist before simulating a wipe"
+    );
+    // Simulate wiping the preferred sequencer DB while leaving BlobSender DB intact.
+    fs::remove_dir_all(preferred_db_path).unwrap();
+
+    let err = match builder.start().await {
+        Ok(test_rollup) => {
+            test_rollup.shutdown().await.unwrap();
+            panic!("Rollup started despite BlobSender DB being ahead of preferred sequencer DB");
+        }
+        Err(err) => err,
+    };
+
+    let err = err.to_string();
+    assert!(
+        err.contains("BlobSender DB contains a preferred blob"),
+        "Unexpected startup error: {err}"
+    );
+    assert!(
+        err.contains("preferred sequencer DB's highest known sequence number is none"),
+        "Unexpected startup error: {err}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]
