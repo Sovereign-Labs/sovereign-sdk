@@ -1,3 +1,11 @@
+use sov_evm::{CallMessage, EvmRuntimeConfigUpdate};
+use sov_modules_api::transaction::Transaction;
+use sov_modules_api::{CryptoSpec, Spec};
+use sov_test_utils::default_test_signed_transaction_with_nonce;
+use sov_test_utils::test_rollup::TestRollup;
+
+use crate::runtime::{EvmBlueprint, EvmTestSpec, TestRuntime, TestRuntimeCall};
+
 mod evm_account_abstraction;
 mod evm_balances;
 mod evm_basefee;
@@ -31,3 +39,25 @@ mod evm_tracing;
 mod evm_tx;
 mod evm_tx_type;
 mod evm_ws_watch;
+
+/// Signs an EVM `UpdateRuntimeConfig` admin call with `admin_key` and sends it to the sequencer.
+///
+/// Shared by the EVM integration tests that drive runtime-config changes (e.g. disabling the
+/// max-fee check or updating the block gas limit); they differ only in the `update` payload.
+async fn send_evm_runtime_config_update(
+    rollup: &TestRollup<EvmBlueprint>,
+    admin_key: &<<EvmTestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    update: EvmRuntimeConfigUpdate<EvmTestSpec>,
+) -> anyhow::Result<()> {
+    let msg = TestRuntimeCall::<EvmTestSpec>::Evm(CallMessage::UpdateRuntimeConfig(update));
+    let chain_hash =
+        <TestRuntime<EvmTestSpec> as sov_modules_stf_blueprint::Runtime<EvmTestSpec>>::CHAIN_HASH;
+    let tx: Transaction<TestRuntime<EvmTestSpec>, EvmTestSpec> =
+        default_test_signed_transaction_with_nonce(admin_key, &msg, 0, &chain_hash);
+    rollup
+        .client
+        .client
+        .send_tx_to_sequencer_with_retry(&tx)
+        .await?;
+    Ok(())
+}
