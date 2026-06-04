@@ -216,7 +216,7 @@ fn sequencer_run_out_of_gas() {
 #[test]
 fn slot_out_of_gas_tests() {
     env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_INITIAL_GAS_LIMIT",
+        "SOV_TEST_CONST_OVERRIDE_BLOCK_GAS_LIMIT",
         "[10000000000, 10000000000]",
     );
     let priority_fee_bips = PriorityFeeBips::from_percentage(5);
