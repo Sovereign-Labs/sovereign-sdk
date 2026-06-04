@@ -7,7 +7,7 @@
 
 use alloy::network::TransactionBuilder;
 use alloy::signers::local::PrivateKeySigner;
-use alloy_primitives::{Address, B256};
+use alloy_primitives::{Address, B256, U256};
 use alloy_provider::{DynProvider, Provider};
 use alloy_rpc_types_eth::{
     BlockNumberOrTag, BlockTransactions, TransactionReceipt, TransactionRequest,
@@ -16,16 +16,17 @@ use serde::Deserialize;
 
 use sov_cli::NodeClient;
 use sov_eth_client::SimpleStorageClient;
-use sov_modules_api::{GasPrice, GasUnit};
+use sov_evm::{ChainSpecUpdate, EvmRuntimeConfigUpdate};
+use sov_modules_api::{CryptoSpec, GasPrice, GasUnit, Spec};
 use sov_test_utils::test_rollup::TestRollup;
 
 use crate::common::{
-    alloy_client, create_simple_storage_client, deploy_contract_check,
+    alloy_client, alloy_client_with_signer, create_simple_storage_client, deploy_contract_check,
     estimate_gas_and_check_affordability, set_value_check, setup_test_rollup,
-    setup_test_rollup_with_ideal_lag, EVM_EXTENSION, HIGH_MAX_FEE_PER_GAS,
+    setup_test_rollup_with_admin_key, setup_test_rollup_with_ideal_lag, EVM_EXTENSION,
     HIGH_PRIORITY_FEE_PER_GAS, MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
-use crate::runtime::EvmBlueprint;
+use crate::runtime::{EvmBlueprint, EvmTestSpec};
 
 /// Mirror of the EVM genesis values used by `default_genesis()` (see
 /// `crate::common::genesis`). Inlined so the test does not depend on
@@ -223,48 +224,6 @@ async fn send_high_fee_set_value(
         .send_tx_and_wait_finalized(tx)
         .await
         .map_err(|err| anyhow::anyhow!(err.to_string()))
-}
-
-fn override_rollup_gas_limit_transition(
-    initial_gas_limit: u64,
-    updated_gas_limit: u64,
-    change_after_height: u64,
-) {
-    std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_INITIAL_GAS_LIMIT",
-        format!("[{initial_gas_limit},{initial_gas_limit}]"),
-    );
-    std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_UPDATED_GAS_LIMIT",
-        format!("[{updated_gas_limit},{updated_gas_limit}]"),
-    );
-    std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_CHANGE_GAS_LIMIT_AFTER_HEIGHT",
-        change_after_height.to_string(),
-    );
-}
-
-async fn send_high_fee_transfer(
-    client: &DynProvider,
-    nonce: u64,
-) -> anyhow::Result<TransactionReceipt> {
-    send_high_fee_transfer_with_gas_limit(client, nonce, 1_000_000).await
-}
-
-async fn send_high_fee_transfer_with_gas_limit(
-    client: &DynProvider,
-    nonce: u64,
-    gas_limit: u64,
-) -> anyhow::Result<TransactionReceipt> {
-    let tx = TransactionRequest::default()
-        .with_to(Address::ZERO)
-        .with_nonce(nonce)
-        .with_value(alloy_primitives::U256::ZERO)
-        .with_gas_limit(gas_limit)
-        .with_max_fee_per_gas(HIGH_MAX_FEE_PER_GAS)
-        .with_max_priority_fee_per_gas(HIGH_PRIORITY_FEE_PER_GAS);
-    let pending = client.send_transaction(tx).await?;
-    Ok(pending.get_receipt().await?)
 }
 
 // ==================== Test Setup Helpers ====================
@@ -1350,134 +1309,6 @@ async fn test_fee_history_block_with_tx_nonzero_ratio() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Regression: each gas_used_ratio entry must use that block's gas limit across a gas-limit transition.
-#[tokio::test(flavor = "multi_thread")]
-async fn test_fee_history_gas_used_ratio_uses_per_block_limit_across_transition(
-) -> anyhow::Result<()> {
-    const INITIAL_GAS_LIMIT: u64 = 100_000_000_000;
-    const UPDATED_GAS_LIMIT: u64 = 50_000_000_000;
-    const CHANGE_GAS_LIMIT_AFTER_HEIGHT: u64 = 10;
-
-    override_rollup_gas_limit_transition(
-        INITIAL_GAS_LIMIT,
-        UPDATED_GAS_LIMIT,
-        CHANGE_GAS_LIMIT_AFTER_HEIGHT,
-    );
-
-    let rollup = setup_test_rollup(0, EVM_EXTENSION).await;
-    let client = alloy_client(rollup.http_addr);
-
-    let target_pre_boundary_height = CHANGE_GAS_LIMIT_AFTER_HEIGHT.saturating_sub(2);
-    let current_height = rollup.height().await.get();
-    assert!(
-        current_height <= target_pre_boundary_height,
-        "test precondition failed: startup height {current_height} already exceeded target pre-boundary height {target_pre_boundary_height}"
-    );
-    rollup.wait_for_height(target_pre_boundary_height).await;
-
-    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
-    let mut nonce = client.get_transaction_count(signer.address()).await?;
-    let mut tx_blocks = Vec::new();
-
-    // Send transactions in blocks on both sides of the fee boundary (so that eth_feeHistory will have nonzero ratios)
-    for _ in 0..6 {
-        let receipt = send_high_fee_transfer(&client, nonce).await?;
-        rollup.wait_for_rollup_height_advance_by(1).await;
-        nonce = nonce.saturating_add(1);
-        tx_blocks.push(
-            receipt
-                .block_number
-                .expect("transfer receipt should include block number"),
-        );
-
-        let has_pre_change = tx_blocks
-            .iter()
-            .any(|&block| block <= CHANGE_GAS_LIMIT_AFTER_HEIGHT);
-        let has_post_change = tx_blocks
-            .iter()
-            .any(|&block| block > CHANGE_GAS_LIMIT_AFTER_HEIGHT);
-        if has_pre_change && has_post_change {
-            break;
-        }
-    }
-
-    let pre_change_block = tx_blocks
-        .iter()
-        .copied()
-        .filter(|&block| block <= CHANGE_GAS_LIMIT_AFTER_HEIGHT)
-        .max()
-        .expect("expected at least one tx-bearing block at or before the change height");
-    let post_change_block = tx_blocks
-        .iter()
-        .copied()
-        .find(|&block| block > CHANGE_GAS_LIMIT_AFTER_HEIGHT)
-        .expect("expected at least one tx-bearing block after the change height");
-
-    let block_count = post_change_block
-        .saturating_sub(pre_change_block)
-        .saturating_add(1);
-    let fee_history = client
-        .get_fee_history(
-            block_count,
-            BlockNumberOrTag::Number(post_change_block),
-            &[],
-        )
-        .await?;
-
-    assert_eq!(
-        fee_history.oldest_block, pre_change_block,
-        "feeHistory range should start at the last tx-bearing block before the gas-limit change"
-    );
-
-    let pre_change_idx = 0usize;
-    let post_change_idx: usize = post_change_block
-        .saturating_sub(pre_change_block)
-        .try_into()
-        .expect("block distance should fit in usize");
-
-    let pre_change_gas_used = total_gas_used_from_receipts(&client, pre_change_block).await?;
-    let post_change_gas_used = total_gas_used_from_receipts(&client, post_change_block).await?;
-    assert!(
-        pre_change_gas_used > 0,
-        "pre-change block should contain a transaction"
-    );
-    assert!(
-        post_change_gas_used > 0,
-        "post-change block should contain a transaction"
-    );
-
-    let observed_pre_change_ratio: f64 = fee_history.gas_used_ratio[pre_change_idx];
-    let observed_post_change_ratio: f64 = fee_history.gas_used_ratio[post_change_idx];
-    assert!(
-        observed_post_change_ratio > observed_pre_change_ratio,
-        "post-change gas_used_ratio should increase when the gas limit is reduced"
-    );
-
-    let observed_ratio_change = observed_pre_change_ratio / observed_post_change_ratio;
-    let expected_ratio_change = (pre_change_gas_used as f64 / post_change_gas_used as f64)
-        * (UPDATED_GAS_LIMIT as f64 / INITIAL_GAS_LIMIT as f64);
-    assert_float_eq(
-        observed_ratio_change,
-        expected_ratio_change,
-        "gas_used_ratio change across gas-limit transition",
-    );
-    assert!(
-        observed_ratio_change < 0.6,
-        "gas_used_ratio before/after should reflect the gas-limit drop, got {observed_ratio_change}"
-    );
-
-    // `wrong_shared_denominator_ratio_change` is the ratio of gas_used across the two blocks. If the gas limit hadn't changed,
-    // the rateio of `fee_ratio_before / fee_ratio_after` would be equal to this value. We want to assert that it *has* changed
-    let wrong_shared_denominator_ratio_change =
-        pre_change_gas_used as f64 / post_change_gas_used as f64;
-    assert!(
-        (observed_ratio_change - wrong_shared_denominator_ratio_change).abs() > 1e-12, // Float not equals check
-        "gas_used_ratio change should include the gas-limit transition, not just the gas-used change"
-    );
-
-    Ok(())
-}
-
 /// TC30: Multiple transactions across blocks show distinct ratios
 ///
 /// This test verifies that blocks with transactions show non-zero gas_used_ratio.
@@ -2057,4 +1888,125 @@ async fn test_fee_history_heavy_gas_usage() -> anyhow::Result<()> {
     assert_gas_ratios_valid(&fee_history.gas_used_ratio);
 
     Ok(())
+}
+
+/// Regression: `eth_feeHistory` must compute each block's `gasUsedRatio` against *that block's*
+/// stored gas limit, not the current runtime constant. We drive a gas-limit change through the EVM
+/// admin config update (not the removed `CHANGE_GAS_LIMIT_AFTER_HEIGHT` fork) and assert that every
+/// block's ratio equals `gas_used / eth_getBlockByNumber(block).gasLimit` across the change.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_fee_history_gas_used_ratio_uses_per_block_limit() -> anyhow::Result<()> {
+    // Clearly different from the genesis EVM block gas limit and above MIN_BLOCK_GAS_LIMIT (5M).
+    const NEW_BLOCK_GAS_LIMIT: u64 = 0x1_2345_6700; // 4_886_718_208
+
+    let (rollup, admin_key) = setup_test_rollup_with_admin_key(0, EVM_EXTENSION).await;
+    let client = alloy_client_with_signer(rollup.http_addr, SENDER_PRIV_KEY);
+    rollup.wait_for_sequencer_ready().await.unwrap();
+
+    // 1. A transaction under the original (genesis) gas limit.
+    let pre_block = send_transfer_get_block(&client).await?;
+    let pre_limit = get_block_gas_limit(&client, pre_block).await?;
+    assert_ne!(
+        pre_limit, NEW_BLOCK_GAS_LIMIT,
+        "test precondition: the new limit must differ from the genesis limit"
+    );
+
+    // 2. Change the EVM block gas limit via an admin runtime-config update.
+    update_block_gas_limit(&rollup, &admin_key, NEW_BLOCK_GAS_LIMIT).await?;
+
+    // Wait until freshly produced blocks reflect the new limit.
+    let mut applied = false;
+    for _ in 0..30 {
+        rollup.wait_for_rollup_height_advance_by(1).await;
+        let latest = client.get_block_number().await?;
+        if get_block_gas_limit(&client, latest).await? == NEW_BLOCK_GAS_LIMIT {
+            applied = true;
+            break;
+        }
+    }
+    assert!(applied, "EVM block gas limit update did not take effect");
+
+    // 3. A transaction under the updated gas limit (non-zero gas_used so the denominator matters).
+    let post_block = send_transfer_get_block(&client).await?;
+    assert_eq!(
+        get_block_gas_limit(&client, post_block).await?,
+        NEW_BLOCK_GAS_LIMIT
+    );
+
+    // 4. Query fee history spanning both blocks; every ratio must use the block's own limit.
+    let block_count = post_block - pre_block + 1;
+    let fee_history = client
+        .get_fee_history(block_count, BlockNumberOrTag::Number(post_block), &[])
+        .await?;
+    let oldest = fee_history.oldest_block;
+    assert!(
+        oldest <= pre_block,
+        "fee history (oldest {oldest}) should cover the pre-update block {pre_block}"
+    );
+
+    let (mut saw_pre, mut saw_post) = (false, false);
+    for (i, ratio) in fee_history.gas_used_ratio.iter().enumerate() {
+        let n = oldest + i as u64;
+        let limit = get_block_gas_limit(&client, n).await?;
+        let gas_used = total_gas_used_from_receipts(&client, n).await?;
+        let expected = gas_used as f64 / limit as f64;
+        assert_float_eq(
+            *ratio,
+            expected,
+            &format!("gas_used_ratio for block {n} must use that block's own gas limit ({limit})"),
+        );
+        saw_pre |= limit == pre_limit;
+        saw_post |= limit == NEW_BLOCK_GAS_LIMIT;
+    }
+    assert!(
+        saw_pre && saw_post,
+        "fee history range must span the gas-limit change to be a meaningful regression test"
+    );
+
+    Ok(())
+}
+
+/// Sends a zero-value transfer and returns the block number it landed in.
+async fn send_transfer_get_block(client: &DynProvider) -> anyhow::Result<u64> {
+    let signer: PrivateKeySigner = SENDER_PRIV_KEY.parse()?;
+    let nonce = client.get_transaction_count(signer.address()).await?;
+    let tx = TransactionRequest::default()
+        .with_to(Address::ZERO)
+        .with_nonce(nonce)
+        .with_value(U256::ZERO)
+        .with_max_fee_per_gas(MAX_FEE_PER_GAS)
+        .with_max_priority_fee_per_gas(HIGH_PRIORITY_FEE_PER_GAS)
+        .with_gas_limit(100_000);
+    let receipt = client.send_transaction(tx).await?.get_receipt().await?;
+    receipt
+        .block_number
+        .ok_or_else(|| anyhow::anyhow!("transfer receipt should include a block number"))
+}
+
+/// Reads a block's stored gas limit (the value `eth_getBlockByNumber` reports).
+async fn get_block_gas_limit(client: &DynProvider, block_number: u64) -> anyhow::Result<u64> {
+    let block = client
+        .get_block_by_number(BlockNumberOrTag::Number(block_number))
+        .await?
+        .ok_or_else(|| anyhow::anyhow!("block {block_number} should exist"))?;
+    Ok(block.header.gas_limit)
+}
+
+/// Changes the EVM block gas limit via an admin `UpdateRuntimeConfig` call.
+async fn update_block_gas_limit(
+    rollup: &TestRollup<EvmBlueprint>,
+    admin_key: &<<EvmTestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    new_block_gas_limit: u64,
+) -> anyhow::Result<()> {
+    let update = EvmRuntimeConfigUpdate::<EvmTestSpec> {
+        new_hardfork: None,
+        new_contract_creation_policy: None,
+        chain_spec_update: Some(ChainSpecUpdate {
+            new_limit_contract_code_size: None,
+            new_block_gas_limit: Some(new_block_gas_limit),
+            new_tx_gas_limit: None,
+        }),
+        new_admin: None,
+    };
+    super::send_evm_runtime_config_update(rollup, admin_key, update).await
 }
