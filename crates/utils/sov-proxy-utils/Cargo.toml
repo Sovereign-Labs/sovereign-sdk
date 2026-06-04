@@ -23,7 +23,8 @@ thiserror = { workspace = true }
 
 [dev-dependencies]
 sov-test-utils = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread"] }
+axum = { workspace = true, features = ["http1", "tokio"] }
 
 
 [lints]
