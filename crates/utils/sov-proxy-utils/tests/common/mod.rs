@@ -72,6 +72,20 @@ pub async fn insert_node(pool: &PgPool, node_id: &str, address: &str) {
         .expect("Failed to insert node");
 }
 
+/// Records the given node as the current leader in the `sequencer_leader`
+/// table. The node should already exist in `nodes` (see [`insert_node`]),
+/// otherwise discovery will report it as a missing leader.
+pub async fn set_leader(pool: &PgPool, node_id: &str) {
+    sqlx::query(
+        "INSERT INTO sequencer_leader (node_id, last_updated) VALUES ($1, NOW()) \
+         ON CONFLICT (singleton) DO UPDATE SET node_id = EXCLUDED.node_id, last_updated = EXCLUDED.last_updated",
+    )
+    .bind(node_id)
+    .execute(pool)
+    .await
+    .expect("Failed to set leader");
+}
+
 /// Waits for the discovery task to publish a cluster info update.
 pub async fn wait_for_change(task: &mut NodeDiscoveryTask) {
     tokio::time::timeout(Duration::from_secs(20), task.receiver.changed())

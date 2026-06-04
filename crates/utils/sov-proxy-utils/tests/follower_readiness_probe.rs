@@ -15,10 +15,11 @@ use tokio::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use tokio::task::JoinHandle;
 
 mod common;
-use common::{insert_node, setup, start_discovery, wait_for_change};
+use common::{insert_node, set_leader, setup, start_discovery, wait_for_change};
 
 const READY_NODE: &str = "ready_node";
 const LATE_READY_NODE: &str = "late_ready_node";
+const LEADER_NODE: &str = "leader_node";
 
 /// Records every advertised cluster update so a test can assert on the
 /// sequence of advertised views.
@@ -177,6 +178,47 @@ async fn not_ready_follower_is_excluded_from_advertised_cluster() {
     assert!(
         advertised.has_follower(READY_NODE) && advertised.has_follower(LATE_READY_NODE),
         "after the previously not-ready follower starts returning 200, both followers should be advertised"
+    );
+
+    task.abort();
+}
+
+/// The leader is never readiness-probed: a leader whose `/sequencer/ready`
+/// endpoint reports not-ready is still advertised as the cluster leader,
+/// unlike followers which are gated on the probe.
+#[tokio::test(flavor = "multi_thread")]
+async fn not_ready_leader_is_still_advertised() {
+    let Some((_container, connection_string, writer)) = setup().await else {
+        return; // Docker unavailable — skip.
+    };
+
+    // The leader reports not-ready for the entire test; the follower is the
+    // ready positive control that proves a readiness probe cycle ran.
+    let leader_endpoint = ReadyEndpoint::start(StatusCode::SERVICE_UNAVAILABLE).await;
+    let follower_endpoint = ReadyEndpoint::start(StatusCode::OK).await;
+
+    let (notifier, mut recorder) = ClusterUpdateRecorder::new();
+
+    let task = start_discovery(
+        &connection_string,
+        Duration::from_millis(500),
+        Some(notifier),
+    )
+    .await;
+
+    // Register and elect the leader *before* inserting the follower so that any
+    // poll which observes the follower also observes the already-committed
+    // leader row: the snapshot we assert on is guaranteed to carry the leader.
+    insert_node(&writer, LEADER_NODE, &leader_endpoint.address().to_string()).await;
+    set_leader(&writer, LEADER_NODE).await;
+    insert_node(&writer, READY_NODE, &follower_endpoint.address().to_string()).await;
+
+    // Wait for the ready follower to appear, confirming the probe cycle ran.
+    let advertised = recorder.wait_until_has_follower(READY_NODE).await;
+
+    assert!(
+        advertised.has_leader(LEADER_NODE),
+        "leader returning 503 from /sequencer/ready must still be advertised as leader"
     );
 
     task.abort();
