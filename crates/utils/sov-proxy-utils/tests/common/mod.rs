@@ -120,7 +120,7 @@ pub async fn start_proxied_discovery(
 ) -> (ToxiProxySetup, NodeDiscoveryTask) {
     let toxiproxy = ToxiProxySetup::start_for_postgres(connection_string).await;
     let task = start_discovery(
-        &toxiproxy.proxied_postgres_connection_string(),
+        toxiproxy.proxied_postgres_connection_string(),
         poll_interval,
         None,
     )
