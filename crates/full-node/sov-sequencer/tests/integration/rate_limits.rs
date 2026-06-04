@@ -13,7 +13,6 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::RawTx;
 use sov_modules_api::Spec;
 use sov_modules_stf_blueprint::Runtime;
-use sov_rollup_interface::common::RollupHeight;
 use sov_sequencer::rest_api::AcceptTx;
 use sov_sequencer::SequencerKindConfig;
 use sov_test_utils::generate_operator_runtime_with_kernel;
@@ -119,7 +118,6 @@ async fn test_rate_limiting() {
         max_requests_per_second: 1_000_000,
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),
-        height_for_gas_limit_computation: RollupHeight::GENESIS,
     };
 
     let (test_rollup, admin) = create_test_rollup(genesis, sov_config).await;
@@ -172,7 +170,6 @@ async fn test_zero_limit_address() {
     let sov_config = SovRateLimiterConfig {
         max_nb_of_concurrent_users_in_rate_limiter: 1000,
         max_requests_per_second: 1_000_000,
-        height_for_gas_limit_computation: RollupHeight::GENESIS,
         default_limits: Limits {
             resources_per_bucket: 5,
             refill_rate: 100,
@@ -215,7 +212,6 @@ async fn test_correct_ip() {
             resources_per_bucket: 5,
             refill_rate: 0,
         },
-        height_for_gas_limit_computation: RollupHeight::GENESIS,
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),
     };
@@ -281,7 +277,6 @@ async fn test_zero_limit_ip() {
 
     let genesis = Genesis::new();
     let sov_config = SovRateLimiterConfig {
-        height_for_gas_limit_computation: RollupHeight::GENESIS,
         max_requests_per_second: 1000,
         max_nb_of_concurrent_users_in_rate_limiter: 1000,
         default_limits: Limits {
@@ -345,7 +340,6 @@ async fn assert_subnet_bucket_is_shared(subnet: &str, ip_a: &str, ip_b: &str) {
             resources_per_bucket: 5,
             refill_rate: 0,
         },
-        height_for_gas_limit_computation: RollupHeight::GENESIS,
         address_custom_limits: Vec::default(),
         ip_custom_limits: vec![(
             subnet.parse().unwrap(),

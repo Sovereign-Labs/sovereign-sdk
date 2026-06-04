@@ -13,8 +13,8 @@ use sov_modules_api::capabilities::{
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
-    call_message_repr, Amount, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx,
-    Gas, GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
+    call_message_repr, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx, Gas,
+    GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
     RuntimeEventProcessor, RuntimeEventResponse, SelectedBlob, Spec, StateCheckpoint,
     TransactionReceipt, TxChangeSet, TxHash, VersionReader, VisibleSlotNumber,
 };
@@ -965,13 +965,7 @@ where
     let standard_gas_escrow = S::max_tx_check_costs()
         .checked_value(next_gas_price)
         .expect("Gas price overflow! This is a bug, please report it.");
-    let needed_gas_escrow_for_preferred_sequencer =
-    // The blob sender decides what the gas limit should be *before* we call `increment_rollup_height`. Use the same height
-        if old_rollup_height > <S as GasSpec>::change_gas_limit_after_height() {
-            Amount::ZERO
-        } else {
-            standard_gas_escrow
-        };
+    let needed_gas_escrow_for_preferred_sequencer = standard_gas_escrow;
     kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow_for_preferred_sequencer, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
 
     let blob_selector_output = {
