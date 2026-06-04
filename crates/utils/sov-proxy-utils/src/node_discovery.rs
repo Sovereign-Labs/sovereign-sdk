@@ -17,7 +17,7 @@ use tokio::task::JoinHandle;
 /// so the absence of samples can be alerted on if the polling task dies silently.
 const LIVENESS_POLL_MULTIPLIER: u32 = 5;
 const READY_ENDPOINT_PATH: &str = "/sequencer/ready";
-const READY_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+const READY_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
 const READY_CONNECTION_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Information about a registered node.
@@ -241,7 +241,12 @@ pub struct NodeDiscovery {
     listener: PgListener,
     http_client: reqwest::Client,
     prev_membership: ClusterMembership,
-    prev_advertised_membership: ClusterMembership,
+    /// Last advertised membership emitted to the notifier, or `None` if nothing
+    /// has been emitted yet. `None` forces the first poll to materialize the
+    /// current view — even when it is empty — so stale contents left behind by a
+    /// previous process are overwritten instead of lingering until the next
+    /// real change.
+    prev_advertised_membership: Option<ClusterMembership>,
     notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     sender: watch::Sender<ClusterInfo>,
     pub(crate) receiver: watch::Receiver<ClusterInfo>,
@@ -303,7 +308,7 @@ impl NodeDiscovery {
             listener,
             http_client,
             prev_membership: ClusterMembership::default(),
-            prev_advertised_membership: ClusterMembership::default(),
+            prev_advertised_membership: None,
             notifier,
             sender,
             receiver,
@@ -427,8 +432,12 @@ impl NodeDiscovery {
         let advertised_info = self.advertised_cluster_info(&info).await;
         let advertised_membership =
             ClusterMembership::from_cluster_info(&advertised_info.cluster_info);
-        let advertised_membership_change =
-            advertised_membership.change_from(&self.prev_advertised_membership);
+        // Treat the very first poll (`None`) as a change so the advertised view
+        // is always materialized once, even if it is empty.
+        let advertised_changed = self
+            .prev_advertised_membership
+            .as_ref()
+            .is_none_or(|prev| advertised_membership.change_from(prev).has_changed());
 
         // Liveness is keyed off wall-clock time, not the wake-up source, so a
         // chatty cluster (frequent NOTIFY traffic) still emits periodic samples
@@ -438,10 +447,7 @@ impl NodeDiscovery {
             .last_metric_at
             .is_none_or(|t| t.elapsed() >= self.liveness_interval);
 
-        if !(membership_change.has_changed()
-            || advertised_membership_change.has_changed()
-            || liveness_due)
-        {
+        if !(membership_change.has_changed() || advertised_changed || liveness_due) {
             return Ok(());
         }
 
@@ -458,12 +464,11 @@ impl NodeDiscovery {
             membership: membership.clone(),
             cluster_changed: membership_change.has_changed(),
             advertised_membership: advertised_membership.clone(),
-            advertised_cluster_changed: advertised_membership_change.has_changed(),
+            advertised_cluster_changed: advertised_changed,
             not_ready_followers: advertised_info.not_ready_followers_for_metric(),
         };
 
-        if advertised_membership_change.has_changed() {
-            // Notify watchers that the advertised cluster was updated.
+        if advertised_changed {
             if let Some(notifier) = &mut self.notifier {
                 notifier
                     .on_cluster_update(&advertised_info.cluster_info)
@@ -471,7 +476,7 @@ impl NodeDiscovery {
                     .map_err(HandleClusterUpdateError::Notify)?;
             }
 
-            self.prev_advertised_membership = advertised_membership;
+            self.prev_advertised_membership = Some(advertised_membership);
         }
 
         if membership_change.has_changed() {
