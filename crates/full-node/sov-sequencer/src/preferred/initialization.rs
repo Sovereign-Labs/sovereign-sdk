@@ -98,6 +98,7 @@ where
         let (next_sequence_number, db_cache) = db.initial_data().await?;
         let mut handles = vec![];
 
+        let approximate_block_time = self.da.get_approximate_block_time().await; // Load the block time before moving the DA service to the blob sender
         let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
             self.da,
             ledger_db.clone(),
@@ -180,6 +181,7 @@ where
             cached_txs.write_handle(),
             cache_warm_up_executor,
             start_replica_task_notifier,
+            approximate_block_time,
         );
 
         let test_only_state_update_notification_receiver = synchronized_state
