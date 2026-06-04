@@ -1,5 +1,7 @@
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::stf::FullyBakedTx;
+#[cfg(feature = "native")]
+use sov_rollup_interface::Bytes;
 
 use crate::{capabilities::HasCapabilities, Context, HDTimestamp, Runtime, Spec, TxState};
 
@@ -21,6 +23,16 @@ pub trait SequencingDataHandler<S: Spec> {
     /// Generates the sequencing data for a new transaction.
     #[cfg(feature = "native")]
     fn create_sequencing_data(&self) -> Self::SequencingData;
+
+    /// Finalizes sequencing data after native transaction execution.
+    #[cfg(feature = "native")]
+    fn finalize_sequencing_data(
+        &mut self,
+        data: Self::SequencingData,
+        _scratchpad: Option<Bytes>,
+    ) -> Self::SequencingData {
+        data
+    }
 }
 
 /// Trait for sequencing data that can be deserialized and serialized using borsh.

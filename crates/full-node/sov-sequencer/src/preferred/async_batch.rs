@@ -159,6 +159,7 @@ pub(crate) struct ExecutedTxResponse<S: Spec> {
     pub(crate) receipt: TransactionReceipt<S>,
     pub(crate) tx_changes: TxChangeSet,
     pub(crate) remaining_slot_gas: <S as Spec>::Gas,
+    pub(crate) sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
 }
 
 /// The channel responsible for notifying an async tx submitter of the txs result
@@ -249,6 +250,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             reward,
             penalty,
             execution_status,
+            sequencing_scratchpad,
         } = provisional_outcome;
         let MaybeExecuted::Executed(receipt) = execution_status else {
             self.send(
@@ -264,6 +266,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
                 receipt: receipt.clone(),
                 tx_changes: dirty_scratchpad.tx_changes(execution_context),
                 remaining_slot_gas: *slot_gas_meter_before_tx.remaining_preferred_slot_gas(), // Since we ignore this tx, the remaining gas limit is unchanged
+                sequencing_scratchpad,
             };
 
             self.send(gas_used, execution_time_micros, Ok(response));
@@ -292,6 +295,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
             receipt: receipt.clone(),
             tx_changes: dirty_scratchpad.tx_changes(execution_context),
             remaining_slot_gas,
+            sequencing_scratchpad,
         };
 
         self.send(gas_used, execution_time_micros, Ok(response));

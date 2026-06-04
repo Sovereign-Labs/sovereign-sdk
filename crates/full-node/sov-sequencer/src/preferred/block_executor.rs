@@ -9,7 +9,7 @@ use borsh::BorshDeserialize;
 use sov_blob_storage::PreferredProofData;
 use sov_modules_api::capabilities::{
     get_maybe_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState,
-    FatalError, RollupHeight, TransactionAuthenticator,
+    FatalError, HasCapabilities, RollupHeight, SequencingDataHandler, TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
@@ -303,8 +303,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
 
         match result {
-            Ok((receipt, remaining_slot_gas, execution_time_micros, tx_changes)) => {
-                let accepted_tx = self.process_tx_receipt(&receipt, timestamp);
+            Ok((receipt, tx, remaining_slot_gas, execution_time_micros, tx_changes)) => {
+                let accepted_tx = self.process_tx_receipt(receipt, tx, timestamp);
                 if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
                     writer.insert(accepted_tx.clone()).await;
                 }
@@ -325,7 +325,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         &mut self,
         baked_tx: FullyBakedTxWithMaybeChangeSet,
     ) -> Result<
-        (TransactionReceipt<S>, <S as Spec>::Gas, u64, TxChangeSet),
+        (
+            TransactionReceipt<S>,
+            FullyBakedTx,
+            <S as Spec>::Gas,
+            u64,
+            TxChangeSet,
+        ),
         RollupBlockExecutorErrorWithBudget<S>,
     > {
         let Some(task_state) = self.rollup_block_task_state.as_mut() else {
@@ -366,9 +372,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         } = result;
 
         let ExecutedTxResponse {
-            receipt,
+            mut receipt,
             tx_changes,
             remaining_slot_gas,
+            sequencing_scratchpad,
         } = inner_result.map_err(|reason| RollupBlockExecutorErrorWithBudget {
             execution_time_micros,
             gas_used,
@@ -386,10 +393,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             });
         }
 
+        let mut tx = receipt
+            .body_to_save
+            .take()
+            .expect("Transaction receipts contain bodies when using sov-modules-stf-blueprint");
+        Self::finalize_tx_sequencing_data(&mut tx, sequencing_scratchpad);
+
         self.checkpoint.apply_tx_changes(tx_changes.clone());
 
         Ok((
             receipt,
+            tx,
             remaining_slot_gas,
             execution_time_micros,
             tx_changes,
@@ -639,12 +653,18 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     fn process_tx_receipt(
         &mut self,
-        tx_receipt: &TransactionReceipt<S>,
+        tx_receipt: TransactionReceipt<S>,
+        tx: FullyBakedTx,
         timestamp: Option<HDTimestamp>,
     ) -> AcceptedTx<Confirmation<S, Rt>> {
+        let TransactionReceipt {
+            tx_hash,
+            body_to_save: _,
+            events,
+            receipt,
+        } = tx_receipt;
         let tx_number = self.next_tx_number;
-        let events = tx_receipt
-            .events
+        let events = events
             .iter()
             .zip(self.next_event_number..)
             .map(|(event, number)| {
@@ -658,18 +678,33 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.next_event_number += events.len() as u64;
         self.next_tx_number += 1;
         AcceptedTx {
-            tx: tx_receipt
-                .body_to_save
-                .clone()
-                .expect("Transaction receipts contain bodies when using sov-modules-stf-blueprint"),
-            tx_hash: tx_receipt.tx_hash,
+            tx,
+            tx_hash,
             confirmation: Confirmation {
                 events,
-                receipt: tx_receipt.receipt.clone().into(),
+                receipt: receipt.into(),
                 tx_number,
                 timestamp_nanos: timestamp,
             },
         }
+    }
+
+    fn finalize_tx_sequencing_data(
+        tx: &mut FullyBakedTx,
+        scratchpad: Option<sov_rollup_interface::Bytes>,
+    ) {
+        let Some(data) = tx.sequencing_data.as_ref() else {
+            return;
+        };
+        let Ok(decoded) = <Rt as HasCapabilities<S>>::SequencingData::try_from_slice(data) else {
+            tracing::warn!("Failed to deserialize sequencing data while finalizing transaction");
+            return;
+        };
+
+        let mut runtime = Rt::default();
+        let mut handler = runtime.sequencing_data_handler();
+        let finalized = handler.finalize_sequencing_data(decoded, scratchpad);
+        tx.set_sequencing_metadata(&finalized);
     }
 
     fn update_kernel_with_user_state_root(&mut self) {
@@ -786,8 +821,11 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             if batch_receipt.inner.da_address == self.da_address {
                 continue;
             }
-            for tx_receipt in batch_receipt.tx_receipts {
-                let accepted_tx = self.process_tx_receipt(&tx_receipt, None);
+            for mut tx_receipt in batch_receipt.tx_receipts {
+                let tx = tx_receipt.body_to_save.take().expect(
+                    "Transaction receipts contain bodies when using sov-modules-stf-blueprint",
+                );
+                let accepted_tx = self.process_tx_receipt(tx_receipt, tx, None);
                 forced_txs.push(accepted_tx);
             }
         }

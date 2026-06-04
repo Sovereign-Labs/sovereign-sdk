@@ -57,6 +57,8 @@ where
             ApplyTxResult::<S> {
                 transaction_consumption,
                 receipt,
+                #[cfg(feature = "native")]
+                sequencing_scratchpad: ctx.take_sequencing_scratchpad(),
             },
             tx_scratchpad,
         );
@@ -117,6 +119,8 @@ where
         ApplyTxResult::<S> {
             transaction_consumption,
             receipt,
+            #[cfg(feature = "native")]
+            sequencing_scratchpad: ctx.take_sequencing_scratchpad(),
         },
         tx_scratchpad,
     )

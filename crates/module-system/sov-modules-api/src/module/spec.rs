@@ -2,6 +2,9 @@
 
 use core::fmt::Debug;
 
+#[cfg(feature = "native")]
+use std::sync::{Arc, Mutex};
+
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::crypto::{CredentialId, Signature};
@@ -149,6 +152,66 @@ where
 /// slightly more restrictive traits defined in the module system.
 impl<C: CryptoHelper> CryptoSpecExt for C {}
 
+/// Sequencer-provided data plus native-only execution scratchpad.
+#[derive(Clone, Debug)]
+pub struct SequencingContext {
+    data: Option<Bytes>,
+    #[cfg(feature = "native")]
+    scratchpad: SequencingScratchpad,
+}
+
+impl SequencingContext {
+    /// Creates a new sequencing context.
+    #[must_use]
+    pub fn new(data: Option<Bytes>) -> Self {
+        Self {
+            data,
+            #[cfg(feature = "native")]
+            scratchpad: SequencingScratchpad::default(),
+        }
+    }
+
+    /// Returns the sequencing data.
+    pub fn data(&self) -> &Option<Bytes> {
+        &self.data
+    }
+
+    /// Returns the native sequencing scratchpad.
+    #[cfg(feature = "native")]
+    pub fn scratchpad(&self) -> SequencingScratchpad {
+        self.scratchpad.clone()
+    }
+}
+
+/// Native-only scratchpad for recording data while finalizing sequencing metadata.
+#[cfg(feature = "native")]
+#[derive(Clone, Debug, Default)]
+pub struct SequencingScratchpad {
+    inner: Arc<Mutex<Option<Bytes>>>,
+}
+
+#[cfg(feature = "native")]
+impl SequencingScratchpad {
+    /// Replaces the scratchpad contents.
+    pub fn set(&self, value: Bytes) {
+        self.with_value(|slot| *slot = Some(value));
+    }
+
+    /// Takes the scratchpad contents, leaving it empty.
+    pub fn take(&self) -> Option<Bytes> {
+        self.with_value(Option::take)
+    }
+
+    /// Mutates the scratchpad contents under the scratchpad lock.
+    pub fn with_value<R>(&self, f: impl FnOnce(&mut Option<Bytes>) -> R) -> R {
+        let mut guard = self
+            .inner
+            .lock()
+            .expect("sequencing scratchpad mutex was poisoned");
+        f(&mut guard)
+    }
+}
+
 /// The context in which a transaction executes
 
 #[derive(Clone, Debug)]
@@ -162,7 +225,7 @@ pub struct Context<S: Spec> {
     /// The DA layer address of the sequencer who included the transaction.
     sequencer_da_address: <S::Da as DaSpec>::Address,
     /// Sequencing data provided by the sequencer
-    sequencing_data: Option<Bytes>,
+    sequencing: SequencingContext,
     /// The rollup address that pays the gas fees for the transaction.
     gas_refund_recipient: S::Address,
     /// The execution context of the transaction.
@@ -189,7 +252,19 @@ impl<S: Spec> Context<S> {
 
     /// Returns the sequencing data
     pub fn sequencing_data(&self) -> &Option<Bytes> {
-        &self.sequencing_data
+        self.sequencing.data()
+    }
+
+    /// Returns the native sequencing scratchpad.
+    #[cfg(feature = "native")]
+    pub fn sequencing_scratchpad(&self) -> SequencingScratchpad {
+        self.sequencing.scratchpad()
+    }
+
+    /// Takes the native sequencing scratchpad contents.
+    #[cfg(feature = "native")]
+    pub fn take_sequencing_scratchpad(&self) -> Option<Bytes> {
+        self.sequencing.scratchpad().take()
     }
 
     /// Returns the rollup address which will receive any gas refund from the transaction.
@@ -256,7 +331,7 @@ impl<S: Spec> Context<S> {
             sequencer,
             sequencer_da_address,
             gas_refund_recipient: payer,
-            sequencing_data,
+            sequencing: SequencingContext::new(sequencing_data),
             execution_context,
             sequencer_type,
         }

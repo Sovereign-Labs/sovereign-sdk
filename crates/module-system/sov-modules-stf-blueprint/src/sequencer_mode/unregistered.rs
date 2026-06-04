@@ -320,6 +320,7 @@ where
         Ok(ApplyTxResult {
             transaction_consumption,
             receipt,
+            ..
         }) => {
             // We reward sequencer only if the registration transaction is successful.
             if receipt.receipt.is_successful() {

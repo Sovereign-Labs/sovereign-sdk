@@ -62,6 +62,10 @@ pub struct ApplyTxResult<S: Spec> {
     pub transaction_consumption: TransactionConsumption<S::Gas>,
     /// The transaction receipt.
     pub receipt: TransactionReceipt<S>,
+    /// Native scratchpad recorded while executing with the transaction's sequencing data.
+    #[cfg(feature = "native")]
+    #[serde(skip)]
+    pub sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
 }
 
 /// Genesis parameters for a blueprint
