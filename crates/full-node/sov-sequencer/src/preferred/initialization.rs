@@ -121,7 +121,7 @@ where
                     .checked_sub(1)
                     .map_or_else(|| "none".to_owned(), |seq| seq.to_string());
                 anyhow::bail!(
-                    "Node state is inconsistent, aborting startup. The BlobSender DB contains a preferred blob with sequence number {blob_sender_sequence_number}, but the preferred sequencer DB's highest known sequence number is {preferred_db_highest_sequence_number}. This could mean the preferred sequencer DB was wiped; this is not supported, but to proceed, the BlobSender DB must also be deleted in the rollup state directory. Otherwise, this as a bug, please report it."
+                    "Node state is inconsistent, aborting startup: BlobSender DB contains a higher blob sequence number than the Preferred Sequencer DB. BlobSender has blobs up to {blob_sender_sequence_number}, but the preferred sequencer only has blobs up to {preferred_db_highest_sequence_number}. This could mean the preferred sequencer DB was wiped; this is not supported, but to proceed, the BlobSender DB must also be deleted in the rollup state directory. Otherwise, this as a bug, please report it."
                 );
             }
         }

@@ -111,11 +111,11 @@ async fn test_startup_fails_if_blob_sender_db_is_ahead_of_preferred_db() {
 
     let err = err.to_string();
     assert!(
-        err.contains("BlobSender DB contains a preferred blob"),
+        err.contains("Node state is inconsistent, aborting startup: BlobSender DB contains a higher blob sequence number than the Preferred Sequencer DB."),
         "Unexpected startup error: {err}"
     );
     assert!(
-        err.contains("preferred sequencer DB's highest known sequence number is none"),
+        err.contains("preferred sequencer only has blobs up to none"),
         "Unexpected startup error: {err}"
     );
 }
