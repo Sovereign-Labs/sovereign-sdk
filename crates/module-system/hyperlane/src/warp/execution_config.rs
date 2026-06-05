@@ -12,6 +12,7 @@ pub static WARP_EXECUTION_CONFIG: OnceLock<WarpExecutionConfig> = OnceLock::new(
 /// This configuration specifies which warp routes should have their rate limiter
 /// metrics emitted during block processing.
 #[derive(Clone, Default, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct WarpExecutionConfig {
     /// Warp routes to monitor for rate limiter metrics.
     ///

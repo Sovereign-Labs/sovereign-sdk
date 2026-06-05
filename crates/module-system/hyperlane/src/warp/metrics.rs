@@ -56,9 +56,10 @@ impl sov_metrics::Metric for RateLimiterCapacityMetrics {
             self.direction,
             self.route_id,
             self.remote_domain,
-            escape_tag(&self.route_name),
+            sov_metrics::safe_telegraf_string(&self.route_name),
         )?;
 
+        // fields
         write!(
             buffer,
             " max_capacity={},current_capacity={},replenishment_per_slot={}",
@@ -80,15 +81,6 @@ impl sov_metrics::Metric for RateLimiterCapacityMetrics {
 )]
 fn scale(amount: Amount, decimals: u8) -> f64 {
     amount.0 as f64 / 10f64.powi(i32::from(decimals))
-}
-
-/// escapes a string for use as an InfluxDB line-protocol tag value.
-fn escape_tag(value: &str) -> String {
-    value
-        .replace('\\', "\\\\")
-        .replace(',', "\\,")
-        .replace('=', "\\=")
-        .replace(' ', "\\ ")
 }
 
 #[cfg(test)]
