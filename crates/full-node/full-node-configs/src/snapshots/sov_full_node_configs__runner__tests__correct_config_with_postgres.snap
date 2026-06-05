@@ -1,6 +1,5 @@
 ---
 source: crates/full-node/full-node-configs/src/runner.rs
-assertion_line: 313
 expression: config
 ---
 {
@@ -85,7 +84,8 @@ expression: config
       "num_cache_warmup_workers": 0,
       "rate_limiter": null,
       "maximum_future_nonce_delta": 100,
-      "future_nonce_transaction_timeout_millis": 2000
+      "future_nonce_transaction_timeout_millis": 2000,
+      "use_pi_rate_limiter": false
     },
     "max_batch_size_bytes": 1048576,
     "max_concurrent_batch_blobs": 16,

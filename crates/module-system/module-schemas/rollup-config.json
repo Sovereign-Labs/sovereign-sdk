@@ -608,6 +608,11 @@
         "recovery_strategy": {
           "description": "Strategy for handling recovery scenarios in the preferred sequencer.",
           "$ref": "#/$defs/RecoveryStrategy"
+        },
+        "use_pi_rate_limiter": {
+          "description": "Whether to enable the experimental PI controller for rate limiting.\nThis smooths out the tx acceptance rate over time, rather than suddenly rejecting all txs when the batch is full.",
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false,

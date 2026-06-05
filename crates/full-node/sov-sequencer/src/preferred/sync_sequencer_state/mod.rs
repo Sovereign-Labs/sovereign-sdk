@@ -183,6 +183,7 @@ pub(crate) fn create<S, Rt>(
     tx_cache_writer: TxResultWriter<S, Rt>,
     cache_warm_up_executor: CacheWarmUpExecutor<S>,
     start_replica_task_notifier: EventReceiverStartNotifier,
+    approximate_block_time: Duration,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,
@@ -238,6 +239,12 @@ where
         cache_warm_up_executor,
         start_replica_task_notifier,
         rate_limiter,
+
+        pi_controller: PIController::new(
+            approximate_block_time,
+            seq_config.max_batch_size_bytes,
+            batch_execution_time_limit_micros,
+        ),
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
@@ -248,6 +255,7 @@ where
         heap: BTreeMap::new(),
         runtime: Default::default(),
         test_only_state_update_notification_sender: broadcast::channel(100).0,
+        use_pi_rate_limiter: seq_config.sequencer_kind_config.use_pi_rate_limiter,
     };
     let updator = SequencerStateUpdator {
         message_sender,
