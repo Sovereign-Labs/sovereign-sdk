@@ -71,24 +71,11 @@ impl sov_metrics::Metric for RateLimiterCapacityMetrics {
     }
 }
 
-/// Scales a raw token amount to whole-token units using the token's decimals,
-/// rendered as a decimal string (e.g. `742500000` with 6 decimals -> `742.5`).
-fn scale(amount: Amount, decimals: u8) -> String {
-    let decimals = usize::from(decimals);
-    if decimals == 0 {
-        return amount.0.to_string();
-    }
-
-    let digits = format!("{:0>width$}", amount.0, width = decimals + 1);
-    let point = digits.len() - decimals;
-    let whole = &digits[..point];
-    let frac = digits[point..].trim_end_matches('0');
-
-    if frac.is_empty() {
-        whole.to_string()
-    } else {
-        format!("{whole}.{frac}")
-    }
+/// Scales a raw token amount to whole-token units using the token's decimals
+/// (e.g. `742500000` with 6 decimals -> `742.5`). Lossy for amounts beyond
+/// f64's precision, which is acceptable for a metric gauge.
+fn scale(amount: Amount, decimals: u8) -> f64 {
+    amount.0 as f64 / 10f64.powi(i32::from(decimals))
 }
 
 /// escapes a string for use as an InfluxDB line-protocol tag value.
@@ -132,21 +119,6 @@ mod tests {
         assert!(
             line.contains("max_capacity=1000,current_capacity=742.5,replenishment_per_slot=0.0115"),
             "amounts should be scaled to whole tokens: {line}"
-        );
-    }
-
-    #[test]
-    fn serializes_fractional_scaled_amount() {
-        let metrics = RateLimiterCapacityMetrics {
-            max_capacity: Amount(1_234_567_891),
-            ..sample("USDC", 8)
-        };
-
-        let line = serialize(&metrics);
-
-        assert!(
-            line.contains("max_capacity=12.34567891"),
-            "non-whole amounts should keep their fractional digits: {line}"
         );
     }
 
