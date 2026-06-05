@@ -33,7 +33,6 @@ pub struct ChainStateConfig<S: Spec> {
     pub genesis_da_height: u64,
 
     /// The version of Sovereign SDK consensus the rollup will run at genesis.
-    #[serde(default)]
     pub state_version: u64,
 
     /// The admin address. This address is allowed to terminate setup mode early.
