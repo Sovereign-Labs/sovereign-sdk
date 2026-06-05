@@ -1,7 +1,7 @@
-use std::{env, fs};
+use std::{env, fs, time::Duration};
 
 use futures::StreamExt;
-use sov_blob_sender::BlobSelectorStatus;
+use sov_blob_sender::{BlobSelectorStatus, BlobSubmissionStatus};
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::prelude::*;
@@ -87,9 +87,31 @@ async fn test_startup_fails_if_blob_sender_db_is_ahead_of_preferred_db() {
     let tx = tx_set_many_values(&admin.private_key, 0, vec![7; 100]);
     client.send_raw_tx_to_sequencer(&tx).await.unwrap();
 
+    let mut blob_sender_statuses = test_rollup
+        .subscribe_to_blobs_from_blob_sender()
+        .await
+        .unwrap();
+
     // Pause DA submission after BlobSender persists the blob locally, before it can land on DA.
     test_rollup.da_service.set_blob_submission_pause().await;
     test_rollup.force_close_batch().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            let blob_status = blob_sender_statuses
+                .next()
+                .await
+                .expect("BlobSender status stream closed before the blob was persisted")
+                .expect("BlobSender status stream returned an error");
+            if matches!(
+                blob_status.blob_submission_status,
+                BlobSubmissionStatus::MustSubmit
+            ) {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("Timeout occurred while waiting for the blob to be persisted in BlobSender DB.");
 
     let builder = test_rollup.shutdown().await.unwrap();
     let storage_path = builder.storage_path();
