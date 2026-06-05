@@ -74,7 +74,10 @@ impl sov_metrics::Metric for RateLimiterCapacityMetrics {
 /// Scales a raw token amount to whole-token units using the token's decimals
 /// (e.g. `742500000` with 6 decimals -> `742.5`). Lossy for amounts beyond
 /// f64's precision, which is acceptable for a metric gauge.
-#[allow(clippy::float_arithmetic, reason = "lossy scaling is fine for a metric gauge")]
+#[allow(
+    clippy::float_arithmetic,
+    reason = "lossy scaling is fine for a metric gauge"
+)]
 fn scale(amount: Amount, decimals: u8) -> f64 {
     amount.0 as f64 / 10f64.powi(i32::from(decimals))
 }
