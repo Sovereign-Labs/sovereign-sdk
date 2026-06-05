@@ -11,6 +11,9 @@ pub(crate) struct ClusterUpdateMetric {
     pub advertised_membership: ClusterMembership,
     pub advertised_cluster_changed: bool,
     pub not_ready_followers_count: usize,
+    /// Number of followers whose readiness probe failed entirely (unreachable,
+    /// panicked, or cancelled). Disjoint from `not_ready_followers_count`.
+    pub errored_followers_count: usize,
 }
 
 impl sov_metrics::Metric for ClusterUpdateMetric {
@@ -53,6 +56,11 @@ impl sov_metrics::Metric for ClusterUpdateMetric {
             buffer,
             ",not_ready_followers_count={}",
             self.not_ready_followers_count
+        )?;
+        write!(
+            buffer,
+            ",errored_followers_count={}",
+            self.errored_followers_count
         )
     }
 }

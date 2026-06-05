@@ -136,6 +136,10 @@ impl AdvertisedClusterInfo {
     fn not_ready_followers_count(&self) -> usize {
         self.not_ready_followers.len()
     }
+
+    fn errors_count(&self) -> usize {
+        self.errors.len()
+    }
 }
 
 /// Whether a follower reported itself ready, and if not, the status it returned.
@@ -463,6 +467,7 @@ impl NodeDiscovery {
             advertised_membership: advertised_membership.clone(),
             advertised_cluster_changed: advertised_changed,
             not_ready_followers_count: advertised_info.not_ready_followers_count(),
+            errored_followers_count: advertised_info.errors_count(),
         };
 
         if advertised_changed {
