@@ -160,10 +160,13 @@ fn replace_chars(input: &str, char_map: &HashMap<char, &str>) -> String {
 }
 
 static TELEGRAF_ESCAPED_CHARS: LazyLock<HashMap<char, &'static str>> =
-    LazyLock::new(|| HashMap::from([(' ', r"\ "), ('=', r"\="), (',', r"\,")]));
+    LazyLock::new(|| HashMap::from([('\\', r"\\"), (' ', r"\ "), ('=', r"\="), (',', r"\,")]));
 
 /// Returns a string that is the right format for telegraf.
 /// Source: (Special telegraf characters)[`https://docs.influxdata.com/influxdb/cloud/reference/syntax/line-protocol/#special-characters`]
+///
+/// Backslashes are escaped too: parsers unescape `\,`, `\ ` and `\=`, so a literal
+/// trailing backslash in the input would otherwise swallow the separator after it.
 pub fn safe_telegraf_string(string: &str) -> String {
     replace_chars(string, &TELEGRAF_ESCAPED_CHARS)
 }
@@ -225,6 +228,15 @@ mod tests {
         let mut buffer = Vec::new();
         write_escaped_field_value(&mut buffer, r#"a\b"c"\"#).unwrap();
         assert_eq!(std::str::from_utf8(&buffer).unwrap(), r#"a\\b\"c\"\\"#);
+    }
+
+    #[test]
+    fn safe_telegraf_string_escapes_special_chars() {
+        assert_eq!(
+            safe_telegraf_string(r"a b=c,d\"),
+            r"a\ b\=c\,d\\",
+            "space, equals, comma and backslash must all be escaped"
+        );
     }
 
     #[test]
