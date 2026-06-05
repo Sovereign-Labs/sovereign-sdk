@@ -33,9 +33,9 @@ use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
 use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
-use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint, VersionReader};
+use sov_modules_api::{FullyBakedTx, HexString, Runtime, Spec, StateCheckpoint, VersionReader};
 use sov_rollup_full_node_interface::StateUpdateInfo;
-use sov_state::Storage;
+use sov_state::{NativeStorage, ProvableNamespace, StateRoot, Storage};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -654,6 +654,8 @@ where
 
         Self::common_for_final_catchup_and_new_storage(&mut inner, info.clone()).await;
 
+        Self::check_cached_state_root_against_node(&inner, &info, new_rollup_height).await;
+
         // Compute finalized_rollup_height from the finalized slot to avoid over-pruning during reorgs.
         // Only prune state roots for heights that are finalized on the DA layer.
         let finalized_rollup_height = {
@@ -683,6 +685,51 @@ where
             .executor
             .state_roots
             .retain(|height, _| *height > finalized_rollup_height);
+    }
+
+    async fn check_cached_state_root_against_node(
+        inner: &Inner<S, Rt>,
+        info: &StateUpdateInfo<S::Storage>,
+        new_rollup_height: RollupHeight,
+    ) {
+        let Some(sequencer_root) = inner.executor.state_roots.get(&new_rollup_height) else {
+            debug!(
+                %new_rollup_height,
+                "Skipping sequencer/node state root sanity check; no cached sequencer root is available"
+            );
+            return;
+        };
+
+        let Some(node_root) = info.storage.get_root_hash(info.slot_number) else {
+            debug!(
+                %new_rollup_height,
+                slot_number = %info.slot_number,
+                "Skipping sequencer/node state root sanity check; node root is not available"
+            );
+            return;
+        };
+
+        let sequencer_user_root = sequencer_root.namespace_root(ProvableNamespace::User);
+        let node_user_root = node_root.namespace_root(ProvableNamespace::User);
+
+        if sequencer_user_root == node_user_root {
+            debug!(
+                %new_rollup_height,
+                slot_number = %info.slot_number,
+                user_root = %HexString(sequencer_user_root),
+                "Sequencer/node user state root sanity check passed"
+            );
+            return;
+        }
+
+        tracing::error!(
+            %new_rollup_height,
+            slot_number = %info.slot_number,
+            sequencer_user_root = %HexString(sequencer_user_root),
+            node_user_root = %HexString(node_user_root),
+            "Sequencer user state root does not match the node user state root. This indicates a sequencer/node state divergence."
+        );
+        crate::preferred::exit_rollup(&inner.shutdown_sender).await;
     }
 
     async fn process_final_catchup(
