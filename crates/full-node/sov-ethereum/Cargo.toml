@@ -86,4 +86,20 @@ default = []
 local = [
 	"sov-ethereum/local"
 ]
-native = []
+native = [
+	"sov-accounts/native",
+	"sov-address/native",
+	"sov-bank/native",
+	"sov-blob-storage/native",
+	"sov-ethereum/native",
+	"sov-evm/native",
+	"sov-kernels/native",
+	"sov-metrics/native",
+	"sov-mock-da/native",
+	"sov-modules-api/native",
+	"sov-modules-stf-blueprint/native",
+	"sov-paymaster/native",
+	"sov-rollup-interface/native",
+	"sov-state/native",
+	"sov-uniqueness/native"
+]
