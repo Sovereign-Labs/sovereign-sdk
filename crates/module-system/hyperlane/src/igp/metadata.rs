@@ -36,8 +36,6 @@ impl IGPMetadata {
     const EXPECTED_VARIANT: u16 = 1;
 
     pub(crate) fn deserialize(buf: &[u8]) -> Result<Self> {
-        type U256 = ruint::Uint<256, 4>;
-
         let mut cursor = buf;
 
         // variant (0:2): reject unknown versions so a future format isn't misparsed.
@@ -57,7 +55,7 @@ impl IGPMetadata {
 
         // gas limit (34:66): Hyperlane uses a u256 but our amounts are u128, so
         // anything beyond u128::MAX is rejected.
-        let gas_limit = U256::from_be_bytes(read_field::<32>(&mut cursor)?);
+        let gas_limit = ruint::Uint::<256, 4>::from_be_bytes(read_field::<32>(&mut cursor)?);
         let gas_limit: u128 = gas_limit
             .try_into()
             .map_err(|_| Error::new(ErrorKind::InvalidData, "Gas limit exceeds u128 maximum"))?;
