@@ -8,7 +8,7 @@
 //! - **Static replicas** run a heartbeat for registration only, never competing for leadership.
 
 use std::net::SocketAddr;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use sov_full_node_configs::sequencer::{ConfiguredNodeRole, PostgresConfig};
@@ -21,6 +21,26 @@ use super::SequencerRole;
 
 use super::postgres::PostgresBackend;
 use crate::preferred::exit_rollup;
+
+/// Leadership role of a node, used both as the configured mode of a heartbeat
+/// task and as the result of a leadership heartbeat / election attempt.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+enum LeadershipRole {
+    /// This node currently holds leadership.
+    Leader,
+    /// This node is a replica: another node holds leadership, or no leader is
+    /// currently elected.
+    Replica,
+}
+
+impl std::fmt::Display for LeadershipRole {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            LeadershipRole::Leader => f.write_str("leader"),
+            LeadershipRole::Replica => f.write_str("replica"),
+        }
+    }
+}
 
 /// Manages periodic heartbeat and optional leadership election for a sequencer node.
 ///
@@ -73,16 +93,15 @@ impl HeartBeatTask {
         }
     }
 
-    // Sends a heartbeat that competes for leadership.
-    // Returns `true` if this node is the current leader.
-    async fn try_acquire_leadership(&self) -> Result<bool> {
+    // Sends a heartbeat that competes for leadership and reports who holds it.
+    async fn try_acquire_leadership(&self) -> Result<LeadershipRole> {
         match self
             .backend
             .heartbeat(Some(self.postgres_config.leader_election))
             .await?
         {
-            Some(leader) => Ok(leader.node_id == self.node_id),
-            None => Ok(false),
+            Some(leader) if leader.node_id == self.node_id => Ok(LeadershipRole::Leader),
+            _ => Ok(LeadershipRole::Replica),
         }
     }
 
@@ -95,40 +114,81 @@ impl HeartBeatTask {
     // Spawns a task for the current leader to maintain leadership.
     //
     // Periodically refreshes leadership. If leadership is lost or the database
-    // becomes unreachable, triggers a graceful shutdown.  .
+    // becomes unreachable, triggers a graceful shutdown.
     fn spawn_leader_heartbeat_task(self) -> JoinHandle<()> {
+        self.spawn_heartbeat_loop(LeadershipRole::Leader)
+    }
+
+    // Spawns a task for a replica that wants to become leader.
+    //
+    // Periodically attempts to acquire leadership. If successful, triggers
+    // a shutdown so the node can restart as the new leader.
+    fn spawn_replica_heartbeat_task(self) -> JoinHandle<()> {
+        self.spawn_heartbeat_loop(LeadershipRole::Replica)
+    }
+
+    // Drives the periodic heartbeat loop shared by the leader and replica tasks.
+    //
+    // Each tick acquires a fresh leadership status and dispatches it to the
+    // mode-specific handler. The loop ends on shutdown, or when the handler
+    // signals it should stop (e.g. a replica that won the election).
+    fn spawn_heartbeat_loop(self, mode: LeadershipRole) -> JoinHandle<()> {
         tokio::spawn(async move {
-            info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting leader heartbeat task");
+            info!(node_id = %self.node_id, address = %self.backend.node_address, %mode, "Starting heartbeat task");
             let mut interval = tokio::time::interval(self.heartbeat_interval);
 
+            // Liveness log, throttled to at most once every 5s. Helps detect a
+            // blocked tokio event loop: a gap between these logs means the loop
+            // was not being driven.
+            let alive_log_period = Duration::from_secs(5);
+            let mut last_alive_log = Instant::now();
+
             loop {
+                // Also helps detect a frozen tokio event loop: a stalled runtime
+                // makes the tick fire late, so `tick_elapsed` (below) overshoots
+                // the heartbeat interval.
+                let tick_start = Instant::now();
                 match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                     FutureOrShutdownOutput::Shutdown => {
-                        info!("Shutdown signal received, stopping heartbeat task");
+                        info!(%mode, "Shutdown signal received, stopping heartbeat task");
                         return;
                     }
                     FutureOrShutdownOutput::Output(_) => {
-                        match self.try_acquire_leadership().await {
-                            Ok(true) => {
-                                // Successfully refreshed leadership and node registration
-                                tracing::trace!("Leadership heartbeat successful.");
-                            }
-                            Ok(false) => {
-                                error!(
-                                    node_id = %self.node_id,
-                                    "Leadership lost! Another node has taken over. Initiating graceful shutdown."
-                                );
-                                exit_rollup(&self.shutdown_sender).await;
-                                unreachable!();
-                            }
-                            Err(e) => {
-                                error!(
-                                    node_id = %self.node_id,
-                                    error = ?e,
-                                    "Heartbeat error! Unable to communicate with database. Initiating graceful shutdown."
-                                );
-                                exit_rollup(&self.shutdown_sender).await;
-                                unreachable!();
+                        let tick_elapsed = tick_start.elapsed();
+                        if tick_elapsed > 2 * self.heartbeat_interval {
+                            warn!(
+                                %mode,
+                                node_id = %self.node_id,
+                                elapsed = ?tick_elapsed,
+                                heartbeat_interval = ?self.heartbeat_interval,
+                                "Heartbeat interval tick took longer than twice the heartbeat interval"
+                            );
+                        }
+
+                        let start = Instant::now();
+                        let status = self.try_acquire_leadership().await;
+                        let elapsed = start.elapsed();
+                        if elapsed > self.heartbeat_interval {
+                            warn!(
+                                %mode,
+                                node_id = %self.node_id,
+                                ?elapsed,
+                                heartbeat_interval = ?self.heartbeat_interval,
+                                "Leadership heartbeat db call took longer than the heartbeat interval"
+                            );
+                        }
+
+                        if last_alive_log.elapsed() >= alive_log_period {
+                            info!(%mode, node_id = %self.node_id, "Heartbeat task alive, sending heartbeats");
+                            last_alive_log = Instant::now();
+                        }
+
+                        match mode {
+                            LeadershipRole::Leader => self.handle_leader_heartbeat(status).await,
+                            LeadershipRole::Replica => {
+                                if self.handle_replica_election(status) {
+                                    break;
+                                }
                             }
                         }
                     }
@@ -137,49 +197,58 @@ impl HeartBeatTask {
         })
     }
 
-    // Spawns a task for a replica that wants to become leader.
-    //
-    // Periodically attempts to acquire leadership. If successful, triggers
-    // a shutdown so the node can restart as the new leader.
-    fn spawn_replica_heartbeat_task(self) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting replica election task");
-            let mut interval = tokio::time::interval(self.heartbeat_interval);
-
-            loop {
-                match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
-                    FutureOrShutdownOutput::Shutdown => {
-                        info!("Shutdown signal received, stopping election task.");
-                        return;
-                    }
-                    FutureOrShutdownOutput::Output(_) => {
-                        match self.try_acquire_leadership().await {
-                            Ok(true) => {
-                                info!(
-                                    node_id = %self.node_id,
-                                    "Replica acquired leadership! Exiting to restart as leader."
-                                );
-                                let _ = self.shutdown_sender.send(());
-                                break;
-                            }
-                            Ok(false) => {
-                                // Another node is still leader, keep trying
-                                tracing::trace!(
-                                    "Leadership acquisition failed, another node is leader."
-                                );
-                            }
-                            Err(e) => {
-                                warn!(
-                                    node_id = %self.node_id,
-                                    error = ?e,
-                                    "Election attempt failed, will retry."
-                                );
-                            }
-                        }
-                    }
-                }
+    // Handles the outcome of a leader heartbeat. If leadership is lost or the
+    // database is unreachable, triggers a graceful shutdown (never returns).
+    async fn handle_leader_heartbeat(&self, status: Result<LeadershipRole>) {
+        match status {
+            Ok(LeadershipRole::Leader) => {
+                // Successfully refreshed leadership and node registration
+                tracing::trace!("Leadership heartbeat successful.");
             }
-        })
+            Ok(LeadershipRole::Replica) => {
+                error!(
+                    node_id = %self.node_id,
+                    "Leadership lost! Another node has taken over. Initiating graceful shutdown."
+                );
+                exit_rollup(&self.shutdown_sender).await;
+            }
+            Err(e) => {
+                error!(
+                    node_id = %self.node_id,
+                    error = ?e,
+                    "Heartbeat error! Unable to communicate with database. Initiating graceful shutdown."
+                );
+                exit_rollup(&self.shutdown_sender).await;
+            }
+        }
+    }
+
+    // Handles the outcome of a replica election attempt. Returns `true` if
+    // leadership was acquired and the election loop should stop.
+    fn handle_replica_election(&self, status: Result<LeadershipRole>) -> bool {
+        match status {
+            Ok(LeadershipRole::Leader) => {
+                info!(
+                    node_id = %self.node_id,
+                    "Replica acquired leadership! Exiting to restart as leader."
+                );
+                let _ = self.shutdown_sender.send(());
+                true
+            }
+            Ok(LeadershipRole::Replica) => {
+                // Another node is still leader, keep trying
+                tracing::trace!("Leadership acquisition failed, another node is leader.");
+                false
+            }
+            Err(e) => {
+                warn!(
+                    node_id = %self.node_id,
+                    error = ?e,
+                    "Election attempt failed, will retry."
+                );
+                false
+            }
+        }
     }
 
     // Spawns a task that only maintains node registration.
