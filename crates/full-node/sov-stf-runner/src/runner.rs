@@ -562,14 +562,20 @@ where
         let da_extraction_time = stf_execution_start.elapsed();
 
         let apply_slot_start = std::time::Instant::now();
-        let slot_result = self.stf.apply_slot(
-            &pre_state_root,
-            stf_pre_state,
-            Default::default(),
-            &filtered_block_header,
-            relevant_blobs.as_iters(),
-            ExecutionContext::Node,
-        );
+        // `apply_slot` is a CPU-bound, synchronous computation. Run it via
+        // `block_in_place` so the tokio worker hands off its scheduler core to
+        // another thread instead of stalling the async runtime while we execute
+        // the slot.
+        let slot_result = tokio::task::block_in_place(|| {
+            self.stf.apply_slot(
+                &pre_state_root,
+                stf_pre_state,
+                Default::default(),
+                &filtered_block_header,
+                relevant_blobs.as_iters(),
+                ExecutionContext::Node,
+            )
+        });
 
         let apply_slot_time = apply_slot_start.elapsed();
 
