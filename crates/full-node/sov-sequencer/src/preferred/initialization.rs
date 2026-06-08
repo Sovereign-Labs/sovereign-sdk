@@ -112,6 +112,20 @@ where
         )
         .await?;
 
+        if let Some(blob_sender_sequence_number) =
+            blob_sender.highest_sequence_number_to_send_after_restart()?
+        {
+            if blob_sender_sequence_number >= next_sequence_number {
+                let _ = shutdown_sender.send(());
+                let preferred_db_highest_sequence_number = next_sequence_number
+                    .checked_sub(1)
+                    .map_or_else(|| "none".to_owned(), |seq| seq.to_string());
+                anyhow::bail!(
+                    "Node state is inconsistent, aborting startup: BlobSender DB contains a higher blob sequence number than the Preferred Sequencer DB. BlobSender has blobs up to {blob_sender_sequence_number}, but the preferred sequencer only has blobs up to {preferred_db_highest_sequence_number}. This could mean the preferred sequencer DB was wiped; this is not supported, but to proceed, the BlobSender DB must also be deleted in the rollup state directory. Otherwise, this as a bug, please report it."
+                );
+            }
+        }
+
         if let Some(blob_sender_handle) = blob_sender_handle {
             handles.push(blob_sender_handle);
         }

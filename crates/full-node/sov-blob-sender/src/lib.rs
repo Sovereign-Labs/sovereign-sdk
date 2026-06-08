@@ -218,6 +218,15 @@ where
         &self.hooks
     }
 
+    /// Returns the blobs that were loaded from storage and will be submitted on
+    /// the first publish call after restart.
+    pub fn blobs_to_send_after_restart(&self) -> impl Iterator<Item = &BlobToSend> {
+        self.blobs_to_send_after_restart
+            .as_deref()
+            .into_iter()
+            .flat_map(|blobs| blobs.iter().map(|blob| &blob.blob))
+    }
+
     /// Can be called again with the same [`BlobInternalId`] to resume publishing.
     pub async fn publish_batch_blob(
         &mut self,
