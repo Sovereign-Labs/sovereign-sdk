@@ -83,7 +83,7 @@ impl<S: Spec> EvmPrecompile<S> for OraclePrecompile<S> {
         gas_limit: u64,
         env: &mut EvmPrecompileEnv<'_, S, ST>,
     ) -> PrecompileResult {
-        if input.is_empty() || input.len() % 32 != 0 {
+        if input.is_empty() || !input.len().is_multiple_of(32) {
             return Err(PrecompileError::InvalidInput(format!(
                 "expected one or more 32-byte keys, got {} bytes",
                 input.len()
