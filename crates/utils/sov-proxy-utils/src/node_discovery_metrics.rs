@@ -1,13 +1,19 @@
+use crate::node_discovery::ClusterMembership;
 use sov_metrics::write_escaped_field_value;
 use std::io::Write;
 
 #[derive(Debug)]
 pub(crate) struct ClusterUpdateMetric {
-    pub current_leader: Option<String>,
-    pub followers: Vec<String>,
+    pub membership: ClusterMembership,
     /// `true` if this emission reflects an actual membership or leader change;
     /// `false` if it is a periodic liveness re-emit of the unchanged state.
     pub cluster_changed: bool,
+    pub advertised_membership: ClusterMembership,
+    pub advertised_cluster_changed: bool,
+    pub not_ready_followers_count: usize,
+    /// Number of followers whose readiness probe failed entirely (unreachable,
+    /// panicked, or cancelled). Disjoint from `not_ready_followers_count`.
+    pub errored_followers_count: usize,
 }
 
 impl sov_metrics::Metric for ClusterUpdateMetric {
@@ -20,10 +26,42 @@ impl sov_metrics::Metric for ClusterUpdateMetric {
         // tag value creates a new InfluxDB series and cluster membership can
         // change often enough to cause high-cardinality storage/query overhead.
         write!(buffer, "{} current_leader=\"", self.measurement_name(),)?;
-        write_escaped_field_value(buffer, self.current_leader.as_deref().unwrap_or("none"))?;
+        write_escaped_field_value(
+            buffer,
+            self.membership.leader_id.as_deref().unwrap_or("none"),
+        )?;
         write!(buffer, "\",followers=\"")?;
-        write_escaped_field_value(buffer, &format!("{:?}", self.followers))?;
-        write!(buffer, "\",cluster_changed={}", self.cluster_changed)
+        write_escaped_field_value(buffer, &format!("{:?}", self.membership.followers))?;
+        write!(buffer, "\",cluster_changed={}", self.cluster_changed)?;
+
+        write!(buffer, ",advertised_current_leader=\"")?;
+        write_escaped_field_value(
+            buffer,
+            self.advertised_membership
+                .leader_id
+                .as_deref()
+                .unwrap_or("none"),
+        )?;
+        write!(buffer, "\",advertised_followers=\"")?;
+        write_escaped_field_value(
+            buffer,
+            &format!("{:?}", self.advertised_membership.followers),
+        )?;
+        write!(
+            buffer,
+            "\",advertised_cluster_changed={}",
+            self.advertised_cluster_changed
+        )?;
+        write!(
+            buffer,
+            ",not_ready_followers_count={}",
+            self.not_ready_followers_count
+        )?;
+        write!(
+            buffer,
+            ",errored_followers_count={}",
+            self.errored_followers_count
+        )
     }
 }
 

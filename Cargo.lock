@@ -12138,6 +12138,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "axum 0.8.8",
  "reqwest 0.13.3",
  "serde",
  "sov-metrics",
