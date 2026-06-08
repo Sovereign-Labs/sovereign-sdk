@@ -29,7 +29,7 @@
         "turbo": "^2.9.14",
         "typedoc": "^0.28.4",
         "vite-plugin-wasm": "^3.4.1",
-        "vitest": "4.0.7"
+        "vitest": "4.1.0"
     },
     "pnpm": {
         "overrides": {

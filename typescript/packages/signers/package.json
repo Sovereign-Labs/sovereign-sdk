@@ -46,7 +46,7 @@
     "bs58": "^6.0.0",
     "tsup": "^8.3.0",
     "typescript": "^5.6.3",
-    "vitest": "4.0.7"
+    "vitest": "4.1.0"
   },
   "peerDependencies": {
     "tsup": "^8.3.0",
