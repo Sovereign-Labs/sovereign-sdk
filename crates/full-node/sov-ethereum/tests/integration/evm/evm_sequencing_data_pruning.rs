@@ -1,4 +1,4 @@
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::str::FromStr;
@@ -83,52 +83,81 @@ impl<S: Spec> EvmPrecompile<S> for OraclePrecompile<S> {
         gas_limit: u64,
         env: &mut EvmPrecompileEnv<'_, S, ST>,
     ) -> PrecompileResult {
-        if ORACLE_PRECOMPILE_GAS > gas_limit {
-            return Err(PrecompileError::OutOfGas);
-        }
-        if input.len() != 32 {
+        if input.is_empty() || input.len() % 32 != 0 {
             return Err(PrecompileError::InvalidInput(format!(
-                "expected 32-byte key, got {} bytes",
+                "expected one or more 32-byte keys, got {} bytes",
                 input.len()
             )));
         }
 
-        let raw_key = U256::from_be_slice(input);
-        if raw_key > U256::from(u64::MAX) {
-            return Err(PrecompileError::InvalidInput(
-                "key does not fit in u64".to_string(),
-            ));
+        let key_count = u64::try_from(input.len() / 32)
+            .map_err(|_| PrecompileError::InvalidInput("too many oracle keys".to_string()))?;
+        let gas_used = ORACLE_PRECOMPILE_GAS
+            .checked_mul(key_count)
+            .ok_or(PrecompileError::OutOfGas)?;
+        if gas_used > gas_limit {
+            return Err(PrecompileError::OutOfGas);
         }
-        let key = raw_key.to::<u64>();
 
-        let sequencing_data = env
-            .sov_context
-            .and_then(|ctx| ctx.sequencing_data().as_ref())
-            .ok_or_else(|| PrecompileError::State("missing sequencing data".to_string()))?;
-        let sequencing_data =
+        let sequencing_data = {
+            let sequencing_data = env
+                .sov_context
+                .and_then(|ctx| ctx.sequencing_data().as_ref())
+                .ok_or_else(|| PrecompileError::State("missing sequencing data".to_string()))?;
             OracleSequencingData::try_from_slice(sequencing_data).map_err(|err| {
                 PrecompileError::State(format!("failed to deserialize sequencing data: {err}"))
-            })?;
-        let value = sequencing_data
-            .0
-            .get(&key)
-            .ok_or_else(|| PrecompileError::InvalidInput(format!("missing oracle key {key}")))?;
+            })?
+        };
 
-        #[cfg(feature = "native")]
-        env.sov_context
-            .expect("sov context was checked above")
-            .sequencing_scratchpad()
-            .set(
-                borsh::to_vec(&key)
-                    .expect("u64 serialization is infallible")
-                    .into(),
-            );
+        let mut output = Vec::with_capacity(input.len());
+        for raw_key in input.chunks_exact(32) {
+            let raw_key = U256::from_be_slice(raw_key);
+            if raw_key > U256::from(u64::MAX) {
+                return Err(PrecompileError::InvalidInput(
+                    "key does not fit in u64".to_string(),
+                ));
+            }
+            let key = raw_key.to::<u64>();
+            let value = *sequencing_data.0.get(&key).ok_or_else(|| {
+                PrecompileError::InvalidInput(format!("missing oracle key {key}"))
+            })?;
+
+            #[cfg(feature = "native")]
+            record_used_oracle_key(env, key)?;
+
+            output.extend_from_slice(&U256::from(value).to_be_bytes::<32>());
+        }
 
         Ok(PrecompileOutput {
-            gas_used: ORACLE_PRECOMPILE_GAS,
-            bytes: u256_word(*value),
+            gas_used,
+            bytes: output.into(),
         })
     }
+}
+
+#[cfg(feature = "native")]
+fn record_used_oracle_key<S: Spec, ST: TxState<S>>(
+    env: &EvmPrecompileEnv<'_, S, ST>,
+    key: u64,
+) -> Result<(), PrecompileError> {
+    env.sov_context
+        .expect("sov context was checked above")
+        .sequencing_scratchpad()
+        .with_value(|scratchpad| {
+            let mut used_keys = match scratchpad.as_deref() {
+                Some(bytes) => Vec::<u64>::try_from_slice(bytes).map_err(|err| {
+                    PrecompileError::State(format!("failed to deserialize used oracle keys: {err}"))
+                })?,
+                None => Vec::new(),
+            };
+            used_keys.push(key);
+            *scratchpad = Some(
+                borsh::to_vec(&used_keys)
+                    .expect("u64 vector serialization is infallible")
+                    .into(),
+            );
+            Ok(())
+        })
 }
 
 sov_evm::generate_precompile_set! {
@@ -197,10 +226,11 @@ impl<S: Spec> SequencingDataHandler<S> for PruningCapabilities<'_, S> {
         let Some(scratchpad) = scratchpad else {
             return data;
         };
-        let Ok(used_key) = u64::try_from_slice(&scratchpad) else {
+        let Ok(used_keys) = Vec::<u64>::try_from_slice(&scratchpad) else {
             return data;
         };
-        data.0.retain(|key, _| *key == used_key);
+        let used_keys = used_keys.into_iter().collect::<BTreeSet<_>>();
+        data.0.retain(|key, _| used_keys.contains(key));
         data
     }
 }
@@ -460,10 +490,17 @@ async fn evm_precompile_can_prune_sequencing_data_and_replay_from_da() -> anyhow
     let oracle_entries = BTreeMap::from([(11, 1_100), (22, 2_200), (33, 3_300)]);
     set_oracle_data(oracle_entries.clone());
 
-    let mut expected_by_hash = BTreeMap::new();
-    for (&key, &value) in &oracle_entries {
-        let tx_hash = assert_precompile_value(&evm_client, tester_address, key, value).await?;
-        expected_by_hash.insert(tx_hash_bytes(tx_hash), key);
+    let mut expected_by_hash: BTreeMap<[u8; 32], BTreeSet<u64>> = BTreeMap::new();
+    for &key in oracle_entries.keys() {
+        let keys = [key];
+        let tx_hash =
+            assert_precompile_values(&evm_client, tester_address, &keys, &oracle_entries).await?;
+        expected_by_hash.insert(tx_hash_bytes(tx_hash), keys.into_iter().collect());
+    }
+    for keys in [vec![11, 22], vec![33, 11, 22]] {
+        let tx_hash =
+            assert_precompile_values(&evm_client, tester_address, &keys, &oracle_entries).await?;
+        expected_by_hash.insert(tx_hash_bytes(tx_hash), keys.into_iter().collect());
     }
 
     let last_checked_height = test_rollup.da_service.get_head_block_header().await?.height;
@@ -602,16 +639,22 @@ async fn deploy_precompile_tester(
         .expect("deployment receipt should include contract address"))
 }
 
-async fn assert_precompile_value(
+async fn assert_precompile_values(
     client: &sov_eth_client::SimpleStorageClient,
     tester_address: Address,
-    key: u64,
-    value: u64,
+    keys: &[u64],
+    oracle_entries: &BTreeMap<u64, u64>,
 ) -> anyhow::Result<TxHash> {
+    let expected_values = keys.iter().map(|key| {
+        oracle_entries
+            .get(key)
+            .copied()
+            .unwrap_or_else(|| panic!("missing test oracle value for key {key}"))
+    });
     let call = PrecompileTester::assertPrecompileResultCall {
         precompile: ORACLE_PRECOMPILE_ADDRESS,
-        input: u256_word(key),
-        expectedOutput: u256_word(value),
+        input: u256_words(keys.iter().copied()),
+        expectedOutput: u256_words(expected_values),
     };
     let tx = client.make_tx(Some(tester_address), Some(Bytes::from(call.abi_encode())));
     let tx_hash = client
@@ -621,14 +664,14 @@ async fn assert_precompile_value(
     let receipt = client.wait_for_receipt(tx_hash).await;
     assert!(
         receipt.status(),
-        "precompile assertion tx for key {key} should succeed"
+        "precompile assertion tx for keys {keys:?} should succeed"
     );
     Ok(tx_hash)
 }
 
 async fn wait_for_pruned_txs_on_da(
     test_rollup: &TestRollup<PruningBlueprint>,
-    expected_by_hash: &BTreeMap<[u8; 32], u64>,
+    expected_by_hash: &BTreeMap<[u8; 32], BTreeSet<u64>>,
     oracle_entries: &BTreeMap<u64, u64>,
     mut last_checked_height: u64,
 ) -> anyhow::Result<()> {
@@ -644,7 +687,7 @@ async fn wait_for_pruned_txs_on_da(
                     for tx in batch.data.iter() {
                         let tx_hash = <RT as RuntimeTrait<S>>::Auth::compute_tx_hash(tx)?;
                         let tx_hash = <[u8; 32]>::from(tx_hash);
-                        let Some(expected_key) = expected_by_hash.get(&tx_hash) else {
+                        let Some(expected_keys) = expected_by_hash.get(&tx_hash) else {
                             continue;
                         };
                         let sequencing_data = tx
@@ -653,17 +696,20 @@ async fn wait_for_pruned_txs_on_da(
                             .expect("oracle tx should include sequencing data");
                         let sequencing_data =
                             OracleSequencingData::try_from_slice(sequencing_data)?;
+                        let actual_keys =
+                            sequencing_data.0.keys().copied().collect::<BTreeSet<_>>();
                         assert_eq!(
-                            sequencing_data.0.len(),
-                            1,
-                            "published tx should retain only the used oracle key"
+                            actual_keys, *expected_keys,
+                            "published tx should retain only the used oracle keys"
                         );
-                        assert_eq!(
-                            sequencing_data.0.get(expected_key),
-                            oracle_entries.get(expected_key),
-                            "published tx should retain the used oracle value"
-                        );
-                        found.insert(tx_hash, *expected_key);
+                        for expected_key in expected_keys {
+                            assert_eq!(
+                                sequencing_data.0.get(expected_key),
+                                oracle_entries.get(expected_key),
+                                "published tx should retain the used oracle value"
+                            );
+                        }
+                        found.insert(tx_hash, expected_keys.clone());
                     }
                 }
             }
@@ -695,8 +741,12 @@ fn set_oracle_data(data: BTreeMap<u64, u64>) {
     *ORACLE_DATA.lock().expect("oracle data mutex was poisoned") = OracleSequencingData(data);
 }
 
-fn u256_word(value: u64) -> Bytes {
-    Bytes::copy_from_slice(&U256::from(value).to_be_bytes::<32>())
+fn u256_words(values: impl IntoIterator<Item = u64>) -> Bytes {
+    let mut bytes = Vec::new();
+    for value in values {
+        bytes.extend_from_slice(&U256::from(value).to_be_bytes::<32>());
+    }
+    Bytes::from(bytes)
 }
 
 fn tx_hash_bytes(tx_hash: TxHash) -> [u8; 32] {
