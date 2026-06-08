@@ -308,7 +308,7 @@ risc0-build = "3.0"
 # pin their own sp1-zkvm source explicitly because [patch.crates-io] requires
 # a workspace root and prevents `workspace = true` inheritance. See also the
 # sha2 / ed25519-dalek pinning notes above.
-slop-algebra = { version = "6.2.2", default-features = false }
+slop-algebra = { version = "6.2.3", default-features = false }
 sp1-build = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202", default-features = false }
 sp1-lib = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202", default-features = false }
 sp1-primitives = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202", default-features = false }

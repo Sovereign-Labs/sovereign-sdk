@@ -3525,7 +3525,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -10477,9 +10477,9 @@ dependencies = [
 
 [[package]]
 name = "slop-algebra"
-version = "6.2.2"
+version = "6.2.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3e8abf7cfad18c0580576e8adc01f7fa27b1cb19432e451e82950c9a445a7cfc"
+checksum = "6d7e25239ac2fe1cbc2ed5114844209d70361c8d55ef812cb935c90d6f771b5b"
 dependencies = [
  "itertools 0.14.0",
  "p3-field",
@@ -10502,7 +10502,7 @@ version = "6.2.3"
 source = "git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202#df936473ab63dea702f9f6136ba35efab009f202"
 dependencies = [
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "thiserror 1.0.69",
 ]
 
@@ -10514,7 +10514,7 @@ dependencies = [
  "lazy_static",
  "p3-baby-bear",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-challenger",
  "slop-poseidon2",
  "slop-symmetric",
@@ -10528,7 +10528,7 @@ dependencies = [
  "derive-where",
  "itertools 0.14.0",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-baby-bear",
  "slop-bn254",
@@ -10551,7 +10551,7 @@ dependencies = [
  "itertools 0.14.0",
  "rand 0.8.5",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-baby-bear",
  "slop-basefold",
@@ -10576,7 +10576,7 @@ dependencies = [
  "ff",
  "p3-bn254-fr",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-challenger",
  "slop-poseidon2",
  "slop-symmetric",
@@ -10590,7 +10590,7 @@ dependencies = [
  "futures",
  "p3-challenger",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-symmetric",
 ]
 
@@ -10611,7 +10611,7 @@ source = "git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6
 dependencies = [
  "p3-dft",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-matrix",
  "slop-tensor",
@@ -10651,7 +10651,7 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-baby-bear",
  "slop-basefold",
@@ -10688,7 +10688,7 @@ dependencies = [
  "lazy_static",
  "p3-koala-bear",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-challenger",
  "slop-poseidon2",
  "slop-symmetric",
@@ -10719,7 +10719,7 @@ dependencies = [
  "itertools 0.14.0",
  "p3-merkle-tree",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-baby-bear",
  "slop-bn254",
@@ -10746,7 +10746,7 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-challenger",
  "slop-commit",
@@ -10768,7 +10768,7 @@ name = "slop-primitives"
 version = "6.2.3"
 source = "git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202#df936473ab63dea702f9f6136ba35efab009f202"
 dependencies = [
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
 ]
 
 [[package]]
@@ -10780,7 +10780,7 @@ dependencies = [
  "futures",
  "itertools 0.14.0",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-basefold",
  "slop-basefold-prover",
@@ -10802,7 +10802,7 @@ dependencies = [
  "itertools 0.14.0",
  "rayon",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-baby-bear",
  "slop-challenger",
@@ -10829,7 +10829,7 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-futures",
  "slop-matrix",
@@ -10866,7 +10866,7 @@ dependencies = [
  "rand 0.8.5",
  "rayon",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-baby-bear",
  "slop-basefold",
@@ -12509,7 +12509,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "slop-algebra 6.2.2",
+ "slop-algebra 6.2.3 (registry+https://github.com/rust-lang/crates.io-index)",
  "sov-metrics",
  "sov-rollup-interface",
  "sov-sp1-adapter",
@@ -12954,7 +12954,7 @@ dependencies = [
  "serde_arrays 0.2.0",
  "serde_json",
  "slop-air",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-maybe-rayon",
  "slop-symmetric",
  "sp1-curves",
@@ -13025,7 +13025,7 @@ dependencies = [
  "serde",
  "serde_json",
  "slop-air",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-challenger",
  "slop-futures",
  "slop-keccak-air",
@@ -13067,7 +13067,7 @@ dependencies = [
  "num",
  "p256",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "snowbridge-amcl",
  "sp1-primitives",
  "typenum",
@@ -13101,7 +13101,7 @@ dependencies = [
  "rayon-scan",
  "serde",
  "slop-air",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-basefold",
  "slop-basefold-prover",
@@ -13186,7 +13186,7 @@ dependencies = [
  "num-bigint 0.4.6",
  "serde",
  "sha2 0.10.9",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-bn254",
  "slop-challenger",
  "slop-koala-bear",
@@ -13224,7 +13224,7 @@ dependencies = [
  "serial_test",
  "sha2 0.10.9",
  "slop-air",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-basefold",
  "slop-bn254",
  "slop-challenger",
@@ -13292,7 +13292,7 @@ dependencies = [
  "rayon",
  "serde",
  "slop-air",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-alloc",
  "slop-basefold",
  "slop-basefold-prover",
@@ -13329,7 +13329,7 @@ dependencies = [
  "cfg-if",
  "itertools 0.14.0",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-bn254",
  "slop-symmetric",
  "sp1-core-machine",
@@ -13351,7 +13351,7 @@ dependencies = [
  "itertools 0.14.0",
  "range-set-blaze",
  "serde",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-maybe-rayon",
  "slop-poseidon2",
  "slop-symmetric",
@@ -13376,7 +13376,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-symmetric",
  "sp1-hypercube",
  "sp1-primitives",
@@ -13394,7 +13394,7 @@ dependencies = [
  "itertools 0.14.0",
  "rand 0.8.5",
  "slop-air",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-basefold",
  "slop-matrix",
  "slop-maybe-rayon",
@@ -13470,7 +13470,7 @@ dependencies = [
  "lazy_static",
  "serde",
  "sha2 0.10.9",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "slop-challenger",
  "slop-primitives",
  "slop-symmetric",
@@ -13497,7 +13497,7 @@ dependencies = [
  "libm",
  "rand 0.8.5",
  "sha2 0.10.9",
- "slop-algebra 6.2.3",
+ "slop-algebra 6.2.3 (git+https://github.com/succinctlabs/sp1.git?rev=df936473ab63dea702f9f6136ba35efab009f202)",
  "sp1-lib",
  "sp1-primitives",
 ]
