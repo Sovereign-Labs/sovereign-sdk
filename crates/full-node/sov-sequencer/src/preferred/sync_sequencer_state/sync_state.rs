@@ -638,23 +638,23 @@ where
         // Note that we use `StateCheckpoint::new(info.storage.clone(), ...)` *without* passing any intermediate state. This
         // is because we want to see what the height of the checkpoint we just received is, not the height of the sequencer's intermediate state.
         let mut rt = Rt::default();
-        let new_rollup_height =
+        let node_rollup_height =
             StateCheckpoint::new(info.storage.clone(), &rt.kernel()).rollup_height_to_access();
 
         inner
             .executor
             .uncommitted_changes
-            .prune_changes_through(new_rollup_height.get());
+            .prune_changes_through(node_rollup_height.get());
         let uncommitted_changes = inner.executor.uncommitted_changes.clone();
         inner
             .executor
             .checkpoint
             .replace_storage(info.storage.clone(), Box::new(uncommitted_changes));
-        tracing::debug!(%new_rollup_height, "Storage has been replaced");
+        tracing::debug!(%node_rollup_height, "Storage has been replaced");
 
         Self::common_for_final_catchup_and_new_storage(&mut inner, info.clone()).await;
 
-        Self::check_cached_state_root_against_node(&inner, &info, new_rollup_height).await;
+        Self::check_cached_state_root_against_node(&inner, &info, node_rollup_height).await;
 
         // Compute finalized_rollup_height from the finalized slot to avoid over-pruning during reorgs.
         // Only prune state roots for heights that are finalized on the DA layer.
@@ -690,11 +690,11 @@ where
     async fn check_cached_state_root_against_node(
         inner: &Inner<S, Rt>,
         info: &StateUpdateInfo<S::Storage>,
-        new_rollup_height: RollupHeight,
+        node_rollup_height: RollupHeight,
     ) {
-        let Some(sequencer_root) = inner.executor.state_roots.get(&new_rollup_height) else {
+        let Some(sequencer_root) = inner.executor.state_roots.get(&node_rollup_height) else {
             debug!(
-                %new_rollup_height,
+                %node_rollup_height,
                 "Skipping sequencer/node state root sanity check; no cached sequencer root is available"
             );
             return;
@@ -702,7 +702,7 @@ where
 
         let Some(node_root) = info.storage.get_root_hash(info.slot_number) else {
             debug!(
-                %new_rollup_height,
+                %node_rollup_height,
                 slot_number = %info.slot_number,
                 "Skipping sequencer/node state root sanity check; node root is not available"
             );
@@ -714,7 +714,7 @@ where
 
         if sequencer_user_root == node_user_root {
             debug!(
-                %new_rollup_height,
+                %node_rollup_height,
                 slot_number = %info.slot_number,
                 user_root = %HexString(sequencer_user_root),
                 "Sequencer/node user state root sanity check passed"
@@ -723,7 +723,7 @@ where
         }
 
         tracing::error!(
-            %new_rollup_height,
+            %node_rollup_height,
             slot_number = %info.slot_number,
             sequencer_user_root = %HexString(sequencer_user_root),
             node_user_root = %HexString(node_user_root),
