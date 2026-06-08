@@ -367,7 +367,7 @@
           "description": "Maximum time in milliseconds without a heartbeat before a leader is considered inactive.",
           "type": "integer",
           "format": "uint64",
-          "default": 500,
+          "default": 1000,
           "minimum": 0
         }
       }
@@ -471,6 +471,15 @@
           "format": "uint32",
           "minimum": 0
         },
+        "rpc_aggregation": {
+          "description": "In-process aggregation of JSON-RPC call statistics. When the section is\nomitted, defaults are used.",
+          "$ref": "#/$defs/RpcAggregationConfig",
+          "default": {
+            "flush_interval_secs": 10,
+            "max_slow_call_points_per_window": 10,
+            "slow_call_threshold_ms": 500
+          }
+        },
         "telegraf_address": {
           "description": "A UDP or TCP socket where Telegraf has `inputs.socket_listener`, something like `udp://127.0.0.1:8094`.\nLocalhost is preferred for latency and reliability reasons.",
           "$ref": "#/$defs/TelegrafSocketConfig"
@@ -497,7 +506,7 @@
           "default": {
             "grace_period_millis": 10000,
             "heartbeat_interval_millis": 100,
-            "leader_timeout_millis": 500
+            "leader_timeout_millis": 1000
           }
         },
         "node_id": {
@@ -684,6 +693,92 @@
         "max_concurrent_proof_blobs"
       ]
     },
+    "PrunerConfig": {
+      "description": "State-version pruning policy: how (and whether) old historical versions of state keys\nare deleted.\n\nDefaults to [`PrunerConfig::Off`] (full history retained). In config files, omitting the\n`pruner` section disables pruning; otherwise select a variant, e.g.\n`[storage.pruner.periodic]` or `[storage.pruner.once_at_startup]`.",
+      "oneOf": [
+        {
+          "description": "Never prune; the node retains full history.",
+          "type": "string",
+          "const": "off"
+        },
+        {
+          "description": "Prune exactly once, synchronously, at node startup (before block processing begins),\nthen never again during this run. This performs all pruning I/O up front, when there\nis no live read/write traffic to compete with, instead of interfering on every\nfinalized block as [`PrunerConfig::Periodic`] does.",
+          "type": "object",
+          "properties": {
+            "once_at_startup": {
+              "type": "object",
+              "properties": {
+                "compact_after": {
+                  "description": "If `true`, run a full RocksDB compaction on the pruned column families after the\nstartup prune completes, dropping the resulting tombstones and reclaiming disk\nspace. This is heavy (it rewrites the affected column families) and only sensible\nfor the one-time startup prune, so it is off by default.",
+                  "type": "boolean",
+                  "default": false
+                },
+                "max_batch_size": {
+                  "description": "Maximum number of keys deleted per internal batch. Omitting it in config falls back\nto [`default_max_pruning_batch_size`].\n\nWithin each pass the user-state pruner is served first and the kernel-state pruner\nonly gets the leftover budget, so while user state has more than `max_batch_size`\nprunable keys the kernel pruner waits for user pruning to catch up. This only adds\npasses here, since the startup prune runs to completion before block processing; the\ndisk-growth effect of this ordering is a steady-state [`PrunerConfig::Periodic`]\nconcern.",
+                  "type": "integer",
+                  "format": "uint",
+                  "default": 300000,
+                  "minimum": 1
+                },
+                "versions_to_keep": {
+                  "description": "Number of recent versions to retain for historical querying.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "versions_to_keep"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "once_at_startup"
+          ]
+        },
+        {
+          "description": "Periodically prune in the background during finalization (the historical behavior):\nroughly every `block_interval` finalized DA blocks a background pruner is spawned and\nits delete batch is committed on a subsequent finalize.",
+          "type": "object",
+          "properties": {
+            "periodic": {
+              "type": "object",
+              "properties": {
+                "block_interval": {
+                  "description": "Run the pruner roughly every `block_interval` finalized DA blocks.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 0
+                },
+                "max_batch_size": {
+                  "description": "Maximum number of keys deleted per batch. Omitting it in config falls back to\n[`default_max_pruning_batch_size`].\n\nWithin each pass the user-state pruner is served first and the kernel-state pruner\nonly gets the leftover budget, so while user state has more than `max_batch_size`\nprunable keys the kernel pruner makes no progress and kernel historical state can\ngrow on disk until user pruning catches up; raising `max_batch_size` shortens that\nwindow.",
+                  "type": "integer",
+                  "format": "uint",
+                  "default": 300000,
+                  "minimum": 1
+                },
+                "versions_to_keep": {
+                  "description": "Number of recent versions to retain for historical querying.",
+                  "type": "integer",
+                  "format": "uint64",
+                  "minimum": 1
+                }
+              },
+              "additionalProperties": false,
+              "required": [
+                "block_interval",
+                "versions_to_keep"
+              ]
+            }
+          },
+          "additionalProperties": false,
+          "required": [
+            "periodic"
+          ]
+        }
+      ]
+    },
     "RandomizationBehaviour": {
       "description": "Defines the behavior of randomization applied to blobs or blocks.\n\nThis configurable behavior determines how blobs are processed and returned to the caller\nduring various stages of the block production process.\nRandomization may involve reordering, shuffling, skipping, or altering the chain's length,\nwhile preserving certain constraints such as finality.",
       "oneOf": [
@@ -860,7 +955,7 @@
           "minimum": 0
         },
         "kernel_hashtable_buckets": {
-          "description": "Can be increased for an existing database, but cannot be decreased.\nMore details at [`Options::hashtable_buckets`]",
+          "description": "Cannot be changed for the existing database.\nMore details at [`Options::hashtable_buckets`]",
           "type": [
             "integer",
             "null"
@@ -913,32 +1008,10 @@
           "description": "Path where all databases are stored",
           "type": "string"
         },
-        "pruner_block_interval": {
-          "description": "Pruner\nDefines how often pruner is going to be started.\nMeasure by DA blocks.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint64",
-          "minimum": 0
-        },
-        "pruner_max_batch_size": {
-          "description": "Maximum number of keys to prune in a single batch.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint",
-          "minimum": 0
-        },
-        "pruner_versions_to_keep": {
-          "description": "These many versions will be available for historical querying.",
-          "type": [
-            "integer",
-            "null"
-          ],
-          "format": "uint",
-          "minimum": 0
+        "pruner": {
+          "description": "State-version pruning policy. Defaults to [`PrunerConfig::Off`] (full history\nretained) when omitted from config.\n\nThe struct uses `#[serde(deny_unknown_fields)]`, so the deprecated flat\n`pruner_block_interval` / `pruner_versions_to_keep` / `pruner_max_batch_size` keys (and any\nother unknown key) are rejected at parse time rather than silently ignored.",
+          "$ref": "#/$defs/PrunerConfig",
+          "default": "off"
         },
         "state_cache_size": {
           "description": "The size of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB.\nA larger cache size can improve execution speed at the cost of more memory usage.",
@@ -959,7 +1032,7 @@
           "minimum": 0
         },
         "user_hashtable_buckets": {
-          "description": "Value is determined by the expected size of the state. Recommended to start with 15_000_000.\nCan be increased for an existing database, but cannot be decreased.\nMore details at [`Options::hashtable_buckets`]",
+          "description": "Value is determined by the expected size of the state. Recommended to start with 15_000_000.\nCannot be changed for the existing database.\nMore details at [`Options::hashtable_buckets`]",
           "type": [
             "integer",
             "null"
@@ -1002,6 +1075,7 @@
           ]
         }
       },
+      "additionalProperties": false,
       "required": [
         "path"
       ]
@@ -1011,6 +1085,33 @@
       "type": "integer",
       "format": "uint64",
       "minimum": 0
+    },
+    "RpcAggregationConfig": {
+      "description": "Configuration for in-process aggregation of JSON-RPC call statistics.",
+      "type": "object",
+      "properties": {
+        "flush_interval_secs": {
+          "description": "How often aggregated RPC statistics are flushed to the metrics server,\nin seconds. One point per `(method, transport)` pair is emitted per\nwindow, and only for pairs that saw traffic.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 10,
+          "minimum": 0
+        },
+        "max_slow_call_points_per_window": {
+          "description": "Maximum number of individual slow-call points emitted per flush window,\nso that a flood of slow queries degrades to \"the aggregate shows many\nslow calls\" instead of crowding out other metrics.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 10,
+          "minimum": 0
+        },
+        "slow_call_threshold_ms": {
+          "description": "Calls at least this slow emit an individual metric point (subject to\n`max_slow_call_points_per_window`) and a debug-level log line with the\nrequest parameters.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 500,
+          "minimum": 0
+        }
+      }
     },
     "RunnerConfig": {
       "description": "Configuration for StateTransitionRunner.",

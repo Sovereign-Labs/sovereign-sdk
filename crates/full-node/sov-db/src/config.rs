@@ -168,7 +168,7 @@ pub struct RollupDbConfig {
     /// More details at [`Options::commit_concurrency`]
     pub user_commit_concurrency: Option<usize>,
     /// Value is determined by the expected size of the state. Recommended to start with 15_000_000.
-    /// Cannot be changed for the existing database.
+    /// Can be increased for an existing database, but cannot be decreased.
     /// More details at [`Options::hashtable_buckets`]
     pub user_hashtable_buckets: Option<u32>,
     /// Sets whether to preallocate the hashtable file for user db.
@@ -188,7 +188,7 @@ pub struct RollupDbConfig {
     /// Number of concurrent commit workers for the kernel state.
     /// More details at [`Options::commit_concurrency`]
     pub kernel_commit_concurrency: Option<usize>,
-    /// Cannot be changed for the existing database.
+    /// Can be increased for an existing database, but cannot be decreased.
     /// More details at [`Options::hashtable_buckets`]
     pub kernel_hashtable_buckets: Option<u32>,
     /// Sets whether to preallocate the hashtable file for kernel db.
@@ -253,15 +253,7 @@ impl RollupDbConfig {
             self.kernel_commit_concurrency
                 .expect("`kernel_commit_concurrency` concurrency must be set"),
         );
-        if let Some(hashtable_buckets) = self.kernel_hashtable_buckets {
-            opts.hashtable_buckets(hashtable_buckets);
-        } else if cfg!(debug_assertions) {
-            // 2MB
-            opts.hashtable_buckets(500);
-        } else {
-            // 1000MB
-            opts.hashtable_buckets(self.kernel_hashtable_buckets.unwrap_or(256_000));
-        }
+        opts.hashtable_buckets(self.kernel_hashtable_buckets());
 
         if let Some(preallocate_ht) = self.kernel_preallocate_ht {
             opts.preallocate_ht(preallocate_ht);
@@ -282,6 +274,18 @@ impl RollupDbConfig {
         opts
     }
 
+    pub(crate) fn kernel_hashtable_buckets(&self) -> u32 {
+        self.kernel_hashtable_buckets.unwrap_or_else(|| {
+            if cfg!(debug_assertions) {
+                // 2MB
+                500
+            } else {
+                // 1000MB
+                256_000
+            }
+        })
+    }
+
     pub(crate) fn get_user_options(&self) -> Options {
         let mut opts = nomt_default_options();
         // Enabling rollback for user space too, to be able to sync with the historical state.
@@ -291,10 +295,7 @@ impl RollupDbConfig {
             self.user_commit_concurrency
                 .expect("`user_commit_concurrency` must be set"),
         );
-        opts.hashtable_buckets(
-            self.user_hashtable_buckets
-                .expect("`user_hashtable_buckets` must be set"),
-        );
+        opts.hashtable_buckets(self.user_hashtable_buckets());
         if let Some(preallocate_ht) = self.user_preallocate_ht {
             opts.preallocate_ht(preallocate_ht);
         }
@@ -310,6 +311,11 @@ impl RollupDbConfig {
 
         opts.path(self.path.join("user_nomt_db"));
         opts
+    }
+
+    pub(crate) fn user_hashtable_buckets(&self) -> u32 {
+        self.user_hashtable_buckets
+            .expect("`user_hashtable_buckets` must be set")
     }
 
     pub(crate) fn pruner(&self) -> PrunerConfig {
