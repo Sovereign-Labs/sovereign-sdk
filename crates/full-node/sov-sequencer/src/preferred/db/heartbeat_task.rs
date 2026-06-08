@@ -15,7 +15,7 @@ use sov_full_node_configs::sequencer::{ConfiguredNodeRole, PostgresConfig};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
-use tracing::{error, info, warn};
+use tracing::{error, info, warn, Instrument};
 
 use super::SequencerRole;
 
@@ -133,68 +133,76 @@ impl HeartBeatTask {
     // mode-specific handler. The loop ends on shutdown, or when the handler
     // signals it should stop (e.g. a replica that won the election).
     fn spawn_heartbeat_loop(self, mode: LeadershipRole) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            info!(node_id = %self.node_id, address = %self.backend.node_address, %mode, "Starting heartbeat task");
-            let mut interval = tokio::time::interval(self.heartbeat_interval);
+        // Attach the node identity, role, and interval to a span so every event
+        // emitted by this task carries them, instead of repeating the fields on
+        // each log.
+        let span = tracing::info_span!(
+            "heartbeat",
+            node_id = %self.node_id,
+            address = %self.backend.node_address,
+            %mode,
+            heartbeat_interval = ?self.heartbeat_interval,
+        );
 
-            // Liveness log, throttled to at most once every 5s. Helps detect a
-            // blocked tokio event loop: a gap between these logs means the loop
-            // was not being driven.
-            let alive_log_period = Duration::from_secs(5);
-            let mut last_alive_log = Instant::now();
+        tokio::spawn(
+            async move {
+                info!("Starting heartbeat task");
+                let mut interval = tokio::time::interval(self.heartbeat_interval);
 
-            loop {
-                // Also helps detect a frozen tokio event loop: a stalled runtime
-                // makes the tick fire late, so `tick_elapsed` (below) overshoots
-                // the heartbeat interval.
-                let tick_start = Instant::now();
-                match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
-                    FutureOrShutdownOutput::Shutdown => {
-                        info!(%mode, "Shutdown signal received, stopping heartbeat task");
-                        return;
-                    }
-                    FutureOrShutdownOutput::Output(_) => {
-                        let tick_elapsed = tick_start.elapsed();
-                        if tick_elapsed > 2 * self.heartbeat_interval {
-                            warn!(
-                                %mode,
-                                node_id = %self.node_id,
-                                elapsed = ?tick_elapsed,
-                                heartbeat_interval = ?self.heartbeat_interval,
-                                "Heartbeat interval tick took longer than twice the heartbeat interval"
-                            );
+                // Liveness log, throttled to at most once every 5s. Helps detect a
+                // blocked tokio event loop: a gap between these logs means the loop
+                // was not being driven.
+                let alive_log_period = Duration::from_secs(5);
+                let mut last_alive_log = Instant::now();
+
+                loop {
+                    // Also helps detect a frozen tokio event loop: a stalled runtime
+                    // makes the tick fire late, so `tick_elapsed` (below) overshoots
+                    // the heartbeat interval.
+                    let tick_start = Instant::now();
+                    match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
+                        FutureOrShutdownOutput::Shutdown => {
+                            info!("Shutdown signal received, stopping heartbeat task");
+                            return;
                         }
+                        FutureOrShutdownOutput::Output(_) => {
+                            let tick_elapsed = tick_start.elapsed();
+                            if tick_elapsed > 2 * self.heartbeat_interval {
+                                warn!(
+                                    elapsed = ?tick_elapsed,
+                                    "Heartbeat interval tick took longer than twice the heartbeat interval"
+                                );
+                            }
 
-                        let start = Instant::now();
-                        let status = self.try_acquire_leadership().await;
-                        let elapsed = start.elapsed();
-                        if elapsed > self.heartbeat_interval {
-                            warn!(
-                                %mode,
-                                node_id = %self.node_id,
-                                ?elapsed,
-                                heartbeat_interval = ?self.heartbeat_interval,
-                                "Leadership heartbeat db call took longer than the heartbeat interval"
-                            );
-                        }
+                            let start = Instant::now();
+                            let status = self.try_acquire_leadership().await;
+                            let elapsed = start.elapsed();
+                            if elapsed > self.heartbeat_interval {
+                                warn!(
+                                    ?elapsed,
+                                    "Leadership heartbeat db call took longer than the heartbeat interval"
+                                );
+                            }
 
-                        if last_alive_log.elapsed() >= alive_log_period {
-                            info!(%mode, node_id = %self.node_id, "Heartbeat task alive, sending heartbeats");
-                            last_alive_log = Instant::now();
-                        }
+                            if last_alive_log.elapsed() >= alive_log_period {
+                                info!("Heartbeat task alive, sending heartbeats");
+                                last_alive_log = Instant::now();
+                            }
 
-                        match mode {
-                            LeadershipRole::Leader => self.handle_leader_heartbeat(status).await,
-                            LeadershipRole::Replica => {
-                                if self.handle_replica_election(status) {
-                                    break;
+                            match mode {
+                                LeadershipRole::Leader => self.handle_leader_heartbeat(status).await,
+                                LeadershipRole::Replica => {
+                                    if self.handle_replica_election(status) {
+                                        break;
+                                    }
                                 }
                             }
                         }
                     }
                 }
             }
-        })
+            .instrument(span),
+        )
     }
 
     // Handles the outcome of a leader heartbeat. If leadership is lost or the
