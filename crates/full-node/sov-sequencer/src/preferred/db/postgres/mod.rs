@@ -348,6 +348,19 @@ impl PostgresBackend {
         Ok(())
     }
 
+    /// Removes this node's registration from the `nodes` table.
+    ///
+    /// Deleting the row fires the `nodes_changes` NOTIFY trigger so `NodeDiscovery` stops
+    /// routing to this node within milliseconds instead of waiting for staleness. Idempotent
+    /// (deleting an already-missing row is a no-op) and only ever deletes *this* node's row.
+    pub(crate) async fn deregister_node_on_shutdown(&self) -> anyhow::Result<()> {
+        sqlx::query("DELETE FROM nodes WHERE node_id = $1")
+            .bind(&self.node_id)
+            .execute(&self.pool)
+            .await?;
+        Ok(())
+    }
+
     async fn prune_inner(
         &self,
         prune_up_to_including: SequenceNumber,
