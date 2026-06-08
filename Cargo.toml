@@ -302,22 +302,22 @@ ruint = { version = "1", default-features = false }
 risc0-zkvm = { version = "3.0", default-features = false }
 risc0-zkvm-platform = "2.2"
 risc0-build = "3.0"
-# All sp1-* and slop-* crates ship from the same SP1 release and must be upgraded
+# All sp1-* and slop-* crates ship from the same SP1 revision and must be upgraded
 # in lockstep. Self-rooted zkvm-guest workspaces
 # (examples/demo-rollup/provers/sp1/guest-* and crates/adapters/sp1/fibonacci-program)
-# pin their own sp1-zkvm version explicitly because [patch.crates-io] requires
+# pin their own sp1-zkvm source explicitly because [patch.crates-io] requires
 # a workspace root and prevents `workspace = true` inheritance. See also the
 # sha2 / ed25519-dalek pinning notes above.
 slop-algebra = { version = "6.2.2", default-features = false }
-sp1-build = { version = "6.2.2", default-features = false }
-sp1-lib = { version = "6.2.2", default-features = false }
-sp1-primitives = { version = "6.2.2", default-features = false }
-sp1-recursion-executor = { version = "6.2.2", default-features = false }
-sp1-sdk = { version = "6.2.2", default-features = false }
-sp1-verifier = { version = "6.2.2", default-features = false }
+sp1-build = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202", default-features = false }
+sp1-lib = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202", default-features = false }
+sp1-primitives = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202", default-features = false }
+sp1-recursion-executor = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202", default-features = false }
+sp1-sdk = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202", default-features = false }
+sp1-verifier = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202", default-features = false }
 # sp1-zkvm keeps default features (`libm`, `lib`) because sov-sp1-adapter
 # relies on them via the guest-side `verify` feature dependency chain.
-sp1-zkvm = { version = "6.2.2" }
+sp1-zkvm = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202" }
 flume = { version = "0.11.1", features = ["async"] }
 tokio-metrics = { version = "0.4.0" }
 

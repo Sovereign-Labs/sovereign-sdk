@@ -8,7 +8,7 @@ resolver = "2"
 [workspace]
 
 [dependencies]
-sp1-zkvm = { version = "6.2.2" }
+sp1-zkvm = { git = "https://github.com/succinctlabs/sp1.git", rev = "df936473ab63dea702f9f6136ba35efab009f202" }
 sov-mock-da = { path = "../../../../../crates/adapters/mock-da" }
 demo-stf = { path = "../../../stf" }
 sov-metrics = { path = "../../../../../crates/full-node/sov-metrics", optional = true }
