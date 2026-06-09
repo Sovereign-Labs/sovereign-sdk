@@ -274,6 +274,7 @@ tower-http = "0.6"
 tower-request-id = "0.3"
 tracing = { version = "0.1.40", default-features = false, features = ["attributes"] }
 tracing-subscriber = { version = "0.3.18" } # There's hardly any reason to disable its default features.
+tracing-appender = { version = "0.2", default-features = false }
 tracing-test = { version = "0.2.5", features = [
     "no-env-filter",
 ] } # https://docs.rs/tracing-test/latest/tracing_test/#per-crate-filtering

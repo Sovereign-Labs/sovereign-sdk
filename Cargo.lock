@@ -12031,6 +12031,7 @@ dependencies = [
  "sov-stf-runner",
  "tokio",
  "tracing",
+ "tracing-appender",
  "tracing-opentelemetry",
  "tracing-panic",
  "tracing-subscriber 0.3.20",
