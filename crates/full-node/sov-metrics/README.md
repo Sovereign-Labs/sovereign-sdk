@@ -265,7 +265,7 @@ Known cases today:
   IDs (`/blocks/12345`, `/tx/0xabc…`) create one series per ID. Normalization is tracked
   in PR #2753.
 - `sov_hyperlane_rate_limiter_capacity` — series count is `monitored_routes × enrolled_domains × 2`.
-  Cardinality is operator-controlled via `WarpExecutionConfig.monitored_route_ids`; a large
+  Cardinality is operator-controlled via `WarpExecutionConfig.monitored_routes`; a large
   monitored list × many enrolled destinations can still pressure InfluxDB. Prefer enumerating
   only the routes you actively care about.
 
