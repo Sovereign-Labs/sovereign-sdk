@@ -12896,8 +12896,10 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "criterion",
  "schemars 1.2.1",
  "serde",
+ "serde_json",
  "sov-address",
  "sov-modules-api",
  "sov-state",
