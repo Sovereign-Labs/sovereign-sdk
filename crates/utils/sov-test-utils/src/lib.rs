@@ -8,6 +8,7 @@ use std::sync::Arc;
 
 pub use generators::MessageGenerator;
 pub use interface::*;
+pub use logging::initialize_logging;
 pub use rt_agnostic_blueprint::{
     AdditionalSequencerApis, NoAdditionalApis, ParallelProverFactory, ProverFactory,
     RtAgnosticBlueprint, RtAgnosticBlueprintWithApis,
@@ -28,7 +29,6 @@ use sov_modules_api::{
     Amount, BasicGasMeter, CryptoSpec, Gas, GasArray, KernelStateValue, Spec, StateCheckpoint,
 };
 pub use sov_modules_api::{EncodeCall, TxProcessingError, TxReceiptContents};
-pub use sov_modules_rollup_blueprint::logging::initialize_logging;
 pub use sov_modules_stf_blueprint::get_gas_used;
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rollup_interface::common::SlotNumber;
