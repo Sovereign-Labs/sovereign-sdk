@@ -45,15 +45,18 @@ pub fn initialize_logging() -> Option<OtelGuard> {
     let get_env_filter = || EnvFilter::from_str(&env_filter).unwrap();
 
     // Route stdout through a non-blocking, lossy, bounded writer so a slow or backpressuring
-    // stdout consumer can never block tokio worker threads. With the default blocking
-    // `std::io::stdout()` writer, a log-storm (e.g. the per-retry warnings emitted by every DA
-    // task during a Celestia outage) makes workers block mid-poll inside `write(2)`, which
-    // freezes the entire runtime — including DA-independent tasks like the heartbeat (incident
-    // 2026-06). The node logs for its whole lifetime, so we keep the writer's worker thread
+    // stdout consumer can never block tokio worker threads.
+    // With the default blocking `std::io::stdout()` writer, a log-storm `lossy(true)`
+    // (also the default, but set explicitly because it is load-bearing: `lossy(false)`
+    // would re-introduce the blocking) drops lines when the buffer is full rather
+    // than blocking. The node logs for its whole lifetime, so we keep the writer's worker thread
     // alive by leaking the guard; this deliberately keeps the return type unchanged, since it is
-    // consumed (often unbound) at many call sites. Trade-off: the last buffered lines may not
-    // flush on an abrupt exit.
-    let (non_blocking, worker_guard) = tracing_appender::non_blocking(std::io::stdout());
+    // consumed (often unbound) at many call sites.
+    // Trade-off: the last buffered lines may not flush on an abrupt exit.
+    let (non_blocking, worker_guard) =
+        tracing_appender::non_blocking::NonBlockingBuilder::default()
+            .lossy(true)
+            .finish(std::io::stdout());
     std::mem::forget(worker_guard);
 
     let mut layers = fmt::layer()
