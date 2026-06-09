@@ -111,6 +111,31 @@ impl HeartBeatTask {
         Ok(())
     }
 
+    // Best-effort deregistration of this node from the `nodes` table on shutdown.
+    //
+    // An SLO optimization, not a correctness requirement: on error or timeout we log and
+    // continue, relying on staleness-based filtering as the fallback. Bounded so a slow or
+    // unreachable database cannot delay shutdown.
+    async fn deregister_on_shutdown_best_effort(&self) {
+        const DEREGISTER_TIMEOUT: Duration = Duration::from_millis(500);
+        match tokio::time::timeout(
+            DEREGISTER_TIMEOUT,
+            self.backend.deregister_node_on_shutdown(),
+        )
+        .await
+        {
+            Ok(Ok(())) => {
+                info!(node_id = %self.node_id, "Deregistered node from cluster on shutdown");
+            }
+            Ok(Err(error)) => {
+                warn!(node_id = %self.node_id, ?error, "Failed to deregister on shutdown; relying on staleness");
+            }
+            Err(_) => {
+                warn!(node_id = %self.node_id, "Timed out deregistering on shutdown; relying on staleness");
+            }
+        }
+    }
+
     // Spawns a task for the current leader to maintain leadership.
     //
     // Periodically refreshes leadership. If leadership is lost or the database
@@ -163,6 +188,11 @@ impl HeartBeatTask {
                     match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
                         FutureOrShutdownOutput::Shutdown => {
                             info!("Shutdown signal received, stopping heartbeat task");
+                            // Only a replica deregisters; the leader is removed via the
+                            // staleness timeout, so deleting its `nodes` row here would be wrong.
+                            if mode == LeadershipRole::Replica {
+                                self.deregister_on_shutdown_best_effort().await;
+                            }
                             return;
                         }
                         FutureOrShutdownOutput::Output(_) => {
@@ -264,28 +294,34 @@ impl HeartBeatTask {
     // Periodically updates the node's entry in the `nodes` table without
     // competing for leadership. Failures are logged but don't cause shutdown.
     fn spawn_node_registration_task(self) -> JoinHandle<()> {
-        tokio::spawn(async move {
-            info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting replica registration task.");
-            let mut interval = tokio::time::interval(self.heartbeat_interval);
+        let span = tracing::info_span!("registration", mode = %LeadershipRole::Replica);
 
-            loop {
-                match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
-                    FutureOrShutdownOutput::Shutdown => {
-                        info!("Shutdown signal received, stopping registration task.");
-                        return;
-                    }
-                    FutureOrShutdownOutput::Output(_) => match self.register_node().await {
-                        Ok(_) => {}
-                        Err(e) => {
-                            warn!(
-                                node_id = %self.node_id,
-                                error = ?e,
-                                "Node registration attempt failed, will retry."
-                            );
+        tokio::spawn(
+            async move {
+                info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting replica registration task.");
+                let mut interval = tokio::time::interval(self.heartbeat_interval);
+
+                loop {
+                    match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
+                        FutureOrShutdownOutput::Shutdown => {
+                            info!(node_id = %self.node_id, "Shutdown signal received, stopping registration task.");
+                            self.deregister_on_shutdown_best_effort().await;
+                            return;
                         }
-                    },
+                        FutureOrShutdownOutput::Output(_) => match self.register_node().await {
+                            Ok(_) => {}
+                            Err(error) => {
+                                warn!(
+                                    node_id = %self.node_id,
+                                    ?error,
+                                    "Node registration attempt failed, will retry."
+                                );
+                            }
+                        },
+                    }
                 }
             }
-        })
+            .instrument(span),
+        )
     }
 }
