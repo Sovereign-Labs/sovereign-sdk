@@ -128,7 +128,9 @@ where
             )
             .await;
 
-            let _ = aggregator_handle.await;
+            if let Err(e) = aggregator_handle.await {
+                tracing::error!(error = ?e, "Aggregator task panicked");
+            }
         })
     }
 }
