@@ -11261,6 +11261,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "futures",
  "schemars 1.2.1",
  "serde",
  "sov-bank",

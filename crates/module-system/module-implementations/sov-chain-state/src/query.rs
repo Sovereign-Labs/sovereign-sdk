@@ -11,7 +11,7 @@ use sov_modules_api::{
     ApiStateAccessor,
 };
 #[cfg(feature = "native")]
-use sov_rollup_interface::common::VisibleSlotNumber;
+use sov_rollup_interface::common::{RollupHeight, VisibleSlotNumber};
 
 use crate::ChainState;
 
@@ -41,6 +41,86 @@ impl<S: Spec> ChainState<S> {
             .unwrap_infallible()
             .into())
     }
+
+    /// WebSocket handler that streams the current [`RollupHeight`] to the client: the
+    /// latest height is sent on connection, and a new value is pushed every time the
+    /// rollup height advances (deduplicated, since the underlying checkpoint updates
+    /// once per slot but the rollup height only advances when a block is produced).
+    #[cfg(feature = "native")]
+    async fn subscribe_rollup_height(
+        state: ApiState<S, Self>,
+        ws: axum::extract::ws::WebSocketUpgrade,
+    ) -> axum::response::Response {
+        use futures::StreamExt;
+
+        ws.on_upgrade(move |socket| async move {
+            // No shutdown receiver is plumbed through to module custom REST APIs, so we
+            // keep a local sender alive for the lifetime of the connection: the helper's
+            // shutdown arm then never fires, and the task instead terminates on client
+            // disconnect, ping timeout, or stream end. Stream end covers node shutdown:
+            // dropping the checkpoint sender makes `changed()` return `Err`, ending the
+            // stream.
+            let (_shutdown_tx, shutdown_rx) =
+                sov_modules_api::prelude::tokio::sync::watch::channel(());
+
+            let stream = futures::stream::unfold(
+                (
+                    state.checkpoint_receiver(),
+                    Option::<RollupHeight>::None,
+                    false,
+                ),
+                move |(mut checkpoint_rx, mut last_sent, started)| {
+                    let state = state.clone();
+                    async move {
+                        loop {
+                            // Skip the wait on the first iteration so the client receives
+                            // the current height immediately on connection.
+                            if started && checkpoint_rx.changed().await.is_err() {
+                                return None;
+                            }
+
+                            let mut accessor = match state.build_api_state_accessor(None) {
+                                Ok(accessor) => accessor,
+                                Err(_) => return None,
+                            };
+                            let height = state.rollup_height(&mut accessor).unwrap_infallible();
+
+                            if last_sent != Some(height) {
+                                last_sent = Some(height);
+                                return Some((
+                                    Ok::<_, RollupHeightWsError>(height),
+                                    (checkpoint_rx, last_sent, true),
+                                ));
+                            }
+                            // Height unchanged: wait for the next checkpoint update.
+                        }
+                    }
+                },
+            )
+            .boxed();
+
+            sov_modules_api::rest::utils::serve_generic_ws_subscription(
+                socket,
+                stream,
+                shutdown_rx,
+            )
+            .await;
+        })
+    }
+}
+
+/// Uninhabited error for the rollup-height subscription stream. Reading the height
+/// from in-memory state is infallible, so this is never constructed; it exists only to
+/// satisfy the `ReportableWsError` bound of `serve_generic_ws_subscription`.
+#[cfg(feature = "native")]
+#[derive(Debug)]
+enum RollupHeightWsError {}
+
+#[cfg(feature = "native")]
+impl sov_modules_api::rest::utils::errors::ReportableWsError for RollupHeightWsError {
+    fn to_json(&self) -> String {
+        match *self {}
+    }
 }
 
 #[cfg(feature = "native")]
@@ -50,6 +130,7 @@ impl<S: Spec> HasCustomRestApi for ChainState<S> {
     fn custom_rest_api(&self, state: ApiState<S>) -> axum::Router<()> {
         axum::Router::new()
             .route("/setup-mode-is-active", get(Self::is_in_setup_mode_handler))
+            .route("/rollup-height/ws", get(Self::subscribe_rollup_height))
             .with_state(state.with(self.clone()))
     }
 }
