@@ -101,13 +101,12 @@ where
                 backoff_policy: self.backoff_policy,
                 metadata_rx,
                 cursor: cursor.clone(),
-                shutdown_receiver: self.shutdown_receiver.clone(),
                 shutdown_sender: self.shutdown_sender,
             };
+
+            let aggregator_shutdown = self.shutdown_receiver.clone();
             let aggregator_handle = tokio::spawn(async move {
-                if let Err(e) = aggregator.run().await {
-                    tracing::error!(error = ?e, "Aggregator task failed");
-                }
+                run_task_until_shutdown("aggregator", aggregator.run(), &aggregator_shutdown).await;
             });
 
             let intake = IntakeTask {
@@ -119,15 +118,36 @@ where
                 da_sync_state: self.da_sync_state,
                 metadata_tx,
                 cursor,
-                shutdown_receiver: self.shutdown_receiver,
                 start_fresh_outer_proof_on_resync: self.start_fresh_outer_proof_on_resync,
             };
-            if let Err(e) = intake.run().await {
-                tracing::error!(error = ?e, "Intake task failed");
-            }
+
+            run_task_until_shutdown(
+                "aggregated proof intake",
+                intake.run(),
+                &self.shutdown_receiver,
+            )
+            .await;
 
             let _ = aggregator_handle.await;
         })
+    }
+}
+
+/// Runs `task` until it completes or the shutdown signal fires, logging the
+/// outcome. On shutdown the task is cancelled at its current await point.
+async fn run_task_until_shutdown<T>(
+    task_name: &str,
+    task: impl std::future::Future<Output = anyhow::Result<T>>,
+    shutdown_receiver: &tokio::sync::watch::Receiver<()>,
+) {
+    match future_or_shutdown(task, shutdown_receiver).await {
+        FutureOrShutdownOutput::Shutdown => {
+            tracing::info!(task_name, "Shutting down task...");
+        }
+        FutureOrShutdownOutput::Output(Err(e)) => {
+            tracing::error!(error = ?e, task_name, "Task failed");
+        }
+        FutureOrShutdownOutput::Output(Ok(_)) => {}
     }
 }
 
@@ -154,7 +174,6 @@ struct IntakeTask<Ps: ProverService> {
     da_sync_state: Arc<DaSyncState>,
     metadata_tx: mpsc::Sender<(AggregateProofMetadata<Ps>, u64)>,
     cursor: CursorHandle,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
     start_fresh_outer_proof_on_resync: bool,
 }
 
@@ -162,7 +181,9 @@ impl<Ps: ProverService> IntakeTask<Ps>
 where
     Ps::DaService: DaService<Error = anyhow::Error>,
 {
-    async fn run(mut self) -> anyhow::Result<()> {
+    /// Never returns successfully: the task runs until it errors or is
+    /// cancelled by the caller's shutdown wrapper.
+    async fn run(mut self) -> anyhow::Result<std::convert::Infallible> {
         let mut resync_state = if self.start_fresh_outer_proof_on_resync {
             ResyncState::AwaitingSync
         } else {
@@ -170,63 +191,51 @@ where
         };
 
         loop {
-            match future_or_shutdown(self.stf_info_receiver.read_next(), &self.shutdown_receiver)
-                .await
-            {
-                FutureOrShutdownOutput::Shutdown => {
-                    tracing::info!("Shutting down aggregated proof intake task...");
-                    break;
+            let stf_info = match self.stf_info_receiver.read_next().await? {
+                None => {
+                    tracing::debug!("Received None instead of StateTransitionInfo. This can happen if the transition has already been processed by the `Receiver`. In that case, it is fine to ignore the notification.");
+                    continue;
                 }
-                FutureOrShutdownOutput::Output(stf_info_result) => {
-                    let stf_info = match stf_info_result? {
-                        None => {
-                            tracing::debug!("Received None instead of StateTransitionInfo. This can happen if the transition has already been processed by the `Receiver`. In that case, it is fine to ignore the notification.");
-                            continue;
-                        }
-                        Some(stf_info) => stf_info,
-                    };
-                    tracing::trace!(
-                        slot_number = %stf_info.slot_number(),
-                        block_header = %stf_info.da_block_header().display(),
-                        "Received STF info"
-                    );
+                Some(stf_info) => stf_info,
+            };
+            tracing::trace!(
+                slot_number = %stf_info.slot_number(),
+                block_header = %stf_info.da_block_header().display(),
+                "Received STF info"
+            );
 
-                    // If still observing resync, try to capture the cutoff. Until the DA
-                    // layer reports `Synced` at least once, skip-advance the current slot
-                    // unconditionally — this drains the channel so the runner can keep
-                    // producing.
-                    if matches!(resync_state, ResyncState::AwaitingSync) {
-                        match self.da_sync_state.status() {
-                            SyncStatus::Syncing { .. } => {
-                                self.cursor.inc_next_height_to_receive_by(1);
-                                continue;
-                            }
-                            SyncStatus::Synced { synced_da_height } => {
-                                tracing::info!(
-                                    %synced_da_height,
-                                    "DA resync complete; recording skip cutoff for proof intake"
-                                );
-                                resync_state = ResyncState::SkipBelow(synced_da_height);
-                                // fall through; this slot may still be below the cutoff.
-                            }
-                        }
+            // If still observing resync, try to capture the cutoff. Until the DA
+            // layer reports `Synced` at least once, skip-advance the current slot
+            // unconditionally — this drains the channel so the runner can keep
+            // producing.
+            if matches!(resync_state, ResyncState::AwaitingSync) {
+                match self.da_sync_state.status() {
+                    SyncStatus::Syncing { .. } => {
+                        self.cursor.inc_next_height_to_receive_by(1);
+                        continue;
                     }
-
-                    if let ResyncState::SkipBelow(skip_height) = resync_state {
-                        if stf_info.da_block_header().height() < skip_height {
-                            // Skipped slots will never be proved, so advance
-                            // the cursor manually.
-                            self.cursor.inc_next_height_to_receive_by(1);
-                            continue;
-                        }
+                    SyncStatus::Synced { synced_da_height } => {
+                        tracing::info!(
+                            %synced_da_height,
+                            "DA resync complete; recording skip cutoff for proof intake"
+                        );
+                        resync_state = ResyncState::SkipBelow(synced_da_height);
+                        // fall through; this slot may still be below the cutoff.
                     }
-
-                    self.process_stf_info(stf_info).await?;
                 }
             }
+
+            if let ResyncState::SkipBelow(skip_height) = resync_state {
+                if stf_info.da_block_header().height() < skip_height {
+                    // Skipped slots will never be proved, so advance
+                    // the cursor manually.
+                    self.cursor.inc_next_height_to_receive_by(1);
+                    continue;
+                }
+            }
+
+            self.process_stf_info(stf_info).await?;
         }
-        tracing::debug!("Aggregated proofs intake task has been completed");
-        Ok(())
     }
 
     async fn process_stf_info(
@@ -312,7 +321,6 @@ struct AggregatorTask<Ps: ProverService> {
     backoff_policy: ExponentialBuilder,
     metadata_rx: mpsc::Receiver<(AggregateProofMetadata<Ps>, u64)>,
     cursor: CursorHandle,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
     shutdown_sender: tokio::sync::watch::Sender<()>,
 }
 
@@ -322,20 +330,14 @@ where
 {
     async fn run(mut self) -> anyhow::Result<()> {
         loop {
-            let (metadata, window_size) =
-                match future_or_shutdown(self.metadata_rx.recv(), &self.shutdown_receiver).await {
-                    FutureOrShutdownOutput::Shutdown => {
-                        tracing::info!("Shutting down aggregator task...");
-                        break;
-                    }
-                    FutureOrShutdownOutput::Output(None) => {
-                        // Intake side dropped its sender (clean shutdown or
-                        // intake error).
-                        tracing::debug!("Intake task closed metadata channel; aggregator exiting");
-                        break;
-                    }
-                    FutureOrShutdownOutput::Output(Some(item)) => item,
-                };
+            let (metadata, window_size) = match self.metadata_rx.recv().await {
+                // Intake side dropped its sender (clean shutdown or intake error).
+                None => {
+                    tracing::debug!("Intake task closed metadata channel; aggregator exiting");
+                    break;
+                }
+                Some(item) => item,
+            };
 
             let status = self.proof_sender.proof_blob_sender_status().await?;
             if status.is_busy() {
