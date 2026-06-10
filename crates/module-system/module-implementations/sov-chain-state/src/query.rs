@@ -67,39 +67,36 @@ impl<S: Spec> ChainState<S> {
                 (
                     state.checkpoint_receiver(),
                     Option::<RollupHeight>::None,
-                    false,
+                    Option::<RollupHeight>::None,
                 ),
-                move |(mut checkpoint_rx, mut last_sent, started)| {
-                    let state = state.clone();
-                    async move {
-                        loop {
-                            // Skip the wait on the first iteration so the client receives
-                            // the current height immediately on connection.
-                            if started && checkpoint_rx.changed().await.is_err() {
-                                return None;
-                            }
-
-                            let mut accessor = match state.build_api_state_accessor(None) {
-                                Ok(accessor) => accessor,
-                                Err(error) => {
-                                    tracing::debug!(
-                                        ?error,
-                                        "Failed to build API state accessor; ending rollup height subscription"
-                                    );
-                                    return None;
-                                }
-                            };
-                            let height = state.rollup_height(&mut accessor).unwrap_infallible();
-
-                            if last_sent != Some(height) {
-                                last_sent = Some(height);
+                |(mut checkpoint_rx, mut last_sent, mut latest_seen)| async move {
+                    loop {
+                        if let Some(latest_height) = latest_seen.take() {
+                            if let Some(height_to_send) =
+                                next_unsent_rollup_height(last_sent, latest_height)
+                            {
+                                last_sent = Some(height_to_send);
+                                latest_seen =
+                                    (height_to_send < latest_height).then_some(latest_height);
                                 return Some((
-                                    Ok::<_, RollupHeightWsError>(height),
-                                    (checkpoint_rx, last_sent, true),
+                                    Ok::<_, RollupHeightWsError>(height_to_send),
+                                    (checkpoint_rx, last_sent, latest_seen),
                                 ));
                             }
-                            // Height unchanged: wait for the next checkpoint update.
                         }
+
+                        // Skip the wait before the first send so the client receives
+                        // the current height immediately on connection.
+                        if last_sent.is_some() && checkpoint_rx.changed().await.is_err() {
+                            return None;
+                        }
+
+                        // The height is fixed at checkpoint creation (`current_heights.0`
+                        // is only written at slot boundaries), so reading the watch value
+                        // is equivalent to reading it from state.
+                        let height = checkpoint_rx.borrow().rollup_height_to_access();
+                        latest_seen = Some(height);
+                        // Height unchanged: wait for the next checkpoint update.
                     }
                 },
             )
@@ -116,8 +113,8 @@ impl<S: Spec> ChainState<S> {
 }
 
 /// Uninhabited error for the rollup-height subscription stream. Reading the height
-/// from in-memory state is infallible, so this is never constructed; it exists only to
-/// satisfy the `ReportableWsError` bound of `serve_generic_ws_subscription`.
+/// from the current checkpoint is infallible, so this is never constructed; it exists
+/// only to satisfy the `ReportableWsError` bound of `serve_generic_ws_subscription`.
 #[cfg(feature = "native")]
 #[derive(Debug)]
 enum RollupHeightWsError {}
@@ -130,6 +127,18 @@ impl sov_modules_api::rest::utils::errors::ReportableWsError for RollupHeightWsE
 }
 
 #[cfg(feature = "native")]
+fn next_unsent_rollup_height(
+    last_sent: Option<RollupHeight>,
+    latest_height: RollupHeight,
+) -> Option<RollupHeight> {
+    match last_sent {
+        None => Some(latest_height),
+        Some(last_sent) if last_sent < latest_height => last_sent.checked_add(1),
+        Some(_) => None,
+    }
+}
+
+#[cfg(feature = "native")]
 impl<S: Spec> HasCustomRestApi for ChainState<S> {
     type Spec = S;
 
@@ -138,5 +147,47 @@ impl<S: Spec> HasCustomRestApi for ChainState<S> {
             .route("/setup-mode-is-active", get(Self::is_in_setup_mode_handler))
             .route("/rollup-height/ws", get(Self::subscribe_rollup_height))
             .with_state(state.with(self.clone()))
+    }
+}
+
+#[cfg(all(test, feature = "native"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn rollup_height_subscription_sends_initial_latest_only() {
+        assert_eq!(
+            Some(RollupHeight::new(7)),
+            next_unsent_rollup_height(None, RollupHeight::new(7))
+        );
+    }
+
+    #[test]
+    fn rollup_height_subscription_ignores_unchanged_height() {
+        assert_eq!(
+            None,
+            next_unsent_rollup_height(Some(RollupHeight::new(7)), RollupHeight::new(7))
+        );
+    }
+
+    #[test]
+    fn rollup_height_subscription_fills_gap_one_height_at_a_time() {
+        let latest_height = RollupHeight::new(10);
+        let mut last_sent = Some(RollupHeight::new(7));
+        let mut emitted_heights = Vec::new();
+
+        while let Some(height_to_send) = next_unsent_rollup_height(last_sent, latest_height) {
+            emitted_heights.push(height_to_send);
+            last_sent = Some(height_to_send);
+        }
+
+        assert_eq!(
+            vec![
+                RollupHeight::new(8),
+                RollupHeight::new(9),
+                RollupHeight::new(10)
+            ],
+            emitted_heights
+        );
     }
 }
