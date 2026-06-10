@@ -315,7 +315,7 @@ impl<S: Spec> ChainState<S> {
         Ok(visible_slot_number)
     }
 
-    /// Returns transition height in the current slot
+    /// Sets the visible slot number to use for the next block.
     pub fn set_next_visible_slot_number(
         &mut self,
         next_visible_slot_number: VisibleSlotNumber,
