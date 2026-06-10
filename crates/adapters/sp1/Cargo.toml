@@ -28,6 +28,7 @@ serde = { workspace = true, features = [
 ] }
 sha2 = { workspace = true }
 sp1-lib = { workspace = true, default-features = true }
+tracing = { workspace = true, optional = true }
 
 sov-rollup-interface = { workspace = true }
 sov-universal-wallet = { workspace = true }
@@ -58,6 +59,7 @@ sov-zkvm-utils = { workspace = true }
 default = []
 native = [
     "rand",
+    "dep:tracing",
     "sp1-sdk/network",
     "sov-rollup-interface/native",
     "sov-metrics/native",

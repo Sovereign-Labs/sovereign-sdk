@@ -274,9 +274,23 @@ impl SP1Prover {
             .request()
             .map_err(|e| anyhow::anyhow!("SP1 network proof submission failed. Error: {:?}", e))?;
 
+        let started_at = std::time::Instant::now();
+        tracing::info!(
+            request_id = %request_id,
+            circuit = ?self.circuit,
+            "Submitted SP1 network proof request",
+        );
+
         let proof = network
             .wait_proof(request_id, None, None)
             .map_err(|e| anyhow::anyhow!("SP1 network proof wait failed. Error: {:?}", e))?;
+
+        tracing::info!(
+            request_id = %request_id,
+            circuit = ?self.circuit,
+            elapsed_secs = started_at.elapsed().as_secs_f64(),
+            "SP1 network proof request completed",
+        );
 
         submit_proving_metric(network, request_id, self.circuit);
 
