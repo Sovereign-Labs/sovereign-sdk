@@ -81,7 +81,13 @@ impl<S: Spec> ChainState<S> {
 
                             let mut accessor = match state.build_api_state_accessor(None) {
                                 Ok(accessor) => accessor,
-                                Err(_) => return None,
+                                Err(error) => {
+                                    tracing::debug!(
+                                        ?error,
+                                        "Failed to build API state accessor; ending rollup height subscription"
+                                    );
+                                    return None;
+                                }
                             };
                             let height = state.rollup_height(&mut accessor).unwrap_infallible();
 
