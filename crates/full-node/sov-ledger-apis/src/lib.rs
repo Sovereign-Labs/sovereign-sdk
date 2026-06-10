@@ -522,7 +522,7 @@ where
             NumberOrHash::Hash(hash) => SlotIdentifier::Hash(hash.0),
         };
 
-        let rollup_height = state
+        let slot_number = state
             .ledger
             .resolve_slot_identifier(&identifier)
             .await
@@ -536,7 +536,7 @@ where
             // can remove this workaround and do the right thing.
             .ok_or_else(|| not_found_404("Slot", "unknown"))?;
 
-        request.extensions_mut().insert(rollup_height);
+        request.extensions_mut().insert(slot_number);
         Ok(next.run(request).await)
     }
 
@@ -727,7 +727,7 @@ where
                         };
 
                         Ok(SlotEvents {
-                            rollup_height: slot_num.get(),
+                            slot_number: slot_num.get(),
                             events,
                         })
                     }
@@ -933,7 +933,7 @@ struct EventFilter {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct SlotEvents<E> {
-    rollup_height: u64,
+    slot_number: u64,
     events: Vec<RuntimeEventResponse<E>>,
 }
 

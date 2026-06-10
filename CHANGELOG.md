@@ -1,3 +1,6 @@
+# 2026-06-10
+- #PR_NUMBER **Breaking Change** Ledger API: renames the `rollup_height` field to `slot_number` in the WebSocket slot-events subscription message (`SlotEvents`); the value was always a slot number, not a rollup height. Mirrors the #2886 `BatchResponse` rename.
+
 # 2026-06-08
 - #2953 Preferred sequencer: replica nodes now deregister from the `nodes` table on graceful shutdown, so node discovery reroutes reads off a departing replica within milliseconds instead of waiting for staleness. Best-effort and bounded; leader removal is unchanged (still timeout-based).
 
