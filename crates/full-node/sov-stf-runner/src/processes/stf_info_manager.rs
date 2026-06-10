@@ -145,12 +145,12 @@ impl<
 
     /// Get the next height to receive as a `SlotNumber`.
     pub fn next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new_dangerous(self.next_height_to_receive.load(Ordering::SeqCst))
+        SlotNumber::new(self.next_height_to_receive.load(Ordering::SeqCst))
     }
 
     /// Increment next height to receive by one, returning the previous value.
     pub fn inc_next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new_dangerous(self.next_height_to_receive.fetch_add(1, Ordering::SeqCst))
+        SlotNumber::new(self.next_height_to_receive.fetch_add(1, Ordering::SeqCst))
     }
 }
 
@@ -460,17 +460,17 @@ where
 
     /// Get the next height to receive as a `SlotNumber`.
     pub fn next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new_dangerous(self.next_height_to_receive.load(Ordering::SeqCst))
+        SlotNumber::new(self.next_height_to_receive.load(Ordering::SeqCst))
     }
 
     /// Increment next height to receive by one, returning the previous value.
     pub fn inc_next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new_dangerous(self.next_height_to_receive.fetch_add(1, Ordering::SeqCst))
+        SlotNumber::new(self.next_height_to_receive.fetch_add(1, Ordering::SeqCst))
     }
 
     /// Increment next height to receive by the requested amount, returning the previous value.
     pub fn inc_next_height_to_receive_by(&self, amount: u64) -> SlotNumber {
-        SlotNumber::new_dangerous(
+        SlotNumber::new(
             self.next_height_to_receive
                 .fetch_add(amount, Ordering::SeqCst),
         )
@@ -505,7 +505,7 @@ pub struct CursorHandle {
 impl CursorHandle {
     /// Increment next height to receive by the requested amount, returning the previous value.
     pub fn inc_next_height_to_receive_by(&self, amount: u64) -> SlotNumber {
-        SlotNumber::new_dangerous(
+        SlotNumber::new(
             self.next_height_to_receive
                 .fetch_add(amount, Ordering::SeqCst),
         )
@@ -899,7 +899,7 @@ mod tests {
             // Check if the old STF infos are pruned.
             for height in 1..test_case.nb_of_stf_infos {
                 let stf_info: Option<StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec>> =
-                    receiver.get(SlotNumber::new_dangerous(height))?;
+                    receiver.get(SlotNumber::new(height))?;
 
                 if height < oldest_height.get() {
                     // The old data was deleted from the Db.
@@ -927,12 +927,12 @@ mod tests {
             .unwrap();
         storage_manager.commit(&schema_batch);
         sender
-            .notify(SlotNumber::new_dangerous(rollup_height), ledger_db)
+            .notify(SlotNumber::new(rollup_height), ledger_db)
             .await
             .unwrap();
 
         let fetched_stf_info = receiver
-            .get(SlotNumber::new_dangerous(rollup_height))
+            .get(SlotNumber::new(rollup_height))
             .unwrap()
             .unwrap();
 
@@ -967,7 +967,7 @@ mod tests {
                 batch_blobs: vec![],
             },
             witness: vec![],
-            slot_number: SlotNumber::new_dangerous(height),
+            slot_number: SlotNumber::new(height),
         })
     }
 

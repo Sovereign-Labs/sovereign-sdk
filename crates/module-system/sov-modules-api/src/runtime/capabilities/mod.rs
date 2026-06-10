@@ -207,7 +207,7 @@ pub mod mocks {
         /// Create a new mock kernel with the given slot numbers
         pub fn new(true_slot_number: u64, visible_slot_number: u64) -> Self {
             Self {
-                true_slot_number: SlotNumber::new_dangerous(true_slot_number),
+                true_slot_number: SlotNumber::new(true_slot_number),
                 visible_slot_number: VisibleSlotNumber::new_dangerous(visible_slot_number),
                 next_sequence_number: 0,
                 phantom: core::marker::PhantomData,
@@ -228,7 +228,8 @@ pub mod mocks {
             true_slot_number: SlotNumber,
             _state: &mut crate::ApiStateAccessor<S>,
         ) -> Option<VisibleSlotNumber> {
-            Some(true_slot_number.as_visible())
+            // The mock models a based rollup, so the visible slot number equals the true one.
+            Some(VisibleSlotNumber::new_dangerous(true_slot_number.get()))
         }
 
         fn current_rollup_height(
@@ -252,7 +253,7 @@ pub mod mocks {
             height: super::RollupHeight,
             _state: &mut crate::state::ApiStateAccessor<S>,
         ) -> Option<SlotNumber> {
-            Some(SlotNumber::new_dangerous(height.get()))
+            Some(SlotNumber::new(height.get()))
         }
 
         fn base_fee_per_gas_at(
@@ -280,7 +281,7 @@ pub mod mocks {
             height: RollupHeight,
             _state: &S::Storage,
         ) -> Option<SlotNumber> {
-            Some(SlotNumber::new_dangerous(height.get()))
+            Some(SlotNumber::new(height.get()))
         }
     }
 

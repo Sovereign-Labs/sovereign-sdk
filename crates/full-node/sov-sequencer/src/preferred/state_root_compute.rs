@@ -832,7 +832,7 @@ mod tests {
                 sequencer_storages: Vec::new(),
                 uncommitted_changes: uncommitted_changes.clone(),
                 rollup_height: RollupHeight::new(((idx + 1) / 2) as u64),
-                slot_number: SlotNumber::new_dangerous(idx as u64),
+                slot_number: SlotNumber::new(idx as u64),
             });
         }
 

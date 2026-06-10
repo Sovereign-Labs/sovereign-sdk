@@ -43,7 +43,7 @@ pub(crate) fn make_chained_headers(count: usize) -> Vec<MockBlockHeader> {
 fn make_transition_info(
     da_block_header: MockBlockHeader,
 ) -> StateTransitionInfo<StateRoot, Vec<u8>, MockDaSpec> {
-    let slot_number = SlotNumber::new_dangerous(da_block_header.height + 1);
+    let slot_number = SlotNumber::new(da_block_header.height + 1);
     StateTransitionInfo::new(StateTransitionWitness {
         initial_state_root: Vec::default(),
         final_state_root: Vec::default(),
