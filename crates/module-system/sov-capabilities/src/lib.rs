@@ -417,14 +417,14 @@ impl<S: Spec, T> ProofProcessor<S> for StandardProvenRollupCapabilities<'_, S, T
     fn process_challenge<ST: TxState<S> + GetGasPrice<Spec = S>>(
         &mut self,
         proof: sov_rollup_interface::optimistic::SerializedChallenge,
-        rollup_height: SlotNumber,
+        slot_number: SlotNumber,
         prover_address: &<S as Spec>::Address,
         state: &mut ST,
     ) -> Result<SovStateTransitionPublicData<S>, InvalidProofError> {
         let result = self.attester_incentives.process_challenge(
             prover_address,
             &proof,
-            rollup_height,
+            slot_number,
             state,
         )?;
 

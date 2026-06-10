@@ -40,7 +40,7 @@ pub(crate) const DB_LOCK_POISONED: &str = "Internal db lock is poisoned";
 #[derive(Default, Clone, Debug)]
 #[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 pub struct ItemNumbers {
-    /// The rollup height
+    /// The slot number
     pub slot_number: SlotNumber,
     /// The batch number
     pub batch_number: u64,
@@ -631,7 +631,7 @@ impl LedgerDb {
         Ok(schema_batch)
     }
 
-    /// Get [`StoredStfInfo`] for the given rollup height.
+    /// Get [`StoredStfInfo`] for the given slot number.
     pub fn get_stf_info(&self, slot_num: SlotNumber) -> anyhow::Result<Option<StoredStfInfo>> {
         let db = self.db.read().expect(DB_LOCK_POISONED).clone();
         db.get::<StfInfoByNumber>(&slot_num)
