@@ -58,7 +58,7 @@ pub trait ProofProcessor<S: Spec> {
     fn process_challenge<ST: TxState<S> + GetGasPrice<Spec = S>>(
         &mut self,
         proof: SerializedChallenge,
-        rollup_height: SlotNumber,
+        slot_number: SlotNumber,
         prover_address: &S::Address,
         state: &mut ST,
     ) -> anyhow::Result<SovStateTransitionPublicData<S>, InvalidProofError>;
