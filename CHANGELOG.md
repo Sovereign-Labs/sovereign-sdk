@@ -1,3 +1,6 @@
+# 2026-06-11
+- #PR_NUMBER sov-migrations: the v1 (state_version 0->1) migration is now idempotent. Re-running it against an already-migrated DB (state_version >= 1) logs a message and exits Ok instead of erroring, so a restarted rollup that re-invokes the migration binary no longer fails.
+
 # 2026-05-26
 - #2918 Adds support for CIDR based rate limiting in preferred sequencer. Existing configs are backwards compatible.
   * **Breaking (behavior)**: corrects a unit bug in the preferred sequencer rate limiter where the per-request budget (`req_counter`) was computed 1000× too large (per-second rate × milliseconds). It now enforces the true requests-per-batch, consistent with the size/execution-time/gas limits. Configs are unchanged; in typical setups the request-count dimension still doesn't bind, but the request-count limit is now 1000× tighter. At low configured request budgets, request-counter refill still uses integer per-millisecond refill and can round down to zero.

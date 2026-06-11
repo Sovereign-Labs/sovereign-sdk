@@ -182,6 +182,39 @@ where
     let pre_state_root = storage
         .get_root_hash(head_slot_number)
         .context("failed to read pre-migration state root")?;
+
+    // Idempotency guard: if the migration has already been applied (state_version is at or
+    // beyond the target), do nothing and exit successfully. This makes the migration safe to
+    // re-run, e.g. when a node restarts and re-invokes the migration binary.
+    let from_state_version = {
+        let value = state_version_value(chain_state);
+        match storage.get_accessory_unbound(value.slot_key(), Some(head_slot_number)) {
+            Some(slot_value) => value.decode_unwrap(&slot_value),
+            // Absent ⇒ version 0, mirroring `ChainState::state_version`'s `unwrap_or(0)`.
+            None => 0,
+        }
+    };
+    if from_state_version >= TARGET_STATE_VERSION {
+        eprintln!(
+            "v1 migration already applied: on-disk state_version is {from_state_version} \
+             (target {TARGET_STATE_VERSION}); nothing to do"
+        );
+        return Ok(crate::MigrationOutcome {
+            dry_run: options.dry_run,
+            db_path: db_path.display().to_string(),
+            pre_state_root: pre_state_root.to_string(),
+            post_state_root: pre_state_root.to_string(),
+            head_rollup_slot: head_slot_number.get(),
+            migration: MigrationReport {
+                from_state_version,
+                to_state_version: from_state_version,
+                accounts: sov_accounts::migrations::MigrationReport {
+                    entries_migrated: 0,
+                },
+            },
+        });
+    }
+
     let migration_data = collect(accounts, chain_state, &storage)?;
 
     let mut checkpoint = {
