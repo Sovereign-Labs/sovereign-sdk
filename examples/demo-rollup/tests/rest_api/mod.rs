@@ -66,19 +66,21 @@ async fn trailing_slashes_handled() -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Starts a rollup and warms it up so the sequencer begins advancing the rollup height.
+/// Starts a rollup and warms it up so the sequencer is synced and ready to accept
+/// transactions. No prover is needed (these tests assert nothing about proofs), and the
+/// sequencer's state root consistency checks stay enabled: without proof blobs the
+/// sequencer and node state roots cannot diverge, so any mismatch is a real bug worth
+/// failing the test for.
 async fn start_warm_rollup() -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
     let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
         test_genesis_source(OperatingMode::Zk),
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         0,
     )
-    .enable_prover()
     .start()
     .await?;
 
-    test_rollup.da_service.produce_n_blocks_now(5).await?;
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    test_rollup.produce_enough_finalized_slots().await;
 
     Ok(test_rollup)
 }
