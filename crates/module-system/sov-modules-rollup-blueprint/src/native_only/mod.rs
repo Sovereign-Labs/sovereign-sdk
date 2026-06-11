@@ -832,7 +832,9 @@ fn validate_operating_mode_config(
     proof_manager_configured: bool,
 ) -> anyhow::Result<()> {
     if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
-        panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
+        anyhow::bail!(
+            "The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported",
+        );
     }
 
     if operating_mode != OperatingMode::Operator && !proof_manager_configured {
