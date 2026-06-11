@@ -154,6 +154,7 @@ where
             checkpoint_receiver,
             kernel_with_slot_mapping,
             None,
+            shutdown_receiver.clone(),
         );
 
         let txsm = TxStatusManager::default();

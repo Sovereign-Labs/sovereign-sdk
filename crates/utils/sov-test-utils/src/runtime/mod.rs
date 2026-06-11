@@ -178,6 +178,9 @@ pub struct TestRunner<
     checkpoint_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
     /// The corresponding receiving end of the channel.
     checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
+    /// Held for the runner's lifetime so REST API handlers only observe shutdown
+    /// when the runner is dropped.
+    shutdown_sender: watch::Sender<()>,
     axum_server: axum_server::Handle<std::net::SocketAddr>,
     /// Test runner configuration.
     pub config: RunnerConfig<S::Da>,
@@ -512,6 +515,7 @@ where
             axum_server: Default::default(),
             checkpoint_sender: sender,
             checkpoint_receiver: receiver,
+            shutdown_sender: watch::channel(()).0,
             config,
         };
 
@@ -899,6 +903,7 @@ where
             self.checkpoint_receiver.clone(),
             self.runtime().kernel_with_slot_mapping(),
             None,
+            self.shutdown_sender.subscribe(),
         );
 
         let router = self.runtime().rest_api(state);

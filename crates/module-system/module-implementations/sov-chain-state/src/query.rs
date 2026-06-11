@@ -55,15 +55,6 @@ impl<S: Spec> ChainState<S> {
         use futures::StreamExt;
 
         ws.on_upgrade(move |socket| async move {
-            // No shutdown receiver is plumbed through to module custom REST APIs, so we
-            // keep a local sender alive for the lifetime of the connection: the helper's
-            // shutdown arm then never fires, and the task instead terminates on client
-            // disconnect, ping timeout, or stream end. Stream end covers node shutdown:
-            // dropping the checkpoint sender makes `changed()` return `Err`, ending the
-            // stream.
-            let (_shutdown_tx, shutdown_rx) =
-                sov_modules_api::prelude::tokio::sync::watch::channel(());
-
             let stream = futures::stream::unfold(
                 (
                     state.checkpoint_receiver(),
@@ -105,7 +96,7 @@ impl<S: Spec> ChainState<S> {
             sov_modules_api::rest::utils::serve_generic_ws_subscription(
                 socket,
                 stream,
-                shutdown_rx,
+                state.shutdown_receiver(),
             )
             .await;
         })

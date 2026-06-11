@@ -83,7 +83,10 @@ where
 
         let tx_status_manager = TxStatusManager::default();
 
-        let (api_state, checkpoint_sender) = Self::api_state(latest_state_update.storage.clone());
+        let (api_state, checkpoint_sender) = Self::api_state(
+            latest_state_update.storage.clone(),
+            shutdown_sender.subscribe(),
+        );
 
         let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
 
@@ -335,6 +338,7 @@ where
 
     fn api_state(
         storage: S::Storage,
+        shutdown_receiver: watch::Receiver<()>,
     ) -> (
         ApiState<S>,
         watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
@@ -355,6 +359,7 @@ where
             checkpoint_receiver,
             runtime.kernel_with_slot_mapping(),
             None,
+            shutdown_receiver,
         );
         (api_state, checkpoint_sender)
     }

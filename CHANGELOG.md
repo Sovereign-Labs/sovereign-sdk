@@ -1,5 +1,6 @@
 # 2026-06-10
 - #2960 Chain state: Adds a WebSocket subscription streaming the current rollup height. New endpoint `GET /modules/chain-state/rollup-height/ws` sends the current rollup height (`current_heights.0`) on connection, then every subsequent height in order as the rollup height advances (heights are never skipped or repeated).
+- #2960 **Breaking Change** Module REST API: `ApiState::build` now requires a node shutdown receiver (`watch::Receiver<()>`), exposed to handlers via the new `ApiState::shutdown_receiver()`. This gives module custom REST APIs (e.g. WebSocket subscriptions) a real graceful-shutdown signal instead of each handler faking one.
 - #2959 **Breaking Change** Ledger API: renames the `rollup_height` field to `slot_number` in the WebSocket slot-events subscription message (`SlotEvents`); the value was always a slot number, not a rollup height. Mirrors the #2886 `BatchResponse` rename.
 
 # 2026-06-08
