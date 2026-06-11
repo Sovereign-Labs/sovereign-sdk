@@ -113,7 +113,7 @@ impl<S: Spec> SlotInformation<S> {
         self.gas_info.gas_limit()
     }
 
-    /// Returns the hash of the DA block assocaited with this slot.
+    /// Returns the hash of the DA block associated with this slot.
     pub const fn slot_hash(&self) -> &<<S as Spec>::Da as DaSpec>::SlotHash {
         &self.hash
     }
@@ -204,7 +204,7 @@ pub struct ChainState<S: Spec> {
     /// The state root hashes from genesis to the current slot.
     /// ## Note
     /// There is a one slot-delay for the update of this state map because we cannot predict what will be the next
-    /// most up to date state root inside the current slot. We have to wait for the next slot to start getting processed and return
+    /// most up-to-date state root inside the current slot. We have to wait for the next slot to start getting processed and return
     /// the pre-state root.
     #[state]
     past_user_state_roots: KernelStateMap<RollupHeight, [u8; 32]>,
@@ -705,7 +705,7 @@ impl<S: Spec> Module for ChainState<S> {
         &mut self,
         message: Self::CallMessage,
         context: &sov_modules_api::Context<Self::Spec>,
-        state: &mut impl sov_modules_api::TxState<Self::Spec>,
+        state: &mut impl TxState<Self::Spec>,
     ) -> Result<(), Self::Error> {
         use sov_modules_api::EventEmitter;
         match message {
