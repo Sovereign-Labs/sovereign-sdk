@@ -11,8 +11,9 @@ use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_demo_rollup::MockDemoRollup;
 use sov_modules_api::execution_mode::Native;
+use sov_modules_api::transaction::Transaction;
 use sov_modules_api::OperatingMode;
-use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
+use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction_with_nonce, TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
     TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
@@ -65,7 +66,8 @@ async fn trailing_slashes_handled() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
+/// Starts a rollup and warms it up so the sequencer begins advancing the rollup height.
+async fn start_warm_rollup() -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
     let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
         test_genesis_source(OperatingMode::Zk),
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
@@ -78,6 +80,10 @@ async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
     test_rollup.da_service.produce_n_blocks_now(5).await?;
     tokio::time::sleep(Duration::from_millis(200)).await;
 
+    Ok(test_rollup)
+}
+
+fn synthetic_load_tx() -> Transaction<Runtime<TestSpec>, TestSpec> {
     // Based on an assumption that this key is admin in sov-value-setter
     let key_and_address = read_private_key::<TestSpec>("tx_signer_private_key.json");
     let msg = RuntimeCall::<TestSpec>::SyntheticLoad(
@@ -88,12 +94,18 @@ async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
         },
     );
 
-    let tx = default_test_signed_transaction_with_nonce::<Runtime<TestSpec>, TestSpec>(
+    default_test_signed_transaction_with_nonce::<Runtime<TestSpec>, TestSpec>(
         &key_and_address.private_key,
         &msg,
         0,
         &CHAIN_HASH,
-    );
+    )
+}
+
+async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
+    let test_rollup = start_warm_rollup().await?;
+
+    let tx = synthetic_load_tx();
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await?;
     test_rollup.client.client.send_tx_to_sequencer(&tx).await?;
     slot_subscription.next().await;
@@ -335,18 +347,7 @@ async fn check_historical_data(client: &demo_stf_json_client::Client) -> anyhow:
 /// each time the height advances.
 #[tokio::test(flavor = "multi_thread")]
 async fn chain_state_rollup_height_subscription_streams_live_height() -> anyhow::Result<()> {
-    let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
-        test_genesis_source(OperatingMode::Zk),
-        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
-        0,
-    )
-    .enable_prover()
-    .start()
-    .await?;
-
-    // Warm up so the sequencer starts advancing the rollup height (mirrors `setup`).
-    test_rollup.da_service.produce_n_blocks_now(5).await?;
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    let test_rollup = start_warm_rollup().await?;
 
     let mut height_sub = test_rollup
         .client
@@ -360,37 +361,22 @@ async fn chain_state_rollup_height_subscription_streams_live_height() -> anyhow:
         .context("timed out waiting for the initial rollup height")?
         .context("subscription closed before sending the initial rollup height")??;
 
-    // Submit a transaction and produce more blocks to advance the chain (mirrors `setup`).
-    let key_and_address = read_private_key::<TestSpec>("tx_signer_private_key.json");
-    let msg = RuntimeCall::<TestSpec>::SyntheticLoad(
-        sov_synthetic_load::CallMessage::ReadAndSetHeavyState {
-            number_of_new_values: 10,
-            max_heavy_state_size: 30,
-            salt: 10_000,
-        },
-    );
-    let tx = default_test_signed_transaction_with_nonce::<Runtime<TestSpec>, TestSpec>(
-        &key_and_address.private_key,
-        &msg,
-        0,
-        &CHAIN_HASH,
-    );
+    // Submit a transaction and produce more blocks to advance the chain.
+    let tx = synthetic_load_tx();
     test_rollup.client.client.send_tx_to_sequencer(&tx).await?;
     test_rollup.da_service.produce_n_blocks_now(3).await?;
 
-    // The subscription must push strictly greater rollup heights as the chain advances.
-    let mut latest = first;
-    while latest <= first {
-        let next = tokio::time::timeout(Duration::from_secs(10), height_sub.next())
-            .await
-            .context("timed out waiting for the rollup height to advance")?
-            .context("subscription closed before the rollup height advanced")??;
-        assert!(
-            next >= latest,
-            "rollup height stream must be monotonic non-decreasing, got {next} after {latest}"
-        );
-        latest = next;
-    }
+    // Heights are pushed in order without skips or repeats, so the first push after the
+    // chain advances must be exactly the next height.
+    let next = tokio::time::timeout(Duration::from_secs(10), height_sub.next())
+        .await
+        .context("timed out waiting for the rollup height to advance")?
+        .context("subscription closed before the rollup height advanced")??;
+    assert_eq!(
+        next,
+        first + 1,
+        "subscription must push consecutive rollup heights, got {next} after {first}"
+    );
 
     // The streamed value is the chain-state rollup height (`current_heights.0`): it tracks
     // committed state and is never ahead of it. Re-read via REST as a race-free bound.
@@ -400,8 +386,8 @@ async fn chain_state_rollup_height_subscription_streams_live_height() -> anyhow:
         .await
         .context("querying chain-state current-heights")?;
     assert!(
-        latest <= current_heights.value[0],
-        "streamed rollup height {latest} must not exceed chain-state current_heights.0 ({})",
+        next <= current_heights.value[0],
+        "streamed rollup height {next} must not exceed chain-state current_heights.0 ({})",
         current_heights.value[0]
     );
 

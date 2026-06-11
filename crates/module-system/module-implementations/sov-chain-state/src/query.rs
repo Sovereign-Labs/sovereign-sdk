@@ -43,9 +43,10 @@ impl<S: Spec> ChainState<S> {
     }
 
     /// WebSocket handler that streams the current [`RollupHeight`] to the client: the
-    /// latest height is sent on connection, and a new value is pushed every time the
-    /// rollup height advances (deduplicated, since the underlying checkpoint updates
-    /// once per slot but the rollup height only advances when a block is produced).
+    /// latest height is sent on connection, then every subsequent height is pushed in
+    /// order as the rollup height advances. Heights are never skipped or repeated:
+    /// checkpoint updates that don't advance the height are ignored, and a height jump
+    /// is streamed one value at a time.
     #[cfg(feature = "native")]
     async fn subscribe_rollup_height(
         state: ApiState<S, Self>,
@@ -79,7 +80,7 @@ impl<S: Spec> ChainState<S> {
                                 latest_seen =
                                     (height_to_send < latest_height).then_some(latest_height);
                                 return Some((
-                                    Ok::<_, RollupHeightWsError>(height_to_send),
+                                    Ok::<_, std::convert::Infallible>(height_to_send),
                                     (checkpoint_rx, last_sent, latest_seen),
                                 ));
                             }
@@ -96,7 +97,6 @@ impl<S: Spec> ChainState<S> {
                         // is equivalent to reading it from state.
                         let height = checkpoint_rx.borrow().rollup_height_to_access();
                         latest_seen = Some(height);
-                        // Height unchanged: wait for the next checkpoint update.
                     }
                 },
             )
@@ -109,20 +109,6 @@ impl<S: Spec> ChainState<S> {
             )
             .await;
         })
-    }
-}
-
-/// Uninhabited error for the rollup-height subscription stream. Reading the height
-/// from the current checkpoint is infallible, so this is never constructed; it exists
-/// only to satisfy the `ReportableWsError` bound of `serve_generic_ws_subscription`.
-#[cfg(feature = "native")]
-#[derive(Debug)]
-enum RollupHeightWsError {}
-
-#[cfg(feature = "native")]
-impl sov_modules_api::rest::utils::errors::ReportableWsError for RollupHeightWsError {
-    fn to_json(&self) -> String {
-        match *self {}
     }
 }
 
@@ -157,16 +143,16 @@ mod tests {
     #[test]
     fn rollup_height_subscription_sends_initial_latest_only() {
         assert_eq!(
-            Some(RollupHeight::new(7)),
-            next_unsent_rollup_height(None, RollupHeight::new(7))
+            next_unsent_rollup_height(None, RollupHeight::new(7)),
+            Some(RollupHeight::new(7))
         );
     }
 
     #[test]
     fn rollup_height_subscription_ignores_unchanged_height() {
         assert_eq!(
-            None,
-            next_unsent_rollup_height(Some(RollupHeight::new(7)), RollupHeight::new(7))
+            next_unsent_rollup_height(Some(RollupHeight::new(7)), RollupHeight::new(7)),
+            None
         );
     }
 
@@ -182,12 +168,12 @@ mod tests {
         }
 
         assert_eq!(
+            emitted_heights,
             vec![
                 RollupHeight::new(8),
                 RollupHeight::new(9),
                 RollupHeight::new(10)
-            ],
-            emitted_heights
+            ]
         );
     }
 }
