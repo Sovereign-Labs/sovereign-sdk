@@ -215,8 +215,8 @@ nmt-rs = { version = "0.2.5", features = ["serde", "borsh"] }
 # External dependencies
 # nomt-core = { version = "1.0.4", default-features = false, features = ["borsh", "serde"] }
 # nomt = { version = "1.0.4", default-features = false, features = ["borsh", "serde"] }
-nomt-core = { git = "https://github.com/Sovereign-Labs/nomt", rev = "c85fb01f526b9eee742bafbdc89c4a58313b249b", features = ["borsh", "serde"] }
-nomt = { git = "https://github.com/Sovereign-Labs/nomt", rev = "c85fb01f526b9eee742bafbdc89c4a58313b249b", features = ["borsh", "serde"] }
+nomt-core = { git = "https://github.com/thrumdev/nomt.git", rev = "cf1672b2bb9e89e07f6d939f6b7e404417c3120a", features = ["borsh", "serde"] }
+nomt = { git = "https://github.com/thrumdev/nomt.git", rev = "cf1672b2bb9e89e07f6d939f6b7e404417c3120a", features = ["borsh", "serde"] }
 concread = { version = "0.5.7" }
 
 anyhow = { version = "1.0.95" }
