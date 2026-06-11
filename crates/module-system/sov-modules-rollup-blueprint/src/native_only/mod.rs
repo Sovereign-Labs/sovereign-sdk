@@ -471,9 +471,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 );
                 let genesis_da_height = genesis_params.genesis_slot_number();
                 info!(
-                        rollup_genesis_height = genesis_da_height,
-                        "Rollup state is empty, performing genesis initialization. Requesting genesis DA block"
-                    );
+                    rollup_genesis_height = genesis_da_height,
+                    "Rollup state is empty, performing genesis initialization. Requesting genesis DA block"
+                );
                 let rollup_genesis_block = da_service.get_block_at(genesis_da_height).await?;
 
                 let genesis_header = rollup_genesis_block.header().clone();
@@ -520,8 +520,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .genesis_da_height(&mut checkpoint)
                     .context(
                         "rollup state is initialized but `genesis_da_height` is missing from \
-                             chain state; the database may be corrupted or produced by an \
-                             incompatible binary",
+                         chain state; the database may be corrupted or produced by an \
+                         incompatible binary",
                     )?;
                 (
                     prover_storage,
