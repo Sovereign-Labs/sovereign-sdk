@@ -1,6 +1,3 @@
-# 2026-06-11
-- #PR_NUMBER sov-migrations: the v1 (state_version 0->1) migration is now idempotent. Re-running it against an already-migrated DB (state_version >= 1) logs a message and exits Ok instead of erroring, so a restarted rollup that re-invokes the migration binary no longer fails.
-
 # 2026-05-26
 - #2918 Adds support for CIDR based rate limiting in preferred sequencer. Existing configs are backwards compatible.
   * **Breaking (behavior)**: corrects a unit bug in the preferred sequencer rate limiter where the per-request budget (`req_counter`) was computed 1000× too large (per-second rate × milliseconds). It now enforces the true requests-per-batch, consistent with the size/execution-time/gas limits. Configs are unchanged; in typical setups the request-count dimension still doesn't bind, but the request-count limit is now 1000× tighter. At low configured request budgets, request-counter refill still uses integer per-millisecond refill and can round down to zero.
@@ -90,6 +87,7 @@ Temporary section for maintaining breaking changes from individual PRs, which wi
   Receipt `effectiveGasPrice` and projected `gasUsed` are now unconditionally derived from the actual metered fee. 
   Forks that had set this to a non-zero future activation height must migrate; the new behavior is mandatory.
 - #2934 **Breaking Change**: Removes the `CHANGE_GAS_LIMIT_AFTER_HEIGHT` gas-limit fork. The `INITIAL_GAS_LIMIT` and `UPDATED_GAS_LIMIT` constants are replaced by a single `BLOCK_GAS_LIMIT` constant (test override env var `SOV_TEST_CONST_OVERRIDE_INITIAL_GAS_LIMIT` → `SOV_TEST_CONST_OVERRIDE_BLOCK_GAS_LIMIT`). Removes the `sequencer.height_for_gas_limit_computation` rate-limiter config field and the `ChainStateCapability::block_gas_limit` / `ChainState::block_gas_limit{,_at}` methods (use `<S as GasSpec>::block_gas_limit()` instead). The block gas limit is now constant for all heights; the per-block sequencer safeguards (preferred-sequencer pre-exec escrow, zero-bond preferred-sequencer penalization, and the slot-gas-limit pre-check) remain unconditionally enabled.
+- #2965 sov-migrations: the v1 (state_version 0->1) migration is now idempotent. Re-running it against an already-migrated DB (state_version >= 1) logs a message and exits Ok instead of erroring, so a restarted rollup that re-invokes the migration binary no longer fails.
 
 # 2026-04-01
 - #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
