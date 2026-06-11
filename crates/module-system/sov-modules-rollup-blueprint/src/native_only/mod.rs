@@ -469,6 +469,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 let operating_mode = <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(
                     &genesis_params.runtime,
                 );
+                validate_operating_mode_config(
+                    operating_mode,
+                    prover_config,
+                    rollup_config.proof_manager.is_some(),
+                )?;
                 let genesis_da_height = genesis_params.genesis_slot_number();
                 info!(
                     rollup_genesis_height = genesis_da_height,
@@ -535,15 +540,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         info!(?operating_mode, "Instantiating a new rollup");
 
-        if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
-            panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
-        }
-
-        if operating_mode != OperatingMode::Operator && rollup_config.proof_manager.is_none() {
-            anyhow::bail!(
-                "Missing `[proof_manager]` section in rollup config: it is required for `{operating_mode:?}` rollups.",
-            );
-        }
+        validate_operating_mode_config(
+            operating_mode,
+            prover_config,
+            rollup_config.proof_manager.is_some(),
+        )?;
 
         let da_sync_state = make_da_sync_state(
             genesis_da_height,
@@ -798,6 +799,24 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             genesis_slot_number: genesis_da_height,
         })
     }
+}
+
+fn validate_operating_mode_config(
+    operating_mode: OperatingMode,
+    prover_config: RollupProverConfig,
+    proof_manager_configured: bool,
+) -> anyhow::Result<()> {
+    if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
+        panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
+    }
+
+    if operating_mode != OperatingMode::Operator && !proof_manager_configured {
+        anyhow::bail!(
+            "Missing `[proof_manager]` section in rollup config: it is required for `{operating_mode:?}` rollups.",
+        );
+    }
+
+    Ok(())
 }
 
 async fn cleanup_failed_startup<S: Spec>(
