@@ -5,7 +5,7 @@ use anyhow::Context;
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use demo_stf_json_client::types::RuntimeError;
 use demo_stf_json_client::Error;
-use futures::StreamExt;
+use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
@@ -392,6 +392,84 @@ async fn chain_state_rollup_height_subscription_streams_live_height() -> anyhow:
         "streamed rollup height {next} must not exceed chain-state current_heights.0 ({})",
         current_heights.value[0]
     );
+
+    Ok(())
+}
+
+/// Opens a websocket subscription to `path` and keeps it actively engaged from a
+/// background task: pings the server every 100ms, replies to server pings, and drains
+/// pushed data frames. Returns once the server has answered a first ping, proving the
+/// subscription is live. The task exits when the connection is closed.
+async fn spawn_active_ws_subscription(
+    base_url: &str,
+    path: &str,
+) -> anyhow::Result<tokio::task::JoinHandle<()>> {
+    use tokio_tungstenite::tungstenite::{Bytes, Message};
+
+    let url = format!("{base_url}{path}").replace("http://", "ws://");
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url).await?;
+
+    // One ping/pong roundtrip before returning: proves the server-side subscription
+    // loop is actually serving this connection.
+    ws.send(Message::Ping(Bytes::new())).await?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match ws.next().await {
+                Some(Ok(Message::Pong(_))) => break Ok(()),
+                // Skip data frames, e.g. the initial rollup-height push.
+                Some(Ok(_)) => continue,
+                Some(Err(e)) => break Err(anyhow::Error::from(e)),
+                None => break Err(anyhow::anyhow!("ws closed before the first pong")),
+            }
+        }
+    })
+    .await
+    .context("server did not answer the first ping")??;
+
+    Ok(tokio::spawn(async move {
+        let mut ping_interval = tokio::time::interval(Duration::from_millis(100));
+        loop {
+            tokio::select! {
+                _ = ping_interval.tick() => {
+                    if ws.send(Message::Ping(Bytes::new())).await.is_err() {
+                        break; // The connection is closed.
+                    }
+                }
+                msg = ws.next() => match msg {
+                    Some(Ok(Message::Ping(data))) => {
+                        // A send failure means the connection is closing; the next
+                        // poll of the socket breaks the loop.
+                        let _ = ws.send(Message::Pong(data)).await;
+                    }
+                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
+                    Some(Ok(_)) => {} // Drain data frames.
+                },
+            }
+        }
+    }))
+}
+
+/// The node must shut down cleanly while a websocket subscription is open and
+/// actively exchanging ping/pong traffic.
+#[tokio::test(flavor = "multi_thread")]
+async fn rollup_shuts_down_cleanly_with_active_ws_subscription() -> anyhow::Result<()> {
+    let test_rollup = start_warm_rollup().await?;
+
+    let ws_task = spawn_active_ws_subscription(
+        &test_rollup.client.base_url,
+        "/modules/chain-state/rollup-height/ws",
+    )
+    .await?;
+
+    // The open, actively pinging subscription must not block shutdown.
+    tokio::time::timeout(Duration::from_secs(3), test_rollup.shutdown())
+        .await
+        .context("rollup did not shut down within 3s while a ws subscription was open")??;
+
+    // Clean shutdown closes the connection, which ends the background task.
+    tokio::time::timeout(Duration::from_secs(3), ws_task)
+        .await
+        .context("server did not close the ws connection on shutdown")??;
 
     Ok(())
 }
