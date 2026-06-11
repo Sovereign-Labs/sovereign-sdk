@@ -524,10 +524,20 @@ where
             AuthAndProcessOutcome::Applied {
                 transaction_consumption,
                 receipt,
-            } => ProvisionalSequencerOutcome::reward(
-                transaction_consumption.priority_fee().0,
-                receipt,
-            ),
+                #[cfg(feature = "native")]
+                sequencing_scratchpad,
+            } => {
+                let outcome = ProvisionalSequencerOutcome::reward(
+                    transaction_consumption.priority_fee().0,
+                    receipt,
+                );
+                #[cfg(feature = "native")]
+                let outcome = ProvisionalSequencerOutcome {
+                    sequencing_scratchpad,
+                    ..outcome
+                };
+                outcome
+            }
         };
 
         let provisional_reward = provisional_outcome.reward;
@@ -652,6 +662,8 @@ enum AuthAndProcessOutcome<S: Spec> {
     Applied {
         transaction_consumption: TransactionConsumption<S::Gas>,
         receipt: TransactionReceipt<S>,
+        #[cfg(feature = "native")]
+        sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
     },
 }
 
@@ -916,6 +928,8 @@ where
         Ok(ApplyTxResult {
             transaction_consumption,
             receipt,
+            #[cfg(feature = "native")]
+            sequencing_scratchpad,
         }) => {
             // The gas_used in the receipt is the sum of pre_exec_gas_meter.gas_used and the gas consumed during transaction execution.
             let gas_used = get_gas_used(&receipt);
@@ -926,6 +940,8 @@ where
                 outcome: AuthAndProcessOutcome::Applied {
                     receipt,
                     transaction_consumption,
+                    #[cfg(feature = "native")]
+                    sequencing_scratchpad,
                 },
             }
         }

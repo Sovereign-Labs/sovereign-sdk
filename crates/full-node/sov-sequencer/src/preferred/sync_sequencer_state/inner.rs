@@ -832,9 +832,10 @@ where
         };
 
         let gas_used = accepted_tx.confirmation.gas_used();
+        let finalized_tx_len = accepted_tx.tx.len();
         let resource_used = ResourceUsed::new(1, tx_len, execution_time_micros, gas_used);
 
-        batch_size_tracker.add_tx(tx_len, execution_time_micros);
+        batch_size_tracker.add_tx(finalized_tx_len, execution_time_micros);
         let rx = executor_events_sender
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;

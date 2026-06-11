@@ -44,6 +44,8 @@ constants_output.csv
 
 .codex
 
+.envrc
+
 *.log
 
 # Temporary test data files

@@ -322,6 +322,7 @@ where
             Ok(ApplyTxResult {
                 receipt,
                 transaction_consumption,
+                ..
             }) => {
                 let sequencer_reward = transaction_consumption.priority_fee();
                 // ...and immediately store the new `StateCheckpoint`.
