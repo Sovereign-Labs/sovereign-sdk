@@ -9,7 +9,9 @@ pub use endpoints::*;
 use futures::future;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
-use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, RollupHeight};
+use sov_modules_api::capabilities::{
+    ChainState, HasCapabilities, HasKernel, ProofProcessor, RollupHeight,
+};
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::ApiState;
@@ -54,6 +56,34 @@ pub use wallet::*;
 /// Commit hash of this rollup
 pub const GIT_COMMIT_HASH: &str = env!("GIT_COMMIT_HASH");
 use crate::RollupBlueprint;
+
+/// Specifies how to source the genesis data for a rollup.
+///
+/// The source is only consulted when the rollup state is empty. On a restart
+/// with populated state, genesis data is intentionally never read: the values
+/// needed at startup are recovered from chain state instead, so genesis files
+/// are not required to match the current binary's `GenesisConfig` after a
+/// hard fork.
+pub enum GenesisSource<S: Spec, R: RuntimeTrait<S>> {
+    /// Genesis data will be parsed from files found at the given paths.
+    ///
+    /// See [`FullNodeBlueprint::create_genesis_config`].
+    Paths(R::GenesisInput),
+    /// Genesis data provided explicitly using [`GenesisParams`].
+    ///
+    /// This is most useful when you're automatically generating genesis data
+    /// rather than parsing it.
+    CustomParams(GenesisParams<R::GenesisConfig>),
+}
+
+impl<S: Spec, R: RuntimeTrait<S>> Clone for GenesisSource<S, R> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Paths(paths) => Self::Paths(paths.clone()),
+            Self::CustomParams(params) => Self::CustomParams(params.clone()),
+        }
+    }
+}
 
 /// This trait defines how to create all the necessary dependencies required by a rollup.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -186,10 +216,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
     {
-        let genesis_params = self.create_genesis_config(runtime_genesis_paths, &rollup_config)?;
-
-        self.create_new_rollup_with_genesis_params(
-            genesis_params,
+        self.create_new_rollup_with_genesis_source(
+            GenesisSource::Paths(runtime_genesis_paths.clone()),
             rollup_config,
             prover_config,
             start_at_rollup_height,
@@ -327,11 +355,14 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     }
 
     /// Identical to [`FullNodeBlueprint::create_new_rollup`], but with
-    /// a custom [`GenesisParams`].
+    /// a custom [`GenesisSource`].
+    ///
+    /// The genesis source is only consulted when the rollup state is empty;
+    /// on a restart with populated state it is never read.
     #[tracing::instrument(name = "init_blueprint", skip_all)]
-    async fn create_new_rollup_with_genesis_params(
+    async fn create_new_rollup_with_genesis_source(
         &self,
-        genesis_params: GenesisParams<<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisConfig>,
+        genesis_source: GenesisSource<Self::Spec, Self::Runtime>,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         prover_config: RollupProverConfig,
         start_at_rollup_height: Option<RollupHeight>,
@@ -369,20 +400,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         } else {
             tracing::warn!("Metrics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
         };
-
-        let operating_mode =
-            <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(&genesis_params.runtime);
-        info!(?operating_mode, "Instantiating a new rollup");
-
-        if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
-            panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
-        }
-
-        if operating_mode != OperatingMode::Operator && rollup_config.proof_manager.is_none() {
-            anyhow::bail!(
-                "Missing `[proof_manager]` section in rollup config: it is required for `{operating_mode:?}` rollups.",
-            );
-        }
 
         let da_service = self
             .create_da_service(&rollup_config, secondary_shutdown_receiver.clone())
@@ -432,17 +449,32 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             "Recovering the state root"
         );
         let native_stf = StfBlueprint::new();
-        let genesis_da_height = genesis_params.genesis_slot_number();
-        let (prover_storage, prev_state_root, genesis_state_root) = match prev_root {
-            // Missing prev_root means need for initialization
+        let mut rt = Self::Runtime::default();
+        let (
+            prover_storage,
+            prev_state_root,
+            genesis_state_root,
+            operating_mode,
+            genesis_da_height,
+        ) = match prev_root {
+            // Missing prev_root means need for initialization: obtain genesis
+            // params now, deserializing them from files if needed.
             None => {
-                info!(
-                    rollup_genesis_height = genesis_params.genesis_slot_number(),
-                    "Rollup state is empty, performing genesis initialization. Requesting genesis DA block"
+                let genesis_params = match genesis_source {
+                    GenesisSource::Paths(paths) => {
+                        self.create_genesis_config(&paths, &rollup_config)?
+                    }
+                    GenesisSource::CustomParams(params) => params,
+                };
+                let operating_mode = <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(
+                    &genesis_params.runtime,
                 );
-                let rollup_genesis_block = da_service
-                    .get_block_at(genesis_params.genesis_slot_number())
-                    .await?;
+                let genesis_da_height = genesis_params.genesis_slot_number();
+                info!(
+                        rollup_genesis_height = genesis_da_height,
+                        "Rollup state is empty, performing genesis initialization. Requesting genesis DA block"
+                    );
+                let rollup_genesis_block = da_service.get_block_at(genesis_da_height).await?;
 
                 let genesis_header = rollup_genesis_block.header().clone();
                 let genesis_state_root: <<Self::Spec as Spec>::Storage as Storage>::Root =
@@ -469,17 +501,49 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     prover_storage,
                     genesis_state_root.clone(),
                     genesis_state_root,
+                    operating_mode,
+                    genesis_da_height,
                 )
             }
             // LedgerDb contains previous state root, initialization already has been done.
+            // The genesis source is intentionally not read: after a hard fork the on-disk
+            // genesis files may not deserialize into the current `GenesisConfig`, and they
+            // are not needed. The values genesis persisted to chain state are used instead.
             Some(prev_state_root) => {
                 let genesis_state_root = prover_storage
                     .get_root_hash(SlotNumber::GENESIS)
                     .context("genesis root must exist when storage has prior state")?;
-                // (prev_state_root, genesis_state_root)
-                (prover_storage, prev_state_root, genesis_state_root)
+                let mut checkpoint = StateCheckpoint::new(prover_storage.clone(), &rt.kernel());
+                let operating_mode = rt.chain_state().operating_mode(&mut checkpoint);
+                let genesis_da_height = rt
+                    .chain_state()
+                    .genesis_da_height(&mut checkpoint)
+                    .context(
+                        "rollup state is initialized but `genesis_da_height` is missing from \
+                             chain state; the database may be corrupted or produced by an \
+                             incompatible binary",
+                    )?;
+                (
+                    prover_storage,
+                    prev_state_root,
+                    genesis_state_root,
+                    operating_mode,
+                    genesis_da_height,
+                )
             }
         };
+
+        info!(?operating_mode, "Instantiating a new rollup");
+
+        if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
+            panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
+        }
+
+        if operating_mode != OperatingMode::Operator && rollup_config.proof_manager.is_none() {
+            anyhow::bail!(
+                "Missing `[proof_manager]` section in rollup config: it is required for `{operating_mode:?}` rollups.",
+            );
+        }
 
         let da_sync_state = make_da_sync_state(
             genesis_da_height,
@@ -495,7 +559,6 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             query_state_update_info(&ledger_db, prover_storage.clone(), da_sync_state.as_ref())
                 .await?;
 
-        let mut rt = Self::Runtime::default();
         let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
         let current_height = checkpoint.rollup_height_to_access();
 

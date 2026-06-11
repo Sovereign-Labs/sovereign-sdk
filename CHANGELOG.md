@@ -1,3 +1,8 @@
+# 2026-06-11
+- #PR_NUMBER Genesis configs are now deserialized only when the rollup state is empty. Nodes restarting with populated state no longer read genesis files, so after a hard fork the on-disk genesis configs don't need to match the new binary's `GenesisConfig`; `operating_mode` and `genesis_da_height` are read from chain state instead. Fresh nodes (empty state) still require genesis files valid for the current binary.
+  * **Breaking Change** `FullNodeBlueprint::create_new_rollup_with_genesis_params` is renamed to `create_new_rollup_with_genesis_source` and takes a `GenesisSource` (wrap existing params in `GenesisSource::CustomParams(...)`). The genesis source is only consulted when state is empty. `GenesisSource` moved from `sov-test-utils` to `sov-modules-rollup-blueprint` (re-exported at the old path).
+  * **Breaking Change** New required method `genesis_da_height` on `sov_modules_api::capabilities::ChainState`; custom kernel implementations must add a one-line delegation to the chain-state module's getter.
+
 # 2026-06-10
 - #2959 **Breaking Change** Ledger API: renames the `rollup_height` field to `slot_number` in the WebSocket slot-events subscription message (`SlotEvents`); the value was always a slot number, not a rollup height. Mirrors the #2886 `BatchResponse` rename.
 

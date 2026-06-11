@@ -214,6 +214,19 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for SoftConfirmationsKer
         self.chain_state.operating_mode(state).unwrap_infallible()
     }
 
+    fn genesis_da_height<
+        Reader: VersionReader
+            + StateReader<User, Error = Infallible>
+            + StateReader<Kernel, Error = Infallible>,
+    >(
+        &self,
+        state: &mut Reader,
+    ) -> Option<u64> {
+        self.chain_state
+            .genesis_da_height(state)
+            .unwrap_infallible()
+    }
+
     #[cfg(feature = "native")]
     fn test_only_set_rollup_height_for_genesis(
         &mut self,

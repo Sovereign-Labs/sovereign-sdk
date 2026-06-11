@@ -221,7 +221,6 @@ pub struct ChainState<S: Spec> {
     /// we can use this value with the `true_slot_number` to get the current height of the DA layer,
     /// using the following formula:
     /// `current_da_height = true_slot_number + genesis_da_height`.
-    /// Should be the same as the `genesis_height` field in the `RunnerConfig` (`sov-stf-runner` crate)
     #[state]
     genesis_da_height: StateValue<u64>,
 
@@ -458,7 +457,7 @@ impl<S: Spec> ChainState<S> {
     }
 
     /// Return the initial height of the DA layer.
-    pub fn genesis_da_height<Accessor: StateAccessor>(
+    pub fn genesis_da_height<Accessor: StateReader<User>>(
         &self,
         state: &mut Accessor,
     ) -> Result<Option<u64>, <Accessor as StateReader<User>>::Error> {
