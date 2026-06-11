@@ -10,9 +10,6 @@ use futures::future;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_modules_api::capabilities::{
-    ChainState, HasCapabilities, HasKernel, ProofProcessor, RollupHeight,
-};
-use sov_modules_api::capabilities::{
     ChainState as _, HasCapabilities, HasKernel, ProofProcessor, RollupHeight,
 };
 use sov_modules_api::execution_mode::ExecutionMode;
