@@ -127,9 +127,12 @@ mod tests {
             StateCheckpoint::<S>::new(storage, kernel.as_ref()),
         ));
         let (_sender, receiver) = sov_modules_api::prelude::tokio::sync::watch::channel(checkpoint);
+        let (_shutdown_sender, shutdown_receiver) =
+            sov_modules_api::prelude::tokio::sync::watch::channel(());
 
         let accounts = Accounts::<S>::default();
-        let state = ApiState::build(Arc::new(()), receiver, kernel, None).with(accounts);
+        let state =
+            ApiState::build(Arc::new(()), receiver, kernel, None, shutdown_receiver).with(accounts);
         let accessor = state.default_api_state_accessor();
 
         let credential_id = CredentialId::from([7u8; 32]);
