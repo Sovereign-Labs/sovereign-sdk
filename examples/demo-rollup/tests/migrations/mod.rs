@@ -39,6 +39,91 @@ struct KernelRoundtrip {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn v1_migration_rewrites_live_demo_state() -> anyhow::Result<()> {
+    let (builder, storage_config, credential_id, account_address) =
+        build_and_force_v0_demo_state().await?;
+
+    let report = run_v1_migration(storage_config.clone())?;
+
+    assert!(!report.dry_run);
+    assert!(report.head_rollup_slot > 0);
+    assert_ne!(report.pre_state_root, report.post_state_root);
+    assert_eq!(
+        report.migration.from_state_version,
+        sov_migrations::v1::SOURCE_STATE_VERSION
+    );
+    assert_eq!(
+        report.migration.to_state_version,
+        sov_migrations::v1::TARGET_STATE_VERSION
+    );
+    assert_eq!(report.migration.accounts.entries_migrated, 1);
+
+    assert_migrated_state(storage_config, credential_id, account_address)?;
+
+    let restarted_rollup = builder.start().await?;
+    restarted_rollup.wait_for_node_synced().await?;
+    restarted_rollup.shutdown().await?;
+
+    Ok(())
+}
+
+/// Re-running the migration against an already-migrated database must be a graceful no-op: it
+/// exits `Ok` without changing state, so a restarted node that re-invokes the migration binary
+/// does not fail.
+#[tokio::test(flavor = "multi_thread")]
+async fn v1_migration_is_idempotent() -> anyhow::Result<()> {
+    let (_builder, storage_config, credential_id, account_address) =
+        build_and_force_v0_demo_state().await?;
+
+    // First run actually applies the migration, establishing the already-migrated precondition.
+    let first = run_v1_migration(storage_config.clone())?;
+    assert_eq!(
+        first.migration.accounts.entries_migrated, 1,
+        "first run should migrate the seeded legacy account"
+    );
+    assert_ne!(
+        first.pre_state_root, first.post_state_root,
+        "first run should change the state root"
+    );
+
+    // Second run sees state_version already at the target and must do nothing.
+    let second = run_v1_migration(storage_config.clone())?;
+    assert_eq!(
+        second.migration.from_state_version,
+        sov_migrations::v1::TARGET_STATE_VERSION,
+        "second run should observe the already-migrated state version"
+    );
+    assert_eq!(
+        second.migration.to_state_version,
+        sov_migrations::v1::TARGET_STATE_VERSION,
+        "second run should leave the state version at the target"
+    );
+    assert_eq!(
+        second.migration.accounts.entries_migrated, 0,
+        "second run must not migrate any accounts"
+    );
+    assert_eq!(
+        second.pre_state_root, second.post_state_root,
+        "second run must not change the state root"
+    );
+    assert_eq!(
+        second.pre_state_root, first.post_state_root,
+        "state must be unchanged between the first and second runs"
+    );
+
+    assert_migrated_state(storage_config, credential_id, account_address)?;
+
+    Ok(())
+}
+
+/// Builds a live demo rollup, advances it past genesis with one transfer, shuts it down, and
+/// rewrites its head into a state-version-0 database carrying a legacy account entry. Returns the
+/// shutdown builder (for an optional restart), the storage config, and the seeded account ids.
+async fn build_and_force_v0_demo_state() -> anyhow::Result<(
+    RollupBuilder<Rollup>,
+    RollupDbConfig,
+    CredentialId,
+    <DemoRollupSpec as Spec>::Address,
+)> {
     let credential_id = credential_id(0x11);
     let account_address = account_address(0x22);
 
@@ -74,37 +159,23 @@ async fn v1_migration_rewrites_live_demo_state() -> anyhow::Result<()> {
 
     prepare_v0_state_with_legacy_account(storage_config.clone(), credential_id, account_address)?;
 
+    Ok((builder, storage_config, credential_id, account_address))
+}
+
+/// Runs the v1 migration against `storage_config` with a fresh runtime, returning the outcome.
+fn run_v1_migration(
+    storage_config: RollupDbConfig,
+) -> anyhow::Result<sov_migrations::MigrationOutcome<sov_migrations::v1::MigrationReport>> {
     let mut runtime = DemoRuntime::<DemoRollupSpec>::default();
     let runtime_inner = &mut *runtime;
-    let report = sov_migrations::v1::run_with_options::<DemoRollupSpec, Hasher>(
+    sov_migrations::v1::run_with_options::<DemoRollupSpec, Hasher>(
         sov_migrations::MigrationOptions {
-            storage: storage_config.clone(),
+            storage: storage_config,
             dry_run: false,
         },
         &mut runtime_inner.accounts,
         &mut runtime_inner.chain_state,
-    )?;
-
-    assert!(!report.dry_run);
-    assert!(report.head_rollup_slot > 0);
-    assert_ne!(report.pre_state_root, report.post_state_root);
-    assert_eq!(
-        report.migration.from_state_version,
-        sov_migrations::v1::SOURCE_STATE_VERSION
-    );
-    assert_eq!(
-        report.migration.to_state_version,
-        sov_migrations::v1::TARGET_STATE_VERSION
-    );
-    assert_eq!(report.migration.accounts.entries_migrated, 1);
-
-    assert_migrated_state(storage_config, credential_id, account_address)?;
-
-    let restarted_rollup = builder.start().await?;
-    restarted_rollup.wait_for_node_synced().await?;
-    restarted_rollup.shutdown().await?;
-
-    Ok(())
+    )
 }
 
 fn prepare_v0_state_with_legacy_account(
