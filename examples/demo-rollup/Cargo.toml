@@ -116,6 +116,7 @@ hex = { workspace = true }
 sha2 = { workspace = true }
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["full"] }
+tokio-tungstenite = { workspace = true, features = ["connect"] }
 tracing-subscriber = { workspace = true }
 rand = { workspace = true }
 

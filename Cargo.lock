@@ -11261,6 +11261,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "borsh",
+ "futures",
  "schemars 1.2.1",
  "serde",
  "sov-bank",
@@ -11438,6 +11439,7 @@ dependencies = [
  "tempfile",
  "testcontainers",
  "tokio",
+ "tokio-tungstenite 0.29.0",
  "tracing",
  "tracing-panic",
  "tracing-subscriber 0.3.20",

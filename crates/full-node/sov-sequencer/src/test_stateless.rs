@@ -49,6 +49,7 @@ pub struct TestStatelessSequencer<R, S: Spec, Da: DaService> {
     tx_status_manager: TxStatusManager<S::Da>,
     _r: PhantomData<R>,
     state_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
+    shutdown_receiver: watch::Receiver<()>,
     api_ledger_db: LedgerDb,
 }
 
@@ -104,6 +105,7 @@ where
             tx_status_manager,
             _r: Default::default(),
             state_sender,
+            shutdown_receiver: shutdown_receiver.clone(),
             api_ledger_db: ledger_db.clone(),
         };
 
@@ -199,6 +201,7 @@ where
             self.state_sender.subscribe(),
             runtime.kernel_with_slot_mapping(),
             None,
+            self.shutdown_receiver.clone(),
         )
     }
 
