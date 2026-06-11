@@ -269,3 +269,93 @@ async fn test_leader_grace_period() {
     );
     assert_eq!(result.unwrap().node_id, "node_2");
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_relinquished_leader_allows_immediate_takeover() {
+    let Some(postgres) = setup_test_postgres().await else {
+        return;
+    };
+
+    let db_1 = &mut DB::new(
+        &postgres,
+        String::from("node_1"),
+        ConfiguredNodeRole::Leader,
+    )
+    .await;
+    let db_2 = &mut DB::new(
+        &postgres,
+        String::from("node_2"),
+        ConfiguredNodeRole::Replica,
+    )
+    .await;
+
+    db_1.maybe_update_leader().await.unwrap();
+    db_2.override_timeouts(
+        Duration::from_millis(100_000),
+        Duration::from_millis(100_000),
+    );
+    assert!(
+        db_2.maybe_update_leader().await.is_none(),
+        "Replica should not take over while the leader is active"
+    );
+
+    db_1.backend
+        .relinquish_leadership_on_shutdown()
+        .await
+        .unwrap();
+
+    assert!(!is_leader(db_1, "node_1").await);
+    assert!(relinquished_at(db_1).await.is_some());
+    assert!(
+        db_1.get_sequencer_leader().await.unwrap().is_none(),
+        "Relinquished leader should not be returned as active"
+    );
+
+    let new_leader = db_2.maybe_update_leader().await.unwrap();
+    assert_eq!(new_leader.node_id, "node_2");
+    assert!(is_leader(db_2, "node_2").await);
+    assert!(relinquished_at(db_2).await.is_none());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_same_node_restart_clears_relinquished_marker() {
+    let Some(postgres) = setup_test_postgres().await else {
+        return;
+    };
+
+    let db = &mut DB::new(
+        &postgres,
+        String::from("node_1"),
+        ConfiguredNodeRole::Leader,
+    )
+    .await;
+
+    db.maybe_update_leader().await.unwrap();
+    db.backend
+        .relinquish_leadership_on_shutdown()
+        .await
+        .unwrap();
+
+    assert!(!is_leader(db, "node_1").await);
+    assert!(relinquished_at(db).await.is_some());
+
+    let restarted_leader = db.maybe_update_leader().await.unwrap();
+    assert_eq!(restarted_leader.node_id, "node_1");
+    assert!(is_leader(db, "node_1").await);
+    assert!(relinquished_at(db).await.is_none());
+}
+
+async fn is_leader(db: &DB, node_id: &str) -> bool {
+    sqlx::query_scalar("SELECT is_leader($1)")
+        .bind(node_id)
+        .fetch_one(&db.backend.pool)
+        .await
+        .unwrap()
+}
+
+async fn relinquished_at(db: &DB) -> Option<OffsetDateTime> {
+    sqlx::query_scalar("SELECT relinquished_at FROM sequencer_leader WHERE singleton = 1")
+        .fetch_one(&db.backend.pool)
+        .await
+        .unwrap()
+}

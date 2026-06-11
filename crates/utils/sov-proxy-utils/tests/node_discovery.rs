@@ -22,6 +22,9 @@ const MIGRATIONS: &[&str] = &[
     include_str!(
         "../../../full-node/sov-sequencer/src/preferred/db/postgres/migrations/003_unique_tx_events.sql"
     ),
+    include_str!(
+        "../../../full-node/sov-sequencer/src/preferred/db/postgres/migrations/004_leader_relinquish.sql"
+    ),
 ];
 
 /// Spins up a Postgres container with [`MIGRATIONS`] applied.
@@ -162,4 +165,41 @@ async fn survives_database_connection_loss() {
 
     task.abort();
     toxiproxy.shutdown();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn excludes_relinquished_leader_from_cluster_info() {
+    let Some((_container, connection_string, writer)) = setup().await else {
+        return; // Docker unavailable — skip.
+    };
+
+    insert_node(&writer, "leader", "127.0.0.1:9001").await;
+    insert_node(&writer, "follower", "127.0.0.1:9002").await;
+    sqlx::query(
+        "INSERT INTO sequencer_leader (node_id, last_updated, relinquished_at)
+         VALUES ($1, NOW(), NOW())",
+    )
+    .bind("leader")
+    .execute(&writer)
+    .await
+    .expect("Failed to insert relinquished leader");
+
+    let mut task = NodeDiscovery::connect(
+        &connection_string,
+        Duration::from_secs(300),
+        Duration::from_secs(100000),
+        None,
+    )
+    .await
+    .expect("Failed to connect NodeDiscovery")
+    .spawn();
+
+    wait_for_change(&mut task).await;
+    let info = task.receiver.borrow_and_update().clone();
+
+    assert!(info.leader.is_none());
+    assert!(!info.has_follower("leader"));
+    assert!(info.has_follower("follower"));
+
+    task.abort();
 }

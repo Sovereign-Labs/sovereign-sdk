@@ -352,6 +352,49 @@ async fn test_retry_sensitive_writes_are_idempotent() {
     );
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_deregister_node_on_shutdown_removes_only_target() {
+    let Some(postgres) = setup_test_postgres().await else {
+        return;
+    };
+
+    let alice = DB::new(
+        &postgres,
+        String::from("alice"),
+        ConfiguredNodeRole::Replica,
+    )
+    .await;
+    let bob = DB::new(&postgres, String::from("bob"), ConfiguredNodeRole::Replica).await;
+
+    alice.backend.heartbeat(None).await.unwrap();
+    bob.backend.heartbeat(None).await.unwrap();
+    assert_eq!(count_nodes(&alice).await, 2);
+
+    alice.backend.deregister_node_on_shutdown().await.unwrap();
+
+    assert_eq!(count_nodes(&alice).await, 1);
+    assert!(!node_exists(&alice, "alice").await);
+    assert!(node_exists(&alice, "bob").await);
+
+    alice.backend.deregister_node_on_shutdown().await.unwrap();
+    assert_eq!(count_nodes(&alice).await, 1);
+}
+
+async fn count_nodes(db: &DB) -> i64 {
+    sqlx::query_scalar::<_, i64>("SELECT COUNT(*) FROM nodes")
+        .fetch_one(&db.backend.pool)
+        .await
+        .unwrap()
+}
+
+async fn node_exists(db: &DB, node_id: &str) -> bool {
+    sqlx::query_scalar::<_, bool>("SELECT EXISTS(SELECT 1 FROM nodes WHERE node_id = $1)")
+        .bind(node_id)
+        .fetch_one(&db.backend.pool)
+        .await
+        .unwrap()
+}
+
 async fn count_events(db: &DB, sequence_number: SequenceNumber, event_type: &str) -> i64 {
     sqlx::query_scalar(
         "SELECT COUNT(*)

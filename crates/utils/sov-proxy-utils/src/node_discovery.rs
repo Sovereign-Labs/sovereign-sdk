@@ -230,12 +230,6 @@ impl NodeDiscovery {
             }
         }
 
-        if let Some(leader_id) = &leader_id {
-            if leader.is_none() {
-                anyhow::bail!("Leader is missing from the Nodes table. leader_id: {leader_id}, followers: {followers:?}");
-            }
-        }
-
         Ok(ClusterInfo { leader, followers })
     }
 
@@ -372,14 +366,21 @@ impl NodeDiscovery {
     ) -> Result<(Option<String>, Vec<(String, String, OffsetDateTime)>)> {
         let max_age_secs: i64 = self.max_age.as_secs().try_into()?;
 
-        // Fetch nodes updated within max_age, always including the leader regardless of age.
-        // The leader_id is included in each row via LEFT JOIN, allowing us to get it from the results.
+        // Fetch nodes updated within max_age, always including the active leader
+        // regardless of age. A relinquished leader is excluded from routing even if
+        // its node row is still fresh.
         let rows: Vec<(String, String, OffsetDateTime, Option<String>)> = sqlx::query_as(
-            "SELECT n.node_id, n.address, n.last_updated, l.node_id as leader_id \
+            "SELECT n.node_id,
+                    n.address,
+                    n.last_updated,
+                    CASE WHEN l.relinquished_at IS NULL THEN l.node_id END AS leader_id \
              FROM nodes n \
              LEFT JOIN sequencer_leader l ON l.singleton = 1 \
-             WHERE n.last_updated > NOW() - $1 * INTERVAL '1 second' \
-                OR n.node_id = l.node_id \
+             WHERE (
+                    n.last_updated > NOW() - $1 * INTERVAL '1 second' \
+                    OR (n.node_id = l.node_id AND l.relinquished_at IS NULL)
+                ) \
+                AND NOT (n.node_id = l.node_id AND l.relinquished_at IS NOT NULL) \
              ORDER BY n.node_id",
         )
         .bind(max_age_secs)
@@ -425,20 +426,20 @@ mod tests {
     }
 
     #[test]
-    fn cluster_errors_when_leader_not_in_nodes() {
+    fn cluster_returns_no_leader_when_leader_not_in_nodes() {
         let ts = test_timestamp();
-        let result = NodeDiscovery::cluster(
+        let info = NodeDiscovery::cluster(
             Some("missing_leader".to_string()),
             vec![
                 ("node1".to_string(), "127.0.0.1:8000".to_string(), ts),
                 ("node2".to_string(), "127.0.0.1:8001".to_string(), ts),
             ],
-        );
+        )
+        .unwrap();
 
-        let err = result.unwrap_err();
-        assert!(err
-            .to_string()
-            .contains("Leader is missing from the Nodes table."));
+        assert!(info.leader.is_none());
+        assert!(info.has_follower("node1"));
+        assert!(info.has_follower("node2"));
     }
 
     #[test]

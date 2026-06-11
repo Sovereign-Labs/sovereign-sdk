@@ -1,5 +1,5 @@
 use super::*;
-use crate::preferred::db::heartbeat_task::HeartBeatTask;
+use crate::preferred::db::heartbeat_task::{heartbeat_stopped_channel, HeartBeatTask};
 use crate::preferred::db::SequencerRole;
 use anyhow::Context;
 use anyhow::Result;
@@ -192,6 +192,16 @@ where
         let synchronized_state_task = synchronized_state.start().await;
         handles.push(synchronized_state_task);
 
+        let (heartbeat_stopped_sender, heartbeat_stopped_receiver) =
+            if preferred_config.postgres_config.is_some()
+                && matches!(seq_role, SequencerRole::BatchProducer)
+            {
+                let (sender, receiver) = heartbeat_stopped_channel();
+                (Some(sender), Some(receiver))
+            } else {
+                (None, None)
+            };
+
         let side_effects_task = SideEffectsTask {
             checkpoint_sender,
             blob_sender,
@@ -200,6 +210,7 @@ where
             api_ledger_db,
             shutdown_sender: shutdown_sender.clone(),
             transaction_cache: cached_txs.write_handle(),
+            heartbeat_stopped_receiver,
         }
         .spawn();
         handles.push(side_effects_task);
@@ -258,6 +269,7 @@ where
                 shutdown_sender.clone(),
                 bind_addr,
                 postgres_config.leader_election.heartbeat_interval(),
+                heartbeat_stopped_sender,
             )
             .await?;
             let heartbeat_handle = heartbeat_task.spawn(seq_role).await;

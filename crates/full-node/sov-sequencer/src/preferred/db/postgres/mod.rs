@@ -297,24 +297,27 @@ impl PostgresBackend {
             .expect("PostgresBackend error: grace_period is bigger than i64::MAX");
 
         // Leadership update logic:
-        // 1. Same node can always refresh its heartbeat
-        // 2. Different node can only take over if BOTH:
+        // 1. Same node can always refresh its heartbeat, clearing a prior relinquish marker.
+        // 2. Different node can take over immediately if the current leader relinquished.
+        // 3. Otherwise, different node can only take over if BOTH:
         //    - The current leader has timed out (no heartbeat within leader_timeout)
         //    - The grace period since leader_acquired_at has passed (prevents rapid flapping)
         let res = sqlx::query_as::<_, SequencerLeader>(
             "WITH ts AS (SELECT NOW() as current_time)
-            INSERT INTO sequencer_leader (node_id, last_updated)
-            SELECT $1, ts.current_time FROM ts
+            INSERT INTO sequencer_leader (node_id, last_updated, relinquished_at)
+            SELECT $1, ts.current_time, NULL FROM ts
                 ON CONFLICT (singleton) DO UPDATE
                     SET
                         node_id = EXCLUDED.node_id,
                         last_updated = EXCLUDED.last_updated,
+                        relinquished_at = NULL,
                         leader_acquired_at = CASE
                             WHEN sequencer_leader.node_id != EXCLUDED.node_id THEN EXCLUDED.last_updated
                             ELSE sequencer_leader.leader_acquired_at
                         END
                     WHERE
                         sequencer_leader.node_id = EXCLUDED.node_id
+                        OR sequencer_leader.relinquished_at IS NOT NULL
                         OR (
                             sequencer_leader.last_updated < EXCLUDED.last_updated - ($2 * INTERVAL '1 millisecond')
                             AND sequencer_leader.leader_acquired_at < EXCLUDED.last_updated - ($3 * INTERVAL '1 millisecond')
@@ -345,6 +348,54 @@ impl PostgresBackend {
         .bind(&self.node_address)
         .execute(&mut *conn)
         .await?;
+        Ok(())
+    }
+
+    fn shutdown_backoff_policy() -> ExponentialBuilder {
+        ExponentialBuilder::default()
+            .with_min_delay(Duration::from_millis(10))
+            .with_max_delay(Duration::from_millis(100))
+            .with_factor(10.0)
+            .with_max_times(2)
+    }
+
+    /// Deletes this node's row from the `nodes` table.
+    ///
+    /// Used during graceful shutdown to remove the node from discovery immediately,
+    /// rather than waiting for its heartbeat to age out via the `last_updated`
+    /// staleness filter.
+    pub(crate) async fn deregister_node_on_shutdown(&self) -> anyhow::Result<()> {
+        let shutdown_backoff = Self::shutdown_backoff_policy();
+        run_with_retries!(
+            &shutdown_backoff,
+            sqlx::query("DELETE FROM nodes WHERE node_id = $1")
+                .bind(&self.node_id)
+                .execute(&self.pool),
+            "postgres_db_backend_deregister_node_on_shutdown"
+        )?;
+        Ok(())
+    }
+
+    /// Marks this node's leadership as relinquished after shutdown side effects drain.
+    ///
+    /// The `sequencer_leader` row is kept so old guarded writes can finish before
+    /// relinquish. Once this marker is set, `is_leader()` no longer authorizes this
+    /// node and DbElected standbys can take over without waiting for the timeout.
+    pub(crate) async fn relinquish_leadership_on_shutdown(&self) -> anyhow::Result<()> {
+        let shutdown_backoff = Self::shutdown_backoff_policy();
+        run_with_retries!(
+            &shutdown_backoff,
+            sqlx::query(
+                "UPDATE sequencer_leader
+                 SET relinquished_at = NOW()
+                 WHERE singleton = 1
+                   AND node_id = $1
+                   AND relinquished_at IS NULL",
+            )
+            .bind(&self.node_id)
+            .execute(&self.pool),
+            "postgres_db_backend_relinquish_leadership_on_shutdown"
+        )?;
         Ok(())
     }
 
@@ -387,7 +438,8 @@ impl PostgresBackend {
         let maybe_leader: Option<SequencerLeader> = sqlx::query_as::<_, SequencerLeader>(
             "SELECT node_id, last_updated
                 FROM sequencer_leader
-                WHERE singleton = 1",
+                WHERE singleton = 1
+                  AND relinquished_at IS NULL",
         )
         .fetch_optional(connection)
         .await?;
@@ -607,6 +659,11 @@ impl DbBackend for PostgresBackend {
 
         Ok(())
     }
+
+    async fn relinquish_leadership_on_shutdown(&mut self) -> anyhow::Result<()> {
+        PostgresBackend::relinquish_leadership_on_shutdown(self).await
+    }
+
     async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>, DbError> {
         let mut tx = self.pool.begin().await?;
         let maybe_leader = self.get_sequencer_leader_inner(&mut tx).await?;

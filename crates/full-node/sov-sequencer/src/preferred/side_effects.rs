@@ -10,6 +10,7 @@ use tracing::{debug, enabled, error, warn, Level};
 
 use super::executor_events::ExecutorEvent;
 use crate::metrics::PreferredSequencerExecutorEventMetrics;
+use crate::preferred::db::heartbeat_task::HeartbeatStoppedReceiver;
 use crate::preferred::db::BatchToStore;
 use crate::preferred::executor_events::AcceptedTxEventContents;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
@@ -32,6 +33,7 @@ where
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
     pub shutdown_sender: watch::Sender<()>,
     pub transaction_cache: TxResultWriter<S, Rt>,
+    pub heartbeat_stopped_receiver: Option<HeartbeatStoppedReceiver>,
 }
 
 impl<S, Rt, Da> SideEffectsTask<S, Rt, Da>
@@ -316,7 +318,7 @@ where
         &mut self,
         mut event_queue: VecDeque<ExecutorEvent<S, Rt>>,
         max_queue_size: usize,
-    ) {
+    ) -> bool {
         while let Some(event) = self.executor_events_receiver.recv().await {
             event_queue.push_back(event);
             while event_queue.len() < max_queue_size {
@@ -332,10 +334,12 @@ where
                     tracing::error!(error = ?e, "Error handling executor event");
                     // If we've already started shutting down, this might fail - but then we're happy.
                     let _ = self.shutdown_sender.send(());
-                    break;
+                    return false;
                 }
             }
         }
+
+        true
     }
 
     pub(crate) fn spawn(mut self) -> JoinHandle<()> {
@@ -343,8 +347,19 @@ where
         let max_queue_size = self.executor_events_receiver.max_capacity();
         let event_queue = VecDeque::with_capacity(max_queue_size);
         tokio::spawn(async move {
-            self.receive_and_process_events(event_queue, max_queue_size)
-                .await;
+            if self
+                .receive_and_process_events(event_queue, max_queue_size)
+                .await
+            {
+                tracing::debug!("Executor event sender dropped after side effects drained");
+                wait_for_heartbeat_task_to_stop(self.heartbeat_stopped_receiver.take()).await;
+                tracing::debug!(
+                    "Side effects drained and heartbeat stopped; relinquishing leadership if applicable"
+                );
+                self.db
+                    .relinquish_leadership_on_shutdown_best_effort()
+                    .await;
+            }
         })
     }
 }
@@ -364,6 +379,17 @@ fn drain_consecutive_accepted_txs<S: Spec, Rt: Runtime<S>>(
         }
     }
     txs_to_insert
+}
+
+async fn wait_for_heartbeat_task_to_stop(
+    heartbeat_stopped_receiver: Option<HeartbeatStoppedReceiver>,
+) {
+    let Some(heartbeat_stopped_receiver) = heartbeat_stopped_receiver else {
+        return;
+    };
+
+    tracing::debug!("Waiting for heartbeat task to stop before relinquishing leadership");
+    let _ = heartbeat_stopped_receiver.await;
 }
 
 #[cfg(test)]
@@ -420,6 +446,21 @@ mod tests {
                 _ => panic!("Expected AcceptedTx event"),
             }
         }
+    }
+
+    #[tokio::test]
+    async fn waits_for_heartbeat_stop_before_barrier_returns() {
+        let (sender, receiver) = oneshot::channel();
+        let wait = wait_for_heartbeat_task_to_stop(Some(receiver));
+        tokio::pin!(wait);
+
+        tokio::select! {
+            () = &mut wait => panic!("Heartbeat stop barrier returned before heartbeat stopped"),
+            () = tokio::task::yield_now() => {}
+        }
+
+        let _ = sender.send(());
+        wait.await;
     }
 
     #[tokio::test]
