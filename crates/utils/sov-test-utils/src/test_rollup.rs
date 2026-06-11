@@ -16,7 +16,6 @@ use crate::{
     TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MAX_CONCURRENT_PROOF_BLOBS,
 };
 use anyhow::Context;
-use derivative::Derivative;
 use serde::Deserialize;
 use sov_api_spec::types;
 use sov_api_spec::types::TxInfoWithConfirmation;
@@ -39,7 +38,7 @@ use sov_modules_api::ModuleExecutionConfig;
 use sov_modules_api::Spec;
 pub use sov_modules_rollup_blueprint::FullNodeBlueprint;
 use sov_modules_rollup_blueprint::RollupBlueprint;
-use sov_modules_stf_blueprint::{GenesisParams, Runtime};
+use sov_modules_stf_blueprint::Runtime;
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_interface::common::SlotNumber;
@@ -65,21 +64,7 @@ use tokio::time::timeout;
 use tokio::time::Duration;
 use tokio_stream::StreamExt;
 
-/// Specifies how to source the genesis data for a rollup.
-#[derive(Derivative)]
-#[derivative(Clone(bound = ""))]
-pub enum GenesisSource<S: Spec, R: Runtime<S>> {
-    /// Genesis data will be parsed from files found at the given paths.
-    ///
-    /// See [`FullNodeBlueprint::create_genesis_config`].
-    Paths(R::GenesisInput),
-    /// Genesis data provided explicitly using [`GenesisParams`].
-    ///
-    /// This is most useful when you're automatically generating genesis data
-    /// rather than parsing it. See e.g.
-    /// [`crate::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig::generate`].
-    CustomParams(GenesisParams<R::GenesisConfig>),
-}
+pub use sov_modules_rollup_blueprint::GenesisSource;
 
 #[derive(Clone)]
 pub enum StoragePath {
@@ -276,34 +261,17 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         })?;
 
         let rollup_config = self.rollup_config();
-        let rollup = match &self.genesis {
-            GenesisSource::Paths(genesis_paths) => {
-                blueprint
-                    .create_new_rollup(
-                        genesis_paths,
-                        rollup_config.clone(),
-                        self.config.rollup_prover_config,
-                        self.config.start_at_rollup_height,
-                        self.config.stop_at_rollup_height,
-                        self.exec_config.clone(),
-                        self.config.start_fresh_outer_proof_on_resync,
-                    )
-                    .await?
-            }
-            GenesisSource::CustomParams(genesis_params) => {
-                blueprint
-                    .create_new_rollup_with_genesis_params(
-                        genesis_params.clone(),
-                        rollup_config.clone(),
-                        self.config.rollup_prover_config,
-                        self.config.start_at_rollup_height,
-                        self.config.stop_at_rollup_height,
-                        self.exec_config.clone(),
-                        self.config.start_fresh_outer_proof_on_resync,
-                    )
-                    .await?
-            }
-        };
+        let rollup = blueprint
+            .create_new_rollup_with_genesis_source(
+                self.genesis.clone(),
+                rollup_config.clone(),
+                self.config.rollup_prover_config,
+                self.config.start_at_rollup_height,
+                self.config.stop_at_rollup_height,
+                self.exec_config.clone(),
+                self.config.start_fresh_outer_proof_on_resync,
+            )
+            .await?;
 
         let shutdown_sender = rollup.shutdown_sender.clone();
 

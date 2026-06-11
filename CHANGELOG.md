@@ -1,3 +1,8 @@
+# 2026-06-11
+- #2966 Genesis configs are now deserialized only when the rollup state is empty. Nodes restarting with populated state no longer read genesis files, so after a hard fork the on-disk genesis configs don't need to match the new binary's `GenesisConfig`; `operating_mode` and `genesis_da_height` are read from chain state instead. Fresh nodes (empty state) still require genesis files valid for the current binary.
+  * **Breaking Change** `FullNodeBlueprint::create_new_rollup_with_genesis_params` is renamed to `create_new_rollup_with_genesis_source` and takes a `GenesisSource` (wrap existing params in `GenesisSource::CustomParams(...)`). The genesis source is only consulted when state is empty. `GenesisSource` moved from `sov-test-utils` to `sov-modules-rollup-blueprint` (re-exported at the old path).
+  * **Breaking Change** New required method `genesis_da_height` on `sov_modules_api::capabilities::ChainState`; custom kernel implementations must add a one-line delegation to the chain-state module's getter.
+
 # 2026-06-10
 - #2960 Chain state: Adds a WebSocket subscription streaming the current rollup height. New endpoint `GET /modules/chain-state/rollup-height/ws` sends the current rollup height (`current_heights.0`) on connection, then every subsequent height in order as the rollup height advances (heights are never skipped or repeated).
 - #2960 **Breaking Change** Module REST API: `ApiState::build` now requires a node shutdown receiver (`watch::Receiver<()>`), exposed to handlers via the new `ApiState::shutdown_receiver()`. This gives module custom REST APIs (e.g. WebSocket subscriptions) a real graceful-shutdown signal instead of each handler faking one.

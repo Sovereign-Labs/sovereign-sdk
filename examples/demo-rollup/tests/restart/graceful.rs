@@ -9,6 +9,7 @@ use crate::test_helpers::{
     build_transfer_token_tx_with_generation, test_genesis_source, DemoRollupSpec,
 };
 use anyhow::Context;
+use demo_stf::genesis_config::GenesisPaths;
 use futures::StreamExt;
 use rand::rngs::StdRng;
 use rand::seq::SliceRandom;
@@ -25,7 +26,9 @@ use sov_sequencer::SequencerKindConfig;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::generate_operator_runtime_with_kernel;
 use sov_test_utils::logging::LogCollector;
-use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, StoragePath, TestRollup};
+use sov_test_utils::test_rollup::{
+    read_private_key, GenesisSource, RollupBuilder, StoragePath, TestRollup,
+};
 use sov_test_utils::{TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING};
 use tracing::Level;
 use tracing_subscriber::prelude::*;
@@ -757,6 +760,102 @@ async fn flaky_test_increasing_stf_infos_zk_instant_finality() -> anyhow::Result
 // Flaky because of an existing problem: "Error: IO error: lock hold by current process,"
 async fn flaky_test_increasing_stf_infos_optimistic_instant_finality() -> anyhow::Result<()> {
     try_to_clog_channel_instant_finality(OperatingMode::Optimistic).await
+}
+
+/// Restarting a node with populated state must not read genesis files at all:
+/// after a hard fork the on-disk genesis configs may no longer deserialize into
+/// the current binary's `GenesisConfig`, and they are not needed.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_genesis_files_not_read_when_state_is_populated() -> anyhow::Result<()> {
+    let rollup_storage_dir = Arc::new(tempfile::tempdir()?);
+
+    // First start: valid genesis files, instant finality.
+    let test_rollup = tokio::time::timeout(
+        ROLLUP_START_TIMEOUT,
+        RollupBuilder::<MockDemoRollup<Native>>::new(
+            test_genesis_source(OperatingMode::Zk),
+            TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+            0,
+        )
+        .set_config(|c| {
+            c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
+        })
+        .set_persistent_da()
+        .start(),
+    )
+    .await
+    .context("First rollup start failed")??;
+
+    let mut slot_subscription = test_rollup.client.client.subscribe_slots().await?;
+    let first_run_slot = tokio::time::timeout(Duration::from_secs(10), slot_subscription.next())
+        .await
+        .context("Waiting for a slot on the first run failed")?
+        .transpose()?
+        .context("Slot subscription ended on the first run")?
+        .number;
+    drop(slot_subscription);
+    tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown()).await??;
+
+    // Restart over the same storage with genesis paths that cannot be read.
+    let test_rollup = tokio::time::timeout(
+        ROLLUP_START_TIMEOUT,
+        RollupBuilder::<MockDemoRollup<Native>>::new(
+            GenesisSource::Paths(GenesisPaths::from_dir("/nonexistent-genesis-dir")),
+            TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+            0,
+        )
+        .set_config(|c| {
+            c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
+        })
+        .set_persistent_da()
+        .start(),
+    )
+    .await
+    .context("Restart with unreadable genesis paths over populated state failed")??;
+
+    // The restarted node must process new slots, not just come up.
+    let mut slot_subscription = test_rollup.client.client.subscribe_slots().await?;
+    tokio::time::timeout(Duration::from_secs(10), async {
+        loop {
+            let slot = slot_subscription
+                .next()
+                .await
+                .transpose()?
+                .context("Slot subscription ended after the restart")?;
+            if slot.number > first_run_slot {
+                return anyhow::Ok(());
+            }
+        }
+    })
+    .await
+    .context("Rollup did not make progress after the restart")??;
+    drop(slot_subscription);
+    tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, test_rollup.shutdown()).await??;
+
+    Ok(())
+}
+
+/// Control for `test_genesis_files_not_read_when_state_is_populated`: with empty
+/// state the same unreadable genesis paths must fail startup, proving genesis
+/// files are still deserialized when they are actually needed.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_unreadable_genesis_files_fail_startup_on_empty_state() -> anyhow::Result<()> {
+    let result = RollupBuilder::<MockDemoRollup<Native>>::new(
+        GenesisSource::Paths(GenesisPaths::from_dir("/nonexistent-genesis-dir")),
+        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+        0,
+    )
+    .start()
+    .await;
+
+    let error = result
+        .err()
+        .context("rollup with unreadable genesis paths and empty state must fail to start")?;
+    assert!(
+        format!("{error:#}").contains("Failed to read rollup genesis"),
+        "Startup error should come from genesis config deserialization, got: {error:#}"
+    );
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]

@@ -9,7 +9,9 @@ pub use endpoints::*;
 use futures::future;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
-use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, RollupHeight};
+use sov_modules_api::capabilities::{
+    ChainState, HasCapabilities, HasKernel, ProofProcessor, RollupHeight,
+};
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::ApiState;
@@ -54,6 +56,34 @@ pub use wallet::*;
 /// Commit hash of this rollup
 pub const GIT_COMMIT_HASH: &str = env!("GIT_COMMIT_HASH");
 use crate::RollupBlueprint;
+
+/// Specifies how to source the genesis data for a rollup.
+///
+/// The source is only consulted when the rollup state is empty. On a restart
+/// with populated state, genesis data is intentionally never read: the values
+/// needed at startup are recovered from chain state instead, so genesis files
+/// are not required to match the current binary's `GenesisConfig` after a
+/// hard fork.
+pub enum GenesisSource<S: Spec, R: RuntimeTrait<S>> {
+    /// Genesis data will be parsed from files found at the given paths.
+    ///
+    /// See [`FullNodeBlueprint::create_genesis_config`].
+    Paths(R::GenesisInput),
+    /// Genesis data provided explicitly using [`GenesisParams`].
+    ///
+    /// This is most useful when you're automatically generating genesis data
+    /// rather than parsing it.
+    CustomParams(GenesisParams<R::GenesisConfig>),
+}
+
+impl<S: Spec, R: RuntimeTrait<S>> Clone for GenesisSource<S, R> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Paths(paths) => Self::Paths(paths.clone()),
+            Self::CustomParams(params) => Self::CustomParams(params.clone()),
+        }
+    }
+}
 
 /// This trait defines how to create all the necessary dependencies required by a rollup.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -186,10 +216,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
     {
-        let genesis_params = self.create_genesis_config(runtime_genesis_paths, &rollup_config)?;
-
-        self.create_new_rollup_with_genesis_params(
-            genesis_params,
+        self.create_new_rollup_with_genesis_source(
+            GenesisSource::Paths(runtime_genesis_paths.clone()),
             rollup_config,
             prover_config,
             start_at_rollup_height,
@@ -327,11 +355,14 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     }
 
     /// Identical to [`FullNodeBlueprint::create_new_rollup`], but with
-    /// a custom [`GenesisParams`].
+    /// a custom [`GenesisSource`].
+    ///
+    /// The genesis source is only consulted when the rollup state is empty;
+    /// on a restart with populated state it is never read.
     #[tracing::instrument(name = "init_blueprint", skip_all)]
-    async fn create_new_rollup_with_genesis_params(
+    async fn create_new_rollup_with_genesis_source(
         &self,
-        genesis_params: GenesisParams<<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisConfig>,
+        genesis_source: GenesisSource<Self::Spec, Self::Runtime>,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         prover_config: RollupProverConfig,
         start_at_rollup_height: Option<RollupHeight>,
@@ -370,44 +401,53 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             tracing::warn!("Metrics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
         };
 
-        let operating_mode =
-            <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(&genesis_params.runtime);
-        info!(?operating_mode, "Instantiating a new rollup");
-
-        if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
-            panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
-        }
-
-        if operating_mode != OperatingMode::Operator && rollup_config.proof_manager.is_none() {
-            anyhow::bail!(
-                "Missing `[proof_manager]` section in rollup config: it is required for `{operating_mode:?}` rollups.",
-            );
-        }
-
         let da_service = self
             .create_da_service(&rollup_config, secondary_shutdown_receiver.clone())
             .await;
         let da_service_handle = da_service.take_background_join_handle().await;
+        if let Some(handle) = da_service_handle {
+            background_handles.push(handle);
+        }
         let da_service = Arc::new(da_service);
+
+        macro_rules! startup_step {
+            ($expr:expr) => {
+                match $expr {
+                    Ok(value) => value,
+                    Err(error) => {
+                        cleanup_failed_startup_before_sequencer(
+                            &main_shutdown_sender,
+                            &secondary_shutdown_sender,
+                            &mut background_handles,
+                        )
+                        .await;
+                        return Err(error.into());
+                    }
+                }
+            };
+        }
 
         let da_polling_interval =
             std::time::Duration::from_millis(rollup_config.runner.da_polling_interval_ms);
-        let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
-            da_service.clone(),
-            secondary_shutdown_receiver.clone(),
-            da_polling_interval,
-        )
-        .await?;
-        let current_finalized_header = da_service.get_last_finalized_block_header().await?;
+        let da_service_with_cache = startup_step!(
+            DaServiceWithCachedFinalizedHeaders::new(
+                da_service.clone(),
+                secondary_shutdown_receiver.clone(),
+                da_polling_interval,
+            )
+            .await
+        );
+        let current_finalized_header =
+            startup_step!(da_service.get_last_finalized_block_header().await);
 
         let witness_generation = prover_config.is_enabled();
         let mut storage_manager =
-            self.create_storage_manager(&rollup_config, witness_generation)?;
+            startup_step!(self.create_storage_manager(&rollup_config, witness_generation));
 
         let (prover_storage, ledger_state) =
-            storage_manager.create_state_after(&current_finalized_header)?;
+            startup_step!(storage_manager.create_state_after(&current_finalized_header));
 
-        let ledger_db = self.create_ledger_db(ledger_state.clone())?;
+        let ledger_db = startup_step!(self.create_ledger_db(ledger_state.clone()));
         // Create separate API LedgerDb that will be used to provide strong consistency for REST
         // API. The updating of the underlying ledger reader will be delayed until other components
         // have completed their processing.
@@ -417,12 +457,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         // REST APIs view of the ledger.
         let api_ledger_db = LedgerDb::with_shared_notifications(&ledger_db);
 
-        let prev_root = match ledger_db.get_head_slot()? {
-            Some((number, _)) => {
-                Some(prover_storage.get_root_hash(number).with_context(|| {
+        let prev_root = match startup_step!(ledger_db.get_head_slot()) {
+            Some((number, _)) => Some(startup_step!(prover_storage
+                .get_root_hash(number)
+                .with_context(|| {
                     format!("missing root hash for committed head slot {number}")
-                })?)
-            }
+                }))),
             None => None,
         };
 
@@ -432,33 +472,55 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             "Recovering the state root"
         );
         let native_stf = StfBlueprint::new();
-        let genesis_da_height = genesis_params.genesis_slot_number();
-        let (prover_storage, prev_state_root, genesis_state_root) = match prev_root {
-            // Missing prev_root means need for initialization
+        let mut rt = Self::Runtime::default();
+        let (
+            prover_storage,
+            prev_state_root,
+            genesis_state_root,
+            operating_mode,
+            genesis_da_height,
+        ) = match prev_root {
+            // Missing prev_root means need for initialization: obtain genesis
+            // params now, deserializing them from files if needed.
             None => {
+                let genesis_params = match genesis_source {
+                    GenesisSource::Paths(paths) => {
+                        startup_step!(self.create_genesis_config(&paths, &rollup_config))
+                    }
+                    GenesisSource::CustomParams(params) => params,
+                };
+                let operating_mode = <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(
+                    &genesis_params.runtime,
+                );
+                startup_step!(validate_operating_mode_config(
+                    operating_mode,
+                    prover_config,
+                    rollup_config.proof_manager.is_some(),
+                ));
+                let genesis_da_height = genesis_params.genesis_slot_number();
                 info!(
-                    rollup_genesis_height = genesis_params.genesis_slot_number(),
+                    rollup_genesis_height = genesis_da_height,
                     "Rollup state is empty, performing genesis initialization. Requesting genesis DA block"
                 );
-                let rollup_genesis_block = da_service
-                    .get_block_at(genesis_params.genesis_slot_number())
-                    .await?;
+                let rollup_genesis_block =
+                    startup_step!(da_service.get_block_at(genesis_da_height).await);
 
                 let genesis_header = rollup_genesis_block.header().clone();
-                let genesis_state_root: <<Self::Spec as Spec>::Storage as Storage>::Root =
+                let genesis_state_root: <<Self::Spec as Spec>::Storage as Storage>::Root = startup_step!(
                     initialize_state::<_, Self::DaService, _>(
                         &native_stf,
                         &mut storage_manager,
                         rollup_genesis_block,
                         genesis_params,
                     )
-                    .await?;
+                    .await
+                );
 
                 // Re-create bootstrap storage, so it fetches the latest version after initialization.
                 // And can see the latest changes. Otherwise Sequencer won't be able to process any batches,
                 // because genesis data won't be visible to it.
                 let (prover_storage, ledger_state) =
-                    storage_manager.create_state_after(&genesis_header)?;
+                    startup_step!(storage_manager.create_state_after(&genesis_header));
 
                 ledger_db.replace_reader(ledger_state.clone());
                 api_ledger_db.replace_reader(ledger_state);
@@ -469,41 +531,71 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     prover_storage,
                     genesis_state_root.clone(),
                     genesis_state_root,
+                    operating_mode,
+                    genesis_da_height,
                 )
             }
             // LedgerDb contains previous state root, initialization already has been done.
+            // The genesis source is intentionally not read: after a hard fork the on-disk
+            // genesis files may not deserialize into the current `GenesisConfig`, and they
+            // are not needed. The values genesis persisted to chain state are used instead.
             Some(prev_state_root) => {
-                let genesis_state_root = prover_storage
+                let genesis_state_root = startup_step!(prover_storage
                     .get_root_hash(SlotNumber::GENESIS)
-                    .context("genesis root must exist when storage has prior state")?;
-                // (prev_state_root, genesis_state_root)
-                (prover_storage, prev_state_root, genesis_state_root)
+                    .context("genesis root must exist when storage has prior state"));
+                let mut checkpoint = StateCheckpoint::new(prover_storage.clone(), &rt.kernel());
+                let operating_mode = rt.chain_state().operating_mode(&mut checkpoint);
+                let genesis_da_height_result = {
+                    let chain_state = rt.chain_state();
+                    chain_state.genesis_da_height(&mut checkpoint).context(
+                        "rollup state is initialized but `genesis_da_height` is missing from \
+                         chain state; the database may be corrupted or produced by an \
+                         incompatible binary",
+                    )
+                };
+                let genesis_da_height = startup_step!(genesis_da_height_result);
+                startup_step!(validate_operating_mode_config(
+                    operating_mode,
+                    prover_config,
+                    rollup_config.proof_manager.is_some(),
+                ));
+                (
+                    prover_storage,
+                    prev_state_root,
+                    genesis_state_root,
+                    operating_mode,
+                    genesis_da_height,
+                )
             }
         };
 
-        let da_sync_state = make_da_sync_state(
-            genesis_da_height,
-            stop_at_rollup_height,
-            &ledger_db,
-            &da_service_with_cache,
-        )
-        .await?;
+        info!(?operating_mode, "Instantiating a new rollup");
+
+        let da_sync_state = startup_step!(
+            make_da_sync_state(
+                genesis_da_height,
+                stop_at_rollup_height,
+                &ledger_db,
+                &da_service_with_cache,
+            )
+            .await
+        );
 
         let sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
 
-        let state_update_info =
+        let state_update_info = startup_step!(
             query_state_update_info(&ledger_db, prover_storage.clone(), da_sync_state.as_ref())
-                .await?;
+                .await
+        );
 
-        let mut rt = Self::Runtime::default();
         let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
         let current_height = checkpoint.rollup_height_to_access();
 
-        validate_heights(
+        startup_step!(validate_heights(
             current_height,
             start_at_rollup_height,
             stop_at_rollup_height,
-        )?;
+        ));
 
         tracing::debug!(
             prev_root_hash = hex::encode(prev_state_root.as_ref()),
@@ -516,19 +608,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let state_update_receiver = state_channel.subscribe_state_update();
         let storage_receiver = state_channel.subscribe_storage();
 
-        if let Some(handle) = da_service_handle {
-            background_handles.push(handle);
-        }
-
         let visible_state_height_tracker: Box<dyn ProvableHeightTracker> = Box::new(
             MaximumProvableHeight::new(state_channel.subscribe_storage(), Self::Runtime::default()),
         );
 
-        let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
-        let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
-        let axum_socket_addr = axum_tcp.local_addr()?;
-        let mut sequencer = self
-            .create_sequencer(
+        let axum_socket_addr = startup_step!(rollup_config.runner.http_config.socket_address());
+        let axum_tcp = startup_step!(TcpListener::bind(axum_socket_addr).await);
+        let axum_socket_addr = startup_step!(axum_tcp.local_addr());
+        let mut sequencer = startup_step!(
+            self.create_sequencer(
                 state_update_receiver.clone(),
                 da_sync_state.clone(),
                 &rollup_config,
@@ -540,7 +628,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 stop_at_rollup_height,
                 axum_socket_addr,
             )
-            .await?;
+            .await
+        );
 
         let proof_pipeline_enabled =
             should_enable_proof_pipeline(prover_config, sequencer.is_replica);
@@ -737,6 +826,26 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     }
 }
 
+fn validate_operating_mode_config(
+    operating_mode: OperatingMode,
+    prover_config: RollupProverConfig,
+    proof_manager_configured: bool,
+) -> anyhow::Result<()> {
+    if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
+        anyhow::bail!(
+            "The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported",
+        );
+    }
+
+    if operating_mode != OperatingMode::Operator && !proof_manager_configured {
+        anyhow::bail!(
+            "Missing `[proof_manager]` section in rollup config: it is required for `{operating_mode:?}` rollups.",
+        );
+    }
+
+    Ok(())
+}
+
 async fn cleanup_failed_startup<S: Spec>(
     main_shutdown_sender: &watch::Sender<()>,
     secondary_shutdown_sender: &watch::Sender<()>,
@@ -746,11 +855,37 @@ async fn cleanup_failed_startup<S: Spec>(
     let _ = main_shutdown_sender.send(());
     let _ = secondary_shutdown_sender.send(());
 
-    // Drain handles concurrently rather than serially.
     let background_handles_to_join = std::mem::take(background_handles);
     let sequencer_background_handles = std::mem::take(&mut sequencer.background_handles);
     let endpoint_background_handles = std::mem::take(&mut sequencer.endpoints.background_handles);
 
+    wait_for_failed_startup_tasks(
+        background_handles_to_join,
+        sequencer_background_handles,
+        endpoint_background_handles,
+    )
+    .await;
+}
+
+async fn cleanup_failed_startup_before_sequencer(
+    main_shutdown_sender: &watch::Sender<()>,
+    secondary_shutdown_sender: &watch::Sender<()>,
+    background_handles: &mut Vec<JoinHandle<()>>,
+) {
+    let _ = main_shutdown_sender.send(());
+    let _ = secondary_shutdown_sender.send(());
+
+    let background_handles_to_join = std::mem::take(background_handles);
+
+    wait_for_failed_startup_tasks(background_handles_to_join, Vec::new(), Vec::new()).await;
+}
+
+async fn wait_for_failed_startup_tasks(
+    background_handles_to_join: Vec<JoinHandle<()>>,
+    sequencer_background_handles: Vec<JoinHandle<()>>,
+    endpoint_background_handles: Vec<JoinHandle<anyhow::Result<()>>>,
+) {
+    // Drain handles concurrently rather than serially.
     let drain = async move {
         let _ = tokio::join!(
             future::join_all(background_handles_to_join),
