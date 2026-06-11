@@ -152,11 +152,7 @@ fn test_valid_challenge() -> Result<(), Infallible> {
 
     let challenge_proof = runner
         .query_visible_state(|state| {
-            build_challenge(
-                state,
-                SlotNumber::new_dangerous(1),
-                bonded_challenger_address,
-            )
+            build_challenge(state, SlotNumber::new(1), bonded_challenger_address)
         })
         .unwrap();
 
@@ -170,7 +166,7 @@ fn test_valid_challenge() -> Result<(), Infallible> {
         input: ProofInput(make_challenge_blob(
             challenge_proof,
             true,
-            SlotNumber::new_dangerous(1),
+            SlotNumber::new(1),
         )),
         assert: Box::new(move |result, state| {
             assert_eq!(
@@ -265,11 +261,7 @@ fn test_invalid_challenge_initial_state_root() {
 
     let mut challenge_proof = runner
         .query_visible_state(|state| {
-            build_challenge(
-                state,
-                SlotNumber::new_dangerous(1),
-                bonded_challenger_address,
-            )
+            build_challenge(state, SlotNumber::new(1), bonded_challenger_address)
         })
         .unwrap();
 
@@ -279,7 +271,7 @@ fn test_invalid_challenge_initial_state_root() {
         &mut runner,
         expected_reward.0,
         &bonded_challenger,
-        make_challenge_blob(challenge_proof, true, SlotNumber::new_dangerous(1)),
+        make_challenge_blob(challenge_proof, true, SlotNumber::new(1)),
         SlashingReason::InvalidInitialHash,
     );
 }
@@ -292,11 +284,7 @@ fn test_invalid_challenge_transition() {
 
     let mut challenge_proof = runner
         .query_visible_state(|state| {
-            build_challenge(
-                state,
-                SlotNumber::new_dangerous(1),
-                bonded_challenger_address,
-            )
+            build_challenge(state, SlotNumber::new(1), bonded_challenger_address)
         })
         .unwrap();
 
@@ -306,7 +294,7 @@ fn test_invalid_challenge_transition() {
         &mut runner,
         expected_reward.0,
         &bonded_challenger,
-        make_challenge_blob(challenge_proof, true, SlotNumber::new_dangerous(1)),
+        make_challenge_blob(challenge_proof, true, SlotNumber::new(1)),
         SlashingReason::TransitionInvalid,
     );
 }
@@ -319,11 +307,7 @@ fn test_invalid_challenge_proof() {
 
     let challenge_proof = runner
         .query_visible_state(|state| {
-            build_challenge(
-                state,
-                SlotNumber::new_dangerous(1),
-                bonded_challenger_address,
-            )
+            build_challenge(state, SlotNumber::new(1), bonded_challenger_address)
         })
         .unwrap();
 
@@ -331,7 +315,7 @@ fn test_invalid_challenge_proof() {
         &mut runner,
         expected_reward.0,
         &bonded_challenger,
-        make_challenge_blob(challenge_proof, false, SlotNumber::new_dangerous(1)),
+        make_challenge_blob(challenge_proof, false, SlotNumber::new(1)),
         SlashingReason::InvalidZkProof,
     );
 }

@@ -46,7 +46,13 @@ impl SlotNumber {
     /// The largest possible [`SlotNumber`].
     pub const MAX: Self = Self(u64::MAX);
 
-    /// Wraps a [`u64`] into a [`SlotNumber`].
+    /// Wraps a raw [`u64`] that is already a slot number.
+    ///
+    /// The caller asserts the value really is a slot number — e.g. decoded from storage or a
+    /// ledger key, or derived from a DA height. There is no validation. To obtain a
+    /// [`SlotNumber`] from a [`RollupHeight`] or [`VisibleSlotNumber`] (which only coincide
+    /// with the slot number for a based rollup), go through the kernel's `KernelWithSlotMapping`
+    /// instead — there is no correct stateless conversion.
     pub const fn new(height: u64) -> Self {
         Self(height)
     }
@@ -86,12 +92,6 @@ impl SlotNumber {
         self.0
     }
 
-    /// Constructs a [`SlotNumber`] from a [`u64`]. This method should be used with caution,
-    /// since passing a [`SlotNumber`] that is not a valid height can lead to unexpected results.
-    pub fn new_dangerous(height: u64) -> Self {
-        Self(height)
-    }
-
     /// Calculates the difference between two [`SlotNumber`]s as a [`u64`].
     ///
     /// # Panics
@@ -128,16 +128,6 @@ impl SlotNumber {
     pub fn checked_sub(&self, rhs: u64) -> Option<Self> {
         self.0.checked_sub(rhs).map(Self)
     }
-    /// Casts this value into a [`SlotNumber`].
-    ///
-    /// <div class="warning">
-    /// This type cast is NEVER safe (as far as I can tell; I don't see edge
-    /// cases in which we'd truly want to do this). All usages of this method
-    /// should be reviewed AND removed.
-    /// </div>
-    pub fn as_visible(&self) -> VisibleSlotNumber {
-        VisibleSlotNumber::new_dangerous(self.get())
-    }
 
     /// Iterates over all [`SlotNumber`]s in the range `[self, end]`.
     pub fn range_inclusive(&self, end: Self) -> impl Iterator<Item = Self> {
@@ -150,13 +140,10 @@ impl SlotNumber {
     }
 }
 
-/// Easy initialization of [`SlotNumber`] and [`VisibleSlotNumber`].
+/// Easy initialization of [`SlotNumber`].
 pub trait IntoSlotNumber {
     /// Creates a new [`SlotNumber`].
     fn to_slot_number(self) -> SlotNumber;
-
-    /// Creates a new [`VisibleSlotNumber`].
-    fn to_visible_slot_number(self) -> VisibleSlotNumber;
 }
 
 macro_rules! impl_into_slot_number {
@@ -164,10 +151,6 @@ macro_rules! impl_into_slot_number {
         impl IntoSlotNumber for $t {
             fn to_slot_number(self) -> SlotNumber {
                 SlotNumber::new(self as _)
-            }
-
-            fn to_visible_slot_number(self) -> VisibleSlotNumber {
-                VisibleSlotNumber::new_dangerous(self as _)
             }
         }
     };
@@ -348,11 +331,5 @@ impl RollupHeight {
     #[must_use]
     pub fn saturating_add(self, rhs: u64) -> Self {
         Self(self.0.saturating_add(rhs))
-    }
-
-    /// Convert a rollup height to a slot number
-    #[must_use]
-    pub fn to_slot_number(&self) -> SlotNumber {
-        SlotNumber::new_dangerous(self.0)
     }
 }

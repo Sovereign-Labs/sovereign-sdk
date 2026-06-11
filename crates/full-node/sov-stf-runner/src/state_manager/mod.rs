@@ -418,7 +418,7 @@ where
         );
 
         let last_finalized_slot_number = finalized_transitions.iter().last().map(|t| {
-            SlotNumber::new_dangerous(
+            SlotNumber::new(
                 t.block_header
                     .height()
                     .saturating_sub(self.genesis_da_height),

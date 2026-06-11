@@ -516,9 +516,7 @@ where
         next: Next,
     ) -> Result<Response, Response> {
         let identifier = match get_path_item(&path_values, "slotId")? {
-            NumberOrHash::Number(number) => {
-                SlotIdentifier::Number(SlotNumber::new_dangerous(number))
-            }
+            NumberOrHash::Number(number) => SlotIdentifier::Number(SlotNumber::new(number)),
             NumberOrHash::Hash(hash) => SlotIdentifier::Hash(hash.0),
         };
 

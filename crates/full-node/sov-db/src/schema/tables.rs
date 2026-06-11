@@ -346,7 +346,7 @@ impl KeyDecoder<ModuleAccessoryState> for (AccessoryKey, SlotNumber) {
         let mut cursor = std::io::Cursor::new(data);
         let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
         let version = cursor.read_u64::<BigEndian>()?;
-        Ok((key, SlotNumber::new_dangerous(version)))
+        Ok((key, SlotNumber::new(version)))
     }
 }
 
@@ -395,7 +395,7 @@ impl KeyDecoder<AccessoryKeysByVersion> for (SlotNumber, AccessoryKey) {
         let mut cursor = std::io::Cursor::new(data);
         let version = cursor.read_u64::<BigEndian>()?;
         let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
-        Ok((SlotNumber::new_dangerous(version), key))
+        Ok((SlotNumber::new(version), key))
     }
 }
 
