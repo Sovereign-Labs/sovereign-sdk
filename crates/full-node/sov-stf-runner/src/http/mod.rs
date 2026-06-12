@@ -87,7 +87,10 @@ pub(crate) async fn start_http_server(
     mut shutdown_receiver: watch::Receiver<()>,
     cors_configuration: CorsConfiguration,
     rpc_aggregation: RpcAggregationConfig,
-) -> anyhow::Result<(JoinHandle<anyhow::Result<()>>, JoinHandle<anyhow::Result<()>>)> {
+) -> anyhow::Result<(
+    JoinHandle<anyhow::Result<()>>,
+    JoinHandle<anyhow::Result<()>>,
+)> {
     let rest_address = axum_listener.local_addr()?;
     let (rpc_router, server_handle, aggregator) =
         rpc_module_to_router(methods, cors_configuration, rpc_aggregation);
@@ -145,7 +148,10 @@ pub(crate) async fn start_http_server(
 /// services. The caller must drive [`RpcStatsAggregator::run_flush_loop`]
 /// (typically via `tokio::spawn`, observing the task) for aggregated metrics
 /// to be emitted; without it, recorded events are silently discarded once the
-/// aggregator's internal channel fills up.
+/// aggregator's internal channel fills up, channel-overflow warnings are never
+/// logged, and individual slow-call points — which initially work, since they
+/// are emitted directly from the recording path — stop permanently once the
+/// per-window cap fills, because the cap is only reset at flush time.
 pub fn rpc_module_to_router(
     methods: RpcModule<()>,
     cors_config: CorsConfiguration,

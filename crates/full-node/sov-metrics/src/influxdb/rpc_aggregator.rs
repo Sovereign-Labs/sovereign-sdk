@@ -887,12 +887,7 @@ mod tests {
         let agg = aggregator();
         // 500.4ms with the default 500ms threshold: must be Slow AND must not
         // be counted in the le_500ms bucket.
-        let recorded = agg.record_call(
-            "eth_getLogs",
-            false,
-            Duration::from_micros(500_400),
-            None,
-        );
+        let recorded = agg.record_call("eth_getLogs", false, Duration::from_micros(500_400), None);
         assert_eq!(
             recorded,
             RecordedCall::Slow {

@@ -192,18 +192,22 @@ where
         // `batch` pseudo-method.
         let mut entry_count: u64 = 0;
         let mut malformed_entries: u64 = 0;
-        let mut entry_names = Vec::new();
+        let mut entry_methods = Vec::new();
         for entry in batch.iter() {
             entry_count += 1;
             match entry {
-                Ok(entry) => entry_names.push(entry.method_name()),
+                Ok(entry) => entry_methods.push(aggregator.resolve_method(entry.method_name())),
                 // Malformed entries carry no method name; they are counted
                 // here and appear as error objects in the response body,
                 // where `count_failed_entries` picks them up.
                 Err(_) => malformed_entries += 1,
             }
         }
-        let entry_methods = aggregator.record_batch_entries(entry_names, is_ws);
+        // The resolved names are needed again only by the slow-batch log
+        // below; clone them only when that log could actually fire.
+        let methods_for_slow_log =
+            tracing::enabled!(tracing::Level::DEBUG).then(|| entry_methods.clone());
+        aggregator.record_batch_entries(entry_methods, is_ws);
         let guard = CancellationGuard::new(aggregator.clone(), GuardTarget::Batch, is_ws);
 
         async move {
@@ -224,7 +228,7 @@ where
                     entry_count,
                     malformed_entries,
                     failed_entries,
-                    methods = ?entry_methods,
+                    methods = ?methods_for_slow_log.as_deref(),
                     "Slow RPC batch"
                 );
             }
@@ -256,6 +260,14 @@ where
 /// `error` member. Returns 0 when the body is not a JSON array (e.g. a
 /// whole-batch rejection, which is covered by the response's error code
 /// instead).
+///
+/// This is a single pass over the serialized response
+/// but the cost is still proportional to the response size and is paid
+/// for every batch, including fast ones: the `failed_entries` counter is part
+/// of every window's aggregate, and jsonrpsee's middleware only exposes the
+/// batch response as a serialized whole, so re-parsing it is the only way to
+/// count per-entry failures. Large batched queries (e.g. `eth_getLogs`) make
+/// this the most expensive step of recording a batch.
 fn count_failed_entries(batch_response_json: &str) -> u64 {
     #[derive(serde::Deserialize)]
     struct EntryProbe {
