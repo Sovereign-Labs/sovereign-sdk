@@ -373,6 +373,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_datagram_size: None,
                 max_pending_metrics: None,
                 tokio_runtime_metrics_interval_millis: 500,
+                rpc_aggregation: sov_stf_runner::RpcAggregationConfig::standard(),
             },
         }
     }

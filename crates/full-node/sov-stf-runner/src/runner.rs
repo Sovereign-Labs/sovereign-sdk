@@ -297,8 +297,9 @@ where
         router: axum::Router<()>,
         methods: RpcModule<()>,
         cors_configuration: CorsConfiguration,
+        rpc_aggregation: sov_metrics::RpcAggregationConfig,
     ) -> anyhow::Result<()> {
-        let http_task_handle = crate::http::start_http_server(
+        let (http_task_handle, rpc_metrics_flush_handle) = crate::http::start_http_server(
             self.axum_tcp
                 .take()
                 .ok_or_else(|| anyhow::anyhow!("HTTP server already started."))?,
@@ -306,10 +307,12 @@ where
             methods,
             self.secondary_shutdown_sender.subscribe(),
             cors_configuration,
+            rpc_aggregation,
         )
         .await?;
 
         self.background_handles.push(http_task_handle);
+        self.background_handles.push(rpc_metrics_flush_handle);
 
         Ok(())
     }
