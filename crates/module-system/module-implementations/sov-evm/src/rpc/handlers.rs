@@ -63,7 +63,7 @@ where
     }
 
     /// Handler for `eth_getBlockByHash`
-    #[rpc_method(name = "eth_getBlockByHash")]
+    #[rpc_method(name = "eth_getBlockByHash", blocking)]
     pub fn get_block_by_hash(
         &self,
         block_hash: B256,
@@ -83,7 +83,7 @@ where
     }
 
     /// Handler for: `eth_getBlockByNumber`
-    #[rpc_method(name = "eth_getBlockByNumber")]
+    #[rpc_method(name = "eth_getBlockByNumber", blocking)]
     pub fn get_block_by_number(
         &self,
         block_id: Option<BlockId>,
@@ -235,7 +235,7 @@ where
     ///
     /// This endpoint helps wallets and users determine appropriate gas prices
     /// by exposing the rollup's EIP-1559 style base fee history.
-    #[rpc_method(name = "eth_feeHistory")]
+    #[rpc_method(name = "eth_feeHistory", blocking)]
     pub fn fee_history(
         &self,
         block_count: U64,
@@ -325,7 +325,7 @@ where
     }
 
     /// Handler for: `eth_getBlockReceipts`
-    #[rpc_method(name = "eth_getBlockReceipts")]
+    #[rpc_method(name = "eth_getBlockReceipts", blocking)]
     pub fn get_block_receipts(
         &self,
         block_id: Option<BlockId>,
@@ -376,7 +376,7 @@ where
     ///
     /// References:
     /// - Geth `doCall`: <https://github.com/ethereum/go-ethereum/blob/master/internal/ethapi/api.go>
-    #[rpc_method(name = "eth_call")]
+    #[rpc_method(name = "eth_call", blocking)]
     pub fn eth_call(
         &self,
         request: TransactionRequest,
@@ -412,7 +412,7 @@ where
     ///
     /// See [`prepare_call_env`](crate::helpers::prepare_call_env) for the full
     /// affordability analysis and current divergence from geth.
-    #[rpc_method(name = "eth_createAccessList")]
+    #[rpc_method(name = "eth_createAccessList", blocking)]
     pub fn eth_create_access_list(
         &self,
         request: TransactionRequest,
@@ -482,7 +482,7 @@ where
     }
 
     /// Handler for `debug_traceBlockByNumber`
-    #[rpc_method(name = "debug_traceBlockByNumber")]
+    #[rpc_method(name = "debug_traceBlockByNumber", blocking)]
     pub fn debug_trace_block_by_number(
         &self,
         block: BlockNumberOrTag,
@@ -497,7 +497,7 @@ where
     }
 
     /// Handler for: `debug_traceTransaction`
-    #[rpc_method(name = "debug_traceTransaction")]
+    #[rpc_method(name = "debug_traceTransaction", blocking)]
     pub fn debug_trace_transaction(
         &self,
         tx_hash: B256,
@@ -568,8 +568,13 @@ where
             method = "eth_getBlockTransactionCountByNumber",
             "EVM module JSON-RPC request"
         );
-        let block = self.get_maybe_synthetic_block_for_rpc(block_id, false.into(), state)?;
-        Ok(block.map(|b| U64::from(b.transactions.len())))
+        let result = self
+            .get_maybe_sealed_block_by_id(block_id.unwrap_or_else(BlockId::latest), state)
+            .map(|block| {
+                block
+                    .map(|b| U64::from(b.transactions_end().saturating_sub(b.transactions_start())))
+            })?;
+        Ok(result)
     }
 
     /// Handler for: `eth_getBlockTransactionCountByHash`
