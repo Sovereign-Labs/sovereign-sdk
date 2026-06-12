@@ -119,7 +119,7 @@ ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintai
 #node_id = "node_1"
 #node_role = "Leader" # Other options are "Replica", "ReplicaNoLeaderSync", or "DbElected"
 #[sequencer.preferred.postgres_config.leader_election] # Configuration for leader election timing
-#leader_timeout_millis = 500 # Maximum time in milliseconds without a heartbeat before a leader is considered inactive
+#leader_timeout_millis = 1000 # Maximum time in milliseconds without a heartbeat before a leader is considered inactive
 #grace_period_millis = 10000 # Minimum time in milliseconds after leader acquisition before another node can take over
 #heartbeat_interval_millis = 100 # Interval in milliseconds between heartbeat updates
 

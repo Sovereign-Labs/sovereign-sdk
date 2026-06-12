@@ -1,3 +1,6 @@
+# 2026-06-12
+- Preferred sequencer: increases the default `leader_timeout_millis` (leader-election) from 500ms to 1000ms. A leader is now considered inactive only after 1s without a heartbeat, reducing spurious failovers at the cost of slightly slower dead-leader detection. Configurable via `[sequencer.preferred.postgres_config.leader_election]`; existing configs that set the value explicitly are unaffected.
+
 # 2026-06-11
 - #2966 Genesis configs are now deserialized only when the rollup state is empty. Nodes restarting with populated state no longer read genesis files, so after a hard fork the on-disk genesis configs don't need to match the new binary's `GenesisConfig`; `operating_mode` and `genesis_da_height` are read from chain state instead. Fresh nodes (empty state) still require genesis files valid for the current binary.
   * **Breaking Change** `FullNodeBlueprint::create_new_rollup_with_genesis_params` is renamed to `create_new_rollup_with_genesis_source` and takes a `GenesisSource` (wrap existing params in `GenesisSource::CustomParams(...)`). The genesis source is only consulted when state is empty. `GenesisSource` moved from `sov-test-utils` to `sov-modules-rollup-blueprint` (re-exported at the old path).
