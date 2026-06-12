@@ -106,6 +106,40 @@ pub struct BlobWithSender {
     pub hash: HexHash,
 }
 
+/// Celestia-private accessors distinguishing the two byte streams a blob represents:
+///
+/// * **DA-physical ("compressed")**: the payload bytes as actually posted to Celestia.
+///   Share-occupancy math (inclusion proofs, namespace continuity) is defined over
+///   these bytes and only these bytes.
+/// * **Logical**: the payload bytes exposed to the rollup via [`BlobReaderTrait`].
+///
+/// Today the two streams are identical. Once blobs can be posted in a compressed
+/// envelope, they diverge; proof generation and verification must keep using the
+/// `compressed_*` accessors so the share math stays tied to what is actually on DA.
+impl BlobWithSender {
+    /// DA-physical payload bytes consumed so far. These are the bytes that
+    /// inclusion proofs must cover.
+    pub(crate) fn compressed_verified_data(&self) -> &[u8] {
+        self.blob.accumulator()
+    }
+
+    /// Total DA-physical payload length. Must always equal the `sequence_length`
+    /// recorded in the blob's first share; the verifier enforces this.
+    pub(crate) fn compressed_total_len(&self) -> usize {
+        self.blob.total_len()
+    }
+
+    /// Logical payload bytes observed by the rollup so far.
+    pub(crate) fn logical_verified_data(&self) -> &[u8] {
+        self.compressed_verified_data()
+    }
+
+    /// Total length of the logical payload exposed to the rollup.
+    pub(crate) fn logical_total_len(&self) -> usize {
+        self.compressed_total_len()
+    }
+}
+
 impl BlobReaderTrait for BlobWithSender {
     type Address = CelestiaAddress;
     type BlobHash = TmHash;
@@ -119,11 +153,11 @@ impl BlobReaderTrait for BlobWithSender {
     }
 
     fn verified_data(&self) -> &[u8] {
-        self.blob.accumulator()
+        self.logical_verified_data()
     }
 
     fn total_len(&self) -> usize {
-        self.blob.total_len()
+        self.logical_total_len()
     }
 
     #[cfg(feature = "native")]
@@ -290,6 +324,8 @@ impl NamespaceBoundaryProof {
 pub mod tests {
     use std::str::FromStr;
 
+    use sov_rollup_interface::da::BlobReaderTrait;
+
     use crate::test_helper::files::*;
     use crate::test_helper::ROLLUP_BATCH_NAMESPACE;
     use crate::types::{NamespaceData, NamespaceRelevantData, TmHash};
@@ -384,6 +420,26 @@ pub mod tests {
         // this is a batch submitted by sequencer, consisting of a single
         // "CreateToken" transaction, but we verify only length there to
         // not make this test depend on deserialization logic
-        assert_eq!(blob.blob.total_len(), 277);
+        assert_eq!(blob.total_len(), 277);
+    }
+
+    #[test]
+    fn accessors_match_trait_view_for_raw_blobs() {
+        let path = make_test_path(with_rollup_batch_data::DATA_PATH);
+        let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
+
+        let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
+
+        let mut blob = ns_data.get_blobs_with_sender().remove(0);
+
+        // For raw (uncompressed) blobs the DA-physical and logical views are identical,
+        // both before and after a partial read.
+        assert_eq!(blob.compressed_total_len(), blob.total_len());
+        assert_eq!(blob.compressed_verified_data(), blob.verified_data());
+
+        blob.advance(10);
+        assert_eq!(blob.verified_data().len(), 10);
+        assert_eq!(blob.compressed_verified_data(), blob.verified_data());
+        assert_eq!(blob.compressed_total_len(), blob.total_len());
     }
 }

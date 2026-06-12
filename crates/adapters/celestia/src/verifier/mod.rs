@@ -348,7 +348,8 @@ fn authenticate_blob_data(
     }
     // The accumulator length is considered trusted as a record of the bytes that the rollup saw.
     // This does not mean that it can be trusted to contain the correct bytes.
-    let blob_data_read = blob.blob.accumulator();
+    // Share-occupancy math is defined over DA-physical bytes, hence the compressed accessor.
+    let blob_data_read = blob.compressed_verified_data();
     let first_share = blob_row_proof.first_share().map_err(InvalidRowProof)?;
     let has_signer = first_share.signer().is_some();
     let num_shares_to_prove =
@@ -456,6 +457,17 @@ fn authenticate_blob_data(
         }));
     }
 
+    // The blob's record of its total payload length is a prover-supplied witness claim:
+    // it backs `BlobReaderTrait::total_len()`, which feeds gas accounting and size gates
+    // inside the STF. It must match the `sequence_length` of the authenticated first
+    // share, otherwise a malicious prover could attest a state transition computed over
+    // a forged blob length.
+    if blob.compressed_total_len() as u64 != sequence_length {
+        return Err(InvalidBlobData(BlobDataError::TotalLenMismatch {
+            expected: sequence_length,
+            actual: blob.compressed_total_len() as u64,
+        }));
+    }
     let shares_occupied_total =
         shares_needed_for_bytes_with_signer(sequence_length as usize, has_signer);
     Ok(shares_occupied_total)

@@ -60,7 +60,8 @@ fn assert_single_blob(
     let mut fetched_blob = blobs.pop().unwrap();
     assert_eq!(fetched_blob.sender, expected_signer);
     assert_eq!(fetched_blob.hash, expected_hash);
-    fetched_blob.blob.advance(fetched_blob.total_len());
+    let total_len = fetched_blob.total_len();
+    fetched_blob.advance(total_len);
     assert_eq!(fetched_blob.verified_data(), expected_data);
 }
 
@@ -923,29 +924,29 @@ where
 #[tokio::test(flavor = "multi_thread")]
 async fn verification_succeeds_for_correct_blocks() {
     let read_full = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
-        blob_with_sender.blob.advance(total_len);
-        let data = blob_with_sender.blob.accumulator();
+        let total_len = blob_with_sender.total_len();
+        blob_with_sender.advance(total_len);
+        let data = blob_with_sender.verified_data();
         assert_eq!(data.len(), total_len);
     };
     let no_read = |blob_with_sender: &mut BlobWithSender| {
-        let data = blob_with_sender.blob.accumulator();
+        let data = blob_with_sender.verified_data();
         assert_eq!(data.len(), 0);
     };
     let single_byte = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
+        let total_len = blob_with_sender.total_len();
         if total_len > 0 {
-            blob_with_sender.blob.advance(1);
+            blob_with_sender.advance(1);
         }
-        let data = blob_with_sender.blob.accumulator();
+        let data = blob_with_sender.verified_data();
         let expected_len = std::cmp::min(total_len, 1);
         assert_eq!(data.len(), expected_len);
     };
     let read_half = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
+        let total_len = blob_with_sender.total_len();
         let half_len = total_len / 2;
-        blob_with_sender.blob.advance(half_len);
-        let data = blob_with_sender.blob.accumulator();
+        blob_with_sender.advance(half_len);
+        let data = blob_with_sender.verified_data();
         assert_eq!(data.len(), half_len);
     };
 
@@ -1029,15 +1030,17 @@ async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
         );
 
         for blob in relevant_blobs.batch_blobs.iter_mut() {
-            let total_len = blob.blob.total_len();
+            let total_len = blob.total_len();
             match read_mode {
                 "no_read" => {}
                 "single_byte" => {
                     if total_len > 0 {
-                        blob.blob.advance(1);
+                        blob.advance(1);
                     }
                 }
-                "full" => blob.blob.advance(total_len),
+                "full" => {
+                    blob.advance(total_len);
+                }
                 _ => unreachable!("unexpected read mode"),
             }
         }
@@ -1162,6 +1165,46 @@ async fn verification_fails_if_tx_missing() {
 
     assert!(
         error.to_string().contains("MoreProofsThanBlobs"),
+        "Actual error: {error}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verification_fails_if_witness_total_len_inflated() {
+    verification_fails_for_forged_total_len(1_000_000).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verification_fails_if_witness_total_len_deflated() {
+    verification_fails_for_forged_total_len(1).await;
+}
+
+/// `BlobWithSender`'s record of its total payload length backs
+/// `BlobReaderTrait::total_len()`, which feeds gas accounting and size gates in the
+/// STF. It is a prover-supplied witness field, so the verifier must reject any value
+/// that does not match the `sequence_length` of the authenticated first share.
+async fn verification_fails_for_forged_total_len(forged_sequence_len: u64) {
+    let block = with_rollup_batch_data::filtered_block();
+    let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
+
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    // Proofs are built for the honest, unread witness: one share per blob.
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+
+    // Forge the witness through its serialized form, as a malicious prover would.
+    let blob = relevant_blobs.batch_blobs.remove(0);
+    let mut serialized = serde_json::to_value(&blob).unwrap();
+    serialized["blob"]["inner"]["sequence_len"] = serde_json::Value::from(forged_sequence_len);
+    let forged_blob: BlobWithSender = serde_json::from_value(serialized).unwrap();
+    relevant_blobs.batch_blobs.insert(0, forged_blob);
+
+    let verifier = CelestiaVerifier::new(rollup_params);
+    let error = verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .unwrap_err();
+
+    assert!(
+        error.to_string().contains("TotalLenMismatch"),
         "Actual error: {error}"
     );
 }
@@ -1353,10 +1396,10 @@ async fn test_payload_can_be_read_back() -> anyhow::Result<()> {
     let assert_payload = |blobs: &mut Vec<BlobWithSender>, expected_blobs: Vec<Vec<u8>>| {
         assert_eq!(blobs.len(), expected_blobs.len());
         for (actual_batch, expected_batch) in blobs.iter_mut().zip(expected_blobs.iter()) {
-            let total_len = actual_batch.blob.total_len();
+            let total_len = actual_batch.total_len();
             assert_eq!(total_len, expected_batch.len());
-            actual_batch.blob.advance(total_len);
-            let full_data = actual_batch.blob.accumulator();
+            actual_batch.advance(total_len);
+            let full_data = actual_batch.verified_data();
 
             assert_eq!(full_data, expected_batch);
         }

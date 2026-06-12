@@ -60,6 +60,8 @@ pub enum BlobDataError {
     WrongSender,
     #[error("Blob claims length {actual} but proven sequence length is {expected}")]
     MismatchedBlobLength { expected: usize, actual: usize },
+    #[error("Blob total length does not match the sequence length of its first share: expected {expected}, actual {actual}")]
+    TotalLenMismatch { expected: u64, actual: u64 },
 }
 
 #[derive(Debug, thiserror::Error)]
