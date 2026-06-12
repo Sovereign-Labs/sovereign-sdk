@@ -14,8 +14,10 @@ path = "src/main.rs"
 
 [dependencies]
 anyhow = { workspace = true }
+bincode = { workspace = true }
 clap = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
+sov-celestia-adapter = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-sp1-adapter = { workspace = true, features = ["native"] }
 sp1-sdk = { workspace = true, features = ["blocking", "profiling"] }

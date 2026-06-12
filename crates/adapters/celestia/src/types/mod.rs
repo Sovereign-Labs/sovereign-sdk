@@ -232,6 +232,10 @@ impl sov_rollup_interface::node::da::SlotData for FilteredCelestiaBlock {
 }
 
 impl FilteredCelestiaBlock {
+    pub fn header(&self) -> &CelestiaHeader {
+        &self.header
+    }
+
     #[cfg(feature = "native")]
     pub(crate) fn new(
         rollup_batch_data: NamespaceRelevantData,
