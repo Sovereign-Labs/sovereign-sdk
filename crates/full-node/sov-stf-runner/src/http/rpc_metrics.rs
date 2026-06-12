@@ -308,6 +308,8 @@ mod tests {
         type BatchResponse = MethodResponse;
         type NotificationResponse = MethodResponse;
 
+        // Match the signature of RpcService exactly rather than using the new sugar.
+        #[allow(clippy::manual_async_fn)]
         fn call<'a>(
             &self,
             request: Request<'a>,
@@ -328,6 +330,8 @@ mod tests {
             }
         }
 
+        // Match the signature of RpcService exactly rather than using the new sugar.
+        #[allow(clippy::manual_async_fn)]
         fn batch<'a>(
             &self,
             _batch: Batch<'a>,
@@ -337,6 +341,8 @@ mod tests {
             }
         }
 
+        // Match the signature of RpcService exactly rather than using the new sugar.
+        #[allow(clippy::manual_async_fn)]
         fn notification<'a>(
             &self,
             _notification: Notification<'a>,
