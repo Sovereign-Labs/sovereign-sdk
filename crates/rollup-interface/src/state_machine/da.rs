@@ -164,9 +164,17 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
     ///
     /// Rollups should use this method in conjunction with `advance` to read only the minimum amount
     /// of data required for execution
+    ///
+    /// The returned bytes are the *logical* payload as submitted by the original caller.
+    /// Adapters are free to post a different physical representation to the DA layer
+    /// (e.g. a compressed envelope), as long as the logical bytes exposed here are
+    /// authenticated by the adapter's verifier.
     fn verified_data(&self) -> &[u8];
 
     /// Returns the total number of bytes in the blob. Note that this may be unequal to `verified_data.len()`.
+    ///
+    /// Like [`Self::verified_data`], this is the length of the *logical* payload, which may
+    /// differ from the number of bytes the blob occupies on the DA layer.
     fn total_len(&self) -> usize;
 
     /// Extends the `partial_data` accumulator with the next `num_bytes` of  data from the blob

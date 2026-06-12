@@ -58,6 +58,8 @@ pub enum BlobDataError {
     NonMatchingShare,
     #[error("Wrong sender")]
     WrongSender,
+    #[error("Blob total length does not match the sequence length of its first share: expected {expected}, actual {actual}")]
+    TotalLenMismatch { expected: u64, actual: u64 },
 }
 
 #[derive(Debug, thiserror::Error)]
