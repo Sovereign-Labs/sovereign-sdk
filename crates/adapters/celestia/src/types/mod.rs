@@ -167,6 +167,40 @@ impl BlobWithSender {
     }
 }
 
+/// Celestia-private accessors distinguishing the two byte streams a blob represents:
+///
+/// * **DA-physical ("compressed")**: the payload bytes as actually posted to Celestia.
+///   Share-occupancy math (inclusion proofs, namespace continuity) is defined over
+///   these bytes and only these bytes.
+/// * **Logical**: the payload bytes exposed to the rollup via [`BlobReaderTrait`].
+///
+/// Today the two streams are identical. Once blobs can be posted in a compressed
+/// envelope, they diverge; proof generation and verification must keep using the
+/// `compressed_*` accessors so the share math stays tied to what is actually on DA.
+impl BlobWithSender {
+    /// DA-physical payload bytes consumed so far. These are the bytes that
+    /// inclusion proofs must cover.
+    pub(crate) fn compressed_verified_data(&self) -> &[u8] {
+        self.blob.accumulator()
+    }
+
+    /// Total DA-physical payload length. Must always equal the `sequence_length`
+    /// recorded in the blob's first share; the verifier enforces this.
+    pub(crate) fn compressed_total_len(&self) -> usize {
+        self.blob.total_len()
+    }
+
+    /// Logical payload bytes observed by the rollup so far.
+    pub(crate) fn logical_verified_data(&self) -> &[u8] {
+        self.compressed_verified_data()
+    }
+
+    /// Total length of the logical payload exposed to the rollup.
+    pub(crate) fn logical_total_len(&self) -> usize {
+        self.compressed_total_len()
+    }
+}
+
 impl BlobReaderTrait for BlobWithSender {
     type Address = CelestiaAddress;
     type BlobHash = TmHash;
