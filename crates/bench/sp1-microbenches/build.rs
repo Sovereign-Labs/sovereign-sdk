@@ -40,5 +40,12 @@ fn main() -> anyhow::Result<()> {
         },
     );
 
+    build_program_with_args(
+        "./guest-storage",
+        BuildArgs {
+            ..Default::default()
+        },
+    );
+
     Ok(())
 }
