@@ -71,7 +71,7 @@ expression: config
         "node_id": "node_1",
         "node_role": "Leader",
         "leader_election": {
-          "leader_timeout_millis": 500,
+          "leader_timeout_millis": 1000,
           "grace_period_millis": 10000,
           "heartbeat_interval_millis": 100
         }

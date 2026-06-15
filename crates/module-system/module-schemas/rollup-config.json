@@ -367,7 +367,7 @@
           "description": "Maximum time in milliseconds without a heartbeat before a leader is considered inactive.",
           "type": "integer",
           "format": "uint64",
-          "default": 500,
+          "default": 1000,
           "minimum": 0
         }
       }
@@ -506,7 +506,7 @@
           "default": {
             "grace_period_millis": 10000,
             "heartbeat_interval_millis": 100,
-            "leader_timeout_millis": 500
+            "leader_timeout_millis": 1000
           }
         },
         "node_id": {
