@@ -220,7 +220,7 @@ Ordered roughly by how much they should weigh on the decision.
 
 3. **Partial-read capability — delivered (the v3 "latent" item, now resolved).** Chunking makes envelope blobs prefix-decodable: a future STF/parser can authenticate and decode only the chunks covering a prefix and stop after a malformed region, without forcing the whole blob. Bought at the cost in #1. No current consumer (Fact A).
 
-4. **Operational footgun → slashing (wants activation gating).** Turning `compress_on_submit` on before every node/prover is upgraded means an old node reads an envelope as raw → borsh fails → an **honest sequencer is slashed**. The `off` default helps, but a per-service config flag desyncs the instant one node lags or is misconfigured. **Recommendation (adversarial framing):** gate envelope *emission* on a protocol activation height / chain version, not just the local flag, so a blob is never emitted before every reader can decode it. (Distinct from Fact C, which is pure read-path code, not an activation matter.)
+4. **Operational footgun → slashing (DECIDED 2026-06-15: config flag only, no consensus gate).** Turning `compress_on_submit` on before every node/prover is upgraded means an old node reads an envelope as raw → borsh fails → an **honest sequencer is slashed**. A consensus activation-height gate was considered — the mechanism exists cheaply (`config_value!("…_ACTIVATION_HEIGHT")` constants + `rollup_height_to_access()`, EVM hardforks `get_spec_id` as precedent) — but **not adopted**. Rollout relies on the `off` default + a strict **deployment ordering**: PR2's dark read path ships and is deployed to every node/prover *well before* PR3 introduces the emit config, so by the time compression *can* be enabled, every reader already decodes envelopes. The residual risk (a build that gains PR3 emit capability without PR2's reader, or an operator who enables `lz4` prematurely) is **accepted operationally**. (Distinct from Fact C, which is pure read-path code.)
 
 5. **Non-obvious invariants (bug-hiding surface).** Correct logical `total_len()` depends on construction having eager-advanced the header + chunk table into the accumulator at *every* construction site; plus an invalidatable/keyed cache to return `&[u8]` from a lazy decode; plus the logical cursor; plus the chunk-aware logical↔compressed map; plus — most subtly — the Fact-C full-frame-vs-prefix split in `decode`. All reviewable, but more mechanism than "just decompress," and the place bugs hide. Covered by the explicit tests above; audit target.
 
@@ -228,7 +228,7 @@ Ordered roughly by how much they should weigh on the decision.
 
 ## Accepted risks / out of scope
 - Historical magic-collision reinterpretation: ~2⁻¹²⁸, documented (outcome is slash either way).
-- Old binaries can't decode envelope blobs: enabling `lz4` needs all nodes/provers on PR2+; `off` default + activation gating (disadvantage #4) make rollout operator-controlled and atomic.
+- Old binaries can't decode envelope blobs: enabling `lz4` needs all nodes/provers on PR2+; `off` default + the PR2-before-PR3 deployment ordering (disadvantage #4) make rollout operator-controlled. No consensus activation gate (DECIDED 2026-06-15); the footgun is accepted operationally.
 - zstd reserved only (codec 2 → InvalidAuthenticatedEnvelope/empty for current code; adding it later is a coordinated upgrade).
 - **Witness unread-share bloat: pre-existing, unrelated to compression, not worsened. DECIDED: deferred to a separate follow-up** (Nikolai, 2026-06-15).
 - Borsh trailing-byte / valid-prefix edge on the deserialize-*success* branch (the assert at `capabilities.rs:1063` only runs on failure): pre-existing for legacy blobs, not introduced by compression. Worth a one-line confirmation during PR2, not a blocker.
@@ -239,7 +239,7 @@ Ordered roughly by how much they should weigh on the decision.
 1. ~~Drop witness-pruning~~ — **RESOLVED: deferred to a follow-up.**
 2. **Eager-advance the header + chunk table at construction** vs. a stored claim checked by the verifier. Picks eager-advance plus verifier validation of the authenticated metadata; this is bounded metadata proof overhead, not zero-cost. See disadvantage #5.
 3. ~~Single frame vs chunks~~ — **RESOLVED (2026-06-15): chunked**, to preserve partial reads. See "Decisions" and disadvantage #1 for the cost accepted.
-4. **Activation gating** — recommend a protocol activation height/version for envelope emission (disadvantage #4), rather than relying on the per-service `off` flag alone. Open for Nikolai.
+4. ~~Activation gating~~ — **RESOLVED (2026-06-15): not adopted.** Rely on the `compress_on_submit = off` default + strict deployment ordering (PR2's dark read path everywhere before PR3's emit config). The slashing footgun is accepted operationally, not consensus-mitigated. See disadvantage #4.
 
 ## Design intent: preserve partial reads — RESOLVED by chunking
 
