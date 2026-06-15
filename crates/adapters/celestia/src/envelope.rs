@@ -86,7 +86,7 @@ pub(crate) enum EnvelopeState {
     Envelope(EnvelopeHeader),
 }
 
-/// Why a magic-prefixed frame failed envelope validation.
+/// Why a frame failed envelope validation.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub(crate) enum EnvelopeError {
     /// The frame is shorter than the fixed 24-byte header.
@@ -95,6 +95,9 @@ pub(crate) enum EnvelopeError {
         /// Actual frame length.
         len: usize,
     },
+    /// The frame does not begin with [`ENVELOPE_MAGIC`].
+    #[error("envelope frame missing magic prefix")]
+    MissingMagic,
     /// The version byte is not [`ENVELOPE_VERSION`].
     #[error("unsupported envelope version: {0}")]
     BadVersion(u8),
@@ -136,12 +139,15 @@ pub(crate) fn has_magic_prefix(buf: &[u8]) -> bool {
 
 /// Validate a full frame's header and length invariants.
 ///
-/// The caller need not have checked the magic. Every [`EnvelopeError`] variant is
-/// reachable from here, so the classifier can collapse all of them to
-/// [`EnvelopeState::Malformed`].
+/// The caller need not have checked the magic: non-magic frames return
+/// [`EnvelopeError::MissingMagic`]. The classifier separately maps non-magic
+/// blobs to [`EnvelopeState::Legacy`].
 pub(crate) fn parse_envelope(buf: &[u8]) -> Result<EnvelopeHeader, EnvelopeError> {
     if buf.len() < ENVELOPE_HEADER_LEN {
         return Err(EnvelopeError::TooShort { len: buf.len() });
+    }
+    if !has_magic_prefix(buf) {
+        return Err(EnvelopeError::MissingMagic);
     }
 
     let version = buf[OFFSET_VERSION];
@@ -239,6 +245,15 @@ mod tests {
         let buf = b"\x00\x01 a borsh-ish payload long enough to clear the header length";
         assert_eq!(has_magic_prefix(buf), false);
         assert_eq!(classify(buf), EnvelopeState::Legacy);
+    }
+
+    #[test]
+    fn parse_rejects_non_magic_frame_with_valid_header_bytes() {
+        let mut buf = vec![0u8; ENVELOPE_HEADER_LEN];
+        buf[OFFSET_VERSION] = ENVELOPE_VERSION;
+        buf[OFFSET_CODEC] = CODEC_RAW_ESCAPE;
+        assert_eq!(parse_envelope(&buf), Err(EnvelopeError::MissingMagic));
+        assert_eq!(classify(&buf), EnvelopeState::Legacy);
     }
 
     #[test]
