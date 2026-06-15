@@ -1,5 +1,5 @@
 #![allow(missing_docs)]
-//! To check that [`NativeStorageManager`] creates correct [`DeltaReader`]
+//! To check that the storage manager creates correct [`DeltaReader`]
 //! tests are writing data related to each block,
 //! so it can be validated by looking at what data reader can provide.
 
@@ -14,9 +14,6 @@ use crate::accessory_db::AccessoryDb;
 use crate::schema::tables::EventByNumber;
 use crate::schema::types::slot_key::SlotKey;
 use crate::schema::types::EventNumber;
-// Encoding/Decoding data.
-
-pub(crate) type H = sha2::Sha256;
 
 fn decode_ledger_item(item: (EventNumber, StoredEvent)) -> (u64, MockHash) {
     let (event_number, stored_event) = item;

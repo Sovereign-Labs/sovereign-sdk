@@ -47,7 +47,6 @@ pub use temp_cache::BorshSerializedSize;
 use self::seal::UniversalStateAccessor;
 use super::traits::PerBlockCache;
 use super::{StateReaderAndWriter, VersionReader};
-use crate::state::traits::PinnedCacheAccessor;
 use crate::Spec;
 
 pub(super) mod seal {
@@ -90,7 +89,6 @@ pub trait StateProvider<S: Spec>:
     + VersionReader
     + PerBlockCache
     + StateMetricsProvider
-    + PinnedCacheAccessor<S>
 {
     /// Transforms this [`StateProvider`] into a [`TxScratchpad`].
     fn to_tx_scratchpad(self) -> TxScratchpad<S, Self>;
@@ -98,6 +96,16 @@ pub trait StateProvider<S: Spec>:
 
 impl<S: Spec> StateProvider<S> for StateCheckpoint<S> {
     fn to_tx_scratchpad(self) -> TxScratchpad<S, StateCheckpoint<S>> {
+        TxScratchpad {
+            inner: RevertableWriter::new(self),
+            phantom: PhantomData,
+        }
+    }
+}
+
+#[cfg(feature = "native")]
+impl<S: Spec> StateProvider<S> for ApiStateAccessor<S> {
+    fn to_tx_scratchpad(self) -> TxScratchpad<S, ApiStateAccessor<S>> {
         TxScratchpad {
             inner: RevertableWriter::new(self),
             phantom: PhantomData,

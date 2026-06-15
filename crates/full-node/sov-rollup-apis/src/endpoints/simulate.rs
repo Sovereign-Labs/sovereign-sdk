@@ -16,7 +16,6 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::common::Amount;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::anyhow;
-use sov_modules_api::rest::StateUpdateReceiver;
 use sov_modules_api::sov_universal_wallet::schema::{RollupRoots, SchemaError};
 use sov_modules_api::transaction::{Credentials, PriorityFeeBips, TxDetails};
 use sov_modules_api::{
@@ -26,6 +25,7 @@ use sov_modules_api::{
 };
 use sov_modules_stf_blueprint::{apply_tx, get_gas_used, ApplyTxResult};
 use sov_rest_utils::{json_obj, preconfigured_router_layers, ErrorObject};
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::stf::ExecutionContext;
 use sov_rollup_interface::stf::TxEffect;
 use sov_uniqueness::Uniqueness;
@@ -420,7 +420,6 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
         let mut accessor = StateCheckpoint::new(
             state.state_receiver.borrow().storage.clone(),
             &runtime.kernel(),
-            None,
         );
         let gas_price = runtime
             .chain_state()

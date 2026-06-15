@@ -10,7 +10,7 @@ use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
     AccessoryStateReader, AccessoryStateReaderAndWriter, Amount, InfallibleStateAccessor,
-    InfallibleStateReaderAndWriter, Spec, StateReader,
+    InfallibleStateReaderAndWriter, Spec, StateReader, VersionReader,
 };
 #[cfg(feature = "native")]
 use sov_rollup_interface::common::RollupHeight;
@@ -31,7 +31,10 @@ use crate::{
 
 /// Non-trivial state reads
 #[cfg(feature = "native")]
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     /// Gets block by number. Fails if prunned or in the future
     pub fn block<Accessor: AccessoryStateReaderAndWriter>(
         &self,
@@ -77,7 +80,10 @@ impl<S: Spec> Evm<S> {
 }
 
 /// User state reads
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     /// Get a EvmDb instance for the supplied state.
     pub fn db<'a, Ws: StateReader<User>>(&self, state: &'a mut Ws) -> EvmDb<'a, Ws, S> {
         EvmDb::new(
@@ -126,10 +132,38 @@ impl<S: Spec> Evm<S> {
     ) -> Result<bool, Accessor::Error> {
         Ok(self.disable_max_fee_check.get(state)?.unwrap_or(false))
     }
+
+    /// Returns true when the EIP-1559 fee-cap check should be enforced for this state.
+    pub fn is_max_fee_check_active<Accessor: StateReader<User> + VersionReader>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<bool, Accessor::Error> {
+        let block_number: u64 = state.rollup_height_to_access().get();
+        if !crate::sov_fee_and_gas_utils::is_max_fee_check_height_active(block_number) {
+            return Ok(false);
+        }
+
+        Ok(!self.is_max_fee_check_disabled(state)?)
+    }
+
+    /// Returns the gas multiplier for the current state.
+    pub(crate) fn fee_multiplier<Accessor: StateReader<User> + VersionReader>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<crate::sov_fee_and_gas_utils::GasMultiplier, Accessor::Error> {
+        if self.is_max_fee_check_active(state)? {
+            Ok(crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckActive)
+        } else {
+            Ok(crate::sov_fee_and_gas_utils::GasMultiplier::FeeCheckInactive)
+        }
+    }
 }
 
 /// Accessory state reads
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     /// Access the pending Ethereum transactions.
     pub fn pending_transactions<Accessor: InfallibleStateReaderAndWriter<User>>(
         &self,
@@ -188,7 +222,10 @@ impl<S: Spec> Evm<S> {
 }
 
 /// Reads on accessory state set in genesis
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     /// Access the Ethereum blocks.
     pub fn block_numbers<Accessor: AccessoryStateReaderAndWriter>(
         &self,

@@ -96,47 +96,53 @@ impl<Ps: ProverService> AggregateProofMetadata<Ps> {
         if self.is_ready {
             return;
         }
-        for proof in self.block_proof_info.iter_mut() {
-            let mut prev_status = BlockProofStatus::Submitted;
-            std::mem::swap(&mut prev_status, &mut proof.status);
-            if let BlockProofStatus::Waiting(mut witness) = prev_status {
-                // TODO: Add backoff on proof submission attempts
-                //  <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/446>
-                loop {
-                    let status = prover_service
-                        .prove(witness)
-                        .await
-                        .expect("The proof submission should succeed");
 
-                    // Stop the runner loop until prover is ready.
-                    match status {
-                        ProofProcessingStatus::ProvingInProgress => break,
-                        ProofProcessingStatus::Busy(data) => {
-                            witness = data;
-                            tokio::time::sleep(Duration::from_millis(100)).await;
-                        }
+        let submissions: Vec<_> = self
+            .block_proof_info
+            .iter_mut()
+            .filter_map(|proof| {
+                match std::mem::replace(&mut proof.status, BlockProofStatus::Submitted) {
+                    BlockProofStatus::Waiting(w) => Some(w),
+                    BlockProofStatus::Submitted => None,
+                }
+            })
+            .collect();
+
+        let futs = submissions.into_iter().map(|mut witness| async {
+            loop {
+                let status = prover_service
+                    .prove(witness)
+                    .await
+                    .expect("The proof submission should succeed");
+
+                match status {
+                    ProofProcessingStatus::ProvingInProgress => break,
+                    ProofProcessingStatus::Busy(data) => {
+                        witness = data;
+                        tokio::time::sleep(Duration::from_millis(100)).await;
                     }
                 }
             }
-        }
+        });
+        futures::future::join_all(futs).await;
+
         self.is_ready = true;
     }
 
     pub async fn prove(
         mut self,
         prover_service: &Ps,
-        genesis_state_root: &Ps::StateRoot,
     ) -> Result<SerializedAggregatedProof, (Self, anyhow::Error)> {
         self.prove_any_unproven_blocks(prover_service).await;
         let agg_proof_hashes: Vec<_> = self
             .block_proof_info
             .iter()
-            .map(|info| info.hash.clone())
+            .map(|info| info.header.clone())
             .collect();
 
         loop {
             let status = prover_service
-                .create_aggregated_proof(agg_proof_hashes.as_slice(), genesis_state_root)
+                .create_aggregated_proof(agg_proof_hashes.as_slice())
                 .await;
 
             match status {
@@ -158,7 +164,7 @@ pub(crate) struct BlockProofInfo<Ps: ProverService> {
     /// The current status of the proof for this block
     pub status: BlockProofStatus<ProverStateTransitionInfo<Ps>>,
     /// The hash of this block
-    pub hash: <<Ps::DaService as DaService>::Spec as DaSpec>::SlotHash,
+    pub header: <<Ps::DaService as DaService>::Spec as DaSpec>::BlockHeader,
 
     /// The size of any public data needed to verify a proof of this block, in bytes
     pub public_data_size: u64,

@@ -14,7 +14,6 @@ workspace = true
 
 [dependencies]
 tracing = { workspace = true, optional = true }
-strum = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["sync", "net", "macros", "rt", "io-util"], default-features = false, optional = true }
 serde = { workspace = true }
 bincode = { workspace = true, optional = true }
@@ -31,7 +30,7 @@ risc0-zkvm = { workspace = true, default-features = false, features = [
     "std",
 ], optional = true }
 risc0-zkvm-platform = { workspace = true, features = ["export-syscalls"], optional = true }
-sp1-lib = { version = "5.0.8", default-features = false, optional = true }
+sp1-lib = { workspace = true, default-features = false, optional = true }
 
 chrono = { workspace = true, optional = true }
 
@@ -56,7 +55,6 @@ native = [
     "dep:tokio",
     "dep:schemars",
     "dep:tracing",
-    "dep:strum",
     "dep:bincode",
     "dep:http",
     "dep:derivative",

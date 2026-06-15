@@ -6,7 +6,7 @@ use sov_modules_api::{
     ModuleId, ModuleInfo, Spec, StateValue, TxState,
 };
 
-pub trait TestSpec: Default + std::fmt::Debug + Clone + PartialEq + Eq {
+pub trait TestSpec: Default + std::fmt::Debug + Clone + PartialEq + Eq + serde::Serialize + serde::de::DeserializeOwned {
     type Data: Data;
 }
 
@@ -110,7 +110,7 @@ struct Runtime<S: Spec, T: TestSpec> {
     pub first: my_module::QueryModule<S, T::Data>,
 }
 
-#[derive(Default, Clone, Debug, PartialEq, Eq)]
+#[derive(Default, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
 struct ActualSpec;
 
 impl TestSpec for ActualSpec {

@@ -5,16 +5,8 @@ use capabilities::RollupHeight;
 use sov_modules_api::*;
 use sov_state::{BorshCodec, Prefix, Storage, StorageProof};
 use sov_test_utils::storage::SimpleStorageManager;
-use sov_test_utils::validate_and_materialize;
+use sov_test_utils::{validate_and_materialize, write_kernel_marker};
 use unwrap_infallible::UnwrapInfallible;
-
-/// Helper to write a dummy value to the kernel namespace.
-/// NOMT requires both user and kernel namespaces to be written together.
-fn write_kernel_marker<S: Spec>(state: &mut StateCheckpoint<S>) {
-    let mut kernel_val: KernelStateValue<u8> =
-        KernelStateValue::with_codec(Prefix::new(255, 0), BorshCodec);
-    kernel_val.set(&0u8, state).unwrap_infallible();
-}
 
 type S = sov_test_utils::TestSpec;
 
@@ -30,10 +22,10 @@ fn make_user_map_proof(
     let kernel = MockKernel::<S>::default();
     let mut storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
-    let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel, None);
+    let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel);
     let mut map = StateMap::with_codec(Prefix::new(0, 0), BorshCodec);
     map.set(&key, &value, &mut state).unwrap_infallible();
-    write_kernel_marker(&mut state);
+    write_kernel_marker(&mut state).unwrap_infallible();
 
     let (cache_log, _, witness) = state.freeze();
 
@@ -43,11 +35,11 @@ fn make_user_map_proof(
         &witness,
         <<S as Spec>::Storage as Storage>::PRE_GENESIS_ROOT,
     )
-    .expect("Native jmt validation should succeed");
+    .expect("Native storage validation should succeed");
     storage_manager.commit(change_set);
     let storage = storage_manager.create_storage();
 
-    let state_checkpoint = StateCheckpoint::new(storage, &kernel, None);
+    let state_checkpoint = StateCheckpoint::new(storage, &kernel);
     let mut state = ApiStateAccessor::new(
         Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
             state_checkpoint,
@@ -70,10 +62,10 @@ fn make_user_value_proof(
     let kernel = MockKernel::<S>::default();
     let mut storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
-    let mut state = StateCheckpoint::<S>::new(storage.clone(), &MockKernel::<S>::default(), None);
+    let mut state = StateCheckpoint::<S>::new(storage.clone(), &MockKernel::<S>::default());
     let mut state_val = StateValue::with_codec(Prefix::new(0, 0), BorshCodec);
     state_val.set(&value, &mut state).unwrap_infallible();
-    write_kernel_marker(&mut state);
+    write_kernel_marker(&mut state).unwrap_infallible();
 
     let (cache_log, _, witness) = state.freeze();
 
@@ -83,11 +75,11 @@ fn make_user_value_proof(
         &witness,
         <S as Spec>::Storage::PRE_GENESIS_ROOT,
     )
-    .expect("Native jmt validation should succeed");
+    .expect("Native storage validation should succeed");
     storage_manager.commit(change_set);
     let storage = storage_manager.create_storage();
 
-    let state_checkpoint = StateCheckpoint::new(storage, &kernel, None);
+    let state_checkpoint = StateCheckpoint::new(storage, &kernel);
     let mut state = ApiStateAccessor::new(
         Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
             state_checkpoint,
@@ -204,20 +196,20 @@ fn test_archival_proof_gen() {
             kernel.increase_heights();
         }
 
-        let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel, None);
+        let mut state = StateCheckpoint::<S>::new(storage.clone(), &kernel);
 
         if iter % 2 == 0 {
             state_val.set(&iter, &mut state).unwrap_infallible();
         } else {
             state_val.delete(&mut state).unwrap_infallible();
         }
-        write_kernel_marker(&mut state);
+        write_kernel_marker(&mut state).unwrap_infallible();
 
         let (cache_log, _, witness) = state.freeze();
 
         let (root, change_set) =
             validate_and_materialize(storage, cache_log, &witness, current_root)
-                .expect("Native jmt validation should succeed");
+                .expect("Native storage validation should succeed");
         current_root = root;
 
         storage_manager.commit(change_set);
@@ -227,7 +219,7 @@ fn test_archival_proof_gen() {
 
     let storage = storage_manager.create_storage();
     // Generate a proof at each archival state and validate it against the root
-    let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
+    let state_checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
     let mut api_state_accessor = ApiStateAccessor::new(
         Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
             state_checkpoint,

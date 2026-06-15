@@ -41,8 +41,6 @@ use sov_rollup_interface::da::RelevantBlobIters;
 use sov_rollup_interface::stf::{ApplySlotOutput, StateTransitionFunction};
 #[cfg(feature = "native")]
 use sov_state::storage::StateUpdate;
-#[cfg(feature = "native")]
-use sov_state::NativeStorage;
 use sov_state::{Storage, StorageProof};
 pub use stf_blueprint::StfBlueprint;
 use tracing::trace;
@@ -64,6 +62,10 @@ pub struct ApplyTxResult<S: Spec> {
     pub transaction_consumption: TransactionConsumption<S::Gas>,
     /// The transaction receipt.
     pub receipt: TransactionReceipt<S>,
+    /// Native scratchpad recorded while executing with the transaction's sequencing data.
+    #[cfg(feature = "native")]
+    #[serde(skip)]
+    pub sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
 }
 
 /// Genesis parameters for a blueprint
@@ -252,7 +254,7 @@ where
     }
 }
 
-impl<S, RT> StateTransitionFunction<S::InnerZkvm, S::OuterZkvm, S::Da> for StfBlueprint<S, RT>
+impl<S, RT> StateTransitionFunction<S::Da> for StfBlueprint<S, RT>
 where
     S: Spec,
     RT: Runtime<S>,
@@ -287,7 +289,7 @@ where
         // Sanity checks.
         assert!(<S as GasSpec>::process_tx_pre_exec_checks_gas()
             .dim_is_less_than(<S as GasSpec>::max_tx_check_costs()), "Gas misconfiguration: PROCESS_TX_PRE_EXEC_GAS must be less than MAX_SEQUENCER_EXEC_GAS_PER_TX");
-        let mut state_checkpoint = StateCheckpoint::new(pre_state, &runtime.kernel(), None);
+        let mut state_checkpoint = StateCheckpoint::new(pre_state, &runtime.kernel());
 
         let mut genesis_accessor =
             state_checkpoint.to_genesis_state_accessor::<RT>(&params.runtime);
@@ -370,7 +372,7 @@ where
         slot_header: &<S::Da as DaSpec>::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         execution_context: ExecutionContext,
-    ) -> ApplySlotOutput<S::InnerZkvm, S::OuterZkvm, S::Da, Self> {
+    ) -> ApplySlotOutput<S::Da, Self> {
         self.apply_slot_with_control_flow(
             pre_state_root,
             pre_state,
@@ -417,19 +419,17 @@ where
 {
     /// Run a state transition using the STF blueprint.
     // Similar to `apply_slot`, but enables the injection of a custom `InjectedControlFlow`.
-    // Danger! Note that the semantics of cloning `pre_state` are messy. They are guaranteed not to change the state that the rollup sees, but they are *not* guaranteed
-    // to preserve the pinned cache. Cloning in the wrong place might cause this funciton to slow down silently!
     #[allow(clippy::too_many_arguments)]
     pub fn apply_slot_with_control_flow<CF: InjectedControlFlow<S> + Clone>(
         &self,
         pre_state_root: &<S::Storage as Storage>::Root,
-        #[cfg_attr(not(feature = "native"), allow(unused_mut))] mut pre_state: S::Storage,
+        pre_state: S::Storage,
         witness: <S::Storage as Storage>::Witness,
         slot_header: &<S::Da as DaSpec>::BlockHeader,
         relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]>,
         execution_context: ExecutionContext,
         cf: CF,
-    ) -> ApplySlotOutput<S::InnerZkvm, S::OuterZkvm, S::Da, Self> {
+    ) -> ApplySlotOutput<S::Da, Self> {
         let mut runtime = RT::default();
         // Sanity check that gas limits are set correctly. This is already checked at genesis, but we check again in case
         // Someone modifies the code after genesis.
@@ -438,25 +438,7 @@ where
 
         start_timer!(start_slot);
 
-        let pinned_cache = {
-            #[cfg(feature = "native")]
-            {
-                let mut pinned_cache = pre_state.try_load_saved_pinned_cache();
-                if pinned_cache.is_none() {
-                    tracing::trace!("No pinned cache found in storage. Populating from db if supported - this may take a while...");
-                    pinned_cache = RT::populate_pinned_cache(&pre_state);
-                    tracing::trace!("Finished populating pinned cache from db.");
-                }
-                pinned_cache
-            }
-            #[cfg(not(feature = "native"))]
-            {
-                None
-            }
-        };
-
-        let mut state =
-            StateCheckpoint::with_witness(pre_state, witness, &runtime.kernel(), pinned_cache);
+        let mut state = StateCheckpoint::with_witness(pre_state, witness, &runtime.kernel());
         // First, we bootstrap the kernel from the previous state. The
         // `true_slot_number`, will *always* be stale because it's leftover from the
         // previous slot.
@@ -572,6 +554,7 @@ where
             .finalize_chain_state(&total_gas, &mut kernel_state_accessor);
 
         let rollup_height = state.rollup_height_to_access();
+        let slot_number = runtime.kernel().accessor(&mut state).true_slot_number();
         let (state_root, witness, change_set) = {
             // We can't use `if cfg!` here because `materialize_slot` returns different types in native and non-native mode.
             // So we structure this code to make it obvious that we're handling both cases.
@@ -607,7 +590,7 @@ where
             }
         };
 
-        ApplySlotOutput::<S::InnerZkvm, S::OuterZkvm, S::Da, Self> {
+        ApplySlotOutput::<S::Da, Self> {
             state_root,
             change_set,
             proof_receipts,
@@ -615,6 +598,7 @@ where
             discarded_blobs,
             witness,
             rollup_height,
+            slot_number,
         }
     }
 
@@ -669,7 +653,9 @@ where
         // Note: The gas price should be computed after all the capabilities involving the [`KernelStateAccessor`] to have the
         // most recent version of the visible rollup height.
         let gas_price = runtime.chain_state().base_fee_per_gas(&mut state).expect("The base fee per gas for the current slot should be known at this point! This is a bug. Please report it");
-        let block_gas_limit = runtime.chain_state().block_gas_limit(&mut state).expect("The slot gas limit for the current slot should be known at this point! This is a bug. Please report it");
+        let block_gas_limit = runtime
+            .chain_state()
+            .block_gas_limit(state.rollup_height_to_access(), !creates_rollup_block);
 
         let preferred_sequencer = runtime
             .sequencer_remuneration()
@@ -786,7 +772,8 @@ where
                         &sequencer_address,
                         sequencer_bond,
                         gas_price,
-                        proof,
+                        execution_context,
+                        &proof[..],
                         state,
                     );
 

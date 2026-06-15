@@ -1,5 +1,6 @@
 use crate::{
     get_spec_id,
+    precompiles::{EvmPrecompileSet, PrecompileDb, SovPrecompileProvider},
     sov_evm::{SovEvm, StorageAccessInspector},
     EvmRuntimeConfig,
 };
@@ -14,7 +15,7 @@ use revm::{
 };
 #[cfg(feature = "native")]
 use revm::{interpreter::interpreter::EthInterpreter, Inspector};
-use revm_database_interface::{DBErrorMarker, TryDatabaseCommit};
+use revm_database_interface::DBErrorMarker;
 use sov_modules_api::macros::config_value;
 
 /// The maximum contract code size is 512KiB by default.
@@ -46,33 +47,47 @@ pub(crate) fn get_cfg_env(
 }
 
 /// Execute an Ethereum transaction and commit it to the database.
-pub fn transact_commit<DB: Database<Error = E> + TryDatabaseCommit<Error = E>, E: DBErrorMarker>(
+#[cfg(feature = "native")]
+pub(crate) fn transact_commit<'a, S, P, DB, E>(
     mut db: &mut DB,
-    block_env: &BlockEnv,
+    block_env: &'a BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
-) -> Result<ExecutionResult, EVMError<E>> {
-    let ExecResultAndState { result, state } = transact(&mut db, block_env, tx, cfg)?;
+    precompiles: SovPrecompileProvider<'a, S, P>,
+) -> Result<ExecutionResult, EVMError<E>>
+where
+    S: sov_modules_api::Spec,
+    P: EvmPrecompileSet<S>,
+    DB: Database<Error = E>
+        + revm_database_interface::TryDatabaseCommit<Error = E>
+        + PrecompileDb<S>,
+    E: DBErrorMarker,
+{
+    let ExecResultAndState { result, state } = transact(&mut db, block_env, tx, cfg, precompiles)?;
     // We don't use transact_commit as it does not support returning an error
-    db.try_commit(state)?;
+    revm_database_interface::TryDatabaseCommit::try_commit(db, state)?;
     Ok(result)
 }
 
 #[cfg(feature = "native")]
-#[allow(dead_code)]
-pub(crate) fn inspect<'a, DB: Database<Error = E>, E: DBErrorMarker, I>(
+pub(crate) fn inspect<'a, S, P, DB, E, I>(
     db: DB,
     block_env: &'a BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
     inspector: I,
+    precompiles: SovPrecompileProvider<'a, S, P>,
 ) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
 where
+    S: sov_modules_api::Spec,
+    P: EvmPrecompileSet<S>,
+    DB: Database<Error = E> + PrecompileDb<S>,
+    E: DBErrorMarker,
     I: Inspector<Context<&'a BlockEnv, TxEnv, CfgEnv, DB>, EthInterpreter>,
 {
     let context = context(db, block_env, cfg);
     let storage_inspector = StorageAccessInspector::new();
-    let mut evm = SovEvm::new(context, (inspector, storage_inspector));
+    let mut evm = SovEvm::new(context, (inspector, storage_inspector), precompiles);
     let mut exec_result = evm.inspect_tx(tx)?;
     // Rebate the gas we charged for storage access during execution. We rebate after rather than during execution so that
     // a loop of SSTORE/SLOADs will still terminate due to OOG despite the rebate.
@@ -83,15 +98,22 @@ where
     Ok(exec_result)
 }
 
-/// Execute ethereum transaction
-pub fn transact<DB: Database<Error = E>, E: DBErrorMarker>(
+/// Execute ethereum transaction.
+pub(crate) fn transact<'a, S, P, DB, E>(
     db: DB,
-    block_env: &BlockEnv,
+    block_env: &'a BlockEnv,
     tx: TxEnv,
     cfg: CfgEnv,
-) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>> {
+    precompiles: SovPrecompileProvider<'a, S, P>,
+) -> Result<ExecResultAndState<ExecutionResult>, EVMError<E>>
+where
+    S: sov_modules_api::Spec,
+    P: EvmPrecompileSet<S>,
+    DB: Database<Error = E> + PrecompileDb<S>,
+    E: DBErrorMarker,
+{
     let context = context(db, block_env, cfg);
-    let mut evm = SovEvm::new(context, StorageAccessInspector::new());
+    let mut evm = SovEvm::new(context, StorageAccessInspector::new(), precompiles);
     let mut exec_result = evm.inspect_tx(tx)?;
     // Rebate the gas we charged for storage access during execution. We rebate after rather than during execution so that
     // a loop of SSTORE/SLOADs will still terminate due to OOG despite the rebate.

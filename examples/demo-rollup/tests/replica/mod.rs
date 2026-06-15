@@ -1,4 +1,6 @@
 mod db_elected;
+mod proofs;
+mod recovery;
 mod replica_gets_txs_from_master;
 mod replica_partitioned_db;
 mod replica_registers_in_db;
@@ -6,8 +8,11 @@ mod root_hash_checker;
 mod start_stop;
 mod toxi_proxy_helper;
 
+pub use crate::external_mock_da::{start_external_mock_da, ExternalDa};
 use crate::test_helpers::build_transfer_token_tx;
+use crate::test_helpers::test_genesis_paths;
 use crate::test_helpers::test_genesis_source;
+use demo_stf::genesis_config::create_genesis_config;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_api_spec::types;
@@ -15,10 +20,9 @@ use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_demo_rollup::ExternalMockDemoRollup;
 use sov_full_node_configs::sequencer::SequencerKindConfig;
-use sov_mock_da::storable::rpc::start_server;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::storable::StorableMockDaService;
-use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig};
+use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::OperatingMode;
@@ -26,14 +30,18 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
+use sov_modules_stf_blueprint::GenesisParams;
 use sov_proxy_utils::ClusterInfo;
 use sov_proxy_utils::ClusterInfoService;
 use sov_proxy_utils::RootHashCheck;
 use sov_proxy_utils::RootHashConsistency;
 use sov_sequencer::preferred::ConfiguredNodeRole;
+use sov_sequencer::preferred::RecoveryStrategy;
 use sov_sequencer::SequencerRole;
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
+use sov_test_utils::test_rollup::GenesisSource;
 use sov_test_utils::test_rollup::PostgresData;
 use sov_test_utils::test_rollup::RollupBuilder;
 use sov_test_utils::test_rollup::TestRollup;
@@ -44,7 +52,6 @@ use tokio::sync::watch;
 use tokio::time::Duration;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
-const TEST_SEQ_DA_ADDRESS: MockAddress = MockAddress::new([0; 32]);
 const AMOUNT: u128 = 100;
 
 fn random_address() -> <S as Spec>::Address {
@@ -52,31 +59,10 @@ fn random_address() -> <S as Spec>::Address {
     pk.pub_key().credential_id().into()
 }
 
-// Actually creates DA service that produces block on batch submitted.
-async fn create_da_service_manual() -> (StorableMockDaService, SocketAddr) {
-    let da_service = StorableMockDaService::new_in_memory(TEST_SEQ_DA_ADDRESS, 0).await;
-
-    let addr = start_server(da_service.clone(), "127.0.0.1", 0)
-        .await
-        .unwrap();
-
-    (da_service, addr)
-}
-
-async fn create_da_service_periodic() -> (StorableMockDaService, watch::Sender<()>, SocketAddr) {
-    let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
-    let mut da_config = MockDaConfig::instant_with_sender(TEST_SEQ_DA_ADDRESS);
-    da_config.block_producing = BlockProducingConfig::Periodic {
+fn periodic_block_producing() -> BlockProducingConfig {
+    BlockProducingConfig::Periodic {
         block_time_ms: TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 2,
-    };
-
-    let da_service = StorableMockDaService::from_config(da_config, shutdown_receiver).await;
-
-    let addr = start_server(da_service.clone(), "127.0.0.1", 0)
-        .await
-        .unwrap();
-
-    (da_service, shutdown_sender, addr)
+    }
 }
 
 async fn start_rollup_with_connection_string(
@@ -101,6 +87,8 @@ async fn start_rollup_with_connection_string(
             }
             SequencerKindConfig::Preferred(p) => {
                 p.num_cache_warmup_workers = 0;
+                p.recovery_strategy = RecoveryStrategy::TryToSave;
+                p.ideal_lag_behind_finalized_slot = 3;
                 if let Some(connection_string) = postgres_connection_override.as_ref() {
                     p.postgres_config
                         .as_mut()
@@ -122,6 +110,52 @@ async fn start_rollup(
     postgres: Option<(Arc<PostgresData>, String, ConfiguredNodeRole)>,
 ) -> TestRollup<ExternalMockDemoRollup<Native>> {
     start_rollup_with_connection_string(addr, postgres, None).await
+}
+
+/// Like [`start_rollup`], but boots the node in Zk mode with the prover
+/// pipeline enabled so that aggregated proofs get produced and posted to DA.
+async fn start_rollup_with_prover(
+    addr: SocketAddr,
+    da_service: &StorableMockDaService,
+    postgres: Option<(Arc<PostgresData>, String, ConfiguredNodeRole)>,
+) -> TestRollup<ExternalMockDemoRollup<Native>> {
+    da_service.wait_for_height(3).await.unwrap();
+
+    let operating_mode = OperatingMode::Zk;
+    let mut runtime_config =
+        create_genesis_config::<S>(&test_genesis_paths(operating_mode)).unwrap();
+    runtime_config.chain_state.genesis_da_height = 3;
+    let genesis = GenesisSource::CustomParams(GenesisParams {
+        runtime: runtime_config,
+    });
+
+    RollupBuilder::new_with_external_da(
+        genesis,
+        MockDaClientConfig {
+            url: format!("http://{addr}"),
+        },
+        postgres,
+    )
+    .await
+    .enable_prover()
+    .set_start_fresh_outer_proof_on_resync(true)
+    .set_config(|c| {
+        c.max_concurrent_batch_blobs = 16777216;
+        c.rollup_prover_config = RollupProverConfig::Prove;
+        c.blob_processing_timeout_secs = 180;
+        c.aggregated_proof_block_jump = 2;
+        c.max_concurrent_proof_blobs = 1024;
+        if let SequencerKindConfig::Preferred(seq) = &mut c.sequencer_config {
+            seq.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
+            seq.recovery_strategy = RecoveryStrategy::TryToSave;
+            seq.disable_state_root_consistency_checks = true;
+            seq.num_cache_warmup_workers = 0;
+            seq.ideal_lag_behind_finalized_slot = 3;
+        }
+    })
+    .start_test_rollup()
+    .await
+    .unwrap()
 }
 
 async fn send_transfers(
@@ -186,6 +220,7 @@ type Rollup = ExternalMockDemoRollup<Native>;
 /// Test setup for DbElected tests with two nodes (leader and replica).
 struct NodeDiscoveryTestSetup {
     postgres: Arc<PostgresData>,
+    da_service: StorableMockDaService,
     da_addr: SocketAddr,
     da_shutdown: watch::Sender<()>,
     cluster_info_service: ClusterInfoService,
@@ -211,7 +246,13 @@ impl NodeDiscoveryTestSetup {
             }
         };
 
-        let (_, da_shutdown, da_addr) = create_da_service_periodic().await;
+        let ExternalDa {
+            service: da_service,
+            shutdown: da_shutdown,
+            addr: da_addr,
+        } = start_external_mock_da(periodic_block_producing())
+            .await
+            .unwrap();
 
         let cluster_info_service =
             ClusterInfoService::spawn(postgres.connection_string(), max_age, None)
@@ -220,6 +261,7 @@ impl NodeDiscoveryTestSetup {
 
         Some(Self {
             postgres,
+            da_service,
             da_shutdown,
             da_addr,
             cluster_info_service,
@@ -230,6 +272,16 @@ impl NodeDiscoveryTestSetup {
     async fn start_node(&self, node_id: &str, role: ConfiguredNodeRole) -> TestRollup<Rollup> {
         let node = Some((self.postgres.clone(), node_id.into(), role));
         start_rollup(self.da_addr, node).await
+    }
+
+    /// Start the node with the Zk prover pipeline enabled.
+    async fn start_node_with_prover(
+        &self,
+        node_id: &str,
+        role: ConfiguredNodeRole,
+    ) -> TestRollup<Rollup> {
+        let node = Some((self.postgres.clone(), node_id.into(), role));
+        start_rollup_with_prover(self.da_addr, &self.da_service, node).await
     }
 
     async fn shutdown(self) {

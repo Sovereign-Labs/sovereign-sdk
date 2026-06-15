@@ -12,13 +12,17 @@ use axum::http::StatusCode;
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_blob_sender::{BlobExecutionStatus, BlobInternalId, BlobSenderHooks};
 use sov_db::ledger_db::LedgerDb;
-use sov_modules_api::capabilities::{AuthenticationOutput, RollupHeight, TransactionAuthenticator};
+use sov_modules_api::capabilities::{
+    AuthenticationError, AuthenticationOutput, FatalError, RollupHeight, TransactionAuthenticator,
+};
 use sov_modules_api::rest::utils::ErrorObject;
-use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::rest::ApiState;
 use sov_modules_api::*;
 use sov_modules_stf_blueprint::{PreExecError, Runtime};
 use sov_rest_utils::errors::ReportableWsError;
 use sov_rest_utils::{json_obj, to_json_object};
+use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{ItemOrHash, LedgerStateProvider, QueryMode};
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
@@ -223,8 +227,8 @@ pub trait Sequencer: Clone + Send + Sync + 'static {
     /// Can be used to query and update the status of transactions.
     fn tx_status_manager(&self) -> &TxStatusManager<<Self::Spec as Spec>::Da>;
 
-    /// Closes the current batch.
-    async fn force_close_current_batch(&self) -> anyhow::Result<()> {
+    /// Closes the current batch, if one is in progress. Returns true if the batch was closed successfully, false if there was no batch in progress.
+    async fn force_close_current_batch(&self) -> anyhow::Result<bool> {
         panic!("Not implemented")
     }
 
@@ -272,6 +276,10 @@ pub struct StateUpdateNotification {
     #[cfg(feature = "test-utils")]
     #[serde(default)]
     pub update_skipped_due_to_pause: bool,
+    /// True when the sequencer entered recovery on this state update.
+    #[cfg(feature = "test-utils")]
+    #[serde(default)]
+    pub triggered_recovery: bool,
 }
 
 /// A notification that the sequencer has processed a forced (non-preferred) batch.
@@ -566,11 +574,46 @@ pub fn pre_exec_err_to_accept_tx_err(err: PreExecError) -> ErrorObject {
             ErrorObject {
                 status: StatusCode::BAD_REQUEST,
                 message: "The transaction is invalid".to_string(),
-                details: json_obj!({
-                    "error": error.to_string()
-                })
+                details: to_json_object(AcceptTxErrorDetails::from_auth_error(&error)),
             }
         },
+    }
+}
+
+/// Stable machine-readable codes for `accept_tx` failures that wrappers may remap to
+/// transport-specific error objects.
+#[derive(Debug, Clone, Copy, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+#[serde(rename_all = "snake_case")]
+pub enum AcceptTxErrorCode {
+    /// The transaction's `maxFeePerGas` was below the rollup base fee.
+    InsufficientMaxFeePerGas,
+}
+
+/// Structured details attached to `accept_tx` failures.
+#[derive(Debug, Clone, serde::Serialize, serde::Deserialize, PartialEq, Eq)]
+pub struct AcceptTxErrorDetails {
+    /// Optional stable machine-readable code for callers that need deterministic remapping.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub code: Option<AcceptTxErrorCode>,
+    /// Human-readable underlying error string.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error: Option<String>,
+}
+
+impl AcceptTxErrorDetails {
+    /// Builds structured `accept_tx` details from an authentication error.
+    pub fn from_auth_error(error: &AuthenticationError) -> Self {
+        let code = match error {
+            AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
+                Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
+            }
+            _ => None,
+        };
+
+        Self {
+            code,
+            error: Some(error.to_string()),
+        }
     }
 }
 

@@ -14,31 +14,20 @@ on:
 jobs:
   check:
     name: Check
-    runs-on: ubuntu-latest
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=typescript-ci-1-93
+    timeout-minutes: 30
     defaults:
       run:
         working-directory: ./typescript
     steps:
-      - uses: actions/checkout@v4
-      - name: Cache turbo build setup
-        uses: actions/cache@v4
+      - uses: actions/checkout@v6
+      # Cache the pnpm store and turbo build outputs in a Namespace volume.
+      - uses: namespacelabs/nscloud-cache-action@v1
         with:
-          path: "./typescript/.turbo"
-          key: ${{ runner.os }}-turbo-${{ github.sha }}
-          restore-keys: |
-            ${{ runner.os }}-turbo-
-      - uses: pnpm/action-setup@v4
-        with:
-          package_json_file: ./typescript/package.json
-      - uses: actions/setup-node@v6
-        with:
-          node-version: 20.x
-          cache: "pnpm"
-          cache-dependency-path: "./typescript/pnpm-lock.yaml"
-      # bun is used to compile indexer
-      - uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: 1.2.5
+          cache: pnpm
+          path: |
+            ./typescript/.turbo
+      # Node 24, pnpm, and Bun are all baked into the base image.
       - name: Install dependencies
         run: pnpm install
       - name: Lint and Format

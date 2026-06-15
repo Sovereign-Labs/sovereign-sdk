@@ -1,13 +1,11 @@
 use alloy_consensus::{TxEip1559, TypedTransaction};
 use alloy_eips::eip1559::MIN_PROTOCOL_BASE_FEE;
 use alloy_primitives::{Bytes, TxKind};
-use revm::context::result::ExecutionResult;
-use revm::context::{BlockEnv, CfgEnv};
-use sov_evm::{convert_to_tx_signed, create_tx_env, executor, EthereumAuthenticator, Evm, SpecId};
+use sov_evm::{EthereumAuthenticator, Evm};
 use sov_evm_test_utils::LegacySimpleStorage;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::RawTx;
-use sov_test_utils::TransactionType;
+use sov_test_utils::{TransactionTestCase, TransactionType};
 
 use crate::helpers::setup;
 use crate::runtime::{RT, S};
@@ -33,26 +31,31 @@ fn test_invalid_contract_execution() {
         RT::encode_with_ethereum_auth(raw_tx),
     ));
 
-    runner.query_visible_state(|state| {
-        let evm = Evm::<S>::default();
-        let mut evm_db = evm.db(state);
-        let tx_request = TypedTransaction::Eip1559(TxEip1559 {
-            chain_id: config_value!("CHAIN_ID"),
-            nonce: 1,
-            max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
-            gas_limit: 1_000_000,
-            to: TxKind::Call(contract_addr),
-            input: Bytes::from(hex::decode(hex::encode(contract.failing_function())).unwrap()),
-            ..Default::default()
-        });
-        let (signed_eth_tx, _) = account.sign(tx_request);
-        let cfg_env =
-            CfgEnv::new_with_spec(SpecId::CANCUN).with_chain_id(config_value!("CHAIN_ID"));
-        let tx = convert_to_tx_signed(signed_eth_tx).unwrap();
-        let tx_env = create_tx_env(&tx, account.address(), 1, 1_000_000);
-        let result =
-            executor::transact_commit(&mut evm_db, &BlockEnv::default(), tx_env, cfg_env).unwrap();
-        assert!(matches!(result, ExecutionResult::Revert { .. }));
+    let tx_request = TypedTransaction::Eip1559(TxEip1559 {
+        chain_id: config_value!("CHAIN_ID"),
+        nonce: 1,
+        max_fee_per_gas: MIN_PROTOCOL_BASE_FEE as u128 * 2,
+        gas_limit: 1_000_000,
+        to: TxKind::Call(contract_addr),
+        input: Bytes::from(hex::decode(hex::encode(contract.failing_function())).unwrap()),
+        ..Default::default()
+    });
+    let (signed_eth_tx, _) = account.sign(tx_request);
+    let raw_tx = RawTx {
+        data: borsh::to_vec(&signed_eth_tx).unwrap(),
+    };
+
+    runner.execute_transaction(TransactionTestCase {
+        input: TransactionType::<RT, S>::PreAuthenticated(RT::encode_with_ethereum_auth(raw_tx)),
+        assert: Box::new(|ctx, state| {
+            assert!(ctx.tx_receipt.is_successful());
+
+            let evm = Evm::<S>::default();
+            let receipt = evm
+                .receipt(1, state)
+                .expect("failing contract call should have an EVM receipt");
+            assert!(!receipt.0.receipt.success);
+        }),
     });
 }
 

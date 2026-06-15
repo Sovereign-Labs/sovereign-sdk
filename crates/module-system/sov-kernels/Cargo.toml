@@ -20,8 +20,6 @@ sov-blob-storage = { workspace = true }
 sov-chain-state = { workspace = true }
 sov-rollup-interface = { workspace = true }
 
-serde_json = { workspace = true, optional = true }
-
 [features]
 default = []
 native = [
@@ -29,7 +27,6 @@ native = [
 	"sov-chain-state/native",
 	"sov-modules-api/native",
 	"sov-state/native",
-	"dep:serde_json",
 	"sov-rollup-interface/native"
 ]
 test-utils = []

@@ -117,7 +117,7 @@ impl HttpServerConfig {
 }
 
 /// Prover service configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, JsonSchema)]
 pub struct ProofManagerConfig<Address> {
     /// The "distance" measured in the number of blocks between two consecutive aggregated proofs.
     pub aggregated_proof_block_jump: NonZero<usize>,
@@ -129,10 +129,40 @@ pub struct ProofManagerConfig<Address> {
     /// A number of state transition info entries are allowed to be kept in memory.
     /// If the number is exceeded, rollup execution will be blocked until provers cathes up.
     pub max_number_of_transitions_in_memory: NonZero<u64>,
+    /// When true, proofs are submitted as each block arrives.
+    /// When false, submission is deferred until the batch is full, then submitted concurrently.
+    #[serde(default = "default_eager_proof_submission")]
+    pub eager_proof_submission: bool,
+    /// Override for the number of prover threads. When `None`, defaults to
+    /// `2 * aggregated_proof_block_jump + 1`, which covers inner proofs for
+    /// the current and next batch plus one outer-aggregation worker.
+    #[serde(default)]
+    pub prover_thread_count_override: Option<NonZero<usize>>,
+    /// Maximum number of completed aggregation windows that can be buffered in
+    /// memory between the intake task and the aggregator task. When the
+    /// aggregator falls behind by this many windows, intake stalls and
+    /// back-pressure propagates upstream.
+    pub max_number_of_aggregated_proofs_in_memory: NonZero<usize>,
+    /// Maximum number of proof blobs sent in parallel. Batch blobs are not
+    /// counted against this limit.
+    pub max_concurrent_proof_blobs: usize,
     /// Optional path to the proof manager database directory.
     /// Defaults to the rollup storage path if not specified.
     #[serde(default)]
     pub storage_path: Option<PathBuf>,
+}
+
+fn default_eager_proof_submission() -> bool {
+    true
+}
+
+impl<Address> ProofManagerConfig<Address> {
+    /// Number of prover threads.
+    pub fn prover_thread_count(&self) -> usize {
+        self.prover_thread_count_override
+            .map(|n| n.get())
+            .unwrap_or_else(|| 2 * self.aggregated_proof_block_jump.get() + 1)
+    }
 }
 
 /// Rollup Configuration
@@ -149,8 +179,10 @@ pub struct RollupConfig<Address: Copy, Da: DaService, M> {
     pub runner: RunnerConfig,
     /// Data Availability service configuration.
     pub da: Da::Config,
-    /// Proof manager configuration.
-    pub proof_manager: ProofManagerConfig<Address>,
+    /// Proof manager configuration. Required for `zk` and `optimistic` rollups,
+    /// optional for `operator` rollups.
+    #[serde(default = "Option::<ProofManagerConfig<Address>>::default")]
+    pub proof_manager: Option<ProofManagerConfig<Address>>,
     /// Sequencer (and batch builder) configuration.
     pub sequencer: SequencerConfig<Address, SequencerKindConfig<Address>>,
     /// Monitoring configuration.
@@ -212,12 +244,14 @@ mod tests {
             [proof_manager]
             aggregated_proof_block_jump = 22
             prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
-            max_number_of_transitions_in_db = 1025
-            max_number_of_transitions_in_memory = 768
+            max_number_of_transitions_in_db = 1000
+            max_number_of_transitions_in_memory = 100
+            max_number_of_aggregated_proofs_in_memory = 5
+            max_concurrent_proof_blobs = 16
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
-            max_concurrent_blobs = 16
+            max_concurrent_batch_blobs = 16
             max_allowed_node_distance_behind = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.standard]
@@ -255,18 +289,20 @@ mod tests {
             [proof_manager]
             aggregated_proof_block_jump = 22
             prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
-            max_number_of_transitions_in_db = 1025
-            max_number_of_transitions_in_memory = 768
+            max_number_of_transitions_in_db = 1000
+            max_number_of_transitions_in_memory = 100
+            max_number_of_aggregated_proofs_in_memory = 5
+            max_concurrent_proof_blobs = 16
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
-            max_concurrent_blobs = 16
+            max_concurrent_batch_blobs = 16
             max_allowed_node_distance_behind = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.preferred]
             disable_state_root_consistency_checks = true
             recovery_strategy = "TryToSave"
-            batch_execution_time_limit_millis = 2000 
+            batch_execution_time_limit_millis = 2000
             num_cache_warmup_workers = 0
             ideal_lag_behind_finalized_slot = 3
             [sequencer.preferred.postgres_config]
@@ -308,12 +344,14 @@ mod tests {
             [proof_manager]
             aggregated_proof_block_jump = 22
             prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
-            max_number_of_transitions_in_db = 1025
-            max_number_of_transitions_in_memory = 768
+            max_number_of_transitions_in_db = 1000
+            max_number_of_transitions_in_memory = 100
+            max_number_of_aggregated_proofs_in_memory = 5
+            max_concurrent_proof_blobs = 16
             [sequencer]
             blob_processing_timeout_secs = 60
             max_batch_size_bytes = 1048576
-            max_concurrent_blobs = 16
+            max_concurrent_batch_blobs = 16
             max_allowed_node_distance_behind = 5
             rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
             [sequencer.preferred]
@@ -345,5 +383,43 @@ mod tests {
                 .unwrap();
 
         insta::assert_json_snapshot!(config);
+    }
+
+    #[test]
+    fn test_correct_config_without_proof_manager() {
+        let config_s = r#"
+            [da]
+            connection_string = "sqlite:///tmp/mockda.sqlite?mode=rwc"
+            sender_address = "0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f0f"
+            [da.block_producing.periodic]
+            block_time_ms = 1_000
+            [storage]
+            path = "/tmp"
+            [runner]
+            da_polling_interval_ms = 10000
+            concurrent_sync_tasks = 18
+            [runner.http_config]
+            bind_host = "127.0.0.1"
+            bind_port = 12346
+            public_address = "https://rollup.sovereign.xyz"
+            cors = "restrictive"
+            [monitoring]
+            telegraf_address = "udp://192.168.4.5:8543"
+            max_datagram_size = 1024
+            max_pending_metrics = 2560
+            [sequencer]
+            blob_processing_timeout_secs = 60
+            max_batch_size_bytes = 1048576
+            max_concurrent_batch_blobs = 16
+            max_allowed_node_distance_behind = 5
+            rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
+            [sequencer.standard]
+        "#;
+
+        let config =
+            toml::from_str::<RollupConfig<Address, MockDaService, MonitoringConfig>>(config_s)
+                .unwrap();
+
+        assert_eq!(config.proof_manager, None);
     }
 }

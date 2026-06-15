@@ -22,6 +22,7 @@ serde = { workspace = true }
 anyhow = { workspace = true }
 tracing = { workspace = true }
 toml = { workspace = true }
+ipnet = { workspace = true }
 
 [dev-dependencies]
 sov-mock-da = { workspace = true, features = ["native"] }

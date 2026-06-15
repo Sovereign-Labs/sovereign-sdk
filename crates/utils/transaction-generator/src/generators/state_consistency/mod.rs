@@ -3,9 +3,9 @@
 use std::marker::PhantomData;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::prelude::arbitrary;
-use sov_modules_api::prelude::axum::async_trait;
 use sov_modules_api::{CryptoSpec, PrivateKey, PublicKey, Spec};
 use strum::EnumDiscriminants;
 

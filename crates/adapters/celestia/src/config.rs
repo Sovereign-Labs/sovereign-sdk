@@ -4,6 +4,24 @@ use std::num::NonZero;
 use schemars::JsonSchema;
 use std::fmt;
 
+/// Configuration for a single gRPC fallback endpoint.
+#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
+pub struct GrpcEndpointConfig {
+    /// The URL of the gRPC endpoint, for example `http://fallback1:9090`.
+    pub url: String,
+    /// Optional authentication token, sent as `x-token` metadata.
+    pub token: Option<String>,
+}
+
+impl fmt::Debug for GrpcEndpointConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("GrpcEndpointConfig")
+            .field("url", &self.url)
+            .field("token", &self.token.as_ref().map(|_| "REDACTED"))
+            .finish()
+    }
+}
+
 /// Runtime configuration for the [`sov_rollup_interface::node::da::DaService`] implementation.
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 pub struct CelestiaConfig {
@@ -32,6 +50,13 @@ pub struct CelestiaConfig {
     /// Optional, used only if `grpc_url` is set.
     #[serde(default = "default_grpc_auth_token")]
     pub grpc_auth_token: Option<String>,
+
+    /// Optional list of fallback gRPC endpoints for blob submission.
+    /// Used alongside `grpc_url` for failover. Each entry has a mandatory `url`
+    /// and an optional `token` (sent as `x-token` metadata).
+    /// Default: empty (no fallback endpoints).
+    #[serde(default)]
+    pub grpc_fallback_endpoints: Vec<GrpcEndpointConfig>,
 
     /// The private key in hex format of Celestia wallet that has enough TIA to publish blobs.
     /// If not specified in the config, will be pulled from `SOV_CELESTIA_SIGNER_KEY`.
@@ -100,6 +125,7 @@ impl fmt::Debug for CelestiaConfig {
                 "grpc_auth_token",
                 &self.grpc_auth_token.as_ref().map(|_| "REDACTED"),
             )
+            .field("grpc_fallback_endpoints", &self.grpc_fallback_endpoints)
             .field(
                 "signer_private_key",
                 &self.signer_private_key.as_ref().map(|_| "REDACTED"),
@@ -147,6 +173,7 @@ impl CelestiaConfig {
             rpc_auth_token: None,
             grpc_url: None,
             grpc_auth_token: None,
+            grpc_fallback_endpoints: Vec::new(),
             signer_private_key: None,
             request_timeout_secs: default_request_timeout_seconds(),
             api_request_timeout_secs: default_api_request_timeout_secs(),
@@ -192,12 +219,25 @@ impl CelestiaConfig {
             builder = builder.rpc_auth_token(rpc_auth_token);
         }
         // Submission section.
+        if self.grpc_url.is_none() && !self.grpc_fallback_endpoints.is_empty() {
+            anyhow::bail!("`grpc_fallback_endpoints` requires `grpc_url` to be set");
+        }
         if let Some(grpc_url) = &self.grpc_url {
             let mut endpoint = celestia_client::Endpoint::new(grpc_url.clone());
             if let Some(grpc_auth_token) = &self.grpc_auth_token {
                 endpoint = endpoint.metadata("x-token", grpc_auth_token);
             }
             builder = builder.grpc_endpoint(endpoint);
+            if !self.grpc_fallback_endpoints.is_empty() {
+                let fallback_endpoints = self.grpc_fallback_endpoints.iter().map(|ep| {
+                    let mut endpoint = celestia_client::Endpoint::new(ep.url.clone());
+                    if let Some(token) = &ep.token {
+                        endpoint = endpoint.metadata("x-token", token);
+                    }
+                    endpoint
+                });
+                builder = builder.grpc_endpoints(fallback_endpoints);
+            }
             if let Some(signer_key_hex) = &self.signer_private_key {
                 builder = builder.private_key_hex(signer_key_hex);
             }
@@ -295,7 +335,7 @@ pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_rpc_url, CelestiaConfig};
+    use super::{validate_rpc_url, CelestiaConfig, GrpcEndpointConfig};
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
     const GRPC_ENV_VAR: &str = "SOV_CELESTIA_GRPC_URL";
@@ -393,5 +433,95 @@ mod tests {
         )
         .unwrap();
         assert_eq!(config.grpc_url.as_deref(), Some("http://config-grpc:9090"));
+    }
+
+    #[test]
+    fn grpc_fallback_endpoints_default_to_empty() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let config = deserialize_config("{}").unwrap();
+        assert!(config.grpc_fallback_endpoints.is_empty());
+    }
+
+    #[test]
+    fn grpc_fallback_endpoints_with_token_deserialize() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let config = deserialize_config(
+            r#"{
+                "grpc_fallback_endpoints": [
+                    {"url": "http://fallback1:9090", "token": "secret-token"},
+                    {"url": "http://fallback2:9090"}
+                ]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(config.grpc_fallback_endpoints.len(), 2);
+        assert_eq!(
+            config.grpc_fallback_endpoints[0].url,
+            "http://fallback1:9090"
+        );
+        assert_eq!(
+            config.grpc_fallback_endpoints[0].token.as_deref(),
+            Some("secret-token"),
+        );
+        assert_eq!(
+            config.grpc_fallback_endpoints[1].url,
+            "http://fallback2:9090"
+        );
+        assert_eq!(config.grpc_fallback_endpoints[1].token, None);
+    }
+
+    #[test]
+    fn debug_redacts_fallback_endpoint_tokens() {
+        let mut config = CelestiaConfig::minimal("ws://rpc:26658".to_string());
+        config.grpc_fallback_endpoints = vec![
+            GrpcEndpointConfig {
+                url: "http://fallback1:9090".to_string(),
+                token: Some("super-secret".to_string()),
+            },
+            GrpcEndpointConfig {
+                url: "http://fallback2:9090".to_string(),
+                token: None,
+            },
+        ];
+        let debug_output = format!("{:?}", config);
+        assert!(
+            !debug_output.contains("super-secret"),
+            "token should be redacted in debug output: {debug_output}"
+        );
+        assert!(debug_output.contains("REDACTED"));
+        assert!(debug_output.contains("http://fallback1:9090"));
+        assert!(debug_output.contains("http://fallback2:9090"));
+    }
+
+    #[tokio::test]
+    async fn build_client_rejects_fallback_endpoints_without_grpc_url() {
+        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
+        config.grpc_fallback_endpoints = vec![GrpcEndpointConfig {
+            url: "http://fallback:9090".to_string(),
+            token: None,
+        }];
+        let error = config.build_client().await.unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("`grpc_fallback_endpoints` requires `grpc_url` to be set"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn grpc_fallback_endpoints_roundtrip() {
+        let mut config = CelestiaConfig::minimal("ws://rpc:26658".to_string());
+        config.grpc_fallback_endpoints = vec![GrpcEndpointConfig {
+            url: "http://fallback1:9090".to_string(),
+            token: Some("token1".to_string()),
+        }];
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: CelestiaConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(config, deserialized);
     }
 }

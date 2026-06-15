@@ -9,6 +9,8 @@ This folder contains the [Dockerfile](./Dockerfile) used for [Custom Base Image 
 
 The base image needs to be updated any time the environment changes: Rust toolchain upgrade, ZKVM version upgrade, new tool added to the job
 
+The image bakes a pinned Playwright Chromium build. Its version is tied to `@playwright/test` in `typescript/examples/phantom/package.json` — bump both in lockstep, otherwise the demo-rollup e2e job will re-download the browser at runtime.
+
 ## High-level steps
 
 1. Update and verify [`Dockerfile`](./Dockerfile)

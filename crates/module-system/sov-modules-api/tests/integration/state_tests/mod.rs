@@ -15,12 +15,8 @@ use sov_test_utils::storage::ForklessStorageManager;
 use sov_test_utils::{validate_and_materialize, TestSpec, TestStorageSpec};
 use unwrap_infallible::UnwrapInfallible;
 
-pub type Zk = sov_modules_api::default_spec::DefaultNomtSpec<
-    MockDaSpec,
-    MockZkvm,
-    MockZkvm,
-    execution_mode::Zk,
->;
+pub type Zk =
+    sov_modules_api::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, execution_mode::Zk>;
 pub type StorageSpec = TestStorageSpec;
 
 pub fn commit_to_storage<S, Sm>(
@@ -36,7 +32,7 @@ pub fn commit_to_storage<S, Sm>(
     let (cache_log, _, witness) = state.freeze();
 
     let (root_hash, state_update) = storage
-        .compute_state_update(cache_log, &witness, pre_state_root, None)
+        .compute_state_update(cache_log, &witness, pre_state_root)
         .expect("Compute state update must succeed");
     storage_manager.commit_state_update(storage, state_update, root_hash);
 
@@ -53,7 +49,7 @@ fn increase_value_and_commit<S, Sm>(
     S: Spec,
     Sm: ForklessStorageManager<Storage = S::Storage>,
 {
-    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), kernel, None);
+    let mut state: StateCheckpoint<S> = StateCheckpoint::new(storage.clone(), kernel);
 
     // Setting value, starting from 0
     let value = match state_value.get(&mut state).unwrap_infallible() {

@@ -1,5 +1,7 @@
 mod db_operations;
+mod deregister;
 mod leader_election;
+mod migrations;
 
 use std::net::SocketAddr;
 

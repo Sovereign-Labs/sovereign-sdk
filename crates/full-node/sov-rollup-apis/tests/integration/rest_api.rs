@@ -1,8 +1,9 @@
 use sov_api_spec::types;
 use sov_bank::{config_gas_token_id, Bank};
 use sov_modules_api::prelude::tokio::{self};
-use sov_modules_api::{Amount, Gas, GasArray, GasSpec, Spec, SyncStatus};
+use sov_modules_api::{Amount, Gas, GasArray, GasSpec, Spec};
 use sov_rest_utils::json_obj;
+use sov_rollup_interface::node::SyncStatus;
 use sov_test_utils::{AsUser, TestUser, TransactionTestCase};
 
 use crate::{TestData, RT, S};

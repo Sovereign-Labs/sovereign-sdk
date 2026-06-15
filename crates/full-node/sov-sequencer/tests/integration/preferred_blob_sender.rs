@@ -1,7 +1,7 @@
-use std::env;
+use std::{env, fs, time::Duration};
 
 use futures::StreamExt;
-use sov_blob_sender::BlobSelectorStatus;
+use sov_blob_sender::{BlobSelectorStatus, BlobSubmissionStatus};
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::prelude::*;
@@ -24,6 +24,8 @@ use crate::preferred_end_to_end::{
     TestingAction,
 };
 use crate::utils::{new_test_rollup, tempdir_inside_codebase_dir, MAX_BATCH_EXECUTION_TIME_MILLIS};
+
+const PREFERRED_SEQUENCER_DB_NAME: &str = "preferred_sequencer";
 
 async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
     let genesis_config =
@@ -71,6 +73,73 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
         .await,
         admin,
     )
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_startup_fails_if_blob_sender_db_is_ahead_of_preferred_db() {
+    sov_test_utils::initialize_logging();
+    let (test_rollup, admin) = create_test_rollup().await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let client = test_rollup.api_client().clone();
+    let tx = tx_set_many_values(&admin.private_key, 0, vec![7; 100]);
+    client.send_raw_tx_to_sequencer(&tx).await.unwrap();
+
+    let mut blob_sender_statuses = test_rollup
+        .subscribe_to_blobs_from_blob_sender()
+        .await
+        .unwrap();
+
+    // Pause DA submission after BlobSender persists the blob locally, before it can land on DA.
+    test_rollup.da_service.set_blob_submission_pause().await;
+    test_rollup.force_close_batch().await.unwrap();
+    tokio::time::timeout(Duration::from_secs(15), async {
+        loop {
+            let blob_status = blob_sender_statuses
+                .next()
+                .await
+                .expect("BlobSender status stream closed before the blob was persisted")
+                .expect("BlobSender status stream returned an error");
+            if matches!(
+                blob_status.blob_submission_status,
+                BlobSubmissionStatus::MustSubmit
+            ) {
+                break;
+            }
+        }
+    })
+    .await
+    .expect("Timeout occurred while waiting for the blob to be persisted in BlobSender DB.");
+
+    let builder = test_rollup.shutdown().await.unwrap();
+    let storage_path = builder.storage_path();
+    let preferred_db_path = storage_path.path().join(PREFERRED_SEQUENCER_DB_NAME);
+    assert!(
+        preferred_db_path.exists(),
+        "Preferred sequencer DB should exist before simulating a wipe"
+    );
+    // Simulate wiping the preferred sequencer DB while leaving BlobSender DB intact.
+    fs::remove_dir_all(preferred_db_path).unwrap();
+
+    let err = match builder.start().await {
+        Ok(test_rollup) => {
+            test_rollup.shutdown().await.unwrap();
+            panic!("Rollup started despite BlobSender DB being ahead of preferred sequencer DB");
+        }
+        Err(err) => err,
+    };
+
+    let err = err.to_string();
+    assert!(
+        err.contains("Node state is inconsistent, aborting startup: BlobSender DB contains a higher blob sequence number than the Preferred Sequencer DB."),
+        "Unexpected startup error: {err}"
+    );
+    assert!(
+        err.contains("preferred sequencer only has blobs up to none"),
+        "Unexpected startup error: {err}"
+    );
 }
 
 #[tokio::test(flavor = "multi_thread")]

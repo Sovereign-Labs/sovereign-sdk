@@ -4,11 +4,10 @@ use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
-use jmt::SimpleHasher;
 use serde::{Deserialize, Serialize};
 use serde_big_array::BigArray;
 use sov_rollup_interface::reexports::digest::Digest;
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 
 use crate::{MerkleProofSpec, ProvableNamespace, StateRoot};
 /// Combined root hash of the user and kernel namespaces. The user root hash is the first 32 bytes, whereas the
@@ -79,7 +78,7 @@ impl<S: MerkleProofSpec> StateRoot for StorageRoot<S> {
 }
 
 impl<S: MerkleProofSpec> StorageRoot<S> {
-    /// Creates a new `[ProverStorageRoot]` instance from specified root hashes.
+    /// Creates a new [`StorageRoot`] instance from specified root hashes.
     /// Concretely this method builds the prover root hash by concatenating the user and
     /// the kernel root hashes.
     pub const fn new(user_hash: [u8; 32], kernel_hash: [u8; 32]) -> Self {
@@ -108,67 +107,5 @@ impl<S: MerkleProofSpec> StorageRoot<S> {
         Digest::update(&mut hasher, self.namespace_root(ProvableNamespace::User));
         Digest::update(&mut hasher, self.namespace_root(ProvableNamespace::Kernel));
         Digest::finalize(hasher).into()
-    }
-}
-
-/// A storage proof that is used to verify the existence of a key in the storage.
-#[derive(Derivative, Serialize, Deserialize, BorshDeserialize, BorshSerialize, UniversalWallet)]
-#[derivative(
-    PartialEq(bound = "H: SimpleHasher"),
-    Eq(bound = "H: SimpleHasher"),
-    Clone(bound = "H: SimpleHasher"),
-    Debug(bound = "H: SimpleHasher")
-)]
-pub struct SparseMerkleProof<H: SimpleHasher>(
-    #[serde(bound(serialize = "", deserialize = ""))]
-    #[borsh(bound(serialize = "", deserialize = ""))]
-    #[sov_wallet(as_ty = "wallet_placeholders::MerkleDisplayPlaceholder")]
-    jmt::proof::SparseMerkleProof<H>,
-);
-
-// The types in this module aren't actually dead code, they are used as placeholders in the wallet
-// However, since they only appear in the Schema (which isn't Rust code), Rustc doesn't know that.
-#[allow(dead_code)]
-mod wallet_placeholders {
-    use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
-    #[derive(UniversalWallet)]
-    pub struct MerkleDisplayPlaceholder {
-        leaf: Option<SparseMerkleLeafNodePlacholder>,
-        siblings: Vec<SparseMerkleNodePlaceholder>,
-    }
-
-    #[derive(UniversalWallet)]
-    struct SparseMerkleInternalNodePlaceholder {
-        left_child: [u8; 32],
-        right_child: [u8; 32],
-    }
-
-    #[derive(UniversalWallet)]
-    enum SparseMerkleNodePlaceholder {
-        // The default sparse node
-        Null,
-        // The internal sparse merkle tree node
-        Internal(SparseMerkleInternalNodePlaceholder),
-        // The leaf sparse merkle tree node
-        Leaf(SparseMerkleLeafNodePlacholder),
-    }
-
-    #[derive(UniversalWallet)]
-    pub struct SparseMerkleLeafNodePlacholder {
-        key_hash: [u8; 32],
-        value_hash: [u8; 32],
-    }
-}
-
-impl<H: SimpleHasher> SparseMerkleProof<H> {
-    /// Returns the underlying proof.
-    pub fn inner(&self) -> &jmt::proof::SparseMerkleProof<H> {
-        &self.0
-    }
-}
-
-impl<H: SimpleHasher> From<jmt::proof::SparseMerkleProof<H>> for SparseMerkleProof<H> {
-    fn from(proof: jmt::proof::SparseMerkleProof<H>) -> Self {
-        SparseMerkleProof(proof)
     }
 }

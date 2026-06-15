@@ -8,21 +8,25 @@ homepage.workspace = true
 repository.workspace = true
 publish = false
 
+[package.metadata.cargo-machete]
+ignored = ["futures", "progenitor-client", "regress", "reqwest", "serde", "serde_json"]
+
 # These dependencies are not defined through workspace inheritance because
 # `progenitor` demands very specific version ranges for its dependencies. Read
 # more here: <https://github.com/oxidecomputer/progenitor>.
 [dependencies]
 futures = { workspace = true }
-progenitor-client = { version = "0.8" }
+progenitor-client = { version = "0.14" }
 regress = "0.4.1"
-reqwest = { workspace = true, features = ["rustls-tls", "json", "stream"] }
+reqwest = { workspace = true, features = ["json", "stream"] }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true, features = ["alloc"] }
 
 [build-dependencies]
 prettyplease = "0.2.22"
 sov-address = { workspace = true, features = ["evm"] }
-progenitor = { version = "0.8" }
+progenitor = { version = "0.14" }
+openapiv3 = { workspace = true }
 serde_json = { workspace = true, features = ["alloc"] }
 syn = { workspace = true }
 demo-stf = { workspace = true, features = ["native"] }

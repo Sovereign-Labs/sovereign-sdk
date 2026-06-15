@@ -12,11 +12,13 @@ mod genesis;
 mod hooks;
 #[cfg(feature = "native")]
 mod metrics;
+pub mod precompiles;
 mod sov_evm;
 mod sov_fee_and_gas_utils;
 mod state_access;
 use sov_rollup_interface::da::Time;
 use sov_state::{Kernel, User};
+use std::marker::PhantomData;
 use std::ops::RangeInclusive;
 
 pub use call::*;
@@ -40,6 +42,8 @@ mod helpers;
 
 use alloy_primitives::{Address, BlockHash, B256};
 use alloy_primitives::{BlockNumber, U256};
+#[cfg(feature = "native")]
+pub use authenticate::build_request_preflight_auth;
 pub use authenticate::{
     authenticate, decode_evm_tx, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
 };
@@ -56,6 +60,7 @@ use sov_state::codec::BcsCodec;
 
 use crate::account_storage_key::AccountStorageKey;
 use crate::db::DbAccount;
+pub use crate::evm::primitive_types::BlockBody;
 pub use crate::evm::primitive_types::TransactionSigned;
 use crate::evm::primitive_types::{Block, PendingTransaction, TxSignedAndRecovered};
 
@@ -66,14 +71,32 @@ pub use conversions::create_tx_env;
 use revm::state::Bytecode;
 use thiserror::Error;
 
+#[cfg(feature = "native")]
+/// Prepared inputs for running the STF transaction pipeline for runtime-parity gas estimation.
+#[doc(hidden)]
+pub struct PreparedRuntimeParityEstimate<S: Spec, Call> {
+    /// The pre-exec working set pinned to the selected block context.
+    pub pre_exec_working_set:
+        sov_modules_api::PreExecWorkingSet<S, sov_modules_api::ApiStateAccessor<S>>,
+    /// The authenticated transaction data plus the synthetic raw tx hash.
+    pub authenticated_tx: sov_modules_api::transaction::AuthenticatedTransactionAndRawHash<S>,
+    /// Authorization data used by the runtime transaction authorizer.
+    pub auth_data: sov_modules_api::capabilities::AuthorizationData<S>,
+    /// The decoded runtime call to dispatch through the STF helper.
+    pub runtime_call: Call,
+    /// The synthetic fully baked transaction, including sequencing metadata when needed.
+    pub raw_tx: sov_modules_api::FullyBakedTx,
+    /// The operating mode captured from the selected state.
+    pub operating_mode: sov_modules_api::OperatingMode,
+}
+
 /// These values are associated with EIP-4844, which we do not support, but they must be set to a value other than None for CANCUN.
 const EXCESS_BLOB_GAS: u64 = 0;
 const BLOB_GAS_PRICE: u128 = 0;
 
 /// The sov-evm module provides compatibility with the EVM.
-#[allow(dead_code)]
 #[derive(Clone, ModuleInfo)]
-pub struct Evm<S: Spec> {
+pub struct Evm<S: Spec, P: precompiles::EvmPrecompileSet<S> = precompiles::NoCustomPrecompiles<S>> {
     /// The ID of the evm module.
     #[id]
     pub(crate) id: ModuleId,
@@ -95,6 +118,7 @@ pub struct Evm<S: Spec> {
     pub(crate) code: StateMap<B256, Bytecode, BcsCodec>,
 
     /// A set of addresses that are allowed to deploy new contracts
+    #[allow(dead_code)]
     #[state]
     pub(crate) contract_creation_allowlist: StateMap<Address, (), BcsCodec>,
 
@@ -166,7 +190,7 @@ pub struct Evm<S: Spec> {
     pub(crate) chain_state_module: sov_chain_state::ChainState<S>,
 
     #[phantom]
-    phantom: core::marker::PhantomData<S>,
+    phantom: PhantomData<(S, P)>,
 
     /// When true, the max fee check in the authenticator is disabled.
     /// This is set to true when an EvmRuntimeConfigUpdate with all fields None is received.
@@ -201,9 +225,10 @@ impl From<anyhow::Error> for Error {
     }
 }
 
-impl<S: Spec> Module for Evm<S>
+impl<S: Spec, P> Module for Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: precompiles::EvmPrecompileSet<S>,
 {
     type Spec = S;
 
@@ -239,7 +264,10 @@ where
     }
 }
 
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: precompiles::EvmPrecompileSet<S>,
+{
     pub(crate) fn base_fee<Reader, E>(&self, state: &mut Reader) -> Result<u64, E>
     where
         Reader: VersionReader + StateReader<User, Error = E> + StateReader<Kernel, Error = E>,
@@ -260,6 +288,16 @@ impl<S: Spec> Evm<S> {
     {
         let admin = self.admin.get(state)?;
         Ok(admin.expect("Admin must be set at genesis and cannot be removed"))
+    }
+
+    pub(crate) fn precompile_provider<'a>(
+        &self,
+        context: Option<&'a Context<S>>,
+    ) -> anyhow::Result<precompiles::SovPrecompileProvider<'a, S, P>> {
+        Ok(precompiles::SovPrecompileProvider::new(
+            P::default(),
+            context,
+        ))
     }
 }
 

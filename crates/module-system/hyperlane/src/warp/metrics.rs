@@ -36,6 +36,10 @@ pub struct RateLimiterCapacityMetrics {
     pub route_id: WarpRouteId,
     /// The remote domain for tagging specific destinations.
     pub remote_domain: u32,
+    /// Operator-supplied human-readable name of the route.
+    pub route_name: String,
+    /// Decimals of the route's local token, used to scale the raw capacities.
+    pub decimals: u8,
 }
 
 impl sov_metrics::Metric for RateLimiterCapacityMetrics {
@@ -47,20 +51,80 @@ impl sov_metrics::Metric for RateLimiterCapacityMetrics {
         // measurement name & tags
         write!(
             buffer,
-            "{},direction={},route_id={},remote_domain={}",
+            "{},direction={},route_id={},remote_domain={},route_name={}",
             self.measurement_name(),
             self.direction,
             self.route_id,
-            self.remote_domain
+            self.remote_domain,
+            sov_metrics::safe_telegraf_string(&self.route_name),
         )?;
 
         // fields
         write!(
             buffer,
             " max_capacity={},current_capacity={},replenishment_per_slot={}",
-            self.max_capacity.0, self.current_capacity.0, self.replenishment_per_slot.0
+            scale(self.max_capacity, self.decimals),
+            scale(self.current_capacity, self.decimals),
+            scale(self.replenishment_per_slot, self.decimals),
         )?;
 
         Ok(())
+    }
+}
+
+/// Scales a raw token amount to whole-token units using the token's decimals
+/// (e.g. `742500000` with 6 decimals -> `742.5`). Lossy for amounts beyond
+/// f64's precision, which is acceptable for a metric gauge.
+#[allow(
+    clippy::float_arithmetic,
+    reason = "lossy scaling is fine for a metric gauge"
+)]
+fn scale(amount: Amount, decimals: u8) -> f64 {
+    amount.0 as f64 / 10f64.powi(i32::from(decimals))
+}
+
+#[cfg(test)]
+mod tests {
+    use sov_metrics::Metric as _;
+
+    use super::*;
+
+    fn sample(route_name: &str, decimals: u8) -> RateLimiterCapacityMetrics {
+        RateLimiterCapacityMetrics {
+            max_capacity: Amount(1_000_000_000),
+            current_capacity: Amount(742_500_000),
+            replenishment_per_slot: Amount(11_500),
+            direction: RateLimiterDirection::Inbound,
+            route_id: WarpRouteId::from([0xab; 32]),
+            remote_domain: 0x1234,
+            route_name: route_name.to_string(),
+            decimals,
+        }
+    }
+
+    fn serialize(metrics: &RateLimiterCapacityMetrics) -> String {
+        let mut buffer = Vec::new();
+        metrics.serialize_for_telegraf(&mut buffer).unwrap();
+        String::from_utf8(buffer).unwrap()
+    }
+
+    #[test]
+    fn scales_raw_amounts_by_token_decimals() {
+        let line = serialize(&sample("USDC", 6));
+
+        assert!(
+            line.contains("max_capacity=1000,current_capacity=742.5,replenishment_per_slot=0.0115"),
+            "amounts should be scaled to whole tokens: {line}"
+        );
+    }
+
+    #[test]
+    fn escapes_route_name_tag() {
+        let line = serialize(&sample("USDC eth,v2", 0));
+
+        assert!(
+            line.contains(r"route_name=USDC\ eth\,v2"),
+            "spaces and commas in tag values must be escaped: {line}"
+        );
     }
 }

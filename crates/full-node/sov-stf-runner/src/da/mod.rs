@@ -6,8 +6,8 @@ mod finalized_headers_cache;
 pub use bulk_finalized_blocks_fetcher::FinalizedBlocksBulkFetcher;
 pub use finalized_headers_cache::DaServiceWithCachedFinalizedHeaders;
 
+use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::DaSyncState;
 
 const MAX_GET_BLOCK_ATTEMPTS: u32 = 10;
 

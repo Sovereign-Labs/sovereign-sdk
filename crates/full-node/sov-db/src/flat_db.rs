@@ -4,8 +4,10 @@
 use crate::historical_state::{HistoricalStateReader, STATE_ROOT_HASH_SINGLETON};
 use crate::metrics::nomt::FlatStateCommitMetric;
 use crate::{
+    config::{RocksDbKind, RollupDbConfigWithCustomizations},
     historical_state::StateChanges,
     namespaces::{KernelNamespace, UserNamespace},
+    rocks_db_config,
     schema::{namespace::NomtStateValues, tables::StateRootHashes},
     DbOptions,
 };
@@ -15,7 +17,7 @@ use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::CacheForVersionedDB;
 use rockbound::versioned_db::SchemaWithVersion;
 use rockbound::{
-    default_cf_descriptor, rocksdb::ColumnFamilyDescriptor, versioned_db::VersionedDB,
+    default_cf_descriptor_with, rocksdb::ColumnFamilyDescriptor, versioned_db::VersionedDB,
 };
 use rockbound::{rocksdb, SchemaBatch, DB};
 use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
@@ -37,36 +39,110 @@ impl FlatStateDb {
 
     /// Create a new [`FlatStateDb`] from a path.
     pub fn new(path: std::path::PathBuf, cache_size: usize) -> anyhow::Result<Self> {
-        let live_db = {
-            let mut live_columns = vec![default_cf_descriptor(StateRootHashes::table_name())];
+        Self::new_with_customizations(path, cache_size, None)
+    }
 
-            VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::add_live_db_column_families(
+    /// Create a new [`FlatStateDb`] from a path using RocksDB customizations from
+    /// [`RollupDbConfigWithCustomizations`].
+    pub(crate) fn new_with_customizations(
+        path: std::path::PathBuf,
+        cache_size: usize,
+        custom_config: Option<&RollupDbConfigWithCustomizations>,
+    ) -> anyhow::Result<Self> {
+        let live_db = {
+            let mut live_columns = vec![Self::default_cf_descriptor(
+                RocksDbKind::FlatStateLive,
+                StateRootHashes::table_name(),
+                custom_config,
+            )];
+
+            VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::add_live_db_column_families_with(
                 &mut live_columns,
+                |cf_name, versioned_kind, builder| {
+                    Self::customize_cf(
+                        RocksDbKind::FlatStateLive,
+                        cf_name,
+                        Some(versioned_kind),
+                        builder,
+                        custom_config,
+                    );
+                },
             )?;
-            VersionedDB::<NomtStateValues<KernelNamespace>, DbCache>::add_live_db_column_families(
+            VersionedDB::<NomtStateValues<KernelNamespace>, DbCache>::add_live_db_column_families_with(
                 &mut live_columns,
+                |cf_name, versioned_kind, builder| {
+                    Self::customize_cf(
+                        RocksDbKind::FlatStateLive,
+                        cf_name,
+                        Some(versioned_kind),
+                        builder,
+                        custom_config,
+                    );
+                },
             )?;
+
+            let live_db_options = custom_config
+                .map(|custom_config| custom_config.get_rocksdb_options(RocksDbKind::FlatStateLive))
+                .unwrap_or_else(|| {
+                    rocks_db_config::gen_rocksdb_options(&Default::default(), false)
+                });
 
             let live = Self::get_rockbound_options(live_columns)
-                .setup_db_in_path_with_column_descriptors(path.clone())?;
+                .setup_db_in_path_with_column_descriptors_with_options(
+                    path.clone(),
+                    &live_db_options,
+                )?;
             Arc::new(live)
         };
 
         let archival_db = {
             let archival_path = path.join(Self::ARCHIVAL_DB_PATH_SUFFIX);
 
-            let mut archival_columns = vec![default_cf_descriptor(StateRootHashes::table_name())];
+            let mut archival_columns = vec![Self::default_cf_descriptor(
+                RocksDbKind::FlatStateArchival,
+                StateRootHashes::table_name(),
+                custom_config,
+            )];
 
-            VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::add_archival_db_column_families(
+            VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::add_archival_db_column_families_with(
                 &mut archival_columns,
+                |cf_name, versioned_kind, builder| {
+                    Self::customize_cf(
+                        RocksDbKind::FlatStateArchival,
+                        cf_name,
+                        Some(versioned_kind),
+                        builder,
+                        custom_config,
+                    );
+                },
             )?;
 
-            VersionedDB::<NomtStateValues<KernelNamespace>, DbCache>::add_archival_db_column_families(
+            VersionedDB::<NomtStateValues<KernelNamespace>, DbCache>::add_archival_db_column_families_with(
                 &mut archival_columns,
+                |cf_name, versioned_kind, builder| {
+                    Self::customize_cf(
+                        RocksDbKind::FlatStateArchival,
+                        cf_name,
+                        Some(versioned_kind),
+                        builder,
+                        custom_config,
+                    );
+                },
             )?;
+
+            let archival_db_options = custom_config
+                .map(|custom_config| {
+                    custom_config.get_rocksdb_options(RocksDbKind::FlatStateArchival)
+                })
+                .unwrap_or_else(|| {
+                    rocks_db_config::gen_rocksdb_options(&Default::default(), false)
+                });
 
             let archival = Self::get_rockbound_options(archival_columns)
-                .setup_db_in_path_with_column_descriptors(archival_path)?;
+                .setup_db_in_path_with_column_descriptors_with_options(
+                    archival_path,
+                    &archival_db_options,
+                )?;
 
             Arc::new(archival)
         };
@@ -105,6 +181,28 @@ impl FlatStateDb {
             live_db,
             archival_db,
         })
+    }
+
+    fn default_cf_descriptor(
+        db_kind: RocksDbKind,
+        cf_name: &'static str,
+        custom_config: Option<&RollupDbConfigWithCustomizations>,
+    ) -> ColumnFamilyDescriptor {
+        default_cf_descriptor_with(cf_name, |cf_name, builder| {
+            Self::customize_cf(db_kind, cf_name, None, builder, custom_config);
+        })
+    }
+
+    fn customize_cf(
+        db_kind: RocksDbKind,
+        cf_name: &str,
+        versioned_kind: Option<rockbound::VersionedColumnFamilyKind>,
+        builder: &mut rockbound::CfDescriptorBuilder,
+        custom_config: Option<&RollupDbConfigWithCustomizations>,
+    ) {
+        if let Some(custom_config) = custom_config {
+            custom_config.customize_rocksdb_cf(db_kind, cf_name, versioned_kind, builder);
+        }
     }
 
     pub(crate) fn root_hash_from_live_db(&self) -> anyhow::Result<Option<[u8; 64]>> {
@@ -315,7 +413,8 @@ impl FlatStateDb {
 
         // Write archival db batches.
         #[cfg(feature = "test-utils")]
-        crate::test_utils::CrashLocation::BeforeCommittingArchival.crash_if_env_set();
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingArchival
+            .inject_fault_if_configured();
         self.archival_db.write_db_batch(archival_db_batch)?;
 
         // rockbound requirement:  `store_committed_archival_version` has to be called before before writing `live_db_batch`.
@@ -325,7 +424,8 @@ impl FlatStateDb {
         // Write live db batch.
         if is_commit {
             #[cfg(feature = "test-utils")]
-            crate::test_utils::CrashLocation::BeforeCommittingLive.crash_if_env_set();
+            crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLive
+                .inject_fault_if_configured();
             self.live_db.write_db_batch(live_db_batch)?;
         }
 
@@ -500,7 +600,7 @@ impl CacheForVersionedDB<NomtStateValues<KernelNamespace>> for DbCache {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::test_utils::CrashLocation;
+    use crate::test_utils::CommitFaultInjectionLocation;
     use sov_db_types::{SlotKey, SlotValue};
     use std::{collections::HashMap, panic::AssertUnwindSafe, vec};
     use tempfile::TempDir;
@@ -509,12 +609,12 @@ mod tests {
 
     #[test]
     fn test_rollback_crash_before_commiting_archival() -> anyhow::Result<()> {
-        test_rollback(CrashLocation::BeforeCommittingArchival, 0)
+        test_rollback(CommitFaultInjectionLocation::BeforeCommittingArchival, 0)
     }
 
     #[test]
     fn test_rollback_crash_before_committing_live() -> anyhow::Result<()> {
-        test_rollback(CrashLocation::BeforeCommittingLive, 1)
+        test_rollback(CommitFaultInjectionLocation::BeforeCommittingLive, 1)
     }
 
     fn assert_key_value(
@@ -538,7 +638,10 @@ mod tests {
 
     // This test commits data for version 0 of the rollup state and panics at various points during the commit for version 1.
     // Afterward, it checks whether the rollback logic correctly reverted the archival state.
-    fn test_rollback(crash_location: CrashLocation, archival_version: u64) -> anyhow::Result<()> {
+    fn test_rollback(
+        injection_location: CommitFaultInjectionLocation,
+        archival_version: u64,
+    ) -> anyhow::Result<()> {
         let tempdir = tempfile::tempdir().unwrap();
         let db_path = tempdir.path();
         let data = data_to_insert_per_version();
@@ -566,7 +669,7 @@ mod tests {
         }
 
         unlock_dbs(&tempdir);
-        crash_location.set_crash_env();
+        injection_location.set_crash_env();
 
         // Crash during commit of version 1.
         {

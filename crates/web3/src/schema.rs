@@ -288,7 +288,8 @@ pub enum TransactionBuilderError {
 /// Defines how transaction uniqueness is enforced to prevent replay attacks.
 ///
 /// The uniqueness mechanism ensures that each transaction can only be executed once
-/// on the blockchain. Two different strategies are supported: nonce-based and generation-based.
+/// on the blockchain. Three different strategies are supported: nonce-based,
+/// generation-based, and window-based.
 #[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub enum UniquenessData {
@@ -305,6 +306,12 @@ pub enum UniquenessData {
     /// hash within their generation. This allows for more flexible transaction
     /// ordering while still preventing replays.
     Generation(u64),
+    /// Window-based uniqueness using non-consecutive account nonces.
+    ///
+    /// Each account transaction must have a unique nonce, but the nonce does
+    /// not need to be consecutive as long as it falls within the configured
+    /// uniqueness window.
+    Window(u64),
 }
 
 /// Type alias for runtime calls represented as JSON objects.

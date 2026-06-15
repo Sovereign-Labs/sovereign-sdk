@@ -150,15 +150,13 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for BasicKernel<'_, S> {
             .unwrap_infallible()
     }
 
-    fn block_gas_limit<
-        Reader: VersionReader
-            + StateReader<Kernel, Error = Infallible>
-            + StateReader<User, Error = Infallible>,
-    >(
+    fn block_gas_limit(
         &self,
-        state: &mut Reader,
-    ) -> Option<<Self::Spec as Spec>::Gas> {
-        self.chain_state.block_gas_limit(state).unwrap_infallible()
+        current_rollup_height: RollupHeight,
+        is_stale_height: bool,
+    ) -> <Self::Spec as Spec>::Gas {
+        self.chain_state
+            .block_gas_limit(current_rollup_height, is_stale_height)
     }
 
     fn visible_hash_for(
@@ -224,6 +222,19 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for BasicKernel<'_, S> {
         state: &mut Reader,
     ) -> sov_modules_api::OperatingMode {
         self.chain_state.operating_mode(state).unwrap_infallible()
+    }
+
+    fn genesis_da_height<
+        Reader: VersionReader
+            + StateReader<User, Error = Infallible>
+            + StateReader<Kernel, Error = Infallible>,
+    >(
+        &self,
+        state: &mut Reader,
+    ) -> Option<u64> {
+        self.chain_state
+            .genesis_da_height(state)
+            .unwrap_infallible()
     }
 
     #[cfg(feature = "native")]

@@ -4,20 +4,41 @@ mod call;
 mod capabilities;
 mod event;
 mod genesis;
+mod metrics;
 mod registration;
 
 pub use call::*;
 pub use genesis::*;
+use serde::de::DeserializeOwned;
+use serde::{Deserialize, Serialize};
 use sov_bank::Amount;
 use sov_modules_api::runtime::OperatingMode;
 use sov_modules_api::{
-    Context, DaSpec, Gas, GenesisState, GetGasPrice, ModuleId, ModuleInfo, ModuleRestApi, Spec,
-    StateMap, StateReader, StateValue, TxState,
+    AggregatedProofPublicData, CodeCommitmentFor, Context, DaSpec, Gas, GenesisState, GetGasPrice,
+    ModuleId, ModuleInfo, ModuleRestApi, Spec, StateMap, StateReader, StateValue, TxState,
 };
 use sov_rollup_interface::common::SlotNumber;
+use sov_state::codec::BcsCodec;
+use sov_state::Storage;
 use sov_state::User;
 
 pub use crate::event::Event;
+
+/// A snapshot of the rollup values that an admin upgrade replaces. Stored once per
+/// upgrade, keyed by the proof's `final_slot_number`.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(bound(
+    serialize = "CodeCommitmentFor<S::OuterZkvm>: Serialize, CodeCommitmentFor<S::InnerZkvm>: Serialize, <S::Storage as Storage>::Root: Serialize",
+    deserialize = "CodeCommitmentFor<S::OuterZkvm>: DeserializeOwned, CodeCommitmentFor<S::InnerZkvm>: DeserializeOwned, <S::Storage as Storage>::Root: DeserializeOwned",
+))]
+pub struct AdminUpgrade<S: Spec> {
+    /// The outer code commitment claimed by the admin proof's public outputs.
+    pub outer_code_commitment: CodeCommitmentFor<S::OuterZkvm>,
+    /// The inner code commitment claimed by the admin proof's public outputs.
+    pub inner_code_commitment: CodeCommitmentFor<S::InnerZkvm>,
+    /// The origin state root claimed by the admin proof's public outputs.
+    pub origin_state_root: <S::Storage as Storage>::Root,
+}
 
 /// A new module:
 /// - Must derive `ModuleInfo`
@@ -59,6 +80,27 @@ pub struct ProverIncentives<S: Spec> {
     /// Reference to the Chain state module. Used to check the proof inputs
     #[module]
     pub(crate) chain_state: sov_chain_state::ChainState<S>,
+
+    /// Public data from the most recently accepted aggregated proof.
+    #[state]
+    #[allow(clippy::type_complexity)]
+    pub latest_proof_succesfully_verified:
+        StateValue<AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>>,
+
+    /// The admin prover address.
+    #[state]
+    pub admin: StateValue<S::Address>,
+
+    /// History of admin upgrades keyed by the final slot number of the admin proof
+    /// that introduced the upgrade. Each entry carries the new outer + inner code
+    /// commitments and the new origin state root that become canonical from that
+    /// slot onward.
+    #[state]
+    pub admin_upgrades: StateMap<SlotNumber, AdminUpgrade<S>, BcsCodec>,
+
+    /// The final slot number of the most recent admin upgrade.
+    #[state]
+    pub latest_admin_upgrade_slot: StateValue<SlotNumber>,
 }
 
 impl<S: Spec> sov_modules_api::Module for ProverIncentives<S> {

@@ -8,8 +8,8 @@ use sov_modules_api::macros::config_value;
 use sov_modules_api::Runtime;
 use sov_modules_api::Spec;
 use sov_modules_api::StateCheckpoint;
-use sov_modules_api::StateUpdateInfo;
 use sov_modules_api::VersionReader;
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_interface::common::SlotNumber;
 use tokio::time::Duration;
 use tracing::debug;
@@ -93,7 +93,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
 
     let node_next_sequence_number =
         get_next_sequence_number_according_to_node(info, &mut Rt::default());
-    let next_internal_sequence_number = inner.sequence_number_of_next_blob;
+    let next_internal_sequence_number = inner.next_unassigned_sequence_number;
 
     debug!(
         ?table,
@@ -146,15 +146,8 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
                     .flush_transactions_cache(info.next_tx_number)
                     .await;
 
-                // Since we're resuming "standard" execuiton, pay upfront to populate the pinned cache. This should speed up tx execution at the cost
-                // of some overhead now.
-                tracing::debug!(
-                    "Populating pinned cache for replica execution. This may take a few moments. "
-                );
-                let pinned_cache = Rt::populate_pinned_cache(&info.storage);
-                tracing::debug!("Pinned cache populated. Starting replica execution.");
                 let executor = Some(Box::new(
-                    inner.new_executor_with_empty_uncommitted_changes(info, pinned_cache),
+                    inner.new_executor_with_empty_uncommitted_changes(info),
                 ));
 
                 return PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(
@@ -218,7 +211,7 @@ async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
 ) -> PreferredSeqOperation<S, Rt> {
     // We only need to replay the transactions in the edge cases where the event/tx cache needs repopulating.
     // In all other cases, we can just accept the new storage and move on.
-    let executor = if initial_status.should_flush_tx_cache_and_pinned_cache() {
+    let executor = if initial_status.should_flush_tx_cache() {
         debug!(
             ?initial_status,
             "Proceeding with `replay_soft_confirmations_on_top_of_node_state`"
@@ -228,18 +221,13 @@ async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
             .flush_transactions_cache(info.next_tx_number)
             .await;
 
-        tracing::debug!(inner_status=?initial_status, "Populating pinned cache for replay. This may take a few moments. ");
-        let pinned_cache = Rt::populate_pinned_cache(&info.storage);
-        tracing::debug!("Pinned cache populated. Starting transaction replay.");
-        // On `should_flush_tx_cache_and_pinned_cache` we have to refill the cache the first time we `replay_soft_confirmations_on_top_of_node_state`
         Some(Box::new(
             // Since we're replaying from the node state, don't reuse any uncommitted changes
-            inner.new_executor_with_empty_uncommitted_changes(info, pinned_cache),
+            inner.new_executor_with_empty_uncommitted_changes(info),
         ))
     } else {
-        let rollup_height =
-            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
-                .rollup_height_to_access();
+        let rollup_height = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
+            .rollup_height_to_access();
         debug!(
             ? initial_status,
             % rollup_height,

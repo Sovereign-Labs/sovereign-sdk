@@ -86,3 +86,13 @@ fn initialize_logging_with_filter(filter: &str) {
         tracing::warn!(%error, "Cannot init logging, already happened.");
     }
 }
+
+/// Initialize logging for tests and benchmarks.
+///
+/// Unlike the production [`sov_modules_rollup_blueprint::logging::initialize_logging`], this leaks
+/// the returned guard. Test and bench processes are short-lived and frequently call this without
+/// binding the result; leaking keeps logging alive for the whole process without forcing every call
+/// site to hold the guard. Do **not** use this in production code.
+pub fn initialize_logging() {
+    std::mem::forget(sov_modules_rollup_blueprint::logging::initialize_logging());
+}

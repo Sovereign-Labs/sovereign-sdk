@@ -1,8 +1,8 @@
-use convert_case::{Case, Casing};
 use darling::ast::NestedMeta;
 use darling::util::{parse_attribute_to_meta_list, WithOriginal};
 use darling::FromMeta;
 use quote::ToTokens;
+use serde_derive_internals::attr::RenameRule;
 use syn::{Ident, Meta};
 
 /// For parsing: list of attributes to not ignore
@@ -48,7 +48,7 @@ impl Serde {
     fn rename_using_rename_all(&self, original: &Ident) -> Result<String, syn::Error> {
         match &self.rename_all {
             Some(str) if str.parsed == "snake_case" => {
-                Ok(original.to_string().to_case(Case::Snake))
+                Ok(RenameRule::SnakeCase.apply_to_variant(&original.to_string()))
             }
             Some(str) => Err(syn::Error::new_spanned(
                 &str.original,
@@ -93,4 +93,61 @@ pub fn parse_foreign_attrs(attrs: Vec<syn::Attribute>) -> darling::Result<Foreig
         }
     }
     Ok(res)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn snake_case_serde() -> Serde {
+        let attr: syn::Attribute = syn::parse_quote!(#[serde(rename_all = "snake_case")]);
+        parse_foreign_attrs(vec![attr]).expect("parses").serde
+    }
+
+    fn ident(name: &str) -> Ident {
+        Ident::new(name, proc_macro2::Span::call_site())
+    }
+
+    #[test]
+    fn snake_case_matches_serde_for_known_inputs() {
+        let s = snake_case_serde();
+        let cases = [
+            // This is a test case from Zeta,
+            // convert_case was producing `delegate_user_v_2`
+            ("DelegateUserV2", "delegate_user_v2"),
+            ("DelegateUserV1", "delegate_user_v1"),
+            // Digits don't trigger an underscore split, but the following
+            // uppercase letter does, so this lands as `user2_f_a`.
+            ("User2FA", "user2_f_a"),
+            ("Foo123Bar", "foo123_bar"),
+            // Serde's algorithm has no concept of acronyms — every uppercase
+            // (after position 0) gets an underscore prepended.
+            ("HTTPRequest", "h_t_t_p_request"),
+            ("A", "a"),
+            ("AB", "a_b"),
+            ("alllowercase", "alllowercase"),
+            ("DelegateUser", "delegate_user"),
+        ];
+        for (input, expected) in cases {
+            assert_eq!(
+                s.rename_variant(&ident(input)).unwrap(),
+                expected,
+                "variant {input}"
+            );
+            assert_eq!(
+                s.rename_field(&ident(input)).unwrap(),
+                expected,
+                "field {input}"
+            );
+        }
+    }
+
+    #[test]
+    fn no_rename_all_is_passthrough() {
+        let s = Serde::default();
+        for input in ["DelegateUserV2", "Foo", "snake_already"] {
+            assert_eq!(s.rename_variant(&ident(input)).unwrap(), input);
+            assert_eq!(s.rename_field(&ident(input)).unwrap(), input);
+        }
+    }
 }

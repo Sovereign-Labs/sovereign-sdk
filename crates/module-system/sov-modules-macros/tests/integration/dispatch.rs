@@ -5,7 +5,7 @@ use sov_modules_api::{
     Genesis, MessageCodec, Module, ModuleInfo, SequencerType, Spec, StateValue, TxState,
     WorkingSet,
 };
-use sov_state::ZkStorage;
+use sov_state::nomt::zk_storage::NomtVerifierStorage;
 use sov_test_utils::{TestSpec, ZkTestSpec};
 use third_test_module::ModuleThreeStorable;
 
@@ -167,6 +167,8 @@ pub mod third_test_module {
     pub trait ModuleThreeStorable:
         borsh::BorshSerialize
         + borsh::BorshDeserialize
+        + serde::Serialize
+        + serde::de::DeserializeOwned
         + UniversalWallet
         + schemars::JsonSchema
         + core::fmt::Debug
@@ -317,12 +319,9 @@ mod derive_genesis {
 
     #[test]
     fn derive_genesis() {
-        let storage = ZkStorage::new();
-        let mut state = sov_modules_api::StateCheckpoint::new(
-            storage,
-            &MockKernel::<ZkTestSpec>::default(),
-            None,
-        );
+        let storage = NomtVerifierStorage::new();
+        let mut state =
+            sov_modules_api::StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default());
         let runtime = &mut Runtime::<ZkTestSpec, u32>::default();
         let config = GenesisConfig::new(Default::default(), (), ());
         let mut genesis_state =
@@ -383,13 +382,10 @@ mod derive_dispatch {
 
         let runtime = &mut RT::default();
 
-        let storage = ZkStorage::new();
+        let storage = NomtVerifierStorage::new();
 
-        let mut state = sov_modules_api::StateCheckpoint::new(
-            storage,
-            &MockKernel::<ZkTestSpec>::default(),
-            None,
-        );
+        let mut state =
+            sov_modules_api::StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default());
         let config = GenesisConfig::new(Default::default(), (), ());
         let mut genesis_state =
             state.to_genesis_state_accessor::<Runtime<ZkTestSpec, u32>>(&config);

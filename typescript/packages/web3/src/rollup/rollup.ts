@@ -18,7 +18,7 @@ export type UnsignedTransactionContext<
   C extends RollupContext,
 > = {
   runtimeCall: S["RuntimeCall"];
-  // Provides the ability to override the generation data instead of retrieving it automatically.
+  // Provides the ability to override transaction uniqueness instead of retrieving it automatically.
   overrides: DeepPartial<S["UnsignedTransaction"]>;
   rollup: Rollup<S, C>;
 };
@@ -140,7 +140,7 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
    * Retrieve dedup information about the provided address.
    *
    * @param publicKey - The public key to dedup.
-   * TODO: How to add param for generation explicitly
+   * TODO: How to request a specific uniqueness strategy explicitly
    */
   async dedup(publicKey: Uint8Array): Promise<S["Dedup"]> {
     // for public key credential id is just its bytes representation

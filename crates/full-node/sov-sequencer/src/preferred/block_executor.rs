@@ -5,21 +5,23 @@ use std::sync::Arc;
 use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
+use borsh::BorshDeserialize;
+use sov_blob_storage::PreferredProofData;
 use sov_modules_api::capabilities::{
     get_maybe_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState,
-    FatalError, RollupHeight, TransactionAuthenticator,
+    FatalError, HasCapabilities, RollupHeight, SequencingDataHandler, TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
-    call_message_repr, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx, Gas,
-    GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
+    call_message_repr, Amount, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx,
+    Gas, GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
     RuntimeEventProcessor, RuntimeEventResponse, SelectedBlob, Spec, StateCheckpoint,
-    StateUpdateInfo, TransactionReceipt, TxChangeSet, TxHash, VersionReader, VisibleSlotNumber,
+    TransactionReceipt, TxChangeSet, TxHash, VersionReader, VisibleSlotNumber,
 };
 use sov_modules_api::{CryptoSpec, HDTimestamp};
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rest_utils::{json_obj, ErrorObject};
-use sov_state::pinned_cache::PinnedCache;
+use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};
 use tokio::sync::broadcast;
@@ -37,8 +39,8 @@ use super::{
 use crate::common::AcceptedTx;
 use crate::common::ForcedTxBatchNotification;
 use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
-use crate::preferred::exit_rollup;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
+use crate::preferred::{exit_rollup, PreferredProofToReplay};
 use crate::SequencerConfig;
 
 pub(crate) struct AcceptedTxWithBudgetInfo<S, Rt>
@@ -125,6 +127,7 @@ pub struct StartBlockData<S: Spec> {
     pub node_state_root: <S::Storage as Storage>::Root,
     pub minimum_profit_per_tx: u128,
     pub is_responsible_for_gating_admins: bool,
+    pub proofs_to_replay: Vec<PreferredProofToReplay>, // The proofs to replay before starting the batch
 }
 
 #[derive(Clone)]
@@ -189,7 +192,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
-        pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
         Self::new_helper(
             info,
@@ -197,7 +199,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             rollup_exec_config,
             seq_config,
             uncommitted_changes,
-            pinned_cache,
         )
     }
 
@@ -207,7 +208,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
-        pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
         Self::new_helper(
             info,
@@ -215,7 +215,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             rollup_exec_config,
             seq_config,
             uncommitted_changes,
-            pinned_cache,
         )
     }
 
@@ -225,10 +224,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
-        pinned_cache: Option<PinnedCache>,
     ) -> Self {
         let mut rt = Rt::default();
-        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), pinned_cache);
+        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
 
         let RollupBlockExecutorConfig {
             da_address,
@@ -282,6 +280,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.next_event_number = other.next_event_number;
         self.next_tx_number = other.next_tx_number;
         self.uncommitted_changes = other.uncommitted_changes;
+        self.id = other.id;
 
         // Update our list of state roots from the other executor.
         self.state_roots = other.state_roots;
@@ -304,8 +303,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
 
         match result {
-            Ok((receipt, remaining_slot_gas, execution_time_micros, tx_changes)) => {
-                let accepted_tx = self.process_tx_receipt(&receipt, timestamp);
+            Ok((receipt, tx, remaining_slot_gas, execution_time_micros, tx_changes)) => {
+                let accepted_tx = self.process_tx_receipt(receipt, tx, timestamp);
                 if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
                     writer.insert(accepted_tx.clone()).await;
                 }
@@ -326,7 +325,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         &mut self,
         baked_tx: FullyBakedTxWithMaybeChangeSet,
     ) -> Result<
-        (TransactionReceipt<S>, <S as Spec>::Gas, u64, TxChangeSet),
+        (
+            TransactionReceipt<S>,
+            FullyBakedTx,
+            <S as Spec>::Gas,
+            u64,
+            TxChangeSet,
+        ),
         RollupBlockExecutorErrorWithBudget<S>,
     > {
         let Some(task_state) = self.rollup_block_task_state.as_mut() else {
@@ -367,9 +372,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         } = result;
 
         let ExecutedTxResponse {
-            receipt,
+            mut receipt,
             tx_changes,
             remaining_slot_gas,
+            sequencing_scratchpad,
         } = inner_result.map_err(|reason| RollupBlockExecutorErrorWithBudget {
             execution_time_micros,
             gas_used,
@@ -387,10 +393,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             });
         }
 
+        let mut tx = receipt
+            .body_to_save
+            .take()
+            .expect("Transaction receipts contain bodies when using sov-modules-stf-blueprint");
+        Self::finalize_tx_sequencing_data(&mut tx, sequencing_scratchpad);
+
         self.checkpoint.apply_tx_changes(tx_changes.clone());
 
         Ok((
             receipt,
+            tx,
             remaining_slot_gas,
             execution_time_micros,
             tx_changes,
@@ -402,6 +415,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     pub async fn replay_batch(
         &mut self,
         batch: &PreferredBatchToReplay,
+        proofs: Vec<PreferredProofToReplay>,
         node_state_root: &<S::Storage as Storage>::Root,
     ) -> anyhow::Result<()> {
         self.start_rollup_block_for_replay(
@@ -409,6 +423,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             batch.batch.inner.visible_slots_to_advance,
             node_state_root,
             batch.batch.inner.data.len(),
+            proofs,
         )
         .await;
 
@@ -448,6 +463,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         // fallible, so it's convenient to front-load the error-checking.
         node_state_root: &<S::Storage as Storage>::Root,
         num_txs: usize,
+        proofs_to_replay: Vec<PreferredProofToReplay>, // The proofs to replay before starting the batch
     ) {
         assert!(
             self.rollup_block_task_state.is_none(),
@@ -474,6 +490,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             minimum_profit_per_tx: 0,
             // During replay, we don't need to enforce admin configs - and we don't want to reject any previously accepted transactions if the config changed.
             is_responsible_for_gating_admins: false,
+            proofs_to_replay,
         };
 
         self.start_rollup_block(start_block_data).await;
@@ -569,6 +586,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             visible_increase,
             minimum_profit_per_tx,
             is_responsible_for_gating_admins,
+            proofs_to_replay,
             ..
         } = start_block_data;
 
@@ -592,7 +610,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             let ctx = RollupBlockTaskContext {
                 checkpoint: self
                     .checkpoint
-                    .clone_with_empty_witness_dropping_temp_cache_but_taking_pinned_cache(), // Pass the pinned cache through to the actual executor
+                    .clone_with_empty_witness_dropping_temp_cache(),
                 tx_receiver,
                 setup_sender,
                 old_visible_slot_number,
@@ -607,6 +625,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 sequencer_da_address: self.da_address,
                 executor_context,
                 is_responsible_for_gating_admins,
+                proofs_to_replay,
             };
 
             move || rollup_block_task_body::<S, Rt>(ctx)
@@ -634,12 +653,18 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     fn process_tx_receipt(
         &mut self,
-        tx_receipt: &TransactionReceipt<S>,
+        tx_receipt: TransactionReceipt<S>,
+        tx: FullyBakedTx,
         timestamp: Option<HDTimestamp>,
     ) -> AcceptedTx<Confirmation<S, Rt>> {
+        let TransactionReceipt {
+            tx_hash,
+            body_to_save: _,
+            events,
+            receipt,
+        } = tx_receipt;
         let tx_number = self.next_tx_number;
-        let events = tx_receipt
-            .events
+        let events = events
             .iter()
             .zip(self.next_event_number..)
             .map(|(event, number)| {
@@ -653,18 +678,33 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.next_event_number += events.len() as u64;
         self.next_tx_number += 1;
         AcceptedTx {
-            tx: tx_receipt
-                .body_to_save
-                .clone()
-                .expect("Transaction receipts contain bodies when using sov-modules-stf-blueprint"),
-            tx_hash: tx_receipt.tx_hash,
+            tx,
+            tx_hash,
             confirmation: Confirmation {
                 events,
-                receipt: tx_receipt.receipt.clone().into(),
+                receipt: receipt.into(),
                 tx_number,
                 timestamp_nanos: timestamp,
             },
         }
+    }
+
+    fn finalize_tx_sequencing_data(
+        tx: &mut FullyBakedTx,
+        scratchpad: Option<sov_rollup_interface::Bytes>,
+    ) {
+        let Some(data) = tx.sequencing_data.as_ref() else {
+            return;
+        };
+        let Ok(decoded) = <Rt as HasCapabilities<S>>::SequencingData::try_from_slice(data) else {
+            tracing::warn!("Failed to deserialize sequencing data while finalizing transaction");
+            return;
+        };
+
+        let mut runtime = Rt::default();
+        let mut handler = runtime.sequencing_data_handler();
+        let finalized = handler.finalize_sequencing_data(decoded, scratchpad);
+        tx.set_sequencing_metadata(&finalized);
     }
 
     fn update_kernel_with_user_state_root(&mut self) {
@@ -766,7 +806,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         trace!("Ending rollup block");
 
         let rollup_height = self.checkpoint.rollup_height_to_access();
-        let (batch_receipts, mut new_checkpoint) = self
+        let (batch_receipts, new_checkpoint) = self
             .rollup_block_task_state
             .take()
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it")
@@ -781,8 +821,11 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             if batch_receipt.inner.da_address == self.da_address {
                 continue;
             }
-            for tx_receipt in batch_receipt.tx_receipts {
-                let accepted_tx = self.process_tx_receipt(&tx_receipt, None);
+            for mut tx_receipt in batch_receipt.tx_receipts {
+                let tx = tx_receipt.body_to_save.take().expect(
+                    "Transaction receipts contain bodies when using sov-modules-stf-blueprint",
+                );
+                let accepted_tx = self.process_tx_receipt(tx_receipt, tx, None);
                 forced_txs.push(accepted_tx);
             }
         }
@@ -798,13 +841,12 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             "Sending state root computation request to background task");
         let (response_channel, response_receiver) = oneshot::channel();
         self.state_root_responses.push_back(response_receiver);
-        // TODO: Combine these methods into one
-        let pinned_cache = new_checkpoint.take_pinned_cache();
         let changes = Arc::new(new_checkpoint.to_raw_state_changes());
 
         if self
             .state_root_request_sender
             .send(StateRootComputeRequest {
+                executor_id: self.id,
                 raw_state_changes: changes.clone(),
                 uncommitted_changes: self.uncommitted_changes.clone(),
                 storage: self.checkpoint.storage().clone(),
@@ -824,7 +866,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             self.checkpoint.storage().clone(),
             &Rt::default().kernel(),
             Box::new(self.uncommitted_changes.clone()),
-            pinned_cache,
         );
 
         trace!(%rollup_height, "Successfully ended rollup block");
@@ -869,6 +910,7 @@ struct RollupBlockTaskContext<S: Spec> {
     /// Whether this instance of the executor is responsible for gating admins.
     /// This is not true for replicas or when replaying txs that have already been accepted
     is_responsible_for_gating_admins: bool,
+    proofs_to_replay: Vec<PreferredProofToReplay>,
 }
 
 fn rollup_block_task_body<S, Rt>(ctx: RollupBlockTaskContext<S>) -> BlockExecutionOutput<S>
@@ -892,6 +934,7 @@ where
         sequencer_da_address,
         executor_context,
         is_responsible_for_gating_admins,
+        proofs_to_replay,
     } = ctx;
 
     let _span = match executor_context {
@@ -921,10 +964,18 @@ where
     let next_gas_price = kernel
         .base_fee_per_gas(&mut accessor)
         .unwrap_or(S::initial_base_fee_per_gas());
-    let needed_gas_escrow = S::max_tx_check_costs()
+    // Note that we need to escrow gas for each batch and proof. The escrow amount is `max_tx_check_costs` in each case.
+    let standard_gas_escrow = S::max_tx_check_costs()
         .checked_value(next_gas_price)
         .expect("Gas price overflow! This is a bug, please report it.");
-    kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
+    let needed_gas_escrow_for_preferred_sequencer =
+    // The blob sender decides what the gas limit should be *before* we call `increment_rollup_height`. Use the same height
+        if old_rollup_height > <S as GasSpec>::change_gas_limit_after_height() {
+            Amount::ZERO
+        } else {
+            standard_gas_escrow
+        };
+    kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow_for_preferred_sequencer, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
 
     let blob_selector_output = {
         let preferred_blob = SelectedBlob {
@@ -937,7 +988,7 @@ where
                 sequencer_rollup_address,
                 is_responsible_for_gating_admins,
             )),
-            reserved_gas_tokens: Some(needed_gas_escrow),
+            reserved_gas_tokens: Some(needed_gas_escrow_for_preferred_sequencer),
             sender: sequencer_da_address,
         };
 
@@ -955,7 +1006,7 @@ where
                 // Batches from unregistered sequencers don't reserve any gas
                 // tokens.
                 if b.reserved_gas_tokens.is_some() {
-                    b.reserved_gas_tokens = Some(needed_gas_escrow);
+                    b.reserved_gas_tokens = Some(standard_gas_escrow);
                 }
                 b.map_batch(MaybeAsyncBatch::<S>::new_sync)
             })
@@ -963,8 +1014,23 @@ where
 
         tracing::debug!(count = %non_preferred_blobs.len(), "Extracted non-preferred blobs");
 
-        let mut selected_blobs = vec![preferred_blob];
-        selected_blobs.extend(non_preferred_blobs);
+        let selected_blobs = proofs_to_replay
+            .into_iter()
+            .map(|p| {
+                kernel.escrow_funds_for_preferred_sequencer(needed_gas_escrow_for_preferred_sequencer, &mut accessor).expect("Failed to escrow funds for the preferred sequencer. The sequencer is too low on funds, which could cause soft confirmations to be invalidated. Increase your bond and restart the sequencer.");
+                let proof_with_sequence_number = PreferredProofData::try_from_slice(&p.data.0).expect("Failed to deserialize trusted proof data within the sequencer. This is a bug, please report it.");
+                SelectedBlob {
+                blob_data: BlobDataWithId::Proof {
+                    proof: proof_with_sequence_number.data.into(),
+                    id: [0u8; 32], // Following the preferred batch logic, we use the zero hash for proofs whose blob ID is unknown because they haven't been published yet
+                    sequencer_address: sequencer_rollup_address,
+                },
+                reserved_gas_tokens: Some(needed_gas_escrow_for_preferred_sequencer),
+                sender: sequencer_da_address,
+            }})
+            .chain(std::iter::once(preferred_blob))
+            .chain(non_preferred_blobs)
+            .collect::<Vec<_>>();
 
         BlobSelectorOutput {
             selected_blobs,

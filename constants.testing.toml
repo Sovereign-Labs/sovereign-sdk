@@ -10,6 +10,8 @@ freeze = [1, 1]
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
 CHAIN_HASH_OVERRIDES = []
+# The number of bytes a transaction can have.
+MAX_TX_SIZE=1_048_576
 # We will keep only this many blocks in the EVM module.
 EVM_BLOCK_PRUNING_THRESHOLD = 10000
 # Rollup for production and EVM for benchmarks
@@ -44,6 +46,8 @@ UNREGISTERED_BLOBS_PER_SLOT = 5
 # How many past transaction generations into the past to keep per-account buckets for
 # Higher numbers give more flexibility to avoid collisions, lower numbers reduce the maximum amount of storage used
 PAST_TRANSACTION_GENERATIONS = 5_000
+# The maximum number of past transactions to keep in the windowed uniqueness.
+PAST_TRANSACTIONS_WINDOW = { const = 1_000 }
 # The maximum number of transactions hashes we remember per credential. 
 # Higher numbers allow accounts to send more transactions without updating their generation number. 
 # This is more user friendly for power users, but increases the worst case cost of the uniqueness check.
@@ -132,6 +136,8 @@ PERCENT_BASE_FEE_TO_BURN = 10
 # --- Gas fee adjustment parameters: See https://eips.ethereum.org/EIPS/eip-1559 for a detailed description ---
 # The initial gas limit of the rollup.
 INITIAL_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
+UPDATED_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
+CHANGE_GAS_LIMIT_AFTER_HEIGHT = 9223372036854775807
 # The initial "base fee" that every transaction emits when executed.
 INITIAL_BASE_FEE_PER_GAS = [10, 10]
 # The maximum change denominator of the base fee.
@@ -265,12 +271,12 @@ REVENUE_SHARE_DISCRIMINANT = 17
 SOLANA_REGISTRATION_DISCRIMINANT = 18
 SESSION_REGISTRY_DISCRIMINANT = 19
 BLACKLIST_DISCRIMINANT = 20
-
+TIMELOCK_DISCRIMINANT = 21
 
 # Test modules
 TEST_DEX_DISCRIMINANT = 228
 SEQUENCING_DATA_TESTER_DISCRIMINANT = 229
-PINNED_CACHE_TESTER_DISCRIMINANT = 230
+STATE_MAP_TESTER_DISCRIMINANT = 230
 STATE_CONSISTENCY_DISCRIMINANT = 231
 MODULE_WITH_VERSIONED_STATE_ACCESS_IN_SLOT_HOOK_DISCRIMINANT = 232
 GAS_TESTER_DISCRIMINANT = 233

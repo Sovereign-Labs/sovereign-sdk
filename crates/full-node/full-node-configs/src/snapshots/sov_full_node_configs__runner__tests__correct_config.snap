@@ -1,5 +1,6 @@
 ---
 source: crates/full-node/full-node-configs/src/runner.rs
+assertion_line: 257
 expression: config
 ---
 {
@@ -50,9 +51,12 @@ expression: config
   "proof_manager": {
     "aggregated_proof_block_jump": 22,
     "prover_address": "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
-    "max_number_of_transitions_in_db": 1025,
-    "max_number_of_transitions_in_memory": 768,
-    "storage_path": null
+    "max_number_of_transitions_in_db": 1000,
+    "max_number_of_transitions_in_memory": 100,
+    "eager_proof_submission": true,
+    "prover_thread_count_override": null,
+    "max_number_of_aggregated_proofs_in_memory": 5,
+    "max_concurrent_proof_blobs": 16
   },
   "sequencer": {
     "automatic_batch_production": true,
@@ -65,7 +69,7 @@ expression: config
       "max_batch_size_bytes": null
     },
     "max_batch_size_bytes": 1048576,
-    "max_concurrent_blobs": 16,
+    "max_concurrent_batch_blobs": 16,
     "blob_processing_timeout_secs": 60,
     "extension": null
   },

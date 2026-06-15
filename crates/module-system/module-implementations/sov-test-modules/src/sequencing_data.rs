@@ -2,6 +2,9 @@ use anyhow::{bail, ensure, Context as _};
 use chrono::{TimeZone, Utc};
 use sov_modules_api::{Context, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, Spec, TxState};
 
+#[cfg(feature = "native")]
+pub const SCRATCHPAD_TIMESTAMP_NANOS: u128 = 1_987_654_321_000_000_000;
+
 #[derive(Clone, ModuleInfo)]
 pub struct SequencingDataTester<S: Spec> {
     #[id]
@@ -45,6 +48,10 @@ impl<S: Spec> Module for SequencingDataTester<S> {
             timestamp,
             reasonable_range
         );
+        #[cfg(feature = "native")]
+        context
+            .sequencing_scratchpad()
+            .set(SCRATCHPAD_TIMESTAMP_NANOS.to_le_bytes().to_vec().into());
         Ok(())
     }
 }

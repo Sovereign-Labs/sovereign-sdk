@@ -8,18 +8,31 @@ use std::sync::Arc;
 use std::thread::sleep;
 use std::time::{Duration, SystemTime};
 
+use std::marker::PhantomData;
+
 use anyhow::{bail, Context};
+use async_trait::async_trait;
 use cli::BenchRunnerCLI;
 use demo_stf::runtime::{GenesisConfig, Runtime, RuntimeCall};
 use helpers::{BatchReceiver, BatchSender};
 use humantime::Timestamp;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::NomtStorageManager;
 use sov_metrics::{timestamp, TelegrafSocketConfig};
+use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
+use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::{CryptoSpec, Spec};
-use sov_state::{DefaultStorageSpec, ProverStorage};
+use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
+use sov_risc0_adapter::host::Risc0Host;
+use sov_risc0_adapter::Risc0;
+use sov_rollup_interface::da::DaSpec;
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::{DefaultStorageSpec, Storage};
+use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
+use sov_stf_runner::RollupConfig;
+use sov_test_utils::ledger_db::sov_api_spec::ClientInfo;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
-use sov_test_utils::{MockDaSpec, RtAgnosticBlueprint};
+use sov_test_utils::{MockDaSpec, ProverFactory, RtAgnosticBlueprint};
 use sov_transaction_generator::generators::basic::{BasicChangeLogEntry, BasicClientConfig};
 use sov_transaction_generator::{assert_logs_against_state, GeneratedMessage};
 use tokio::sync::mpsc;
@@ -27,15 +40,54 @@ use tracing::{info, trace};
 
 use crate::bench_generator::BenchmarkData;
 use crate::bench_runner::cli::MetricsCLI;
-use crate::{mock_da_risc0_host_args, BenchRisc0Spec, DEFAULT_FINALIZATION_BLOCKS};
+use crate::{BenchRisc0Spec, DEFAULT_FINALIZATION_BLOCKS};
 
 pub type S = BenchRisc0Spec;
 pub type RT = Runtime<S>;
-type JmtStorageManager = NativeStorageManager<
-    MockDaSpec,
-    ProverStorage<DefaultStorageSpec<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>>,
->;
-pub type BenchBlueprint = RtAgnosticBlueprint<S, RT, JmtStorageManager>;
+type Hasher = <<S as Spec>::CryptoSpec as CryptoSpec>::Hasher;
+type BenchNativeStorage =
+    NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
+type BenchStorageManager = NomtStorageManager<MockDaSpec, Hasher, BenchNativeStorage>;
+
+/// Parallel prover factory for the Risc0 inner VM benchmarks.
+pub struct Risc0ProverFactory<S>(PhantomData<S>);
+
+#[async_trait]
+impl<S> ProverFactory<S> for Risc0ProverFactory<S>
+where
+    S: Spec<Da = MockDaSpec, InnerZkvm = Risc0, OuterZkvm = MockZkvm> + PluggableSpec,
+{
+    type ProverService = ParallelProverService<
+        <S as Spec>::Address,
+        <<S as Spec>::Storage as Storage>::Root,
+        <<S as Spec>::Storage as Storage>::Witness,
+        StorableMockDaService,
+        Risc0,
+        MockZkvm,
+    >;
+
+    async fn create(
+        _prover_config: RollupProverConfig,
+        rollup_config: &RollupConfig<<S as Spec>::Address, StorableMockDaService>,
+    ) -> Self::ProverService {
+        let inner_vm = Risc0Host::new(risc0::MOCK_DA_ELF);
+        let outer_vm = MockZkvmHost::new_non_blocking();
+
+        let proof_manager = rollup_config
+            .proof_manager
+            .as_ref()
+            .expect("proof_manager must be set when prover is enabled");
+        ParallelProverService::new_with_default_workers(
+            inner_vm,
+            outer_vm,
+            Default::default(),
+            proof_manager.prover_address,
+            5,
+        )
+    }
+}
+
+pub type BenchBlueprint = RtAgnosticBlueprint<S, RT, BenchStorageManager, Risc0ProverFactory<S>>;
 pub type BenchRollup = TestRollup<BenchBlueprint>;
 pub type BenchRollupBuilder = RollupBuilder<BenchBlueprint>;
 pub type BenchLogs = BasicChangeLogEntry<S>;
@@ -97,9 +149,9 @@ pub async fn setup_rollup(
         BlockProducingConfig::Manual,
         DEFAULT_FINALIZATION_BLOCKS,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
+    .enable_prover()
     .set_config(|config| {
-        config.max_concurrent_blobs = 1024;
+        config.max_concurrent_batch_blobs = 1024;
         config.prover_address = prover_address.to_string();
         config.automatic_batch_production = true;
         config.telegraf_address = telegraf_address;
@@ -240,7 +292,7 @@ async fn runner(
         assert_logs_against_state(
             log_accumulator,
             Arc::new(BasicClientConfig {
-                url: rollup.api_client().baseurl().clone(),
+                url: rollup.api_client().baseurl().to_string(),
                 rollup_height: None,
             }),
             assert_logs,

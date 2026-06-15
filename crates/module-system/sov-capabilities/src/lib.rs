@@ -14,7 +14,6 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
 };
-use sov_modules_api::ExecutionContext;
 use sov_modules_api::HDTimestamp;
 use sov_modules_api::SequencerType;
 use sov_modules_api::{
@@ -22,11 +21,10 @@ use sov_modules_api::{
     InvalidProofError, ModuleInfo, OperatingMode, Rewards, SovAttestation,
     SovStateTransitionPublicData, Spec, StateAccessor, StateReader, StateWriter, Storage, TxState,
 };
+use sov_modules_api::{ExecutionContext, GasSpec, VersionReader};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::Bytes;
-#[cfg(feature = "native")]
-use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer_registry::SequencerRegistry;
 use sov_state::{Kernel, User};
 
@@ -200,7 +198,8 @@ where
         Accessor: StateReader<Kernel, Error = Infallible>
             + StateWriter<Kernel, Error = Infallible>
             + StateWriter<User, Error = Infallible>
-            + StateReader<User, Error = Infallible>,
+            + StateReader<User, Error = Infallible>
+            + VersionReader,
     >(
         &mut self,
         bond_amount: Amount,
@@ -208,7 +207,14 @@ where
         sequencer: &<S::Da as DaSpec>::Address,
         state: &mut Accessor,
     ) {
-        let mut net_amount = bond_amount.checked_sub(reward.accumulated_penalty).expect("A sequencer can never be penalized more than the amount they have escrowed, regardless of reward accumulation!");
+        // Only the preferred sequencer is allowed to bond zero tokens. After the gas limit change height, we no longer penalize the preferred sequencer.
+        let mut net_amount = if bond_amount == Amount::ZERO
+            && state.rollup_height_to_access() > <S as GasSpec>::change_gas_limit_after_height()
+        {
+            Amount::ZERO
+        } else {
+            bond_amount.checked_sub(reward.accumulated_penalty).expect("A sequencer can never be penalized more than the amount they have escrowed, regardless of reward accumulation!")
+        };
         net_amount = net_amount.checked_add(reward.accumulated_reward).expect("Total sequencer reward + escrow amount is greater than the max possible token supply. This is a bug in gas accounting.");
 
         self.sequencer_registry.add_to_stake(
@@ -358,8 +364,8 @@ impl<S: Spec, T> ProofProcessor<S> for StandardProvenRollupCapabilities<'_, S, T
     fn create_bonding_proof_service<K: HasKernel<S>>(
         &self,
         attester_address: <S as Spec>::Address,
-        state_update_info: sov_modules_api::prelude::tokio::sync::watch::Receiver<
-            StateUpdateInfo<<S as Spec>::Storage>,
+        storage_receiver: sov_modules_api::prelude::tokio::sync::watch::Receiver<
+            <S as Spec>::Storage,
         >,
     ) -> Self::BondingProofService<K> {
         use sov_attester_incentives::BondingProofServiceImpl;
@@ -367,7 +373,7 @@ impl<S: Spec, T> ProofProcessor<S> for StandardProvenRollupCapabilities<'_, S, T
         BondingProofServiceImpl::new(
             attester_address,
             self.attester_incentives.clone(),
-            state_update_info,
+            storage_receiver,
         )
     }
 
@@ -376,6 +382,7 @@ impl<S: Spec, T> ProofProcessor<S> for StandardProvenRollupCapabilities<'_, S, T
         &mut self,
         proof: SerializedAggregatedProof,
         prover_address: &S::Address,
+        execution_context: ExecutionContext,
         state: &mut ST,
     ) -> Result<
         (
@@ -384,9 +391,12 @@ impl<S: Spec, T> ProofProcessor<S> for StandardProvenRollupCapabilities<'_, S, T
         ),
         InvalidProofError,
     > {
-        let result = self
-            .prover_incentives
-            .process_proof(&proof, prover_address, state)?;
+        let result = self.prover_incentives.process_proof(
+            &proof,
+            prover_address,
+            execution_context,
+            state,
+        )?;
 
         Ok((result, proof))
     }
@@ -407,14 +417,14 @@ impl<S: Spec, T> ProofProcessor<S> for StandardProvenRollupCapabilities<'_, S, T
     fn process_challenge<ST: TxState<S> + GetGasPrice<Spec = S>>(
         &mut self,
         proof: sov_rollup_interface::optimistic::SerializedChallenge,
-        rollup_height: SlotNumber,
+        slot_number: SlotNumber,
         prover_address: &<S as Spec>::Address,
         state: &mut ST,
     ) -> Result<SovStateTransitionPublicData<S>, InvalidProofError> {
         let result = self.attester_incentives.process_challenge(
             prover_address,
             &proof,
-            rollup_height,
+            slot_number,
             state,
         )?;
 

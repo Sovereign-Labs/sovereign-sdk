@@ -13,7 +13,6 @@ use sov_modules_api::{
 };
 use sov_test_utils::TestSpec;
 use utoipa::openapi::path::ParameterIn;
-use utoipa::openapi::PathItemType;
 
 #[derive(Debug, Clone, borsh::BorshSerialize, borsh::BorshDeserialize)]
 pub struct Foo {
@@ -137,14 +136,16 @@ async fn rest_api_routes() {
     let storage = storage_manager.create_storage();
     let (_sender, receiver) =
         tokio::sync::watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None),
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default()),
         )));
     let runtime = MyRuntime::<TestSpec>::default();
+    let (_shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let state = ApiState::build(
         Arc::new(()),
         receiver,
         Arc::new(MockKernel::default()),
         None,
+        shutdown_receiver,
     );
 
     let router = runtime.rest_api(state);
@@ -179,12 +180,12 @@ async fn rest_api_routes() {
     // 2. Module details
     // 3-4. State values
     // 5-6. Vec: info and item
-    // 7-8. Map: info and item
-    let expected_paths_count = 8;
+    // 7-9. Map: info, collection, and item
+    let expected_paths_count = 9;
     println!("spec.paths.paths: {:#?}", spec.paths.paths);
     assert_eq!(expected_paths_count, spec.paths.paths.len());
     for (path, item) in spec.paths.paths {
-        let get_operation = match item.operations.get(&PathItemType::Get) {
+        let get_operation = match &item.get {
             None => {
                 continue;
             }
@@ -194,10 +195,10 @@ async fn rest_api_routes() {
         let path_parameters = get_operation
             .parameters
             .as_ref()
-            .map(|parameters| {
+            .map(|parameters: &Vec<_>| {
                 parameters
                     .iter()
-                    .filter(|&param| param.parameter_in == ParameterIn::Path)
+                    .filter(|param| param.parameter_in == ParameterIn::Path)
                     .cloned()
                     .collect::<Vec<_>>()
             })

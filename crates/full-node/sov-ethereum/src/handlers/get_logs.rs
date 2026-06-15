@@ -31,8 +31,8 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    pub async fn eth_get_logs(
-        parameters: JRpcParams<'static>,
+    pub fn eth_get_logs(
+        parameters: JRpcParams<'_>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
     ) -> Result<Vec<LogWithExecutionTimestamp>, ErrorObjectOwned> {
@@ -50,7 +50,7 @@ where
             state,
             ethereum.extension.response_size_limit,
         );
-        let LogsWithMaybeCursor { logs, cursor } = service.logs_for_filter().await?;
+        let LogsWithMaybeCursor { logs, cursor } = service.logs_for_filter()?;
 
         if cursor.is_some() {
             return Err(rpc_limit_exceeded(
@@ -61,8 +61,8 @@ where
         Ok(logs)
     }
 
-    pub async fn eth_get_logs_with_cursor(
-        parameters: JRpcParams<'static>,
+    pub fn eth_get_logs_with_cursor(
+        parameters: JRpcParams<'_>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
     ) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
@@ -80,6 +80,6 @@ where
             state,
             ethereum.extension.response_size_limit,
         );
-        Ok(service.logs_for_filter().await?)
+        Ok(service.logs_for_filter()?)
     }
 }

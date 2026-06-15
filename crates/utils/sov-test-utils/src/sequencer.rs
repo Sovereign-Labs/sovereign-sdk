@@ -7,7 +7,7 @@ use crate::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use crate::runtime::{GenesisConfig, TestOptimisticRuntime};
 use crate::{
     TestHasher, TestPrivateKey, TestSlotHash, TestSpec, TestStfBlueprint, TestStorageManager,
-    TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
+    TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MAX_CONCURRENT_PROOF_BLOBS,
 };
 use sov_api_spec::Client;
 use sov_db::config::RollupDbConfig;
@@ -16,12 +16,14 @@ use sov_db::schema::SchemaBatch;
 use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockAddress, MockBlock, MockDaSpec};
-use sov_modules_api::{DaSyncState, Runtime, SlotData, Spec, SyncStatus};
+use sov_modules_api::{Runtime, SlotData, Spec};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::{PaymasterConfig, SafeVec};
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::stf::StateTransitionFunction;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
-use sov_rollup_interface::StateUpdateInfo;
 use sov_sequencer::standard::{StdSequencer, StdSequencerConfig};
 pub use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::{SequencerApis, SequencerConfig};
@@ -51,7 +53,7 @@ pub struct TestSequencerSetup<Rt: Runtime<TestSpec>> {
     /// The admin private key used to create an external user account for transaction handling.
     pub admin_private_key: TestPrivateKey,
     /// The Axum server handle used to start the Axum server.
-    pub axum_server_handle: axum_server::Handle,
+    pub axum_server_handle: axum_server::Handle<std::net::SocketAddr>,
     /// The Axum server address.
     pub axum_addr: SocketAddr,
     /// Handler for shutdown of sequencer
@@ -151,7 +153,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             dropped_tx_ttl_secs: 0,
             sequencer_kind_config: sequencer_config,
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
-            max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
+            max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
             blob_processing_timeout_secs: 60,
             extension: None,
         };
@@ -162,6 +164,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             da_sync_state,
             dir.path(),
             &config,
+            TEST_MAX_CONCURRENT_PROOF_BLOBS,
             ledger_db,
             api_ledger_db,
             shutdown_sender.clone(),
@@ -255,7 +258,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
         .await
     }
 
-    /// Creates a new [`TestSequencerSetup`]. Instantiates a new [`TestOptimisticRuntime`], [`NativeStorageManager`], executes genesis
+    /// Creates a new [`TestSequencerSetup`]. Instantiates a new [`TestOptimisticRuntime`], executes genesis
     /// and then builds a new [`StdSequencer`]. Instantiates an Axum server in a separate thread.
     pub async fn with_real_sequencer() -> anyhow::Result<Self> {
         Self::with_real_sequencer_and_mempool_max_txs_count(NonZero::new(usize::MAX).unwrap()).await

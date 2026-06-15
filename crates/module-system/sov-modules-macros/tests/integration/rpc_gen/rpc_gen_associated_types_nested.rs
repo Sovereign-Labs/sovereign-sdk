@@ -9,7 +9,7 @@ use sov_modules_api::{
     Genesis, MessageCodec, Module, ModuleId, ModuleInfo, SequencerType, Spec, StateCheckpoint,
     StateValue, TxState,
 };
-use sov_state::ZkStorage;
+use sov_state::nomt::zk_storage::NomtVerifierStorage;
 use sov_test_utils::ZkTestSpec;
 
 pub trait Message: 'static {
@@ -22,6 +22,8 @@ pub trait TestSpec:
     + 'static
     + borsh::BorshSerialize
     + borsh::BorshDeserialize
+    + serde::Serialize
+    + serde::de::DeserializeOwned
     + Clone
     + PartialEq
     + Eq
@@ -137,7 +139,17 @@ impl Message for ActualMessage {
     type Data = u32;
 }
 
-#[derive(Default, PartialEq, Eq, Clone, Debug, borsh::BorshSerialize, borsh::BorshDeserialize)]
+#[derive(
+    Default,
+    PartialEq,
+    Eq,
+    Clone,
+    Debug,
+    borsh::BorshSerialize,
+    borsh::BorshDeserialize,
+    serde::Serialize,
+    serde::Deserialize,
+)]
 struct ActualSpec;
 
 impl TestSpec for ActualSpec {
@@ -148,8 +160,8 @@ impl TestSpec for ActualSpec {
 fn associated_types_nested() {
     type S = ZkTestSpec;
     type RT = Runtime<S, ActualSpec>;
-    let storage = ZkStorage::new();
-    let mut state = StateCheckpoint::new(storage, &MockKernel::<S>::default(), None);
+    let storage = NomtVerifierStorage::new();
+    let mut state = StateCheckpoint::new(storage, &MockKernel::<S>::default());
     let runtime = &mut Runtime::<S, ActualSpec>::default();
     let chain_state_config = sov_chain_state::ChainStateConfig::<S> {
         current_time: sov_rollup_interface::da::Time::from_secs(0),

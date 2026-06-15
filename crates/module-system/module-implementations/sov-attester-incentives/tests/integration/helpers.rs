@@ -189,8 +189,12 @@ pub(crate) fn make_attestation_blob(
 ) -> Vec<u8> {
     let serialized_attestation = SerializedAttestation::from_attestation(&attestation).unwrap();
 
-    borsh::to_vec(&serialize_attestation_blob_with_metadata::<S>(serialized_attestation).unwrap())
-        .unwrap()
+    borsh::to_vec(
+        &serialize_attestation_blob_with_metadata::<S>(serialized_attestation)
+            .unwrap()
+            .0,
+    )
+    .unwrap()
 }
 
 pub(crate) fn create_test_case(
@@ -260,6 +264,7 @@ pub(crate) fn build_challenge(
     > = StateTransitionPublicData {
         initial_state_root: *current_transition.slot().prev_state_root(),
         final_state_root: *current_transition.post_state_root(),
+        slot_number: challenge_slot,
         slot_hash: *current_transition.slot().slot_hash(),
         prover_address,
     };
@@ -279,11 +284,13 @@ pub(crate) fn make_challenge_blob(
 ) -> Vec<u8> {
     let serialized_challenge = MockZkvmHost::create_serialized_proof(is_valid, challenge);
     let serialized_challenge = SerializedChallenge {
-        raw_challenge: serialized_challenge,
+        raw_challenge: serialized_challenge.raw_proof,
     };
 
     borsh::to_vec(
-        &serialize_challenge_blob_with_metadata::<S>(serialized_challenge, challenge_slot).unwrap(),
+        &serialize_challenge_blob_with_metadata::<S>(serialized_challenge, challenge_slot)
+            .unwrap()
+            .0,
     )
     .unwrap()
 }

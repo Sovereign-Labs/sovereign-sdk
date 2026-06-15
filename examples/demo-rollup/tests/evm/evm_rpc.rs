@@ -167,8 +167,8 @@ async fn block_size() -> anyhow::Result<()> {
     rollup.pause_preferred_batches().await;
 
     let header = by_number(&client, 0).await?.unwrap();
-    // Block size is 508 bytes with gas_limit = 100_000_000_000 (5-byte RLP encoding)
-    // Previously was 507 bytes with gas_limit = 1_000_000_000 (4-byte RLP encoding)
+    // Block size is 508 bytes with gas_limit = 100_000_000_000 (5-byte RLP encoding).
+    // The cached body RLP omits withdrawals while withdrawals are unavailable.
     assert_eq!(header.size.unwrap().to::<u64>(), 508);
 
     Ok(())

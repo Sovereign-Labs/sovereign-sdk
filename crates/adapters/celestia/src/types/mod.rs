@@ -6,18 +6,17 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::namespace_data::NamespaceData;
 /// Reexport the [`Namespace`] from `celestia-types`
 pub use celestia_types::nmt::Namespace;
-use celestia_types::AppVersion;
 pub use error::*;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHashTrait, CountedBufReader};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::schema::OverrideSchema;
+use sov_universal_wallet::UniversalWallet;
 
 use crate::shares::BlobIterator;
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
 
-pub(crate) const APP_VERSION: AppVersion = AppVersion::V7;
 pub(crate) const SUPPORTED_SHARE_VERSION: u8 = 1;
 
 #[derive(Debug, PartialEq, PartialOrd, Ord, Clone, Eq, Hash, Serialize, Deserialize)]
@@ -29,7 +28,7 @@ pub struct TmHash(pub tendermint::Hash);
 #[doc(hidden)]
 pub struct TmHashSchema(#[sov_wallet(display(hex))] [u8; 32]);
 
-impl sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema for TmHash {
+impl OverrideSchema for TmHash {
     type Output = TmHashSchema;
 }
 
@@ -77,8 +76,8 @@ impl TmHash {
     pub fn inner(&self) -> &[u8; 32] {
         match self.0 {
             tendermint::Hash::Sha256(ref h) => h,
-            // Hack: when the hash is None, we return a hash of all 255s as a placeholder.
-            // TODO: add special casing for the genesis block at a higher level
+            // `Hash::None` is normalized at a higher layer (genesis predecessor placeholder),
+            // so `TmHash` should never observe it.
             tendermint::Hash::None => unreachable!("Only the genesis block has a None hash, and we use a placeholder in that corner case")
         }
     }
@@ -174,12 +173,9 @@ impl NamespaceRelevantData {
                 share_seq.check_consistency();
             }
             // Commitment
-            let commitment = celestia_types::Commitment::from_shares(
-                self.namespace,
-                &share_seq.shares,
-                APP_VERSION,
-            )
-            .expect("blob must be valid");
+            let commitment =
+                celestia_types::Commitment::from_shares(self.namespace, &share_seq.shares)
+                    .expect("blob must be valid");
             let hash = HexHash::new(*commitment.hash());
 
             let range_in_namespace = share_seq.range_in_ns.clone();
@@ -250,12 +246,14 @@ impl FilteredCelestiaBlock {
     }
 }
 
-/// Proof of the last share
-#[derive(Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+/// Proof of namespace end boundary in the last relevant row.
+#[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct NamespaceBoundaryProof {
-    // This should be the last share in the namespace
+    /// Namespace proof for the boundary.
+    /// For presence proofs this is narrowed to the last namespace share.
+    /// For absence proofs this proves namespace absence in that row.
     pub last_share_proof: celestia_types::nmt::NamespaceProof,
-    /// The last share of the namespace, if proof is of presence.
+    /// The last namespace share when `last_share_proof` is of presence; `None` for absence proofs.
     pub last_share: Option<celestia_types::Share>,
 }
 

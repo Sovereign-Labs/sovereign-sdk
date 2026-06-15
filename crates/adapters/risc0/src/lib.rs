@@ -6,15 +6,15 @@
 use crypto::{Risc0PublicKey, Risc0Signature};
 use risc0_zkvm::sha::Digest;
 #[cfg(not(target_os = "zkvm"))]
-use risc0_zkvm::Journal;
-#[cfg(not(target_os = "zkvm"))]
 use risc0_zkvm::Receipt;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-#[cfg(not(target_os = "zkvm"))]
-use sov_rollup_interface::zk::Proof;
-use sov_rollup_interface::zk::{CodeCommitment, CryptoSpec, ZkVerifier};
+use sov_rollup_interface::common::strict_bincode_deserialize;
+use sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues;
+use sov_rollup_interface::zk::aggregated_proof::{CodeCommitmentDecodeError, CodeCommitmentHash};
+use sov_rollup_interface::zk::SerializedZkProof;
+use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 use thiserror::Error;
 
 pub mod crypto;
@@ -34,6 +34,16 @@ pub mod metrics;
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct Risc0MethodId([u32; 8]);
 
+impl sov_rollup_interface::zk::CodeCommitmentTrait for Risc0MethodId {
+    fn to_hash(&self) -> CodeCommitmentHash {
+        CodeCommitmentHash::from_u32_array(self.0)
+    }
+
+    fn try_from_hash(hash: CodeCommitmentHash) -> Result<Self, CodeCommitmentDecodeError> {
+        Ok(Self(hash.to_u32_array()?))
+    }
+}
+
 impl PartialEq<Digest> for Risc0MethodId {
     fn eq(&self, other: &Digest) -> bool {
         self.0 == other.as_words()
@@ -43,31 +53,6 @@ impl PartialEq<Digest> for Risc0MethodId {
 impl PartialEq<[u32; 8]> for Risc0MethodId {
     fn eq(&self, other: &[u32; 8]) -> bool {
         &self.0 == other
-    }
-}
-
-impl CodeCommitment for Risc0MethodId {
-    type DecodeError = Risc0MethodIdError;
-
-    fn encode(&self) -> Vec<u8> {
-        let mut bytes = Vec::with_capacity(32);
-        for word in &self.0 {
-            bytes.extend_from_slice(&word.to_le_bytes());
-        }
-        bytes
-    }
-
-    fn decode(data: &[u8]) -> Result<Self, Self::DecodeError> {
-        if data.len() != 32 {
-            return Err(Risc0MethodIdError::InvalidLength { found: data.len() });
-        }
-        let mut contents = [0u32; 8];
-        for (idx, chunk) in data.chunks_exact(4).enumerate() {
-            let mut bytes = [0u8; 4];
-            bytes.copy_from_slice(chunk);
-            contents[idx] = u32::from_le_bytes(bytes);
-        }
-        Ok(Self(contents))
     }
 }
 
@@ -118,18 +103,30 @@ impl ZkVerifier for Risc0Verifier {
     type CryptoSpec = Risc0CryptoSpec;
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        serialized_proof: &[u8],
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        _public_values: &SerializedPubValues,
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // Risc0's `verify_with_pub_values` is only meaningful inside the guest.
+        unimplemented!(
+            "Risc0Verifier::verify_with_pub_values is only available inside the zkvm guest"
+        )
+    }
+
+    fn verify_with_proof<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let proof: Proof<Receipt, Option<Journal>> = bincode::deserialize(serialized_proof)?;
-        match proof {
-            Proof::PublicData(_) => anyhow::bail!("Risc0Verifier supports only full proofs"),
-            Proof::Full(receipt) => {
-                receipt.verify(code_commitment.0)?;
-                Ok(bincode::deserialize(&receipt.journal.bytes)?)
-            }
-        }
+        let receipt: Receipt = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+        receipt.verify(code_commitment.0)?;
+        Ok(strict_bincode_deserialize(&receipt.journal.bytes)?)
+    }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error> {
+        let receipt: Receipt = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+        Ok(strict_bincode_deserialize(&receipt.journal.bytes)?)
     }
 }
 
@@ -143,6 +140,9 @@ impl sov_rollup_interface::zk::Zkvm for Risc0 {
 
     #[cfg(feature = "native")]
     type Host = crate::host::Risc0Host<'static>;
+
+    #[cfg(feature = "native")]
+    type OuterHost = crate::host::Risc0Host<'static>;
 }
 
 #[cfg(target_os = "zkvm")]
@@ -153,9 +153,24 @@ impl ZkVerifier for Risc0Verifier {
 
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        _serialized_proof: &[u8],
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        _public_values: &SerializedPubValues,
         _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // Implement this method once risc0 supports recursion: issue #633
+        todo!("Implement once risc0 supports recursion: https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
+    }
+
+    fn verify_with_proof<T: DeserializeOwned>(
+        _serialized_proof: &SerializedZkProof,
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // Implement this method once risc0 supports recursion: issue #633
+        todo!("Implement once risc0 supports recursion: https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
+    }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        _serialized_proof: &SerializedZkProof,
     ) -> Result<T, Self::Error> {
         // Implement this method once risc0 supports recursion: issue #633
         todo!("Implement once risc0 supports recursion: https://github.com/Sovereign-Labs/sovereign-sdk/issues/633")
@@ -172,22 +187,4 @@ fn test_sovereign_admin_pubkey() {
         credential_id.to_string(),
         "0xf1ac96b6ad3cd6bddaf2c23f089de73a6816f892c1af345df70f9a573a86bacb"
     );
-}
-
-#[test]
-fn risc0_method_id_codec_roundtrip() {
-    // Check a roundtrip with the "digest" type from risc0.
-    // This ensures that our use of `from_ne_bytes` is correct on the target platform.
-    let raw_data = [1u32, 2, 3, 4, 5, 6, 7, 8];
-    let method_id = Risc0MethodId(raw_data);
-    let bytes = method_id.encode();
-    let id = Risc0MethodId::decode(&bytes).expect("Encoding is valid");
-    assert_eq!(id.0, raw_data);
-
-    // Assert that we return the expected error when the length is incorrect.
-    let bytes = vec![1u8; 31];
-    assert!(matches!(
-        Risc0MethodId::decode(&bytes),
-        Err(Risc0MethodIdError::InvalidLength { found: 31 })
-    ));
 }

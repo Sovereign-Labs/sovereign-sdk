@@ -39,8 +39,8 @@ sov-test-utils = { workspace = true }
 [features]
 default = []
 arbitrary = [
-  "sov-modules-api/arbitrary",
   "dep:proptest",
+  "sov-modules-api/arbitrary",
   "sov-bank/arbitrary",
   "sov-state/arbitrary",
   "sov-test-utils/arbitrary",
@@ -56,3 +56,6 @@ native = [
 ]
 cli = ["native"]
 test-utils = []
+
+[package.metadata.cargo-machete]
+ignored = ["proptest"]

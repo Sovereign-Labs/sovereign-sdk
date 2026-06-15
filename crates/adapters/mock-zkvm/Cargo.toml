@@ -15,10 +15,10 @@ workspace = true
 [dependencies]
 anyhow = { workspace = true }
 borsh = { workspace = true }
-digest = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-universal-wallet = { workspace = true }
 
 hex = { workspace = true }
 ed25519-dalek = { workspace = true, features = ["serde", "alloc"] }
@@ -31,6 +31,7 @@ rand = { workspace = true, optional = true }
 [dev-dependencies]
 serde_json = { workspace = true }
 sov-mock-zkvm = { path = ".", features = ["native"] }
+tokio = { workspace = true, features = ["macros", "rt"] }
 
 [features]
 default = []

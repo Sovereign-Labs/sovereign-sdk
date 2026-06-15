@@ -8,7 +8,6 @@ use sov_bank::Amount;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::optimistic::{BondingProofService, ProofOfBond};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::rest::StateUpdateReceiver;
 use sov_modules_api::{
     ApiStateAccessor, ConcurrentStateCheckpoint, Gas, GetGasPrice, Spec, StateCheckpoint,
     StateReader,
@@ -17,6 +16,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_state::storage::{SlotKey, Storage, StorageProof};
 use sov_state::SlotKeyFromCodec;
 use sov_state::User;
+use tokio::sync::watch;
 
 use super::AttesterIncentives;
 use crate::UnbondingInfo;
@@ -117,7 +117,7 @@ where
 {
     attester_address: S::Address,
     attester_incentives: AttesterIncentives<S>,
-    state_update_info: StateUpdateReceiver<<S as Spec>::Storage>,
+    storage_receiver: watch::Receiver<<S as Spec>::Storage>,
     has_kernel: PhantomData<K>,
 }
 
@@ -130,12 +130,12 @@ where
     pub fn new(
         attester_address: S::Address,
         attester_incentives: AttesterIncentives<S>,
-        storage: StateUpdateReceiver<<S as Spec>::Storage>,
+        storage_receiver: watch::Receiver<<S as Spec>::Storage>,
     ) -> Self {
         Self {
             attester_address,
             attester_incentives,
-            state_update_info: storage,
+            storage_receiver,
             has_kernel: PhantomData,
         }
     }
@@ -152,11 +152,9 @@ where
         &self,
         slot_number: SlotNumber,
     ) -> Option<ProofOfBond<<Self as BondingProofService>::StateProof>> {
-        let info = self.state_update_info.borrow();
-
-        let storage = info.storage.clone();
+        let storage = self.storage_receiver.borrow().clone();
         let mut kernel = K::default();
-        let checkpoint = StateCheckpoint::new(storage, &kernel.kernel(), None);
+        let checkpoint = StateCheckpoint::new(storage, &kernel.kernel());
         let checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
 
         let mut state = ApiStateAccessor::<S>::new_with_true_slot_number_dangerous(

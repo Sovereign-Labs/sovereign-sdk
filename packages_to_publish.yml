@@ -7,6 +7,7 @@
 - sov-mock-zkvm
 - sov-rest-utils
 - sov-db
+- sov-rollup-full-node-interface
 - sov-blob-sender
 - sov-state
 - sov-modules-macros # Requires --no-verify because it writes outside of OUT_DIR.
@@ -44,6 +45,7 @@
 - sov-blob-storage
 - sov-solana-offchain-auth
 - sov-uniqueness
+- sov-timelock
 - sov-evm
 - sov-paymaster
 - sov-operator-incentives

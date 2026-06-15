@@ -11,13 +11,15 @@ use sov_rollup_interface::node::ledger_api::AggregatedProofResponse;
 use sov_rollup_interface::stf::{
     BatchReceipt, DiscardedBlob, EventKey, StoredEvent, TxReceiptContents,
 };
-use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
+use sov_rollup_interface::zk::aggregated_proof::{
+    SerializedAggregatedProof, SerializedPartialProofReceipt,
+};
 
-use crate::schema::tables::DiscardedBlobHahsByNumber;
 use crate::schema::tables::{
     BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey, EventByNumber, EventCountByKey,
-    FinalizedSlots, ProofByUniqueId, SlotByHash, SlotByNumber, TxByHash, TxByNumber, LEDGER_TABLES,
+    FinalizedSlots, ProofByUniqueId, ProofReceiptHashesBySlot,SlotByHash, SlotByNumber, TxByHash, TxByNumber, LEDGER_TABLES,
 };
+use crate::schema::tables::{DiscardedBlobHahsByNumber, ProofReceiptByHash};
 use crate::schema::types::{
     split_tx_for_storage, BatchNumber, DiscardedBlobNumber, EventKeyNumber, EventNumber,
     LatestFinalizedSlotSingleton, ProofUniqueId, StoredBatch, StoredDiscardedBlob, StoredSlot,
@@ -37,7 +39,7 @@ pub(crate) const DB_LOCK_POISONED: &str = "Internal db lock is poisoned";
 #[derive(Default, Clone, Debug)]
 #[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 pub struct ItemNumbers {
-    /// The rollup height
+    /// The slot number
     pub slot_number: SlotNumber,
     /// The batch number
     pub batch_number: u64,
@@ -581,6 +583,37 @@ impl LedgerDb {
         Ok(schema_batch)
     }
 
+    /// Materializes a partial proof receipt into a [`SchemaBatch`].
+    pub fn materialize_proof_receipt<P: Serialize>(
+        &self,
+        hash: [u8; 32],
+        proof_receipt: P, // We pass a generic type and pre-serialize to avoid leaking lots of generics into the ledger db.
+        slot_number: SlotNumber,
+    ) -> anyhow::Result<SchemaBatch> {
+        let mut schema_batch = SchemaBatch::new();
+        let raw_proof_receipt =
+            bincode::serialize(&proof_receipt).expect("serialization to vec is infallible");
+        schema_batch.put::<ProofReceiptByHash>(
+            &hash,
+            &(
+                slot_number,
+                SerializedPartialProofReceipt { raw_proof_receipt },
+            ),
+        )?;
+        Ok(schema_batch)
+    }
+
+    /// Materializes a vector of proof receipt hashes into a [`SchemaBatch`].
+    pub fn materialize_proof_receipt_hashes(
+        &self,
+        hashes: Vec<[u8; 32]>,
+        slot_number: SlotNumber,
+    ) -> anyhow::Result<SchemaBatch> {
+        let mut schema_batch = SchemaBatch::new();
+        schema_batch.put::<ProofReceiptHashesBySlot>(&slot_number, &hashes)?;
+        Ok(schema_batch)
+    }
+
     /// Gets the discarded blob (if any) corresponding to the given `blob_hash`.
     pub async fn get_discarded_blob_by_hash(
         &self,
@@ -588,6 +621,15 @@ impl LedgerDb {
     ) -> anyhow::Result<Option<StoredDiscardedBlob>> {
         let db = self.db.read().expect(DB_LOCK_POISONED).clone();
         db.get_async::<DiscardedBlobByHash>(&blob_hash.0).await
+    }
+
+    /// Gets the proof receipt (if any) corresponding to the given `hash`.
+    pub async fn get_proof_receipt_by_hash(
+        &self,
+        hash: HexHash,
+    ) -> anyhow::Result<Option<(SlotNumber, SerializedPartialProofReceipt)>> {
+        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
+        db.get_async::<ProofReceiptByHash>(&hash.0).await
     }
 
     /// Get the head state root hash.
@@ -641,6 +683,14 @@ impl LedgerDb {
                     &current_discarded_blob_number,
                 )?;
             }
+        }
+
+        // Delete all proof receipts for this slot
+        if let Some(proof_receipt_hashes) = db.get::<ProofReceiptHashesBySlot>(&head_slot_number)? {
+            for proof_receipt_hash in proof_receipt_hashes {
+                Self::delete_proof_receipt(&mut schema_batch, proof_receipt_hash)?;
+            }
+            schema_batch.delete::<ProofReceiptHashesBySlot>(&head_slot_number)?;
         }
 
         // Delete all batches, transactions, and events in this slot.
@@ -850,6 +900,14 @@ impl LedgerDb {
     ) -> anyhow::Result<()> {
         schema_batch.delete::<DiscardedBlobHahsByNumber>(discarded_blob_number)?;
         schema_batch.delete::<DiscardedBlobByHash>(&discarded_blob_hash)?;
+        Ok(())
+    }
+
+    fn delete_proof_receipt(
+        schema_batch: &mut SchemaBatch,
+        proof_receipt_hash: [u8; 32],
+    ) -> anyhow::Result<()> {
+        schema_batch.delete::<ProofReceiptByHash>(&proof_receipt_hash)?;
         Ok(())
     }
 

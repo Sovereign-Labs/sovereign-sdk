@@ -5,10 +5,14 @@ use std::path::{Path, PathBuf};
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
+use anyhow::Context as _;
 use futures::{FutureExt, StreamExt};
 use proptest::prelude::*;
 use rand::{Rng, SeedableRng};
 use serde::Deserialize;
+use sov_db::config::RollupDbConfig;
+use sov_db::schema::DeltaReader;
+use sov_db::storage_manager::{NomtChangeSet, NomtStorageManager};
 use sov_db::proof_manager_db::ProofManagerDb;
 use sov_db::storage_manager::{NativeChangeSet, NativeStorageManager};
 use sov_db::test_utils::{CrashLocation, CRASH_ENV_NAME};
@@ -18,22 +22,22 @@ use sov_mock_da::{
     BlockProducingConfig, MockAddress, MockBlock, MockBlockHeader, MockDaConfig, MockDaService,
     MockDaSpec, MockHash, PlannedFork, RandomizationBehaviour, RandomizationConfig,
 };
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_rollup_interface::common::{HexHash, RollupHeight, SlotNumber};
-use sov_rollup_interface::da::{DaSpec, RelevantBlobIters};
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, RelevantBlobIters};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::stf::GenesisParams;
 use sov_rollup_interface::stf::{
     ApplySlotOutput, BatchReceipt, ExecutionContext, StateTransitionFunction,
 };
-use sov_rollup_interface::zk::Zkvm;
-use sov_state::{
-    ArrayWitness, NativeStorage, ProverStorage, SlotKey, SlotValue, StateAccesses, Storage,
-};
+use sov_state::nomt::prover_storage::NomtProverStorage;
+use sov_state::{ArrayWitness, NativeStorage, SlotKey, SlotValue, StateAccesses, Storage};
 
 use super::*;
+// We need a proof receipt type whose first and last generics are serializable, and middle two params are daspec and state root.
+// This is never constructed - just used to satisfy the type checker.
+type DummyProofReceipt = PartialProofReceipt<u64, MockDaSpec, StateRoot, u64>;
 
 const DA_POLLING_INTERVAL: std::time::Duration = std::time::Duration::from_millis(10);
 
@@ -65,10 +69,8 @@ impl GenesisParams for MockGenesisParams {
 #[derive(PartialEq, Debug, Clone, Eq, serde::Serialize, serde::Deserialize, Default)]
 pub struct MockStf;
 
-impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, OuterVm, Da>
-    for MockStf
-{
-    type StateRoot = <ProverStorage<S> as Storage>::Root;
+impl<Da: DaSpec> StateTransitionFunction<Da> for MockStf {
+    type StateRoot = <TestStorage as Storage>::Root;
     type Address = Vec<u8>;
     type GenesisParams = MockGenesisParams;
     type PreState = ();
@@ -86,7 +88,7 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
         _base_state: Self::PreState,
         _params: Self::GenesisParams,
     ) -> (Self::StateRoot, ()) {
-        (<ProverStorage<S> as Storage>::PRE_GENESIS_ROOT, ())
+        (<TestStorage as Storage>::PRE_GENESIS_ROOT, ())
     }
 
     fn apply_slot(
@@ -94,12 +96,12 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
         _pre_state_root: &Self::StateRoot,
         _base_state: Self::PreState,
         _witness: Self::Witness,
-        _slot_header: &Da::BlockHeader,
+        slot_header: &Da::BlockHeader,
         _relevant_blobs: RelevantBlobIters<&mut [<Da as DaSpec>::BlobTransaction]>,
         _execution_context: ExecutionContext,
-    ) -> ApplySlotOutput<InnerVm, OuterVm, Da, Self> {
-        ApplySlotOutput::<InnerVm, OuterVm, Da, Self> {
-            state_root: <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
+    ) -> ApplySlotOutput<Da, Self> {
+        ApplySlotOutput::<Da, Self> {
+            state_root: <TestStorage as Storage>::PRE_GENESIS_ROOT,
             change_set: (),
             proof_receipts: vec![],
             batch_receipts: vec![BatchReceipt {
@@ -110,27 +112,22 @@ impl<InnerVm: Zkvm, OuterVm: Zkvm, Da: DaSpec> StateTransitionFunction<InnerVm, 
             }],
             discarded_blobs: Default::default(),
             witness: (),
-            rollup_height: RollupHeight::new(0),
+            rollup_height: RollupHeight::new(slot_header.height()),
+            slot_number: SlotNumber::new(slot_header.height()),
         }
     }
 }
 
-type Vm = MockZkvm;
 type S = sov_state::DefaultStorageSpec<sha2::Sha256>;
+type TestStorage = NomtProverStorage<S, MockHash>;
 type Stf = MockStf;
-type StateRoot = <Stf as StateTransitionFunction<Vm, Vm, MockDaSpec>>::StateRoot;
-type TestBatchReceiptContents =
-    <Stf as StateTransitionFunction<Vm, Vm, MockDaSpec>>::BatchReceiptContents;
-type TestTxReceiptContents =
-    <Stf as StateTransitionFunction<Vm, Vm, MockDaSpec>>::TxReceiptContents;
-type Witness = <Stf as StateTransitionFunction<Vm, Vm, MockDaSpec>>::Witness;
+type StateRoot = <Stf as StateTransitionFunction<MockDaSpec>>::StateRoot;
+type TestBatchReceiptContents = <Stf as StateTransitionFunction<MockDaSpec>>::BatchReceiptContents;
+type TestTxReceiptContents = <Stf as StateTransitionFunction<MockDaSpec>>::TxReceiptContents;
+type Witness = <Stf as StateTransitionFunction<MockDaSpec>>::Witness;
 type MockSlotCommit = SlotCommit<MockBlock, Witness, TestTxReceiptContents>;
-type TestStateManager<Da> = StateManager<
-    StateRoot,
-    Witness,
-    NativeStorageManager<<Da as DaService>::Spec, ProverStorage<S>>,
-    Da,
->;
+type TestStateManager<Da> =
+    StateManager<StateRoot, Witness, NomtStorageManager<MockDaSpec, sha2::Sha256, TestStorage>, Da>;
 type TestStateManagerInMemory = TestStateManager<MockDaService>;
 
 const SEQUENCER_ADDRESS: MockAddress = MockAddress::new([0; 32]);
@@ -216,7 +213,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
             sender.inc_next_height_to_receive();
         };
 
-        assert_eq!(height, finalized.slot_number.get());
+        assert_eq!(height, finalized.slot_number().get());
         assert_eq!(filtered_block.header, finalized.data.da_block_header);
         assert_eq!(state_root, finalized.data.initial_state_root);
         state_root.clone_from(&finalized.data.final_state_root);
@@ -419,6 +416,81 @@ async fn test_proof_manager_restart_recovers_after_ledger_finalize_crash() -> an
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let da_service = MockDaService::new(SEQUENCER_ADDRESS);
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    let (sender, mut receiver) = crate::processes::new_stf_info_channel(
+        state_manager.ledger_db.clone(),
+        NonZero::new(40).unwrap(),
+        NonZero::new(40).unwrap(),
+        None,
+    )
+    .await?;
+    state_manager.stf_info_sender = Some(sender);
+
+    da_service.send_transaction(&[1; 10]).await.await??;
+    let filtered_block = da_service.get_block_at(1).await?;
+
+    let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(
+        state_manager
+            .check_continuation(filtered_block.header(), &da_service)
+            .await?,
+    );
+    let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
+        pre_state_root,
+        prover_storage,
+        &da_service,
+        filtered_block.clone(),
+    )
+    .await;
+    let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
+
+    let accepted_proof = SerializedAggregatedProof {
+        raw_aggregated_proof: vec![1, 2, 3],
+    };
+    let rejected_proof = SerializedAggregatedProof {
+        raw_aggregated_proof: vec![4, 5, 6],
+    };
+
+    state_manager
+        .process_stf_changes(
+            change_set,
+            ledger_pre_state,
+            transition_witness,
+            slot_commit,
+            AggregatedProofs {
+                all_aggregated_proofs: vec![accepted_proof.clone(), rejected_proof.clone()],
+                accepted_aggregated_proofs: vec![accepted_proof.clone()],
+            },
+            Vec::<DummyProofReceipt>::new(),
+        )
+        .await?;
+
+    let latest_proof = state_manager
+        .ledger_db
+        .get_latest_aggregated_proof()
+        .await?
+        .expect("accepted aggregated proof should be published");
+    assert_eq!(accepted_proof, latest_proof.proof);
+
+    let stf_info = receiver
+        .read_next()
+        .await?
+        .expect("stf info should be available");
+    assert_eq!(
+        vec![accepted_proof, rejected_proof],
+        stf_info.aggregated_proofs
+    );
+
+    shutdown_sender.send(())?;
+
+    Ok(())
+}
+
 // Basic test for single reorg, but detailed check of what state root hash is returned.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
@@ -441,7 +513,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
     let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
-    let state_update_receiver = state_manager.state_update_sender.subscribe();
+    let state_update_receiver = state_manager.state_channel.subscribe_state_update();
 
     // State root after executing i-th transition
     let mut post_state_roots = Vec::with_capacity(fork_happens_at as usize);
@@ -463,7 +535,9 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
             )
             .await?;
             let received_storage = state_update_receiver.borrow().storage.clone();
-            let received_storage_root = received_storage.get_latest_root_hash()?;
+            let received_storage_root = received_storage
+                .get_latest_root_hash()
+                .context("received storage must have a root")?;
             assert_eq!(current_state_root, received_storage_root);
             post_state_roots.push(current_state_root);
             hash_to_post_state_root.insert(block_hash, current_state_root);
@@ -500,7 +574,9 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
                 "Expected (left) state root does not match actual(right) from KnownContinuation. All state roots: {post_state_roots:?}");
 
             // State update is not called during re-org detection. So we process transition first
-            let _returned_storage_prev_root = prover_storage.get_latest_root_hash()?;
+            let _returned_storage_prev_root = prover_storage
+                .get_latest_root_hash()
+                .context("prover storage must have a root")?;
             // TODO: Should we check this prev_root against something
 
             let (change_set, transition_witness) = produce_synthetic_state_transition_witness(
@@ -519,13 +595,17 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
                     ledger_pre_state,
                     transition_witness,
                     slot_commit,
-                    Vec::new(),
+                    AggregatedProofs::default(),
+                    Vec::<DummyProofReceipt>::new(),
                 )
                 .await?;
             check_internal_consistency(&state_manager, finality as usize);
 
             let received_update_info = state_update_receiver.borrow().clone();
-            let received_storage_root = received_update_info.storage.get_latest_root_hash()?;
+            let received_storage_root = received_update_info
+                .storage
+                .get_latest_root_hash()
+                .context("received update info storage must have a root")?;
             assert_eq!(final_state_root, received_storage_root);
         }
     }
@@ -604,7 +684,8 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
             ledger_pre_state,
             transition_witness,
             slot_commit,
-            Vec::new(),
+            AggregatedProofs::default(),
+            Vec::<DummyProofReceipt>::new(),
         )
         .await?;
     check_internal_consistency(&state_manager, finality as usize);
@@ -714,7 +795,8 @@ async fn test_progressing_with_shuffle(
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
@@ -930,7 +1012,8 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
@@ -1027,7 +1110,8 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
@@ -1306,10 +1390,11 @@ async fn setup_storage_manager(
     path: &std::path::Path,
 ) -> anyhow::Result<(
     StateRoot,
-    NativeStorageManager<MockDaSpec, ProverStorage<S>>,
+    NomtStorageManager<MockDaSpec, sha2::Sha256, TestStorage>,
 )> {
-    let mut storage_manager: NativeStorageManager<MockDaSpec, ProverStorage<S>> =
-        NativeStorageManager::new(path)?;
+    let config = RollupDbConfig::default_in_path(path.to_path_buf());
+    let mut storage_manager: NomtStorageManager<MockDaSpec, sha2::Sha256, TestStorage> =
+        NomtStorageManager::new(config, true)?;
     let genesis_block = MockBlock::default_at_height(0);
     let genesis_header = genesis_block.header().clone();
     let (genesis_storage, ledger_state) = storage_manager.create_state_for(&genesis_header)?;
@@ -1318,7 +1403,7 @@ async fn setup_storage_manager(
     let (state_root, change_set) = produce_synthetic_changes::<MockDaSpec>(
         genesis_storage,
         &genesis_header,
-        <ProverStorage<S> as Storage>::PRE_GENESIS_ROOT,
+        <TestStorage as Storage>::PRE_GENESIS_ROOT,
     );
 
     let data_to_commit: SlotCommit<_, TestBatchReceiptContents, TestTxReceiptContents> =
@@ -1362,8 +1447,7 @@ where
     shutdown_rx.mark_unchanged();
 
     let update_info = query_state_update_info(&ledger_db, stf_state, sync_state.as_ref()).await?;
-    // Update channel, receiver does not need to be alive
-    let (state_update_sender, _state_update_recv) = watch::channel(update_info);
+    let state_channel = StateChannel::new(update_info);
 
     let da_header_provider = DaServiceWithCachedFinalizedHeaders::new(
         Arc::new(da_service),
@@ -1376,7 +1460,7 @@ where
         storage_manager,
         ledger_db,
         initial_state_root,
-        state_update_sender,
+        state_channel,
         None,
         Box::new(InfiniteHeight),
         sync_state,
@@ -1406,12 +1490,13 @@ fn setup_proof_manager_channel(
     Ok((proof_manager_db, sender, receiver))
 }
 
-// Writes to user space concatenation of block height bytes and block hash
+// Writes to user space concatenation of block height bytes and block hash.
+// NOMT materialization expects user and kernel namespaces to advance together.
 fn produce_synthetic_changes<Da: DaSpec>(
-    prover_storage: ProverStorage<S>,
+    prover_storage: TestStorage,
     block_header: &Da::BlockHeader,
-    pre_state_root: <ProverStorage<S> as Storage>::Root,
-) -> (<ProverStorage<S> as Storage>::Root, NativeChangeSet) {
+    pre_state_root: <TestStorage as Storage>::Root,
+) -> (<TestStorage as Storage>::Root, NomtChangeSet) {
     let mut data = block_header.height().to_le_bytes().to_vec();
     data.extend_from_slice(block_header.hash().as_ref());
     let mut accesses = StateAccesses::default();
@@ -1419,8 +1504,9 @@ fn produce_synthetic_changes<Da: DaSpec>(
         .user
         .ordered_writes
         .push((SlotKey::from_slice(&data), Some(SlotValue::from(data))));
+    sov_test_utils::push_kernel_marker(&mut accesses);
     let (state_root, state_update) = prover_storage
-        .compute_state_update(accesses, &ArrayWitness::default(), pre_state_root, None)
+        .compute_state_update(accesses, &ArrayWitness::default(), pre_state_root)
         .unwrap();
     let change_set = prover_storage.materialize_changes(state_update);
 
@@ -1428,12 +1514,12 @@ fn produce_synthetic_changes<Da: DaSpec>(
 }
 
 async fn produce_synthetic_state_transition_witness<Da: DaService>(
-    initial_state_root: <ProverStorage<S> as Storage>::Root,
-    prover_storage: ProverStorage<S>,
+    initial_state_root: <TestStorage as Storage>::Root,
+    prover_storage: TestStorage,
     da_service: &Da,
     filtered_block: Da::FilteredBlock,
 ) -> (
-    NativeChangeSet,
+    NomtChangeSet,
     StateTransitionWitness<StateRoot, Witness, Da::Spec>,
 ) {
     let (state_root, change_set) = produce_synthetic_changes::<Da::Spec>(
@@ -1452,6 +1538,7 @@ async fn produce_synthetic_state_transition_witness<Da: DaService>(
         relevant_proofs,
         relevant_blobs,
         witness: (),
+        slot_number: SlotNumber::new(filtered_block.header().height()),
     };
 
     (change_set, transition_witness)
@@ -1488,7 +1575,8 @@ async fn process_continuous_transition(
             ledger_pre_state,
             transition_witness,
             slot_commit,
-            Vec::new(),
+            AggregatedProofs::default(),
+            Vec::<DummyProofReceipt>::new(),
         )
         .await?;
     check_internal_consistency(state_manager, finality as usize);
@@ -1498,7 +1586,7 @@ async fn process_continuous_transition(
 
 fn check_internal_consistency<Da>(state_manager: &TestStateManager<Da>, finality: usize)
 where
-    Da: DaService<Error = anyhow::Error>,
+    Da: DaService<Error = anyhow::Error, Spec = MockDaSpec>,
 {
     // Ensure consistency between seen_on_height and state_on_block
     for (height, seen_blocks) in &state_manager.seen_on_height {
@@ -1588,14 +1676,7 @@ async fn resolve_to_continuation<Da>(
     state_manager: &mut TestStateManager<Da>,
     da_service: &Da,
     initial_block: MockBlock,
-) -> anyhow::Result<(
-    ProverStorage<S>,
-    StateRoot,
-    <NativeStorageManager<MockDaSpec, ProverStorage<S>> as HierarchicalStorageManager<
-        MockDaSpec,
-    >>::LedgerState,
-    MockBlock,
-)>
+) -> anyhow::Result<(TestStorage, StateRoot, DeltaReader, MockBlock)>
 where
     Da: DaService<Error = anyhow::Error, Spec = MockDaSpec, FilteredBlock = MockBlock>,
 {
@@ -1769,7 +1850,8 @@ async fn test_progressing_with_rewind_below_finalized(
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
         // Skip check_internal_consistency - this test exercises abnormal DA behavior
@@ -1836,7 +1918,8 @@ async fn test_binary_search_handles_da_error() -> anyhow::Result<()> {
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
     }
@@ -1934,7 +2017,8 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
     }
@@ -1985,7 +2069,8 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
             ledger_pre_state,
             transition_witness,
             slot_commit,
-            Vec::new(),
+            AggregatedProofs::default(),
+            Vec::<DummyProofReceipt>::new(),
         )
         .await?;
 
@@ -2104,7 +2189,8 @@ async fn test_finalized_height_monotonic() -> anyhow::Result<()> {
                 ledger_pre_state,
                 transition_witness,
                 slot_commit,
-                Vec::new(),
+                AggregatedProofs::default(),
+                Vec::<DummyProofReceipt>::new(),
             )
             .await?;
 

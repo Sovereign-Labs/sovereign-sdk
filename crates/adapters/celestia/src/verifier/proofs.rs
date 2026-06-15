@@ -9,23 +9,21 @@ use crate::types::{
     SUPPORTED_SHARE_VERSION,
 };
 
-/// BlobProof contains proof of each range.
-/// Ranges are different and not as a single, because a blob can span across rows,
-/// so it will have different proofs, as each row has a separate proof.
+/// BlobProof contains per-row range proofs for one blob.
+/// A blob can span multiple rows, so its inclusion proof is split into one range proof per row fragment.
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct BlobProof {
     pub(crate) range_proofs: Vec<RangeProof>,
 }
 
 impl BlobProof {
-    // Ensures that range proof covers continuous range.
-    // Different blobs will never overlap each other in the same share, because:
-    // Each blob starts from a new share, called a first share in the sequence,
-    // And it can span to several shares, where the following share is called "Continuation Share".
+    // Ensures sub-proofs within this BlobProof cover one continuous range.
+    // Cross-blob continuity is enforced separately by `verify_continuity`.
+    // Each blob starts from a new share ("sequence start") and can span continuation shares.
     // Remaining bytes are padded with zeroes:
     // > The remaining SHARE_SIZE-NAMESPACE_SIZE-SHARE_INFO_BYTES-SEQUENCE_BYTES bytes are filled with 0
     // From
-    // https://celestiaorg.github.io/celestia-app/specs/shares.html#padding
+    // https://github.com/celestiaorg/celestia-app/blob/c10edd9c49db4f5cef5b6a59eea26add1342a2e7/specs/src/shares.md#L85-L95
     pub(crate) fn enforce_continuity(&self) -> Result<(), RowProofError> {
         for i in 1..self.range_proofs.len() {
             let left_idx = i
@@ -100,10 +98,10 @@ impl BlobProof {
             }));
         }
 
-        // 3. If the first blob starts not from the beginning of the row (start_idx() == 0),
-        // we need to prove that there are no skipped shares from the namespace.
-        // Otherwise, we safely know that the first column of the related row contains this proof,
-        // so there are blobs that have been skipped.
+        // 3. If the first blob starts after the beginning of the row (`start_idx() > 0`),
+        // prove that the immediate left sibling belongs to a strictly smaller namespace.
+        // We need that to ensure that no blobs are censored.
+        // If `start_idx() == 0`, the blob starts at the row boundary, so there is no in-row left gap.
         if first_sub_proof.proof.start_idx() > 0 {
             let Some(rls) = first_sub_proof.proof.rightmost_left_sibling() else {
                 return Err(IncompleteNamespace(IncompleteNamespaceError::MissingBlobs));
@@ -168,19 +166,43 @@ pub(crate) fn new_inclusion_proof(
         .flat_map(|r| r.shares.iter())
         .collect::<Vec<_>>();
 
-    // Extract the positions of each blob up to the number of shares actually used.
+    // Extract the positions of each blob up to the number of shares actually read.
+    // At the same time, advance continuity with the full blob occupancy so we can
+    // still prove any trailing skipped shares (e.g. namespace tail padding) safely.
     for blob in blobs.iter() {
         let range = blob.range_in_namespace.clone();
         let relevant_len = blob.blob.accumulator().len();
-        let relevant_end =
-            range.start + crate::shares::shares_needed_for_bytes(relevant_len).max(1);
-        // Guard in depth - should never be false unless either shares_needed_for_bytes() is bugged
+        let start_share = flat_shares[range.start];
+        let has_signer = start_share.signer().is_some();
+        let relevant_end = range
+            .start
+            .checked_add(
+                crate::shares::shares_needed_for_bytes_with_signer(relevant_len, has_signer).max(1),
+            )
+            .expect("share index overflow");
+        let full_blob_end = range
+            .start
+            .checked_add(
+                crate::shares::shares_needed_for_bytes_with_signer(
+                    blob.blob.total_len(),
+                    has_signer,
+                )
+                .max(1),
+            )
+            .expect("share index overflow");
+        // Guard in depth - should never be false unless share counting is bugged
         // or we read more bytes from the blob than the range has shares (e.g. `BlobWithIter`'s range
         // initialisation is bugged)
         assert!(
             relevant_end <= range.end,
             "relevant_end > range.end: {} > {}",
             relevant_end,
+            range.end
+        );
+        assert!(
+            full_blob_end <= range.end,
+            "full_blob_end > range.end: {} > {}",
+            full_blob_end,
             range.end
         );
 
@@ -196,11 +218,37 @@ pub(crate) fn new_inclusion_proof(
         }
 
         needed_share_ranges.push(range.start..relevant_end);
-        prev_range_end = Some(range.end);
+        prev_range_end = Some(full_blob_end);
     }
 
     let end_of_ns = flat_shares.len();
-    if let Some(prev_end) = prev_range_end {
+    let namespace_has_supported_shares = flat_shares.iter().any(|share| {
+        !is_tail_padding(share)
+            && share.info_byte().expect("Bug. Missing info byte").version()
+                == SUPPORTED_SHARE_VERSION
+    });
+
+    // Invariant: if namespace has supported shares, extraction is expected to produce
+    // at least one blob. Empty `blobs` in this case indicates inconsistent extraction input.
+    if blobs.is_empty() && end_of_ns > 0 {
+        if namespace_has_supported_shares {
+            tracing::error!(
+                namespace = ?rollup_data.namespace,
+                end_of_ns,
+                "Invariant violation: supported shares exist but extracted blob list is empty"
+            );
+            panic!(
+                "supported shares exist in namespace {:?}, but extracted blobs are empty (namespace share count: {end_of_ns})",
+                rollup_data.namespace,
+            );
+        } else {
+            // If no supported blobs were extracted, the namespace may still contain
+            // unsupported blobs (e.g. v0) that must be proven as skipped.
+            let skipped_blob_ranges =
+                build_ranges_to_prove_for_skipped_blobs(0..end_of_ns, &flat_shares);
+            needed_share_ranges.extend(skipped_blob_ranges);
+        }
+    } else if let Some(prev_end) = prev_range_end {
         if prev_end != end_of_ns {
             let skipped_blob_ranges =
                 build_ranges_to_prove_for_skipped_blobs(prev_end..end_of_ns, &flat_shares);
@@ -252,8 +300,11 @@ fn build_ranges_to_prove_for_skipped_blobs(
                 "Skipping version 1, bug!"
             );
         }
-        let shares_in_blob =
-            crate::shares::shares_needed_for_bytes(sequence_length as usize).max(1);
+        let shares_in_blob = crate::shares::shares_needed_for_bytes_with_signer(
+            sequence_length as usize,
+            start_share.signer().is_some(),
+        )
+        .max(1);
         start += shares_in_blob;
     }
 
@@ -412,10 +463,9 @@ fn check_ranges_sorted(ranges: &[std::ops::Range<usize>]) -> bool {
     true
 }
 
-/// Converts namespace relative range into the set of per-row ranges with absolute coordinates inside data square
-/// Blob range is a "flat" range over the whole namespace.
-/// It can span across several rows.
-/// Returns sub-ranges adjusted to the offset.
+/// Converts a namespace-relative flat range into per-row sub-ranges.
+/// Returned coordinates use the namespace-row coordinate system where the first namespace row is row 0,
+/// with `first_row_offset` applied to the first row.
 #[cfg(feature = "native")]
 #[allow(clippy::single_range_in_vec_init)]
 fn split_blob_range_by_rows(

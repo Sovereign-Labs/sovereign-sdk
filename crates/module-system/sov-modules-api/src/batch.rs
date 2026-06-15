@@ -109,7 +109,7 @@ impl<S: Spec> BlobData<S> {
                 sequencer_address: seq_addr,
             }),
             Self::Proof((proof, seq_addr)) => BlobDataWithId::Proof {
-                proof,
+                proof: Arc::from(proof),
                 id,
                 sequencer_address: seq_addr,
             },
@@ -136,7 +136,7 @@ pub enum BlobDataWithId<S: Spec, B> {
     /// Aggregated proof posted on the DA.
     Proof {
         /// The proof
-        proof: Vec<u8>,
+        proof: Arc<[u8]>,
         /// The id of the blob on the DA layer
         id: [u8; 32],
         /// The address of the sequencer that submitted the proof
@@ -190,6 +190,9 @@ pub struct ProvisionalSequencerOutcome<S: Spec> {
     pub penalty: Amount,
     /// Whether the sequencer has run out of funds
     pub execution_status: MaybeExecuted<S>,
+    /// Native scratchpad recorded while executing with the transaction's sequencing data.
+    #[cfg(feature = "native")]
+    pub sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
 }
 
 /// The reason a transaction was rejected by the sequencer due to insufficient funds.
@@ -238,6 +241,8 @@ impl<S: Spec> ProvisionalSequencerOutcome<S> {
             reward: Amount::ZERO,
             penalty,
             execution_status: MaybeExecuted::SequencerOutOfFunds(reason),
+            #[cfg(feature = "native")]
+            sequencing_scratchpad: None,
         }
     }
 
@@ -247,6 +252,8 @@ impl<S: Spec> ProvisionalSequencerOutcome<S> {
             reward: Amount::ZERO,
             penalty,
             execution_status: MaybeExecuted::Executed(receipt),
+            #[cfg(feature = "native")]
+            sequencing_scratchpad: None,
         }
     }
     /// A convenient constructor for provisionally rewarding the sequencer
@@ -255,6 +262,8 @@ impl<S: Spec> ProvisionalSequencerOutcome<S> {
             reward: amount,
             penalty: Amount::ZERO,
             execution_status: MaybeExecuted::Executed(receipt),
+            #[cfg(feature = "native")]
+            sequencing_scratchpad: None,
         }
     }
 }

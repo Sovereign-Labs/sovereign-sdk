@@ -81,14 +81,14 @@ pub trait ChainState {
     ) -> bool;
 
     /// Returns the slot gas limit accessible at the current *virtual* slot.
-    fn block_gas_limit<
-        Reader: VersionReader
-            + StateReader<User, Error = Infallible>
-            + StateReader<Kernel, Error = Infallible>,
-    >(
+    ///
+    /// Note that the gas limit is defined to change as of the slot immediately after the CHANGE_GAS_LIMIT_AFTER_HEIGHT rollup height.
+    /// so we need to know whether this is a stale height (i.e. another slot being executed at the same height so that we can determine whether to show the updated gas limit at the boundary height).
+    fn block_gas_limit(
         &self,
-        state: &mut Reader,
-    ) -> Option<<Self::Spec as Spec>::Gas>;
+        current_rollup_height: RollupHeight,
+        is_stale_height: bool,
+    ) -> <Self::Spec as Spec>::Gas;
 
     /// Returns the visible root hash accessible at the requested rollup height
     ///
@@ -109,6 +109,17 @@ pub trait ChainState {
         &self,
         state: &mut Reader,
     ) -> OperatingMode;
+
+    /// Returns the DA height at which the rollup performed genesis, or `None`
+    /// if genesis has not yet been executed.
+    fn genesis_da_height<
+        Reader: VersionReader
+            + StateReader<User, Error = Infallible>
+            + StateReader<Kernel, Error = Infallible>,
+    >(
+        &self,
+        state: &mut Reader,
+    ) -> Option<u64>;
 
     /// Returns the visible root hash accessible at the requested rollup height using the accessory state.
     ///

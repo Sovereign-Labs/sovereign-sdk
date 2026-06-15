@@ -13,7 +13,10 @@ use crate::ProverIncentives;
 /// the allowed verifier method and a set of initial provers with their
 /// bonding amount.
 #[derive(Debug, Clone, Serialize, Deserialize, JsonSchema)]
-#[serde(bound = "S::Address: Serialize + DeserializeOwned")]
+#[serde(
+    bound = "S::Address: Serialize + DeserializeOwned",
+    deny_unknown_fields
+)]
 #[schemars(
     bound = "S: ::sov_modules_api::Spec",
     rename = "ProverIncentivesConfig"
@@ -23,6 +26,11 @@ pub struct ProverIncentivesConfig<S: Spec> {
     pub proving_penalty: S::Gas,
     /// The minimum bond for a prover.
     pub minimum_bond: S::Gas,
+    /// The admin prover address. When `None`, no admin role is configured for this
+    /// deployment and admin-only paths (e.g. genesis-hash bypass, rollup upgrades) are
+    /// inaccessible.
+    #[serde(default)]
+    pub admin: Option<S::Address>,
     /// A list of initial provers and their bonded amount.
     pub initial_provers: Vec<(S::Address, Amount)>,
 }
@@ -58,6 +66,9 @@ impl<S: Spec> ProverIncentives<S> {
             self.register_staker(prover, prover, *bond, state)?;
         }
         self.minimum_bond.set(&config.minimum_bond, state)?;
+        if let Some(admin) = &config.admin {
+            self.admin.set(admin, state)?;
+        }
 
         Ok(())
     }

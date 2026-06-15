@@ -2,6 +2,7 @@ use crate::utils::encode_call;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use sov_api_spec::types as api_types;
+use sov_api_spec::ClientInfo;
 use sov_full_node_configs::sequencer::Limits;
 use sov_full_node_configs::sequencer::SovRateLimiterConfig;
 use sov_mock_da::BlockProducingConfig;
@@ -12,6 +13,7 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::RawTx;
 use sov_modules_api::Spec;
 use sov_modules_stf_blueprint::Runtime;
+use sov_rollup_interface::common::RollupHeight;
 use sov_sequencer::rest_api::AcceptTx;
 use sov_sequencer::SequencerKindConfig;
 use sov_test_utils::generate_operator_runtime_with_kernel;
@@ -90,7 +92,7 @@ async fn create_test_rollup(
     )
     .set_config(|c| {
         c.storage = StoragePath::Tmp(dir);
-        c.max_concurrent_blobs = 64;
+        c.max_concurrent_batch_blobs = 64;
         if let SequencerKindConfig::Preferred(ref mut config) = &mut c.sequencer_config {
             config.num_cache_warmup_workers = 0;
             config.batch_execution_time_limit_millis = 3000;
@@ -117,6 +119,7 @@ async fn test_rate_limiting() {
         max_requests_per_second: 1_000_000,
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),
+        height_for_gas_limit_computation: RollupHeight::GENESIS,
     };
 
     let (test_rollup, admin) = create_test_rollup(genesis, sov_config).await;
@@ -128,7 +131,7 @@ async fn test_rate_limiting() {
     // Send tx that takes 200ms but the limit for each sender is 3000*0.5% = 15ms
     let tx = tx_set_value_and_sleep(&admin.private_key, 0, 99, 200);
 
-    // The transactions is accepted but the sender has been rate-limited after it is executed.
+    // The transaction is accepted but the sender has been rate-limited after it is executed.
     client
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(&tx),
@@ -136,7 +139,7 @@ async fn test_rate_limiting() {
         .await
         .unwrap();
 
-    // Another transactions fails.
+    // Another transaction fails.
     let tx: RawTx = tx_set_value_and_sleep(&admin.private_key, 1, 100, 1);
     let err = client
         .accept_tx(&api_types::AcceptTxBody {
@@ -169,6 +172,7 @@ async fn test_zero_limit_address() {
     let sov_config = SovRateLimiterConfig {
         max_nb_of_concurrent_users_in_rate_limiter: 1000,
         max_requests_per_second: 1_000_000,
+        height_for_gas_limit_computation: RollupHeight::GENESIS,
         default_limits: Limits {
             resources_per_bucket: 5,
             refill_rate: 100,
@@ -211,7 +215,7 @@ async fn test_correct_ip() {
             resources_per_bucket: 5,
             refill_rate: 0,
         },
-
+        height_for_gas_limit_computation: RollupHeight::GENESIS,
         address_custom_limits: Vec::default(),
         ip_custom_limits: Vec::default(),
     };
@@ -243,7 +247,7 @@ async fn test_correct_ip() {
             .unwrap();
     }
 
-    // Send another tx with the same x_forwarded_for ip but diffrent sender address.
+    // Send another tx with the same x_forwarded_for ip but different sender address.
     {
         let private_key = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
         let tx: RawTx = tx_set_value_and_sleep(&private_key, 1, 100, 0);
@@ -256,7 +260,7 @@ async fn test_correct_ip() {
             .client()
             .post(&url)
             .json(&request)
-            // The header should be case insensitive.
+            // The header should be case-insensitive.
             .header("x-forwarded-for", x_forwarded_for)
             .send()
             .await
@@ -265,7 +269,7 @@ async fn test_correct_ip() {
         let err = resp.bytes().await.unwrap();
         let err_str = std::str::from_utf8(&err).unwrap().to_string();
 
-        // Check that the correct IP was rate limmited.
+        // Check that the correct IP was rate limited.
         assert!(err_str
             .contains("The sender was rate-limited by the sequencer: Resource limit exceeded for IP: 123.123.123.123"));
     }
@@ -277,6 +281,7 @@ async fn test_zero_limit_ip() {
 
     let genesis = Genesis::new();
     let sov_config = SovRateLimiterConfig {
+        height_for_gas_limit_computation: RollupHeight::GENESIS,
         max_requests_per_second: 1000,
         max_nb_of_concurrent_users_in_rate_limiter: 1000,
         default_limits: Limits {
@@ -286,7 +291,7 @@ async fn test_zero_limit_ip() {
 
         address_custom_limits: Vec::default(),
         ip_custom_limits: vec![(
-            IpAddr::from_str(x_forwarded_for).unwrap(),
+            IpAddr::from_str(x_forwarded_for).unwrap().into(),
             Limits {
                 resources_per_bucket: 0,
                 refill_rate: 0,
@@ -313,7 +318,7 @@ async fn test_zero_limit_ip() {
             .client()
             .post(&url)
             .json(&request)
-            // The header should be case insensitive.
+            // The header should be case-insensitive.
             .header("x-forwarded-for", x_forwarded_for)
             .send()
             .await
@@ -322,10 +327,93 @@ async fn test_zero_limit_ip() {
         let err = resp.bytes().await.unwrap();
         let err_str = std::str::from_utf8(&err).unwrap().to_string();
 
-        // Check that the correct IP was rate limmited.
+        // Check that the correct IP was rate limited.
         assert!(err_str
             .contains("The sender was rate-limited by the sequencer: Resource limit exceeded for IP: 123.123.123.123"));
     }
+}
+
+/// Two different IPs inside the same configured subnet share one rate-limit
+/// bucket: once the first exhausts the subnet budget, a request from a second
+/// IP in that subnet (different sender) is rejected by the IP limiter.
+async fn assert_subnet_bucket_is_shared(subnet: &str, ip_a: &str, ip_b: &str) {
+    let genesis = Genesis::new();
+    let sov_config = SovRateLimiterConfig {
+        max_requests_per_second: 1000,
+        max_nb_of_concurrent_users_in_rate_limiter: 1000,
+        default_limits: Limits {
+            resources_per_bucket: 5,
+            refill_rate: 0,
+        },
+        height_for_gas_limit_computation: RollupHeight::GENESIS,
+        address_custom_limits: Vec::default(),
+        ip_custom_limits: vec![(
+            subnet.parse().unwrap(),
+            Limits {
+                resources_per_bucket: 5,
+                refill_rate: 0,
+            },
+        )],
+    };
+
+    let (test_rollup, admin) = create_test_rollup(genesis, sov_config).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let base_url = test_rollup.client.base_url.clone();
+    let client = test_rollup.api_client().clone();
+    let url = format!("{base_url}/sequencer/txs");
+
+    // First IP exhausts the shared subnet bucket (200ms >> the 15ms exec-time budget).
+    {
+        let tx = tx_set_value_and_sleep(&admin.private_key, 0, 100, 200);
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob { blob: tx.data },
+        };
+        client
+            .client()
+            .post(&url)
+            .json(&request)
+            .header("x-forwarded-for", ip_a)
+            .send()
+            .await
+            .unwrap();
+    }
+
+    // Second IP in the same subnet, different sender -> rejected by the shared IP bucket.
+    {
+        let key = <<TestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
+        let tx = tx_set_value_and_sleep(&key, 0, 100, 0);
+        let request = AcceptTx {
+            body: sov_sequencer::rest_api::Base64Blob { blob: tx.data },
+        };
+        let resp = client
+            .client()
+            .post(&url)
+            .json(&request)
+            .header("x-forwarded-for", ip_b)
+            .send()
+            .await
+            .unwrap();
+
+        let body = resp.bytes().await.unwrap();
+        let err_str = std::str::from_utf8(&body).unwrap();
+        let expected = format!("Resource limit exceeded for IP: {ip_b}");
+        assert!(
+            err_str.contains(expected.as_str()),
+            "second IP in the subnet should hit the shared bucket, got: {err_str}"
+        );
+    }
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_subnet_bucket_is_shared_ipv4() {
+    assert_subnet_bucket_is_shared("10.0.0.0/24", "10.0.0.1", "10.0.0.2").await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_subnet_bucket_is_shared_ipv6() {
+    assert_subnet_bucket_is_shared("2001:db8::/64", "2001:db8::1", "2001:db8::2").await;
 }
 
 fn tx_set_value_and_sleep(

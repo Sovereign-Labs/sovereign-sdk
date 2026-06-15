@@ -12,10 +12,10 @@ pub use rewards::{ProverReward, RemainingFunds, SequencerReward, TransactionCons
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
 use sov_rollup_interface::crypto::{SigVerificationError, Signature};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_rollup_interface::TxHash;
 use sov_universal_wallet::schema::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 use thiserror::Error;
 pub use types::{
     v0::Version0,
@@ -33,6 +33,11 @@ use crate::{
 mod tests;
 mod types;
 mod unsigned;
+
+/// Re-exports for V1 (multisig) transaction constants.
+pub mod v1 {
+    pub use super::types::v1::MAX_SIGNERS;
+}
 
 /// Structures that implement this trait represent a call message that can be included in a
 /// transaction.

@@ -61,7 +61,10 @@ where
                 self.close_current_batch_msg_replica(batch_to_store, "replica_close_batch")
                     .await
             }
-            DbData::NewProof => Ok(()),
+            DbData::NewProof(sequence_number, proof_bytes) => {
+                self.do_new_proof_msg_replica(sequence_number, proof_bytes, "replica_new_proof")
+                    .await
+            }
         };
 
         match res {

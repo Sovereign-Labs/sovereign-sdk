@@ -6,7 +6,7 @@ use celestia_types::state::{AccAddress, AddressKind, AddressTrait};
 // use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::reexports::schemars::{self};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 
 #[derive(
     Debug,
@@ -92,17 +92,16 @@ fn deserialize_celestia_address(
 }
 
 impl schemars::JsonSchema for CelestiaAddress {
-    fn schema_name() -> String {
-        "CelestiaAddress".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "CelestiaAddress".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        serde_json::from_value(serde_json::json!({
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
             "type": "string",
             "pattern": "^celestia[a-z0-9]+$",
             "description": "A Celestia address",
-        }))
-        .expect("Invalid schema; this is a bug, please report it")
+        })
     }
 }
 
@@ -112,9 +111,10 @@ impl AsRef<[u8]> for CelestiaAddress {
     }
 }
 
-/// Decodes slice of bytes into CelestiaAddress
-/// Treats it as string if it starts with HRP and the rest is valid ASCII
-/// Otherwise just decodes the tendermint Id and creates address from that.
+/// Decodes bytes into `CelestiaAddress`.
+/// If input is ASCII and starts with the account HRP, parses it as bech32 text.
+/// Otherwise expects a raw 20-byte Tendermint account ID.
+/// Note: HRP-prefixed ASCII that fails bech32 parsing returns an error (no raw-ID fallback).
 impl<'a> TryFrom<&'a [u8]> for CelestiaAddress {
     type Error = anyhow::Error;
 
@@ -149,8 +149,8 @@ mod tests {
 
     const CELESTIA_HRP: Hrp = Hrp::parse_unchecked("celestia");
 
-    use sov_rollup_interface::sov_universal_wallet::schema::Schema;
     use sov_test_utils::validate_schema;
+    use sov_universal_wallet::schema::Schema;
 
     use super::*;
 

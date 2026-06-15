@@ -22,9 +22,9 @@ use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::{CryptoSpec, HexHash, HexString, Spec};
 use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::SequencerKindConfig;
-use sov_test_utils::docker::pull_image_with_retries;
+use sov_test_utils::docker::prepull_image_best_effort;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
-use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
+use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConfig, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
 use testcontainers::core::{CmdWaitFor, ExecCommand, ExecResult};
 use testcontainers::runners::AsyncRunner;
@@ -165,7 +165,7 @@ pub async fn setup_rollup(
         DEFAULT_FINALIZATION_BLOCKS,
     )
     .set_config(|config| {
-        config.rollup_prover_config = None;
+        config.rollup_prover_config = RollupProverConfig::Disabled;
         config.sequencer_config = SequencerKindConfig::Preferred(PreferredSequencerConfig {
             minimum_profit_per_tx: 0,
             ..Default::default()
@@ -228,9 +228,7 @@ impl HyperlaneBuilder {
         // try to pull the image from registry before starting tests
         // but don't pull custom images, as they can be local and it would fail
         if !has_custom_image {
-            pull_image_with_retries(image.clone())
-                .await
-                .expect("failed to pull image");
+            prepull_image_best_effort(image.clone()).await;
         }
 
         Self {

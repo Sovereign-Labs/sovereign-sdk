@@ -24,6 +24,7 @@ use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_down};
 use async_trait::async_trait;
+use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
 use db::postgres::PostgresBackend;
 use db::rocksdb::RocksDbBackend;
@@ -46,16 +47,19 @@ use sov_modules_api::capabilities::{
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::rest::utils::ErrorObject;
-use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
-    RuntimeEventResponse, Spec, StateCheckpoint, StateUpdateInfo, VersionReader, VisibleSlotNumber,
-    *,
+    RuntimeEventResponse, Spec, StateCheckpoint, VersionReader, VisibleSlotNumber, *,
 };
 use sov_modules_stf_blueprint::PreExecError;
 use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
+use sov_rest_utils::json_obj;
+use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootTask;
 use std::boxed::Box;
@@ -87,7 +91,8 @@ use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::rest_api::ApiAcceptedTx;
 use crate::{
-    ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxStatus, TxStatusManager,
+    PreferredProofDataBytes, ProofBlobSender, SequencerConfig, SequencerNotReadyDetails,
+    SerializedProofWithDetailsBytes, TxStatus, TxStatusManager,
 };
 
 type VisibleSlotNumberIncrease = NonZero<u8>;
@@ -149,13 +154,14 @@ where
         state_update_receiver: StateUpdateReceiver<S::Storage>,
         storage_path: &Path,
         config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+        max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        Builder::new(da, config)
+        Builder::new(da, config, max_concurrent_proof_blobs)
             .build(
                 state_update_receiver,
                 storage_path,
@@ -246,9 +252,7 @@ where
                 }
 
                 self.synchronized_state_updator
-                    .trigger_batch_production_if_convenient_msg(
-                        "recover_and_catch_up:dump_catchup_batches",
-                    )
+                    .trigger_batch_production_msg("recover_and_catch_up:dump_catchup_batches")
                     .await
                     .map_err(|e| e.into_state_update_error())?;
             }
@@ -427,7 +431,7 @@ where
         }
 
         let (outer_res, nonce_to_mark_persisted) = match uniqueness {
-            UniquenessData::Generation(_) => (
+            UniquenessData::Generation(_) | UniquenessData::Window(_) => (
                 self.synchronized_state_updator
                     .accept_tx_msg(
                         &baked_tx,
@@ -477,15 +481,15 @@ where
                 Ok(result)
             }
             Err(e) => match e {
-                AcceptTxError::SequencerOverloaded503 => {
-                    return Err(sequencer_overloaded_503("Other"));
+                AcceptTxError::SequencerOverloaded503(reason) => {
+                    return Err(sequencer_overloaded_503(reason));
                 }
                 AcceptTxError::NotFullySynced(details) => {
                     return Err(error_not_fully_synced(details))
                 }
                 AcceptTxError::BatchError {
                     batch_creation_error,
-                    nb_of_concurrent_blob_submissions,
+                    nb_of_batch_blobs_in_flight,
                 } => match batch_creation_error {
                     BatchCreationError::NoFinalizedSlotAvailable => {
                         return Err(sequencer_overloaded_503("No finalized slots available"));
@@ -493,8 +497,8 @@ where
                     BatchCreationError::BlobSenderBusy => {
                         return Err(error_not_fully_synced(
                             SequencerNotReadyDetails::WaitingOnBlobSender {
-                                max_concurrent_blobs: self.config.max_concurrent_blobs,
-                                nb_of_blobs_in_flight: nb_of_concurrent_blob_submissions,
+                                max_concurrent_batch_blobs: self.config.max_concurrent_batch_blobs,
+                                nb_of_batch_blobs_in_flight,
                             },
                         ));
                     }
@@ -599,7 +603,7 @@ fn current_visible_slot_number_according_to_node<S: Spec, Rt: Runtime<S>>(
     info: &StateUpdateInfo<S::Storage>,
 ) -> SlotNumber {
     let mut runtime = Rt::default();
-    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &runtime.kernel(), None);
+    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &runtime.kernel());
     node_checkpoint.current_visible_slot_number().as_true()
 }
 
@@ -626,6 +630,17 @@ pub(crate) enum PreferredSeqOperation<S: Spec, Rt: Runtime<S>> {
     ),
 }
 
+/// Returns `true` when the test pause flag is set and applies to this node.
+///
+/// * `"1"` pauses all nodes (backward-compatible).
+/// * A specific `node_id` pauses only the node whose postgres config matches.
+fn should_skip_update_state(postgres_config: Option<&PostgresConfig>) -> bool {
+    let Ok(flag_value) = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE") else {
+        return false;
+    };
+    flag_value == "1" || postgres_config.is_some_and(|c| c.node_id == flag_value)
+}
+
 #[tracing::instrument(skip_all, level = "debug")]
 async fn update_state_task_inner<S, Rt, Da>(
     seq: PreferredSequencer<S, Rt, Da>,
@@ -639,22 +654,23 @@ where
 {
     let info =
         poll_state_update::<S>(state_update_receiver, shutdown_receiver, "update_state").await?;
-    if cfg!(debug_assertions) {
-        let skip_flag = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
-        if skip_flag == Ok("1".to_string()) {
-            tracing::warn!("skipping state update due to env var flag");
-            #[cfg(feature = "test-utils")]
-            {
-                let _ =
-                    seq.test_only_state_update_notification_sender
-                        .send(StateUpdateNotification {
-                            slot_number: info.slot_number,
-                            finalized_slot_number: info.latest_finalized_slot_number,
-                            update_skipped_due_to_pause: true,
-                        });
-            }
-            return Ok(());
+
+    if cfg!(debug_assertions)
+        && should_skip_update_state(seq.config.sequencer_kind_config.postgres_config.as_ref())
+    {
+        tracing::warn!("skipping state update due to env var flag");
+        #[cfg(feature = "test-utils")]
+        {
+            let _ = seq
+                .test_only_state_update_notification_sender
+                .send(StateUpdateNotification {
+                    slot_number: info.slot_number,
+                    finalized_slot_number: info.latest_finalized_slot_number,
+                    update_skipped_due_to_pause: true,
+                    triggered_recovery: false,
+                });
         }
+        return Ok(());
     }
 
     let mut rt = Rt::default();
@@ -672,6 +688,28 @@ where
         )
         .await
         .map_err(|e| e.into_state_update_error())?;
+
+    // For recovery/resync operations, notify tests BEFORE entering the long-running
+    // handler. This bypasses the state updator message queue (which may be blocked
+    // during trigger_recovery's async calls under CPU pressure), letting tests detect
+    // recovery without going through the is_ready() RPC.
+    // For ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary (the normal path), the
+    // notification is already sent by sync_state.rs after processing — skip here to
+    // avoid duplicates that would desync produce_and_wait_for_slot().
+    #[cfg(feature = "test-utils")]
+    if !matches!(
+        operation,
+        PreferredSeqOperation::ReplaySoftConfirmationsOnTopOfNodeStateIfNecessary(..)
+    ) {
+        let _ = seq
+            .test_only_state_update_notification_sender
+            .send(StateUpdateNotification {
+                slot_number: info.slot_number,
+                finalized_slot_number: info.latest_finalized_slot_number,
+                update_skipped_due_to_pause: false,
+                triggered_recovery: matches!(operation, PreferredSeqOperation::RecoverAndCatchUp),
+            });
+    }
 
     match operation {
         PreferredSeqOperation::Unreachable => {
@@ -751,7 +789,7 @@ where
         // same logic.
         self.synchronized_state_updator
             .check_readiness_msg(
-                self.config.max_concurrent_blobs,
+                self.config.max_concurrent_batch_blobs,
                 self.stop_at_rollup_height,
                 "check_readiness",
             )
@@ -765,12 +803,12 @@ where
     }
 
     #[cfg(feature = "test-utils")]
-    async fn force_close_current_batch(&self) -> anyhow::Result<()> {
-        self.synchronized_state_updator
+    async fn force_close_current_batch(&self) -> anyhow::Result<bool> {
+        Ok(self
+            .synchronized_state_updator
             .force_close_current_batch_msg("force_close_current_batch")
             .await
-            .map_err(|e| e.into_state_update_error())?;
-        Ok(())
+            .map_err(|e| e.into_state_update_error())?)
     }
 
     #[cfg(feature = "test-utils")]
@@ -851,6 +889,16 @@ where
         baked_tx: FullyBakedTx,
         ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
+        if baked_tx.data.len() > config_value!("MAX_TX_SIZE") {
+            return Err(ErrorObject {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: "Transaction is too big".to_string(),
+                details: json_obj!({
+                    "max_allowed_size": config_value!("MAX_TX_SIZE"),
+                    "submitted_size": baked_tx.len(),
+                }),
+            });
+        }
         let sequencer = self.clone();
         tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx, ip_addr).await })
             .await
@@ -889,6 +937,35 @@ pub(crate) struct PreferredBatchToReplay {
     batch: WithCachedTxHashes<PreferredBatchData>,
 }
 
+#[derive(Debug, Clone)]
+pub(crate) struct PreferredProofToReplay {
+    sequence_number: SequenceNumber,
+    data: PreferredProofDataBytes,
+}
+
+#[derive(Debug)]
+pub(crate) enum PreferredBlobToReplay {
+    Batch(PreferredBatchToReplay),
+    Proof(PreferredProofToReplay),
+}
+
+impl PreferredBlobToReplay {
+    pub fn num_txs(&self) -> usize {
+        match self {
+            PreferredBlobToReplay::Batch(b) => b.batch.inner.data.len(),
+            PreferredBlobToReplay::Proof(_) => 0,
+        }
+    }
+
+    /// Returns the sequence number of the blob.
+    pub fn sequence_number(&self) -> SequenceNumber {
+        match self {
+            PreferredBlobToReplay::Batch(b) => b.batch.inner.sequence_number,
+            PreferredBlobToReplay::Proof(p) => p.sequence_number,
+        }
+    }
+}
+
 #[async_trait]
 impl<S, Rt, Da> ProofBlobSender for PreferredSequencer<S, Rt, Da>
 where
@@ -896,7 +973,10 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    async fn produce_and_publish_proof_blob(&self, proof_data: Arc<[u8]>) -> anyhow::Result<()> {
+    async fn produce_and_publish_proof_blob(
+        &self,
+        proof_data: SerializedProofWithDetailsBytes,
+    ) -> anyhow::Result<()> {
         let blob_id = new_blob_id();
         self.synchronized_state_updator
             .proof_blob_msg(
@@ -908,6 +988,13 @@ where
             .map_err(|e| e.into_state_update_error())?;
 
         Ok(())
+    }
+
+    async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus> {
+        self.synchronized_state_updator
+            .proof_blob_sender_status_msg("proof_blob_sender_status")
+            .await
+            .map_err(|e| e.into_state_update_error())
     }
 }
 
@@ -951,8 +1038,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    let mut checkpoint =
-        StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
+    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
 
     runtime.kernel().next_sequence_number(&mut state)

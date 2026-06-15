@@ -33,6 +33,20 @@ pub enum SlashingReason {
 
     /// The final slot hash contained in the [`sov_modules_api::AggregatedStateTransition`] outputs is incorrect
     IncorrectFinalSlotHash,
+
+    /// The inner verification key hash committed in the proof does not match the
+    /// chain's expected inner code commitment.
+    IncorrectInnerVkeyHash,
+
+    /// An admin-submitted upgrade proof targets a slot that is not strictly newer
+    /// than the most recent recorded admin upgrade. Accepting it would rewind the
+    /// canonical commitments.
+    StaleAdminUpgrade,
+
+    /// An admin-submitted upgrade proof committed to a verification key hash that
+    /// the verifier cannot decode (e.g. wrong length). A well-formed inner circuit
+    /// never emits such a hash.
+    InvalidAdminUpgradeVkeyHash,
 }
 
 #[derive(Debug, PartialEq, Clone, schemars::JsonSchema)]

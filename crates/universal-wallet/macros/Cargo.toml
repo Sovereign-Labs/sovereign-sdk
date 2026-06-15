@@ -1,7 +1,8 @@
 [package]
 name = "sov-universal-wallet-macros"
-description = "Macros for sov-universall-wallet"
-version = { workspace = true }
+description = "Derive macros for sov-universal-wallet"
+authors = { workspace = true }
+version = "0.4.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 homepage = { workspace = true }
@@ -12,5 +13,4 @@ proc-macro = true
 
 [dependencies]
 syn = { workspace = true }
-proc-macro2 = { workspace = true }
 sov-universal-wallet-macro-helpers = { workspace = true }

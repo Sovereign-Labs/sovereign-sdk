@@ -5,37 +5,47 @@ use demo_stf::runtime::Runtime;
 use demo_stf::MultiAddressEvmSolana;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_db::ledger_db::LedgerDb;
-use sov_db::storage_manager::NativeStorageManager;
+use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
-use sov_modules_api::rest::StateUpdateReceiver;
-use sov_modules_api::{NodeEndpoints, Spec, Storage, SyncStatus, ZkVerifier};
+use sov_modules_api::{NodeEndpoints, Spec};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::Risc0;
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitment;
+use sov_rollup_full_node_interface::StateUpdateReceiver;
+use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::node::SyncStatus;
 use sov_sequencer::{ProofBlobSender, Sequencer};
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_state::Storage;
+use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
 use crate::solana_offchain_endpoint::solana_offchain_router;
+use crate::{
+    create_mock_prover_service, read_mock_code_commitments_from_env, Hasher, NativeStorage,
+};
 
-/// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`Risc0`] inner vm and [`MockZkvm`] for outer vm
+/// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, [`MockZkvm`] inner vm and [`MockZkvm`] for outer vm
 #[derive(Default, Clone, Copy)]
 pub struct MockDemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
 
 /// The default spec of the rollup
-pub type MockRollupSpec<M> =
-    ConfigurableSpec<MockDaSpec, Risc0, MockZkvm, MultiAddressEvmSolana, M>;
+pub type MockRollupSpec<M> = ConfigurableSpec<
+    MockDaSpec,
+    MockZkvm,
+    MockZkvm,
+    MultiAddressEvmSolana,
+    M,
+    MockZkvmCryptoSpec,
+    NativeStorage,
+>;
 
 impl RollupBlueprint<Native> for MockDemoRollup<Native>
 where
@@ -59,8 +69,7 @@ where
 impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
     type DaService = StorableMockDaService;
 
-    type StorageManager =
-        NativeStorageManager<MockDaSpec, <MockRollupSpec<Native> as Spec>::Storage>;
+    type StorageManager = NomtStorageManager<MockDaSpec, Hasher, NativeStorage>;
 
     type ProverService = ParallelProverService<
         <Self::Spec as Spec>::Address,
@@ -72,12 +81,6 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
     >;
 
     type ProofSender = SovApiProofSender<Self::Spec>;
-
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
-        MockCodeCommitment::default()
-    }
 
     async fn create_endpoints(
         &self,
@@ -105,6 +108,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         sequencer: Seq,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        sequencer_da_address: <MockDaSpec as sov_modules_api::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -113,6 +117,9 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         let eth_rpc_config = EthRpcConfig {
             eth_signer,
             extension: rollup_config.extension_or_panic(),
+            sequencer_rollup_address: rollup_config.sequencer.rollup_address,
+            sequencer_da_address,
+            sequencer_type: crate::sequencer_type(&rollup_config.sequencer),
             shutdown_receiver,
         };
         let axum_router = solana_offchain_router(sequencer.clone());
@@ -135,32 +142,22 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
 
     async fn create_prover_service(
         &self,
-        prover_config: RollupProverConfig<Risc0>,
+        _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
-    ) -> Self::ProverService {
-        let (host_args, prover_config_discriminant) = prover_config.split();
-        let inner_vm = Risc0Host::new(*host_args);
-
-        let outer_vm = MockZkvmHost::new_non_blocking();
-        let da_verifier = Default::default();
-
-        ParallelProverService::new_with_default_workers(
-            inner_vm,
-            outer_vm,
-            da_verifier,
-            prover_config_discriminant,
-            CodeCommitment::default(),
-            rollup_config.proof_manager.prover_address,
-        )
+        ledger_db: &LedgerDb,
+        start_fresh_outer_proof_on_resync: bool,
+    ) -> anyhow::Result<(Self::ProverService, Option<SlotNumber>)> {
+        create_mock_prover_service(rollup_config, ledger_db, start_fresh_outer_proof_on_resync)
+            .await
     }
 
     fn create_storage_manager(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        _witness_generation: bool,
+        witness_generation: bool,
     ) -> anyhow::Result<Self::StorageManager> {
-        NativeStorageManager::new(&rollup_config.storage.path)
+        NomtStorageManager::new(rollup_config.storage.clone(), witness_generation)
     }
 
     fn create_proof_sender(
@@ -169,5 +166,9 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         sequence_number_provider: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(sequence_number_provider))
+    }
+
+    fn compute_code_commitments() -> anyhow::Result<(MockCodeCommitment, MockCodeCommitment)> {
+        Ok(read_mock_code_commitments_from_env())
     }
 }

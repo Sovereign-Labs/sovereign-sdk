@@ -12,12 +12,12 @@ publish = false
 workspace = true
 
 [dependencies]
+demo-stf-declaration = { workspace = true }
+
 anyhow = { workspace = true }
 borsh = { workspace = true, features = ["derive"] }
 serde = { workspace = true, features = ["alloc", "derive"] }
-strum = { workspace = true, features = ["derive"] }
-schemars = { workspace = true }
-arbitrary = { workspace = true, optional = true }
+serde_json = { workspace = true, optional = true }
 
 sov-accounts = { workspace = true }
 sov-address = { workspace = true, features = ["evm"] }
@@ -25,11 +25,10 @@ sov-attester-incentives = { workspace = true }
 sov-bank = { workspace = true }
 sov-capabilities = { workspace = true }
 sov-chain-state = { workspace = true }
-sov-blob-storage = { workspace = true }
 sov-evm = { workspace = true }
+sov-hyperlane-integration = { workspace = true, features = ["evm"] }
 sov-modules-api = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true }
-sov-uniqueness = { workspace = true }
 sov-paymaster = { workspace = true }
 sov-operator-incentives = { workspace = true }
 sov-prover-incentives = { workspace = true }
@@ -43,49 +42,64 @@ sov-rollup-apis = { workspace = true, optional = true }
 sov-test-modules = { workspace = true }
 sov-test-utils = { workspace = true, optional = true }
 
+[build-dependencies]
+anyhow = { workspace = true }
+demo-stf-declaration = { workspace = true }
+sov-address = { workspace = true, features = ["evm"] }
+sov-modules-api = { workspace = true }
+sov-mock-zkvm = { workspace = true }
+sov-mock-da = { workspace = true }
+sov-build = { workspace = true }
+
 [features]
 default = []
 arbitrary = [
-	"dep:arbitrary",
-	"sov-address/arbitrary",
-	"sov-modules-api/arbitrary",
+	"demo-stf-declaration/arbitrary",
 	"sov-accounts/arbitrary",
+	"sov-address/arbitrary",
 	"sov-bank/arbitrary",
 	"sov-evm/arbitrary",
+	"sov-modules-api/arbitrary",
 	"sov-paymaster/arbitrary",
 	"sov-rollup-interface/arbitrary",
 	"sov-sequencer-registry/arbitrary",
 	"sov-state/arbitrary",
 	"sov-test-utils?/arbitrary",
-	"sov-uniqueness/arbitrary"
+	"sov-mock-da/arbitrary",
+	"sov-mock-zkvm/arbitrary",
+	"sov-hyperlane-integration/arbitrary"
 ]
 native = [
+	"demo-stf-declaration/native",
 	"sov-accounts/native",
 	"sov-attester-incentives/native",
 	"sov-bank/native",
 	"sov-capabilities/native",
 	"sov-chain-state/native",
 	"sov-evm/native",
+	"sov-hyperlane-integration/native",
 	"sov-kernels/native",
 	"sov-modules-api/native",
 	"sov-modules-stf-blueprint/native",
-	"sov-uniqueness/native",
 	"sov-operator-incentives/native",
 	"sov-prover-incentives/native",
 	"sov-rollup-interface/native",
 	"sov-sequencer-registry/native",
 	"sov-state/native",
 	"sov-synthetic-load/native",
-	"sov-blob-storage/native",
 	"sov-rollup-apis",
+	"serde_json",
 	"sov-paymaster/native",
 	"sov-address/native",
 	"sov-test-modules/native",
-	"sov-solana-offchain-auth/native"
+	"sov-solana-offchain-auth/native",
+	"sov-mock-da/native",
+	"sov-mock-zkvm/native"
 ]
 
 # We only activate test-utils if we also have native since all our test-code use native by default.
 test-utils = [
     "native",
     "sov-test-utils",
+    "demo-stf-declaration/test-utils",
 ]

@@ -8,7 +8,11 @@ use std::sync::Arc;
 
 pub use generators::MessageGenerator;
 pub use interface::*;
-pub use rt_agnostic_blueprint::RtAgnosticBlueprint;
+pub use logging::initialize_logging;
+pub use rt_agnostic_blueprint::{
+    AdditionalSequencerApis, NoAdditionalApis, ParallelProverFactory, ProverFactory,
+    RtAgnosticBlueprint, RtAgnosticBlueprintWithApis,
+};
 use serde::{Deserialize, Serialize};
 pub use sov_db::schema::SchemaBatch;
 pub use sov_mock_da::verifier::MockDaSpec;
@@ -16,22 +20,24 @@ use sov_mock_da::BlockProducingConfig;
 pub use sov_mock_da::MockHash;
 pub use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
 use sov_modules_api::capabilities::UniquenessData;
-use sov_modules_api::default_spec::{DefaultNomtSpec, DefaultSpec};
+use sov_modules_api::default_spec::DefaultSpec;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{
     PriorityFeeBips, Transaction, TransactionCallable, TxDetails, UnsignedTransaction,
 };
-use sov_modules_api::{Amount, BasicGasMeter, CryptoSpec, Gas, GasArray, Spec};
+use sov_modules_api::{
+    Amount, BasicGasMeter, CryptoSpec, Gas, GasArray, KernelStateValue, Spec, StateCheckpoint,
+};
 pub use sov_modules_api::{EncodeCall, TxProcessingError, TxReceiptContents};
-pub use sov_modules_rollup_blueprint::logging::initialize_logging;
 pub use sov_modules_stf_blueprint::get_gas_used;
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::execution_mode::{Native, Zk};
 use sov_state::nomt::prover_storage::NomtProverStorage;
-pub use sov_state::ProverStorage;
-use sov_state::{DefaultStorageSpec, StateAccesses, Storage};
+use sov_state::{
+    BorshCodec, DefaultStorageSpec, Prefix, SlotKey, SlotValue, StateAccesses, Storage,
+};
 pub use testcontainers::ContainerAsync;
 pub use {
     sov_bank, sov_chain_state, sov_paymaster, sov_rollup_apis, sov_sequencer_registry,
@@ -60,7 +66,7 @@ pub mod runtime;
 
 /// Utilities for testing the sequencer.
 pub mod sequencer;
-/// Utilities for testing that require [`ProverStorage`].
+/// Utilities for testing storage-backed state.
 pub mod storage;
 
 pub mod docker;
@@ -77,14 +83,11 @@ pub type TestCryptoSpec = MockZkvmCryptoSpec;
 pub type TestHasher = <MockZkvmCryptoSpec as CryptoSpec>::Hasher;
 /// The default storage spec type. Uses a [`TestHasher`] for hashing.
 pub type TestStorageSpec = DefaultStorageSpec<TestHasher>;
-/// The default test spec. Uses a [`MockZkvm`] for both inner and outer vm verification.
-/// Uses [`MockZkvmCryptoSpec`] for cryptographic primitives.
-pub type TestJmtSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 /// Shortcut to [`sov_mock_da::MockHash`];
 pub type TestSlotHash = <MockDaSpec as DaSpec>::SlotHash;
-/// The default test spec for NOMT. Uses a [`MockZkvm`] for both inner and outer vm verification.
+/// The default test spec. Uses a [`MockZkvm`] for both inner and outer vm verification.
 /// Uses [`MockZkvmCryptoSpec`] for cryptographic primitives.
-pub type TestSpec = DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+pub type TestSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 /// The default test spec for ZK. Uses a [`MockZkvm`] for both inner and outer vm verification.
 pub type ZkTestSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Zk>;
 /// The default address type. This is the [`sov_modules_api::BasicAddress`] type defined by the [`TestSpec`].
@@ -100,9 +103,35 @@ pub type TestSignature = <TestCryptoSpec as CryptoSpec>::Signature;
 pub type TestStfBlueprint<RT, S> = StfBlueprint<S, RT>;
 /// Just [`NomtProverStorage`] with predefined configs.
 pub type TestStorage = NomtProverStorage<TestStorageSpec, TestSlotHash>;
-/// The default [`sov_db::storage_manager::NativeStorageManager`], that can be used with [`NomtProverStorage`] and [`TestStorageSpec`].
+/// The default [`sov_db::storage_manager::NomtStorageManager`], that can be used with [`NomtProverStorage`] and [`TestStorageSpec`].
 pub type TestStorageManager =
     sov_db::storage_manager::NomtStorageManager<MockDaSpec, TestHasher, TestStorage>;
+
+/// Writes a placeholder value into the kernel namespace via a [`StateCheckpoint`].
+///
+/// NOMT requires the user and kernel namespaces to advance together at every commit.
+/// Tests that only mutate user state should call this before committing so that the
+/// kernel namespace produces a corresponding state update.
+pub fn write_kernel_marker<S: Spec>(
+    state: &mut StateCheckpoint<S>,
+) -> Result<(), std::convert::Infallible> {
+    let mut kernel_value = KernelStateValue::<u8>::with_codec(Prefix::new(255, 0), BorshCodec);
+    kernel_value.set(&0u8, state)
+}
+
+/// Pushes a placeholder write into the kernel namespace of a raw [`StateAccesses`].
+///
+/// The lower-level counterpart to [`write_kernel_marker`] for tests that build a
+/// [`StateAccesses`] directly (e.g. when synthesizing input for
+/// `Storage::compute_state_update`). NOMT requires the kernel namespace to advance
+/// alongside the user namespace.
+pub fn push_kernel_marker(accesses: &mut StateAccesses) {
+    accesses.kernel.ordered_writes.push((
+        SlotKey::from_slice(b"\xff\xffkernel_marker"),
+        Some(SlotValue::from(vec![0u8])),
+    ));
+}
+
 // --- Blessed test parameters ---
 
 // Blessed gas parameters
@@ -117,7 +146,10 @@ pub const TEST_BLOB_PROCESSING_TIMEOUT: u64 = 60;
 pub const TEST_NUM_CACHE_WARMUP_WORKERS: usize = 3;
 
 /// The maximum number of concurrent blobs.
-pub const TEST_MAX_CONCURRENT_BLOBS: usize = 16;
+pub const TEST_MAX_CONCURRENT_BATCH_BLOBS: usize = 16;
+
+/// The maximum number of concurrent proof blobs.
+pub const TEST_MAX_CONCURRENT_PROOF_BLOBS: usize = TEST_MAX_CONCURRENT_BATCH_BLOBS;
 
 /// The default max fee to set for a transaction. This should be enough to be able to execute most standard transactions for the test rollup.
 pub const TEST_DEFAULT_MAX_FEE: Amount = Amount::new(100_000_000_000);
@@ -320,14 +352,14 @@ pub fn new_test_gas_meter_with_price<S: Spec>(
 /// Serializes a value to JSON and validates it based on its
 /// [`schemars::JsonSchema`] rules.
 #[allow(clippy::result_large_err)]
-pub fn validate_schema<T>(item: &T) -> Result<(), jsonschema::error::ValidationErrorKind>
+pub fn validate_schema<T>(item: &T) -> Result<(), jsonschema::error::ValidationError<'static>>
 where
     T: schemars::JsonSchema + serde::Serialize,
 {
     let schema = serde_json::to_value(schemars::schema_for!(T)).unwrap();
     let json = serde_json::to_value(item).unwrap();
 
-    jsonschema::validate(&schema, &json).map_err(|e| e.kind)
+    jsonschema::validate(&schema, &json).map_err(|e| e.to_owned())
 }
 
 /// Validate all the storage accesses in a particular cache log,
@@ -341,7 +373,7 @@ pub fn validate_and_materialize<ST: Storage>(
     prev_state_root: ST::Root,
 ) -> anyhow::Result<(ST::Root, ST::ChangeSet)> {
     let (root_hash, node_batch) =
-        storage.compute_state_update(state_accesses, witness, prev_state_root, None)?;
+        storage.compute_state_update(state_accesses, witness, prev_state_root)?;
 
     let change_set = storage.materialize_changes(node_batch);
     Ok((root_hash, change_set))

@@ -2,10 +2,11 @@ use crate::http::id_provider::HexIdProvider;
 use crate::CorsConfiguration;
 use axum::body::HttpBody;
 use axum::error_handling::HandleErrorLayer;
-use axum::extract::{ConnectInfo, Request};
+use axum::extract::{ConnectInfo, MatchedPath, Request};
 use axum::http::StatusCode;
 use axum::middleware::Next;
 use axum::response::IntoResponse;
+use axum::serve::ListenerExt;
 use axum::ServiceExt;
 use jsonrpsee::server::{
     stop_channel, ServerBuilder, ServerConfig, ServerHandle, StopHandle, TowerService,
@@ -94,6 +95,9 @@ pub(crate) async fn start_http_server(
         let router = NormalizePathLayer::trim_trailing_slash().layer(router);
 
         // TODO: Is there a way to have max_connections and other params for axum::serve?
+        let axum_listener = axum_listener.tap_io(|tcp| {
+            let _ = tcp.set_nodelay(true);
+        });
         let result = axum::serve(
             axum_listener,
             ServiceExt::<axum::extract::Request>::into_make_service_with_connect_info::<SocketAddr>(
@@ -103,7 +107,6 @@ pub(crate) async fn start_http_server(
         .with_graceful_shutdown(async move {
             shutdown_receiver.changed().await.ok();
         })
-        .tcp_nodelay(true)
         .await
         .map_err(|e| anyhow::anyhow!(e));
 
@@ -183,31 +186,37 @@ fn ws_service(methods: RpcModule<()>, stop_handle: StopHandle) -> TowerService<I
         .build(methods, stop_handle)
 }
 
-async fn measure_time(req: Request, next: Next) -> impl IntoResponse {
+async fn measure_time(
+    matched_path: Option<MatchedPath>,
+    req: Request,
+    next: Next,
+) -> impl IntoResponse {
     let method = req.method().clone();
-    let uri = req.uri().clone();
-
     let start = std::time::Instant::now();
 
     let response = next.run(req).await;
     let duration = start.elapsed();
 
-    let body = response.body();
-    let status = response.status();
-    let size_hint = body.size_hint();
-    let exact_or_lower = size_hint.exact().unwrap_or_else(|| size_hint.lower());
+    // Skip metrics for unmatched routes (404s) to avoid cardinality explosion
+    // from arbitrary paths hitting the server.
+    if let Some(matched_path) = matched_path {
+        let body = response.body();
+        let status = response.status();
+        let size_hint = body.size_hint();
+        let exact_or_lower = size_hint.exact().unwrap_or_else(|| size_hint.lower());
 
-    track_metrics(|tracker| {
-        let point = HttpMetrics {
-            request_method: method,
-            request_uri: uri,
-            response_status: status,
-            response_body_size: exact_or_lower,
-            handler_processing_time: duration,
-            is_ws: false,
-        };
-        tracker.submit_known_metric(point);
-    });
+        track_metrics(|tracker| {
+            let point = HttpMetrics {
+                request_method: method,
+                request_path: matched_path.as_str().to_owned(),
+                response_status: status,
+                response_body_size: exact_or_lower,
+                handler_processing_time: duration,
+                is_ws: false,
+            };
+            tracker.submit_known_metric(point);
+        });
+    }
 
     response
 }

@@ -11,8 +11,7 @@ use sov_universal_wallet::ty::ByteDisplayable;
 use sov_universal_wallet::UniversalWallet;
 
 use super::CredentialId;
-use crate as sov_rollup_interface;
-use crate::common::SafeString; // Needed for UniversalWallet, as it requires global paths
+use crate::common::SafeString;
 
 /// Representation of a signature verification error.
 #[derive(Debug, Display)]

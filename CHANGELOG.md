@@ -1,5 +1,128 @@
+# 2026-06-12
+- #2973 Preferred sequencer: increases the default `leader_timeout_millis` (leader-election) from 500ms to 1000ms. A leader is now considered inactive only after 1s without a heartbeat, reducing spurious failovers at the cost of slightly slower dead-leader detection. Configurable via `[sequencer.preferred.postgres_config.leader_election]`; existing configs that set the value explicitly are unaffected.
+
+# 2026-06-11
+- #2966 Genesis configs are now deserialized only when the rollup state is empty. Nodes restarting with populated state no longer read genesis files, so after a hard fork the on-disk genesis configs don't need to match the new binary's `GenesisConfig`; `operating_mode` and `genesis_da_height` are read from chain state instead. Fresh nodes (empty state) still require genesis files valid for the current binary.
+  * **Breaking Change** `FullNodeBlueprint::create_new_rollup_with_genesis_params` is renamed to `create_new_rollup_with_genesis_source` and takes a `GenesisSource` (wrap existing params in `GenesisSource::CustomParams(...)`). The genesis source is only consulted when state is empty. `GenesisSource` moved from `sov-test-utils` to `sov-modules-rollup-blueprint` (re-exported at the old path).
+  * **Breaking Change** New required method `genesis_da_height` on `sov_modules_api::capabilities::ChainState`; custom kernel implementations must add a one-line delegation to the chain-state module's getter.
+
+# 2026-06-10
+- #2960 Chain state: Adds a WebSocket subscription streaming the current rollup height. New endpoint `GET /modules/chain-state/rollup-height/ws` sends the current rollup height (`current_heights.0`) on connection, then every subsequent height in order as the rollup height advances (heights are never skipped or repeated).
+- #2960 **Breaking Change** Module REST API: `ApiState::build` now requires a node shutdown receiver (`watch::Receiver<()>`), exposed to handlers via the new `ApiState::shutdown_receiver()`. This gives module custom REST APIs (e.g. WebSocket subscriptions) a real graceful-shutdown signal instead of each handler faking one.
+- #2959 **Breaking Change** Ledger API: renames the `rollup_height` field to `slot_number` in the WebSocket slot-events subscription message (`SlotEvents`); the value was always a slot number, not a rollup height. Mirrors the #2886 `BatchResponse` rename.
+- #2963 **Breaking Change** `sov-rollup-interface`: removes the unchecked slot-number coercions `SlotNumber::new_dangerous` (use `SlotNumber::new`), `SlotNumber::as_visible`, `RollupHeight::to_slot_number`, and `IntoSlotNumber::to_visible_slot_number`. These were stateless `u64` reinterpretations with no validation; cross-type conversion between slot numbers, visible slot numbers, and rollup heights must go through the `KernelWithSlotMapping` kernel capability instead.
+
+# 2026-06-08
+- #2953 Preferred sequencer: replica nodes now deregister from the `nodes` table on graceful shutdown, so node discovery reroutes reads off a departing replica within milliseconds instead of waiting for staleness. Best-effort and bounded; leader removal is unchanged (still timeout-based).
+
+# 2026-06-02
+- #2936 Request rate limiting uses milli-requests instead of always rounding down.
+  * Per-request budget (`milli_req_counter`) is now more fine-grained and will work even with single digit requests per second.
+# 2026-05-26
+- #2918 Adds support for CIDR based rate limiting in preferred sequencer. Existing configs are backwards compatible.
+  * **Breaking (behavior)**: corrects a unit bug in the preferred sequencer rate limiter where the per-request budget (`req_counter`) was computed 1000× too large (per-second rate × milliseconds). It now enforces the true requests-per-batch, consistent with the size/execution-time/gas limits. Configs are unchanged; in typical setups the request-count dimension still doesn't bind, but the request-count limit is now 1000× tighter. At low configured request budgets, request-counter refill still uses integer per-millisecond refill and can round down to zero.
+  * **Breaking (behavior)**: also corrects a latent swapped-argument bug affecting only `address_custom_limits` and `ip_custom_limits` (the default limits were already correct): their per-key execution-time budget and refill rate were derived from `max_requests_per_second` instead of the batch duration, leaving custom-limited senders effectively unthrottled on execution time. Custom limits are now computed the same way as the default limits.
+
+# 2026-05-20
+- #2893 Adds a new interface for providing custom EVM precompiles that can access sov-state (read-only). Precompiles must implement the `EvmPrecopmile` trait. The `sov-evm::Evm` module is now generic on `EvmPrecompileSet`; a Set can be generated from several `EvmPrecopmile`s using the `generate_precompile_set!` macro. See e.g. `BankBalancePrecompile` or `SequencingTimestampPrecompile` for implementation examples, and the demo-rollup changes for a usage example.
+  * Breaking(code): This PR also changes the visibility of some `sov-evm` export which are intended for internal usage, as well as the signature and generic on `sov-evm` construction. Normal rollup usage should be unaffected.
+
+# 2026-05-15
+- #2875 Upgrades SP1 crates from 6.1.0 to 6.2.1. Centralizes the `sp1-*` and `slop-algebra` workspace dependencies in the root `Cargo.toml`; the upgrade also drops the transitive `halo2` / `zkhash` chain, allowing the `halo2` proprietary-license exception to be removed from `deny.toml`. Stale Plonky-3 / SP1 v5 entries in `.cargo/config.toml` are refreshed to match the v6 architecture.
+# 2026-05-18
+- #2881 **Breaking config change**: Moves `max_concurrent_proof_blobs` from `[sequencer]` to `[proof_manager]` in rollup TOML configs. The `[proof_manager]` section is now optional for `operator` rollups and remains required for `zk`/`optimistic` rollups (enforced at startup).
+- #2879 Updates NOMT crate version. **Breaking for existing ZK-rollups**. Proof type has changed.
+- #2882 Removes EVM pinned cache support. **Breaking config change**: operators must remove the `default_bucket_size_limit`, `privileged_deployer_addresses`, and `known_contracts_and_limits` fields from `evm_execution_config.json`; only `preferred_sequencer_publish_reverted_txs` remains.
+- #2884 Removes JMT crate and JMT-base storage. Please update rollup to use `NomtStorageManager` instead of `StorageManager`
+
+# 2026-05-11
+- #2847 Removes bincode support from `sov-risc0-adapter`
+
+# 2026-05-05
+- #2808 **Breaking config change**: Adds a required `sequencer.max_concurrent_proof_blobs` field to rollup TOML configs, capping the number of proof blobs in flight on the DA layer. When the cap is reached, the ZK aggregator triggers a rollup shutdown.
+# 2026-04-20
+- #2196 Renames 5 metrics to add the `sov_` prefix; update Grafana/Flux dashboards accordingly: `state_db_materialization` → `sov_state_db_materialization`, `nomt_db_stats` → `sov_nomt_db_stats`, `nomt_begin_session` → `sov_nomt_begin_session`, `storage_manager_finalization` → `sov_storage_manager_finalization`, `pruner` → `sov_db_pruner`. Also adds a metric inventory to the `sov-metrics` crate README.
+- #2196 The previously-inline metrics emitted by the SDK (`sov_rollup_num_of_in_flight_blobs`, `sov_rollup_blobs_enter_scope`, `sov_rollup_blobs_exit_scope`, `sov_rollup_current_sequence_number`, `sov_rollup_in_progress_batch_size`, `sov_rollup_sequence_number_delta`) now go through dedicated types implementing `Metric`. The blob-sender scope markers intentionally changed their placeholder field from `foo=1` to `marker=1i`; update Grafana/Flux dashboards accordingly. `MetricsTracker::submit_inline` is retained for external SDK users whose downstream code depends on it.
+- #2196 *Internal*: `sov_rollup_zkvm` and `sov_rollup_gas_constant` now emit caller-supplied `metadata` as InfluxDB string fields rather than tags. Previously these tags could explode series cardinality when the `bench` / `gas-constant-estimation` features were enabled. The on-the-wire field keys are unchanged; if you were selecting them via `group by` (a tag operation) you'll need to switch to field-based filtering.
+# 2026-05-04
+- #2805 **Breaking config change**: Renames `sequencer.max_concurrent_blobs` to `sequencer.max_concurrent_batch_blobs` in rollup TOML configs. The setting now caps only batch blobs in flight; proof blobs no longer count against it. This fixes a stall where a saturated proof buffer blocked batch production. Operators must rename the field in their configs; the JSON schema and example configs have been updated.
+- #2809 Reqwest 0.12→0.13 and progenitor 0.8→0.14 crates upgrade. Reqwest 0.12 is still in the tree for EVM rollups.
+
+# 2026-04-30
+- #2798 (Non-breaking) Adds timelock support to the SDK. To use, add the `sov-timelock` module to the runtime, override the `timelock()` accessor on `HasCapabilities`, and then override `Runtime::timelock_for_callmessage` to match `CallMessage`s and return `TimelockPolicy` for those that should be timelocked. The module supports configurable cancellation policies, including delegating to a separate cancel address. See the `sov-timelock` module README for more details. Existing rollups do not need to do anything.
+
+# 2026-04-23
+- #2693 Adds new apis for statemap iteration at `/modules/{module}/state/{map_name}/items`
+
+# 2026-04-21
+- #2768 *Minor breaking change (code)*: Removed unused `Runtime::resolve_address` method from the native `Runtime` trait in `sov-modules-api`.
+  The method had no call sites; address resolution continues to happen via `Accounts::resolve_sender_address{_read_only}` directly.
+  Downstream runtimes with a manual `Runtime` impl should delete their `resolve_address` function.
+
+# 2026-04-16
+- #2746 Removes re-export of `DaSyncState` and `SyncStatus` from sov-modules-api. Please use `sov-rollup-interface` directly
+- #2744 **Manual intervention might be needed**: Adds `serde(deny_unknown_fields)`, which can fail rollup at startup if genesis config is not tidy.
+  The change also affects call message de-serialization in sov-paymaster, for all call messages that use `PaymasterPolicyInitializer`
+- #2750 **Code breaking change**: `StateUpdateInfo`, `StateChannel`, `StateUpdateReceiver`, and `DaSyncState` have been moved out of `sov-rollup-interface` and `sov-modules-api` into a new crate `sov-rollup-full-node-interface`. This removes the `rockbound` (RocksDB) dependency from `sov-rollup-interface/native`. Update your imports:
+  - `sov_rollup_interface::StateUpdateInfo` -> `sov_rollup_full_node_interface::StateUpdateInfo`
+  - `sov_rollup_interface::StateChannel` -> `sov_rollup_full_node_interface::StateChannel`
+  - `sov_rollup_interface::node::DaSyncState` -> `sov_rollup_full_node_interface::DaSyncState`
+  - `sov_modules_api::StateChannel` -> `sov_rollup_full_node_interface::StateChannel`
+  - `sov_modules_api::rest::StateUpdateReceiver` -> `sov_rollup_full_node_interface::StateUpdateReceiver`
+  - `SyncStatus` remains in `sov_rollup_interface::node::SyncStatus` (unchanged)
+  - `MaximumProvableHeight::new` now takes `watch::Receiver<S::Storage>` instead of `StateUpdateReceiver`. Use `StateChannel::subscribe_storage()` instead of `StateChannel::subscribe_state_update()` when constructing it.
+
+# 2026-04-15
+- #2742 *Minor breaking change (code)*: The `UniversalWallet` macro exported by the `sov-universal-wallet` crate is now meant to be used by depending directly on the crate, and is no longer re-exported from `sov-rollup-interface`. The re-export from `sov-modules-api` is unchanged, so most usage is unaffected; this is only breaking if you were previously importing the macro specifically from `sov-rollup-interface`.
+
+# 2026-04-13
+- #2721 Adds support for fallback gRPC endpoints to celestia-adapter. Optional new field
+- #2735 Internal change: moves EVM RPC tests to sov-ethereum from sov-demo-rollup
+
+# 2026-04-08
+- #2695 adds a new `ext_getStorageProof` RPC endpoint to the EVM module
+- #2704 Replaces `reth`-related crates. No breakage is intended.
+- #2710 Marks demo-rollup's bank test as flaky.
+
+# 2026-04-02
+- #2682 Upgrades axum from 0.7 to 0.8. OpenAPI specs are now served as version 3.1.0 (previously 3.0.2). Manual intervention for upgrading pinned dependencies might be needed. Check Cargo.lock after the upgrade
+- #2683 Removes JMT based rollup from demo-rollup examples. JMT-based storage is still available in sov-state.
+
+# 2026-04-01
+- #2670 **Breaking change** Remove `InnerVm` and `OuterVm` generic type parameters from `StateTransitionFunction` trait and all downstream types.
+
+# 2026-03-30
+- #2651 Updates in rust dependencies. Manual update of `serde_with` is required with `cargo update serde_with`
+- #2629 Sequencer: Replica rejects batch starts that outrun the executor rebase window. `STATE_ROOT_DELAY_BLOCKS` was increased from 3 to 5 in `constants.toml`.
+- #2654 Replace `lazy_static` crate with `std::sync::LazyLock`
+- #2675 Upgrades `rockbound` version, with some dependency clean up. `prometheus_exporter` is removed from `demo-rollup`
+- #2671 Fixes API archival query race condition
+- #2613 Adds two new constants: CHANGE_GAS_LIMIT_AFTER_HEIGHT and UPDATED_GAS_LIMIT. If your rollup does not need to update its gas limit, set these values to i64::MAX and your existing gas limit, respectively.
+- #2658 (Non-breaking) Add multisig support to the sov-solana-offchain-authenticator, but only when using simple signing (i.e. multisigs are not yet supported with Ledger wallets).
+
+# 2026-03-24
+- #2620 Adds proptests for checking consistency between simulation endpoints and sendRawTransaction
+- #2626 EVM: Fixes estimateGas value to match what will end up in the receipt of actually executed transaction
+- #2634 Test only changes
+- #2631 Reorganize and extend demo-stf
+
+# 2026-03-16
+- #2592 Fixes EVM RPC regression for paymaster enabled rollups
+- #2598 Fixes EVM RPC omitted gas limit for simulation endpoints
+- #2599 Make EVM RPC affordances checks paymaster-aware
+- #2621 EVM: Fix feeHistory endpoint for zero blocks
+
+# 2026-03-13
+- #2587 EVM: RPC only: Fixes Fee-cap admission consistency across simulation and submission.
+
+# 2026-03-10
+- #2569 **Breaking change** Updated the `SP1Host` and `SP1Verifier` implementations to support SP1 v6. `ZkvmHost::code_commitment` now returns a Result, which is a breaking change.
+- #2554 **Breaking change** Updated the `SP1Host` and `SP1Verifier` implementations to support SP1 v6. `ZkvmHost::code_commitment` now returns a Result, which is a breaking change.
+
 # 2026-03-05
+- #2554 More stabilization in demo-rollup EVM tests
 - #2556 **Breaking change**: only for runtimes with AccessPattern module.
+- #2548 Updates sp1 to v6.
 
 # 2026-02-12
 - #2482 **Breaking change**: HasCapabilities now requires the `SequencerData` associated type that was previously specified on the implementation of SequencingDataHandler.
@@ -28,6 +151,9 @@
 - #2500 EVM: Fixes the nonce used for simulation endpoints
 - #2499 EVM: Add block-pinned state isolation tests for all 6 RPC endpoints
 - #2495 Updates examples configs
+
+# 2026-02-12
+- #2482 **Breaking change**: HasCapabilities now requires the `SequencerData` associated type that was previously specified on the implementation of SequencingDataHandler.
 
 # 2026-02-09
 - #2459 Fixes in EVM RPC `eth_estimateGas` and `eth_getStorageAt`

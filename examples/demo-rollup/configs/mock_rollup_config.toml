@@ -10,7 +10,7 @@ finalization_blocks = 0 # Defines how many blocks progress to finalization. Set 
 # failure_behavior = "none" # Configures failure injection for testing. Options: "none", or structured variants for testing
 
 [da.block_producing.periodic]
-block_time_ms = 1_000
+block_time_ms = 1000
 
 # Alternative block producing modes:
 # [da.block_producing.manual] # Manual block production mode
@@ -80,13 +80,15 @@ tokio_runtime_metrics_interval_millis = 500
 [proof_manager]
 aggregated_proof_block_jump = 1
 prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
-max_number_of_transitions_in_db = 100
-max_number_of_transitions_in_memory = 30
+max_number_of_transitions_in_db = 1000
+max_number_of_transitions_in_memory = 100
+max_number_of_aggregated_proofs_in_memory = 5
+max_concurrent_proof_blobs = 1024
 
 [sequencer]
 blob_processing_timeout_secs = 3000
 max_batch_size_bytes = 1048576
-max_concurrent_blobs = 128
+max_concurrent_batch_blobs = 128
 max_allowed_node_distance_behind = 10
 rollup_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
 # automatic_batch_production = true # Whether to automatically produce batches
@@ -117,16 +119,21 @@ ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintai
 #node_id = "node_1"
 #node_role = "Leader" # Other options are "Replica", "ReplicaNoLeaderSync", or "DbElected"
 #[sequencer.preferred.postgres_config.leader_election] # Configuration for leader election timing
-#leader_timeout_millis = 500 # Maximum time in milliseconds without a heartbeat before a leader is considered inactive
+#leader_timeout_millis = 1000 # Maximum time in milliseconds without a heartbeat before a leader is considered inactive
 #grace_period_millis = 10000 # Minimum time in milliseconds after leader acquisition before another node can take over
 #heartbeat_interval_millis = 100 # Interval in milliseconds between heartbeat updates
 
 
 # [sequencer.preferred.rate_limiter] # Setting related to rate limiter.
-# max_nb_of_concurrent_users_in_rate_limiter = 100000 # Limit on how many concurrent users the rate limiter can handle.
+# max_nb_of_concurrent_users_in_rate_limiter = 100000 # The cache size for the rate limiter.
 # max_requests_per_second = 10000 # Limit on requests per second.
-# address_custom_limits = [] 
-# ip_custom_limits = []
+# Per-address overrides; each entry is [rollup_address, limits].
+# address_custom_limits = [["sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf", { resources_per_bucket = 50, refill_rate = 10 }]]
+# Per-network rate limits; each entry is [network, limits]. Accepts CIDR ("10.0.0.0/8") or a bare IP ("192.168.1.5", treated as a host network).
+# ip_custom_limits = [
+#     ["10.0.0.0/8", { resources_per_bucket = 10, refill_rate = 2 }],
+#     ["192.168.1.5", { resources_per_bucket = 8, refill_rate = 2 }],
+# ]
 # [sequencer.preferred.rate_limiter.default_limits]
 # resources_per_bucket = 20 # The resources allocated per user per rate-limiting bucket, defined in units of 1/1000th of a full batch. E.g. resources_per_bucket = 10 would mean each bucket allows the user to use 1% of a full batch capacity.
 # refill_rate = 5 # The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.

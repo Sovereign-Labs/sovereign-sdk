@@ -1,17 +1,23 @@
 .PHONY: help
 
 PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
-               examples/demo-rollup/provers/risc0/guest-mock-nomt \
                examples/demo-rollup/provers/risc0/guest-celestia \
-               examples/demo-rollup/provers/risc0/guest-celestia-nomt \
                examples/demo-rollup/provers/sp1/guest-mock \
-               examples/demo-rollup/provers/sp1/guest-mock-nomt \
+               examples/demo-rollup/provers/sp1/guest-aggregation-mock \
                examples/demo-rollup/provers/sp1/guest-celestia \
-               examples/demo-rollup/provers/sp1/guest-celestia-nomt \
+               crates/bench/sp1-microbenches/guest-sha256 \
+               crates/bench/sp1-microbenches/guest-ed25519
 
 # Absolutely all dirs
 ALL_DIRS := $(PROVER_DIRS) \
 						crates/module-system/module-implementations/extern/hyperlane-solana-register/solana
+
+DATA_DIRS := ./crates/module-system/sov-modules-macros/data \
+             ./crates/module-system/sov-solana-offchain-auth/data \
+             ./crates/module-system/hyperlane/data \
+             ./crates/full-node/sov-stf-runner/data \
+             ./crates/full-node/sov-metrics/data \
+             ./examples/demo-rollup/data
 
 # We run `cargo hack` with the `--partition 1/1` by default, but overrides allow
 # CI to parallelize checks.
@@ -42,7 +48,12 @@ check-provers:   ## cargo check in non attached crates
 	@set -e; for dir in $(PROVER_DIRS); do \
 		echo "$$(date) Running cargo fmt + check in $$dir"; \
 		cargo fmt --all --check --quiet --manifest-path "$$dir/Cargo.toml"; \
-		cargo check --all-targets --all-features --manifest-path "$$dir/Cargo.toml"; \
+		case "$$dir" in \
+			*/provers/sp1/*) \
+				(cd "$$dir" && cargo prove build --features bench) ;; \
+			*/provers/risc0/*) \
+				echo "Skipping risc0 prover build in $$dir" ;; \
+		esac; \
 	done
 
 total-clean: clean
@@ -54,6 +65,15 @@ total-clean:
     	(cargo clean --manifest-path "$$dir/Cargo.toml"); \
     done;
 	rm -rf "soak_data/examples/demo-rollup/sov-soak-testing/soak_data"
+	rm -rf typescript/node_modules
+	rm -rf typescript/.turbo
+	rm -rf typescript/.cache
+	rm -rf typescript/packages/universal-wallet-wasm/target
+	cargo clean --manifest-path examples/demo-rollup/tests/prover/sov-aggregated-proof/Cargo.toml
+	cargo clean --manifest-path python/py_sovereign_web3/rust/Cargo.toml
+	@for dir in $(DATA_DIRS); do \
+		rm -rf "$$dir"; \
+	done;
 
 test:  ## Runs test suite using next test
 	@cargo nextest run --no-fail-fast --status-level skip --all-features
@@ -76,7 +96,7 @@ install-dev-tools: install-cargo-tools install-risc0-toolchain install-sp1-toolc
 	cp .vscode/settings.default.json .vscode/settings.json
 	cargo install cargo-llvm-cov
 	cargo install cargo-hack
-	cargo install cargo-udeps
+	cargo install cargo-machete
 	cargo install cargo-deny
 	cargo install flaky-finder
 	cargo install cargo-insta
@@ -88,7 +108,7 @@ install-dev-tools: install-cargo-tools install-risc0-toolchain install-sp1-toolc
 install-cargo-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-llvm-cov
 	cargo install cargo-hack
-	cargo install cargo-udeps
+	cargo install cargo-machete
 	cargo install cargo-deny
 	cargo install flaky-finder
 	cargo install cargo-insta
@@ -97,15 +117,16 @@ install-cargo-tools:  ## Installs all necessary cargo helpers
 
 install-risc0-toolchain:  ## install risc0 toolchain
 	curl -L https://risczero.com/install | bash
-	~/.risc0/bin/rzup install cargo-risczero 2.0.2
-	~/.risc0/bin/rzup install rust 1.88.0
+	~/.risc0/bin/rzup install cargo-risczero 3.0.5
+	~/.risc0/bin/rzup install r0vm 3.0.5
+	~/.risc0/bin/rzup install rust 1.91.1
 	~/.risc0/bin/rzup install cpp 2024.1.5
 	@echo "Risc0 toolchain version:"
 	cargo +risc0 --version
 
 install-sp1-toolchain:  ## install SP1 toolchain
-	curl -L https://raw.githubusercontent.com/succinctlabs/sp1/main/sp1up/install | bash
-	~/.sp1/bin/sp1up $${GITHUB_TOKEN:+--token "$$GITHUB_TOKEN"} --version 5.0.8 --c-toolchain
+	curl -L https://sp1up.succinct.xyz | bash
+	~/.sp1/bin/sp1up $${GITHUB_TOKEN:+--token "$$GITHUB_TOKEN"} --version 6.2.2
 	~/.sp1/bin/cargo-prove prove --version
 	~/.sp1/bin/cargo-prove prove install-toolchain
 	@echo "SP1 toolchain version:"
@@ -119,6 +140,7 @@ lint:  ## cargo fmt, check and clippy.
 	zepter
 	zepter
 	zepter
+	cargo machete
 	if which cargo-dylint > /dev/null; then \
 		cargo dylint --all; \
 	else \

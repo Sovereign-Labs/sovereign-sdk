@@ -1,8 +1,9 @@
 use std::str::FromStr;
 
 use sov_rollup_interface::crypto::CredentialId;
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
 use sov_rollup_interface::BasicAddress;
+use sov_universal_wallet::schema::OverrideSchema;
+use sov_universal_wallet::UniversalWallet;
 
 /// Sequencer DA address used in tests.
 pub const MOCK_SEQUENCER_DA_ADDRESS: [u8; 32] = [0u8; 32];
@@ -36,7 +37,7 @@ pub struct MockAddress {
 #[allow(dead_code)]
 #[doc(hidden)]
 pub struct MockAddressSchema(#[sov_wallet(display(hex))] [u8; 32]);
-impl sov_rollup_interface::sov_universal_wallet::schema::OverrideSchema for MockAddress {
+impl OverrideSchema for MockAddress {
     type Output = MockAddressSchema;
 }
 
@@ -48,18 +49,17 @@ impl MockAddress {
 }
 
 impl schemars::JsonSchema for MockAddress {
-    fn schema_name() -> String {
-        "MockAddress".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "MockAddress".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        serde_json::from_value(serde_json::json!({
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        // This description assumes that `serializer` uses a human-readable format.
+        schemars::json_schema!({
             "type": "string",
             "pattern": "^[a-fA-F0-9]{64}$",
-            // This description assumes that `serializer` uses a human-readable format.
             "description": "Mock address; 32 bytes in hex-encoded format",
-        }))
-        .unwrap()
+        })
     }
 }
 
@@ -144,8 +144,8 @@ mod tests {
 
     use proptest::prelude::any;
     use proptest::proptest;
-    use sov_rollup_interface::sov_universal_wallet::schema::Schema;
     use sov_test_utils::validate_schema;
+    use sov_universal_wallet::schema::Schema;
 
     use super::*;
 

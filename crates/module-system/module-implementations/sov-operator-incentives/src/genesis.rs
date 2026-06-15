@@ -4,6 +4,7 @@ use sov_modules_api::{GenesisState, Module, Spec};
 use crate::OperatorIncentives;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(deny_unknown_fields)]
 pub struct OperatorIncentivesConfig<S: Spec> {
     pub reward_address: S::Address,
 }

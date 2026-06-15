@@ -2,7 +2,8 @@ use std::num::NonZero;
 use std::sync::Arc;
 
 use crate::helpers::hash_stf::HashStf;
-use axum::async_trait;
+use anyhow::Context;
+use async_trait::async_trait;
 use futures::stream::BoxStream;
 use futures::{Stream, StreamExt};
 use rockbound::SchemaBatch;
@@ -17,22 +18,21 @@ use sov_mock_da::{
 };
 use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
-use sov_modules_api::{
-    DaSyncState, FullyBakedTx, ProofSender, StateTransitionFunction, StateUpdateInfo, SyncStatus,
-};
+use sov_modules_api::{FullyBakedTx, ProofSender, StateTransitionFunction};
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::{StateChannel, StateUpdateInfo};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{AggregatedProofResponse, LedgerStateProvider};
+use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::Zkvm;
 use sov_sequencer::standard::StdSequencerConfig;
 use sov_sequencer::{react_to_state_updates, SequencerConfig, SequencerKindConfig};
 use sov_state::NativeStorage;
-use sov_stf_runner::processes::{
-    start_zk_workflow_in_background, ParallelProverService, RollupProverConfigDiscriminants,
-};
+use sov_stf_runner::processes::{start_zk_workflow_in_background, ParallelProverService};
 use sov_stf_runner::{
     initialize_state, query_state_update_info, HttpServerConfig, ProofManagerConfig, RollupConfig,
     RunnerConfig, StateTransitionRunner,
@@ -40,17 +40,17 @@ use sov_stf_runner::{
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::{
     TestSpec, TestStorage, TestStorageManager, TEST_BLOB_PROCESSING_TIMEOUT, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BLOBS, TEST_MOCK_DA_POLLING_INTERVAL,
+    TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MAX_CONCURRENT_PROOF_BLOBS,
+    TEST_MOCK_DA_POLLING_INTERVAL,
 };
 use tokio::net::TcpListener;
 use tokio::sync::broadcast::Receiver;
 use tokio::sync::watch;
 use tokio::task::JoinSet;
 
-type MockInitVariant = InitVariant<HashStf, MockZkvm, MockZkvm, MockDaService>;
+type MockInitVariant = InitVariant<HashStf, MockDaService>;
 
-pub type HashStfRunner<Da> =
-    StateTransitionRunner<HashStf, TestStorageManager, Da, MockZkvm, MockZkvm>;
+pub type HashStfRunner<Da> = StateTransitionRunner<HashStf, TestStorageManager, Da>;
 
 /// TestNode simulates a full-node.
 pub struct TestNode {
@@ -144,6 +144,13 @@ impl ProofSender for MockProofSender {
     ) -> anyhow::Result<()> {
         unimplemented!()
     }
+
+    async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus> {
+        Ok(BlobSenderStatus {
+            in_flight: 0,
+            max_concurrent: usize::MAX,
+        })
+    }
 }
 
 // Returns genesis state root, prev state root for given init variant and initial value for state update info.
@@ -168,6 +175,25 @@ pub async fn initialize_runner(
     init_variant: MockInitVariant,
     aggregated_proof_block_jump: usize,
     nb_of_prover_threads: Option<usize>,
+) -> (HashStfRunner<MockDaService>, StateRoot, TestNode) {
+    initialize_runner_with_stop_at(
+        da_service,
+        path,
+        init_variant,
+        aggregated_proof_block_jump,
+        nb_of_prover_threads,
+        None,
+    )
+    .await
+}
+
+pub async fn initialize_runner_with_stop_at(
+    da_service: Arc<MockDaService>,
+    path: &std::path::Path,
+    init_variant: MockInitVariant,
+    aggregated_proof_block_jump: usize,
+    nb_of_prover_threads: Option<usize>,
+    stop_at_rollup_height: Option<sov_rollup_interface::common::RollupHeight>,
 ) -> (HashStfRunner<MockDaService>, StateRoot, TestNode) {
     let stf = HashStf::new();
     let inner_vm = MockZkvmHost::new();
@@ -210,17 +236,19 @@ pub async fn initialize_runner(
         .unwrap();
     let ledger_db = LedgerDb::with_reader(ledger_state).unwrap();
 
-    let da_sync_state = make_da_sync_state(0, None, &ledger_db, &da_service_with_cache)
-        .await
-        .unwrap();
+    let da_sync_state =
+        make_da_sync_state(0, stop_at_rollup_height, &ledger_db, &da_service_with_cache)
+            .await
+            .unwrap();
     let _sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
-    let (state_update_sender, state_update_recv) = watch::channel(
+    let state_channel = StateChannel::new(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref())
             .await
             .unwrap(),
     );
+    let state_update_recv = state_channel.subscribe_state_update();
 
-    let (prev_state_root, genesis_state_root) = init_variant
+    let (prev_state_root, _genesis_state_root) = init_variant
         .initialize(&stf, &mut storage_manager)
         .await
         .unwrap();
@@ -260,20 +288,21 @@ pub async fn initialize_runner(
     let mut runner = StateTransitionRunner::new(
         rollup_config.runner.clone(),
         axum_tcp,
-        pm_config,
+        nb_of_prover_threads.and(rollup_config.proof_manager),
         da_service.clone(),
         ledger_db.clone(),
         stf,
         storage_manager,
-        state_update_sender,
+        state_channel,
         prev_state_root,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),
         None,
-        None,
+        stop_at_rollup_height,
         da_sync_state,
         da_service_with_cache,
         0,
+        None,
     )
     .await
     .unwrap();
@@ -284,20 +313,25 @@ pub async fn initialize_runner(
                 inner_vm.clone(),
                 outer_vm.clone(),
                 verifier,
-                RollupProverConfigDiscriminants::Prove,
                 nb_of_prover_threads.unwrap(),
-                Default::default(),
                 MockAddress::new([0u8; 32]),
             );
+        let proof_manager = rollup_config
+            .proof_manager
+            .expect("proof_manager must be set when prover is enabled");
         let handle = start_zk_workflow_in_background::<_>(
             prover_service,
-            rollup_config.proof_manager.aggregated_proof_block_jump,
+            proof_manager.aggregated_proof_block_jump,
+            proof_manager.eager_proof_submission,
+            proof_manager.max_number_of_aggregated_proofs_in_memory,
             Box::new(MockProofSender {
                 da: da_service.clone(),
             }),
-            genesis_state_root,
             stf_info_receiver,
+            runner.da_sync_state(),
             shutdown_receiver.clone(),
+            shutdown_sender.clone(),
+            false,
         )
         .await
         .unwrap();
@@ -327,16 +361,10 @@ pub async fn initialize_runner(
     )
 }
 
-type GenesisParams<ST, InnerVm, OuterVm, Da> =
-    <ST as StateTransitionFunction<InnerVm, OuterVm, Da>>::GenesisParams;
+type GenesisParams<ST, Da> = <ST as StateTransitionFunction<Da>>::GenesisParams;
 
 /// How [`StateTransitionRunner`] is initialized
-pub enum InitVariant<
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
-    Da: DaService,
-> {
+pub enum InitVariant<Stf: StateTransitionFunction<Da::Spec>, Da: DaService> {
     /// From give state root
     Initialized {
         prev_state_root: Stf::StateRoot,
@@ -347,16 +375,14 @@ pub enum InitVariant<
         /// Genesis block header should be finalized at an initialization moment.
         block: Da::FilteredBlock,
         /// Genesis params for Stf::init.
-        genesis_params: GenesisParams<Stf, InnerVm, OuterVm, Da::Spec>,
+        genesis_params: GenesisParams<Stf, Da::Spec>,
     },
 }
 
-impl<Stf, InnerVm, OuterVm, Da> InitVariant<Stf, InnerVm, OuterVm, Da>
+impl<Stf, Da> InitVariant<Stf, Da>
 where
     Stf::PreState: NativeStorage<Root = Stf::StateRoot>,
-    Stf: StateTransitionFunction<InnerVm, OuterVm, Da::Spec>,
-    InnerVm: Zkvm,
-    OuterVm: Zkvm,
+    Stf: StateTransitionFunction<Da::Spec>,
     Da: DaService,
 {
     pub async fn initialize<Sm>(
@@ -380,7 +406,9 @@ where
             } => {
                 let (prover_storage, _ledger_state) =
                     storage_manager.create_state_after(&last_finalized_block_header)?;
-                let genesis_state_root = prover_storage.get_root_hash(SlotNumber::GENESIS)?;
+                let genesis_state_root = prover_storage
+                    .get_root_hash(SlotNumber::GENESIS)
+                    .context("genesis root must exist for an initialized rollup")?;
 
                 (prev_state_root, genesis_state_root)
             }
@@ -388,13 +416,8 @@ where
                 block,
                 genesis_params: params,
             } => {
-                let genesis_state_root = initialize_state::<Stf, InnerVm, OuterVm, Da, Sm>(
-                    stf,
-                    storage_manager,
-                    block,
-                    params,
-                )
-                .await?;
+                let genesis_state_root =
+                    initialize_state::<Stf, Da, Sm>(stf, storage_manager, block, params).await?;
                 (genesis_state_root.clone(), genesis_state_root)
             }
         };
@@ -428,13 +451,17 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             save_tx_bodies: false,
         },
         da: da_config,
-        proof_manager: ProofManagerConfig {
+        proof_manager: Some(ProofManagerConfig {
             aggregated_proof_block_jump: NonZero::new(aggregated_proof_block_jump).unwrap(),
             prover_address: MockAddress::new([0u8; 32]),
-            max_number_of_transitions_in_db: NonZero::new(30).unwrap(),
-            max_number_of_transitions_in_memory: NonZero::new(20).unwrap(),
+            max_number_of_transitions_in_db: NonZero::new(1000).unwrap(),
+            max_number_of_transitions_in_memory: NonZero::new(100).unwrap(),
+            eager_proof_submission: true,
+            prover_thread_count_override: None,
+            max_number_of_aggregated_proofs_in_memory: NonZero::new(5).unwrap(),
+            max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
             storage_path: None,
-        },
+        }),
         sequencer: SequencerConfig {
             automatic_batch_production: true,
             max_allowed_node_distance_behind: 10,
@@ -447,7 +474,7 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
                 max_batch_size_bytes: None,
             }),
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
-            max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
+            max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
             blob_processing_timeout_secs: TEST_BLOB_PROCESSING_TIMEOUT,
             extension: None,
         },

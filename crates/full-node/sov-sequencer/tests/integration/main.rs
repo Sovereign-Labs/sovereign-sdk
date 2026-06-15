@@ -1,12 +1,13 @@
-mod pinned_cache;
 mod preferred_blob_sender;
 mod preferred_end_to_end;
 mod preferred_tx_nonce_queue;
+mod preferred_with_proofs;
 mod preferred_with_reorgs;
 mod rate_limits;
 mod sequencing_metadata;
 mod setup_mode;
 mod standard_sequencer;
+mod state_map_iteration;
 mod thin_sequencer;
 mod uniqueness;
 mod upgradability;

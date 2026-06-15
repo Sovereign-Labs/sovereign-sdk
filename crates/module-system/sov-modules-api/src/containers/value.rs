@@ -2,8 +2,8 @@ use std::marker::PhantomData;
 
 use sov_state::codec::BorshCodec;
 use sov_state::namespaces::{Accessory, CompileTimeNamespace, Kernel, User};
-use sov_state::SlotValueFromCodec;
 use sov_state::{EncodeLike, Prefix, SlotKey, SlotValue, StateCodec, StateItemCodec};
+use sov_state::{SlotValueFromCodec, StateItemDecoder};
 use thiserror::Error;
 
 use super::{Borrowed, BorrowedMut};
@@ -35,7 +35,7 @@ where
 #[derive(Debug, Error)]
 pub enum StateValueError<N: CompileTimeNamespace> {
     /// The value was not found for the combination of (namespace, prefix) provided.
-    #[error("Value not found for prefix: {0} in namespace: {}", std::any::type_name::<N>())]
+    #[error("Value not found for prefix: {0} in namespace: {ns}", ns = std::any::type_name::<N>())]
     MissingValue(Prefix, PhantomData<N>),
 }
 
@@ -43,10 +43,10 @@ type ValueOrError<V, N> = Result<V, StateValueError<N>>;
 
 /// A container for a single user-space value.
 pub type StateValue<V, Codec = BorshCodec> = NamespacedStateValue<User, V, Codec>;
-/// A Container for a single value which is only accesible in the kernel.
+/// A Container for a single value which is only accessible in the kernel.
 pub type KernelStateValue<V, Codec = BorshCodec> = NamespacedStateValue<Kernel, V, Codec>;
-/// A Container for a single value stored as "accessory" state, outside of the
-/// JMT.
+/// A Container for a single value stored as "accessory" state,
+/// outside merklized state.
 pub type AccessoryStateValue<V, Codec = BorshCodec> = NamespacedStateValue<Accessory, V, Codec>;
 
 // Implement all other functions generically over codecs
@@ -63,6 +63,11 @@ where
             codec,
             prefix,
         }
+    }
+
+    /// Decodes the provided value, panicking if the decoding fails.
+    pub fn decode_unwrap(&self, value: &SlotValue) -> V {
+        self.codec().value_codec().decode_unwrap(value.value())
     }
 
     pub fn prefix(&self) -> &Prefix {
@@ -251,7 +256,7 @@ mod proofs {
         where
             W: ProvenStateAccessor<N>,
         {
-            state.get_with_proof(self.slot_key())
+            state.get_global_latest_with_proof(self.slot_key())
         }
 
         pub fn verify_proof<S: Spec>(
@@ -301,14 +306,14 @@ mod tests {
     use crate::capabilities::mocks::MockKernel;
     use crate::{StateCheckpoint, StateValue};
 
-    type TestSpec = crate::default_spec::DefaultNomtSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 
     #[test]
     fn state_value_raw_roundtrip_and_remove() {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(7, 7);
         let mut value = StateValue::<u32>::with_codec(prefix, BorshCodec);
@@ -333,7 +338,7 @@ mod tests {
         let storage_manager = SimpleStorageManager::new();
         let storage = storage_manager.create_storage();
         let mut state: StateCheckpoint<TestSpec> =
-            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default(), None);
+            StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default());
 
         let prefix = Prefix::new(8, 8);
         let mut value = StateValue::<u32>::with_codec(prefix, BorshCodec);

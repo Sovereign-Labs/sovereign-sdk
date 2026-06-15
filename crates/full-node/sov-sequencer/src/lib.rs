@@ -14,18 +14,19 @@ pub mod test_stateless;
 
 use std::sync::Arc;
 
-use axum::async_trait;
+use async_trait::async_trait;
 #[cfg(feature = "test-utils")]
 pub use common::ForcedTxBatchNotification;
 #[cfg(feature = "test-utils")]
 pub use common::StateUpdateNotification;
-pub use common::{react_to_state_updates, Sequencer};
+pub use common::{react_to_state_updates, AcceptTxErrorCode, AcceptTxErrorDetails, Sequencer};
 pub use config::{SeqConfigExtension, SequencerConfig, SequencerKindConfig, SovRateLimiterConfig};
 pub use preferred::SequencerRole;
 pub use rest_api::SequencerApis;
 use serde::Serialize;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::TxHash;
 pub use tx_status::TxStatusManager;
 
@@ -57,8 +58,8 @@ pub enum SequencerNotReadyDetails {
     },
     /// The sequencer is waiting for the blob sender to be ready.
     WaitingOnBlobSender {
-        max_concurrent_blobs: usize,
-        nb_of_blobs_in_flight: usize,
+        max_concurrent_batch_blobs: usize,
+        nb_of_batch_blobs_in_flight: usize,
     },
     /// The sequencer is a preferred sequencer and dropped too far out of sync, and is currently
     /// attempting to recover.
@@ -74,10 +75,27 @@ pub enum SequencerNotReadyDetails {
     /// The replica is waiting for the first batch from master.
     ReplicaNotReady,
 }
+
+/// A serialized SerializeProofWithDetails<S>. We convert to bytes to avoid passing a Spec generic
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct SerializedProofWithDetailsBytes(pub Arc<[u8]>);
+
+/// A serialized [sov_blob_storage::PreferredProofData].
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct PreferredProofDataBytes(pub Arc<[u8]>);
+
 /// An object-safe interface to the sequencer, which can be used to
 /// publish a proof blob to DA.
 #[async_trait]
 pub trait ProofBlobSender: Send + Sync + 'static {
     /// Publishes a proof blob to DA.
-    async fn produce_and_publish_proof_blob(&self, proof_blob: Arc<[u8]>) -> anyhow::Result<()>;
+    async fn produce_and_publish_proof_blob(
+        &self,
+        proof_data: SerializedProofWithDetailsBytes,
+    ) -> anyhow::Result<()>;
+
+    /// Returns a [`sov_rollup_interface::stf::BlobSenderStatus`] snapshot
+    /// of in-flight proof blobs against the configured
+    /// `max_concurrent_proof_blobs` cap.
+    async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus>;
 }

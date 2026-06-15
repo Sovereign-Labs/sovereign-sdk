@@ -3,11 +3,10 @@ use std::str::FromStr;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::ser::SerializeSeq;
+use sov_universal_wallet::UniversalWallet;
 
 use super::SafeVec;
-use crate as sov_rollup_interface;
 use crate::da::BlockHashTrait;
-use crate::sov_universal_wallet::UniversalWallet; // Needed for UniversalWallet, as it requires global paths
 
 /// A [`hex`]-encoded 32-byte hash. Note, this is not necessarily a transaction
 /// hash, rather a generic hash.
@@ -27,48 +26,45 @@ where
     T: AsRef<[u8]>;
 
 impl schemars::JsonSchema for HexString {
-    fn schema_name() -> String {
-        "HexString".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "HexString".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        serde_json::from_value(serde_json::json!({
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
             "type": "string",
             "pattern": "^0x(?:[a-fA-F0-9]{2})+$",
             "description": "A `0x`-prefixed hexadecimal string (uppercase or lowercase) of variable length, with an even number of hex digits.",
-        }))
-        .unwrap()
+        })
     }
 }
 
 // Useful for representing Ethereum addresses
 impl<const N: usize> schemars::JsonSchema for HexString<[u8; N]> {
-    fn schema_name() -> String {
-        "HexHash".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "HexHash".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        serde_json::from_value(serde_json::json!({
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
             "type": "string",
             "pattern": format!("^0x[a-fA-F0-9]{{{}}}$", N * 2),
             "description": format!("{} bytes in hexadecimal format, with `0x` prefix.", N),
-        }))
-        .unwrap()
+        })
     }
 }
 
 impl<const N: usize> schemars::JsonSchema for HexString<SafeVec<u8, N>> {
-    fn schema_name() -> String {
-        "HexHash".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "HexHash".into()
     }
 
-    fn json_schema(_gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
-        serde_json::from_value(serde_json::json!({
+    fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
+        schemars::json_schema!({
             "type": "string",
             "pattern": format!("^0x(?:[a-fA-F0-9]{{2}}){{0,{}}}$", N),
             "description": format!("At most {} bytes in hexadecimal format, with `0x` prefix.", N),
-        }))
-        .unwrap()
+        })
     }
 }
 

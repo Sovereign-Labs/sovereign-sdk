@@ -2,15 +2,17 @@ use sov_db::ledger_db::LedgerDb;
 use sov_ledger_apis::{LedgerRoutes, LedgerState};
 use sov_modules_api::capabilities::HasCapabilities;
 use sov_modules_api::execution_mode::ExecutionMode;
+use std::sync::Arc;
+
 use sov_modules_api::prelude::utoipa_swagger_ui::Config;
 use sov_modules_api::rest::utils::errors;
-use sov_modules_api::rest::{HasRestApi, StateUpdateReceiver};
-use sov_modules_api::{
-    BatchSequencerReceipt, NodeEndpoints, RuntimeEventProcessor, Spec, SyncStatus, *,
-};
+use sov_modules_api::rest::HasRestApi;
+use sov_modules_api::{BatchSequencerReceipt, NodeEndpoints, RuntimeEventProcessor, Spec, *};
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_apis::endpoints::simulate::SovereignSimulate;
 use sov_rollup_apis::rollup_tx_router;
+use sov_rollup_full_node_interface::StateUpdateReceiver;
+use sov_rollup_interface::node::SyncStatus;
 use sov_stf_runner::{RollupConfig, RunnerConfig};
 
 use super::SequencerCreationReceipt;
@@ -98,13 +100,60 @@ where
 
     combined_spec.servers = vec![server_url_from_runner_config(&config.runner)];
 
-    endpoints.axum_router = endpoints.axum_router.merge(
-        sov_modules_api::prelude::utoipa_swagger_ui::SwaggerUi::new("/swagger-ui")
-            .external_url_unchecked("/openapi-v3.json", serde_json::to_value(&combined_spec)?)
-            .config(Config::from("/openapi-v3.json")),
-    );
+    // Register swagger-ui routes manually instead of using SwaggerUi::new().merge().
+    // utoipa-swagger-ui v9 redirects /swagger-ui → /swagger-ui/, which causes an infinite
+    // redirect loop with NormalizePathLayer::trim_trailing_slash(). By registering routes
+    // directly, we serve content at both paths without a redirect.
+    let spec_json = serde_json::to_value(&combined_spec)?;
+    let config = Arc::new(Config::from("/openapi-v3.json"));
+    let handler = sov_modules_api::prelude::axum::routing::get(serve_swagger_ui)
+        .layer(sov_modules_api::prelude::axum::Extension(config));
+    endpoints.axum_router = endpoints
+        .axum_router
+        .route(
+            "/openapi-v3.json",
+            sov_modules_api::prelude::axum::routing::get(move || async move {
+                sov_modules_api::prelude::axum::Json(spec_json)
+            }),
+        )
+        .route("/swagger-ui", handler.clone())
+        .route("/swagger-ui/", handler.clone())
+        .route("/swagger-ui/{*rest}", handler);
 
     Ok(endpoints)
+}
+
+/// Serves swagger-ui files using the public `utoipa_swagger_ui::serve` API.
+///
+/// Registered at `/swagger-ui`, `/swagger-ui/`, and `/swagger-ui/{*rest}` to avoid
+/// the redirect that utoipa-swagger-ui v9's built-in router adds (which conflicts with
+/// `NormalizePathLayer::trim_trailing_slash()`).
+async fn serve_swagger_ui(
+    path: Option<sov_modules_api::prelude::axum::extract::Path<String>>,
+    sov_modules_api::prelude::axum::Extension(config): sov_modules_api::prelude::axum::Extension<
+        Arc<Config<'static>>,
+    >,
+) -> impl sov_modules_api::prelude::axum::response::IntoResponse {
+    use sov_modules_api::prelude::axum::http::StatusCode;
+    use sov_modules_api::prelude::axum::response::IntoResponse;
+
+    let tail = match &path {
+        Some(sov_modules_api::prelude::axum::extract::Path(tail)) => tail.as_str(),
+        None => "",
+    };
+    match sov_modules_api::prelude::utoipa_swagger_ui::serve(tail, config) {
+        Ok(file) => file
+            .map(|file| {
+                (
+                    StatusCode::OK,
+                    [("Content-Type", file.content_type)],
+                    file.bytes.to_vec(),
+                )
+                    .into_response()
+            })
+            .unwrap_or_else(|| StatusCode::NOT_FOUND.into_response()),
+        Err(error) => (StatusCode::INTERNAL_SERVER_ERROR, error.to_string()).into_response(),
+    }
 }
 
 fn merge_specs(

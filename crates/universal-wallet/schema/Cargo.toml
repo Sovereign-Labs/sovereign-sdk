@@ -1,7 +1,8 @@
 [package]
 name = "sov-universal-wallet"
-description = "UniversallWallet for Sovereign rollups"
-version = { workspace = true }
+description = "Universal wallet schema and display utilities for Sovereign rollups"
+authors = { workspace = true }
+version = "0.4.0"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 homepage = { workspace = true }
@@ -23,7 +24,7 @@ once_cell = { workspace = true }
 serde_json = { workspace = true, optional = true }
 serde = { workspace = true, optional = true }
 # EIP712 functionality
-alloy-dyn-abi = { version = "1.3.1", features = ["eip712"], optional = true }
+alloy-dyn-abi = { workspace = true, features = ["eip712"], optional = true }
 alloy-primitives = { workspace = true, optional = true }
 # Re-exporting the macro
 sov-universal-wallet-macros = { workspace = true, optional = true }
@@ -33,7 +34,6 @@ schemars = { workspace = true, optional = true }                    # for SafeSt
 borsh = { workspace = true }
 sov-universal-wallet-macros = { workspace = true }
 sov-universal-wallet = { path = ".", features = ["serde", "eip712", "macros"] }
-sov-rollup-interface = { workspace = true }
 serde_arrays = { workspace = true }
 serde_with = { workspace = true }
 serde = { workspace = true }

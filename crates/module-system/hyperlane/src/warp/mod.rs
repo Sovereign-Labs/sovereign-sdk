@@ -31,7 +31,7 @@ mod metrics;
 mod types;
 
 #[cfg(feature = "native")]
-pub use execution_config::{WarpExecutionConfig, WARP_EXECUTION_CONFIG};
+pub use execution_config::{MonitoredRoute, WarpExecutionConfig, WARP_EXECUTION_CONFIG};
 pub use types::*;
 
 /// Implements support for Hyperlane Warp Routes

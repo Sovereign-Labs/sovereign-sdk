@@ -20,6 +20,7 @@ anyhow = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
 serde = { workspace = true }
 tracing = { workspace = true }
+futures = { workspace = true, optional = true }
 
 sov-modules-api = { workspace = true }
 sov-rollup-interface = { workspace = true }
@@ -40,6 +41,7 @@ sov-bank = { workspace = true, features = ["test-utils"] }
 default = []
 test-utils = []
 native = [
+	"dep:futures",
 	"sov-chain-state/native",
 	"sov-mock-da/native",
 	"sov-mock-zkvm/native",

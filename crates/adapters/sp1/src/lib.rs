@@ -6,14 +6,15 @@
 use std::fmt;
 use std::fmt::Debug;
 
-use anyhow::Error;
 use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::{CodeCommitment, CryptoSpec, ZkVerifier};
-#[cfg(not(target_os = "zkvm"))]
-use sp1_sdk::{ProverClient, SP1ProofWithPublicValues};
+use sov_rollup_interface::common::strict_bincode_deserialize;
+use sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues;
+use sov_rollup_interface::zk::aggregated_proof::{CodeCommitmentDecodeError, CodeCommitmentHash};
+use sov_rollup_interface::zk::SerializedZkProof;
+use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 
 #[cfg(feature = "native")]
 use crate::crypto::private_key::SP1PrivateKey;
@@ -22,18 +23,14 @@ pub mod crypto;
 pub mod guest;
 #[cfg(feature = "native")]
 pub mod host;
-
-#[cfg(all(feature = "native", feature = "bench"))]
-pub mod metrics;
+#[cfg(feature = "native")]
+mod metrics;
 
 /// Uniquely identifies a SP1 binary. Stored as a serialized version of `SP1VerifyingKey`.
-/// TODO: When there's a nice representation of SP1VerifyingKey that can be compiled in SP1, we can use that.
-/// e.g. If SP1VerifyingKey is moved to a crate that can be compiled in an SP1 program.
-///
 ///
 /// Use the [`ZkvmHost::code_commitment`](sov_rollup_interface::zk::ZkvmHost) method to get the MethodId for a given binary.
-#[derive(Clone, Serialize, Deserialize, PartialEq, Eq)]
-pub struct SP1MethodId(Vec<u8>);
+#[derive(Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct SP1MethodId(pub [u32; 8]);
 
 impl Debug for SP1MethodId {
     fn fmt(&self, f: &mut fmt::Formatter) -> fmt::Result {
@@ -41,15 +38,13 @@ impl Debug for SP1MethodId {
     }
 }
 
-impl CodeCommitment for SP1MethodId {
-    type DecodeError = Error;
-
-    fn encode(&self) -> Vec<u8> {
-        self.0.clone()
+impl sov_rollup_interface::zk::CodeCommitmentTrait for SP1MethodId {
+    fn to_hash(&self) -> CodeCommitmentHash {
+        CodeCommitmentHash::from_u32_array(self.0)
     }
 
-    fn decode(verifying_key_bytes: &[u8]) -> Result<Self, Self::DecodeError> {
-        Ok(Self(verifying_key_bytes.to_vec()))
+    fn try_from_hash(hash: CodeCommitmentHash) -> Result<Self, CodeCommitmentDecodeError> {
+        Ok(Self(hash.to_u32_array()?))
     }
 }
 
@@ -83,23 +78,97 @@ impl CryptoSpec for SP1CryptoSpec {
 #[derive(Default, Clone)]
 pub struct SP1Verifier;
 
+/// On-the-wire envelope for SP1 proofs carried in [`SerializedZkProof::raw_proof`].
+///
+/// `public_values` is placed first so the zkvm guest can decode only that field
+/// (via [`bincode::deserialize_from`] with an `&[u8]` reader) and skip the
+/// potentially-large `sp1_proof` body.
+#[cfg(not(target_os = "zkvm"))]
+#[derive(Serialize, Deserialize)]
+struct Sp1ProofEnvelope {
+    public_values: Vec<u8>,
+    /// Bincode-serialized [`sp1_sdk::SP1ProofWithPublicValues`].
+    sp1_proof: Vec<u8>,
+}
+
+/// Encodes an [`sp1_sdk::SP1ProofWithPublicValues`].
+#[cfg(not(target_os = "zkvm"))]
+pub fn encode_sp1_proof(
+    proof: &sp1_sdk::SP1ProofWithPublicValues,
+) -> anyhow::Result<SerializedZkProof> {
+    let envelope = Sp1ProofEnvelope {
+        public_values: proof.public_values.to_vec(),
+        sp1_proof: bincode::serialize(proof)?,
+    };
+    Ok(SerializedZkProof {
+        raw_proof: bincode::serialize(&envelope)?,
+    })
+}
+
 #[cfg(not(target_os = "zkvm"))]
 impl ZkVerifier for SP1Verifier {
     type CodeCommitment = SP1MethodId;
     type CryptoSpec = SP1CryptoSpec;
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        serialized_proof: &[u8],
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        _public_values: &SerializedPubValues,
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // SP1's `verify_with_pub_values` is only meaningful inside the guest.
+        unimplemented!(
+            "SP1Verifier::verify_with_pub_values is only available inside the zkvm guest"
+        )
+    }
+
+    fn verify_with_proof<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let proof: SP1ProofWithPublicValues = bincode::deserialize(serialized_proof)?;
+        use core::borrow::Borrow;
+        use slop_algebra::AbstractField;
+        use slop_algebra::PrimeField32;
 
-        let prover = ProverClient::from_env();
-        let verifying_key = bincode::deserialize(&code_commitment.0)?;
-        prover.verify(&proof, &verifying_key)?;
+        let proof = decode_sp1_proof(serialized_proof)?;
+        let is_mock = std::env::var("SP1_PROVER").ok().as_deref() == Some("mock");
 
-        Ok(bincode::deserialize(proof.public_values.as_slice())?)
+        if !is_mock {
+            let sp1_sdk::SP1Proof::Compressed(ref compressed) = proof.proof else {
+                anyhow::bail!("SP1Verifier only supports compressed proofs");
+            };
+
+            let vkey_hash: [sp1_primitives::SP1Field; 8] = code_commitment
+                .0
+                .map(sp1_primitives::SP1Field::from_canonical_u32);
+
+            sp1_verifier::compressed::SP1CompressedVerifier::new()
+                .verify_compressed_with_public_values(
+                    compressed.as_ref(),
+                    proof.public_values.as_slice(),
+                    &vkey_hash,
+                )?;
+
+            // `SP1CompressedVerifier` does not inspect `exit_code`; the SDK's
+            // verifier does. Enforce SUCCESS here after the proof shape has been validated.
+            let recursion_public_values: &sp1_recursion_executor::RecursionPublicValues<
+                sp1_primitives::SP1Field,
+            > = compressed.proof.public_values.as_slice().borrow();
+            let exit_code = recursion_public_values.exit_code.as_canonical_u32();
+            if exit_code != 0 {
+                anyhow::bail!("SP1 proof has non-success exit code: {exit_code}");
+            }
+        }
+
+        Ok(strict_bincode_deserialize(proof.public_values.as_slice())?)
+    }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error> {
+        let envelope: Sp1ProofEnvelope = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+        Ok(strict_bincode_deserialize(
+            envelope.public_values.as_slice(),
+        )?)
     }
 }
 
@@ -112,7 +181,10 @@ impl sov_rollup_interface::zk::Zkvm for SP1 {
     type Verifier = SP1Verifier;
 
     #[cfg(feature = "native")]
-    type Host = crate::host::SP1Host<'static>;
+    type Host = crate::host::SP1Host;
+
+    #[cfg(feature = "native")]
+    type OuterHost = crate::host::SP1AggregationHost;
 }
 
 #[cfg(target_os = "zkvm")]
@@ -123,19 +195,49 @@ impl ZkVerifier for SP1Verifier {
 
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        _serialized_proof: &[u8],
-        _code_commitment: &Self::CodeCommitment,
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        public_values: &SerializedPubValues,
+        vkey_hash: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        // Implement this, SP1 already supports recursion.
-        // Use sp1_zkvm::lib::verify::verify_sp1_proof(vkey, &public_values_digest.into());
-        // Example can be found here: https://github.com/succinctlabs/sp1/blob/14eb569d41d24721ffbd407d6060e202482d659c/examples/aggregation/program/src/main.rs#L47-L60
-        //
-        // Note: Currently SP1 does not support this interface for recursion. It expects proofs to be written into SP1Stdin with stdin.write_proof,
-        // which are then read within the verify_sp1_proof method. The `verify_sp1_proof` method takes in the vkey hash, and the public values digest as direct input.
-        // In the future, SP1 will support an interface for passing all 3 in directly.
-        todo!("Implement this.")
+        use sha2::Digest;
+        let public_values = &public_values.pub_values;
+        let public_values_digest: [u8; 32] = sha2::Sha256::digest(public_values).into();
+        sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash.0, &public_values_digest);
+        Ok(strict_bincode_deserialize(public_values)?)
     }
+
+    fn verify_with_proof<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+        vkey_hash: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        use sha2::Digest;
+
+        // The envelope lays out `public_values` before `sp1_proof`, so a reader-based
+        // bincode decode stops after consuming only the public values' length-prefix and bytes.
+        let mut reader: &[u8] = &serialized_proof.raw_proof;
+        let public_values: Vec<u8> = bincode::deserialize_from(&mut reader)?;
+
+        let public_values_digest: [u8; 32] = sha2::Sha256::digest(&public_values).into();
+        sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash.0, &public_values_digest);
+        Ok(strict_bincode_deserialize(&public_values)?)
+    }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error> {
+        let mut reader: &[u8] = &serialized_proof.raw_proof;
+        let public_values: Vec<u8> = bincode::deserialize_from(&mut reader)?;
+        Ok(strict_bincode_deserialize(&public_values)?)
+    }
+}
+
+/// Decodes a serialized SP1 proof.
+#[cfg(not(target_os = "zkvm"))]
+pub fn decode_sp1_proof(
+    serialized_proof: &SerializedZkProof,
+) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
+    let envelope: Sp1ProofEnvelope = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+    Ok(strict_bincode_deserialize(&envelope.sp1_proof)?)
 }
 
 #[cfg(test)]
@@ -153,25 +255,5 @@ mod tests {
             credential_id.to_string(),
             "0xf1ac96b6ad3cd6bddaf2c23f089de73a6816f892c1af345df70f9a573a86bacb"
         );
-    }
-
-    // See <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1209>.
-    #[cfg(not(coverage))]
-    #[test]
-    fn test_sp1_method_id_codec_roundtrip() {
-        use sov_rollup_interface::zk::CodeCommitment;
-        use sp1_sdk::{Prover, ProverClient};
-
-        use crate::SP1MethodId;
-
-        const ELF: &[u8] = include_bytes!("../test_data/riscv32im-succinct-zkvm-elf");
-
-        let prover = ProverClient::builder().mock().build();
-        let (_, vk) = prover.setup(ELF);
-        let method_id = SP1MethodId(bincode::serialize(&vk).unwrap());
-        let encoded = method_id.encode();
-        let decoded = SP1MethodId::decode(&encoded).unwrap();
-
-        assert_eq!(method_id, decoded);
     }
 }

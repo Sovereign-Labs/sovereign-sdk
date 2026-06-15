@@ -15,8 +15,6 @@ workspace = true
 
 [dependencies]
 thiserror = { workspace = true }
-revm = { workspace = true, features = ["std", "secp256k1"] }
-reth-primitives = { workspace = true, features = ["secp256k1"] }
-alloy-consensus = { workspace = true }
-alloy-rpc-types = { workspace = true }
+alloy-consensus = { workspace = true, features = ["secp256k1"] }
+alloy-primitives = { workspace = true }
 secp256k1 = { workspace = true }

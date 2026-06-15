@@ -2,7 +2,8 @@ use std::sync::Arc;
 
 use crate::helpers::hash_stf::{HashStf, S};
 use crate::helpers::runner_init::{
-    bootstrap_state_update_info, initialize_runner, HashStfRunner, InitVariant,
+    bootstrap_state_update_info, initialize_runner, initialize_runner_with_stop_at, HashStfRunner,
+    InitVariant,
 };
 use anyhow::Context;
 use sov_db::config::RollupDbConfig;
@@ -14,9 +15,11 @@ use sov_mock_da::{
     BlockProducingConfig, FailureBehavior, MockAddress, MockBlob, MockBlock, MockBlockHeader,
     MockDaConfig, MockDaService, MockDaSpec, RandomizationBehaviour, RandomizationConfig,
 };
-use sov_mock_zkvm::MockZkvm;
+
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
+use sov_rollup_full_node_interface::StateChannel;
+use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
@@ -29,7 +32,7 @@ use tempfile::TempDir;
 use tokio::net::TcpListener;
 use tokio::sync::watch;
 
-type MockInitVariant = InitVariant<HashStf, MockZkvm, MockZkvm, MockDaService>;
+type MockInitVariant = InitVariant<HashStf, MockDaService>;
 
 const STANDARD_SENDER: MockAddress = MockAddress::new([0u8; 32]);
 const TREE_MINUTES: std::time::Duration = std::time::Duration::from_secs(60 * 3);
@@ -78,7 +81,7 @@ async fn test_runner_with_background_da_service(
     let da_sync_state = make_da_sync_state(0, None, &ledger_db, &da_service_with_cache).await?;
     let mut sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
 
-    let (state_update_sender, _state_update_recv) = watch::channel(
+    let state_channel = StateChannel::new(
         bootstrap_state_update_info(&mut storage_manager, da_sync_state.as_ref()).await?,
     );
 
@@ -108,7 +111,7 @@ async fn test_runner_with_background_da_service(
         ledger_db.clone(),
         stf,
         storage_manager,
-        state_update_sender,
+        state_channel,
         prev_state_root,
         Box::new(InfiniteHeight),
         shutdown_receiver.clone(),
@@ -117,6 +120,7 @@ async fn test_runner_with_background_da_service(
         da_sync_state,
         da_service_with_cache,
         genesis_da_height,
+        None,
     )
     .await?;
 
@@ -394,6 +398,42 @@ async fn check_runner(
     assert_eq!(expected_state_root, after);
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_stop_at_rollup_height_stops_with_prefetch_backlog() -> anyhow::Result<()> {
+    let tmp_dir = tempfile::tempdir()?;
+    let sequencer_address = MockAddress::new([11u8; 32]);
+    let genesis_params = vec![1, 2, 3, 4, 5];
+    let stop_at_height = RollupHeight::new(3);
+
+    let da_service = Arc::new(MockDaService::new(sequencer_address).with_wait_attempts(2));
+    let genesis_block = da_service.get_block_at(0).await?;
+
+    for _ in 0..100 {
+        da_service.send_transaction(&batch(vec![1])).await.await??;
+    }
+
+    let init_variant: MockInitVariant = InitVariant::Genesis {
+        block: genesis_block,
+        genesis_params: genesis_params.into(),
+    };
+
+    let (mut runner, _before, test_node) = initialize_runner_with_stop_at(
+        da_service,
+        tmp_dir.path(),
+        init_variant,
+        1,
+        None,
+        Some(stop_at_height),
+    )
+    .await;
+
+    tokio::time::timeout(std::time::Duration::from_secs(20), runner.run_in_process()).await??;
+    drop(runner);
+    test_node.stop().await;
+
+    Ok(())
+}
+
 fn get_saved_root_hash(
     path: &std::path::Path,
 ) -> anyhow::Result<Option<<TestStorage as Storage>::Root>> {
@@ -404,10 +444,9 @@ fn get_saved_root_hash(
 
     let ledger_db = LedgerDb::with_reader(ledger_state)?;
 
-    ledger_db
+    Ok(ledger_db
         .get_head_slot()?
-        .map(|(number, _)| stf_state.get_root_hash(number))
-        .transpose()
+        .and_then(|(number, _)| stf_state.get_root_hash(number)))
 }
 
 fn get_expected_execution_hash_from(
@@ -442,7 +481,7 @@ fn get_result_from_blocks(
     let stf = HashStf::new();
 
     let (genesis_state_root, change_set) =
-        <HashStf as StateTransitionFunction<MockZkvm, MockZkvm, MockDaSpec>>::init_chain(
+        <HashStf as StateTransitionFunction<MockDaSpec>>::init_chain(
             &stf,
             &Default::default(),
             storage,
@@ -456,16 +495,15 @@ fn get_result_from_blocks(
         let mut relevant_blobs = block.as_relevant_blobs();
 
         let storage = storage_manager.create_storage();
-        let result =
-            <HashStf as StateTransitionFunction<MockZkvm, MockZkvm, MockDaSpec>>::apply_slot(
-                &stf,
-                &state_root,
-                storage,
-                ArrayWitness::default(),
-                &block.header,
-                relevant_blobs.as_iters(),
-                sov_modules_api::ExecutionContext::Node,
-            );
+        let result = <HashStf as StateTransitionFunction<MockDaSpec>>::apply_slot(
+            &stf,
+            &state_root,
+            storage,
+            ArrayWitness::default(),
+            &block.header,
+            relevant_blobs.as_iters(),
+            sov_modules_api::ExecutionContext::Node,
+        );
 
         state_root = result.state_root;
         storage_manager.commit(result.change_set);

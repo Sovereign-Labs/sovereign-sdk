@@ -9,13 +9,12 @@ use sha3::{Digest, Keccak256};
 use sov_hyperlane_integration::{EthAddress, Message};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{Amount, HexHash, HexString};
-use sov_test_utils::docker::{print_logs_from_container, pull_image_with_retries};
+use sov_test_utils::docker::{prepull_image_best_effort, print_logs_from_container};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
-use testcontainers::core::Mount;
 use testcontainers::runners::AsyncRunner;
-use testcontainers::{ContainerAsync, GenericImage, ImageExt};
+use testcontainers::{ContainerAsync, GenericImage};
 use testcontainers_modules::anvil::AnvilNode;
 
 pub const ANVIL_PORT: u16 = 8545;
@@ -33,14 +32,7 @@ pub struct AnvilRunner {
 impl AnvilRunner {
     pub async fn new() -> Self {
         tracing::info!("Starting anvil container...");
-        pull_image_with_retries(GenericImage::new(ANVIL_IMAGE, TAG))
-            .await
-            .unwrap_or_else(|err| {
-                panic!(
-                    "failed to pull anvil image {ANVIL_IMAGE}:{TAG}: {err}. \
-                     Hint: verify GHCR connectivity or pre-pull the image before tests."
-                )
-            });
+        prepull_image_best_effort(GenericImage::new(ANVIL_IMAGE, TAG)).await;
 
         // Hard code tag, so we don't accidental breakages
         let (container, loaded_state) = {
@@ -50,12 +42,10 @@ impl AnvilRunner {
 
             let mut node = AnvilNode::default().with_tag(TAG);
             if use_state {
-                let state_mount =
-                    Mount::bind_mount(state_dir.to_string_lossy().to_string(), "/state");
                 let load_path = format!("/state/{ANVIL_STATE_FILE}");
                 node = node
-                    .with_mount(state_mount)
-                    .with_cmd(vec!["--load-state".to_string(), load_path]);
+                    .with_state_mount(&state_dir)
+                    .with_load_state_path(load_path);
             }
 
             let container = node.start().await.unwrap_or_else(|err| {

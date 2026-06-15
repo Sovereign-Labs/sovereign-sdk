@@ -15,7 +15,6 @@ workspace = true
 
 [dependencies]
 console-subscriber = { workspace = true, optional = true }
-derivative = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-stf-runner = { workspace = true, optional = true }
 sov-state = { workspace = true }
@@ -26,6 +25,7 @@ sov-db = { workspace = true, optional = true }
 sov-sequencer = { workspace = true, optional = true }
 sov-ledger-apis = { workspace = true, optional = true }
 sov-rollup-apis = { workspace = true, optional = true }
+sov-rollup-full-node-interface = { workspace = true, optional = true }
 sov-api-spec = { workspace = true, optional = true }
 sov-metrics = { workspace = true, optional = true }
 
@@ -40,6 +40,7 @@ tokio = { workspace = true, features = ["sync", "signal"], optional = true }
 tracing = { workspace = true, optional = true }
 tracing-panic = { version = "0.1.2", optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"], optional = true }
+tracing-appender = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 opentelemetry = { version = "0.31", default-features = false, features = ["trace"], optional = true }
 opentelemetry_sdk = { version = "0.31", default-features = false, features = ["trace", "rt-tokio"], optional = true }
@@ -54,7 +55,6 @@ native = [
 	"async-trait",
 	"futures",
 	"console-subscriber",
-	"derivative",
 	"serde_json",
 	"sov-cli",
 	"sov-db",
@@ -64,6 +64,7 @@ native = [
 	"sov-modules-api/native",
 	"sov-modules-stf-blueprint/native",
 	"sov-rollup-apis",
+	"sov-rollup-full-node-interface",
 	"sov-rollup-interface/native",
 	"sov-sequencer",
 	"sov-state/native",
@@ -73,6 +74,7 @@ native = [
 	"tracing",
 	"tracing-panic",
 	"tracing-subscriber",
+	"tracing-appender",
 	"hex",
 	"opentelemetry",
 	"opentelemetry_sdk",

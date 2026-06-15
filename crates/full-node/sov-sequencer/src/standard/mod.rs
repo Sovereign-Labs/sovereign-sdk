@@ -9,7 +9,8 @@ use crate::common::{
     WithCachedTxHashes,
 };
 use crate::{
-    ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, TxHash, TxStatus, TxStatusManager,
+    ProofBlobSender, SequencerConfig, SequencerNotReadyDetails, SerializedProofWithDetailsBytes,
+    TxHash, TxStatus, TxStatusManager,
 };
 use anyhow::Context;
 use async_trait::async_trait;
@@ -19,14 +20,18 @@ use sov_db::ledger_db::LedgerDb;
 pub use sov_full_node_configs::sequencer::StdSequencerConfig;
 use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::{AuthenticationError, ChainState};
+use sov_modules_api::macros::config_value;
 use sov_modules_api::rest::utils::ErrorObject;
-use sov_modules_api::rest::{ApiState, StateUpdateReceiver};
+use sov_modules_api::rest::ApiState;
 use sov_modules_api::transaction::SequencerReward;
 use sov_modules_api::*;
 use sov_modules_stf_blueprint::{process_tx_and_reward_prover, ApplyTxResult, PreExecError};
 use sov_rest_utils::json_obj;
+use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::DaSyncState;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use std::boxed::Box;
 use std::marker::PhantomData;
 use std::net::IpAddr;
@@ -94,6 +99,7 @@ where
     api_state: ApiState<S>,
     da_address: <S::Da as DaSpec>::Address,
     config: SequencerConfig<S::Address, StdSequencerConfig>,
+    max_concurrent_proof_blobs: usize,
     api_ledger_db: LedgerDb,
 }
 
@@ -125,6 +131,7 @@ where
         _da_sync_state: Arc<DaSyncState>,
         storage_path: &Path,
         config: &SequencerConfig<S::Address, StdSequencerConfig>,
+        max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
@@ -136,7 +143,7 @@ where
         let latest_state_update = state_update_receiver.borrow().clone();
         let checkpoint = Arc::new(
             ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
-                StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None),
+                StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel()),
                 latest_state_update.latest_finalized_slot_number,
             ),
         );
@@ -147,17 +154,19 @@ where
             checkpoint_receiver,
             kernel_with_slot_mapping,
             None,
+            shutdown_receiver.clone(),
         );
 
         let txsm = TxStatusManager::default();
         let checkpoint =
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
 
         let da_address = da.get_signer().await.context(
             "Standard sequencer require DaService to be configured with submitting support",
         )?;
 
-        let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
+        let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
+        let nb_of_concurrent_proof_blob_submissions = Arc::new(AtomicUsize::new(0));
         let (blob_sender, blob_sender_handle) = BlobSender::new(
             da,
             ledger_db.clone(),
@@ -167,7 +176,8 @@ where
             Duration::from_secs(config.blob_processing_timeout_secs),
             None,
             Default::default(),
-            nb_of_concurrent_blob_submissions,
+            nb_of_concurrent_batch_blob_submissions,
+            nb_of_concurrent_proof_blob_submissions,
         )
         .await?;
 
@@ -195,6 +205,7 @@ where
             runtime: Rt::default(),
             checkpoint_sender,
             config: config.clone(),
+            max_concurrent_proof_blobs,
             api_ledger_db,
             da_address,
         }));
@@ -311,6 +322,7 @@ where
             Ok(ApplyTxResult {
                 receipt,
                 transaction_consumption,
+                ..
             }) => {
                 let sequencer_reward = transaction_consumption.priority_fee();
                 // ...and immediately store the new `StateCheckpoint`.
@@ -673,7 +685,7 @@ where
             latest_finalized_slot_number,
             ..
         } = &state_update_info;
-        let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel(), None);
+        let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel());
 
         tracing::debug!(
             %slot_number,
@@ -686,9 +698,7 @@ where
                 .send(Arc::new(
                     // Standard sequencer preserves true finality as reported by the node.
                     ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
-                        checkpoint
-                            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(
-                            ),
+                        checkpoint.clone_with_empty_witness_dropping_temp_cache(),
                         *latest_finalized_slot_number,
                     ),
                 ))
@@ -719,6 +729,17 @@ where
         baked_tx: FullyBakedTx,
         _ip_addr: IpAddr,
     ) -> Result<AcceptedTx<Self::Confirmation>, ErrorObject> {
+        if baked_tx.data.len() > config_value!("MAX_TX_SIZE") {
+            return Err(ErrorObject {
+                status: StatusCode::PAYLOAD_TOO_LARGE,
+                message: "Transaction is too big".to_string(),
+                details: json_obj!({
+                    "max_allowed_size": config_value!("MAX_TX_SIZE"),
+                    "submitted_size": baked_tx.len(),
+                }),
+            });
+        }
+
         let sequencer = self.clone();
         tokio::spawn(async move { sequencer.accept_tx_inner(baked_tx).await })
             .await
@@ -761,13 +782,31 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    async fn produce_and_publish_proof_blob(&self, proof_blob: Arc<[u8]>) -> anyhow::Result<()> {
+    async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus> {
+        let in_flight = self
+            .inner
+            .lock()
+            .await
+            .blob_sender
+            .nb_of_concurrent_proof_blob_submissions();
+        Ok(BlobSenderStatus {
+            in_flight,
+            max_concurrent: self.max_concurrent_proof_blobs,
+        })
+    }
+
+    async fn produce_and_publish_proof_blob(
+        &self,
+        proof_blob: SerializedProofWithDetailsBytes,
+    ) -> anyhow::Result<()> {
         let blob_id = new_blob_id();
 
         // TODO: Put SerializedAggregatedProof directly on chain without
         // wrapping in a vec
         // <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1065>
-        let blob_bytes = borsh::to_vec(&proof_blob)?.into();
+        // Note: This behavior of double-serializing is leftover from the previous implementation.
+        // TODO: Decide whether this can be safely removed (i.e. does the blob selector expect the payload to have been double-serialized?)
+        let blob_bytes = borsh::to_vec(&proof_blob.0)?.into();
 
         debug!(blob_id, "Dispatching proof blob for publishing");
 

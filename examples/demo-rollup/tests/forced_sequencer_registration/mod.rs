@@ -15,11 +15,11 @@ use base64::Engine;
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use futures::stream::BoxStream;
 use futures::StreamExt;
-use secp256k1::{PublicKey, SecretKey};
+use secp256k1::SecretKey;
 use sov_api_spec::types as api_types;
 use sov_bank::config_gas_token_id;
 use sov_cli::NodeClient;
-use sov_demo_rollup::{mock_da_risc0_host_args, MockDemoRollup};
+use sov_demo_rollup::MockDemoRollup;
 use sov_eth_dev_signer::Signer;
 use sov_evm::{EthereumAuthenticator, RlpEvmTransaction};
 use sov_evm_test_utils::LegacySimpleStorage;
@@ -32,7 +32,6 @@ use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey as _;
 use sov_modules_api::{Amount, CryptoSpec, OperatingMode, RawTx, Runtime as RuntimeT, Spec};
 use sov_modules_macros::config_value;
-use sov_risc0_adapter::crypto::private_key::Risc0PrivateKey;
 use sov_rollup_interface::node::da::DaService;
 use sov_sequencer::ForcedTxBatchNotification;
 use sov_synthetic_load::CallMessage as SyntheticLoadCall;
@@ -288,12 +287,8 @@ impl EvmAccount {
         Self(secret_key)
     }
 
-    fn public_key(&self) -> PublicKey {
-        PublicKey::from_secret_key(secp256k1::SECP256K1, &self.0)
-    }
-
     fn address(&self) -> Address {
-        reth_primitives::public_key_to_address(self.public_key())
+        Signer::new(self.0).address()
     }
 
     fn sign(&self, tx: TypedTransaction) -> RlpEvmTransaction {
@@ -357,13 +352,14 @@ async fn setup_with_block_producing(
         block_producing,
         FINALIZATION_BLOCKS,
     )
-    .with_zkvm_host_args(mock_da_risc0_host_args())
     .set_config(|c| {
-        c.max_concurrent_blobs = 65536;
+        c.max_concurrent_batch_blobs = 65536;
         c.automatic_batch_production = true;
-        c.rollup_prover_config = None;
         c.max_channel_size = 1;
         c.max_infos_in_db = 1;
+        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
+            seq.ideal_lag_behind_finalized_slot = 3;
+        }
     })
     .start()
     .await
@@ -685,11 +681,11 @@ async fn forced_txs_resync_test_case(
     // - funded_key: has gas tokens, so its txs will succeed
     // - unfunded_key: no gas tokens, so its txs will fail (tests error handling)
     // - post_resync_recipient: separate recipient so post-resync txs don't affect main balance checks
-    let funded_key = Risc0PrivateKey::generate();
+    let funded_key = TestPrivateKey::generate();
     let funded_address = funded_key.pub_key().credential_id().into();
-    let unfunded_key = Risc0PrivateKey::generate();
+    let unfunded_key = TestPrivateKey::generate();
     let post_resync_recipient: <TestSpec as Spec>::Address =
-        Risc0PrivateKey::generate().pub_key().credential_id().into();
+        TestPrivateKey::generate().pub_key().credential_id().into();
 
     let preferred_transfer = 50u128;
     let forced_transfer = 5u128;

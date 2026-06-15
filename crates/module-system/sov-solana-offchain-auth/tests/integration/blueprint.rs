@@ -2,6 +2,7 @@ use std::marker::PhantomData;
 use std::net::SocketAddr;
 use std::sync::Arc;
 
+use async_trait::async_trait;
 use axum::extract::{ConnectInfo, State};
 use axum::response::IntoResponse;
 use axum::routing::post;
@@ -10,15 +11,16 @@ use serde::{Deserialize, Serialize};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::prelude::axum::async_trait;
-use sov_modules_api::rest::{HasRestApi, StateUpdateReceiver};
-use sov_modules_api::{NodeEndpoints, RawTx, Spec, SyncStatus};
+use sov_modules_api::rest::HasRestApi;
+use sov_modules_api::{DaSpec, NodeEndpoints, RawTx, Spec};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
 use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rest_utils::{errors, ApiResult};
+use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::da::DaBlobHash;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::TxHash;
 use sov_sequencer::rest_api::{AcceptTx, TxInfoWithConfirmation};
 use sov_sequencer::{ProofBlobSender, Sequencer, TxStatus};
@@ -72,13 +74,6 @@ where
     type ProverService = <RtAgnosticBlueprint<S, R> as FullNodeBlueprint<Native>>::ProverService;
     type ProofSender = <RtAgnosticBlueprint<S, R> as FullNodeBlueprint<Native>>::ProofSender;
 
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as sov_stf_runner::processes::ProverService>::Verifier as sov_modules_api::ZkVerifier>::CodeCommitment
-    {
-        self.inner.create_outer_code_commitment()
-    }
-
     async fn create_endpoints(
         &self,
         state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
@@ -107,6 +102,7 @@ where
         sequencer: Seq,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        _sequencer_da_address: <<Self::Spec as Spec>::Da as DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
         Seq: Sequencer<Spec = Self::Spec, Rt = Self::Runtime, Da = Self::DaService>,
@@ -137,14 +133,23 @@ where
 
     async fn create_prover_service(
         &self,
-        prover_config: sov_stf_runner::processes::RollupProverConfig<
-            <Self::Spec as Spec>::InnerZkvm,
-        >,
+        prover_config: sov_stf_runner::processes::RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         da_service: &Self::DaService,
-    ) -> Self::ProverService {
+        ledger_db: &sov_db::ledger_db::LedgerDb,
+        start_fresh_outer_proof_on_resync: bool,
+    ) -> anyhow::Result<(
+        Self::ProverService,
+        Option<sov_rollup_interface::common::SlotNumber>,
+    )> {
         self.inner
-            .create_prover_service(prover_config, rollup_config, da_service)
+            .create_prover_service(
+                prover_config,
+                rollup_config,
+                da_service,
+                ledger_db,
+                start_fresh_outer_proof_on_resync,
+            )
             .await
     }
 
@@ -164,6 +169,13 @@ where
     ) -> anyhow::Result<Self::ProofSender> {
         self.inner
             .create_proof_sender(rollup_config, proof_blob_sender)
+    }
+
+    fn compute_code_commitments() -> anyhow::Result<(
+        sov_modules_api::CodeCommitmentFor<<Self::Spec as Spec>::InnerZkvm>,
+        sov_modules_api::CodeCommitmentFor<<Self::Spec as Spec>::OuterZkvm>,
+    )> {
+        <RtAgnosticBlueprint<S, R> as FullNodeBlueprint<Native>>::compute_code_commitments()
     }
 }
 

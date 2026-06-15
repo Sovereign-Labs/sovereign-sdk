@@ -22,6 +22,7 @@ fn is_default<T: Default + PartialEq>(value: &T) -> bool {
 
 /// Evm account.
 #[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct AccountData {
     /// Account address.
     pub address: Address,
@@ -60,9 +61,10 @@ impl AccountData {
     }
 }
 
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     pub(crate) fn init_module(
         &mut self,

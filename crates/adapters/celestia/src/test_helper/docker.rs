@@ -13,7 +13,7 @@ use crate::{CelestiaConfig, CelestiaService};
 use anyhow::{anyhow, Context};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_test_utils::docker::pull_image_with_retries;
+use sov_test_utils::docker::prepull_image_best_effort;
 use testcontainers::core::{ExecCommand, Host, Mount, WaitFor};
 use testcontainers::runners::AsyncRunner;
 use testcontainers::{ContainerAsync, Image, ImageExt};
@@ -21,13 +21,13 @@ use tokio::time::sleep;
 use uuid::Uuid;
 
 const VALIDATOR_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-validator-devnet";
-const VALIDATOR_TAG: &str = "v7.0.2-mocha";
+const VALIDATOR_TAG: &str = "v8.0.1-mocha";
 const BRIDGE_IMAGE: &str = "ghcr.io/sovereign-labs/celestia-bridge-devnet";
-const BRIDGE_TAG: &str = "v0.29.1-mocha";
+const BRIDGE_TAG: &str = "v0.30.1-mocha";
 const VALIDATOR_GRPC_PORT: u16 = 9090;
 const BRIDGE_RPC_PORT: u16 = 26658;
 
-const STARTUP_TIMEOUT: Duration = Duration::from_secs(90);
+const STARTUP_TIMEOUT: Duration = Duration::from_secs(180);
 
 #[derive(Clone)]
 pub struct CelestiaValidator;
@@ -91,12 +91,8 @@ impl CelestiaDevNode {
     pub async fn start() -> anyhow::Result<Self> {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let start = std::time::Instant::now();
-        pull_image_with_retries(CelestiaValidator)
-            .await
-            .context("failed to pull celestia validator image")?;
-        pull_image_with_retries(CelestiaBridge)
-            .await
-            .context("failed to pull celestia bridge image")?;
+        prepull_image_best_effort(CelestiaValidator).await;
+        prepull_image_best_effort(CelestiaBridge).await;
         let suffix = Uuid::new_v4().to_string();
 
         let network = format!("celestia-test-{suffix}");
@@ -229,7 +225,7 @@ impl CelestiaDevNode {
         Ok(stdout_trimmed)
     }
 
-    /// By default, celestia validator will pre-fund 10 keys. Index starts from 0.
+    /// By default, celestia validator will pre-fund 7 keys. Index starts from 0.
     pub async fn export_signer_key(&self, key_index: u8) -> anyhow::Result<String> {
         let key_name = format!("bridge-{key_index}");
         let command = vec![
@@ -289,6 +285,7 @@ impl CelestiaDevNode {
             rpc_auth_token: None,
             grpc_url: Some(grpc_url),
             grpc_auth_token: None,
+            grpc_fallback_endpoints: Vec::new(),
             signer_private_key: Some(key_0),
             request_timeout_secs: default_request_timeout_seconds(),
             api_request_timeout_secs: default_api_request_timeout_secs(),

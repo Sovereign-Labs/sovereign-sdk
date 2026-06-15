@@ -140,3 +140,15 @@ impl<ExtDB: Database> Database for MetricsDb<ExtDB> {
         time!(self.db.block_hash(number))
     }
 }
+
+impl<ExtDB, S> crate::precompiles::PrecompileDb<S> for MetricsDb<ExtDB>
+where
+    S: sov_modules_api::Spec,
+    ExtDB: crate::precompiles::PrecompileDb<S>,
+{
+    type State = ExtDB::State;
+
+    fn precompile_state_mut(&mut self) -> &mut Self::State {
+        self.db.precompile_state_mut()
+    }
+}

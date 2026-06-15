@@ -1,25 +1,18 @@
 use std::env;
 
+use demo_stf::runtime::Runtime;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
-use sov_demo_rollup::MockDemoRollup;
 use sov_mock_da::{MockAddress, MockBlock, MockDaService};
-use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_rollup_interface::node::da::DaService;
 use sov_test_utils::generators::bank::BankMessageGenerator;
 use sov_test_utils::generators::BlobBuildingCtx;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::MessageGenerator;
 
-type S = sov_modules_api::configurable_spec::ConfigurableSpec<
-    sov_mock_da::MockDaSpec,
-    sov_risc0_adapter::Risc0,
-    sov_mock_zkvm::MockZkvm,
-    demo_stf::MultiAddressEvmSolana,
-    WitnessGeneration,
->;
+type S = super::DefaultSpec;
 
-const DEFAULT_BLOCKS: u64 = 10;
-const DEFAULT_TXNS_PER_BLOCK: u64 = 100;
+pub const DEFAULT_BLOCKS: u64 = 1;
+const DEFAULT_TXNS_PER_BLOCK: u64 = 2;
 
 pub async fn get_blocks_from_da(mode: BlobBuildingCtx) -> anyhow::Result<Vec<MockBlock>> {
     let txns_per_block = match env::var("SOV_BENCH_TXNS_PER_BLOCK") {
@@ -50,13 +43,13 @@ pub async fn get_blocks_from_da(mode: BlobBuildingCtx) -> anyhow::Result<Vec<Moc
             private_key_and_address.private_key,
         );
 
-    let blob = create_token_message_gen.create_blobs::<<MockDemoRollup<Native> as sov_modules_rollup_blueprint::RollupBlueprint<Native>>::Runtime>(&mode);
+    let blob = create_token_message_gen.create_blobs::<Runtime<S>>(&mode);
     da_service.send_transaction(&blob).await.await??;
     let block1 = da_service.get_block_at(1).await?;
     blocks.push(block1);
 
     for i in 0..block_cnt {
-        let blob = transfer_message_gen.create_blobs::<<MockDemoRollup<Native> as sov_modules_rollup_blueprint::RollupBlueprint<Native>>::Runtime>(&mode);
+        let blob = transfer_message_gen.create_blobs::<Runtime<S>>(&mode);
         da_service.send_transaction(&blob).await.await??;
         let blocki = da_service.get_block_at(2 + i).await?;
         blocks.push(blocki);

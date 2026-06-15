@@ -18,6 +18,7 @@ use sov_rollup_interface::zk::CryptoSpec;
 use sov_rollup_interface::TxHash;
 use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::SequencerKindConfig;
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::genesis::zk::MinimalZkGenesisConfig;
 use sov_test_utils::sov_bank::{config_gas_token_id, CallMessageDiscriminants, Coins};
@@ -53,7 +54,7 @@ type TestRollupBuilder = RollupBuilder<RollupBlueprint>;
 
 const TEST_RANDOMIZATION_SEED: HexHash = HexHash::new([10; 32]);
 const TEST_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(120);
-const RUNNER_LOG_DEBUG: &str = "debug,sov_metrics=error,sov_sequencer::preferred=trace,sov_db=trace,sov_ledger_apis=trace,integration=warn,jmt=info,hyper=info,request=info,tower=info,sqlx=warn,h2=info";
+const RUNNER_LOG_DEBUG: &str = "debug,sov_metrics=error,sov_sequencer::preferred=trace,sov_db=trace,sov_ledger_apis=trace,integration=warn,hyper=info,request=info,tower=info,sqlx=warn,h2=info";
 
 fn setup_genesis(additional_accounts: usize) -> (HighLevelZkGenesisConfig<S>, GenesisConfig<S>) {
     let high_level_genesis_config = HighLevelZkGenesisConfig::generate()
@@ -248,8 +249,8 @@ async fn test_stream_of_transactions(
             minimum_profit_per_tx: 0,
             ..Default::default()
         });
-        config.rollup_prover_config = None;
-        config.max_concurrent_blobs = 128;
+        config.rollup_prover_config = RollupProverConfig::Disabled;
+        config.max_concurrent_batch_blobs = 128;
     })
     .set_da_config(|da_config| {
         da_config.sender_address = genesis_config

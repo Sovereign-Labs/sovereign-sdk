@@ -188,6 +188,8 @@ where
     /// - `num_workers`: Total number of parallel workers
     /// - `validity`: Distribution of valid vs invalid messages
     /// - `restart_after`: Optional duration after which to restart the worker
+    /// - `batch_size`: If set, use a fixed batch size instead of random 10..100
+    /// - `batch_interval_ms`: If set, use a fixed sleep interval instead of random 25..100ms
     pub async fn run(
         self,
         client: sov_api_spec::Client,
@@ -196,6 +198,8 @@ where
         num_workers: u32,
         validity: Distribution<MessageValidity>,
         restart_after: Option<std::time::Duration>,
+        batch_size: Option<u32>,
+        batch_interval_ms: Option<u64>,
     ) -> anyhow::Result<()> {
         loop {
             tracing::info!(worker_id, ?restart_after, "Starting worker");
@@ -208,7 +212,9 @@ where
                         worker_id,
                         num_workers,
                         validity.clone(),
-                        self.use_retries
+                        self.use_retries,
+                        batch_size,
+                        batch_interval_ms,
                     ) => {
                         // If prepare_and_send_txs completes (likely an error), return immediately
                         return result;
@@ -230,6 +236,8 @@ where
                     num_workers,
                     validity.clone(),
                     self.use_retries,
+                    batch_size,
+                    batch_interval_ms,
                 )
                 .await
             };
@@ -320,6 +328,8 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
     num_workers: u32,
     validity: Distribution<MessageValidity>,
     use_retries: bool,
+    fixed_batch_size: Option<u32>,
+    fixed_batch_interval_ms: Option<u64>,
 ) -> anyhow::Result<()> {
     let mut nonces: HashMap<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey, u64> =
         Default::default();
@@ -339,9 +349,8 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
             // rng must fall out of scope before awaiting anything so this fn is Send
             let mut rng = rand::thread_rng();
 
-            // Do this at the start so we add some jitter to initial API requests
-            let sleep_ms = rng.gen_range(25..100);
-            let txn_count = rng.gen_range(10..100);
+            let sleep_ms = fixed_batch_interval_ms.unwrap_or_else(|| rng.gen_range(25..100));
+            let txn_count = fixed_batch_size.unwrap_or_else(|| rng.gen_range(10..100));
             (txn_count, sleep_ms)
         };
 

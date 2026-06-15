@@ -8,7 +8,6 @@ use sov_chain_state::ChainState;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
-use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::{RollupHeight, TransactionAuthenticator, UniquenessData};
 use sov_modules_api::digest::Digest;
 use sov_modules_api::rest::HasRestApi;
@@ -39,7 +38,7 @@ use sov_test_utils::{
     default_test_signed_transaction, default_test_tx_details, test_signed_transaction, EncodeCall,
     MessageGenerator, RtAgnosticBlueprint, TestPrivateKey, TestSpec, TransactionType,
     TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
-    TEST_MAX_CONCURRENT_BLOBS,
+    TEST_MAX_CONCURRENT_BATCH_BLOBS,
 };
 use sov_value_setter::ValueSetter;
 
@@ -299,7 +298,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     automatic_batch_production: bool,
     max_batch_size_bytes: usize,
     block_producing_config: BlockProducingConfig,
-    rollup_prover_config: Option<RollupProverConfig<MockZkvm>>,
+    rollup_prover_config: Option<RollupProverConfig>,
     blob_processing_timeout_secs: u64,
     max_batch_execution_time_millis: u64,
     stop_at_rollup_height: Option<RollupHeight>,
@@ -311,7 +310,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
         finalization_blocks,
     )
     .set_config(|c| {
-        c.rollup_prover_config = rollup_prover_config;
+        c.rollup_prover_config = rollup_prover_config.unwrap_or(RollupProverConfig::Disabled);
         c.automatic_batch_production = automatic_batch_production;
         c.storage = StoragePath::Tmp(dir);
         c.max_batch_size_bytes = max_batch_size_bytes;
@@ -321,8 +320,13 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
         {
             preferred_sequencer_config.batch_execution_time_limit_millis =
                 max_batch_execution_time_millis;
+            // Proof generation and sequencer state-root consistency checks are currently
+            // incompatible in these integration tests.
+            if c.rollup_prover_config.is_enabled() {
+                preferred_sequencer_config.disable_state_root_consistency_checks = true;
+            }
         }
-        c.max_concurrent_blobs = TEST_MAX_CONCURRENT_BLOBS;
+        c.max_concurrent_batch_blobs = TEST_MAX_CONCURRENT_BATCH_BLOBS;
     })
     .set_da_config(|c| c.sender_address = seq_da_address)
     .set_persistent_da()
@@ -338,12 +342,26 @@ pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
     call_message: &<RT as DispatchCall>::Decodable,
     max_fee: Amount,
 ) -> RawTx {
+    encode_call_with_fee_and_uniqueness::<RT>(
+        key,
+        call_message,
+        max_fee,
+        UniquenessData::Generation(generation),
+    )
+}
+
+pub fn encode_call_with_fee_and_uniqueness<RT: Runtime<TestSpec>>(
+    key: &Ed25519PrivateKey,
+    call_message: &<RT as DispatchCall>::Decodable,
+    max_fee: Amount,
+    uniqueness: UniquenessData,
+) -> RawTx {
     let mut tx_details = default_test_tx_details();
     tx_details.max_fee = max_fee;
     let tx = test_signed_transaction::<RT, TestSpec>(
         key,
         call_message,
-        UniquenessData::Generation(generation),
+        uniqueness,
         &<RT as Runtime<TestSpec>>::CHAIN_HASH,
         tx_details,
     );
@@ -366,6 +384,28 @@ pub fn tx_set_value_with_gas<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<Test
     );
 
     encode_call_with_fee::<RT>(key, generation, &msg, max_fee)
+}
+
+pub fn tx_set_value_nonce<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<TestSpec>>>(
+    key: &Ed25519PrivateKey,
+    nonce: u64,
+    value_to_set: u64,
+    gas: Option<<TestSpec as Spec>::Gas>,
+) -> RawTx {
+    let tx_details = default_test_tx_details::<TestSpec>();
+    let msg = <RT as EncodeCall<ValueSetter<TestSpec>>>::to_decodable(
+        sov_value_setter::CallMessage::SetValue {
+            value: value_to_set as u32,
+            gas,
+        },
+    );
+
+    encode_call_with_fee_and_uniqueness::<RT>(
+        key,
+        &msg,
+        tx_details.max_fee,
+        UniquenessData::Nonce(nonce),
+    )
 }
 
 // This allows for easily setting file sharing when using Docker Desktop.

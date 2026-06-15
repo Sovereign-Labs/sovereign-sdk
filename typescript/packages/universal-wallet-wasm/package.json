@@ -7,7 +7,10 @@
     "compile:node": "wasm-pack build --target nodejs --release --out-dir dist/node",
     "test": "vitest run --project unit"
   },
-  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sovereign-Labs/sovereign-sdk.git"
+  },
   "files": [
     "dist/**/*",
     "!dist/**/.gitignore",

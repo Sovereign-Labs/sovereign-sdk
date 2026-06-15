@@ -4,7 +4,6 @@ use std::num::TryFromIntError;
 
 use sov_metrics::StateAccessMetric;
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
-use sov_state::pinned_cache::PinnedCache;
 #[cfg(feature = "native")]
 use sov_state::StorageProof;
 use sov_state::{
@@ -87,14 +86,6 @@ impl<T> InfallibleKernelStateAccessor for T where
 {
 }
 
-pub trait PinnedCacheAccessor<S: Spec> {
-    /// Returns a mutable reference to the pinned cache backing this accessor, if any exists.
-    fn pinned_cache_mut(&mut self) -> Option<&mut PinnedCache>;
-
-    /// Returns a reference to the storage backing this accessor.
-    fn storage(&self) -> &S::Storage;
-}
-
 /// The state accessor used during transaction execution. It provides unrestricted
 /// access to [`User`]-space state, as well as limited visibility into the `Kernel` state.
 pub trait TxState<S: Spec>:
@@ -109,7 +100,6 @@ pub trait TxState<S: Spec>:
     + GasMeter<Spec = S>
     + Sized
     + StateMetricsProvider
-    + PinnedCacheAccessor<S>
 {
     /// Converts this state accessor into a [`RevertableTxState`].
     ///
@@ -131,7 +121,6 @@ impl<S: Spec, T> TxState<S> for T where
         + GasMeter<Spec = S>
         + Sized
         + StateMetricsProvider
-        + PinnedCacheAccessor<S>
 {
 }
 
@@ -541,8 +530,9 @@ impl<T: AccessoryStateWriter> StateWriter<Accessory> for T {
 pub trait ProvenStateAccessor<N: ProvableCompileTimeNamespace>: StateReaderAndWriter<N> {
     /// The underlying storage whose proof is returned
     type Proof;
-    /// Fetch the value with the requested key and provide a proof of its presence/absence.
-    fn get_with_proof(&mut self, key: SlotKey) -> Option<StorageProof<Self::Proof>>
+    /// Fetch the value with the requested key and provide a proof of its presence/absence against the latest state root. Historical proofs are not supported,
+    /// so queries against an archival state accessor will still return the latest state root.
+    fn get_global_latest_with_proof(&mut self, key: SlotKey) -> Option<StorageProof<Self::Proof>>
     where
         Self: StateReaderAndWriter<N>,
         N: ProvableCompileTimeNamespace;

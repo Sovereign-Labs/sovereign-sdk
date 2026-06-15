@@ -8,42 +8,44 @@ license = { workspace = true }
 repository = { workspace = true }
 publish = false
 
+[package.metadata.cargo-machete]
+ignored = ["prettytable-rs"]
+
 [dependencies]
 # Sovereign dependencies
 sov-rollup-interface = { workspace = true, features = ["arbitrary"] }
 sov-modules-api = { workspace = true, features = ["arbitrary", "bench", "native"] }
-sov-capabilities = { workspace = true }
+sov-modules-rollup-blueprint = { workspace = true }
 sov-state = { workspace = true }
 sov-db = { workspace = true }
 
 sov-test-modules = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 sov-address = { workspace = true }
-sov-modules-stf-blueprint = { workspace = true, features = ["bench"] }
+sov-hyperlane-integration = { workspace = true, features = ["native"] }
 sov-transaction-generator = { workspace = true }
-sov-modules-rollup-blueprint = { workspace = true, default-features = false }
 sov-node-client = { workspace = true }
 
 sov-metrics = { workspace = true, default-features = false }
 
 sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-stf-runner = { workspace = true }
 
 demo-stf = { workspace = true, features = ["test-utils", "arbitrary"] }
-reqwest = { workspace = true, features = ["rustls-tls", "stream"], default-features = false }
+reqwest = { workspace = true, features = ["stream"] }
 
 sov-risc0-adapter = { workspace = true, features = ["arbitrary", "bench", "native"] }
-sov-sp1-adapter = { workspace = true, features = ["arbitrary", "bench", "native"] }
+sov-sp1-adapter = { workspace = true, features = ["arbitrary", "native"] }
 
 # Provers
 risc0 = { path = "../provers/risc0", features = ["bench"] }
 
 # Other dependencies
-derive_more = { workspace = true, default-features = false, features = ["std"] }
 tracing = { workspace = true, default-features = false }
 prettytable-rs = "^0.10"
 criterion = "0.5.1"
 bincode = { workspace = true }
-derivative = { workspace = true, features = ["use_core"] }
 anyhow = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
     "alloc",
@@ -51,10 +53,10 @@ serde = { workspace = true, default-features = false, features = [
 ] }
 backon = { workspace = true }
 tokio = { workspace = true, default-features = false, features = ["process"] }
+async-trait = { workspace = true }
 humantime = "2.1"
 clap = { workspace = true }
 tempfile = { workspace = true }
-strum = { workspace = true, features = ["derive"] }
 futures = { workspace = true, default-features = false }
 
 [[bench]]
@@ -71,5 +73,4 @@ harness = false
 gas-constant-estimation = [
     "sov-modules-api/gas-constant-estimation",
     "sov-metrics/gas-constant-estimation",
-    "sov-modules-stf-blueprint/gas-constant-estimation",
 ]

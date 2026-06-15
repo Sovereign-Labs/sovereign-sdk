@@ -304,7 +304,6 @@ mod tests {
     use std::collections::hash_map::DefaultHasher;
     use std::hash::{Hash, Hasher};
 
-    use derive_more::FromStr;
     use sov_modules_api::default_spec::DefaultSpec;
     use sov_modules_api::execution_mode::Native;
     use sov_test_utils::{MockDaSpec, MockZkvm};

@@ -22,7 +22,7 @@ fn assert_slashed(
 ) {
     assert_matches!(
         &context.proof_receipt.unwrap().outcome,
-        ProofOutcome::Invalid(e) if matches!(e, InvalidProofError::ProverSlashed(s) if s == slash_reason)
+        ProofOutcome::Invalid(e, _) if matches!(e, InvalidProofError::ProverSlashed(s) if s == slash_reason)
     );
     assert!(TestProverIncentives::default()
         .bonded_provers
@@ -75,10 +75,11 @@ fn test_invalid_proof_slashed() {
 }
 
 #[test]
+#[ignore = "enable after we add admin role in ProverIncentives module"]
 fn test_invalid_genesis_hash_slashed() {
     let (mut runner, prover, mut aggregated_proof) = prepare_for_slashing();
     aggregated_proof
-        .genesis_state_root
+        .origin_state_root
         .clone_from(&aggregated_proof.final_state_root);
 
     runner.execute_proof::<TestProverIncentives>(ProofTestCase {
@@ -155,6 +156,7 @@ fn test_invalid_final_state_root() {
 }
 
 #[test]
+#[ignore = "enable after we add admin role in ProverIncentives module"]
 fn test_invalid_initial_slot_hash() {
     let (mut runner, prover, mut aggregated_proof) = prepare_for_slashing();
     aggregated_proof

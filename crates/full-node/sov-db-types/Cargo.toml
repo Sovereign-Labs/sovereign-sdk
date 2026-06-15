@@ -9,7 +9,7 @@ publish.workspace = true
 repository.workspace = true
 
 [dependencies]
-sov-rollup-interface = { workspace = true }
+sov-universal-wallet = { workspace = true, features = ["macros"] }
 borsh = { workspace = true, features = ["rc"] }
 digest = { workspace = true }
 rockbound = { workspace = true, optional = true }
@@ -31,12 +31,13 @@ workspace = true
 default = []
 native = [
 	"dep:rockbound",
-	"sov-rollup-interface/native"
 ]
 arbitrary = [
 	"dep:arbitrary",
 	"dep:proptest",
 	"dep:proptest-derive",
-	"sov-rollup-interface/arbitrary",
 	"rockbound?/arbitrary"
 ]
+
+[package.metadata.cargo-machete]
+ignored = ["proptest"]

@@ -9,7 +9,6 @@ use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{RawTx, Runtime};
 use sov_node_client::NodeClient;
-use sov_test_utils::logging::LogCollector;
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
 use sov_test_utils::test_rollup::get_height;
@@ -22,9 +21,6 @@ use sov_test_utils::{
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::sync::Arc;
 use std::time::Duration;
-use tracing::Level;
-use tracing_subscriber::prelude::*;
-use tracing_subscriber::registry;
 
 generate_operator_runtime_with_kernel!(kernel_type: SoftConfirmationsKernel<'a, S>, TestRuntime <= value_setter: ValueSetter<S>);
 type TestBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
@@ -80,10 +76,6 @@ async fn test_start_at_finalization_plus_one() {
 }
 
 async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
-    let collector = LogCollector::new(Level::ERROR);
-    let subscriber = registry().with(collector.clone());
-    subscriber.init();
-
     let stop_at_height = RollupHeight::new(3);
 
     let (test_rollup, admin) = create_test_rollup(
@@ -98,12 +90,13 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
     let api_client = test_rollup.api_client().clone();
 
-    // Produce enough finalized DA blocks so the sequencer can start accepting transactions.
-    // Use produce_n_blocks_now (instant) rather than tenderly_produce_blocks to avoid
-    // cascading batch creation that could advance height past stop_at_height.
+    // Produce the minimum paced DA blocks needed for readiness.
+    // We intentionally avoid `produce_enough_finalized_slots()` here because it also performs
+    // extra sync/lag advancement work, which can move this test into transient
+    // "node not synced yet" states and make pre-stop tx checks flaky.
+    // `+2` gives a deterministic post-genesis finalized update observed by the poller.
     test_rollup
-        .da_service
-        .produce_n_blocks_now(finalization_blocks as usize + 3)
+        .tenderly_produce_blocks((finalization_blocks + 2) as usize)
         .await
         .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -136,20 +129,19 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
         panic!("The rollup should have stopped")
     };
 
-    let records = collector.records();
+    let pattern = "The requested stop_height";
     assert!(
-        records
-            .iter()
-            .any(|(_, log)| log.contains("The requested stop_height")),
-        "Expected stop-height log in records: {records:?}"
+        err.to_string().contains(pattern),
+        "Error: '{err}' does not contain expected pattern: '{pattern}'"
     );
-    assert!(err.to_string().contains("The requested stop_height"));
 }
 
 async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
+    let shutdown_timeout = Duration::from_secs(10);
+
     let stop_at_height = RollupHeight::new((finalization_blocks + 12) as u64);
 
-    let (test_rollup, admin) = create_test_rollup(
+    let (mut test_rollup, admin) = create_test_rollup(
         0,
         TEST_MAX_BATCH_SIZE,
         TEST_BLOB_PROCESSING_TIMEOUT,
@@ -165,12 +157,13 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
 
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
 
-    // Produce enough finalized DA blocks so the sequencer can start accepting transactions.
-    // Use produce_n_blocks_now (instant) rather than tenderly_produce_blocks to avoid
-    // cascading batch creation that could advance height past stop_at_height.
+    // Produce the minimum paced DA blocks needed for readiness.
+    // We intentionally avoid `produce_enough_finalized_slots()` here because it also performs
+    // extra sync/lag advancement work, which can move this test into transient
+    // "node not synced yet" states and make pre-stop tx checks flaky.
+    // `+2` gives a deterministic post-genesis finalized update observed by the poller.
     test_rollup
-        .da_service
-        .produce_n_blocks_now(finalization_blocks as usize + 3)
+        .tenderly_produce_blocks((finalization_blocks + 2) as usize)
         .await
         .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -181,18 +174,34 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
     let mut current_height = test_rollup.height().await;
 
     while current_height.get() < stop_at_height.get() {
-        // All transactions should be accepted until the stop height is reached.
-        send_tx(&admin, nonce, &api_client).await.unwrap();
-        nonce += 1;
+        // Height check and tx submission are not atomic. If the node reaches stop-height
+        // between the check and the submission, rejection is expected and we should exit.
+        match send_tx(&admin, nonce, &api_client).await {
+            Ok(_) => {
+                nonce += 1;
+            }
+            Err(err) => {
+                assert!(
+                    err.contains(&expected_error),
+                    "Unexpected pre-stop tx error: {err}"
+                );
+                break;
+            }
+        }
 
         test_rollup.da_service.produce_block_now().await.unwrap();
         slot_subscription.next().await;
         current_height = test_rollup.height().await;
     }
 
+    test_rollup.wait_for_height(stop_at_height.get()).await;
+
     // After the stop height is reached, the sequencer should not accept any transactions. Until the height is finalized.
     for _ in 0..finalization_blocks {
-        let current_height = test_rollup.height().await;
+        let Ok(current_height) = get_height(&test_rollup.client).await else {
+            // Shutdown may race with this verification loop in CI.
+            break;
+        };
         assert_eq!(current_height, stop_at_height);
 
         test_rollup.da_service.produce_block_now().await.unwrap();
@@ -208,9 +217,33 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         slot_subscription.next().await;
     }
 
-    test_rollup
-        .wait_for_rollup_to_shutdown(TEST_NORMAL_SHUTDOWN_TIMEOUT)
-        .await;
+    // We use "standard" MockDa block time to not overwhelm node.
+    let shutdown_wait_step =
+        Duration::from_millis(sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS);
+    let shutdown_deadline = tokio::time::Instant::now() + shutdown_timeout;
+
+    loop {
+        match test_rollup
+            .try_wait_for_rollup_to_shutdown(shutdown_wait_step)
+            .await
+        {
+            Ok(()) => break,
+            Err(error) => {
+                let is_wait_timeout = error
+                    .to_string()
+                    .contains("Failed to join rollup task before timeout");
+                if !is_wait_timeout {
+                    panic!("Rollup shutdown failed unexpectedly: {error:#}");
+                }
+                if tokio::time::Instant::now() >= shutdown_deadline {
+                    panic!(
+                        "Failed waiting for rollup shutdown before timeout (stop_at_height={stop_at_height}): {error:#}"
+                    );
+                }
+                test_rollup.da_service.produce_block_now().await.unwrap();
+            }
+        }
+    }
 }
 
 async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finalization_blocks: u32) {

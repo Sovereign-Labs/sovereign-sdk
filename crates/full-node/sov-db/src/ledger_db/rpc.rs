@@ -340,6 +340,120 @@ impl LedgerRpcReader {
         self.get_data_range::<EventByNumber, _, _>(range).await
     }
 
+    async fn get_filtered_slot_events<E>(
+        &self,
+        slot_id: &SlotIdentifier,
+        event_key_prefix_filter: Option<Vec<u8>>,
+    ) -> anyhow::Result<Vec<E>>
+    where
+        E: for<'a> TryFrom<(u64, &'a StoredEvent), Error = anyhow::Error> + Send + Sync,
+    {
+        let slot_not_found_err = || anyhow::anyhow!("Slot `{:?}` not found", slot_id);
+
+        let slot_num = self
+            .resolve_slot_identifier(slot_id)
+            .await?
+            .ok_or_else(slot_not_found_err)?;
+        let slot = self
+            .db
+            .get_async::<SlotByNumber>(&slot_num)
+            .await?
+            .ok_or_else(slot_not_found_err)?;
+
+        if slot.batches.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let first_batch = self
+            .db
+            .get_async::<BatchByNumber>(&slot.batches.start)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("First batch not found in slot `{:?}`", slot_id))?;
+        let txs_end = if slot.batches.start + 1 == slot.batches.end {
+            first_batch.txs.end
+        } else {
+            self.db
+                .get_async::<BatchByNumber>(&(slot.batches.end - 1))
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Last batch not found in slot `{:?}`", slot_id))?
+                .txs
+                .end
+        };
+        let txs_range = first_batch.txs.start..txs_end;
+        if txs_range.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let first_tx = self
+            .db
+            .get_async::<TxByNumber>(&txs_range.start)
+            .await?
+            .ok_or_else(|| anyhow::anyhow!("First tx not found in slot `{:?}`", slot_id))?;
+        let events_end = if txs_range.start + 1 == txs_range.end {
+            first_tx.events.end
+        } else {
+            self.db
+                .get_async::<TxByNumber>(&(txs_range.end - 1))
+                .await?
+                .ok_or_else(|| anyhow::anyhow!("Last tx not found in slot `{:?}`", slot_id))?
+                .events
+                .end
+        };
+        let event_range = first_tx.events.start..events_end;
+        if event_range.is_empty() {
+            return Ok(vec![]);
+        }
+
+        let stored_events = self
+            .db
+            .collect_in_range_async::<EventByNumber, EventNumber>(event_range.clone())
+            .await?;
+        let mut events = if event_key_prefix_filter.is_some() {
+            Vec::new()
+        } else {
+            Vec::with_capacity(stored_events.len())
+        };
+        let mut expected_event_number = event_range.start.0;
+
+        for (event_number, event) in &stored_events {
+            if event_number.0 != expected_event_number {
+                bail!(
+                    "Ledger DB corruption: missing event {:?} in slot `{:?}` while scanning range {:?}..{:?}",
+                    EventNumber(expected_event_number),
+                    slot_id,
+                    event_range.start,
+                    event_range.end,
+                );
+            }
+
+            if let Some(prefix) = &event_key_prefix_filter {
+                if !event.key().inner().starts_with(prefix) {
+                    expected_event_number = expected_event_number
+                        .checked_add(1)
+                        .expect("event number overflow while scanning slot events");
+                    continue;
+                }
+            }
+
+            events.push((event_number.0, event).try_into()?);
+            expected_event_number = expected_event_number
+                .checked_add(1)
+                .expect("event number overflow while scanning slot events");
+        }
+
+        if expected_event_number != event_range.end.0 {
+            bail!(
+                "Ledger DB corruption: missing event {:?} in slot `{:?}` while scanning range {:?}..{:?}",
+                EventNumber(expected_event_number),
+                slot_id,
+                event_range.start,
+                event_range.end,
+            );
+        }
+
+        Ok(events)
+    }
+
     pub(crate) async fn get_data_range<T, K, V>(
         &self,
         range: &std::ops::Range<K>,
@@ -675,55 +789,10 @@ impl LedgerStateProvider for LedgerDb {
             + Sync
             + DeserializeOwned,
     {
-        let slot_not_found_err = || anyhow::anyhow!("Slot `{:?}` not found", slot_id);
-
-        let slot_num = self
-            .resolve_slot_identifier(slot_id)
+        self.get_rpc_reader()
             .await?
-            .ok_or_else(slot_not_found_err)?;
-        let slot: SlotResponse<B, T, E> = self
-            .get_slot_by_number(slot_num, QueryMode::Full)
-            .await?
-            .ok_or_else(slot_not_found_err)?;
-
-        let batches = slot
-            .batches
-            .unwrap_or_default()
-            .into_iter()
-            .filter_map(|b| match b {
-                ItemOrHash::Full(b) => Some(b),
-                _ => None,
-            });
-        let txs = batches.flat_map(|b| {
-            b.txs
-                .unwrap_or_default()
-                .into_iter()
-                .filter_map(|t| match t {
-                    ItemOrHash::Full(t) => Some(t),
-                    _ => None,
-                })
-        });
-        let event_nums = txs.flat_map(|t| t.event_range);
-
-        let mut events = vec![];
-
-        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
-        for event_num in event_nums {
-            let event = db
-                .get_async::<EventByNumber>(&EventNumber(event_num))
-                .await?
-                .ok_or_else(|| anyhow::anyhow!("Event not found but should be present"))?;
-
-            if let Some(prefix) = &event_key_prefix_filter {
-                if !event.key().inner().starts_with(prefix) {
-                    continue;
-                }
-            }
-
-            events.push((event_num, &event).try_into()?);
-        }
-
-        Ok(events)
+            .get_filtered_slot_events(slot_id, event_key_prefix_filter)
+            .await
     }
 
     // Get X by hash
@@ -846,7 +915,7 @@ impl LedgerStateProvider for LedgerDb {
             MAX_SLOTS_PER_REQUEST
         );
         let ids: Vec<_> = (start.get()..=end.get())
-            .map(|x| SlotIdentifier::Number(SlotNumber::new_dangerous(x)))
+            .map(|x| SlotIdentifier::Number(SlotNumber::new(x)))
             .collect();
         self.get_slots(&ids, query_mode).await
     }

@@ -1,6 +1,6 @@
 {
   "name": "@sovereign-sdk/web3",
-  "version": "0.13.0",
+  "version": "0.14.0",
   "scripts": {
     "build": "pnpm typecheck && tsup",
     "ci": "biome ci",
@@ -9,7 +9,10 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run"
   },
-  "repository": "github:Sovereign-Labs/sovereign-sdk",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Sovereign-Labs/sovereign-sdk.git"
+  },
   "files": ["dist", "package.json"],
   "exports": {
     ".": {
@@ -22,6 +25,7 @@
   "module": "./dist/index.mjs",
   "types": "./dist/index.d.ts",
   "devDependencies": {
+    "@noble/hashes": "^1.5.0",
     "@sovereign-sdk/types": "workspace:^",
     "tsup": "^8.3.0",
     "vitest": "4.0.7"
@@ -30,6 +34,7 @@
     "typescript": "^5.0.0"
   },
   "dependencies": {
+    "bs58": "^6.0.0",
     "@sovereign-sdk/client": "0.1.0-alpha.39",
     "@sovereign-sdk/serializers": "workspace:^",
     "@sovereign-sdk/signers": "workspace:^",

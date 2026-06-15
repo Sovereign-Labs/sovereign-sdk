@@ -2,15 +2,13 @@ use sov_rollup_interface::common::SlotNumber;
 #[cfg(feature = "native")]
 use sov_rollup_interface::optimistic::BondingProofService;
 use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChallenge};
-use sov_rollup_interface::stf::InvalidProofError;
+use sov_rollup_interface::stf::{ExecutionContext, InvalidProofError};
 use sov_rollup_interface::zk::aggregated_proof::{
     AggregatedProofPublicData, SerializedAggregatedProof,
 };
 
 #[cfg(feature = "native")]
 use super::HasKernel;
-#[cfg(feature = "native")]
-use crate::rest::StateUpdateReceiver;
 use crate::{GetGasPrice, SovAttestation, SovStateTransitionPublicData, Spec, Storage, TxState};
 
 /// The `ProofProcessor` capability is responsible for processing proofs inside
@@ -29,7 +27,7 @@ pub trait ProofProcessor<S: Spec> {
     fn create_bonding_proof_service<K: HasKernel<S>>(
         &self,
         attester_address: <S as Spec>::Address,
-        storage: StateUpdateReceiver<<S as Spec>::Storage>,
+        storage_receiver: tokio::sync::watch::Receiver<<S as Spec>::Storage>,
     ) -> Self::BondingProofService<K>;
 
     /// Called by the stf once the zk-proof is received.
@@ -38,6 +36,7 @@ pub trait ProofProcessor<S: Spec> {
         &mut self,
         proof: SerializedAggregatedProof,
         prover_address: &S::Address,
+        execution_context: ExecutionContext,
         state: &mut ST,
     ) -> Result<
         (
@@ -59,7 +58,7 @@ pub trait ProofProcessor<S: Spec> {
     fn process_challenge<ST: TxState<S> + GetGasPrice<Spec = S>>(
         &mut self,
         proof: SerializedChallenge,
-        rollup_height: SlotNumber,
+        slot_number: SlotNumber,
         prover_address: &S::Address,
         state: &mut ST,
     ) -> anyhow::Result<SovStateTransitionPublicData<S>, InvalidProofError>;

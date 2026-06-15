@@ -9,7 +9,7 @@ use rockbound::versioned_db::HasPrefix;
 #[cfg(feature = "native")]
 use rockbound::versioned_db::VersionedSchemaKeyMarker;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+use sov_universal_wallet::UniversalWallet;
 
 use core::{fmt, str};
 
@@ -77,7 +77,7 @@ mod private {
     use borsh::{BorshDeserialize, BorshSerialize};
     use serde::{Deserialize, Serialize};
     use serde_with::{serde_as, Bytes};
-    use sov_rollup_interface::sov_universal_wallet::UniversalWallet;
+    use sov_universal_wallet::UniversalWallet;
 
     /// The total number of bytes in an inline key.
     ///
@@ -490,7 +490,7 @@ impl SlotKey {
         }
     }
 
-    /// Craetes a test key with the given byte.
+    /// Creates a test key with the given byte.
     pub fn test_key(byte: u8) -> Self {
         Self {
             key: KeyContents::Inline(
@@ -717,7 +717,7 @@ impl SlotValue {
 }
 
 /// Combines the value hash with its size.
-// We return `Vec<u8>` here to be compatible with the `JMT::put_value_set_with_proof` method.
+// We return `Vec<u8>` here because NOMT stores the value hash and size as bytes.
 pub fn val_hash_and_size_inner(val_hash: [u8; 32], size: u32) -> Vec<u8> {
     let mut val_hash_and_size = Vec::with_capacity(40);
     let size_bytes = size.to_le_bytes();

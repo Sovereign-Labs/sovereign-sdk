@@ -1,7 +1,83 @@
 use nomt::Options;
+pub use rockbound::VersionedColumnFamilyKind;
+use rockbound::{rocksdb, CfDescriptorBuilder};
 use schemars::JsonSchema;
+use std::sync::Arc;
 
+use crate::rocks_db_config;
 use crate::storage_manager::DEFAULT_MAX_PRUNING_BATCH_SIZE;
+
+type RocksdbOptionsCustomizationFn = dyn Fn(RocksDbKind, &mut rocksdb::Options) + Send + Sync;
+type RocksdbCfCustomizationFn = dyn Fn(RocksDbKind, &str, Option<VersionedColumnFamilyKind>, &mut CfDescriptorBuilder)
+    + Send
+    + Sync;
+#[derive(Clone)]
+/// Additional customization for a logical RocksDB instance.
+pub struct RocksdbOptionsCustomization(Arc<RocksdbOptionsCustomizationFn>);
+
+impl RocksdbOptionsCustomization {
+    /// Create a new RocksDB options customizer.
+    pub fn new(
+        customize: impl Fn(RocksDbKind, &mut rocksdb::Options) + Send + Sync + 'static,
+    ) -> Self {
+        Self(Arc::new(customize))
+    }
+
+    pub(crate) fn apply(&self, db_kind: RocksDbKind, options: &mut rocksdb::Options) {
+        (self.0)(db_kind, options);
+    }
+}
+
+impl std::fmt::Debug for RocksdbOptionsCustomization {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RocksdbOptionsCustomization")
+    }
+}
+
+#[derive(Debug, Clone, Copy, Eq, PartialEq)]
+/// Logical RocksDB instances managed by `sov-db`.
+pub enum RocksDbKind {
+    /// Ledger history database.
+    Ledger,
+    /// Accessory state database.
+    Accessory,
+    /// Flat state live database.
+    FlatStateLive,
+    /// Flat state archival database.
+    FlatStateArchival,
+}
+
+#[derive(Clone)]
+/// Customization hook for column-family and table options.
+pub struct RocksdbCfCustomization(Arc<RocksdbCfCustomizationFn>);
+
+impl RocksdbCfCustomization {
+    /// Create a new column-family customization hook.
+    pub fn new(
+        customize: impl Fn(RocksDbKind, &str, Option<VersionedColumnFamilyKind>, &mut CfDescriptorBuilder)
+            + Send
+            + Sync
+            + 'static,
+    ) -> Self {
+        Self(Arc::new(customize))
+    }
+
+    pub(crate) fn apply(
+        &self,
+        db_kind: RocksDbKind,
+        cf_name: &str,
+        versioned_kind: Option<VersionedColumnFamilyKind>,
+        builder: &mut CfDescriptorBuilder,
+    ) {
+        (self.0)(db_kind, cf_name, versioned_kind, builder);
+    }
+}
+
+impl std::fmt::Debug for RocksdbCfCustomization {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(f, "RocksdbCfCustomization")
+    }
+}
 
 /// Configuration for Sovereign Rollup node database.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
@@ -179,6 +255,73 @@ impl RollupDbConfig {
     pub(crate) fn get_pruner_max_batch_size(&self) -> usize {
         self.pruner_max_batch_size
             .unwrap_or(DEFAULT_MAX_PRUNING_BATCH_SIZE)
+    }
+}
+
+/// Open-time wrapper for [`RollupDbConfig`] that carries runtime-only RocksDB customizations.
+#[derive(Debug, Clone)]
+pub struct RollupDbConfigWithCustomizations {
+    config: RollupDbConfig,
+    rocksdb_options: Option<RocksdbOptionsCustomization>,
+    rocksdb_cf_options: Option<RocksdbCfCustomization>,
+}
+
+impl RollupDbConfigWithCustomizations {
+    /// Create a new open-time wrapper around a pure [`RollupDbConfig`].
+    pub fn new(config: RollupDbConfig) -> Self {
+        Self {
+            config,
+            rocksdb_options: None,
+            rocksdb_cf_options: None,
+        }
+    }
+
+    /// Set DB-wide RocksDB customization shared across all logical `sov-db` instances.
+    pub fn with_rocksdb_options(mut self, customization: RocksdbOptionsCustomization) -> Self {
+        self.rocksdb_options = Some(customization);
+        self
+    }
+
+    /// Set column-family and table customization shared across all logical `sov-db` instances.
+    pub fn with_rocksdb_cf_options(mut self, customization: RocksdbCfCustomization) -> Self {
+        self.rocksdb_cf_options = Some(customization);
+        self
+    }
+
+    /// Borrow the underlying pure data config.
+    pub fn config(&self) -> &RollupDbConfig {
+        &self.config
+    }
+
+    /// Discard runtime-only customizations and return the underlying data config.
+    pub fn into_config(self) -> RollupDbConfig {
+        self.config
+    }
+
+    pub(crate) fn get_rocksdb_options(&self, db_kind: RocksDbKind) -> rocksdb::Options {
+        rocks_db_config::gen_rocksdb_options_with(&Default::default(), false, |options| {
+            if let Some(customization) = &self.rocksdb_options {
+                customization.apply(db_kind, options);
+            }
+        })
+    }
+
+    pub(crate) fn customize_rocksdb_cf(
+        &self,
+        db_kind: RocksDbKind,
+        cf_name: &str,
+        versioned_kind: Option<VersionedColumnFamilyKind>,
+        builder: &mut CfDescriptorBuilder,
+    ) {
+        if let Some(customization) = &self.rocksdb_cf_options {
+            customization.apply(db_kind, cf_name, versioned_kind, builder);
+        }
+    }
+}
+
+impl From<RollupDbConfig> for RollupDbConfigWithCustomizations {
+    fn from(config: RollupDbConfig) -> Self {
+        Self::new(config)
     }
 }
 

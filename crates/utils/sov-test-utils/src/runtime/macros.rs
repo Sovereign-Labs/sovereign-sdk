@@ -20,7 +20,9 @@ macro_rules! generate_runtime_without_capabilities {
         // `fn(&Self, &::sov_modules_api::FullyBakedTx) -> u32`
         // If not provided, defaults to 0 priority (via Runtime trait default).
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
-        $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
+        // Optional: A wrapper expression for custom transaction timelock policy logic.
+        // Expected signature for the expression: `fn(&Self::Decodable) -> Option<TimelockPolicy>`.
+        $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
         // optional final comma for the entire argument block
         $(,)?
     ) => {
@@ -37,6 +39,7 @@ macro_rules! generate_runtime_without_capabilities {
             ::sov_modules_api::macros::RuntimeRestApi,
             ::sov_modules_api::macros::UniversalWallet,
         )]
+        #[::sov_modules_api::macros::expose_rpc]
         pub struct $id<S: ::sov_modules_api::Spec>  where
         $($runtime_trait_impl_bounds)*
         {
@@ -163,18 +166,9 @@ macro_rules! generate_runtime_without_capabilities {
 
                 ::sov_modules_api::NodeEndpoints {
                     axum_router,
-                    jsonrpsee_module: ::sov_modules_api::prelude::jsonrpsee::RpcModule::new(()),
+                    jsonrpsee_module: get_rpc_methods(api_state),
                     background_handles: Vec::new(),
                 }
-            }
-
-            fn resolve_address<ST: ::sov_modules_api::StateReader<::sov_modules_api::User>>(
-                &self,
-                default_address: &S::Address,
-                credential_id: &::sov_modules_api::CredentialId,
-                state: &mut ST,
-            ) -> ::std::result::Result<S::Address, ST::Error>{
-                self.accounts.resolve_sender_address_read_only(default_address, credential_id, state)
             }
 
             fn genesis_config(_input: &Self::GenesisInput) -> ::sov_modules_api::prelude::anyhow::Result<Self::GenesisConfig> {
@@ -206,10 +200,14 @@ macro_rules! generate_runtime_without_capabilities {
             )?
 
             $(
-                fn populate_pinned_cache(storage: &S::Storage) -> Option<::sov_state::pinned_cache::PinnedCache> {
-                    ($populate_pinned_cache_fn_expr)(storage)
+                fn timelock_for_callmessage(
+                    &self,
+                    call: &Self::Decodable,
+                ) -> Option<::sov_modules_api::capabilities::TimelockPolicy> {
+                    ($timelock_policy_wrapper_expr)(call)
                 }
             )?
+
         }
 
 
@@ -234,6 +232,17 @@ macro_rules! generate_runtime_without_capabilities {
     }
 }
 
+#[doc(hidden)]
+#[macro_export]
+macro_rules! __impl_runtime_timelock_capability {
+    () => {};
+    ($timelock_capability_expr:expr) => {
+        fn timelock(&mut self) -> impl ::sov_modules_api::capabilities::TimelockCapability<S> {
+            ($timelock_capability_expr)(self)
+        }
+    };
+}
+
 /// Base for generating runtimes.
 /// Excludes the TransactionAuthenticator trait to allow custom runtimes like EVM to provide their own
 /// implementation.
@@ -250,7 +259,11 @@ macro_rules! generate_runtime {
         auth_type: $auth:ty,
         auth_call_wrapper: $auth_wrapper:expr
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
-        $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
+        $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
+        // Optional: An accessor for a concrete timelock capability.
+        // Expected signature for the expression: `fn(&mut Self) -> impl TimelockCapability<S>`.
+        // If not provided, the runtime uses the default no-op timelock capability.
+        $(, timelock_capability: $timelock_capability_expr:expr)?
         // optional final comma
         $(,)?
     ) => {
@@ -264,6 +277,7 @@ macro_rules! generate_runtime {
             auth_type: $auth,
             auth_call_wrapper: $auth_wrapper
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
+            $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr)?
         }
 
         impl<S> ::sov_modules_api::capabilities::HasCapabilities<S> for $id<S>
@@ -290,6 +304,7 @@ macro_rules! generate_runtime {
                 )
             }
 
+            $crate::__impl_runtime_timelock_capability!($($timelock_capability_expr)?);
         }
     };
     (
@@ -303,7 +318,11 @@ macro_rules! generate_runtime {
         auth_call_wrapper: $auth_wrapper:expr
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
-        $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
+        $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
+        // Optional: An accessor for a concrete timelock capability.
+        // Expected signature for the expression: `fn(&mut Self) -> impl TimelockCapability<S>`.
+        // If not provided, the runtime uses the default no-op timelock capability.
+        $(, timelock_capability: $timelock_capability_expr:expr)?
         // optional final comma
         $(,)?
     ) => {
@@ -318,7 +337,7 @@ macro_rules! generate_runtime {
             auth_call_wrapper: $auth_wrapper
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
             $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr)?
-            $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr)?
+            $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr)?
         }
 
         impl<S> ::sov_modules_api::capabilities::HasCapabilities<S> for $id<S>
@@ -345,6 +364,7 @@ macro_rules! generate_runtime {
                 )
             }
 
+            $crate::__impl_runtime_timelock_capability!($($timelock_capability_expr)?);
         }
     }
 }
@@ -375,7 +395,11 @@ macro_rules! generate_optimistic_runtime_with_kernel {
         modules: [$($module_name:ident : $module_ty:path),*]
         $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr:expr)?
         $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr:expr)?
-        $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr:expr)?
+        $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr:expr)?
+        // Optional: An accessor for a concrete timelock capability.
+        // Expected signature for the expression: `fn(&mut Self) -> impl TimelockCapability<S>`.
+        // If not provided, the runtime uses the default no-op timelock capability.
+        $(, timelock_capability: $timelock_capability_expr:expr)?
         $(,)? // Optional trailing comma for the module list or wrapper
     ) => {
         $crate::generate_runtime! {
@@ -389,7 +413,8 @@ macro_rules! generate_optimistic_runtime_with_kernel {
             auth_call_wrapper: |auth_data| auth_data
             $(, transaction_delay_ms_wrapper: $transaction_delay_ms_wrapper_expr)?
             $(, transaction_priority_wrapper: $transaction_priority_wrapper_expr)?
-            $(, populate_pinned_cache_fn: $populate_pinned_cache_fn_expr)?
+            $(, timelock_policy_wrapper: $timelock_policy_wrapper_expr)?
+            $(, timelock_capability: $timelock_capability_expr)?
         }
     };
 }

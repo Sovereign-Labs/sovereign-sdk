@@ -1,5 +1,7 @@
 use std::ops::Range;
 
+use super::eth_receipt::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
+use super::eth_receipt::EthReceipt;
 use alloy_consensus::proofs::{calculate_receipt_root, calculate_transaction_root};
 use alloy_consensus::{
     serde_bincode_compat::Header as HeaderBincodeCompat,
@@ -12,9 +14,8 @@ use alloy_primitives::private::alloy_rlp::Encodable;
 use alloy_primitives::{Address, Sealable, Sealed, B256};
 use alloy_primitives::{Bloom, TxHash};
 use bytes::BufMut;
-use derive_more::{Deref, DerefMut, From};
+use derive_more::{Deref, DerefMut};
 use derive_new::new;
-use reth_ethereum_primitives::serde_bincode_compat::Receipt as ReceiptBincodeCompat;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
 use sov_rollup_interface::da::Time;
@@ -48,6 +49,8 @@ pub fn parse_synthetic_block_hash(hash: &B256) -> Option<(u64, u32)> {
 
 /// Signed ethereum transaction
 pub type TransactionSigned = EthereumTxEnvelope<TxEip4844>;
+/// Block body with TransactionSigned
+pub type BlockBody<T = TransactionSigned, H = Header> = alloy_consensus::BlockBody<T, H>;
 
 /// RLP encoded evm transaction.
 #[derive(
@@ -162,7 +165,7 @@ impl Block {
 
     #[cfg(feature = "native")]
     fn calculate_rlp_size(&self, transactions: Vec<TransactionSigned>) -> usize {
-        let body = reth_primitives::BlockBody {
+        let body = BlockBody {
             transactions,
             ommers: vec![],
             withdrawals: None,
@@ -247,7 +250,7 @@ impl SyntheticBlockWithoutRootsAndBloom {
     pub fn finish_and_seal(
         mut self,
         transactions: Vec<TxSignedAndRecovered>,
-        receipts: &[reth_primitives::Receipt],
+        receipts: &[EthReceipt],
     ) -> (SealedSynthetic, Vec<TxSignedAndRecovered>) {
         assert_eq!(
             transactions.len(),
@@ -268,7 +271,7 @@ impl SyntheticBlockWithoutRootsAndBloom {
             .transactions_root = tx_root;
         self.header_without_roots_bloom_and_gas_used.receipts_root = receipts_root;
 
-        let body = reth_primitives::BlockBody {
+        let body = BlockBody {
             transactions,
             ommers: vec![],
             withdrawals: None,
@@ -479,7 +482,6 @@ impl MaybeSealedBlock {
     }
 }
 
-/// TODO: Can we replace this with Reth type?
 #[serde_as]
 #[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, Deref, DerefMut)]
 /// Receipt
@@ -488,7 +490,7 @@ pub struct Receipt {
     #[serde_as(as = "ReceiptBincodeCompat")]
     #[deref]
     #[deref_mut]
-    pub receipt: reth_primitives::Receipt,
+    pub receipt: EthReceipt,
     /// tx hash
     pub transaction_hash: TxHash,
     /// tx index
@@ -527,9 +529,9 @@ mod tests {
             block_number: 5u64,
         };
 
-        let reth_tx: Recovered<TransactionSigned> = tx.into();
+        let alloy_tx: Recovered<TransactionSigned> = tx.into();
 
-        assert_eq!(signer, reth_tx.signer());
+        assert_eq!(signer, alloy_tx.signer());
     }
 
     #[test]

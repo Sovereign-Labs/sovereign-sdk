@@ -16,25 +16,12 @@ hex = { workspace = true }
 alloy-contract = { workspace = true }
 alloy-sol-types = { workspace = true, features = ["json"] }
 alloy-primitives = { workspace = true }
-alloy-rpc-types-eth = "1.0.30"
+alloy-rpc-types-eth = { workspace = true }
 alloy = { workspace = true }
-
-arbitrary = { workspace = true, optional = true }
-proptest = { workspace = true, optional = true }
-
 alloy-dyn-abi = { workspace = true, features = ["eip712", "std"] }
-
 
 [lints]
 workspace = true
 
-[features]
-arbitrary = [
-	"dep:arbitrary",
-	"dep:proptest",
-	"alloy-primitives/arbitrary",
-	"alloy-rpc-types-eth/arbitrary",
-	"alloy-sol-types/arbitrary",
-	"alloy/arbitrary",
-	"alloy-dyn-abi/arbitrary"
-]
+[package.metadata.cargo-machete]
+ignored = ["alloy-contract", "alloy-dyn-abi"]

@@ -1,6 +1,6 @@
 # syntax=docker/dockerfile:1
 
-FROM rust:1.88-bookworm AS builder
+FROM rust:1.93-bookworm AS builder
 ARG HIVE_CHAIN_ID=3503995874084926
 
 ENV DEBIAN_FRONTEND=noninteractive \
@@ -52,7 +52,7 @@ COPY examples/demo-rollup/hive/entrypoint.sh /opt/sov/hive/entrypoint.sh
 COPY examples/demo-rollup/hive/hive_services.py /opt/sov/hive/hive_services.py
 COPY examples/demo-rollup/hive/wait_for_rpc.py /opt/sov/hive/wait_for_rpc.py
 COPY examples/demo-rollup/hive/enode.sh /opt/sov/hive/enode.sh
-COPY examples/demo-rollup/hive/mock_nomt_rollup_config.toml /opt/sov/hive/mock_nomt_rollup_config.toml
+COPY examples/demo-rollup/hive/mock_rollup_config.toml /opt/sov/hive/mock_rollup_config.toml
 COPY examples/test-data/genesis/demo/mock /opt/sov/hive/genesis-template
 
 RUN chmod +x \
