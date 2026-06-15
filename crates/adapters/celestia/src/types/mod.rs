@@ -568,4 +568,47 @@ pub mod tests {
         assert_eq!(blob.compressed_verified_data(), blob.verified_data());
         assert_eq!(blob.compressed_total_len(), blob.total_len());
     }
+
+    #[test]
+    fn serde_roundtrip_drops_envelope_cache_and_recomputes() {
+        use super::BlobWithSender;
+        use crate::envelope::{classify, EnvelopeState};
+
+        let path = make_test_path(with_rollup_batch_data::DATA_PATH);
+        let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
+        let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
+
+        let mut blob = ns_data.get_blobs_with_sender().remove(0);
+
+        // Read the whole physical frame so the accumulator carries the bytes to classify.
+        let total = blob.compressed_total_len();
+        blob.advance(total);
+
+        // Simulate PR3's lazy fill so we can prove the cache is dropped on serialize.
+        let expected_state = classify(blob.compressed_verified_data());
+        blob.envelope_state
+            .set(expected_state.clone())
+            .expect("cache starts empty");
+        assert!(blob.envelope_state.get().is_some());
+
+        let json = serde_json::to_string(&blob).unwrap();
+        assert!(
+            !json.contains("envelope_state"),
+            "skipped cache must not be serialized"
+        );
+
+        let restored: BlobWithSender = serde_json::from_str(&json).unwrap();
+
+        // The cache is dropped on deserialize.
+        assert_eq!(restored.envelope_state.get(), None);
+        // Equality ignores the cache: populated original equals empty restored.
+        assert_eq!(restored, blob);
+        // Reconstruction from the authenticated bytes is deterministic.
+        assert_eq!(
+            classify(restored.compressed_verified_data()),
+            expected_state
+        );
+        // This fixture is a raw (non-envelope) blob.
+        assert_eq!(expected_state, EnvelopeState::Legacy);
+    }
 }
