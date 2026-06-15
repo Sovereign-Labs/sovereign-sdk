@@ -1,6 +1,7 @@
 mod error;
 
 use std::ops::Range;
+use std::sync::OnceLock;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::namespace_data::NamespaceData;
@@ -13,6 +14,7 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHashTrait, CountedBufReader
 use sov_universal_wallet::schema::OverrideSchema;
 use sov_universal_wallet::UniversalWallet;
 
+use crate::envelope::EnvelopeState;
 use crate::shares::BlobIterator;
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
@@ -97,13 +99,38 @@ impl From<[u8; 32]> for TmHash {
     }
 }
 
-#[derive(PartialEq, Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Serialize, Deserialize)]
 pub struct BlobWithSender {
     pub(crate) blob: CountedBufReader<BlobIterator>,
     // Range in the entire namespace
     pub(crate) range_in_namespace: Range<usize>,
     pub(crate) sender: CelestiaAddress,
     pub hash: HexHash,
+
+    /// Interior, serde-skipped cache of the blob's envelope classification.
+    ///
+    /// Derived only from the authenticated DA-physical accumulator
+    /// ([`Self::compressed_verified_data`]); never a serialized witness claim.
+    /// Empty after construction and after every (de)serialization, then
+    /// recomputed deterministically. Ignored by `PartialEq`.
+    ///
+    /// Not read on any live path in PR2; PR3 fills it via `get_or_init` while
+    /// holding only `&self`.
+    #[serde(skip)]
+    #[allow(dead_code)] // wired into the read path in PR3
+    envelope_state: OnceLock<EnvelopeState>,
+}
+
+impl PartialEq for BlobWithSender {
+    fn eq(&self, other: &Self) -> bool {
+        // The envelope cache is derived state, not identity: two blobs with the
+        // same authenticated bytes are equal regardless of whether either has
+        // lazily computed its classification yet.
+        self.blob == other.blob
+            && self.range_in_namespace == other.range_in_namespace
+            && self.sender == other.sender
+            && self.hash == other.hash
+    }
 }
 
 /// Celestia-private accessors distinguishing the two byte streams a blob represents:
@@ -226,6 +253,7 @@ impl NamespaceRelevantData {
                 range_in_namespace,
                 sender,
                 hash,
+                envelope_state: OnceLock::new(),
             };
             output.push(blob_tx);
         }
@@ -441,5 +469,48 @@ pub mod tests {
         assert_eq!(blob.verified_data().len(), 10);
         assert_eq!(blob.compressed_verified_data(), blob.verified_data());
         assert_eq!(blob.compressed_total_len(), blob.total_len());
+    }
+
+    #[test]
+    fn serde_roundtrip_drops_envelope_cache_and_recomputes() {
+        use super::BlobWithSender;
+        use crate::envelope::{classify, EnvelopeState};
+
+        let path = make_test_path(with_rollup_batch_data::DATA_PATH);
+        let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
+        let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
+
+        let mut blob = ns_data.get_blobs_with_sender().remove(0);
+
+        // Read the whole physical frame so the accumulator carries the bytes to classify.
+        let total = blob.compressed_total_len();
+        blob.advance(total);
+
+        // Simulate PR3's lazy fill so we can prove the cache is dropped on serialize.
+        let expected_state = classify(blob.compressed_verified_data());
+        blob.envelope_state
+            .set(expected_state.clone())
+            .expect("cache starts empty");
+        assert!(blob.envelope_state.get().is_some());
+
+        let json = serde_json::to_string(&blob).unwrap();
+        assert!(
+            !json.contains("envelope_state"),
+            "skipped cache must not be serialized"
+        );
+
+        let restored: BlobWithSender = serde_json::from_str(&json).unwrap();
+
+        // The cache is dropped on deserialize.
+        assert_eq!(restored.envelope_state.get(), None);
+        // Equality ignores the cache: populated original equals empty restored.
+        assert_eq!(restored, blob);
+        // Reconstruction from the authenticated bytes is deterministic.
+        assert_eq!(
+            classify(restored.compressed_verified_data()),
+            expected_state
+        );
+        // This fixture is a raw (non-envelope) blob.
+        assert_eq!(expected_state, EnvelopeState::Legacy);
     }
 }

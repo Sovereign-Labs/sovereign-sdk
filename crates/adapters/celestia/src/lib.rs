@@ -7,6 +7,10 @@ mod config;
 mod da_service;
 #[cfg(feature = "native")]
 mod metrics;
+// Compressed-blob envelope (v1) parsing and classification. Pure and ungated so
+// the guest verifier shares identical logic. Wired into the read path in PR3.
+#[allow(dead_code)]
+mod envelope;
 pub mod shares;
 #[cfg(test)]
 mod test_helper;
