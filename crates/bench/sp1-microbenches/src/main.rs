@@ -1,5 +1,5 @@
 use clap::{Parser, Subcommand};
-use sp1_microbenches::cmd::{borsh, celestia, ed25519, sha256};
+use sp1_microbenches::cmd::{borsh, celestia, ed25519, sha256, storage};
 
 #[derive(Parser, Debug)]
 #[command(
@@ -21,6 +21,8 @@ enum BenchCmd {
     Celestia(celestia::CelestiaArgs),
     /// Run the borsh deserialization prover-gas sweeps.
     Borsh(borsh::BorshArgs),
+    /// Run the NOMT storage proof-verification prover-gas sweep.
+    Storage(storage::StorageArgs),
 }
 
 impl BenchCmd {
@@ -30,6 +32,7 @@ impl BenchCmd {
             BenchCmd::Ed25519(args) => ed25519::run(args),
             BenchCmd::Celestia(args) => celestia::run(args),
             BenchCmd::Borsh(args) => borsh::run(args),
+            BenchCmd::Storage(args) => storage::run(args),
         }
     }
 }
