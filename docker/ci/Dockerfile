@@ -22,6 +22,15 @@ RUN sudo apt-get update && sudo apt-get install -y --no-install-recommends \
     unzip \
     && sudo rm -rf /var/lib/apt/lists/*
 
+ARG RISC0_RECURSION_ZKR_SHA=744b999f0a35b3c86753311c7efb2a0054be21727095cf105af6ee7d3f4d8849
+ENV RECURSION_SRC_PATH=/opt/risc0-zkrs/recursion_zkr.zip
+RUN sudo mkdir -p /opt/risc0-zkrs \
+    && curl -fsSL "https://risc0-artifacts.s3.us-west-2.amazonaws.com/zkr/${RISC0_RECURSION_ZKR_SHA}.zip" -o /tmp/recursion_zkr.zip \
+    && sudo install -m 0644 /tmp/recursion_zkr.zip "${RECURSION_SRC_PATH}" \
+    && echo "${RISC0_RECURSION_ZKR_SHA}  ${RECURSION_SRC_PATH}" | sha256sum -c - \
+    && unzip -t "${RECURSION_SRC_PATH}" >/dev/null \
+    && rm -f /tmp/recursion_zkr.zip
+
 # Build and install mold linker from source
 RUN git clone https://github.com/rui314/mold.git /tmp/mold \
     && cd /tmp/mold \
