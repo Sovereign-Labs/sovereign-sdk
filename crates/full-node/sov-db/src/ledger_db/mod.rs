@@ -17,7 +17,8 @@ use sov_rollup_interface::zk::aggregated_proof::{
 
 use crate::schema::tables::{
     BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey, EventByNumber, EventCountByKey,
-    FinalizedSlots, ProofByUniqueId, ProofReceiptHashesBySlot,SlotByHash, SlotByNumber, TxByHash, TxByNumber, LEDGER_TABLES,
+    FinalizedSlots, ProofByUniqueId, ProofReceiptHashesBySlot, SlotByHash, SlotByNumber, TxByHash,
+    TxByNumber, LEDGER_TABLES,
 };
 use crate::schema::tables::{DiscardedBlobHahsByNumber, ProofReceiptByHash};
 use crate::schema::types::{

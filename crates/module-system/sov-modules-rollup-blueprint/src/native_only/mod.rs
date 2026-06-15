@@ -665,14 +665,21 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             (None, None)
         };
 
+        let pm_config = if proof_pipeline_enabled {
+            rollup_config.proof_manager.clone().map(|mut config| {
+                config
+                    .storage_path
+                    .get_or_insert_with(|| rollup_config.storage.path.clone());
+                config
+            })
+        } else {
+            None
+        };
+
         let runner_result = StateTransitionRunner::new(
             rollup_config.runner.clone(),
             axum_tcp,
-            if proof_pipeline_enabled {
-                rollup_config.proof_manager
-            } else {
-                None
-            },
+            pm_config,
             da_service.clone(),
             ledger_db.clone(),
             native_stf,
@@ -723,6 +730,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 };
             let proof_manager = rollup_config
                 .proof_manager
+                .as_ref()
                 .expect("proof_manager must be set when prover is enabled");
 
             let workflow_task_handle_result = match operating_mode {

@@ -21,10 +21,8 @@ use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::stf::{PartialProofReceipt, TxReceiptContents};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
-use sov_rollup_interface::node::DaSyncState;
-use sov_rollup_interface::stf::TxReceiptContents;
+use sov_rollup_interface::stf::{PartialProofReceipt, TxReceiptContents};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
@@ -435,10 +433,10 @@ where
             "Initial Ledger ChangeSet is materialized"
         );
 
-        let last_finalized_slot_number =
+        let last_finalized_slot_number: Option<SlotNumber> =
             if let Some(finalized_transition) = finalized_transitions.iter().last() {
                 let last_processed_finalized_header = &finalized_transition.block_header;
-                let last_finalized_slot_number = SlotNumber::new_dangerous(
+                let last_finalized_slot_number = SlotNumber::new(
                     last_processed_finalized_header
                         .height()
                         .saturating_sub(self.genesis_da_height),

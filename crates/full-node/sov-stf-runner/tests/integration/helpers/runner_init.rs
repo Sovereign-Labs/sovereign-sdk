@@ -279,16 +279,20 @@ pub async fn initialize_runner_with_stop_at(
         });
 
     let axum_tcp = TcpListener::bind(axum_socket_addr).await.unwrap();
-    let pm_config = nb_of_prover_threads.is_some().then(|| {
-        let mut pm = rollup_config.proof_manager.clone();
-        pm.storage_path.get_or_insert(path.to_path_buf());
-        pm
-    });
+    let pm_config = nb_of_prover_threads
+        .is_some()
+        .then(|| {
+            rollup_config.proof_manager.clone().map(|mut pm| {
+                pm.storage_path.get_or_insert(path.to_path_buf());
+                pm
+            })
+        })
+        .flatten();
 
     let mut runner = StateTransitionRunner::new(
         rollup_config.runner.clone(),
         axum_tcp,
-        nb_of_prover_threads.and(rollup_config.proof_manager),
+        pm_config,
         da_service.clone(),
         ledger_db.clone(),
         stf,
@@ -318,6 +322,7 @@ pub async fn initialize_runner_with_stop_at(
             );
         let proof_manager = rollup_config
             .proof_manager
+            .as_ref()
             .expect("proof_manager must be set when prover is enabled");
         let handle = start_zk_workflow_in_background::<_>(
             prover_service,

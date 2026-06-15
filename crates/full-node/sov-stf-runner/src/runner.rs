@@ -206,6 +206,11 @@ where
 
         let (stf_info_sender, stf_info_receiver) = if let Some(config) = pm_config {
             validate_proof_manager_config(&config)?;
+            let storage_path = config
+                .storage_path
+                .as_ref()
+                .context("proof manager storage_path must be configured before runner startup")?;
+            let proof_manager_db = ProofManagerDb::open(storage_path)?;
             let channel = new_stf_info_channel(
                 proof_manager_db,
                 config.max_number_of_transitions_in_memory,

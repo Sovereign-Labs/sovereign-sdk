@@ -119,6 +119,7 @@ mod tests {
     use sov_rollup_interface::common::SlotNumber;
     use sov_rollup_interface::da::{DaProof, RelevantBlobs, RelevantProofs};
     use sov_rollup_interface::optimistic::{ProofOfBond, SerializedChallenge};
+    use sov_rollup_interface::stf::BlobSenderStatus;
     use sov_rollup_interface::stf::ProofSender;
     use sov_rollup_interface::zk::StateTransitionWitness;
     use tokio::sync::watch;
@@ -167,6 +168,13 @@ mod tests {
         ) -> anyhow::Result<()> {
             Ok(())
         }
+
+        async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus> {
+            Ok(BlobSenderStatus {
+                in_flight: 0,
+                max_concurrent: usize::MAX,
+            })
+        }
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -178,6 +186,7 @@ mod tests {
             proof_manager_db.clone(),
             NonZero::new(4).unwrap(),
             NonZero::new(4).unwrap(),
+            None,
         )?;
 
         let (_shutdown_sender, shutdown_receiver) = watch::channel(());
@@ -198,33 +207,31 @@ mod tests {
     }
 
     fn make_stf_info(height: u64) -> StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec> {
-        StateTransitionInfo::new(
-            StateTransitionWitness {
-                initial_state_root: vec![1, 2, 3],
-                final_state_root: vec![3, 4, 5],
-                da_block_header: MockBlockHeader {
-                    prev_hash: [0; 32].into(),
-                    hash: MockHash([height as u8; 32]),
-                    height,
-                    time: Time::now(),
-                },
-                relevant_proofs: RelevantProofs {
-                    batch: DaProof {
-                        inclusion_proof: Default::default(),
-                        completeness_proof: Default::default(),
-                    },
-                    proof: DaProof {
-                        inclusion_proof: Default::default(),
-                        completeness_proof: Default::default(),
-                    },
-                },
-                relevant_blobs: RelevantBlobs {
-                    proof_blobs: vec![],
-                    batch_blobs: vec![],
-                },
-                witness: vec![],
+        StateTransitionInfo::new(StateTransitionWitness {
+            initial_state_root: vec![1, 2, 3],
+            final_state_root: vec![3, 4, 5],
+            da_block_header: MockBlockHeader {
+                prev_hash: [0; 32].into(),
+                hash: MockHash([height as u8; 32]),
+                height,
+                time: Time::now(),
             },
-            SlotNumber::new(height),
-        )
+            relevant_proofs: RelevantProofs {
+                batch: DaProof {
+                    inclusion_proof: Default::default(),
+                    completeness_proof: Default::default(),
+                },
+                proof: DaProof {
+                    inclusion_proof: Default::default(),
+                    completeness_proof: Default::default(),
+                },
+            },
+            relevant_blobs: RelevantBlobs {
+                proof_blobs: vec![],
+                batch_blobs: vec![],
+            },
+            witness: vec![],
+            slot_number: SlotNumber::new(height),
+        })
     }
 }

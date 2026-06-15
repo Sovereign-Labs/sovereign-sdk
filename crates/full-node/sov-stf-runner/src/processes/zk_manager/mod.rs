@@ -381,8 +381,8 @@ where
             // Update and IMMEDIATELY persist the next height to receive.
             // This fixes duplicate proof submission after restart by ensuring
             // the persisted value is updated right after successful DA posting.
-            self.stf_info_receiver
-                .inc_next_height_to_receive_by_and_persist(num_proofs_to_create as u64)?;
+            self.cursor
+                .inc_next_height_to_receive_by_and_persist(window_size)?;
         }
         tracing::debug!("Aggregator task has been completed");
         Ok(())

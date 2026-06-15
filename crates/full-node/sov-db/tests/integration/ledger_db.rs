@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use rockbound::SchemaBatch;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
-use sov_db::schema::types::{EventNumber, StoredStfInfo};
+use sov_db::schema::types::EventNumber;
 use sov_db::{
     define_table_with_seek_key_codec, define_table_without_codec, impl_borsh_value_codec,
 };

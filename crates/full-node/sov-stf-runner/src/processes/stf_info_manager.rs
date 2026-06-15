@@ -120,7 +120,8 @@ impl<
         // Re-sync in-memory cursors from DB after recovery, because validation may
         // have rewritten metadata (for example when ProofManagerDb was ahead).
         let maybe_db_next_height_to_receive = self.proof_manager_db.get_next_height_to_receive()?;
-        let db_next_height_to_receive = maybe_db_next_height_to_receive.unwrap_or(SlotNumber::ONE);
+        let db_next_height_to_receive =
+            maybe_db_next_height_to_receive.unwrap_or_else(|| self.next_height_to_receive());
         self.next_height_to_receive
             .store(db_next_height_to_receive.get(), Ordering::SeqCst);
         self.next_height_to_send = db_next_height_to_receive;
@@ -216,6 +217,7 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
 
     let next_height_to_receive = proof_manager_db
         .get_next_height_to_receive()?
+        .or_else(|| latest_proof_final_slot.map(|slot| slot.saturating_add(1)))
         .unwrap_or(SlotNumber::ONE);
 
     let next_height_to_receive_ref = Arc::new(AtomicU64::new(next_height_to_receive.get()));
@@ -252,7 +254,7 @@ where
             return Ok(());
         };
 
-        self.realign_notifier_cursor_to_available_stf_info(ledger_db, write_rollup_height)
+        self.realign_notifier_cursor_to_available_stf_info(write_rollup_height)
             .await?;
         let next_height_to_send = self.next_height_to_send;
 
@@ -410,7 +412,6 @@ where
 
     async fn realign_notifier_cursor_to_available_stf_info(
         &mut self,
-        ledger_db: &LedgerDb,
         write_rollup_height: SlotNumber,
     ) -> anyhow::Result<()> {
         if self.next_height_to_send > write_rollup_height {
@@ -419,7 +420,7 @@ where
 
         let resume_cursor = self.next_height_to_send;
         for height in resume_cursor.range_inclusive(write_rollup_height) {
-            if ledger_db.get_stf_info(height)?.is_some() {
+            if self.proof_manager_db.get_stf_info(height)?.is_some() {
                 if height > resume_cursor {
                     // The consumer's resume cursor (derived from the last
                     // durably-observed proof/attestation, so equal to
@@ -520,6 +521,15 @@ where
         )
     }
 
+    /// Increment next height to receive by the requested amount and immediately persist it.
+    pub fn inc_next_height_to_receive_by_and_persist(
+        &self,
+        amount: u64,
+    ) -> anyhow::Result<SlotNumber> {
+        self.cursor_handle()
+            .inc_next_height_to_receive_by_and_persist(amount)
+    }
+
     /// Returns a cloneable handle that can advance `next_height_to_receive`
     /// from a different task without requiring access to the full
     /// [`Receiver`]. Used by the proof-aggregation pipeline to keep the
@@ -528,6 +538,7 @@ where
     pub fn cursor_handle(&self) -> CursorHandle {
         CursorHandle {
             next_height_to_receive: self.next_height_to_receive.clone(),
+            proof_manager_db: self.proof_manager_db.clone(),
         }
     }
 }
@@ -544,6 +555,7 @@ where
 #[derive(Clone)]
 pub struct CursorHandle {
     next_height_to_receive: Arc<AtomicU64>,
+    proof_manager_db: ProofManagerDb,
 }
 
 impl CursorHandle {
@@ -568,7 +580,10 @@ impl CursorHandle {
         amount: u64,
     ) -> anyhow::Result<SlotNumber> {
         let old_value = self.next_height_to_receive.load(Ordering::SeqCst);
-        let new_value = SlotNumber::new_dangerous(old_value + amount);
+        let new_raw_value = old_value
+            .checked_add(amount)
+            .ok_or_else(|| anyhow!("next_height_to_receive overflowed"))?;
+        let new_value = SlotNumber::new(new_raw_value);
 
         // Persist to disk BEFORE advancing the in-memory atomic.
         // If the write fails, in-memory state remains consistent with disk.
@@ -578,9 +593,9 @@ impl CursorHandle {
         CrashLocation::AfterPersistingProofManagerNextHeight.crash_if_env_set();
 
         self.next_height_to_receive
-            .store(old_value + amount, Ordering::SeqCst);
+            .store(new_raw_value, Ordering::SeqCst);
 
-        Ok(SlotNumber::new_dangerous(old_value))
+        Ok(SlotNumber::new(old_value))
     }
 }
 
@@ -598,7 +613,6 @@ mod tests {
 
     use super::*;
     use crate::processes::StateTransitionInfo;
-    use sov_db::ledger_db::LedgerDb;
 
     type StateRoot = Vec<u8>;
     type Witness = Vec<u8>;
@@ -628,17 +642,17 @@ mod tests {
         Sender<StateRoot, Witness, MockDaSpec>,
         Receiver<StateRoot, Witness, MockDaSpec>,
     )> {
-        setup_with_resume(path, max_channel_size, max_nb_of_infos_in_db, None).await
+        setup_with_resume(path, max_channel_size, max_nb_of_infos_in_db, None)
     }
 
-    async fn setup_with_resume(
+    #[allow(clippy::type_complexity)]
+    fn setup_with_resume(
         path: &Path,
         max_channel_size: u64,
         max_nb_of_infos_in_db: u64,
         latest_proof_final_slot: Option<SlotNumber>,
     ) -> anyhow::Result<(
-        LedgerDb,
-        SimpleLedgerStorageManager,
+        ProofManagerDb,
         Sender<StateRoot, Witness, MockDaSpec>,
         Receiver<StateRoot, Witness, MockDaSpec>,
     )> {
@@ -694,8 +708,8 @@ mod tests {
             for height in 1..=channel_size {
                 let stf_info = make_stf_info(height);
                 sender.stage_stf_info(&stf_info).await?;
-                sender.commit_stf_info(stf_info.slot_number).await?;
-                sender.notify(stf_info.slot_number).await?;
+                sender.commit_stf_info(stf_info.slot_number()).await?;
+                sender.notify(stf_info.slot_number()).await?;
             }
         }
 
@@ -739,13 +753,13 @@ mod tests {
 
             let stf_info = make_stf_info(channel_size + 1);
             sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number).await?;
-            sender.notify(stf_info.slot_number).await?;
+            sender.commit_stf_info(stf_info.slot_number()).await?;
+            sender.notify(stf_info.slot_number()).await?;
 
             let stf_info = make_stf_info(channel_size + 2);
             sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number).await?;
-            sender.notify(stf_info.slot_number).await?;
+            sender.commit_stf_info(stf_info.slot_number()).await?;
+            sender.notify(stf_info.slot_number()).await?;
 
             assert_eq!(sender.get_oldest_slot_number()?.get(), 2);
         }
@@ -777,29 +791,35 @@ mod tests {
         // Simulate a former replica that restarts as a prover: the resume cursor
         // points at slot 3, but the local node only has STF infos starting at 5.
         {
-            let (ledger_db, mut storage_manager, sender, _receiver) = setup_with_resume(
+            let (_proof_manager_db, sender, _receiver) = setup_with_resume(
                 temp_dir.path(),
                 channel_size,
                 max_nb_of_infos_in_db,
                 Some(SlotNumber::new(2)),
-            )
-            .await?;
+            )?;
 
             for height in 5..=6 {
                 let stf_info = make_stf_info(height);
-                let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
-                storage_manager.commit(&schema_batch);
+                sender.stage_stf_info(&stf_info).await?;
+                sender.commit_stf_info(stf_info.slot_number()).await?;
             }
         }
 
         {
-            let (_, _, _, mut receiver) = setup_with_resume(
+            let (_proof_manager_db, mut sender, mut receiver) = setup_with_resume(
                 temp_dir.path(),
                 channel_size,
                 max_nb_of_infos_in_db,
                 Some(SlotNumber::new(2)),
-            )
-            .await?;
+            )?;
+
+            sender
+                .startup_notify_about_infos_from_db(
+                    SlotNumber::new(6),
+                    SlotNumber::new(6),
+                    &InfiniteHeight,
+                )
+                .await?;
 
             let stf_info = receiver.read_next().await?.unwrap();
             assert_eq!(stf_info.slot_number().get(), 5);
@@ -829,8 +849,8 @@ mod tests {
         for height in 1..channel_size {
             let stf_info = make_stf_info(height);
             sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number).await?;
-            sender.notify(stf_info.slot_number).await?;
+            sender.commit_stf_info(stf_info.slot_number()).await?;
+            sender.notify(stf_info.slot_number()).await?;
         }
 
         // Read the data from the db.
@@ -862,8 +882,8 @@ mod tests {
         for height in 1..3 {
             let stf_info = make_stf_info(height);
             sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number).await?;
-            sender.notify(stf_info.slot_number).await?;
+            sender.commit_stf_info(stf_info.slot_number()).await?;
+            sender.notify(stf_info.slot_number()).await?;
         }
 
         drop(sender);
@@ -906,8 +926,11 @@ mod tests {
             for height in 1..=channel_size {
                 let stf_info = make_stf_info(height);
                 sender.stage_stf_info(&stf_info).await.unwrap();
-                sender.commit_stf_info(stf_info.slot_number).await.unwrap();
-                sender.notify(stf_info.slot_number).await.unwrap();
+                sender
+                    .commit_stf_info(stf_info.slot_number())
+                    .await
+                    .unwrap();
+                sender.notify(stf_info.slot_number()).await.unwrap();
             }
         });
 
@@ -999,8 +1022,8 @@ mod tests {
             for height in 1..test_case.nb_of_stf_infos {
                 let stf_info = make_stf_info(height);
                 sender.stage_stf_info(&stf_info).await?;
-                sender.commit_stf_info(stf_info.slot_number).await?;
-                sender.notify(stf_info.slot_number).await?;
+                sender.commit_stf_info(stf_info.slot_number()).await?;
+                sender.notify(stf_info.slot_number()).await?;
                 receiver.read_next().await?.unwrap();
                 receiver
                     .next_height_to_receive
@@ -1098,7 +1121,7 @@ mod tests {
 
             let stf_info = make_stf_info(1);
             sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number).await?;
+            sender.commit_stf_info(stf_info.slot_number()).await?;
 
             let _crash_guard =
                 CrashEnvGuard::set(CrashLocation::AfterPersistingProofManagerNextHeight);
@@ -1153,11 +1176,11 @@ mod tests {
 
             let stf_info = make_stf_info(1);
             sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number).await?;
-            sender.notify(stf_info.slot_number).await?;
+            sender.commit_stf_info(stf_info.slot_number()).await?;
+            sender.notify(stf_info.slot_number()).await?;
 
             let received = receiver.read_next().await?.unwrap();
-            assert_eq!(received.slot_number, SlotNumber::ONE);
+            assert_eq!(received.slot_number(), SlotNumber::ONE);
             receiver.inc_next_height_to_receive_by_and_persist(1)?;
         }
 
@@ -1248,11 +1271,11 @@ mod tests {
 
         let stf_info = make_stf_info(8);
         sender.stage_stf_info(&stf_info).await?;
-        sender.commit_stf_info(stf_info.slot_number).await?;
-        sender.notify(stf_info.slot_number).await?;
+        sender.commit_stf_info(stf_info.slot_number()).await?;
+        sender.notify(stf_info.slot_number()).await?;
 
         let received = receiver.read_next().await?.unwrap();
-        assert_eq!(received.slot_number, SlotNumber::new(8));
+        assert_eq!(received.slot_number(), SlotNumber::new(8));
 
         Ok(())
     }
@@ -1269,13 +1292,10 @@ mod tests {
             .await
             .unwrap();
         sender
-            .commit_stf_info(original_state_transition_info.slot_number)
+            .commit_stf_info(original_state_transition_info.slot_number())
             .await
             .unwrap();
-        sender
-            .notify(SlotNumber::new(rollup_height))
-            .await
-            .unwrap();
+        sender.notify(SlotNumber::new(rollup_height)).await.unwrap();
 
         let fetched_stf_info = receiver
             .get(SlotNumber::new(rollup_height))
@@ -1319,11 +1339,5 @@ mod tests {
 
     fn get_header_hash(stf_info: &StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec>) -> MockHash {
         stf_info.da_block_header().hash
-    }
-
-    fn new_db(path: impl AsRef<Path>) -> rockbound::DB {
-        LedgerDb::get_rockbound_options()
-            .default_setup_db_as_subdir(path.as_ref())
-            .unwrap()
     }
 }

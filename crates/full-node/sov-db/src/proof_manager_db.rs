@@ -51,7 +51,7 @@ impl ProofManagerDb {
 
     /// Open the database at the given path.
     pub fn open(path: impl AsRef<std::path::Path>) -> anyhow::Result<Self> {
-        let db = Self::get_rockbound_options().default_setup_db(path)?;
+        let db = Self::get_rockbound_options().default_setup_db_as_subdir(path)?;
         Ok(Self::new(Arc::new(db)))
     }
 
@@ -351,17 +351,10 @@ impl ProofManagerDb {
         &self,
         upper_bound: SlotNumber,
     ) -> anyhow::Result<Option<SlotNumber>> {
-        let mut current = upper_bound;
-        loop {
-            if self.get_stf_info(current)?.is_some() {
-                return Ok(Some(current));
-            }
-
-            let Some(previous) = current.checked_sub(1) else {
-                return Ok(None);
-            };
-            current = previous;
-        }
+        let proof_manager_reader = DeltaReader::new(self.db.clone(), Vec::new());
+        Ok(proof_manager_reader
+            .get_prev::<StfInfoByNumber>(&upper_bound)?
+            .map(|(slot, _)| slot))
     }
 
     fn bootstrap_future_only(

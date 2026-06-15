@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use std::num::NonZero;
 use std::panic::AssertUnwindSafe;
-use std::path::{Path, PathBuf};
+use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
@@ -11,10 +11,9 @@ use proptest::prelude::*;
 use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 use sov_db::config::RollupDbConfig;
+use sov_db::proof_manager_db::ProofManagerDb;
 use sov_db::schema::DeltaReader;
 use sov_db::storage_manager::{NomtChangeSet, NomtStorageManager};
-use sov_db::proof_manager_db::ProofManagerDb;
-use sov_db::storage_manager::{NativeChangeSet, NativeStorageManager};
 use sov_db::test_utils::{CrashLocation, CRASH_ENV_NAME};
 use sov_mock_da::storable::layer::{Randomizer, StorableMockDaLayer};
 use sov_mock_da::storable::StorableMockDaService;
@@ -150,10 +149,6 @@ impl Drop for CrashEnvGuard {
     }
 }
 
-fn proof_manager_db_path(storage_path: &Path) -> PathBuf {
-    storage_path.join("proof-manager-db")
-}
-
 #[tokio::test(flavor = "multi_thread")]
 async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
@@ -271,7 +266,7 @@ async fn test_non_instant_finality_notifies_only_finalized_slots() -> anyhow::Re
             }
             3 | 4 => {
                 let finalized = receiver.read_next().await?.unwrap();
-                assert_eq!(finalized.slot_number.get(), height - finality as u64);
+                assert_eq!(finalized.slot_number().get(), height - finality as u64);
                 state_manager
                     .stf_info_sender
                     .as_ref()
@@ -322,8 +317,9 @@ async fn test_proof_manager_crash_after_staging_hides_uncommitted_slot() -> anyh
     {
         let (proof_manager_db, mut sender, mut receiver) =
             setup_proof_manager_channel(tempdir.path())?;
-        let mut storage_manager: NativeStorageManager<MockDaSpec, ProverStorage<S>> =
-            NativeStorageManager::new(tempdir.path())?;
+        let config = RollupDbConfig::default_in_path(tempdir.path().to_path_buf());
+        let mut storage_manager: NomtStorageManager<MockDaSpec, sha2::Sha256, TestStorage> =
+            NomtStorageManager::new(config, true)?;
         let (_stf_state, ledger_state) =
             storage_manager.create_state_after(&MockBlockHeader::from_height(0))?;
         let ledger_db = LedgerDb::with_reader(ledger_state)?;
@@ -389,8 +385,9 @@ async fn test_proof_manager_restart_recovers_after_ledger_finalize_crash() -> an
     {
         let (proof_manager_db, mut sender, mut receiver) =
             setup_proof_manager_channel(tempdir.path())?;
-        let mut storage_manager: NativeStorageManager<MockDaSpec, ProverStorage<S>> =
-            NativeStorageManager::new(tempdir.path())?;
+        let config = RollupDbConfig::default_in_path(tempdir.path().to_path_buf());
+        let mut storage_manager: NomtStorageManager<MockDaSpec, sha2::Sha256, TestStorage> =
+            NomtStorageManager::new(config, true)?;
         let (_stf_state, ledger_state) = storage_manager.create_state_after(&restart_header)?;
         let ledger_db = LedgerDb::with_reader(ledger_state)?;
 
@@ -410,7 +407,7 @@ async fn test_proof_manager_restart_recovers_after_ledger_finalize_crash() -> an
         let recovered =
             tokio::time::timeout(std::time::Duration::from_secs(1), receiver.read_next()).await??;
         let recovered = recovered.expect("recovered slot should be visible after restart");
-        assert_eq!(recovered.slot_number, SlotNumber::ONE);
+        assert_eq!(recovered.slot_number(), SlotNumber::ONE);
     }
 
     Ok(())
@@ -423,13 +420,13 @@ async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Res
     let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
+    let proof_manager_db = ProofManagerDb::open(tempdir.path())?;
     let (sender, mut receiver) = crate::processes::new_stf_info_channel(
-        state_manager.ledger_db.clone(),
+        proof_manager_db,
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
         None,
-    )
-    .await?;
+    )?;
     state_manager.stf_info_sender = Some(sender);
 
     da_service.send_transaction(&[1; 10]).await.await??;
@@ -1481,11 +1478,12 @@ fn setup_proof_manager_channel(
     crate::processes::Sender<StateRoot, Witness, MockDaSpec>,
     crate::processes::Receiver<StateRoot, Witness, MockDaSpec>,
 )> {
-    let proof_manager_db = ProofManagerDb::open(proof_manager_db_path(storage_path))?;
+    let proof_manager_db = ProofManagerDb::open(storage_path)?;
     let (sender, receiver) = crate::processes::new_stf_info_channel(
         proof_manager_db.clone(),
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
+        None,
     )?;
     Ok((proof_manager_db, sender, receiver))
 }

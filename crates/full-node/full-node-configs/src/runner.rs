@@ -117,7 +117,7 @@ impl HttpServerConfig {
 }
 
 /// Prover service configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
 pub struct ProofManagerConfig<Address> {
     /// The "distance" measured in the number of blocks between two consecutive aggregated proofs.
     pub aggregated_proof_block_jump: NonZero<usize>,
@@ -148,7 +148,7 @@ pub struct ProofManagerConfig<Address> {
     pub max_concurrent_proof_blobs: usize,
     /// Optional path to the proof manager database directory.
     /// Defaults to the rollup storage path if not specified.
-    #[serde(default)]
+    #[serde(default, skip_serializing_if = "Option::is_none")]
     pub storage_path: Option<PathBuf>,
 }
 
