@@ -194,7 +194,7 @@ impl LeaderElectionConfig {
 }
 
 const fn default_leader_timeout_millis() -> u64 {
-    500
+    1000
 }
 
 const fn default_leader_grace_period_millis() -> u64 {
