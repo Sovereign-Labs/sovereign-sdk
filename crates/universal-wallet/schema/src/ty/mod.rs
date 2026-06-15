@@ -175,6 +175,17 @@ impl<L: LinkingScheme> Ty<L> {
                     byte_offset,
                 }),
             ) => vec![(*field_index, *byte_offset)],
+            Ty::Integer(
+                _,
+                IntegerDisplay::FixedPoint(FixedPointDisplay::FromSiblingFieldWithOverride {
+                    field_index,
+                    ..
+                }),
+            ) => {
+                // We need all 32 bytes of the sibling field to compare against `override_match`.
+                // This also covers the fallback `byte_offset`, which is always within 0..32.
+                (0..32).map(|i| (*field_index, i)).collect()
+            }
             _ => Vec::new(),
         }
     }
@@ -275,6 +286,16 @@ pub enum FixedPointDisplay {
     FromSiblingField {
         field_index: usize,
         byte_offset: usize,
+    },
+    /// Like [`FixedPointDisplay::FromSiblingField`], but if the sibling field's first 32 bytes
+    /// equal `override_match`, `override_decimals` is used instead of the byte at `byte_offset`.
+    /// This lets a single generic primitive special-case a known value (e.g. a specific token id
+    /// whose last byte does not encode its decimals) without this crate knowing what it means.
+    FromSiblingFieldWithOverride {
+        field_index: usize,
+        byte_offset: usize,
+        override_match: [u8; 32],
+        override_decimals: u8,
     },
 }
 

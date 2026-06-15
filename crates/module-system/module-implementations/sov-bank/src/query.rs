@@ -1,7 +1,7 @@
 //! Defines REST queries exposed by the bank module, along with the relevant types.
 
 use crate::TokenHolder;
-use crate::{config_gas_token_id, get_token_id, Amount, Bank, Coins, TokenId};
+use crate::{config_gas_token_id, get_token_id, token_decimals, Amount, Bank, Coins, TokenId};
 use axum::routing::get;
 use axum::Json;
 use sov_modules_api::prelude::utoipa::openapi::OpenApi;
@@ -31,6 +31,27 @@ impl<S: Spec> Bank<S> {
         Json(types::TokenIdResponse {
             token_id: config_gas_token_id(),
         })
+    }
+
+    async fn route_token_metadata(
+        state: ApiState<S, Self>,
+        mut accessor: ApiStateAccessor<S>,
+        Path(token_id): Path<TokenId>,
+    ) -> ApiResult<types::TokenMetadataResponse<S>> {
+        let token = state
+            .tokens
+            .get(&token_id, &mut accessor)
+            .unwrap_infallible()
+            .ok_or_else(|| errors::not_found_404("Token", token_id))?;
+
+        Ok(types::TokenMetadataResponse {
+            name: token.name,
+            decimals: token_decimals(&token_id),
+            total_supply: token.total_supply,
+            supply_cap: token.supply_cap,
+            admins: token.admins,
+        }
+        .into())
     }
 
     async fn route_gas_token_balance(
@@ -105,6 +126,10 @@ impl<S: Spec> HasCustomRestApi for Bank<S> {
         axum::Router::new()
             .route("/tokens/gas_token", get(Self::route_gas_token))
             .route(
+                "/tokens/{tokenId}/metadata",
+                get(Self::route_token_metadata),
+            )
+            .route(
                 "/tokens/gas_token/balances/{holderStr}",
                 get(Self::route_gas_token_balance),
             )
@@ -152,6 +177,16 @@ pub mod types {
     #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
     #[serde(bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned")]
     pub struct AdminsResponse<S: sov_modules_api::Spec> {
+        pub admins: Vec<TokenHolder<S>>,
+    }
+
+    #[derive(Debug, Eq, PartialEq, serde::Deserialize, serde::Serialize, Clone)]
+    #[serde(bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned")]
+    pub struct TokenMetadataResponse<S: sov_modules_api::Spec> {
+        pub name: String,
+        pub decimals: u8,
+        pub total_supply: Amount,
+        pub supply_cap: Amount,
         pub admins: Vec<TokenHolder<S>>,
     }
 }

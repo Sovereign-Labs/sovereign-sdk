@@ -15,6 +15,23 @@ paths:
         "404":
           # Referring type from `runtime-base.yaml`
           $ref: "#/components/responses/StateNotFound"
+  /tokens/{token_id}/metadata:
+    get:
+      summary: Get the metadata of a specific token, including its decimals
+      operationId: "bank_custom_token_get_metadata"
+      tags: [Bank]
+      parameters:
+        - name: token_id
+          in: path
+          required: true
+          schema:
+            $ref: "#/components/schemas/TokenId"
+      responses:
+        "200":
+          $ref: "#/components/responses/TokenMetadataResponse"
+        "404":
+          # Referring type from `runtime-base.yaml`
+          $ref: "#/components/responses/StateNotFound"
   /tokens/gas_token/balances/{address}:
     get:
       summary: Fetch the current balance of the native gas token for a given user
@@ -131,3 +148,32 @@ components:
             properties:
               token_id:
                 $ref: "#/components/schemas/TokenId"
+    TokenMetadataResponse:
+      description: OK
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              name:
+                type: string
+                description: The name of the token.
+              decimals:
+                type: integer
+                minimum: 0
+                maximum: 255
+                description: The number of decimal places of the token.
+              total_supply:
+                type: string
+                pattern: "^[0-9]+$"
+                description: The total minted supply of the token.
+              supply_cap:
+                type: string
+                pattern: "^[0-9]+$"
+                description: The maximum mintable supply of the token.
+              admins:
+                type: array
+                description: The token holders authorized to mint the token.
+                items:
+                  type: object
+                  description: A token holder (one of user, module, or derived).
