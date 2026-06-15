@@ -822,6 +822,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             secondary_shutdown_sender,
             background_handles,
             genesis_slot_number: genesis_da_height,
+            rpc_aggregation_config: monitoring_config.rpc_aggregation.clone(),
         })
     }
 }
@@ -961,6 +962,11 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
     secondary_shutdown_sender: tokio::sync::watch::Sender<()>,
 
     background_handles: Vec<tokio::task::JoinHandle<()>>,
+
+    /// RPC metrics aggregation settings, captured from
+    /// `rollup_config.monitoring` at creation time and handed to the HTTP
+    /// server in [`Rollup::run`].
+    rpc_aggregation_config: sov_metrics::RpcAggregationConfig,
 }
 
 impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
@@ -973,6 +979,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
                 self.endpoints.inner.axum_router,
                 self.endpoints.inner.jsonrpsee_module,
                 self.endpoints.cors_configuration,
+                self.rpc_aggregation_config,
             )
             .await
             .context("Failed to start Axum Server")?;

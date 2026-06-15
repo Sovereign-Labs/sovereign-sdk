@@ -47,6 +47,7 @@ async fn test_metrics_macro() {
             max_datagram_size: Some(1),
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: sov_metrics::RpcAggregationConfig::standard(),
         },
         shutdown_receiver,
     );
@@ -113,6 +114,7 @@ async fn test_metrics_macro_without_input() {
             max_datagram_size: Some(1),
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: sov_metrics::RpcAggregationConfig::standard(),
         },
         shutdown_receiver,
     );

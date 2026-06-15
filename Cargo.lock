@@ -12597,6 +12597,7 @@ dependencies = [
  "rayon",
  "rockbound",
  "serde",
+ "serde_json",
  "sha2 0.10.9",
  "sov-db",
  "sov-full-node-configs",

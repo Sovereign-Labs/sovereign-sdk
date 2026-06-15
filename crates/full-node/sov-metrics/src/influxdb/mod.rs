@@ -9,11 +9,16 @@ mod csv_helper;
 #[cfg(feature = "gas-constant-estimation")]
 mod gas_constant_estimation;
 mod publisher;
+mod rpc_aggregator;
 mod tracker;
 
 pub use config::{MonitoringConfig, TelegrafSocketConfig};
 #[cfg(feature = "gas-constant-estimation")]
 pub use gas_constant_estimation::{GasConstantTracker, GAS_CONSTANTS};
+pub use rpc_aggregator::{
+    AggregatedRpcMetrics, RecordedCall, RpcAggregationConfig, RpcStatsAggregator,
+    SlowRpcCallMetrics, BATCH_PSEUDO_METHOD, UNKNOWN_METHOD,
+};
 pub use tracker::{
     init_metrics_tracker, spawn_tokio_runtime_metrics_task, timestamp, BatchMetrics, BatchOutcome,
     HttpMetrics, RateLimiterMetrics, RpcMetrics, RunnerMetrics, RunnerProcessStfChangesMetrics,
@@ -253,6 +258,7 @@ mod tests {
             max_datagram_size: Some(1),
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: RpcAggregationConfig::standard(),
         };
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
@@ -352,6 +358,7 @@ mod tests {
             max_datagram_size: Some(1),
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: RpcAggregationConfig::standard(),
         };
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
