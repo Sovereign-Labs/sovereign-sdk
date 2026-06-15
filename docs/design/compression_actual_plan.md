@@ -5,8 +5,10 @@ changes from v3: (1) the envelope is **chunked from the start** (not a single LZ
 to preserve the SDK's partial-read capability; (2) the `decode` contract is **corrected**
 — it must never emit logical bytes for un-authenticated input (the v3 "zero-fill to
 `logical_len` on short/error" rule was unsafe under an adversarial prover; see Fact C).
-Scope: `crates/adapters/celestia` (self-contained; no public API changes; verifier
-unchanged).
+Scope: `crates/adapters/celestia` (self-contained; no public API changes). The existing
+compressed-byte verifier checks remain the foundation, but PR2 adds envelope-specific
+metadata/read-cursor authentication where those checks alone do not authenticate
+STF-observable logical fields.
 Supersedes: `celestia-compression-{claude,claude-2,codex,codex-2}.md` (kept for history).
 
 ## Decisions that frame this design (2026-06-15)
@@ -54,17 +56,17 @@ Trust comes only from the block header and the Celestia protocol, never from pro
 3. `sequence_length` / `signer` / `payload()` from the proven first share are trusted.
 4. Witness fields are authenticated **against** those shares: the consumed-bytes accumulator is **byte-compared vs `share.payload()`** (`verifier/mod.rs:385-420`); `compressed_total_len() == sequence_length` (PR1, `:451-456`); `sender == recovered signer` (`:391-396`). Shares proven `= shares_needed_for_bytes_with_signer(accumulator.len()).max(1)` (`:355-369`), matched exactly → work scales with bytes consumed.
 
-Because the accumulator is byte-compared against `share.payload()`, and shares hold the **compressed/on-DA** bytes, **the accumulator is compressed bytes**, authenticated as-is. Logical bytes cannot be tied to shares — they are **decompressed** from the authenticated accumulator. The witness never carries logical bytes and the verifier never "compares decoded vs claimed." Proof generation uses `compressed_*` exclusively (`proofs.rs:175,188`).
+Because the accumulator is byte-compared against `share.payload()`, and shares hold the **compressed/on-DA** bytes, **the accumulator is compressed bytes**, authenticated as-is. Logical bytes cannot be tied to shares — they are **decompressed** from the authenticated accumulator. The witness must never carry trusted logical bytes. It may carry a logical read cursor, but PR2 must authenticate that cursor against the decoded output available from the authenticated compressed prefix. Proof generation uses `compressed_*` exclusively (`proofs.rs:175,188`).
 
-### Fact C — the verifier+STF interlock that stops a truncating prover, and how compression must preserve it
+### Fact C — the verifier+STF interlock that stops a truncating prover on failure paths
 
-Today, a malicious prover cannot slash an honest sequencer: bytes are authenticated (it cannot corrupt them), and *under-reading* (truncating) is caught by an interlock:
+Today, on the standard deserialization-failure path, a malicious prover cannot slash an honest sequencer by truncating the witness: bytes are authenticated (it cannot corrupt them), and *under-reading* is caught by an interlock:
 - the verifier pins `compressed_total_len() == sequence_length` (`verifier/mod.rs:451`) — note `total_len() = inner.remaining() + accumulator.len()`, so the prover cannot lie about the blob's full length; and
 - the STF asserts `verified_data().len() == total_len()` (`capabilities.rs:1063`, *"…some data was not provided. The prover might be malicious"*).
 
-A prover who authenticates only a 500-of-1000-byte prefix (legal — the verifier proves only `shares_needed(500)` shares against the real prefix) trips the assert (`500 != 1000`) → guest panic → no valid proof.
+A prover who authenticates only a 500-of-1000-byte prefix (legal at the compressed-prefix proof layer — the verifier proves only `shares_needed(500)` shares against the real prefix) trips the assert (`500 != 1000`) if deserialization fails → guest panic → no valid proof.
 
-**Compression must not break this interlock.** The v3 `decode` rule ("force output to exactly `logical_len`, zero-fill on any short/error") *does* break it: logical `total_len()` becomes a header value decoupled from the authenticated compressed length, and `verified_data()` becomes `decode(prefix)` zero-filled back to `logical_len`, so the assert degenerates to `logical_len == logical_len` (always true). A malicious prover could then authenticate a prefix → zero-fill → borsh fails on garbage → **honest sequencer slashed with a valid proof.** The corrected decode contract below restores the interlock entirely in the read path (verifier still unchanged).
+**Compression must not break this interlock or the size-gate paths that run before deserialization.** The v3 `decode` rule ("force output to exactly `logical_len`, zero-fill on any short/error") *does* break it: logical `total_len()` becomes a header value decoupled from the authenticated compressed length, and `verified_data()` becomes `decode(prefix)` zero-filled back to `logical_len`, so the assert degenerates to `logical_len == logical_len` (always true). A malicious prover could then authenticate a prefix → zero-fill → borsh fails on garbage → **honest sequencer slashed with a valid proof.** The corrected contract below restores the failure-path interlock and adds verifier/read-path checks for STF-observable metadata, so missing envelope evidence cannot silently turn into an empty or skipped blob. The deserialize-success prefix/trailing-byte edge remains a pre-existing risk called out below and must be confirmed during PR2.
 
 ## Design
 
@@ -86,40 +88,47 @@ payload      [..]  num_chunks back-to-back chunks; chunk i is `chunk_table[i]` b
 Constants: `MAX_LOGICAL_BLOB_LEN = 16 MiB` (decompression-bomb cap); `CHUNK_LOGICAL_LEN =
 64 KiB` (fixed logical chunk size). Fixed logical chunk size keeps the logical→chunk map
 arithmetic (`chunk = logical_offset / CHUNK_LOGICAL_LEN`) — only *compressed* chunk lengths
-need storing, and the table for a 16 MiB blob is ≤256×4 B ≈ 1 KiB. The whole header +
-chunk table is authenticated for free (it lies in the accumulator, which the verifier
-byte-compares against the first shares).
+need storing, and the table for a 16 MiB blob is ≤256×4 B ≈ 1 KiB. The header +
+chunk table are authenticated as normal consumed compressed bytes: they are included in
+the accumulator and byte-compared against shares. This is bounded metadata overhead, not
+free; large envelopes may require a few shares even for a logical zero-read.
 
 ### Mode detection — derived from the (authenticated) accumulator, never claimed
 
-`mode = f(accumulator_prefix, sequence_length)`, one shared pure function:
-- no 16-byte magic prefix (incl. prefix `< 16`) → **Legacy** (today's behavior, byte-for-byte).
-- magic + valid header (version 1, known codec, flags 0, `logical_len ≤ MAX`) + a chunk table consistent with `logical_len` → **Envelope**.
-- magic + invalid/oversized header or inconsistent table → **InvalidEnvelope** → behaves as an empty blob (`total_len()=0`, no data).
+`mode = f(authenticated first-share payload, accumulator_prefix, sequence_length)`, one shared pure function. The verifier must derive the same mode from authenticated share bytes before accepting STF-observable envelope fields:
+- no 16-byte magic prefix in the authenticated first-share payload → **Legacy** (today's behavior, byte-for-byte).
+- magic + complete, valid header (version 1, known codec, flags 0, `logical_len ≤ MAX`) + complete chunk table consistent with `logical_len` → **Envelope**.
+- magic + complete but invalid/oversized header or complete but inconsistent table → **InvalidAuthenticatedEnvelope** → behaves as an empty blob (`total_len()=0`, no data). This is authenticated malformed DA content, not a witness shortcut.
+- magic present but the accumulator does not include the complete header/table needed to classify the blob, or does not include the compressed chunks needed for the claimed logical cursor → **InsufficientEnvelopeEvidence** → witness/proof error before STF execution. It must never be treated as `InvalidAuthenticatedEnvelope` or as a valid empty blob.
+
+Chunk-table validity uses checked arithmetic throughout: derive the table byte length only after `logical_len <= MAX`, cap each encoded length, reject offsets outside `sequence_length`, require `sum(encoded_lengths) == compressed_total_len - metadata_len` for full-frame validation, and require `codec=0` chunk lengths to equal their logical chunk span exactly.
 
 ### Deterministic, total, chunk-aware decode (the corrected logic — the only new logic)
 
-`decode(accumulator, compressed_total_len) -> Vec<u8>`, identical native and guest, never
-fails (never errors the verifier — rejecting on-DA bytes would halt the chain). Two clauses,
-and the split between them is what restores Fact C's interlock:
+`decode(accumulator, compressed_total_len, logical_verified_len) -> DecodeOutput`, identical native and guest. It never rejects authenticated DA bytes as a verifier error, but it must distinguish authenticated malformed content from insufficient witness evidence. Two clauses, and the split between them is what restores Fact C's interlock:
 
 - **Full frame authenticated** (`accumulator.len() == compressed_total_len`, i.e. every
   chunk's compressed bytes are present): decode is **total** and returns **exactly
   `logical_len` bytes**. Each chunk is LZ4-decoded to its declared logical span; any chunk
-  whose block is malformed / short / over-long, or any table inconsistency, is
-  **zero-filled within its span**. (Garbage *content* on DA ⇒ deterministic logical bytes
+  whose block is malformed / short / over-long is **zero-filled within its span**.
+  Header/table inconsistency is handled earlier as `InvalidAuthenticatedEnvelope`.
+  (Garbage *content* on DA ⇒ deterministic logical bytes
   ⇒ borsh fails ⇒ existing slash path. Safe because the bytes are authenticated real on-DA
   bytes — a prover cannot manufacture this for an honest sequencer.)
-- **Only a prefix authenticated** (`accumulator.len() < compressed_total_len`): return the
-  logical bytes of the **maximal run of chunks fully contained in the accumulator, and no
-  more** — a partial/truncated trailing chunk contributes **zero** logical bytes, never
-  zero-fill. For a real truncation this is `< logical_len` ⇒ the STF completeness assert
-  (`capabilities.rs:1063`) fires ⇒ the truncating prover is rejected (Fact C restored). For
-  a *legitimate* future partial read it is exactly the requested logical prefix, nothing
-  fabricated.
+- **Only a prefix authenticated** (`accumulator.len() < compressed_total_len`): decode the
+  maximal run of chunks fully contained in the accumulator, and no more — a
+  partial/truncated trailing chunk contributes **zero** logical bytes, never zero-fill.
+  `logical_verified_len` must be `<= available_decoded_len`; otherwise the verifier rejects
+  `InsufficientEnvelopeEvidence` before the STF. `verified_data()` returns exactly the first
+  `logical_verified_len` bytes, so `advance(1)` exposes one logical byte even if the
+  compressed accumulator rounded up to a full chunk. For a real truncation on today's full
+  read path this yields `< logical_len` ⇒ the STF completeness assert (`capabilities.rs:1063`)
+  fires on deserialization failure. For a legitimate future partial read it is exactly the
+  requested logical prefix, nothing fabricated.
 
 - Legacy → the accumulator unchanged (returned by reference; no copy).
-- InvalidEnvelope, or header-only accumulator (zero-read) → empty.
+- InvalidAuthenticatedEnvelope → empty.
+- InsufficientEnvelopeEvidence → verifier/read-path failure before STF execution, never empty.
 
 The prover cannot cheat: the guest decodes the same authenticated accumulator the prover's
 native execution consumed, so any divergence yields a different state root than committed
@@ -129,33 +138,44 @@ applied identically native and guest.
 ### `BlobWithSender` — one type, minimal change
 
 ```rust
-#[derive(Clone, Debug, Serialize, Deserialize)]   // derived serde; UNCHANGED wire shape
+#[derive(Clone, Debug, Serialize, Deserialize)]   // public API unchanged; witness compatibility handled below
 pub struct BlobWithSender {
     blob: CountedBufReader<BlobIterator>,   // the COMPRESSED stream (accumulator = consumed on-DA bytes)
+    logical_verified_len: usize,            // logical prefix exposed through BlobReaderTrait
     range_in_namespace: Range<usize>,
     sender: CelestiaAddress,
     hash: HexHash,
     #[serde(skip)]
-    decoded: std::sync::OnceLock<Vec<u8>>,  // lazy logical-decode cache; never serialized
+    decoded: Option<DecodeCache>,           // keyed by (compressed_len, logical_verified_len)
 }
 ```
-- **Wire/witness shape unchanged** — the only new field is `#[serde(skip)]`. PR2 is therefore **not** a breaking witness change.
+- **Public API shape unchanged** — `BlobReaderTrait` and `DaService` callers are unchanged. The witness/internal serialization may gain the logical cursor; if so, PR2 must treat this as a witness-format change or provide explicit serde compatibility (`serde(default)`/custom serde) and document the rollout.
 - `compressed_verified_data()` = `blob.accumulator()`, `compressed_total_len()` = `blob.total_len()` — **unchanged**; verifier and proof-gen keep using these.
-- `verified_data()` (logical): Legacy → `blob.accumulator()` (zero-overhead). Envelope/Invalid → `decoded.get_or_init(|| decode(blob.accumulator(), compressed_total_len()))`.
+- `verified_data()` (logical): Legacy → `blob.accumulator()` (zero-overhead). Envelope/Invalid → decode/cache the authenticated compressed prefix and return exactly `logical_verified_len` logical bytes.
 - `total_len()` (logical): Legacy → `compressed_total_len()`. Envelope → `logical_len` parsed from the authenticated header. Invalid → 0.
-- `advance(n)` (native): Legacy → `blob.advance(n)`. Envelope → advance the *compressed* accumulator to cover the chunks spanning the next `n` logical bytes (`chunk = logical_offset / CHUNK_LOGICAL_LEN`; consume those chunks' compressed bytes per the table). The only caller today is `full_data()` (n = the rest), which consumes the whole frame; the chunk machinery exists so a future partial reader can stop after a malformed prefix.
-- **Construction** (`get_blobs_with_sender`, native, `types/mod.rs:200-234`): peek the first share for the magic; if Envelope, eagerly `advance` the **header + chunk table** so logical `total_len()` and the chunk map are available before any read (the size gates call `total_len()` first) **and authenticated for free** — those bytes are in the accumulator, which the verifier already byte-compares against the first shares. No new field, no new verifier check, 0 extra shares for a small header+table (⊂ first shares; `.max(1)` already proves them).
-- Manual `PartialEq` over `{blob, range, sender, hash}` (ignore the `decoded` cache).
+- `advance(n)` (native): Legacy → `blob.advance(n)`. Envelope → increment `logical_verified_len` by exactly `n` (clamped to `logical_total_len`) and advance the *compressed* accumulator to cover the chunks spanning that logical prefix (`chunk = logical_offset / CHUNK_LOGICAL_LEN`; consume those chunks' compressed bytes per the table). The only caller today is `full_data()` (n = the rest), which consumes the whole frame; the chunk machinery exists so a future partial reader can stop after a malformed prefix.
+- The decode cache must be invalidated or keyed whenever either `compressed_verified_data().len()` or `logical_verified_len` changes. A bare `OnceLock<Vec<u8>>` is invalid because `verified_data()` may be called before a later `advance()`.
+- **Construction** (`get_blobs_with_sender`, native, `types/mod.rs:200-234`): peek the first share for the magic; if Envelope, eagerly `advance` the **header + chunk table** so logical `total_len()` and the chunk map are available before any read (the size gates call `total_len()` first). These metadata bytes are authenticated like any other consumed bytes; expect bounded small proof overhead rather than zero extra shares.
+- Manual `PartialEq` over `{blob, logical_verified_len, range, sender, hash}` (ignore the decoded cache).
 
-### Why the verifier is unchanged
+### Verifier additions
 
-It already authenticates the compressed accumulator against shares and checks
-`compressed_total_len == sequence_length` (PR1, `verifier/mod.rs:451`). Mode, `logical_len`,
-the chunk map, and logical bytes are **deterministic functions of the authenticated
-accumulator**, computed in the read path after verification. Crucially, Fact C's interlock
-is preserved *in the read path*: `decode` emits `< logical_len` bytes whenever the frame is
-not fully authenticated, so the STF completeness assert still catches a truncating prover —
-no verifier change needed.
+Layer 1 stays exactly the existing compressed-byte verifier behavior: authenticate the
+compressed accumulator against shares, check `compressed_total_len == sequence_length`
+(PR1, `verifier/mod.rs:451`), and keep proof generation over `compressed_*`.
+
+PR2 adds an envelope Layer 2 before handing blobs to the STF:
+- derive mode from the authenticated first share and the authenticated compressed
+  accumulator, not from witness claims;
+- require complete authenticated header + chunk table before accepting any envelope
+  `total_len()` or chunk map;
+- validate the logical read cursor (`logical_verified_len <= decoded_available_len`) and
+  reject `InsufficientEnvelopeEvidence`;
+- allow `InvalidAuthenticatedEnvelope`/zero-fill semantics only for malformed bytes that
+  are themselves authenticated.
+
+This keeps verifier errors reserved for witness/proof lies and deterministic decode results
+reserved for authenticated DA content.
 
 ### Submit path & config (PR3)
 
@@ -170,11 +190,11 @@ no verifier change needed.
 ### PR2 — Chunked envelope read path (dark)
 - New `crates/adapters/celestia/src/envelope.rs` (not cfg-gated; guest needs `decode`): constants (`MAGIC`, `MAX_LOGICAL_BLOB_LEN`, `CHUNK_LOGICAL_LEN`), `Codec`, header + chunk-table parse, `classify`, the two-clause `decode` above, `#[cfg(feature="native")] encode`, `starts_with_magic`. The chunk map + the full-frame-vs-prefix split is the bulk and the riskiest code — audit target #1.
 - Dep: workspace `lz4_flex = { version = "0.11", default-features = false, features = ["std","safe-decode","safe-encode"] }`, **non-optional** (guest decode needs it; pure Rust; same version native+guest ⇒ decode determinism). Verify it compiles for both risc0 and sp1 guest targets (guest has `std`).
-- `types/mod.rs`: add `#[serde(skip)] decoded` cache + manual `PartialEq`; make `verified_data()`/`total_len()`/`advance()` chunk-aware; `get_blobs_with_sender` peeks the magic and eager-advances the header + chunk table for envelopes.
-- `verifier/mod.rs`, `verifier/proofs.rs`: **unchanged** (already use `compressed_*`; Fact C is handled in the read path).
-- Tests: `envelope` unit (parse matrix incl. magic-needs-16-bytes; `decode` round-trips raw + LZ4 across sizes spanning multiple chunks; **truncated trailing chunk ⇒ fewer logical bytes than `logical_len`, NOT zero-fill** (Fact C); malformed/short/oversized full-frame chunk ⇒ zero-fill within span; `logical_len > MAX`, codec=2, inconsistent table ⇒ empty/Invalid; partial read at and across chunk boundaries returns the exact logical prefix); `types` (legacy unchanged; envelope `total_len()` pre-read via eager header; full read decodes; truncated read trips the completeness assert; cache correctness); a checked-in envelope fixture (`test_data/block_with_envelope_blobs/`, generated once via docker) run through the existing `verification_*` matrix to prove the **unchanged verifier** accepts envelope blobs and a malformed-content (full-frame) envelope decodes to zero-fill (not rejected). All existing tests pass untouched.
+- `types/mod.rs`: add `logical_verified_len` plus an invalidatable/keyed decoded cache + manual `PartialEq`; make `verified_data()`/`total_len()`/`advance()` chunk-aware; `get_blobs_with_sender` peeks the magic and eager-advances the header + chunk table for envelopes.
+- `verifier/mod.rs`: keep Layer 1 compressed checks, then add envelope Layer 2 for mode derivation, metadata completeness, chunk-table validity, and logical cursor authentication. `verifier/proofs.rs` remains over `compressed_*`.
+- Tests: `envelope` unit (parse matrix incl. magic-needs-16-bytes; `decode` round-trips raw + LZ4 across sizes spanning multiple chunks; **truncated trailing chunk ⇒ fewer logical bytes than `logical_len`, NOT zero-fill** (Fact C); malformed/short/oversized full-frame chunk ⇒ zero-fill within span; `logical_len > MAX`, codec=2, inconsistent authenticated table ⇒ InvalidAuthenticatedEnvelope/empty; incomplete header/table/chunk evidence ⇒ InsufficientEnvelopeEvidence/reject; partial read at and across chunk boundaries returns the exact logical prefix); `types` (legacy unchanged; envelope `total_len()` pre-read via eager metadata; full read decodes; partial `advance(1)` exposes exactly one byte; cache invalidates after later `advance`; truncated read trips the completeness assert on failure paths); a checked-in envelope fixture (`test_data/block_with_envelope_blobs/`, generated once via docker) run through the verification matrix to prove envelope blobs verify, malformed authenticated content decodes deterministically, and insufficient evidence is rejected. All existing tests pass untouched.
 - Determinism gate: a test asserting native==guest `decode` over a fixed corpus; `lz4_flex` version workspace-pinned.
-- Not a breaking witness change; changelog notes read-path support + historical magic-collision caveat (~2⁻¹²⁸; such a v1 batch blob would have failed borsh anyway).
+- Witness compatibility: if `logical_verified_len` is serialized, PR2 is a witness-format change unless custom/defaulted serde preserves legacy decoding. Changelog notes read-path support + any witness compatibility impact + historical magic-collision caveat (~2⁻¹²⁸; such a v1 batch blob would have failed borsh anyway).
 
 ### PR3 — Submit path + config + e2e
 - `config.rs` enum + field; `da_service/mod.rs` chunked encode-on-submit (+ magic-escape, fall-back-if-larger), `get_proofs_at` decode; metrics; documented `#compress_on_submit = "off"` in `examples/demo-rollup/configs/celestia_rollup_config.toml`; adapter README; changelog.
@@ -202,14 +222,14 @@ Ordered roughly by how much they should weigh on the decision.
 
 4. **Operational footgun → slashing (wants activation gating).** Turning `compress_on_submit` on before every node/prover is upgraded means an old node reads an envelope as raw → borsh fails → an **honest sequencer is slashed**. The `off` default helps, but a per-service config flag desyncs the instant one node lags or is misconfigured. **Recommendation (adversarial framing):** gate envelope *emission* on a protocol activation height / chain version, not just the local flag, so a blob is never emitted before every reader can decode it. (Distinct from Fact C, which is pure read-path code, not an activation matter.)
 
-5. **Non-obvious invariants (bug-hiding surface).** Correct logical `total_len()` depends on construction having eager-advanced the header + chunk table into the accumulator at *every* construction site; plus the `OnceLock` cache to return `&[u8]` from a lazy decode; plus the chunk-aware logical↔compressed map; plus — most subtly — the Fact-C full-frame-vs-prefix split in `decode`. All reviewable, but more mechanism than "just decompress," and the place bugs hide. Covered by the explicit tests above; audit target.
+5. **Non-obvious invariants (bug-hiding surface).** Correct logical `total_len()` depends on construction having eager-advanced the header + chunk table into the accumulator at *every* construction site; plus an invalidatable/keyed cache to return `&[u8]` from a lazy decode; plus the logical cursor; plus the chunk-aware logical↔compressed map; plus — most subtly — the Fact-C full-frame-vs-prefix split in `decode`. All reviewable, but more mechanism than "just decompress," and the place bugs hide. Covered by the explicit tests above; audit target.
 
 6. **Rides on top of the pre-existing witness bloat.** Envelope blobs still carry their (now compressed, hence smaller) shares in the witness; compression neither fixes nor worsens the unread-share bloat. Pruning is a separate follow-up.
 
 ## Accepted risks / out of scope
 - Historical magic-collision reinterpretation: ~2⁻¹²⁸, documented (outcome is slash either way).
 - Old binaries can't decode envelope blobs: enabling `lz4` needs all nodes/provers on PR2+; `off` default + activation gating (disadvantage #4) make rollout operator-controlled and atomic.
-- zstd reserved only (codec 2 → InvalidEnvelope/empty for current code; adding it later is a coordinated upgrade).
+- zstd reserved only (codec 2 → InvalidAuthenticatedEnvelope/empty for current code; adding it later is a coordinated upgrade).
 - **Witness unread-share bloat: pre-existing, unrelated to compression, not worsened. DECIDED: deferred to a separate follow-up** (Nikolai, 2026-06-15).
 - Borsh trailing-byte / valid-prefix edge on the deserialize-*success* branch (the assert at `capabilities.rs:1063` only runs on failure): pre-existing for legacy blobs, not introduced by compression. Worth a one-line confirmation during PR2, not a blocker.
 - Economics (bytes saved vs zk cycles): intentionally unmeasured; `off` default.
@@ -217,7 +237,7 @@ Ordered roughly by how much they should weigh on the decision.
 
 ## Open points
 1. ~~Drop witness-pruning~~ — **RESOLVED: deferred to a follow-up.**
-2. **Eager-advance the header + chunk table at construction** vs. a stored claim checked by the verifier. Picks eager-advance (no new field, no verifier change). See disadvantage #5.
+2. **Eager-advance the header + chunk table at construction** vs. a stored claim checked by the verifier. Picks eager-advance plus verifier validation of the authenticated metadata; this is bounded metadata proof overhead, not zero-cost. See disadvantage #5.
 3. ~~Single frame vs chunks~~ — **RESOLVED (2026-06-15): chunked**, to preserve partial reads. See "Decisions" and disadvantage #1 for the cost accepted.
 4. **Activation gating** — recommend a protocol activation height/version for envelope emission (disadvantage #4), rather than relying on the per-service `off` flag alone. Open for Nikolai.
 
