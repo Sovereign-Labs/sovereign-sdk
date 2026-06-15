@@ -28,6 +28,7 @@ use tokio::sync::watch;
 use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
+use crate::http::HttpServerStart;
 use crate::processes::{new_stf_info_channel, Receiver};
 use crate::state_manager::{AggregatedProofs, BlockCandidateResolution, StateManager};
 use tokio::net::TcpListener;
@@ -299,7 +300,10 @@ where
         cors_configuration: CorsConfiguration,
         rpc_aggregation: sov_metrics::RpcAggregationConfig,
     ) -> anyhow::Result<()> {
-        let (http_task_handle, rpc_metrics_flush_handle) = crate::http::start_http_server(
+        let HttpServerStart {
+            http_server_handle,
+            rpc_metrics_flush_handle,
+        } = crate::http::start_http_server(
             self.axum_tcp
                 .take()
                 .ok_or_else(|| anyhow::anyhow!("HTTP server already started."))?,
@@ -311,7 +315,7 @@ where
         )
         .await?;
 
-        self.background_handles.push(http_task_handle);
+        self.background_handles.push(http_server_handle);
         self.background_handles.push(rpc_metrics_flush_handle);
 
         Ok(())

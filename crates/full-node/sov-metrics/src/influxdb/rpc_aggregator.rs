@@ -460,7 +460,7 @@ impl RpcStatsAggregator {
             .unwrap_or_else(std::sync::PoisonError::into_inner)
             .take();
         let Some(mut receiver) = receiver else {
-            tracing::warn!("RPC stats flush loop invoked twice; ignoring this invocation");
+            tracing::warn!("RPC stats flush loop invoked more than once; ignoring this invocation");
             return;
         };
 
@@ -472,15 +472,7 @@ impl RpcStatsAggregator {
         tokio::pin!(shutdown);
         loop {
             tokio::select! {
-                maybe_event = receiver.recv() => match maybe_event {
-                    Some(event) => apply(&mut stats, event),
-                    // All senders dropped: nothing can be recorded anymore.
-                    None => {
-                        self.flush(&mut stats);
-                        return;
-                    }
-                },
-                _ = interval.tick() => self.flush(&mut stats),
+                biased;
                 _ = &mut shutdown => {
                     // Drain events recorded before shutdown; `try_recv` errs
                     // once the channel is empty, which ends the drain.
@@ -490,6 +482,15 @@ impl RpcStatsAggregator {
                     self.flush(&mut stats);
                     return;
                 }
+                maybe_event = receiver.recv() => match maybe_event {
+                    Some(event) => apply(&mut stats, event),
+                    // All senders dropped: nothing can be recorded anymore.
+                    None => {
+                        self.flush(&mut stats);
+                        return;
+                    }
+                },
+                _ = interval.tick() => self.flush(&mut stats),
             }
         }
     }

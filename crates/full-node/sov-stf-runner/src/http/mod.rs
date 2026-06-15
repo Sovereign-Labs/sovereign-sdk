@@ -78,6 +78,11 @@ where
     }
 }
 
+pub struct HttpServerStart {
+    pub http_server_handle: JoinHandle<anyhow::Result<()>>,
+    pub rpc_metrics_flush_handle: JoinHandle<anyhow::Result<()>>,
+}
+
 /// Starts the HTTP server and the RPC metrics flush task, returning both
 /// join handles so callers can observe either task's termination.
 pub(crate) async fn start_http_server(
@@ -87,10 +92,7 @@ pub(crate) async fn start_http_server(
     mut shutdown_receiver: watch::Receiver<()>,
     cors_configuration: CorsConfiguration,
     rpc_aggregation: RpcAggregationConfig,
-) -> anyhow::Result<(
-    JoinHandle<anyhow::Result<()>>,
-    JoinHandle<anyhow::Result<()>>,
-)> {
+) -> anyhow::Result<HttpServerStart> {
     let rest_address = axum_listener.local_addr()?;
     let (rpc_router, server_handle, aggregator) =
         rpc_module_to_router(methods, cors_configuration, rpc_aggregation);
@@ -139,7 +141,10 @@ pub(crate) async fn start_http_server(
 
         result
     });
-    Ok((handle, flush_handle))
+    Ok(HttpServerStart {
+        http_server_handle: handle,
+        rpc_metrics_flush_handle: flush_handle,
+    })
 }
 
 /// Build [`axum::Router`] from [`jsonrpsee::RpcModule`] with support of websocket.
@@ -358,7 +363,7 @@ mod tests {
         shutdown_receiver.mark_unchanged();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let (_join_handle, _flush_handle) = start_http_server(
+        let _ = start_http_server(
             listener,
             axum_router,
             methods,

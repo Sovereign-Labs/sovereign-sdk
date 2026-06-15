@@ -256,6 +256,12 @@ where
     }
 }
 
+/// Helper struct for counting failed entries in a batch response.
+#[derive(serde::Deserialize)]
+struct EntryProbe {
+    error: Option<serde::de::IgnoredAny>,
+}
+
 /// Counts the entries of a serialized JSON-RPC batch response that carry an
 /// `error` member. Returns 0 when the body is not a JSON array (e.g. a
 /// whole-batch rejection, which is covered by the response's error code
@@ -269,10 +275,6 @@ where
 /// count per-entry failures. Large batched queries (e.g. `eth_getLogs`) make
 /// this the most expensive step of recording a batch.
 fn count_failed_entries(batch_response_json: &str) -> u64 {
-    #[derive(serde::Deserialize)]
-    struct EntryProbe {
-        error: Option<serde::de::IgnoredAny>,
-    }
     serde_json::from_str::<Vec<EntryProbe>>(batch_response_json)
         .map(|entries| entries.iter().filter(|e| e.error.is_some()).count() as u64)
         .unwrap_or(0)
