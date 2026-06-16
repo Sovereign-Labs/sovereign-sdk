@@ -106,7 +106,9 @@ where
 
             let aggregator_shutdown = self.shutdown_receiver.clone();
             let aggregator_handle = tokio::spawn(async move {
-                run_task_until_shutdown("aggregator", aggregator.run(), &aggregator_shutdown).await;
+                if let Err(e) = aggregator.run(aggregator_shutdown).await {
+                    tracing::error!(error = ?e, task_name = "aggregator", "Task failed");
+                }
             });
 
             let intake = IntakeTask {
@@ -330,18 +332,37 @@ impl<Ps: ProverService> AggregatorTask<Ps>
 where
     Ps::DaService: DaService<Error = anyhow::Error>,
 {
-    async fn run(mut self) -> anyhow::Result<()> {
+    async fn run(
+        mut self,
+        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    ) -> anyhow::Result<()> {
         loop {
-            let (metadata, window_size) = match self.metadata_rx.recv().await {
-                // Intake side dropped its sender (clean shutdown or intake error).
-                None => {
-                    tracing::debug!("Intake task closed metadata channel; aggregator exiting");
+            let (metadata, window_size) =
+                match future_or_shutdown(self.metadata_rx.recv(), &shutdown_receiver).await {
+                    FutureOrShutdownOutput::Shutdown => {
+                        tracing::info!(task_name = "aggregator", "Shutting down task...");
+                        break;
+                    }
+                    FutureOrShutdownOutput::Output(None) => {
+                        // Intake side dropped its sender (clean shutdown or intake error).
+                        tracing::debug!("Intake task closed metadata channel; aggregator exiting");
+                        break;
+                    }
+                    FutureOrShutdownOutput::Output(Some(item)) => item,
+                };
+
+            let status = match future_or_shutdown(
+                self.proof_sender.proof_blob_sender_status(),
+                &shutdown_receiver,
+            )
+            .await
+            {
+                FutureOrShutdownOutput::Shutdown => {
+                    tracing::info!(task_name = "aggregator", "Shutting down task...");
                     break;
                 }
-                Some(item) => item,
+                FutureOrShutdownOutput::Output(status) => status?,
             };
-
-            let status = self.proof_sender.proof_blob_sender_status().await?;
             if status.is_busy() {
                 tracing::error!(
                     in_flight = status.in_flight,
@@ -355,12 +376,22 @@ where
             }
 
             let proving_start = std::time::Instant::now();
-            let agg_proof = create_aggregate_proof_with_retries(
-                metadata,
-                &*self.prover_service,
-                &self.backoff_policy,
+            let agg_proof = match future_or_shutdown(
+                create_aggregate_proof_with_retries(
+                    metadata,
+                    &*self.prover_service,
+                    &self.backoff_policy,
+                ),
+                &shutdown_receiver,
             )
-            .await?;
+            .await
+            {
+                FutureOrShutdownOutput::Shutdown => {
+                    tracing::info!(task_name = "aggregator", "Shutting down task...");
+                    break;
+                }
+                FutureOrShutdownOutput::Output(agg_proof) => agg_proof?,
+            };
             let aggregation_duration = proving_start.elapsed();
 
             sov_metrics::track_metrics(|tracker| {
