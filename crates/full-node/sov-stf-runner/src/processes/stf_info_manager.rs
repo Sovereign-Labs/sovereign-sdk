@@ -2,7 +2,7 @@
 use std::marker::PhantomData;
 use std::num::NonZero;
 use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, bail};
 use borsh::BorshSerialize;
@@ -56,15 +56,92 @@ impl<StateRoot, Witness, Da: DaSpec> StateTransitionInfo<StateRoot, Witness, Da>
     }
 }
 
+/// Shared `next_height_to_receive` cursor.
+///
+/// The cursor has several writers living in independent tokio tasks: the
+/// aggregator advances and persists it after publishing a proof, the intake
+/// skip-advances it during the resync window, and the sender realigns it on
+/// recovery. The aggregator's persist is a load-modify-store sequence that
+/// spans a synchronous DB write, so it cannot be a single atomic instruction.
+/// `write_lock` serializes every writer so that no writer's update is lost
+/// inside another writer's read-modify-write window. Reads stay lock-free on
+/// `value`.
+struct Cursor {
+    /// Current cursor value. Writers MUST hold [`Cursor::write_lock`] for the
+    /// whole read-modify-write; readers may load it without the lock.
+    value: AtomicU64,
+    write_lock: Mutex<()>,
+}
+
+impl Cursor {
+    fn new(value: u64) -> Self {
+        Self {
+            value: AtomicU64::new(value),
+            write_lock: Mutex::new(()),
+        }
+    }
+
+    /// Lock-free read of the current cursor value.
+    fn get(&self) -> u64 {
+        self.value.load(Ordering::SeqCst)
+    }
+
+    /// Atomically add `amount`, serialized against the other writers. Returns
+    /// the previous value.
+    fn fetch_add(&self, amount: u64) -> u64 {
+        let _guard = self.lock();
+        self.value.fetch_add(amount, Ordering::SeqCst)
+    }
+
+    /// Advance to `max(current, value)`, serialized against the other writers.
+    fn fetch_max(&self, value: u64) {
+        let _guard = self.lock();
+        self.value.fetch_max(value, Ordering::SeqCst);
+    }
+
+    /// Overwrite the cursor, serialized against the other writers.
+    fn store(&self, value: u64) {
+        let _guard = self.lock();
+        self.value.store(value, Ordering::SeqCst);
+    }
+
+    /// Advance the cursor by `amount`, running `persist` to durably record the
+    /// new value *before* the in-memory value is updated, all while holding the
+    /// write lock so no concurrent writer can interleave. Persisting before the
+    /// in-memory store keeps disk and memory consistent if the write fails.
+    /// Returns the previous value.
+    fn advance_and_persist(
+        &self,
+        amount: u64,
+        persist: impl FnOnce(u64) -> anyhow::Result<()>,
+    ) -> anyhow::Result<u64> {
+        let _guard = self.lock();
+        let old_value = self.value.load(Ordering::SeqCst);
+        let new_value = old_value
+            .checked_add(amount)
+            .ok_or_else(|| anyhow!("next_height_to_receive overflowed"))?;
+        persist(new_value)?;
+        self.value.store(new_value, Ordering::SeqCst);
+        Ok(old_value)
+    }
+
+    fn lock(&self) -> std::sync::MutexGuard<'_, ()> {
+        self.write_lock.lock().expect("cursor write lock poisoned")
+    }
+}
+
 /// Materializes STF infos and sends notifications to the associated [`Receiver`].
 pub struct Sender<StateRoot, Witness, Da: DaSpec> {
     /// Height of the next `StateTransitionInfo` that should be received by the [`Receiver`].
     /// This value is synchronized with the receiver end of the channel.
-    next_height_to_receive: Arc<AtomicU64>,
+    next_height_to_receive: Arc<Cursor>,
 
     /// The next height to send to the [`Receiver`]. This value is not persisted in the database and
     /// is merely used to avoid sending twice the same height notification to the [`Receiver`].
     pub next_height_to_send: SlotNumber,
+
+    /// Lower bound derived from the latest accepted proof known by LedgerDb at startup.
+    proof_resume_height: SlotNumber,
 
     // Max number of entries we will keep in the Db, older data will be pruned.
     max_nb_of_infos_in_db: NonZero<u64>,
@@ -120,10 +197,16 @@ impl<
         // Re-sync in-memory cursors from DB after recovery, because validation may
         // have rewritten metadata (for example when ProofManagerDb was ahead).
         let maybe_db_next_height_to_receive = self.proof_manager_db.get_next_height_to_receive()?;
-        let db_next_height_to_receive =
-            maybe_db_next_height_to_receive.unwrap_or_else(|| self.next_height_to_receive());
+        let db_next_height_to_receive = next_height_to_receive_with_proof_lower_bound(
+            maybe_db_next_height_to_receive,
+            self.proof_resume_height,
+        );
+        self.persist_cursor_if_below_proof_resume(
+            maybe_db_next_height_to_receive,
+            db_next_height_to_receive,
+        )?;
         self.next_height_to_receive
-            .store(db_next_height_to_receive.get(), Ordering::SeqCst);
+            .store(db_next_height_to_receive.get());
         self.next_height_to_send = db_next_height_to_receive;
 
         let maybe_write_rollup_height = self.proof_manager_db.get_write_height()?;
@@ -164,19 +247,34 @@ impl<
 
     /// Get the next height to receive as a `SlotNumber`.
     pub fn next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new(self.next_height_to_receive.load(Ordering::SeqCst))
+        SlotNumber::new(self.next_height_to_receive.get())
     }
 
     /// Increment next height to receive by one, returning the previous value.
     pub fn inc_next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new(self.next_height_to_receive.fetch_add(1, Ordering::SeqCst))
+        SlotNumber::new(self.next_height_to_receive.fetch_add(1))
+    }
+
+    fn persist_cursor_if_below_proof_resume(
+        &self,
+        maybe_db_next_height_to_receive: Option<SlotNumber>,
+        next_height_to_receive: SlotNumber,
+    ) -> anyhow::Result<()> {
+        if let Some(db_next_height_to_receive) = maybe_db_next_height_to_receive {
+            if db_next_height_to_receive < next_height_to_receive {
+                self.proof_manager_db
+                    .set_next_height_to_receive(next_height_to_receive)?;
+            }
+        }
+
+        Ok(())
     }
 }
 
 /// Receives notifications from the associated [`Sender`] and reads STF info data from the db.
 pub struct Receiver<StateRoot, Witness, Da: DaSpec> {
     /// Height of the next `StateTransitionInfo` that is expected to be processed by the `Receiver`
-    next_height_to_receive: Arc<AtomicU64>,
+    next_height_to_receive: Arc<Cursor>,
     proof_manager_db: ProofManagerDb,
     receiver: mpsc::Receiver<SlotNumber>,
     _phantom: PhantomData<(StateRoot, Witness, Da)>,
@@ -215,30 +313,49 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     let (notifier, receiver) =
         tokio::sync::mpsc::channel::<SlotNumber>(max_channel_size.get().try_into()?);
 
-    let next_height_to_receive = proof_manager_db
-        .get_next_height_to_receive()?
-        .or_else(|| latest_proof_final_slot.map(|slot| slot.saturating_add(1)))
+    let proof_resume_height = latest_proof_final_slot
+        .map(|slot| slot.saturating_add(1))
         .unwrap_or(SlotNumber::ONE);
+    let maybe_db_next_height_to_receive = proof_manager_db.get_next_height_to_receive()?;
+    let next_height_to_receive = next_height_to_receive_with_proof_lower_bound(
+        maybe_db_next_height_to_receive,
+        proof_resume_height,
+    );
+    if let Some(db_next_height_to_receive) = maybe_db_next_height_to_receive {
+        if db_next_height_to_receive < next_height_to_receive {
+            proof_manager_db.set_next_height_to_receive(next_height_to_receive)?;
+        }
+    }
 
-    let next_height_to_receive_ref = Arc::new(AtomicU64::new(next_height_to_receive.get()));
+    let cursor = Arc::new(Cursor::new(next_height_to_receive.get()));
 
     let sender = Sender {
         max_nb_of_infos_in_db,
-        next_height_to_receive: next_height_to_receive_ref.clone(),
+        next_height_to_receive: cursor.clone(),
         next_height_to_send: next_height_to_receive,
+        proof_resume_height,
         notifier,
         proof_manager_db: proof_manager_db.clone(),
         _phantom: PhantomData,
     };
 
     let receiver = Receiver {
-        next_height_to_receive: next_height_to_receive_ref,
+        next_height_to_receive: cursor,
         proof_manager_db,
         receiver,
         _phantom: PhantomData,
     };
 
     Ok((sender, receiver))
+}
+
+fn next_height_to_receive_with_proof_lower_bound(
+    maybe_db_next_height_to_receive: Option<SlotNumber>,
+    proof_resume_height: SlotNumber,
+) -> SlotNumber {
+    maybe_db_next_height_to_receive
+        .unwrap_or(SlotNumber::ONE)
+        .max(proof_resume_height)
 }
 
 impl<StateRoot, Witness, Da: DaSpec> Sender<StateRoot, Witness, Da>
@@ -440,8 +557,7 @@ where
                          This usually means the node previously ran without the proof pipeline (e.g. as a replica)."
                     );
                     self.next_height_to_send = height;
-                    self.next_height_to_receive
-                        .fetch_max(height.get(), Ordering::SeqCst);
+                    self.next_height_to_receive.fetch_max(height.get());
                 }
                 return Ok(());
             }
@@ -505,7 +621,7 @@ where
 
     /// Get the next height to receive as a `SlotNumber`.
     pub fn next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new(self.next_height_to_receive.load(Ordering::SeqCst))
+        SlotNumber::new(self.next_height_to_receive.get())
     }
 
     /// Increment next height to receive by the requested amount and immediately persist it.
@@ -541,17 +657,14 @@ where
 /// giving the task the rest of the [`Receiver`].
 #[derive(Clone)]
 pub struct CursorHandle {
-    next_height_to_receive: Arc<AtomicU64>,
+    next_height_to_receive: Arc<Cursor>,
     proof_manager_db: ProofManagerDb,
 }
 
 impl CursorHandle {
     /// Increment next height to receive by the requested amount, returning the previous value.
     pub fn inc_next_height_to_receive_by(&self, amount: u64) -> SlotNumber {
-        SlotNumber::new(
-            self.next_height_to_receive
-                .fetch_add(amount, Ordering::SeqCst),
-        )
+        SlotNumber::new(self.next_height_to_receive.fetch_add(amount))
     }
 
     /// Increment next height to receive by the requested amount and IMMEDIATELY persist
@@ -566,21 +679,20 @@ impl CursorHandle {
         &self,
         amount: u64,
     ) -> anyhow::Result<SlotNumber> {
-        let old_value = self.next_height_to_receive.load(Ordering::SeqCst);
-        let new_raw_value = old_value
-            .checked_add(amount)
-            .ok_or_else(|| anyhow!("next_height_to_receive overflowed"))?;
-        let new_value = SlotNumber::new(new_raw_value);
-
-        // Persist to disk BEFORE advancing the in-memory atomic.
-        // If the write fails, in-memory state remains consistent with disk.
-        self.proof_manager_db
-            .set_next_height_to_receive(new_value)?;
-        #[cfg(test)]
-        CrashLocation::AfterPersistingProofManagerNextHeight.crash_if_env_set();
-
-        self.next_height_to_receive
-            .store(new_raw_value, Ordering::SeqCst);
+        // The entire read-modify-store runs under the cursor write lock, so a
+        // concurrent increment from the intake skip-advance or the sender's
+        // realign cannot be lost inside this window. Persisting happens before
+        // the in-memory advance: if the write fails, the in-memory value stays
+        // consistent with disk.
+        let old_value =
+            self.next_height_to_receive
+                .advance_and_persist(amount, |new_raw_value| {
+                    self.proof_manager_db
+                        .set_next_height_to_receive(SlotNumber::new(new_raw_value))?;
+                    #[cfg(test)]
+                    CrashLocation::AfterPersistingProofManagerNextHeight.crash_if_env_set();
+                    Ok(())
+                })?;
 
         Ok(SlotNumber::new(old_value))
     }
@@ -843,9 +955,7 @@ mod tests {
         // Read the data from the db.
         for height in 1..channel_size {
             let stf_info = receiver.read_next().await?.unwrap();
-            receiver
-                .next_height_to_receive
-                .fetch_add(1, Ordering::SeqCst);
+            receiver.next_height_to_receive.fetch_add(1);
 
             assert_eq!(stf_info.slot_number().get(), height);
         }
@@ -877,17 +987,13 @@ mod tests {
 
         for height in 1..3 {
             let stf_info = receiver.read_next().await?.unwrap();
-            receiver
-                .next_height_to_receive
-                .fetch_add(1, Ordering::SeqCst);
+            receiver.next_height_to_receive.fetch_add(1);
 
             assert_eq!(stf_info.slot_number().get(), height);
         }
 
         let stf_info = receiver.read_next().await;
-        receiver
-            .next_height_to_receive
-            .fetch_add(1, Ordering::SeqCst);
+        receiver.next_height_to_receive.fetch_add(1);
         assert!(stf_info.is_err());
 
         Ok(())
@@ -924,9 +1030,7 @@ mod tests {
         // Read the data from the db.
         for height in 1..=channel_size {
             let stf_info = receiver.read_next().await?.unwrap();
-            receiver
-                .next_height_to_receive
-                .fetch_add(1, Ordering::SeqCst);
+            receiver.next_height_to_receive.fetch_add(1);
 
             assert_eq!(stf_info.slot_number().get(), height);
         }
@@ -1012,9 +1116,7 @@ mod tests {
                 sender.commit_stf_info(stf_info.slot_number()).await?;
                 sender.notify(stf_info.slot_number()).await?;
                 receiver.read_next().await?.unwrap();
-                receiver
-                    .next_height_to_receive
-                    .fetch_add(1, Ordering::SeqCst);
+                receiver.next_height_to_receive.fetch_add(1);
             }
 
             let oldest_height = sender.get_oldest_slot_number()?;
@@ -1089,6 +1191,52 @@ mod tests {
         }
 
         Ok(())
+    }
+
+    /// Regression test for the shared-cursor race: the aggregator's
+    /// `inc_next_height_to_receive_by_and_persist` (a load-persist-store
+    /// sequence) and the intake's `inc_next_height_to_receive_by` (a fetch_add)
+    /// advance the *same* cursor from independent tasks. Before the cursor write
+    /// lock, the non-atomic store could overwrite a concurrent fetch_add, losing
+    /// increments. With every writer serialized, no increment may be lost.
+    #[test]
+    fn test_concurrent_cursor_advances_lose_no_increments() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 100;
+
+        let (_proof_manager_db, _sender, receiver) =
+            setup(temp_dir.path(), channel_size, max_nb_of_infos_in_db).unwrap();
+
+        let start = receiver.next_height_to_receive().get();
+        const ITERS: u64 = 2_000;
+
+        // Two writers on one shared cursor, mirroring the intake skip-advance and
+        // the aggregator persist running as separate tasks.
+        let skip_handle = receiver.cursor_handle();
+        let persist_handle = receiver.cursor_handle();
+
+        let skip = std::thread::spawn(move || {
+            for _ in 0..ITERS {
+                skip_handle.inc_next_height_to_receive_by(1);
+            }
+        });
+        let persist = std::thread::spawn(move || {
+            for _ in 0..ITERS {
+                persist_handle
+                    .inc_next_height_to_receive_by_and_persist(1)
+                    .unwrap();
+            }
+        });
+
+        skip.join().unwrap();
+        persist.join().unwrap();
+
+        assert_eq!(
+            receiver.next_height_to_receive().get(),
+            start + 2 * ITERS,
+            "concurrent cursor advances must not lose any increment"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1267,6 +1415,97 @@ mod tests {
         Ok(())
     }
 
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_startup_uses_latest_proof_cursor_as_lower_bound() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 100;
+
+        {
+            let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
+            proof_manager_db.put_stf_info(SlotNumber::new(101), &make_stored_stf_info(101))?;
+            proof_manager_db.set_write_height(SlotNumber::new(101))?;
+            proof_manager_db.set_next_height_to_receive(SlotNumber::new(50))?;
+            proof_manager_db.set_oldest_height(SlotNumber::new(50))?;
+        }
+
+        let (proof_manager_db, mut sender, mut receiver) = setup_with_resume(
+            temp_dir.path(),
+            channel_size,
+            max_nb_of_infos_in_db,
+            Some(SlotNumber::new(100)),
+        )?;
+
+        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(101));
+        assert_eq!(sender.next_height_to_send, SlotNumber::new(101));
+        assert_eq!(
+            proof_manager_db.get_next_height_to_receive()?,
+            Some(SlotNumber::new(101))
+        );
+
+        sender
+            .startup_notify_about_infos_from_db(
+                SlotNumber::new(101),
+                SlotNumber::new(101),
+                &InfiniteHeight,
+            )
+            .await?;
+
+        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(101));
+        assert_eq!(sender.next_height_to_send, SlotNumber::new(102));
+        assert_eq!(
+            proof_manager_db.get_next_height_to_receive()?,
+            Some(SlotNumber::new(101))
+        );
+
+        let received = receiver.read_next().await?.unwrap();
+        assert_eq!(received.slot_number(), SlotNumber::new(101));
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_startup_keeps_higher_local_cursor_than_latest_proof() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 100;
+
+        {
+            let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
+            proof_manager_db.put_stf_info(SlotNumber::new(110), &make_stored_stf_info(110))?;
+            proof_manager_db.set_write_height(SlotNumber::new(110))?;
+            proof_manager_db.set_next_height_to_receive(SlotNumber::new(110))?;
+            proof_manager_db.set_oldest_height(SlotNumber::new(110))?;
+        }
+
+        let (proof_manager_db, mut sender, mut receiver) = setup_with_resume(
+            temp_dir.path(),
+            channel_size,
+            max_nb_of_infos_in_db,
+            Some(SlotNumber::new(100)),
+        )?;
+
+        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(110));
+        assert_eq!(sender.next_height_to_send, SlotNumber::new(110));
+        assert_eq!(
+            proof_manager_db.get_next_height_to_receive()?,
+            Some(SlotNumber::new(110))
+        );
+
+        sender
+            .startup_notify_about_infos_from_db(
+                SlotNumber::new(110),
+                SlotNumber::new(110),
+                &InfiniteHeight,
+            )
+            .await?;
+
+        let received = receiver.read_next().await?.unwrap();
+        assert_eq!(received.slot_number(), SlotNumber::new(110));
+
+        Ok(())
+    }
+
     async fn assert_stf_in_db(
         rollup_height: u64,
         sender: &mut Sender<StateRoot, Witness, MockDaSpec>,
@@ -1293,6 +1532,12 @@ mod tests {
             get_header_hash(&original_state_transition_info),
             get_header_hash(&fetched_stf_info)
         );
+    }
+
+    fn make_stored_stf_info(height: u64) -> StoredStfInfo {
+        StoredStfInfo {
+            data: bincode::serialize(&make_stf_info(height)).unwrap(),
+        }
     }
 
     fn make_stf_info(height: u64) -> StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec> {
