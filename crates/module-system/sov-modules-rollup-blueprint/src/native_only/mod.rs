@@ -676,7 +676,10 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             None
         };
 
-        let runner_result = StateTransitionRunner::new(
+        let allow_missing_local_stf_prefix =
+            latest_proof_final_slot.is_none() || start_fresh_outer_proof_on_resync;
+
+        let runner_result = StateTransitionRunner::new_with_missing_local_stf_prefix_policy(
             rollup_config.runner.clone(),
             axum_tcp,
             pm_config,
@@ -694,6 +697,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             da_service_with_cache,
             genesis_da_height,
             latest_proof_final_slot,
+            allow_missing_local_stf_prefix,
         )
         .await;
         let mut runner = match runner_result {

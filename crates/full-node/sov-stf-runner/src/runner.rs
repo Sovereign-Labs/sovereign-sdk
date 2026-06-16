@@ -29,7 +29,7 @@ use tokio::sync::watch;
 use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
-use crate::processes::{new_stf_info_channel, Receiver};
+use crate::processes::{new_stf_info_channel_with_missing_prefix_policy, Receiver};
 use crate::state_manager::{AggregatedProofs, BlockCandidateResolution, StateManager};
 use tokio::net::TcpListener;
 
@@ -177,6 +177,52 @@ where
         genesis_da_height: u64,
         latest_proof_final_slot: Option<SlotNumber>,
     ) -> anyhow::Result<Self> {
+        let allow_missing_local_stf_prefix = latest_proof_final_slot.is_none();
+        Self::new_with_missing_local_stf_prefix_policy(
+            runner_config,
+            axum_tcp,
+            pm_config,
+            da_service,
+            ledger_db,
+            stf,
+            storage_manager,
+            state_channel,
+            prev_state_root,
+            state_height_tracker,
+            shutdown_receiver,
+            start_at_rollup_height,
+            stop_at_rollup_height,
+            sync_state,
+            da_service_with_cached_finalized_headers,
+            genesis_da_height,
+            latest_proof_final_slot,
+            allow_missing_local_stf_prefix,
+        )
+        .await
+    }
+
+    /// Creates a new [`StateTransitionRunner`] with an explicit STF-info prefix policy.
+    #[allow(clippy::too_many_arguments, clippy::type_complexity)]
+    pub async fn new_with_missing_local_stf_prefix_policy(
+        runner_config: RunnerConfig,
+        axum_tcp: TcpListener,
+        pm_config: Option<ProofManagerConfig<Stf::Address>>,
+        da_service: Arc<Da>,
+        ledger_db: LedgerDb,
+        stf: Stf,
+        storage_manager: Sm,
+        state_channel: StateChannel<Sm::StfState>,
+        prev_state_root: Stf::StateRoot,
+        state_height_tracker: Box<dyn ProvableHeightTracker>,
+        shutdown_receiver: watch::Receiver<()>,
+        start_at_rollup_height: Option<RollupHeight>,
+        stop_at_rollup_height: Option<RollupHeight>,
+        sync_state: Arc<DaSyncState>,
+        da_service_with_cached_finalized_headers: DaServiceWithCachedFinalizedHeaders<Da>,
+        genesis_da_height: u64,
+        latest_proof_final_slot: Option<SlotNumber>,
+        allow_missing_local_stf_prefix: bool,
+    ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
         let mut background_handles = Vec::new();
@@ -211,11 +257,12 @@ where
                 .as_ref()
                 .context("proof manager storage_path must be configured before runner startup")?;
             let proof_manager_db = ProofManagerDb::open(storage_path)?;
-            let channel = new_stf_info_channel(
+            let channel = new_stf_info_channel_with_missing_prefix_policy(
                 proof_manager_db,
                 config.max_number_of_transitions_in_memory,
                 config.max_number_of_transitions_in_db,
                 latest_proof_final_slot,
+                allow_missing_local_stf_prefix,
             )?;
 
             (Some(channel.0), Some(channel.1))

@@ -129,6 +129,13 @@ pub struct Sender<StateRoot, Witness, Da: DaSpec> {
     /// outer aggregation host a chain that is contiguous with the proof it continues from.
     latest_proof_final_slot: Option<SlotNumber>,
 
+    /// Whether startup may skip a missing local STF-info prefix.
+    ///
+    /// This is only sound when no previous outer proof is being restored. If a
+    /// previous outer proof exists, the aggregation circuit requires the next
+    /// inner proof to start exactly at `latest_proof_final_slot + 1`.
+    allow_missing_local_stf_prefix: bool,
+
     // Max number of entries we will keep in the Db, older data will be pruned.
     max_nb_of_infos_in_db: NonZero<u64>,
 
@@ -263,6 +270,27 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     Sender<StateRoot, Witness, Da>,
     Receiver<StateRoot, Witness, Da>,
 )> {
+    new_stf_info_channel_with_missing_prefix_policy(
+        proof_manager_db,
+        max_channel_size,
+        max_nb_of_infos_in_db,
+        latest_proof_final_slot,
+        latest_proof_final_slot.is_none(),
+    )
+}
+
+/// Creates a new [`Sender`] and [`Receiver`] channel with an explicit missing-prefix policy.
+#[allow(clippy::type_complexity)]
+pub(crate) fn new_stf_info_channel_with_missing_prefix_policy<StateRoot, Witness, Da: DaSpec>(
+    proof_manager_db: ProofManagerDb,
+    max_channel_size: NonZero<u64>,
+    max_nb_of_infos_in_db: NonZero<u64>,
+    latest_proof_final_slot: Option<SlotNumber>,
+    allow_missing_local_stf_prefix: bool,
+) -> anyhow::Result<(
+    Sender<StateRoot, Witness, Da>,
+    Receiver<StateRoot, Witness, Da>,
+)> {
     assert!(
         max_channel_size <= max_nb_of_infos_in_db,
         "Channel size should be smaller than the max number of STFInfos in the db"
@@ -281,6 +309,7 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
         next_height_to_receive: cursor.clone(),
         next_height_to_send: next_height_to_receive,
         latest_proof_final_slot,
+        allow_missing_local_stf_prefix,
         notifier,
         proof_manager_db: proof_manager_db.clone(),
         _phantom: PhantomData,
@@ -509,6 +538,15 @@ where
         for height in resume_cursor.range_inclusive(write_rollup_height) {
             if self.proof_manager_db.get_stf_info(height)?.is_some() {
                 if height > resume_cursor {
+                    if !self.allow_missing_local_stf_prefix {
+                        bail!(
+                            "Cannot realign STF-info notifier cursor from {resume_cursor} to first local slot {height}: \
+                             latest_proof_final_slot={:?} requires recursive proof continuity from slot {resume_cursor}. \
+                             Start with a fresh outer proof before skipping locally-missing STF infos",
+                            self.latest_proof_final_slot
+                        );
+                    }
+
                     // The consumer's resume cursor (derived from the last
                     // durably-observed proof/attestation, so equal to
                     // `latest_proof_final_slot + 1` in zk mode) sits before the
@@ -725,14 +763,37 @@ mod tests {
         Sender<StateRoot, Witness, MockDaSpec>,
         Receiver<StateRoot, Witness, MockDaSpec>,
     )> {
+        setup_with_resume_and_missing_prefix_policy(
+            path,
+            max_channel_size,
+            max_nb_of_infos_in_db,
+            latest_proof_final_slot,
+            latest_proof_final_slot.is_none(),
+        )
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn setup_with_resume_and_missing_prefix_policy(
+        path: &Path,
+        max_channel_size: u64,
+        max_nb_of_infos_in_db: u64,
+        latest_proof_final_slot: Option<SlotNumber>,
+        allow_missing_local_stf_prefix: bool,
+    ) -> anyhow::Result<(
+        ProofManagerDb,
+        Sender<StateRoot, Witness, MockDaSpec>,
+        Receiver<StateRoot, Witness, MockDaSpec>,
+    )> {
         let proof_manager_db = ProofManagerDb::open(path)?;
 
-        let (sender, receiver) = new_stf_info_channel::<StateRoot, Witness, MockDaSpec>(
-            proof_manager_db.clone(),
-            NonZero::new(max_channel_size).unwrap(),
-            NonZero::new(max_nb_of_infos_in_db).unwrap(),
-            latest_proof_final_slot,
-        )?;
+        let (sender, receiver) =
+            new_stf_info_channel_with_missing_prefix_policy::<StateRoot, Witness, MockDaSpec>(
+                proof_manager_db.clone(),
+                NonZero::new(max_channel_size).unwrap(),
+                NonZero::new(max_nb_of_infos_in_db).unwrap(),
+                latest_proof_final_slot,
+                allow_missing_local_stf_prefix,
+            )?;
 
         Ok((proof_manager_db, sender, receiver))
     }
@@ -852,13 +913,55 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_stf_info_restart_realigns_missing_local_prefix() -> anyhow::Result<()> {
+    async fn test_stf_info_restart_realigns_missing_local_prefix_without_previous_proof(
+    ) -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let channel_size = 10;
         let max_nb_of_infos_in_db = 10;
 
-        // Simulate a former replica that restarts as a prover: the resume cursor
-        // points at slot 3, but the local node only has STF infos starting at 5.
+        // Simulate a node that starts proving without a previous outer proof:
+        // the local node only has STF infos starting at 5, and the first
+        // aggregation may legitimately start at the first local slot.
+        {
+            let (_proof_manager_db, sender, _receiver) =
+                setup_with_resume(temp_dir.path(), channel_size, max_nb_of_infos_in_db, None)?;
+
+            for height in 5..=6 {
+                let stf_info = make_stf_info(height);
+                sender.stage_stf_info(&stf_info).await?;
+                sender.commit_stf_info(stf_info.slot_number()).await?;
+            }
+        }
+
+        {
+            let (_proof_manager_db, mut sender, mut receiver) =
+                setup_with_resume(temp_dir.path(), channel_size, max_nb_of_infos_in_db, None)?;
+
+            sender
+                .startup_notify_about_infos_from_db(
+                    SlotNumber::new(6),
+                    SlotNumber::new(6),
+                    &InfiniteHeight,
+                )
+                .await?;
+
+            let stf_info = receiver.read_next().await?.unwrap();
+            assert_eq!(stf_info.slot_number().get(), 5);
+
+            let stf_info = receiver.read_next().await?.unwrap();
+            assert_eq!(stf_info.slot_number().get(), 6);
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_stf_info_restart_rejects_missing_local_prefix_with_previous_proof(
+    ) -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 10;
+
         {
             let (_proof_manager_db, sender, _receiver) = setup_with_resume(
                 temp_dir.path(),
@@ -875,12 +978,65 @@ mod tests {
         }
 
         {
-            let (_proof_manager_db, mut sender, mut receiver) = setup_with_resume(
+            let (_proof_manager_db, mut sender, _receiver) = setup_with_resume(
                 temp_dir.path(),
                 channel_size,
                 max_nb_of_infos_in_db,
                 Some(SlotNumber::new(2)),
             )?;
+
+            let err = sender
+                .startup_notify_about_infos_from_db(
+                    SlotNumber::new(6),
+                    SlotNumber::new(6),
+                    &InfiniteHeight,
+                )
+                .await
+                .expect_err("missing local prefix must be rejected when restoring an outer proof");
+
+            assert!(
+                err.to_string()
+                    .contains("requires recursive proof continuity"),
+                "unexpected error: {err:?}"
+            );
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_stf_info_restart_realigns_missing_local_prefix_with_fresh_outer_proof(
+    ) -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 10;
+
+        {
+            let (_proof_manager_db, sender, _receiver) =
+                setup_with_resume_and_missing_prefix_policy(
+                    temp_dir.path(),
+                    channel_size,
+                    max_nb_of_infos_in_db,
+                    Some(SlotNumber::new(2)),
+                    true,
+                )?;
+
+            for height in 5..=6 {
+                let stf_info = make_stf_info(height);
+                sender.stage_stf_info(&stf_info).await?;
+                sender.commit_stf_info(stf_info.slot_number()).await?;
+            }
+        }
+
+        {
+            let (_proof_manager_db, mut sender, mut receiver) =
+                setup_with_resume_and_missing_prefix_policy(
+                    temp_dir.path(),
+                    channel_size,
+                    max_nb_of_infos_in_db,
+                    Some(SlotNumber::new(2)),
+                    true,
+                )?;
 
             sender
                 .startup_notify_about_infos_from_db(
