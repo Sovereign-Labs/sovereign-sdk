@@ -3,6 +3,7 @@ mod in_flight_blob;
 mod metrics;
 
 use std::collections::HashMap;
+use std::fmt;
 use std::path::Path;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -40,9 +41,23 @@ use tracing::{debug, error, info, trace};
 pub type BlobInternalId = u128;
 
 const LEDGER_POLL_INTERVAL: Duration = Duration::from_secs(1);
+const BLOB_SENDER_SHUTDOWN_MESSAGE: &str =
+    "BlobSender: shutdown signal received, skipping blob submission";
 
 /// If a blob is not published within this number of retries, the rollup will exit.
 pub const MAX_NB_OF_BLOB_SUBMISSION_RETRIES: u8 = 3;
+
+/// Returned when a caller tries to submit a new blob after shutdown has started.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct BlobSenderShutdownError;
+
+impl fmt::Display for BlobSenderShutdownError {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.write_str(BLOB_SENDER_SHUTDOWN_MESSAGE)
+    }
+}
+
+impl std::error::Error for BlobSenderShutdownError {}
 
 /// See [`BlobInternalId`].
 pub fn new_blob_id() -> BlobInternalId {
@@ -290,7 +305,7 @@ where
         latest_known_processing_state: BlobExecutionStatus<Da::Spec>,
     ) -> anyhow::Result<()> {
         if self.shutdown_receiver.has_changed()? {
-            anyhow::bail!("BlobSender: shutdown signal received, skipping blob submission");
+            return Err(BlobSenderShutdownError.into());
         }
 
         // It is ok to hold the lock here because:

@@ -668,6 +668,11 @@ where
         visible_slot_number_after_increase: VisibleSlotNumber,
         visible_increase: NonZero<u8>,
     ) -> Result<Option<SequenceNumber>, BatchCreationError> {
+        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+            tracing::debug!("Shutdown signal received; skipping preferred batch start");
+            return Ok(None);
+        }
+
         if self.executor.has_in_progress_batch() {
             return Ok(None);
         }
@@ -1037,6 +1042,11 @@ where
         proof_bytes: PreferredProofDataBytes,
         sequence_number: SequenceNumber,
     ) {
+        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+            tracing::debug!("Shutdown signal received; skipping proof blob publication");
+            return;
+        }
+
         // Put the proof blob into the sequencer cache, from which it will get pulled out and processed when the next batch is created.
         // The side effects task also persists it to postgres.
         self.executor_events_sender

@@ -1,4 +1,4 @@
-use sov_blob_sender::BlobExecutionStatus;
+use sov_blob_sender::{BlobExecutionStatus, BlobSenderShutdownError};
 use sov_blob_sender::{BlobInternalId, BlobSender, BlobToSend};
 use sov_blob_storage::{PreferredBatchData, PreferredProofData};
 use sov_db::ledger_db::LedgerDb;
@@ -25,6 +25,7 @@ use crate::{common::TxStatusBlobSenderHooks, TxStatusManager};
 /// Wrapper around [`BlobSender`] with preferred blob -specific logic.
 pub struct PreferredBlobSender<Da: DaService> {
     inner: Option<BlobSender<Da, TxStatusBlobSenderHooks<Da::Spec>, LedgerDb>>,
+    shutdown_receiver: watch::Receiver<()>,
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
     nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
 }
@@ -43,10 +44,12 @@ impl<Da: DaService> PreferredBlobSender<Da> {
     ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
         let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
         let nb_of_concurrent_proof_blob_submissions = Arc::new(AtomicUsize::new(0));
+        let shutdown_receiver = shutdown_sender.subscribe();
         match seq_role {
             SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica => Ok((
                 Self {
                     inner: None,
+                    shutdown_receiver,
                     nb_of_concurrent_batch_blob_submissions,
                     nb_of_concurrent_proof_blob_submissions,
                 },
@@ -77,6 +80,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
                 Ok((
                     Self {
                         inner: Some(inner),
+                        shutdown_receiver,
                         nb_of_concurrent_batch_blob_submissions,
                         nb_of_concurrent_proof_blob_submissions,
                     },
@@ -101,7 +105,8 @@ impl<Da: DaService> PreferredBlobSender<Da> {
             blob_id, "Dispatching proof blob for publishing"
         );
 
-        inner.publish_proof_blob(proof_data.0, blob_id).await?;
+        let result = inner.publish_proof_blob(proof_data.0, blob_id).await;
+        self.handle_blob_publish_result(result)?;
 
         Ok(())
     }
@@ -114,9 +119,24 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         let blob_id = batch.blob_id;
         let data = batch_bytes(batch)?;
 
-        inner.publish_batch_blob(data, blob_id).await?;
+        let result = inner.publish_batch_blob(data, blob_id).await;
+        self.handle_blob_publish_result(result)?;
 
         Ok(())
+    }
+
+    fn handle_blob_publish_result(&self, result: anyhow::Result<()>) -> anyhow::Result<()> {
+        match result {
+            Ok(()) => Ok(()),
+            Err(err)
+                if err.downcast_ref::<BlobSenderShutdownError>().is_some()
+                    && self.shutdown_receiver.has_changed().unwrap_or(true) =>
+            {
+                debug!("BlobSender rejected blob submission after shutdown started");
+                Ok(())
+            }
+            Err(err) => Err(err),
+        }
     }
 
     pub async fn publish_blobs_for_recovery(
