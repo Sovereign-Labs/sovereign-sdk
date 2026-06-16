@@ -177,6 +177,25 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
     /// differ from the number of bytes the blob occupies on the DA layer.
     fn total_len(&self) -> usize;
 
+    /// Returns `true` when the blob's fully-provided, authenticated DA bytes do not
+    /// decode into the logical payload they claim — for example, an adapter that posts a
+    /// compressed envelope whose authenticated bytes fail to decompress to the declared
+    /// logical length (or do not form a canonical, complete encoding).
+    ///
+    /// This is distinct from a prover withholding bytes: it means the *sender* posted
+    /// structurally invalid content, so the consumer should slash/discard the blob
+    /// rather than treat the shortfall as missing data (which must fail the proof
+    /// closed). It is derived deterministically from the authenticated bytes — never a
+    /// serialized claim — so it is identical in native and zk execution, and it must be
+    /// consulted *before* trusting a successful deserialization (a short decoded prefix
+    /// can itself be a complete, valid value).
+    ///
+    /// Adapters whose logical payload equals their DA-physical bytes (no decode layer)
+    /// keep the default `false`.
+    fn logical_decode_failed(&self) -> bool {
+        false
+    }
+
     /// Extends the `partial_data` accumulator with the next `num_bytes` of  data from the blob
     /// and returns a reference to the entire contents of the blob up to this point.
     ///
