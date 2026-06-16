@@ -3,6 +3,7 @@
 //! This database persists proof-manager state independently from the ledger
 //! commit loop.
 
+use std::num::NonZero;
 use std::sync::Arc;
 
 use rockbound::{SchemaBatch, DB};
@@ -70,13 +71,6 @@ impl ProofManagerDb {
         Ok(())
     }
 
-    /// Create a SchemaBatch for deleting STF info.
-    pub fn materialize_delete_stf_info(&self, slot: SlotNumber) -> anyhow::Result<SchemaBatch> {
-        let mut batch = SchemaBatch::new();
-        batch.delete::<StfInfoByNumber>(&slot)?;
-        Ok(batch)
-    }
-
     /// Set the write height (highest finalized STF slot visible to proof-manager consumers).
     ///
     /// STF rows for later non-finalized slots may already be staged in the DB, but they must
@@ -125,34 +119,45 @@ impl ProofManagerDb {
         self.db.get::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID)
     }
 
-    /// Create a SchemaBatch for putting STF info.
-    pub fn materialize_stf_info(
+    /// Commit the finalized-visible STF height and prune old STF info rows in one DB batch.
+    pub fn commit_visible_height_and_prune(
         &self,
-        slot: SlotNumber,
-        info: &StoredStfInfo,
-    ) -> anyhow::Result<SchemaBatch> {
-        let mut batch = SchemaBatch::new();
-        batch.put::<StfInfoByNumber>(&slot, info)?;
-        Ok(batch)
-    }
+        write_height: SlotNumber,
+        next_height_to_receive: SlotNumber,
+        max_entries: NonZero<u64>,
+    ) -> anyhow::Result<()> {
+        let current_write_height = self.get_write_height()?.unwrap_or(SlotNumber::GENESIS);
+        assert!(
+            current_write_height <= write_height,
+            "write({write_height}) is smaller than current write_height({current_write_height})"
+        );
 
-    /// Create a SchemaBatch for setting write height.
-    pub fn materialize_write_height(&self, slot: SlotNumber) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::new();
-        batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &slot)?;
-        Ok(batch)
-    }
+        batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &write_height)?;
 
-    /// Create a SchemaBatch for setting oldest height.
-    pub fn materialize_oldest_height(&self, slot: SlotNumber) -> anyhow::Result<SchemaBatch> {
-        let mut batch = SchemaBatch::new();
-        batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &slot)?;
-        Ok(batch)
-    }
+        let Some(prune_up_to) = write_height.checked_sub(max_entries.get()) else {
+            self.db.write_schemas(&batch)?;
+            return Ok(());
+        };
 
-    /// Write a SchemaBatch to the database.
-    pub fn write_batch(&self, batch: &SchemaBatch) -> anyhow::Result<()> {
-        self.db.write_schemas(batch)?;
+        let oldest_height = self.get_oldest_height()?.unwrap_or(SlotNumber::ONE);
+        for slot in oldest_height.range_exclusive(prune_up_to) {
+            if slot >= next_height_to_receive {
+                tracing::warn!(
+                    %next_height_to_receive,
+                    ?prune_up_to,
+                    "State Transition Info is not consumed fast enough, cannot prune older entries. Please check that consumer works."
+                );
+                break;
+            }
+            batch.delete::<StfInfoByNumber>(&slot)?;
+        }
+
+        if prune_up_to > oldest_height {
+            batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &prune_up_to)?;
+        }
+
+        self.db.write_schemas(&batch)?;
         Ok(())
     }
 
@@ -255,7 +260,7 @@ impl ProofManagerDb {
         }
 
         if batch_changed {
-            self.write_batch(&batch)?;
+            self.db.write_schemas(&batch)?;
         }
 
         // Recover write_height forward if metadata lagged behind already-finalized STF info.
@@ -387,25 +392,27 @@ mod tests {
     }
 
     #[test]
-    fn test_batch_operations() {
+    fn test_commit_visible_height_and_prune() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db = create_test_db(temp_dir.path());
 
-        let slot = SlotNumber::new(1);
-        let info = make_stf_info(1);
+        for slot in 1..=5 {
+            let slot = SlotNumber::new(slot);
+            db.put_stf_info(slot, &make_stf_info(slot.get())).unwrap();
+        }
 
-        // Build a batch with multiple operations
-        let mut batch = db.materialize_stf_info(slot, &info).unwrap();
-        batch.merge(db.materialize_write_height(slot).unwrap());
-        batch.merge(db.materialize_oldest_height(SlotNumber::ONE).unwrap());
+        db.commit_visible_height_and_prune(
+            SlotNumber::new(5),
+            SlotNumber::new(4),
+            NonZero::new(2).unwrap(),
+        )
+        .unwrap();
 
-        // Write the batch
-        db.write_batch(&batch).unwrap();
-
-        // Verify all operations took effect
-        assert!(db.get_stf_info(slot).unwrap().is_some());
-        assert_eq!(db.get_write_height().unwrap(), Some(slot));
-        assert_eq!(db.get_oldest_height().unwrap(), Some(SlotNumber::ONE));
+        assert_eq!(db.get_write_height().unwrap(), Some(SlotNumber::new(5)));
+        assert_eq!(db.get_oldest_height().unwrap(), Some(SlotNumber::new(3)));
+        assert!(db.get_stf_info(SlotNumber::ONE).unwrap().is_none());
+        assert!(db.get_stf_info(SlotNumber::new(2)).unwrap().is_none());
+        assert!(db.get_stf_info(SlotNumber::new(3)).unwrap().is_some());
     }
 
     #[test]

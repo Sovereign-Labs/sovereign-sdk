@@ -3,15 +3,14 @@ use std::marker::PhantomData;
 use std::num::NonZero;
 use std::sync::{Arc, Mutex};
 
+#[cfg(test)]
+use crate::test_hooks::CrashLocation;
 use anyhow::{anyhow, bail};
 use borsh::BorshSerialize;
-use rockbound::SchemaBatch;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_db::proof_manager_db::ProofManagerDb;
 use sov_db::schema::types::StoredStfInfo;
-#[cfg(test)]
-use sov_db::test_utils::CrashLocation;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
@@ -270,7 +269,7 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     Sender<StateRoot, Witness, Da>,
     Receiver<StateRoot, Witness, Da>,
 )> {
-    new_stf_info_channel_with_missing_prefix_policy(
+    new_stf_info_channel_inner(
         proof_manager_db,
         max_channel_size,
         max_nb_of_infos_in_db,
@@ -279,9 +278,30 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     )
 }
 
-/// Creates a new [`Sender`] and [`Receiver`] channel with an explicit missing-prefix policy.
 #[allow(clippy::type_complexity)]
-pub(crate) fn new_stf_info_channel_with_missing_prefix_policy<StateRoot, Witness, Da: DaSpec>(
+pub(crate) fn new_stf_info_channel_for_runner<StateRoot, Witness, Da: DaSpec>(
+    proof_manager_db: ProofManagerDb,
+    max_channel_size: NonZero<u64>,
+    max_nb_of_infos_in_db: NonZero<u64>,
+    latest_proof_final_slot: Option<SlotNumber>,
+    start_fresh_outer_proof_on_resync: bool,
+) -> anyhow::Result<(
+    Sender<StateRoot, Witness, Da>,
+    Receiver<StateRoot, Witness, Da>,
+)> {
+    let allow_missing_local_stf_prefix =
+        latest_proof_final_slot.is_none() || start_fresh_outer_proof_on_resync;
+    new_stf_info_channel_inner(
+        proof_manager_db,
+        max_channel_size,
+        max_nb_of_infos_in_db,
+        latest_proof_final_slot,
+        allow_missing_local_stf_prefix,
+    )
+}
+
+#[allow(clippy::type_complexity)]
+fn new_stf_info_channel_inner<StateRoot, Witness, Da: DaSpec>(
     proof_manager_db: ProofManagerDb,
     max_channel_size: NonZero<u64>,
     max_nb_of_infos_in_db: NonZero<u64>,
@@ -407,65 +427,6 @@ where
         Ok(())
     }
 
-    fn prune_entries(
-        &self,
-        next_height_to_receive: SlotNumber,
-        write_rollup_height: SlotNumber,
-    ) -> anyhow::Result<SchemaBatch> {
-        let Some(prune_up_to) = write_rollup_height.checked_sub(self.max_nb_of_infos_in_db.get())
-        else {
-            // If we have not reached [`Self::max_nb_of_infos_in_db`] we don't need to prune the data
-            return Ok(Default::default());
-        };
-
-        let oldest_height = self.get_oldest_slot_number()?;
-
-        let mut out_schema = SchemaBatch::new();
-        for i in oldest_height.range_exclusive(prune_up_to) {
-            if i >= next_height_to_receive {
-                tracing::warn!(
-                    %next_height_to_receive,
-                    ?prune_up_to,
-                    "State Transition Info is not consumed fast enough, cannot prune older entries. Please check that consumer works."
-                );
-                break;
-            }
-            out_schema.merge(self.proof_manager_db.materialize_delete_stf_info(i)?);
-        }
-
-        if prune_up_to > oldest_height {
-            out_schema.merge(
-                self.proof_manager_db
-                    .materialize_oldest_height(prune_up_to)?,
-            );
-        }
-
-        Ok(out_schema)
-    }
-
-    /// Builds a SchemaBatch for staging STF info data only (no metadata updates).
-    pub fn materialize_stf_info_data(
-        &self,
-        stf_info: &StateTransitionInfo<StateRoot, Witness, Da>,
-    ) -> anyhow::Result<SchemaBatch> {
-        let encoded_stf_info: Vec<u8> = bincode::serialize(stf_info).unwrap();
-        let stored_stf_info = StoredStfInfo {
-            data: encoded_stf_info,
-        };
-
-        let write_rollup_height = stf_info.slot_number();
-
-        let schema = self
-            .proof_manager_db
-            .materialize_stf_info(write_rollup_height, &stored_stf_info)?;
-
-        tracing::trace!(
-            %write_rollup_height,
-            "Done materializing stf_info data"
-        );
-        Ok(schema)
-    }
-
     /// Stage STF info data in ProofManagerDb immediately.
     ///
     /// # Two-phase commit pattern
@@ -485,39 +446,39 @@ where
         &self,
         stf_info: &StateTransitionInfo<StateRoot, Witness, Da>,
     ) -> anyhow::Result<()> {
-        let schema = self.materialize_stf_info_data(stf_info)?;
-        self.write_batch_blocking(schema).await?;
+        let encoded_stf_info: Vec<u8> = bincode::serialize(stf_info).unwrap();
+        let stored_stf_info = StoredStfInfo {
+            data: encoded_stf_info,
+        };
+        let write_rollup_height = stf_info.slot_number();
+        let db = self.proof_manager_db.clone();
+
+        tokio::task::spawn_blocking(move || db.put_stf_info(write_rollup_height, &stored_stf_info))
+            .await
+            .map_err(|e| anyhow!("ProofManagerDb write task failed: {e}"))??;
+
+        tracing::trace!(
+            %write_rollup_height,
+            "Done staging stf_info data"
+        );
         Ok(())
     }
 
     /// Commit STF info metadata after ledger finality advances.
     pub async fn commit_stf_info(&self, write_rollup_height: SlotNumber) -> anyhow::Result<()> {
         let next_rollup_height_to_receive = self.next_height_to_receive();
-        let current_write_rollup_height = self
-            .proof_manager_db
-            .get_write_height()?
-            .unwrap_or(SlotNumber::GENESIS);
-        let mut schema = self
-            .proof_manager_db
-            .materialize_write_height(write_rollup_height)?;
-
-        // Prune the oldest entries if needed
-        schema.merge(self.prune_entries(next_rollup_height_to_receive, write_rollup_height)?);
-
-        assert!(
-            current_write_rollup_height <= write_rollup_height,
-            "write({write_rollup_height}) is smaller than current write_height({current_write_rollup_height})"
-        );
-
-        self.write_batch_blocking(schema).await?;
-        Ok(())
-    }
-
-    async fn write_batch_blocking(&self, schema: SchemaBatch) -> anyhow::Result<()> {
+        let max_nb_of_infos_in_db = self.max_nb_of_infos_in_db;
         let db = self.proof_manager_db.clone();
-        tokio::task::spawn_blocking(move || db.write_batch(&schema))
-            .await
-            .map_err(|e| anyhow!("ProofManagerDb write task failed: {e}"))??;
+
+        tokio::task::spawn_blocking(move || {
+            db.commit_visible_height_and_prune(
+                write_rollup_height,
+                next_rollup_height_to_receive,
+                max_nb_of_infos_in_db,
+            )
+        })
+        .await
+        .map_err(|e| anyhow!("ProofManagerDb write task failed: {e}"))??;
         Ok(())
     }
 
@@ -711,7 +672,6 @@ mod tests {
     use std::panic::AssertUnwindSafe;
     use std::path::Path;
 
-    use sov_db::test_utils::{CrashLocation, CRASH_ENV_NAME};
     use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
     use sov_modules_api::da::Time;
     use sov_modules_api::provable_height_tracker::InfiniteHeight;
@@ -720,6 +680,7 @@ mod tests {
 
     use super::*;
     use crate::processes::StateTransitionInfo;
+    use crate::test_hooks::{CrashLocation, CRASH_ENV_NAME};
 
     type StateRoot = Vec<u8>;
     type Witness = Vec<u8>;
@@ -786,14 +747,13 @@ mod tests {
     )> {
         let proof_manager_db = ProofManagerDb::open(path)?;
 
-        let (sender, receiver) =
-            new_stf_info_channel_with_missing_prefix_policy::<StateRoot, Witness, MockDaSpec>(
-                proof_manager_db.clone(),
-                NonZero::new(max_channel_size).unwrap(),
-                NonZero::new(max_nb_of_infos_in_db).unwrap(),
-                latest_proof_final_slot,
-                allow_missing_local_stf_prefix,
-            )?;
+        let (sender, receiver) = new_stf_info_channel_inner::<StateRoot, Witness, MockDaSpec>(
+            proof_manager_db.clone(),
+            NonZero::new(max_channel_size).unwrap(),
+            NonZero::new(max_nb_of_infos_in_db).unwrap(),
+            latest_proof_final_slot,
+            allow_missing_local_stf_prefix,
+        )?;
 
         Ok((proof_manager_db, sender, receiver))
     }

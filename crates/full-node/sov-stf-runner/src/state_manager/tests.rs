@@ -14,7 +14,6 @@ use sov_db::config::RollupDbConfig;
 use sov_db::proof_manager_db::ProofManagerDb;
 use sov_db::schema::DeltaReader;
 use sov_db::storage_manager::{NomtChangeSet, NomtStorageManager};
-use sov_db::test_utils::{CrashLocation, CRASH_ENV_NAME};
 use sov_mock_da::storable::layer::{Randomizer, StorableMockDaLayer};
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{
@@ -34,6 +33,7 @@ use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{ArrayWitness, NativeStorage, SlotKey, SlotValue, StateAccesses, Storage};
 
 use super::*;
+use crate::test_hooks::{CrashLocation, CRASH_ENV_NAME};
 // We need a proof receipt type whose first and last generics are serializable, and middle two params are daspec and state root.
 // This is never constructed - just used to satisfy the type checker.
 type DummyProofReceipt = PartialProofReceipt<u64, MockDaSpec, StateRoot, u64>;
@@ -430,6 +430,10 @@ async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Res
     state_manager.stf_info_sender = Some(sender);
 
     da_service.send_transaction(&[1; 10]).await.await??;
+    // Let the background finalized-header poller observe block 1 before driving
+    // `process_stf_changes`; otherwise it reads a stale cached finalized header, skips
+    // `commit_stf_info`, and `read_next()` below blocks forever waiting for a notification.
+    tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
     let filtered_block = da_service.get_block_at(1).await?;
 
     let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(

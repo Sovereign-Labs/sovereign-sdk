@@ -8,6 +8,8 @@ mod da;
 mod http;
 mod runner;
 mod state_manager;
+#[cfg(test)]
+mod test_hooks;
 
 pub use crate::config::{
     from_toml_path, CorsConfiguration, HttpServerConfig, MonitoringConfig, ProofManagerConfig,

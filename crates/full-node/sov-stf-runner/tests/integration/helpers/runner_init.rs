@@ -307,6 +307,7 @@ pub async fn initialize_runner_with_stop_at(
         da_service_with_cache,
         0,
         None,
+        false,
     )
     .await
     .unwrap();

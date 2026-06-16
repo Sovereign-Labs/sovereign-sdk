@@ -9,12 +9,12 @@ use std::sync::Arc;
 use crate::da::DaServiceWithCachedFinalizedHeaders;
 use crate::processes::{Sender as StfInfoSender, StateTransitionInfo};
 use crate::query_state_update_info;
+#[cfg(test)]
+use crate::test_hooks::CrashLocation;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
 use sov_db::schema::{DeltaReader, SchemaBatch};
-#[cfg(test)]
-use sov_db::test_utils::CrashLocation;
 use sov_metrics::RunnerProcessStfChangesMetrics;
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_full_node_interface::StateChannel;
