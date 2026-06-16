@@ -58,17 +58,9 @@ impl<StateRoot, Witness, Da: DaSpec> StateTransitionInfo<StateRoot, Witness, Da>
 
 /// Shared `next_height_to_receive` cursor.
 ///
-/// The cursor has several writers living in independent tokio tasks: the
-/// aggregator advances and persists it after publishing a proof, the intake
-/// skip-advances it during the resync window, and the sender realigns it on
-/// recovery. The aggregator's persist is a load-modify-store sequence that
-/// spans a synchronous DB write, so it cannot be a single atomic instruction.
-/// `write_lock` serializes every writer so that no writer's update is lost
-/// inside another writer's read-modify-write window. Reads stay lock-free on
-/// `value`.
+/// Writers are serialized because the persistent advance is a load-write-store
+/// sequence, not a single atomic operation.
 struct Cursor {
-    /// Current cursor value. Writers MUST hold [`Cursor::write_lock`] for the
-    /// whole read-modify-write; readers may load it without the lock.
     value: AtomicU64,
     write_lock: Mutex<()>,
 }
@@ -81,35 +73,27 @@ impl Cursor {
         }
     }
 
-    /// Lock-free read of the current cursor value.
     fn get(&self) -> u64 {
         self.value.load(Ordering::SeqCst)
     }
 
-    /// Atomically add `amount`, serialized against the other writers. Returns
-    /// the previous value.
     fn fetch_add(&self, amount: u64) -> u64 {
         let _guard = self.lock();
         self.value.fetch_add(amount, Ordering::SeqCst)
     }
 
-    /// Advance to `max(current, value)`, serialized against the other writers.
     fn fetch_max(&self, value: u64) {
         let _guard = self.lock();
         self.value.fetch_max(value, Ordering::SeqCst);
     }
 
-    /// Overwrite the cursor, serialized against the other writers.
     fn store(&self, value: u64) {
         let _guard = self.lock();
         self.value.store(value, Ordering::SeqCst);
     }
 
-    /// Advance the cursor by `amount`, running `persist` to durably record the
-    /// new value *before* the in-memory value is updated, all while holding the
-    /// write lock so no concurrent writer can interleave. Persisting before the
-    /// in-memory store keeps disk and memory consistent if the write fails.
-    /// Returns the previous value.
+    /// Persist the new value before updating memory so a failed write leaves
+    /// memory and disk on the same cursor.
     fn advance_and_persist(
         &self,
         amount: u64,
@@ -190,21 +174,11 @@ impl<
         latest_finalized_slot_number: SlotNumber,
         max_provable_slot_number: &dyn ProvableHeightTracker,
     ) -> anyhow::Result<()> {
-        // Validate and recover ProofManagerDb metadata against the finalized ledger view.
         self.proof_manager_db
             .validate_and_recover_write_height(ledger_head, latest_finalized_slot_number)?;
 
-        // Re-sync in-memory cursors from DB after recovery, because validation may
-        // have rewritten metadata (for example when ProofManagerDb was ahead).
-        let maybe_db_next_height_to_receive = self.proof_manager_db.get_next_height_to_receive()?;
-        let db_next_height_to_receive = next_height_to_receive_with_proof_lower_bound(
-            maybe_db_next_height_to_receive,
-            self.proof_resume_height,
-        );
-        self.persist_cursor_if_below_proof_resume(
-            maybe_db_next_height_to_receive,
-            db_next_height_to_receive,
-        )?;
+        let (maybe_db_next_height_to_receive, db_next_height_to_receive) =
+            load_next_height_to_receive(&self.proof_manager_db, self.proof_resume_height)?;
         self.next_height_to_receive
             .store(db_next_height_to_receive.get());
         self.next_height_to_send = db_next_height_to_receive;
@@ -237,9 +211,8 @@ impl<
             }
         }
 
-        // We notify the receiver about the STF infos available between the last submitted height and the next height to receive.
-        // We are only notifying the maximum height that is available in the DB - the `Receiver` will ensure to read every transition
-        // between `Receiver::next_height_to_receive` and `max_provable_slot_number`.
+        // Notify about visible pending STF info; the receiver drains each
+        // transition from its current cursor up to this height.
         self.notify(max_provable_slot_number).await?;
 
         Ok(())
@@ -251,23 +224,13 @@ impl<
     }
 
     /// Increment next height to receive by one, returning the previous value.
+    ///
+    /// Non-persisting (in-memory only); the persisting variant is
+    /// [`CursorHandle::inc_next_height_to_receive_by_and_persist`]. Test-only to
+    /// prevent production callers from silently losing cursor advances on restart.
+    #[cfg(test)]
     pub fn inc_next_height_to_receive(&self) -> SlotNumber {
         SlotNumber::new(self.next_height_to_receive.fetch_add(1))
-    }
-
-    fn persist_cursor_if_below_proof_resume(
-        &self,
-        maybe_db_next_height_to_receive: Option<SlotNumber>,
-        next_height_to_receive: SlotNumber,
-    ) -> anyhow::Result<()> {
-        if let Some(db_next_height_to_receive) = maybe_db_next_height_to_receive {
-            if db_next_height_to_receive < next_height_to_receive {
-                self.proof_manager_db
-                    .set_next_height_to_receive(next_height_to_receive)?;
-            }
-        }
-
-        Ok(())
     }
 }
 
@@ -304,28 +267,14 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
         "Channel size should be smaller than the max number of STFInfos in the db"
     );
 
-    // Internally, the Db keeps the following entries:
-    // 1. The STF info data.
-    // 2. The highest finalized STF height currently visible to proof-manager consumers.
-    // 3. The next height of the retrieved STF info (increased on every `read_next`` operation).
-
-    // On startup, we need to fill the notification channel with the pending STF info from the db.
     let (notifier, receiver) =
         tokio::sync::mpsc::channel::<SlotNumber>(max_channel_size.get().try_into()?);
 
     let proof_resume_height = latest_proof_final_slot
         .map(|slot| slot.saturating_add(1))
         .unwrap_or(SlotNumber::ONE);
-    let maybe_db_next_height_to_receive = proof_manager_db.get_next_height_to_receive()?;
-    let next_height_to_receive = next_height_to_receive_with_proof_lower_bound(
-        maybe_db_next_height_to_receive,
-        proof_resume_height,
-    );
-    if let Some(db_next_height_to_receive) = maybe_db_next_height_to_receive {
-        if db_next_height_to_receive < next_height_to_receive {
-            proof_manager_db.set_next_height_to_receive(next_height_to_receive)?;
-        }
-    }
+    let (_, next_height_to_receive) =
+        load_next_height_to_receive(&proof_manager_db, proof_resume_height)?;
 
     let cursor = Arc::new(Cursor::new(next_height_to_receive.get()));
 
@@ -349,13 +298,22 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     Ok((sender, receiver))
 }
 
-fn next_height_to_receive_with_proof_lower_bound(
-    maybe_db_next_height_to_receive: Option<SlotNumber>,
+fn load_next_height_to_receive(
+    proof_manager_db: &ProofManagerDb,
     proof_resume_height: SlotNumber,
-) -> SlotNumber {
-    maybe_db_next_height_to_receive
+) -> anyhow::Result<(Option<SlotNumber>, SlotNumber)> {
+    let maybe_db_next_height_to_receive = proof_manager_db.get_next_height_to_receive()?;
+    let next_height_to_receive = maybe_db_next_height_to_receive
         .unwrap_or(SlotNumber::ONE)
-        .max(proof_resume_height)
+        .max(proof_resume_height);
+
+    if let Some(db_next_height_to_receive) = maybe_db_next_height_to_receive {
+        if db_next_height_to_receive < next_height_to_receive {
+            proof_manager_db.set_next_height_to_receive(next_height_to_receive)?;
+        }
+    }
+
+    Ok((maybe_db_next_height_to_receive, next_height_to_receive))
 }
 
 impl<StateRoot, Witness, Da: DaSpec> Sender<StateRoot, Witness, Da>
@@ -667,8 +625,8 @@ impl CursorHandle {
         SlotNumber::new(self.next_height_to_receive.fetch_add(amount))
     }
 
-    /// Increment next height to receive by the requested amount and IMMEDIATELY persist
-    /// the new value to disk.
+    /// Increment next height to receive by the requested amount and persist the
+    /// new value to disk.
     ///
     /// This method must be called after successful aggregated proof posting to DA.
     /// It fixes the duplicate proof submission bug by ensuring the persisted value

@@ -1,8 +1,7 @@
 //! Implements a wrapper around RocksDB for storing proof manager state.
 //!
-//! This database persists proof-manager-specific data independently from the
-//! ledger commit loop, enabling immediate persistence of critical metadata
-//! like `next_height_to_receive` after successful aggregated proof posting.
+//! This database persists proof-manager state independently from the ledger
+//! commit loop.
 
 use std::sync::Arc;
 
@@ -21,11 +20,6 @@ const NEXT_SLOT_NUMBER_TO_RECEIVE_ID: StfInfoUniqueId = StfInfoUniqueId(1);
 /// DB key for the oldest saved STF info (used for pruning).
 const OLDEST_SLOT_NUMBER_ID: StfInfoUniqueId = StfInfoUniqueId(2);
 /// Database for proof manager state that persists independently from ledger commits.
-///
-/// This allows critical proof manager metadata (like `next_height_to_receive`) to be
-/// persisted immediately after successful operations, without waiting for the next
-/// ledger commit. This fixes issues where restarts could cause duplicate proof
-/// submissions.
 #[derive(Clone, Debug)]
 pub struct ProofManagerDb {
     db: Arc<DB>,
@@ -55,9 +49,7 @@ impl ProofManagerDb {
         Ok(Self::new(Arc::new(db)))
     }
 
-    // ==================== STF Info Operations ====================
-
-    /// Store STF info for a slot. Writes immediately to disk.
+    /// Store STF info for a slot.
     pub fn put_stf_info(&self, slot: SlotNumber, info: &StoredStfInfo) -> anyhow::Result<()> {
         let mut batch = SchemaBatch::new();
         batch.put::<StfInfoByNumber>(&slot, info)?;
@@ -70,7 +62,7 @@ impl ProofManagerDb {
         self.db.get::<StfInfoByNumber>(&slot)
     }
 
-    /// Delete STF info for a slot. Writes immediately to disk.
+    /// Delete STF info for a slot.
     pub fn delete_stf_info(&self, slot: SlotNumber) -> anyhow::Result<()> {
         let mut batch = SchemaBatch::new();
         batch.delete::<StfInfoByNumber>(&slot)?;
@@ -78,14 +70,12 @@ impl ProofManagerDb {
         Ok(())
     }
 
-    /// Create a SchemaBatch for deleting STF info (for batched operations).
+    /// Create a SchemaBatch for deleting STF info.
     pub fn materialize_delete_stf_info(&self, slot: SlotNumber) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::new();
         batch.delete::<StfInfoByNumber>(&slot)?;
         Ok(batch)
     }
-
-    // ==================== Metadata Operations ====================
 
     /// Set the write height (highest finalized STF slot visible to proof-manager consumers).
     ///
@@ -103,7 +93,7 @@ impl ProofManagerDb {
         self.db.get::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID)
     }
 
-    /// Set next_height_to_receive. Writes immediately to disk.
+    /// Set next_height_to_receive.
     ///
     /// Immediate persistence is critical: if this update waited for the next
     /// ledger commit, a crash after proof posting but before the commit would
@@ -122,7 +112,7 @@ impl ProofManagerDb {
             .get::<StfInfoMetadata>(&NEXT_SLOT_NUMBER_TO_RECEIVE_ID)
     }
 
-    /// Set the oldest height. Writes immediately to disk.
+    /// Set the oldest height.
     pub fn set_oldest_height(&self, slot: SlotNumber) -> anyhow::Result<()> {
         let mut batch = SchemaBatch::new();
         batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &slot)?;
@@ -135,9 +125,7 @@ impl ProofManagerDb {
         self.db.get::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID)
     }
 
-    // ==================== Batch Operations ====================
-
-    /// Create a SchemaBatch for putting STF info (for batched operations).
+    /// Create a SchemaBatch for putting STF info.
     pub fn materialize_stf_info(
         &self,
         slot: SlotNumber,
@@ -148,14 +136,14 @@ impl ProofManagerDb {
         Ok(batch)
     }
 
-    /// Create a SchemaBatch for setting write height (for batched operations).
+    /// Create a SchemaBatch for setting write height.
     pub fn materialize_write_height(&self, slot: SlotNumber) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::new();
         batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &slot)?;
         Ok(batch)
     }
 
-    /// Create a SchemaBatch for setting oldest height (for batched operations).
+    /// Create a SchemaBatch for setting oldest height.
     pub fn materialize_oldest_height(&self, slot: SlotNumber) -> anyhow::Result<SchemaBatch> {
         let mut batch = SchemaBatch::new();
         batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &slot)?;
@@ -167,8 +155,6 @@ impl ProofManagerDb {
         self.db.write_schemas(batch)?;
         Ok(())
     }
-
-    // ==================== Startup Validation ====================
 
     /// Validate ProofManagerDb state against the ledger view on startup and
     /// recover finalized-visible `write_height` if metadata lagged behind stored STF info.

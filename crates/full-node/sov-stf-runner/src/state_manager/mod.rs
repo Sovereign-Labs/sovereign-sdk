@@ -189,9 +189,8 @@ where
 
     pub(crate) async fn startup(&mut self) -> anyhow::Result<()> {
         if let Some(sender) = &mut self.stf_info_sender {
-            // If this state manager uses a channel, it MUST be correctly
-            // initialized before usage.
-            // Get ledger head for reconciliation - use genesis height if empty
+            // The proof manager DB is reconciled against the finalized ledger
+            // view before any new STF info is produced.
             let ledger_head = self
                 .ledger_db
                 .get_head_slot()?
@@ -532,16 +531,7 @@ where
 
         let sending_to_prover_start = std::time::Instant::now();
         if let Some(stf_info_sender) = &mut self.stf_info_sender {
-            // Only advance write_height for slots finalized in LedgerDb.
-            // Later STF rows stay staged in ProofManagerDb but remain hidden from `notify()`
-            // until finality reaches them.
-            //
-            // Safety: finalized_slot is always >= the current write_height because:
-            // - state_on_block is empty on startup, so finalized transitions only
-            //   come from blocks processed after startup (slot > ledger_head)
-            // - validate_and_recover_write_height caps write_height at the latest finalized slot
-            // - finality is strictly monotonic (get_effective_finalized_header
-            //   never returns a height below last_processed_finalized_header)
+            // Later STF rows stay staged but hidden until ledger finality reaches them.
             if let Some(finalized_slot) = last_finalized_slot_number {
                 stf_info_sender.commit_stf_info(finalized_slot).await?;
             }

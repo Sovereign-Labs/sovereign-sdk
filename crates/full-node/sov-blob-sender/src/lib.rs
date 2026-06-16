@@ -290,7 +290,8 @@ where
         latest_known_processing_state: BlobExecutionStatus<Da::Spec>,
     ) -> anyhow::Result<()> {
         if self.shutdown_receiver.has_changed()? {
-            anyhow::bail!("BlobSender: shutdown signal received, skipping blob submission");
+            info!("BlobSender: shutdown signal received, skipping blob submission");
+            return Ok(());
         }
 
         // It is ok to hold the lock here because:

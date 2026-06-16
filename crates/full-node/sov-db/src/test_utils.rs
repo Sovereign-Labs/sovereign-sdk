@@ -321,12 +321,6 @@ pub enum CommitFaultInjectionLocation {
     BeforeCommittingArchival,
     /// Inject an action before committing the live db.
     BeforeCommittingLive,
-    /// Rollup crashes after staging STF info in ProofManagerDb, before ledger commit.
-    AfterStagingProofManagerStfInfo,
-    /// Rollup crashes after ledger finalization, before ProofManager metadata commit.
-    AfterFinalizingLedgerBeforeProofManagerCommit,
-    /// Rollup crashes after persisting the next ProofManager height.
-    AfterPersistingProofManagerNextHeight,
 }
 
 #[cfg(any(test, feature = "test-utils"))]

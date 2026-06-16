@@ -194,36 +194,6 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn blob_sender_rejects_new_blob_after_shutdown() -> anyhow::Result<()> {
-    let deps = create_deps().await;
-    let (mut blob_sender, handle) = create_blob_sender(
-        Duration::from_secs(20),
-        &deps,
-        None,
-        BlobSelectorStatus::Accepted,
-    )
-    .await;
-
-    deps.shutdown_sender.send(())?;
-
-    let data = Arc::new([11, 2, 3, 4, 5]);
-    let error = blob_sender
-        .publish_proof_blob(data, 11u8 as BlobInternalId)
-        .await
-        .expect_err("publishing after shutdown must fail");
-
-    assert!(
-        error.to_string().contains("shutdown signal received"),
-        "unexpected error: {error:?}"
-    );
-    assert_eq!(blob_sender.nb_of_concurrent_proof_blob_submissions(), 0);
-
-    handle.await?;
-
-    Ok(())
-}
-
-#[tokio::test(flavor = "multi_thread")]
 async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Result<()> {
     let deps = create_deps().await;
     let nb_of_blobs = 2;
