@@ -249,8 +249,10 @@ a **clean, exact, complete** decode (exact `logical_len`, exact physical consump
 no trailing/extra/malformed chunks). Restructure `deserialize_or_try_slash_sender` (the
 single accept chokepoint for batches + `Vec<u8>` proofs) to slash on
 `logical_decode_failed()` **before accepting any Borsh `Ok`** (a corrupt envelope can
-decode to a short prefix that is itself valid Borsh), keeping the existing completeness
-assert on the Borsh-`Err` arm for prover-withholding. Touches `crates/rollup-interface`
+decode to a short prefix that is itself valid Borsh), and move the completeness assert
+to run **unconditionally before Borsh** (R3: a prover can withhold trailing bytes and
+expose a prefix that is itself valid Borsh — an Err-arm-only assert would miss it; this
+also closes the same pre-existing legacy gap). Touches `crates/rollup-interface`
 + `sov-blob-storage`, reviewed in isolation; PR3 depends on it. Full spec in
 `celestia-compression-pr3.md`.
 
