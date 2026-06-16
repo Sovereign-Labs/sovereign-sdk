@@ -134,7 +134,7 @@ pub(crate) enum EnvelopeError {
 
 /// Returns true iff `buf` begins with the 16-byte envelope magic.
 pub(crate) fn has_magic_prefix(buf: &[u8]) -> bool {
-    buf.len() >= ENVELOPE_MAGIC.len() && buf[..ENVELOPE_MAGIC.len()] == ENVELOPE_MAGIC
+    buf.starts_with(&ENVELOPE_MAGIC)
 }
 
 /// Validate a full frame's header and length invariants.
@@ -143,11 +143,11 @@ pub(crate) fn has_magic_prefix(buf: &[u8]) -> bool {
 /// [`EnvelopeError::MissingMagic`]. The classifier separately maps non-magic
 /// blobs to [`EnvelopeState::Legacy`].
 pub(crate) fn parse_envelope(buf: &[u8]) -> Result<EnvelopeHeader, EnvelopeError> {
-    if buf.len() < ENVELOPE_HEADER_LEN {
-        return Err(EnvelopeError::TooShort { len: buf.len() });
-    }
     if !has_magic_prefix(buf) {
         return Err(EnvelopeError::MissingMagic);
+    }
+    if buf.len() < ENVELOPE_HEADER_LEN {
+        return Err(EnvelopeError::TooShort { len: buf.len() });
     }
 
     let version = buf[OFFSET_VERSION];
@@ -243,7 +243,7 @@ mod tests {
     #[test]
     fn legacy_when_no_magic() {
         let buf = b"\x00\x01 a borsh-ish payload long enough to clear the header length";
-        assert_eq!(has_magic_prefix(buf), false);
+        assert!(!has_magic_prefix(buf));
         assert_eq!(classify(buf), EnvelopeState::Legacy);
     }
 
@@ -364,7 +364,7 @@ mod tests {
         // Magic present but fewer than 24 header bytes total (18 here).
         let mut buf = ENVELOPE_MAGIC.to_vec();
         buf.extend_from_slice(&[1u8, 0u8]);
-        assert_eq!(has_magic_prefix(&buf), true);
+        assert!(has_magic_prefix(&buf));
         assert_eq!(
             parse_envelope(&buf),
             Err(EnvelopeError::TooShort { len: 18 })
