@@ -181,17 +181,6 @@ impl BlobWithSender {
             EnvelopeState::Legacy | EnvelopeState::Malformed => self.compressed_total_len(),
         }
     }
-
-    /// Read every remaining DA-physical byte into the accumulator, dropping the derived
-    /// envelope cache so the logical view recomputes over the full payload.
-    #[cfg(feature = "native")]
-    fn read_all_physical(&mut self) {
-        let remaining = self.compressed_total_len() - self.compressed_verified_data().len();
-        if remaining > 0 {
-            self.blob.advance(remaining);
-            self.envelope_state.take();
-        }
-    }
 }
 
 impl BlobReaderTrait for BlobWithSender {
@@ -225,23 +214,31 @@ impl BlobReaderTrait for BlobWithSender {
         if !decoded.clean {
             return true;
         }
-        // A clean decode is canonical only once the whole authenticated payload is present
-        // and the chunks tile it exactly into the declared logical length. A short prefix
-        // (a genuine partial read) is not a failure here — it routes to the prover
-        // withholding path, which fails closed separately.
         let total = self.compressed_total_len();
-        let fully_present = self.compressed_verified_data().len() == total;
-        fully_present
-            && !(decoded.consumed == total
-                && decoded.logical.len() == decoded.header.logical_len as usize)
+        if decoded.logical.len() == decoded.header.logical_len as usize {
+            // All declared logical bytes decoded. The encoding is canonical only if the
+            // chunks consumed the entire authenticated posted payload — a trailing physical
+            // tail is non-canonical. `total` is the authenticated sequence length, so we
+            // flag (and slash) the tail WITHOUT reading it: a tiny-logical/huge-tail blob
+            // cannot force the verifier to authenticate the tail just to reject it.
+            decoded.consumed != total
+        } else {
+            // Fewer logical bytes than declared. This is a sender fault (too few or
+            // truncated chunks) only once the whole posted payload is present; a genuine
+            // partial read (more physical still available) is the prover-withholding case,
+            // which sov-blob-storage's unconditional completeness assert fails closed.
+            self.compressed_verified_data().len() == total
+        }
     }
 
     #[cfg(feature = "native")]
     fn advance(&mut self, num_bytes: usize) -> &[u8] {
-        let (logical_len, mut covered) = match self.logical_state() {
-            EnvelopeState::Envelope(decoded) => {
-                (decoded.header.logical_len as usize, decoded.logical.len())
-            }
+        let (codec, logical_len, mut covered) = match self.logical_state() {
+            EnvelopeState::Envelope(decoded) => (
+                decoded.header.codec,
+                decoded.header.logical_len,
+                decoded.logical.len(),
+            ),
             EnvelopeState::Legacy | EnvelopeState::Malformed => {
                 // Legacy/malformed: logical and DA-physical bytes coincide.
                 self.blob.advance(num_bytes);
@@ -252,10 +249,11 @@ impl BlobReaderTrait for BlobWithSender {
         // Envelope: pull in whole chunks until at least `num_bytes` more logical bytes are
         // covered (overshooting to a chunk boundary is expected). The accumulator always
         // ends on a chunk boundary, so the next chunk's 4-byte framing starts at its
-        // current length; we read framing -> payload per chunk without decoding in the
-        // loop, then drop the cache so `verified_data()` decodes the larger accumulator
-        // once. A partial read therefore authenticates only a prefix of the physical blob.
-        let target = covered.saturating_add(num_bytes).min(logical_len);
+        // current length. We validate each chunk's framing BEFORE authenticating its
+        // (attacker-controlled-length) payload, then drop the cache so `verified_data()`
+        // decodes the larger accumulator once. A partial read therefore authenticates only
+        // a prefix of the physical blob.
+        let target = covered.saturating_add(num_bytes).min(logical_len as usize);
         let before = self.blob.accumulator().len();
         while covered < target {
             let pos = self.blob.accumulator().len();
@@ -267,15 +265,28 @@ impl BlobReaderTrait for BlobWithSender {
             if acc.len() < pos + crate::envelope::CHUNK_HEADER_LEN {
                 break; // truncated framing at EOF
             }
-            let chunk_logical = u16::from_le_bytes([acc[pos], acc[pos + 1]]) as usize;
-            let chunk_encoded = u16::from_le_bytes([acc[pos + 2], acc[pos + 3]]) as usize;
-            self.blob.advance(chunk_encoded);
+            let chunk_logical = u16::from_le_bytes([acc[pos], acc[pos + 1]]);
+            let chunk_encoded = u16::from_le_bytes([acc[pos + 2], acc[pos + 3]]);
+            // Enforce the per-chunk caps / sum / raw-length match before reading the
+            // payload, so a malicious framing can't make a 1-byte logical read authenticate
+            // a u16-sized payload. A structurally bad chunk stops the read; the subsequent
+            // decode marks it unclean and `logical_decode_failed()` slashes.
+            if !crate::envelope::chunk_framing_valid(
+                codec,
+                chunk_logical,
+                chunk_encoded,
+                covered,
+                logical_len,
+            ) {
+                break;
+            }
+            self.blob.advance(chunk_encoded as usize);
             if self.blob.accumulator().len()
-                < pos + crate::envelope::CHUNK_HEADER_LEN + chunk_encoded
+                < pos + crate::envelope::CHUNK_HEADER_LEN + chunk_encoded as usize
             {
                 break; // truncated payload at EOF
             }
-            covered = covered.saturating_add(chunk_logical);
+            covered = covered.saturating_add(chunk_logical as usize);
         }
         if self.blob.accumulator().len() != before {
             // The accumulator grew; recompute the logical view over the larger prefix.
@@ -284,14 +295,11 @@ impl BlobReaderTrait for BlobWithSender {
         self.verified_data()
     }
 
-    #[cfg(feature = "native")]
-    fn full_data(&mut self) -> &[u8] {
-        // The default advances by a *logical* delta, which does not map to the physical
-        // advance an envelope requires; read all remaining physical bytes directly so the
-        // logical view is the complete payload (or a detectable non-canonical decode).
-        self.read_all_physical();
-        self.verified_data()
-    }
+    // `full_data()` uses the trait default: `advance(total_len() - verified_data().len())`.
+    // For an envelope that is `advance(logical_len - covered)`, which reads whole chunks up
+    // to logical completion and STOPS — it must not authenticate a trailing physical tail
+    // (a tiny-logical/huge-tail blob would otherwise force full-blob verification just to
+    // slash it). For legacy/malformed blobs it advances over all remaining physical bytes.
 }
 
 /// Data that is required for extracting the relevant blobs from the namespace
@@ -637,7 +645,7 @@ mod envelope_blob_tests {
 
     use super::BlobWithSender;
     use crate::envelope::{
-        classify_and_decode, encode_for_submission, EnvelopeState, CODEC_RAW_CHUNK,
+        classify_and_decode, encode_for_submission, EnvelopeState, CODEC_LZ4, CODEC_RAW_CHUNK,
         ENVELOPE_HEADER_LEN, ENVELOPE_MAGIC, ENVELOPE_VERSION, MAX_LOGICAL_CHUNK_LEN,
     };
     use crate::test_helper::{ADDR_1, ROLLUP_BATCH_NAMESPACE};
@@ -701,8 +709,7 @@ mod envelope_blob_tests {
 
     #[test]
     fn partial_advance_reads_only_covering_chunks() {
-        // ~4 chunks of 512 logical bytes; highly compressible so each chunk is tiny on the
-        // wire.
+        // Several chunks; highly compressible so each chunk is tiny on the wire.
         let logical = vec![0x5Au8; 2000];
         let physical = encode_for_submission(&logical, true, 512).unwrap();
         let mut blob = blob_over_physical(&physical);
@@ -712,7 +719,7 @@ mod envelope_blob_tests {
         blob.advance(1);
         assert!(!blob.verified_data().is_empty());
         assert!(
-            blob.verified_data().len() <= 512,
+            blob.verified_data().len() <= MAX_LOGICAL_CHUNK_LEN as usize,
             "rounds up to one chunk, not the whole payload"
         );
         assert!(
@@ -726,6 +733,60 @@ mod envelope_blob_tests {
 
         // Reading on yields the complete logical payload.
         assert_eq!(blob.full_data(), &logical[..]);
+    }
+
+    #[test]
+    fn tiny_logical_with_large_tail_is_slashed_without_reading_tail() {
+        // A valid small-logical envelope followed by a large trailing physical tail. The
+        // logical size/gas gate sees only the small declared length; a full read must
+        // decode to logical completion and STOP, so the tail is never authenticated — yet
+        // the blob is still flagged non-canonical and slashed.
+        let logical = vec![0x5Au8; 100];
+        let mut physical = encode_for_submission(&logical, true, 512).unwrap();
+        let canonical_len = physical.len();
+        physical.extend(std::iter::repeat_n(0xEEu8, 50_000));
+
+        let mut blob = blob_over_physical(&physical);
+        assert_eq!(
+            blob.total_len(),
+            logical.len(),
+            "gate sees only logical_len"
+        );
+
+        blob.full_data();
+        assert!(
+            blob.compressed_verified_data().len() <= canonical_len,
+            "a full read must not pull in the trailing tail (DoS guard)"
+        );
+        assert!(
+            blob.logical_decode_failed(),
+            "chunks don't consume the posted tail -> non-canonical -> slash"
+        );
+    }
+
+    #[test]
+    fn advance_does_not_authenticate_oversized_chunk_payload() {
+        // Valid header, but the first chunk's framing claims an encoded length far above the
+        // cap. A partial read must reject on the framing, before authenticating the payload.
+        let mut physical = ENVELOPE_MAGIC.to_vec();
+        physical.push(ENVELOPE_VERSION);
+        physical.push(CODEC_LZ4);
+        physical.extend_from_slice(&0u16.to_le_bytes()); // flags
+        physical.extend_from_slice(&100u32.to_le_bytes()); // logical_len
+        physical.extend_from_slice(&1u16.to_le_bytes()); // chunk_logical_len = 1
+        physical.extend_from_slice(&50_000u16.to_le_bytes()); // chunk_encoded_len >> cap
+        physical.extend(std::iter::repeat_n(0u8, 50_000)); // the oversized payload
+
+        let mut blob = blob_over_physical(&physical);
+        blob.advance(1);
+        assert!(
+            blob.compressed_verified_data().len() <= ENVELOPE_HEADER_LEN + 4,
+            "only header + framing read; the oversized payload is never authenticated"
+        );
+        assert!(
+            blob.logical_decode_failed(),
+            "an over-cap chunk framing is structurally invalid -> slash"
+        );
     }
 
     #[test]

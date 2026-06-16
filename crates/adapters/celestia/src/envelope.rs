@@ -60,10 +60,12 @@ pub(crate) const CHUNK_HEADER_LEN: usize = 4;
 /// malicious `logical_len` cannot request an unbounded allocation.
 pub(crate) const MAX_LOGICAL_BLOB_LEN: u32 = 64 * 1024 * 1024;
 
-/// Maximum decoded length of a single chunk. Share-aligned (~one Celestia share
-/// payload): this is both the per-byte DoS bound (worst case, the verifier decodes one
-/// chunk to expose one logical byte) and the partial-read granularity.
-pub(crate) const MAX_LOGICAL_CHUNK_LEN: u16 = 512;
+/// Maximum decoded length of a single chunk: one continuation sparse-share payload
+/// (`SHARE_SIZE 512 − NAMESPACE_SIZE 29 − SHARE_INFO_BYTES 1 = 482`). Share-aligned so one
+/// logical chunk maps to roughly one Celestia share — this is both the per-byte DoS bound
+/// (worst case, the verifier decodes one chunk to expose one logical byte) and the
+/// partial-read granularity.
+pub(crate) const MAX_LOGICAL_CHUNK_LEN: u16 = 482;
 
 /// Maximum posted (encoded) length of a single chunk: the LZ4 block worst-case
 /// expansion of [`MAX_LOGICAL_CHUNK_LEN`] (`n + n/255 + 16`). The verifier rejects any
@@ -199,6 +201,27 @@ pub(crate) fn parse_header(buf: &[u8]) -> Result<EnvelopeHeader, EnvelopeError> 
     })
 }
 
+/// Whether a chunk's framing is structurally valid, given the running logical sum and the
+/// codec: caps respected, both lengths nonzero, no logical-sum overrun, and — for the raw
+/// codec — encoded length equal to logical length. Does NOT check payload availability
+/// (truncation) or LZ4 decodability. Both the decoder and the native partial reader gate on
+/// this *before* touching a chunk's (attacker-controlled-length) payload, so a malicious
+/// framing can never make a reader authenticate more than [`MAX_ENCODED_CHUNK_LEN`] bytes.
+pub(crate) fn chunk_framing_valid(
+    codec: u8,
+    chunk_logical_len: u16,
+    chunk_encoded_len: u16,
+    covered_logical: usize,
+    logical_len: u32,
+) -> bool {
+    chunk_logical_len != 0
+        && chunk_logical_len <= MAX_LOGICAL_CHUNK_LEN
+        && chunk_encoded_len != 0
+        && chunk_encoded_len <= MAX_ENCODED_CHUNK_LEN
+        && covered_logical as u64 + chunk_logical_len as u64 <= logical_len as u64
+        && (codec != CODEC_RAW_CHUNK || chunk_encoded_len == chunk_logical_len)
+}
+
 /// Decode the chunk stream that follows the fixed header.
 ///
 /// `bytes` is everything after the 24-byte header (possibly a partial prefix). Returns
@@ -226,17 +249,15 @@ fn decode_chunks(bytes: &[u8], codec: u8, logical_len: u32) -> (Vec<u8>, usize, 
         let chunk_logical_len = u16::from_le_bytes([bytes[pos], bytes[pos + 1]]);
         let chunk_encoded_len = u16::from_le_bytes([bytes[pos + 2], bytes[pos + 3]]);
 
-        // Per-chunk caps, enforced before allocating. Zero-length chunks are rejected
-        // so a reader can never scan unbounded empty chunks to reach one logical byte.
-        if chunk_logical_len == 0
-            || chunk_logical_len > MAX_LOGICAL_CHUNK_LEN
-            || chunk_encoded_len == 0
-            || chunk_encoded_len > MAX_ENCODED_CHUNK_LEN
-        {
-            return (logical, pos, false);
-        }
-        // The running logical sum must not exceed the declared total.
-        if logical.len() as u64 + chunk_logical_len as u64 > logical_len as u64 {
+        // Structural framing checks (caps incl. zero-length rejection, logical-sum overrun,
+        // raw-codec length match), enforced before allocating or reading the payload.
+        if !chunk_framing_valid(
+            codec,
+            chunk_logical_len,
+            chunk_encoded_len,
+            logical.len(),
+            logical_len,
+        ) {
             return (logical, pos, false);
         }
 
@@ -249,12 +270,8 @@ fn decode_chunks(bytes: &[u8], codec: u8, logical_len: u32) -> (Vec<u8>, usize, 
         let payload = &bytes[payload_start..payload_end];
 
         let chunk_logical = match codec {
-            CODEC_RAW_CHUNK => {
-                if chunk_encoded_len != chunk_logical_len {
-                    return (logical, pos, false);
-                }
-                payload.to_vec()
-            }
+            // `chunk_framing_valid` already verified `encoded == logical` for the raw codec.
+            CODEC_RAW_CHUNK => payload.to_vec(),
             CODEC_LZ4 => {
                 // Output buffer is exactly `chunk_logical_len` (<= MAX_LOGICAL_CHUNK_LEN),
                 // so decompression cannot overrun it.
@@ -382,20 +399,28 @@ fn is_canonical_encoding_of(frame: &[u8], logical: &[u8]) -> bool {
 
 /// Encode `logical` for submission to Celestia.
 ///
-/// - `compress`: when true, an LZ4 chunked envelope is built and used **only if it is
-///   strictly smaller than the raw payload and re-decodes canonically** to `logical`.
-/// - Otherwise (or when compression is not beneficial), a raw payload that begins with
-///   the magic is wrapped in a `codec = 0` chunked envelope so upgraded readers do not
-///   misclassify it; anything else is posted verbatim.
+/// - `compress == false` ([`crate::config::CompressOnSubmit::Off`]): post verbatim. No
+///   envelope is ever emitted, so nodes that predate compression keep working during the
+///   upgrade window. (A real Borsh batch cannot begin with the 16-byte magic — its length
+///   prefix would be absurd — so verbatim is safe.)
+/// - `compress == true`: build an LZ4 chunked envelope and use it **only if it is strictly
+///   smaller than the raw payload and re-decodes canonically** to `logical`. If compression
+///   is not beneficial, a payload that begins with the magic is still wrapped in a
+///   `codec = 0` chunked envelope so envelope-aware readers do not misclassify it; anything
+///   else is posted verbatim.
 #[cfg(feature = "native")]
 pub(crate) fn encode_for_submission(
     logical: &[u8],
     compress: bool,
     chunk_size: usize,
 ) -> Result<Vec<u8>, EnvelopeEncodeError> {
+    if !compress {
+        return Ok(logical.to_vec());
+    }
+
     let too_large = logical.len() > MAX_LOGICAL_BLOB_LEN as usize;
 
-    if compress && !too_large {
+    if !too_large {
         let frame = encode_chunked(logical, CODEC_LZ4, chunk_size);
         if frame.len() < logical.len() && is_canonical_encoding_of(&frame, logical) {
             return Ok(frame);
@@ -491,21 +516,31 @@ mod tests {
     }
 
     #[test]
-    fn magic_prefixed_raw_payload_is_escaped_codec0() {
-        // A raw payload that happens to start with the magic, incompressible -> escaped.
+    fn magic_prefixed_incompressible_payload_is_escaped_codec0_when_compressing() {
+        // A payload that begins with the magic but does not compress: under Lz4 the LZ4
+        // frame is not smaller, so it is wrapped in a codec-0 (raw-chunk) envelope rather
+        // than posted verbatim, so envelope-aware readers don't misclassify it.
         let mut logical = ENVELOPE_MAGIC.to_vec();
-        logical.extend_from_slice(
-            &(0..1000u32)
-                .map(|i| (i.wrapping_mul(40503) >> 7) as u8)
-                .collect::<Vec<_>>(),
-        );
-        let posted = encode_for_submission(&logical, false, 512).unwrap();
-        assert_ne!(
-            posted, logical,
-            "magic-prefixed raw payload must be wrapped"
+        logical.extend_from_slice(&incompressible_bytes(1000, 0x9E37));
+        let posted = encode_for_submission(&logical, true, 512).unwrap();
+        assert_ne!(posted, logical, "magic-prefixed payload must be wrapped");
+        assert_eq!(
+            posted[OFFSET_CODEC], CODEC_RAW_CHUNK,
+            "an incompressible escape uses the raw-chunk codec"
         );
         // It round-trips back to the original raw bytes.
         assert_canonical(&classify_and_decode(&posted), posted.len(), &logical);
+    }
+
+    #[test]
+    fn off_posts_magic_prefixed_payload_verbatim() {
+        // CompressOnSubmit::Off (compress = false) must post verbatim even when the payload
+        // begins with the magic, so nodes that predate compression keep working during the
+        // upgrade window.
+        let mut logical = ENVELOPE_MAGIC.to_vec();
+        logical.extend_from_slice(b"a batch that happens to start with the magic prefix bytes");
+        let posted = encode_for_submission(&logical, false, 512).unwrap();
+        assert_eq!(posted, logical, "Off emits no envelope");
     }
 
     #[test]

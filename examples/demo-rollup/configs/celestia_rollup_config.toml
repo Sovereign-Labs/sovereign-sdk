@@ -87,8 +87,8 @@ backoff_max_times = 10
 # Target logical chunk size (in bytes) for compressed batch envelopes. Each chunk is
 # compressed independently so a verifier can decode a prefix without reading the whole
 # blob. Clamped to the verifier's per-chunk cap.
-# Default: 512 (share-aligned)
-#compression_chunk_size = 512
+# Default: 482 (one continuation Celestia share payload)
+#compression_chunk_size = 482
 
 
 # WITH CURRENT UNCOMMENTED VALUES:

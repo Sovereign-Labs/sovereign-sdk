@@ -9,9 +9,8 @@ use std::fmt;
     Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize, JsonSchema,
 )]
 pub enum CompressOnSubmit {
-    /// Post batches verbatim (today's behavior). A payload that happens to begin with the
-    /// envelope magic is still wrapped in a raw-chunk envelope so upgraded readers do not
-    /// misclassify it.
+    /// Post batches verbatim (today's behavior) — emit no envelope at all, so nodes that
+    /// predate compression keep working during the upgrade window.
     #[default]
     Off,
     /// Wrap batches in an LZ4 chunked envelope, used only when it is strictly smaller than
