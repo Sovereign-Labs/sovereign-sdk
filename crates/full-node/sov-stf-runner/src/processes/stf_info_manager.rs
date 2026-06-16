@@ -124,8 +124,10 @@ pub struct Sender<StateRoot, Witness, Da: DaSpec> {
     /// is merely used to avoid sending twice the same height notification to the [`Receiver`].
     pub next_height_to_send: SlotNumber,
 
-    /// Lower bound derived from the latest accepted proof known by LedgerDb at startup.
-    proof_resume_height: SlotNumber,
+    /// Final slot of the latest accepted aggregated proof known to LedgerDb at startup, if
+    /// any. The receive cursor resumes one slot past it so the prover feeds the restored
+    /// outer aggregation host a chain that is contiguous with the proof it continues from.
+    latest_proof_final_slot: Option<SlotNumber>,
 
     // Max number of entries we will keep in the Db, older data will be pruned.
     max_nb_of_infos_in_db: NonZero<u64>,
@@ -178,7 +180,7 @@ impl<
             .validate_and_recover_write_height(ledger_head, latest_finalized_slot_number)?;
 
         let (maybe_db_next_height_to_receive, db_next_height_to_receive) =
-            load_next_height_to_receive(&self.proof_manager_db, self.proof_resume_height)?;
+            load_next_height_to_receive(&self.proof_manager_db, self.latest_proof_final_slot)?;
         self.next_height_to_receive
             .store(db_next_height_to_receive.get());
         self.next_height_to_send = db_next_height_to_receive;
@@ -270,11 +272,8 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     let (notifier, receiver) =
         tokio::sync::mpsc::channel::<SlotNumber>(max_channel_size.get().try_into()?);
 
-    let proof_resume_height = latest_proof_final_slot
-        .map(|slot| slot.saturating_add(1))
-        .unwrap_or(SlotNumber::ONE);
     let (_, next_height_to_receive) =
-        load_next_height_to_receive(&proof_manager_db, proof_resume_height)?;
+        load_next_height_to_receive(&proof_manager_db, latest_proof_final_slot)?;
 
     let cursor = Arc::new(Cursor::new(next_height_to_receive.get()));
 
@@ -282,7 +281,7 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
         max_nb_of_infos_in_db,
         next_height_to_receive: cursor.clone(),
         next_height_to_send: next_height_to_receive,
-        proof_resume_height,
+        latest_proof_final_slot,
         notifier,
         proof_manager_db: proof_manager_db.clone(),
         _phantom: PhantomData,
@@ -300,17 +299,31 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
 
 fn load_next_height_to_receive(
     proof_manager_db: &ProofManagerDb,
-    proof_resume_height: SlotNumber,
+    latest_proof_final_slot: Option<SlotNumber>,
 ) -> anyhow::Result<(Option<SlotNumber>, SlotNumber)> {
     let maybe_db_next_height_to_receive = proof_manager_db.get_next_height_to_receive()?;
-    let next_height_to_receive = maybe_db_next_height_to_receive
-        .unwrap_or(SlotNumber::ONE)
-        .max(proof_resume_height);
 
-    if let Some(db_next_height_to_receive) = maybe_db_next_height_to_receive {
-        if db_next_height_to_receive < next_height_to_receive {
-            proof_manager_db.set_next_height_to_receive(next_height_to_receive)?;
-        }
+    let next_height_to_receive = match latest_proof_final_slot {
+        // A predecessor aggregated proof exists: the outer aggregation host is restored
+        // from it and resumes exactly one slot past its final slot, requiring a
+        // contiguous inner-proof chain. The receive cursor must resume at that same slot,
+        // never ahead. The persisted cursor is advanced at DA-post time, so it can lead
+        // the latest *accepted* proof; honoring it as a lower bound (the previous
+        // `.max()`) would make the prover skip slots the restored outer host still
+        // expects, producing a non-contiguous chain that aborts proof aggregation.
+        Some(final_slot) => final_slot.saturating_add(1),
+        // No aggregated proof yet: there is no predecessor to stay contiguous with, so
+        // resume where individual proving left off. The first aggregation may legitimately
+        // start mid-flight.
+        None => maybe_db_next_height_to_receive.unwrap_or(SlotNumber::ONE),
+    };
+
+    // Keep the on-disk cursor in sync with the resume point, clamping it down when it was
+    // advanced ahead of the latest accepted proof.
+    if maybe_db_next_height_to_receive.is_some()
+        && maybe_db_next_height_to_receive != Some(next_height_to_receive)
+    {
+        proof_manager_db.set_next_height_to_receive(next_height_to_receive)?;
     }
 
     Ok((maybe_db_next_height_to_receive, next_height_to_receive))
@@ -1423,11 +1436,16 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_startup_keeps_higher_local_cursor_than_latest_proof() -> anyhow::Result<()> {
+    async fn test_startup_clamps_cursor_down_to_latest_proof() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let channel_size = 10;
         let max_nb_of_infos_in_db = 100;
 
+        // The persisted receive cursor (110) was advanced ahead at DA-post time, but the
+        // latest *accepted* aggregated proof only reached slot 100, so the restored outer
+        // aggregation host resumes at slot 101. Startup must clamp the resume cursor down
+        // to 101 — resuming at 110 would skip slots the outer host still expects to verify,
+        // producing a non-contiguous proof chain.
         {
             let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
             proof_manager_db.put_stf_info(SlotNumber::new(110), &make_stored_stf_info(110))?;
@@ -1436,30 +1454,19 @@ mod tests {
             proof_manager_db.set_oldest_height(SlotNumber::new(110))?;
         }
 
-        let (proof_manager_db, mut sender, mut receiver) = setup_with_resume(
+        let (proof_manager_db, sender, receiver) = setup_with_resume(
             temp_dir.path(),
             channel_size,
             max_nb_of_infos_in_db,
             Some(SlotNumber::new(100)),
         )?;
 
-        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(110));
-        assert_eq!(sender.next_height_to_send, SlotNumber::new(110));
+        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(101));
+        assert_eq!(sender.next_height_to_send, SlotNumber::new(101));
         assert_eq!(
             proof_manager_db.get_next_height_to_receive()?,
-            Some(SlotNumber::new(110))
+            Some(SlotNumber::new(101))
         );
-
-        sender
-            .startup_notify_about_infos_from_db(
-                SlotNumber::new(110),
-                SlotNumber::new(110),
-                &InfiniteHeight,
-            )
-            .await?;
-
-        let received = receiver.read_next().await?.unwrap();
-        assert_eq!(received.slot_number(), SlotNumber::new(110));
 
         Ok(())
     }
