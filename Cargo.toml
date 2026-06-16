@@ -288,6 +288,10 @@ toml = { version = "0.8.19", features = ["parse"] }
 jsonrpsee = { version = "0.26.0", default-features = false }
 jsonrpsee-types = { version = "0.26.0", default-features = false }
 jsonrpsee-core = { version = "0.26.0", default-features = false }
+# Pure-Rust LZ4 for Celestia blob compression. `default-features = false` drops the
+# `std`/`frame` features; the explicit `safe-*` features keep the bounds-checked
+# (no-unsafe) block codec — important for the guest path that decodes adversarial bytes.
+lz4_flex = { version = "0.11", default-features = false, features = ["safe-encode", "safe-decode"] }
 schemars = { version = "1.2", features = ["derive"] }
 tempfile = "3.20.0"
 testcontainers = "0.27.0"
