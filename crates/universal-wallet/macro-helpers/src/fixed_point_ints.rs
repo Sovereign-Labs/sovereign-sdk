@@ -13,7 +13,8 @@ use syn::{Expr, ExprAssign, ExprPath, Ident, Meta, Token};
 ///  * `FromField(index)`: parses the field at location `index` in the parent struct as a single
 ///    `u8` byte and uses that as the amount of decimal places. Performs NO type-checking.
 ///  * `FromFieldWithOverride`: like `FromField`, but if the entire sibling field equals the
-///    `override_match` expression, uses `override_decimals` instead of the byte.
+///    `override_match` expression, uses `override_decimals` instead of the byte. Internal
+///    special-case for our fixed 32-byte token-id override only; not a general-purpose mechanism.
 #[derive(Debug, Clone)]
 pub enum FixedPointDisplay {
     Direct(u8),
@@ -93,7 +94,7 @@ impl FromMeta for FixedPointDisplay {
             NestedMeta::Meta(Meta::List(list)) => {
                 match list.path.get_ident().map(Ident::to_string) {
                     Some(s) if s == "from_field" => {
-                        const USAGE: &str = "Field references for fixed points must provide a field index: `from_field(1)`, optionally a 0-indexed byte offset: `from_field(5, offset=31)`, and optionally an override pair: `from_field(1, offset=31, override_eq=<expr>, override_decimals=<expr>)`";
+                        const USAGE: &str = "Field references for fixed points must provide a field index: `from_field(1)`, and optionally a 0-indexed byte offset: `from_field(5, offset=31)`";
                         let field_meta = Punctuated::<Expr, Token![,]>::parse_terminated.parse2(list.tokens.clone())?;
                         if field_meta.is_empty() {
                             return Err(darling::Error::unsupported_shape(USAGE));

@@ -182,8 +182,9 @@ impl<L: LinkingScheme> Ty<L> {
                     ..
                 }),
             ) => {
-                // We need all 32 bytes of the sibling field to compare against `override_match`.
-                // This also covers the fallback `byte_offset`, which is always within 0..32.
+                // Intentionally limited to 32-byte sibling fields (our token-id use case): we grab
+                // all 32 bytes to compare against `override_match`, which also covers the fallback
+                // `byte_offset` (always within 0..32).
                 (0..32).map(|i| (*field_index, i)).collect()
             }
             _ => Vec::new(),
@@ -287,10 +288,10 @@ pub enum FixedPointDisplay {
         field_index: usize,
         byte_offset: usize,
     },
-    /// Like [`FixedPointDisplay::FromSiblingField`], but if the sibling field's first 32 bytes
-    /// equal `override_match`, `override_decimals` is used instead of the byte at `byte_offset`.
-    /// This lets a single generic primitive special-case a known value (e.g. a specific token id
-    /// whose last byte does not encode its decimals) without this crate knowing what it means.
+    /// Like [`FixedPointDisplay::FromSiblingField`], but if the sibling field's 32 bytes equal
+    /// `override_match`, `override_decimals` is used instead of the byte at `byte_offset`. Intended
+    /// only for our fixed 32-byte token-id override and intentionally supports 32-byte sibling
+    /// fields only; not a general-purpose primitive.
     FromSiblingFieldWithOverride {
         field_index: usize,
         byte_offset: usize,
