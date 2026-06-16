@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 use std::marker::PhantomData;
 use std::num::NonZero;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 
 use anyhow::{anyhow, bail};
@@ -58,38 +57,39 @@ impl<StateRoot, Witness, Da: DaSpec> StateTransitionInfo<StateRoot, Witness, Da>
 
 /// Shared `next_height_to_receive` cursor.
 ///
-/// Writers are serialized because the persistent advance is a load-write-store
-/// sequence, not a single atomic operation.
+/// A single mutex serializes all access. The persistent advance is a
+/// load-write-store sequence (an in-memory update plus a ProofManagerDb write),
+/// not a single atomic operation, so writers must be serialized; reads share the
+/// same lock.
 struct Cursor {
-    value: AtomicU64,
-    write_lock: Mutex<()>,
+    value: Mutex<SlotNumber>,
 }
 
 impl Cursor {
-    fn new(value: u64) -> Self {
+    fn new(value: SlotNumber) -> Self {
         Self {
-            value: AtomicU64::new(value),
-            write_lock: Mutex::new(()),
+            value: Mutex::new(value),
         }
     }
 
-    fn get(&self) -> u64 {
-        self.value.load(Ordering::SeqCst)
+    fn get(&self) -> SlotNumber {
+        *self.lock()
     }
 
-    fn fetch_add(&self, amount: u64) -> u64 {
-        let _guard = self.lock();
-        self.value.fetch_add(amount, Ordering::SeqCst)
+    fn fetch_add(&self, amount: u64) -> SlotNumber {
+        let mut value = self.lock();
+        let old_value = *value;
+        *value = old_value.saturating_add(amount);
+        old_value
     }
 
-    fn fetch_max(&self, value: u64) {
-        let _guard = self.lock();
-        self.value.fetch_max(value, Ordering::SeqCst);
+    fn fetch_max(&self, other: SlotNumber) {
+        let mut value = self.lock();
+        *value = (*value).max(other);
     }
 
-    fn store(&self, value: u64) {
-        let _guard = self.lock();
-        self.value.store(value, Ordering::SeqCst);
+    fn store(&self, new_value: SlotNumber) {
+        *self.lock() = new_value;
     }
 
     /// Persist the new value before updating memory so a failed write leaves
@@ -97,20 +97,20 @@ impl Cursor {
     fn advance_and_persist(
         &self,
         amount: u64,
-        persist: impl FnOnce(u64) -> anyhow::Result<()>,
-    ) -> anyhow::Result<u64> {
-        let _guard = self.lock();
-        let old_value = self.value.load(Ordering::SeqCst);
+        persist: impl FnOnce(SlotNumber) -> anyhow::Result<()>,
+    ) -> anyhow::Result<SlotNumber> {
+        let mut value = self.lock();
+        let old_value = *value;
         let new_value = old_value
             .checked_add(amount)
             .ok_or_else(|| anyhow!("next_height_to_receive overflowed"))?;
         persist(new_value)?;
-        self.value.store(new_value, Ordering::SeqCst);
+        *value = new_value;
         Ok(old_value)
     }
 
-    fn lock(&self) -> std::sync::MutexGuard<'_, ()> {
-        self.write_lock.lock().expect("cursor write lock poisoned")
+    fn lock(&self) -> std::sync::MutexGuard<'_, SlotNumber> {
+        self.value.lock().expect("cursor lock poisoned")
     }
 }
 
@@ -181,8 +181,7 @@ impl<
 
         let (maybe_db_next_height_to_receive, db_next_height_to_receive) =
             load_next_height_to_receive(&self.proof_manager_db, self.latest_proof_final_slot)?;
-        self.next_height_to_receive
-            .store(db_next_height_to_receive.get());
+        self.next_height_to_receive.store(db_next_height_to_receive);
         self.next_height_to_send = db_next_height_to_receive;
 
         let maybe_write_rollup_height = self.proof_manager_db.get_write_height()?;
@@ -222,7 +221,7 @@ impl<
 
     /// Get the next height to receive as a `SlotNumber`.
     pub fn next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new(self.next_height_to_receive.get())
+        self.next_height_to_receive.get()
     }
 
     /// Increment next height to receive by one, returning the previous value.
@@ -232,7 +231,7 @@ impl<
     /// prevent production callers from silently losing cursor advances on restart.
     #[cfg(test)]
     pub fn inc_next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new(self.next_height_to_receive.fetch_add(1))
+        self.next_height_to_receive.fetch_add(1)
     }
 }
 
@@ -275,7 +274,7 @@ pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     let (_, next_height_to_receive) =
         load_next_height_to_receive(&proof_manager_db, latest_proof_final_slot)?;
 
-    let cursor = Arc::new(Cursor::new(next_height_to_receive.get()));
+    let cursor = Arc::new(Cursor::new(next_height_to_receive));
 
     let sender = Sender {
         max_nb_of_infos_in_db,
@@ -528,7 +527,7 @@ where
                          This usually means the node previously ran without the proof pipeline (e.g. as a replica)."
                     );
                     self.next_height_to_send = height;
-                    self.next_height_to_receive.fetch_max(height.get());
+                    self.next_height_to_receive.fetch_max(height);
                 }
                 return Ok(());
             }
@@ -592,7 +591,7 @@ where
 
     /// Get the next height to receive as a `SlotNumber`.
     pub fn next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new(self.next_height_to_receive.get())
+        self.next_height_to_receive.get()
     }
 
     /// Increment next height to receive by the requested amount and immediately persist it.
@@ -635,7 +634,7 @@ pub struct CursorHandle {
 impl CursorHandle {
     /// Increment next height to receive by the requested amount, returning the previous value.
     pub fn inc_next_height_to_receive_by(&self, amount: u64) -> SlotNumber {
-        SlotNumber::new(self.next_height_to_receive.fetch_add(amount))
+        self.next_height_to_receive.fetch_add(amount)
     }
 
     /// Increment next height to receive by the requested amount and persist the
@@ -655,17 +654,17 @@ impl CursorHandle {
         // realign cannot be lost inside this window. Persisting happens before
         // the in-memory advance: if the write fails, the in-memory value stays
         // consistent with disk.
-        let old_value =
-            self.next_height_to_receive
-                .advance_and_persist(amount, |new_raw_value| {
-                    self.proof_manager_db
-                        .set_next_height_to_receive(SlotNumber::new(new_raw_value))?;
-                    #[cfg(test)]
-                    CrashLocation::AfterPersistingProofManagerNextHeight.crash_if_env_set();
-                    Ok(())
-                })?;
+        let old_value = self
+            .next_height_to_receive
+            .advance_and_persist(amount, |new_value| {
+                self.proof_manager_db
+                    .set_next_height_to_receive(new_value)?;
+                #[cfg(test)]
+                CrashLocation::AfterPersistingProofManagerNextHeight.crash_if_env_set();
+                Ok(())
+            })?;
 
-        Ok(SlotNumber::new(old_value))
+        Ok(old_value)
     }
 }
 
