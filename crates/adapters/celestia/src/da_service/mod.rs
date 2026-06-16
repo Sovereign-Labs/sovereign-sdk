@@ -2,14 +2,15 @@
 mod tests;
 
 pub use crate::config::CelestiaConfig;
+use crate::config::CompressOnSubmit;
 use crate::metrics::client::{
     BlobGetAllMeasurement, GetBlockHeaderMeasurement, GetChainHeadMeasurement,
     GetNamespaceDataMeasurement, HeaderSyncStateMeasurement, StateBalanceForAddressMeasurement,
     StateEstimateGasPriceMeasurement, SubmitPayForBlob,
 };
 use crate::metrics::full::{
-    BlobSubmitMeasurement, CelestiaAdapterStateMeasurement, GetBlockMeasurement,
-    NamespaceDataMetrics,
+    BlobCompressionMeasurement, BlobSubmitMeasurement, CelestiaAdapterStateMeasurement,
+    GetBlockMeasurement, NamespaceDataMetrics,
 };
 use crate::metrics::RollupNamespace;
 use crate::types::{
@@ -51,9 +52,12 @@ pub struct CelestiaService {
     request_timeout: Duration,
     tx_priority: celestia_client::tx::TxPriority,
     tx_status_polling_millis: u64,
+    compression: CompressOnSubmit,
+    compression_chunk_size: usize,
 }
 
 impl CelestiaService {
+    #[allow(clippy::too_many_arguments)]
     fn with_client(
         client: celestia_client::Client,
         rollup_batch_namespace: Namespace,
@@ -64,6 +68,8 @@ impl CelestiaService {
         request_timeout: Duration,
         tx_priority: celestia_client::tx::TxPriority,
         tx_status_polling_millis: u64,
+        compression: CompressOnSubmit,
+        compression_chunk_size: usize,
     ) -> Self {
         Self {
             client: Arc::new(client),
@@ -75,6 +81,8 @@ impl CelestiaService {
             request_timeout,
             tx_priority,
             tx_status_polling_millis,
+            compression,
+            compression_chunk_size,
         }
     }
 
@@ -179,6 +187,27 @@ impl CelestiaService {
             da_transaction_id: tx_hash,
         })
     }
+
+    /// Encode a logical batch for submission per the configured compression policy and
+    /// record a compression metric. Proof blobs are posted verbatim and never come here.
+    fn encode_batch_for_submission(&self, logical: &[u8]) -> anyhow::Result<Vec<u8>> {
+        let compress = matches!(self.compression, CompressOnSubmit::Lz4);
+        let encoded =
+            crate::envelope::encode_for_submission(logical, compress, self.compression_chunk_size)?;
+        let mode = match crate::envelope::encoded_codec(&encoded) {
+            Some(crate::envelope::CODEC_LZ4) => "lz4",
+            Some(crate::envelope::CODEC_RAW_CHUNK) => "raw_escape",
+            _ => "passthrough",
+        };
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(BlobCompressionMeasurement {
+                logical_bytes: logical.len(),
+                posted_bytes: encoded.len(),
+                mode,
+            });
+        });
+        Ok(encoded)
+    }
 }
 
 impl CelestiaService {
@@ -237,6 +266,8 @@ impl CelestiaService {
             request_timeout,
             tx_priority,
             config.tx_status_polling_millis,
+            config.compression,
+            config.compression_chunk_size,
         )
     }
 }
@@ -407,7 +438,12 @@ impl CelestiaService {
         });
 
         let blobs = flatten_timeout(result)?
-            .map(|blobs| blobs.into_iter().map(|blob| blob.data).collect())
+            .map(|blobs| {
+                blobs
+                    .into_iter()
+                    .map(|blob| crate::envelope::decode_for_read(&blob.data))
+                    .collect()
+            })
             .unwrap_or_default();
         Ok(blobs)
     }
@@ -512,10 +548,13 @@ impl DaService for CelestiaService {
         Result<SubmitBlobReceipt<<Self::Spec as DaSpec>::TransactionId>, Self::Error>,
     > {
         let (tx, rx) = oneshot::channel();
-        let res = self
-            .submit_blob_to_namespace(blob, self.rollup_batch_namespace)
-            .await
-            .context("Batch submit");
+        let res = match self.encode_batch_for_submission(blob) {
+            Ok(encoded) => self
+                .submit_blob_to_namespace(&encoded, self.rollup_batch_namespace)
+                .await
+                .context("Batch submit"),
+            Err(e) => Err(e).context("Batch encode"),
+        };
         // UNWRAP: Not possible because the receiver is in the scope still
         tx.send(res).unwrap();
         rx

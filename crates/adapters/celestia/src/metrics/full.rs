@@ -89,6 +89,42 @@ impl Metric for BlobSubmitMeasurement {
     }
 }
 
+/// Compression effectiveness for a single submitted batch blob.
+#[derive(Debug)]
+pub(crate) struct BlobCompressionMeasurement {
+    /// Logical (pre-encode) payload length.
+    pub logical_bytes: usize,
+    /// Posted (post-encode) payload length.
+    pub posted_bytes: usize,
+    /// Encoding applied: `lz4`, `raw_escape`, or `passthrough`.
+    pub mode: &'static str,
+}
+
+impl Metric for BlobCompressionMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_compress_blob"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let mode = self.mode;
+        let logical_bytes = self.logical_bytes;
+        let posted_bytes = self.posted_bytes;
+        // Bytes saved by encoding; negative when a magic-escape envelope expands the payload.
+        let saved_bytes = logical_bytes as i64 - posted_bytes as i64;
+        // Posted size as a fraction of logical, in basis points (10000 = unchanged).
+        let ratio_bps = if logical_bytes > 0 {
+            (posted_bytes as u64 * 10_000 / logical_bytes as u64) as i64
+        } else {
+            10_000
+        };
+        write!(
+            buffer,
+            "{name},mode={mode} logical_bytes={logical_bytes},posted_bytes={posted_bytes},saved_bytes={saved_bytes},ratio_bps={ratio_bps}"
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct CelestiaAdapterStateMeasurement {
     pub signer: CelestiaAddress,

@@ -78,6 +78,18 @@ backoff_max_times = 10
 # Default: 2.0
 # backoff_factor = 2.0
 
+# Whether to compress batch blobs before submitting them to Celestia.
+# Options are "Off" (post verbatim) and "Lz4" (wrap batches in an LZ4 chunked envelope,
+# used only when it is strictly smaller than the raw payload).
+# Default: "Off"
+#compression = "Off"
+
+# Target logical chunk size (in bytes) for compressed batch envelopes. Each chunk is
+# compressed independently so a verifier can decode a prefix without reading the whole
+# blob. Clamped to the verifier's per-chunk cap.
+# Default: 512 (share-aligned)
+#compression_chunk_size = 512
+
 
 # WITH CURRENT UNCOMMENTED VALUES:
 # Timeout per request: 18 seconds

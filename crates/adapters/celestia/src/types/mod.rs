@@ -14,7 +14,7 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHashTrait, CountedBufReader
 use sov_universal_wallet::schema::OverrideSchema;
 use sov_universal_wallet::UniversalWallet;
 
-use crate::envelope::EnvelopeState;
+use crate::envelope::{classify_and_decode, EnvelopeState};
 use crate::shares::BlobIterator;
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
@@ -107,17 +107,15 @@ pub struct BlobWithSender {
     pub(crate) sender: CelestiaAddress,
     pub hash: HexHash,
 
-    /// Interior, serde-skipped cache of the blob's envelope classification.
+    /// Interior, serde-skipped cache of the blob's envelope classification and decode.
     ///
     /// Derived only from the authenticated DA-physical accumulator
     /// ([`Self::compressed_verified_data`]); never a serialized witness claim.
-    /// Empty after construction and after every (de)serialization, then
-    /// recomputed deterministically. Ignored by `PartialEq`.
-    ///
-    /// Not read on any live path in PR2; PR3 fills it via `get_or_init` while
-    /// holding only `&self`.
+    /// Empty after construction and after every (de)serialization, then recomputed
+    /// deterministically by [`Self::logical_state`] (holding only `&self`). A native read
+    /// that extends the accumulator drops it so the logical view recomputes over the
+    /// larger payload. Ignored by `PartialEq`.
     #[serde(skip)]
-    #[allow(dead_code)] // wired into the read path in PR3
     envelope_state: OnceLock<EnvelopeState>,
 }
 
@@ -156,14 +154,43 @@ impl BlobWithSender {
         self.blob.total_len()
     }
 
-    /// Logical payload bytes observed by the rollup so far.
-    pub(crate) fn logical_verified_data(&self) -> &[u8] {
-        self.compressed_verified_data()
+    /// The blob's envelope classification + decode over the authenticated accumulator,
+    /// computed once and cached. Recomputed after (de)serialization (the cache is
+    /// `#[serde(skip)]`) and after a native read extends the accumulator.
+    fn logical_state(&self) -> &EnvelopeState {
+        self.envelope_state
+            .get_or_init(|| classify_and_decode(self.compressed_verified_data()))
     }
 
-    /// Total length of the logical payload exposed to the rollup.
+    /// Logical payload bytes observed by the rollup so far. For a compressed envelope
+    /// these are the bytes decoded from the complete chunks in the authenticated prefix;
+    /// for legacy/malformed blobs the logical and DA-physical bytes coincide.
+    pub(crate) fn logical_verified_data(&self) -> &[u8] {
+        match self.logical_state() {
+            EnvelopeState::Envelope(decoded) => &decoded.logical,
+            EnvelopeState::Legacy | EnvelopeState::Malformed => self.compressed_verified_data(),
+        }
+    }
+
+    /// Total length of the logical payload exposed to the rollup. For an envelope this is
+    /// the authenticated header `logical_len` (never the currently-decodable length, so it
+    /// stays stable as the blob is read); otherwise the DA-physical length.
     pub(crate) fn logical_total_len(&self) -> usize {
-        self.compressed_total_len()
+        match self.logical_state() {
+            EnvelopeState::Envelope(decoded) => decoded.header.logical_len as usize,
+            EnvelopeState::Legacy | EnvelopeState::Malformed => self.compressed_total_len(),
+        }
+    }
+
+    /// Read every remaining DA-physical byte into the accumulator, dropping the derived
+    /// envelope cache so the logical view recomputes over the full payload.
+    #[cfg(feature = "native")]
+    fn read_all_physical(&mut self) {
+        let remaining = self.compressed_total_len() - self.compressed_verified_data().len();
+        if remaining > 0 {
+            self.blob.advance(remaining);
+            self.envelope_state.take();
+        }
     }
 }
 
@@ -187,9 +214,82 @@ impl BlobReaderTrait for BlobWithSender {
         self.logical_total_len()
     }
 
+    fn logical_decode_failed(&self) -> bool {
+        let EnvelopeState::Envelope(decoded) = self.logical_state() else {
+            // Legacy and malformed-as-raw blobs expose their authenticated bytes
+            // verbatim; there is no decode step that can fail.
+            return false;
+        };
+        // A structurally invalid chunk (cap violation, bad LZ4, raw length mismatch, or
+        // logical-sum overrun) is the sender's fault regardless of how much was read.
+        if !decoded.clean {
+            return true;
+        }
+        // A clean decode is canonical only once the whole authenticated payload is present
+        // and the chunks tile it exactly into the declared logical length. A short prefix
+        // (a genuine partial read) is not a failure here — it routes to the prover
+        // withholding path, which fails closed separately.
+        let total = self.compressed_total_len();
+        let fully_present = self.compressed_verified_data().len() == total;
+        fully_present
+            && !(decoded.consumed == total
+                && decoded.logical.len() == decoded.header.logical_len as usize)
+    }
+
     #[cfg(feature = "native")]
     fn advance(&mut self, num_bytes: usize) -> &[u8] {
-        self.blob.advance(num_bytes);
+        let (logical_len, mut covered) = match self.logical_state() {
+            EnvelopeState::Envelope(decoded) => {
+                (decoded.header.logical_len as usize, decoded.logical.len())
+            }
+            EnvelopeState::Legacy | EnvelopeState::Malformed => {
+                // Legacy/malformed: logical and DA-physical bytes coincide.
+                self.blob.advance(num_bytes);
+                return self.verified_data();
+            }
+        };
+
+        // Envelope: pull in whole chunks until at least `num_bytes` more logical bytes are
+        // covered (overshooting to a chunk boundary is expected). The accumulator always
+        // ends on a chunk boundary, so the next chunk's 4-byte framing starts at its
+        // current length; we read framing -> payload per chunk without decoding in the
+        // loop, then drop the cache so `verified_data()` decodes the larger accumulator
+        // once. A partial read therefore authenticates only a prefix of the physical blob.
+        let target = covered.saturating_add(num_bytes).min(logical_len);
+        let before = self.blob.accumulator().len();
+        while covered < target {
+            let pos = self.blob.accumulator().len();
+            if pos >= self.blob.total_len() {
+                break; // physical EOF
+            }
+            self.blob.advance(crate::envelope::CHUNK_HEADER_LEN);
+            let acc = self.blob.accumulator();
+            if acc.len() < pos + crate::envelope::CHUNK_HEADER_LEN {
+                break; // truncated framing at EOF
+            }
+            let chunk_logical = u16::from_le_bytes([acc[pos], acc[pos + 1]]) as usize;
+            let chunk_encoded = u16::from_le_bytes([acc[pos + 2], acc[pos + 3]]) as usize;
+            self.blob.advance(chunk_encoded);
+            if self.blob.accumulator().len()
+                < pos + crate::envelope::CHUNK_HEADER_LEN + chunk_encoded
+            {
+                break; // truncated payload at EOF
+            }
+            covered = covered.saturating_add(chunk_logical);
+        }
+        if self.blob.accumulator().len() != before {
+            // The accumulator grew; recompute the logical view over the larger prefix.
+            self.envelope_state.take();
+        }
+        self.verified_data()
+    }
+
+    #[cfg(feature = "native")]
+    fn full_data(&mut self) -> &[u8] {
+        // The default advances by a *logical* delta, which does not map to the physical
+        // advance an envelope requires; read all remaining physical bytes directly so the
+        // logical view is the complete payload (or a detectable non-canonical decode).
+        self.read_all_physical();
         self.verified_data()
     }
 }
@@ -248,8 +348,20 @@ impl NamespaceRelevantData {
                 tracing::debug!("Blob without a signer, happens if blob is version 0");
                 continue;
             };
+            let iter = blob.into_iter();
+            // Peek the leading bytes (the first share's payload) to detect the envelope
+            // magic without consuming anything for legacy blobs.
+            let has_magic = crate::envelope::has_magic_prefix(prost::bytes::Buf::chunk(&iter));
+            let mut reader = CountedBufReader::new(iter);
+            if has_magic {
+                // Eagerly authenticate the fixed envelope header so the logical length and
+                // classification are pinned before any size gate reads `total_len()`.
+                // Legacy blobs read nothing here, preserving the "a deferred blob proves no
+                // shares" DoS property.
+                reader.advance(crate::envelope::ENVELOPE_HEADER_LEN);
+            }
             let blob_tx = BlobWithSender {
-                blob: CountedBufReader::new(blob.into_iter()),
+                blob: reader,
                 range_in_namespace,
                 sender,
                 hash,
@@ -474,7 +586,7 @@ pub mod tests {
     #[test]
     fn serde_roundtrip_drops_envelope_cache_and_recomputes() {
         use super::BlobWithSender;
-        use crate::envelope::{classify, EnvelopeState};
+        use crate::envelope::{classify_and_decode, EnvelopeState};
 
         let path = make_test_path(with_rollup_batch_data::DATA_PATH);
         let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
@@ -482,16 +594,13 @@ pub mod tests {
 
         let mut blob = ns_data.get_blobs_with_sender().remove(0);
 
-        // Read the whole physical frame so the accumulator carries the bytes to classify.
-        let total = blob.compressed_total_len();
-        blob.advance(total);
-
-        // Simulate PR3's lazy fill so we can prove the cache is dropped on serialize.
-        let expected_state = classify(blob.compressed_verified_data());
-        blob.envelope_state
-            .set(expected_state.clone())
-            .expect("cache starts empty");
-        assert!(blob.envelope_state.get().is_some());
+        // Reading the whole blob lazily populates the envelope cache.
+        blob.full_data();
+        assert!(
+            blob.envelope_state.get().is_some(),
+            "reading the blob should populate the cache"
+        );
+        let expected_state = classify_and_decode(blob.compressed_verified_data());
 
         let json = serde_json::to_string(&blob).unwrap();
         assert!(
@@ -507,10 +616,198 @@ pub mod tests {
         assert_eq!(restored, blob);
         // Reconstruction from the authenticated bytes is deterministic.
         assert_eq!(
-            classify(restored.compressed_verified_data()),
+            classify_and_decode(restored.compressed_verified_data()),
             expected_state
         );
         // This fixture is a raw (non-envelope) blob.
         assert_eq!(expected_state, EnvelopeState::Legacy);
+    }
+}
+
+/// Integration tests for the envelope read path, exercised over *real* Celestia v1 shares
+/// built from arbitrary physical bytes (`Blob::new(..).to_shares()`), so the accessors run
+/// against genuine multi-share blob iteration exactly as in production.
+#[cfg(test)]
+mod envelope_blob_tests {
+    use std::str::FromStr;
+    use std::sync::OnceLock;
+
+    use sov_rollup_interface::common::HexHash;
+    use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
+
+    use super::BlobWithSender;
+    use crate::envelope::{
+        classify_and_decode, encode_for_submission, EnvelopeState, CODEC_RAW_CHUNK,
+        ENVELOPE_HEADER_LEN, ENVELOPE_MAGIC, ENVELOPE_VERSION, MAX_LOGICAL_CHUNK_LEN,
+    };
+    use crate::test_helper::{ADDR_1, ROLLUP_BATCH_NAMESPACE};
+    use crate::verifier::address::CelestiaAddress;
+
+    /// Build a [`BlobWithSender`] over `physical` exactly as `get_blobs_with_sender` would:
+    /// genuine Celestia v1 shares plus the eager fixed-header advance for magic-prefixed
+    /// blobs.
+    fn blob_over_physical(physical: &[u8]) -> BlobWithSender {
+        let signer = CelestiaAddress::from_str(ADDR_1).unwrap();
+        let json =
+            celestia_types::Blob::new(ROLLUP_BATCH_NAMESPACE, physical.to_vec(), Some(signer.0))
+                .expect("valid v1 blob");
+        let shares = json.to_shares().expect("blob splits into shares");
+        let range_in_namespace = 0..shares.len();
+        let iter = crate::shares::Blob(shares).into_iter();
+        let has_magic = crate::envelope::has_magic_prefix(prost::bytes::Buf::chunk(&iter));
+        let mut reader = CountedBufReader::new(iter);
+        if has_magic {
+            reader.advance(ENVELOPE_HEADER_LEN);
+        }
+        BlobWithSender {
+            blob: reader,
+            range_in_namespace,
+            sender: signer,
+            hash: HexHash::new([0u8; 32]),
+            envelope_state: OnceLock::new(),
+        }
+    }
+
+    /// A raw-codec frame with an explicit (possibly inconsistent) header `logical_len` and
+    /// hand-built chunks — for crafting non-canonical / structurally invalid payloads.
+    fn raw_frame(logical_len: u32, chunks: &[(u16, Vec<u8>)]) -> Vec<u8> {
+        let mut v = ENVELOPE_MAGIC.to_vec();
+        v.push(ENVELOPE_VERSION);
+        v.push(CODEC_RAW_CHUNK);
+        v.extend_from_slice(&0u16.to_le_bytes());
+        v.extend_from_slice(&logical_len.to_le_bytes());
+        for (clen, payload) in chunks {
+            v.extend_from_slice(&clen.to_le_bytes());
+            v.extend_from_slice(&(payload.len() as u16).to_le_bytes());
+            v.extend_from_slice(payload);
+        }
+        v
+    }
+
+    #[test]
+    fn canonical_envelope_full_read_exposes_logical() {
+        // Compressible and large enough to span many chunks across several shares.
+        let logical = vec![0x5Au8; 2000];
+        let physical = encode_for_submission(&logical, true, 512).unwrap();
+        assert!(physical.len() < logical.len(), "fixture should compress");
+
+        let mut blob = blob_over_physical(&physical);
+        // `total_len` is the logical length read from the authenticated header.
+        assert_eq!(blob.total_len(), logical.len());
+        // A full read decodes every chunk to the complete logical payload.
+        assert_eq!(blob.full_data(), &logical[..]);
+        assert!(!blob.logical_decode_failed());
+    }
+
+    #[test]
+    fn partial_advance_reads_only_covering_chunks() {
+        // ~4 chunks of 512 logical bytes; highly compressible so each chunk is tiny on the
+        // wire.
+        let logical = vec![0x5Au8; 2000];
+        let physical = encode_for_submission(&logical, true, 512).unwrap();
+        let mut blob = blob_over_physical(&physical);
+        let full_physical = blob.compressed_total_len();
+
+        // Ask for 1 logical byte -> only the first chunk is pulled in, not the whole blob.
+        blob.advance(1);
+        assert!(!blob.verified_data().is_empty());
+        assert!(
+            blob.verified_data().len() <= 512,
+            "rounds up to one chunk, not the whole payload"
+        );
+        assert!(
+            blob.compressed_verified_data().len() < full_physical,
+            "a partial read authenticates only a prefix of the physical blob (DoS property)"
+        );
+        assert!(
+            !blob.logical_decode_failed(),
+            "a clean partial prefix is not a decode failure"
+        );
+
+        // Reading on yields the complete logical payload.
+        assert_eq!(blob.full_data(), &logical[..]);
+    }
+
+    #[test]
+    fn deferred_envelope_reads_only_header_but_knows_logical_len() {
+        let logical = vec![0x5Au8; 2000];
+        let physical = encode_for_submission(&logical, true, 512).unwrap();
+
+        let blob = blob_over_physical(&physical);
+        // Only the 24-byte header has been read (DoS: a size-checked blob proves ~1 share).
+        assert_eq!(blob.compressed_verified_data().len(), ENVELOPE_HEADER_LEN);
+        // Yet the logical length is already known from the authenticated header.
+        assert_eq!(blob.total_len(), logical.len());
+        assert!(blob.verified_data().is_empty(), "no logical bytes read yet");
+        // A header-only prefix is a clean partial read, not a decode failure.
+        assert!(!blob.logical_decode_failed());
+    }
+
+    #[test]
+    fn trailing_bytes_after_canonical_envelope_fail_decode() {
+        let logical = vec![0x5Au8; 1500];
+        let mut physical = encode_for_submission(&logical, true, 512).unwrap();
+        physical.extend_from_slice(&[0xDE, 0xAD, 0xBE, 0xEF]);
+
+        let mut blob = blob_over_physical(&physical);
+        blob.full_data();
+        // The chunks decode cleanly to `logical`, but they do not consume the trailing
+        // bytes, so the full physical payload is not a canonical encoding -> slash.
+        assert_eq!(blob.verified_data(), &logical[..]);
+        assert!(blob.logical_decode_failed());
+    }
+
+    #[test]
+    fn too_few_chunks_fail_decode() {
+        // Header claims 1000 logical bytes but the chunks supply only 300.
+        let physical = raw_frame(1000, &[(300u16, vec![7u8; 300])]);
+        let mut blob = blob_over_physical(&physical);
+        blob.full_data();
+        assert_eq!(blob.total_len(), 1000);
+        assert_eq!(blob.verified_data().len(), 300);
+        assert!(
+            blob.logical_decode_failed(),
+            "sum(chunk_logical_len) < logical_len is non-canonical"
+        );
+    }
+
+    #[test]
+    fn over_cap_chunk_fails_decode() {
+        let physical = raw_frame(
+            MAX_LOGICAL_CHUNK_LEN as u32 + 1,
+            &[(
+                MAX_LOGICAL_CHUNK_LEN + 1,
+                vec![1u8; MAX_LOGICAL_CHUNK_LEN as usize + 1],
+            )],
+        );
+        let mut blob = blob_over_physical(&physical);
+        blob.full_data();
+        assert!(
+            blob.logical_decode_failed(),
+            "a structurally invalid (over-cap) chunk must slash"
+        );
+    }
+
+    #[test]
+    fn serde_roundtrip_recomputes_envelope_decode() {
+        let logical = vec![0x5Au8; 2000];
+        let physical = encode_for_submission(&logical, true, 512).unwrap();
+
+        let mut blob = blob_over_physical(&physical);
+        blob.full_data();
+
+        let json = serde_json::to_string(&blob).unwrap();
+        let restored: BlobWithSender = serde_json::from_str(&json).unwrap();
+        assert_eq!(
+            restored.envelope_state.get(),
+            None,
+            "cache dropped on deserialize"
+        );
+        assert_eq!(restored, blob);
+        // The decode recomputed from the authenticated bytes is the full logical payload.
+        match classify_and_decode(restored.compressed_verified_data()) {
+            EnvelopeState::Envelope(decoded) => assert_eq!(decoded.logical, logical),
+            other => panic!("expected Envelope, got {other:?}"),
+        }
     }
 }
