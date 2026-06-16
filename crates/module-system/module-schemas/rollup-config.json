@@ -673,6 +673,13 @@
           "format": "uint",
           "default": null,
           "minimum": 1
+        },
+        "storage_path": {
+          "description": "Optional path to the proof manager database directory.\nDefaults to the rollup storage path if not specified.",
+          "type": [
+            "string",
+            "null"
+          ]
         }
       },
       "required": [

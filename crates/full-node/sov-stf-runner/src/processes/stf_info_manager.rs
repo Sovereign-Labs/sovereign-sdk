@@ -508,19 +508,6 @@ where
         SlotNumber::new(self.next_height_to_receive.load(Ordering::SeqCst))
     }
 
-    /// Increment next height to receive by one, returning the previous value.
-    pub fn inc_next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new(self.next_height_to_receive.fetch_add(1, Ordering::SeqCst))
-    }
-
-    /// Increment next height to receive by the requested amount, returning the previous value.
-    pub fn inc_next_height_to_receive_by(&self, amount: u64) -> SlotNumber {
-        SlotNumber::new(
-            self.next_height_to_receive
-                .fetch_add(amount, Ordering::SeqCst),
-        )
-    }
-
     /// Increment next height to receive by the requested amount and immediately persist it.
     pub fn inc_next_height_to_receive_by_and_persist(
         &self,
