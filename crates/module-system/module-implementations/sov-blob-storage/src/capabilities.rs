@@ -16,7 +16,7 @@ use sov_rollup_interface::da::RelevantBlobIters;
 use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_rollup_interface::stf::DiscardedBlob;
 use sov_sequencer_registry::AllowedSequencerError;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, info, warn};
 
 use crate::max_size_checker::{BlobsAccumulatorWithSizeLimit, PushOrIgnore};
 use crate::{
@@ -1085,7 +1085,7 @@ impl<S: Spec> BlobStorage<S> {
                 {
                     let leading_bytes =
                         &blob.verified_data()[..std::cmp::min(100, blob.verified_data().len())];
-                    trace!(
+                    tracing::trace!(
                         deserializing_as = std::any::type_name::<B>(),
                         leading_bytes = %hex::encode(leading_bytes),
                         "Blob failed to be deserialized"
@@ -1309,17 +1309,23 @@ fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> impl std::io::Re
 }
 
 #[cfg(test)]
+mod deserialization_tests;
+
+#[cfg(test)]
 mod tests {
     use std::io::{Cursor, ErrorKind};
     use std::num::NonZeroU8;
+    use std::sync::Arc;
 
-    use borsh::BorshDeserialize;
-    use sov_mock_da::MOCK_SEQUENCER_DA_ADDRESS;
+    use borsh::{BorshDeserialize, BorshSerialize};
+    use sov_mock_da::{MockBlob, MOCK_SEQUENCER_DA_ADDRESS};
+    use sov_modules_api::{BlobReaderTrait, FullyBakedTx};
     use sov_test_utils::TestSpec;
 
     use super::{
-        is_borsh_truncated_input_error, BlobStorage, BlobType, PreferredBatchData,
-        PreferredBlobData, PreferredBlobDataWithId, PreferredProofData, SequencerNumberTracker,
+        data_for_deserialization, is_borsh_truncated_input_error, BlobStorage, BlobType,
+        PreferredBatchData, PreferredBlobData, PreferredBlobDataWithId, PreferredProofData,
+        SequencerNumberTracker, BORSH_UNEXPECTED_LENGTH_OF_INPUT,
     };
 
     #[test]
@@ -1341,6 +1347,114 @@ mod tests {
 
         assert_eq!(error.kind(), ErrorKind::InvalidData);
         assert!(!is_borsh_truncated_input_error(&error));
+    }
+
+    #[test]
+    fn borsh_truncated_blob_payload_types_consume_full_blob_in_native() {
+        assert_native_truncated_borsh_error_consumes_full_blob(
+            "FullyBakedTx",
+            FullyBakedTx::new(vec![1, 2, 3]),
+        );
+        assert_native_truncated_borsh_error_consumes_full_blob(
+            "PreferredProofData",
+            PreferredProofData {
+                sequence_number: 1,
+                data: vec![1, 2, 3],
+            },
+        );
+        assert_native_truncated_borsh_error_consumes_full_blob(
+            "PreferredBatchData",
+            PreferredBatchData {
+                sequence_number: 1,
+                data: Arc::new(vec![FullyBakedTx::new(vec![1, 2, 3])]),
+                visible_slots_to_advance: NonZeroU8::new(1).unwrap(),
+            },
+        );
+        assert_native_truncated_borsh_error_consumes_full_blob("Vec<u8>", vec![1u8, 2, 3]);
+        assert_native_truncated_borsh_error_consumes_full_blob(
+            "Vec<FullyBakedTx>",
+            vec![FullyBakedTx::new(vec![1, 2, 3])],
+        );
+    }
+
+    #[test]
+    fn borsh_truncated_input_classifier_can_false_positive_before_native_reader_is_exhausted() {
+        struct EarlyUnexpectedLengthError;
+
+        impl BorshDeserialize for EarlyUnexpectedLengthError {
+            fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+                let mut first_byte = [0u8; 1];
+                reader.read_exact(&mut first_byte)?;
+                Err(std::io::Error::new(
+                    ErrorKind::InvalidData,
+                    BORSH_UNEXPECTED_LENGTH_OF_INPUT,
+                ))
+            }
+        }
+
+        let mut blob = mock_blob(vec![1, 2, 3]);
+        let error = {
+            let mut reader = data_for_deserialization(&mut blob);
+            match EarlyUnexpectedLengthError::try_from_reader(&mut reader) {
+                Ok(_) => panic!("test deserializer unexpectedly succeeded"),
+                Err(error) => error,
+            }
+        };
+
+        assert!(is_borsh_truncated_input_error(&error));
+        assert!(
+            blob.verified_data().len() < blob.total_len(),
+            "a classifier false positive can happen before the native reader consumes the full blob"
+        );
+    }
+
+    #[test]
+    fn borsh_try_from_reader_rejects_trailing_garbage() {
+        let mut serialized = borsh::to_vec(&FullyBakedTx::new(vec![1, 2, 3])).unwrap();
+        serialized.push(0xff);
+        let mut blob = mock_blob(serialized);
+
+        let error = {
+            let mut reader = data_for_deserialization(&mut blob);
+            FullyBakedTx::try_from_reader(&mut reader).unwrap_err()
+        };
+
+        assert_eq!(error.kind(), ErrorKind::InvalidData);
+        assert_eq!(error.to_string(), "Not all bytes read");
+        assert!(!is_borsh_truncated_input_error(&error));
+    }
+
+    fn assert_native_truncated_borsh_error_consumes_full_blob<T>(case: &str, value: T)
+    where
+        T: BorshDeserialize + BorshSerialize,
+    {
+        let mut serialized = borsh::to_vec(&value).unwrap();
+        serialized
+            .pop()
+            .expect("test values must serialize to non-empty bytes");
+        let mut blob = mock_blob(serialized);
+
+        let error = {
+            let mut reader = data_for_deserialization(&mut blob);
+            match T::try_from_reader(&mut reader) {
+                Ok(_) => panic!("{case} unexpectedly deserialized from truncated bytes"),
+                Err(error) => error,
+            }
+        };
+
+        assert!(
+            is_borsh_truncated_input_error(&error),
+            "{case} error was not classified as truncated input: {error:?}"
+        );
+        assert_eq!(
+            blob.verified_data().len(),
+            blob.total_len(),
+            "{case} did not consume the full native blob before reporting truncated input"
+        );
+    }
+
+    fn mock_blob(data: Vec<u8>) -> MockBlob {
+        MockBlob::new_with_hash(data, MOCK_SEQUENCER_DA_ADDRESS.into())
     }
 
     #[test]
