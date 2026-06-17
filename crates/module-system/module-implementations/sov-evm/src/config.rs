@@ -42,7 +42,7 @@ pub struct EvmGenesisConfig<S: Spec> {
     pub contract_creation_policy: ContractCreationPolicy,
     /// Custom precompile addresses enabled at genesis. Addresses must be available in the
     /// concrete EVM precompile set configured for the runtime.
-    #[serde(default, skip_serializing_if = "BTreeSet::is_empty")]
+    #[serde(default)]
     pub enabled_custom_precompiles: BTreeSet<Address>,
     /// The address which is allowed to modify the config.
     pub admin: S::Address,
