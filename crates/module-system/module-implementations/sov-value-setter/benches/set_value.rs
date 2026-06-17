@@ -15,7 +15,9 @@ generate_zk_runtime!(BenchRuntime <= value_setter: ValueSetter<S>);
 type S = TestSpec;
 type RT = BenchRuntime<S>;
 
-const BATCH_SIZES: &[usize] = &[1, 4, 16, 64, 256];
+// Large N so the per-call signal dominates the fixed per-slot overhead; the fit
+// slope (equivalently a large/small difference) then cancels the overhead cleanly.
+const BATCH_SIZES: &[usize] = &[4096, 16384, 65536];
 
 // Policy: 1 ns wall-clock = 1 gas. Applied uniformly across all native-calibrated
 // constants; rescale by adjusting INITIAL_GAS_LIMIT if the absolute scale shifts.
@@ -52,7 +54,7 @@ fn build_batch(admin: &TestUser<S>, n: usize) -> BatchType<RT, S> {
 
 fn bench_set_value(c: &mut Criterion) {
     let mut group = c.benchmark_group(BENCH_GROUP);
-    group.sample_size(20);
+    group.sample_size(50);
     for &n in BATCH_SIZES {
         group.bench_with_input(BenchmarkId::from_parameter(n), &n, |b, &n| {
             b.iter_batched(
