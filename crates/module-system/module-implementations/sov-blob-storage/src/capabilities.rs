@@ -27,6 +27,13 @@ use crate::{
 /// A loose upper bound on the size of an emergency registration blob, in bytes. Blobs larger than this are statically known to be invalid
 /// so we don't bother trying to deserialize them.
 const MAX_EMERGENCY_REGISTRATION_BLOB_SIZE: usize = 1000;
+const BORSH_UNEXPECTED_LENGTH_OF_INPUT: &str = "Unexpected length of input";
+
+fn is_borsh_truncated_input_error(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::UnexpectedEof
+        || (error.kind() == std::io::ErrorKind::InvalidData
+            && error.to_string() == BORSH_UNEXPECTED_LENGTH_OF_INPUT)
+}
 
 #[derive(Debug)]
 enum SequencerStatus<S: Spec> {
@@ -1063,14 +1070,12 @@ impl<S: Spec> BlobStorage<S> {
             Ok(batch) => Some(batch),
             // if the blob is malformed, slash the sequencer
             Err(error) => {
-                // Distinguish a genuinely malformed blob from a withheld/truncated one (censorship):
-                // borsh reports `UnexpectedEof` only when it ran out of bytes, which is a legitimate
-                // failure ONLY if the whole blob was actually verified.
-                // Otherwise a malicious prover may have truncated the witness to frame an honest sequencer.
-                // Every other borsh error (`InvalidData`: bad value or trailing bytes) is
-                // determined entirely by the bytes we did verify, so it proves malformation
-                // regardless of how much of the blob is unread.
-                if error.kind() == std::io::ErrorKind::UnexpectedEof {
+                // Distinguish a genuinely malformed blob from a withheld/truncated one (censorship).
+                // Borsh signals truncated input either as `UnexpectedEof` or as
+                // `InvalidData("Unexpected length of input")`, depending on the type being decoded.
+                // That failure is legitimate ONLY if the whole blob was actually verified. Otherwise
+                // a malicious prover may have truncated the witness to frame an honest sequencer.
+                if is_borsh_truncated_input_error(&error) {
                     assert_eq!(
                         blob.verified_data().len(),
                         blob.total_len(),
@@ -1305,15 +1310,38 @@ fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> impl std::io::Re
 
 #[cfg(test)]
 mod tests {
+    use std::io::{Cursor, ErrorKind};
     use std::num::NonZeroU8;
 
+    use borsh::BorshDeserialize;
     use sov_mock_da::MOCK_SEQUENCER_DA_ADDRESS;
     use sov_test_utils::TestSpec;
 
     use super::{
-        BlobStorage, BlobType, PreferredBatchData, PreferredBlobData, PreferredBlobDataWithId,
-        PreferredProofData, SequencerNumberTracker,
+        is_borsh_truncated_input_error, BlobStorage, BlobType, PreferredBatchData,
+        PreferredBlobData, PreferredBlobDataWithId, PreferredProofData, SequencerNumberTracker,
     };
+
+    #[test]
+    fn borsh_reports_truncated_vec_u8_as_invalid_data() {
+        // Borsh Vec<u8>: first 4 bytes are little-endian length.
+        // This claims length 4 but provides only one payload byte.
+        let truncated = [4, 0, 0, 0, 0xaa];
+
+        let error = Vec::<u8>::try_from_reader(&mut Cursor::new(truncated)).unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::InvalidData);
+        assert_eq!(error.to_string(), "Unexpected length of input");
+        assert!(is_borsh_truncated_input_error(&error));
+    }
+
+    #[test]
+    fn borsh_truncated_input_classifier_rejects_other_invalid_data() {
+        let error = bool::try_from_reader(&mut Cursor::new([2])).unwrap_err();
+
+        assert_eq!(error.kind(), ErrorKind::InvalidData);
+        assert!(!is_borsh_truncated_input_error(&error));
+    }
 
     #[test]
     fn test_find_next_run() {
