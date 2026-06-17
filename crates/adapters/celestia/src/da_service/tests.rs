@@ -1191,6 +1191,39 @@ async fn verification_fails_if_not_all_blobs_are_proven() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn verification_fails_if_blob_total_len_is_forged() {
+    use crate::shares::BlobIterator;
+    use sov_rollup_interface::da::CountedBufReader;
+
+    let block = with_namespace_padding::filtered_block();
+    let rollup_params = with_namespace_padding::ROLLUP_PARAMS;
+
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    // The length that the DA shares actually prove for this blob.
+    let proven_len = relevant_blobs.batch_blobs[0].total_len();
+
+    // Build the inclusion proof from the honest blob first, then swap in a blob whose
+    // witness-derived `total_len()` disagrees with the proven sequence length. The verifier
+    // only authenticates the accumulator *content*, so without the cross-check a malicious
+    // prover could smuggle in an arbitrary `total_len()` (used downstream by sov-blob-storage
+    // for the malformed-blob slash decision, size limits, and deserialization gas charging).
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    let forged_len = proven_len + 7;
+    relevant_blobs.batch_blobs[0].blob =
+        CountedBufReader::new(BlobIterator::with_forged_len(forged_len));
+
+    let verifier = CelestiaVerifier::new(rollup_params);
+    let error = verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .unwrap_err();
+
+    assert!(
+        error.to_string().contains("MismatchedBlobLength"),
+        "Expected the verifier to reject a forged total_len, got: {error}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_blobs_from_padded_namespace() {
     let block: FilteredCelestiaBlock = with_namespace_padding::filtered_block();
     let relevant_blobs = extract_relevant_blobs(&block);
