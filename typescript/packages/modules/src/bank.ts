@@ -1,6 +1,5 @@
 import { sha256 } from "@noble/hashes/sha2";
-import { type Rollup, SovereignClient } from "@sovereign-sdk/web3";
-import { bech32m } from "bech32";
+import type { Rollup } from "@sovereign-sdk/web3";
 import type { ErrorResponse } from "./types";
 
 // TokenHolder is an enum: { user: string } | { module: string } | { derived: string }
@@ -9,14 +8,12 @@ type TokenHolderPayload =
   | { module: string }
   | { derived: string };
 
-type TokenStatePayload = {
-  key: string;
-  value: {
-    name: string;
-    total_supply: string;
-    supply_cap: string;
-    admins: TokenHolderPayload[];
-  };
+type TokenMetadataResponse = {
+  name: string;
+  decimals: number;
+  total_supply: string;
+  supply_cap: string;
+  admins: TokenHolderPayload[];
 };
 
 export type TokenMetadata = {
@@ -144,21 +141,18 @@ export class Bank {
    */
   async tokenMetadata(tokenId?: string): Promise<TokenMetadata> {
     const token = await this.tokenIdOrElseGasTokenId(tokenId);
-    const response: TokenStatePayload = await this.rollup.http.get(
-      `/modules/bank/state/tokens/items/${token}`,
+    // Decimals are resolved server-side, so the gas token's authoritative decimals (which are not
+    // encoded in its id) are handled by the rollup rather than reconstructed here.
+    const response: TokenMetadataResponse = await this.rollup.http.get(
+      `/modules/bank/tokens/${token}/metadata`,
     );
 
-    // Decimals are encoded in the last byte of the token ID (byte 31 of the 32-byte hash)
-    const decoded = bech32m.decode(token);
-    const bytes = bech32m.fromWords(decoded.words);
-    const decimals = bytes[31];
-
     return {
-      name: response.value.name,
-      decimals,
-      totalSupply: BigInt(response.value.total_supply),
-      supplyCap: BigInt(response.value.supply_cap),
-      admins: response.value.admins.map(getHolderAddress),
+      name: response.name,
+      decimals: response.decimals,
+      totalSupply: BigInt(response.total_supply),
+      supplyCap: BigInt(response.supply_cap),
+      admins: response.admins.map(getHolderAddress),
     };
   }
 

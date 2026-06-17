@@ -1115,6 +1115,56 @@ fn test_struct_with_integer_fixedpoints() {
 
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
 #[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
+pub struct StructWithOverrideFixedPoint {
+    // Use byte 31 of `id` for decimals, unless `id` equals `[9; 32]`, in which case use 6.
+    #[cfg_attr(
+        test,
+        sov_wallet(fixed_point(from_field(
+            1,
+            offset = 31,
+            override_eq = [9u8; 32],
+            override_decimals = 6u8
+        )))
+    )]
+    amount: u64,
+    #[cfg_attr(test, sov_wallet(hidden))]
+    id: [u8; 32],
+}
+
+#[test]
+fn test_override_fixed_point_uses_constant_when_field_matches() {
+    let my_struct = StructWithOverrideFixedPoint {
+        amount: 123_456_789,
+        id: [9u8; 32],
+    };
+
+    // `id` matches `override_eq`, so the override decimals (6) are used, not byte 31 (= 9).
+    encode_decode_tests!(
+        StructWithOverrideFixedPoint,
+        my_struct,
+        "{ amount: 123.456789 }"
+    );
+}
+
+#[test]
+fn test_override_fixed_point_falls_back_to_byte_when_field_differs() {
+    let mut id = [1u8; 32];
+    id[31] = 4;
+    let my_struct = StructWithOverrideFixedPoint {
+        amount: 1_234_567,
+        id,
+    };
+
+    // `id` does not match `override_eq`, so byte 31 (= 4) is used, not the override's 6.
+    encode_decode_tests!(
+        StructWithOverrideFixedPoint,
+        my_struct,
+        "{ amount: 123.4567 }"
+    );
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
 pub struct TupleWithIntegerDisplaysAndNesting(
     #[cfg_attr(test, sov_wallet(fixed_point(from_field(5, offset = 1))))] u16,
     #[cfg_attr(test, sov_wallet(fixed_point(from_field(0))))] i8,
