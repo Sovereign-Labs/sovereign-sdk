@@ -773,6 +773,41 @@ async fn txs_below_min_fee_are_rejected() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn duplicate_txs_are_rejected() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let client = test_rollup.api_client().clone();
+    let tx = tx_set_value(&admin.private_key, 0, 7);
+    let mut tx_mal = tx.clone();
+    tx_mal.data.push(1);
+    let _ok = client
+        .send_raw_tx_to_sequencer(&tx)
+        .await
+        .expect("Tx must have been accepted");
+
+    let error = client
+        .send_raw_tx_to_sequencer(&tx_mal)
+        .await
+        .expect_err("Tx must have been rejected for trailing bytes");
+    let err_message = error.to_string();
+    assert!(
+        err_message.contains("1 trailing bytes after transaction deserialization"),
+        "Full error message does not contain expect part: {err_message}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_tx_ws_submission() {
     let (test_rollup, admin) = create_test_rollup(
         0,

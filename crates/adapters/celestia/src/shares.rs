@@ -212,6 +212,25 @@ impl Buf for BlobIterator {
     }
 }
 
+#[cfg(test)]
+impl BlobIterator {
+    /// Test-only constructor that reports `sequence_len` as the blob length while carrying no
+    /// share data. Wrapped in [`sov_rollup_interface::da::CountedBufReader::new`] (which starts
+    /// with an empty accumulator) it yields a blob whose `total_len()` is decoupled from the
+    /// length proven from the DA shares — i.e. a forged length, as a malicious prover could
+    /// supply via the witness. The share data is never read in that scenario, so the inner
+    /// shares are intentionally empty.
+    pub(crate) fn with_forged_len(sequence_len: usize) -> Self {
+        Self {
+            sequence_len,
+            consumed: 0,
+            current: Bytes::new(),
+            current_idx: 0,
+            blob: Blob(Vec::new()),
+        }
+    }
+}
+
 /// Goes over namespace and splits it into blobs.
 #[cfg(feature = "native")]
 #[derive(Debug)]

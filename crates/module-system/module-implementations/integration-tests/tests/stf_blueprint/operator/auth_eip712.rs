@@ -193,13 +193,35 @@ pub fn encode<S: Spec, RT: Runtime<S> + Eip712AuthenticatorTrait<S>>(
     <RT as Eip712AuthenticatorTrait<S>>::encode_with_eip712_auth(raw_tx)
 }
 
+pub fn encode_malformed<S: Spec, RT: Runtime<S> + Eip712AuthenticatorTrait<S>>(
+    tx: Transaction<RT, S>,
+) -> FullyBakedTx {
+    let mut raw_tx = RawTx::new(borsh::to_vec(&tx).unwrap());
+    raw_tx.data.push(1);
+    <RT as Eip712AuthenticatorTrait<S>>::encode_with_eip712_auth(raw_tx)
+}
+
 fn execute_tx(
     runner: &mut TestRunner<RT, S>,
     tx: Transaction<RT, S>,
 ) -> TxEffect<
     impl TxReceiptContents<Successful = SuccessfulTxContents<S>, Skipped = SkippedTxContents<S>>,
 > {
-    let serialized_tx = encode(tx);
+    execute_tx_maybe_malformed(runner, tx, false)
+}
+
+fn execute_tx_maybe_malformed(
+    runner: &mut TestRunner<RT, S>,
+    tx: Transaction<RT, S>,
+    malformed: bool,
+) -> TxEffect<
+    impl TxReceiptContents<Successful = SuccessfulTxContents<S>, Skipped = SkippedTxContents<S>>,
+> {
+    let serialized_tx = if malformed {
+        encode_malformed(tx)
+    } else {
+        encode(tx)
+    };
     let txs: Vec<FullyBakedTx> = vec![serialized_tx];
     let blob = borsh::to_vec(&txs).unwrap();
     let blob = MockBlob::new_with_hash(blob, runner.config.sequencer_da_address);
@@ -224,6 +246,29 @@ fn correct_signature_is_accepted() {
     let TxEffect::Successful(SuccessfulTxContents { .. }) = receipt else {
         panic!("Expected transaction to succeed, got: {receipt:?}");
     };
+}
+
+#[test]
+fn duplicate_tx_is_rejected() {
+    let (mut runner, admin) = setup();
+    let call = encode_message::<_, RT>();
+    let tx = create_tx::<_, RT>(call, &admin);
+    let tx_clone = tx.clone();
+
+    let receipt = execute_tx(&mut runner, tx);
+    let TxEffect::Successful(SuccessfulTxContents { .. }) = receipt else {
+        panic!("Expected transaction to succeed, got: {receipt:?}");
+    };
+    let receipt = execute_tx_maybe_malformed(&mut runner, tx_clone, true);
+    let TxEffect::Skipped(SkippedTxContents { error, .. }) = receipt else {
+        panic!("Expected transaction to be skipped, got: {receipt:?}");
+    };
+    assert!(
+        error
+            .to_string()
+            .contains("148 trailing bytes after transaction deserialization"),
+        "Expected error to contain '148 trailing bytes after transaction deserialization', got: {error}"
+    );
 }
 
 #[test]
