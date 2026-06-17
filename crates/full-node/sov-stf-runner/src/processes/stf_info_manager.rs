@@ -316,9 +316,20 @@ fn new_stf_info_channel_inner<StateRoot, Witness, Da: DaSpec>(
         "Channel size should be smaller than the max number of STFInfos in the db"
     );
 
+    // Internally, the Db keeps the following entries:
+    // 1. The STF info data.
+    // 2. The latest height of the written STF info (increased on every `materialize_stf_info`` operation)
+    // 3. The next height of the retrieved STF info (increased on every `read_next`` operation).
+
+    // On startup, we need to fill the notification channel with the pending STF info from the db.
     let (notifier, receiver) =
         tokio::sync::mpsc::channel::<SlotNumber>(max_channel_size.get().try_into()?);
 
+    // Resume STF-info processing from the last aggregated proof that was
+    // verified on-chain and persisted in the DB: that proof's `final_slot` is
+    // the last slot we know is committed, so the prover picks up at
+    // `final_slot + 1`. If no such proof exists yet (fresh node), start from
+    // genesis.
     let (_, next_height_to_receive) =
         load_next_height_to_receive(&proof_manager_db, latest_proof_final_slot)?;
 
