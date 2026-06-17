@@ -64,6 +64,10 @@ GAS_DIMENSIONS = { const = 2 }
 GAS_FORCED_SEQUENCER_REGISTRATION_COST = [100000, 100000]
 # The ID of the "native token" of the rollup, which is used to pay gas fees.
 GAS_TOKEN_ID = { bech32 = "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7", type = "TokenId" }
+# The number of decimal places of the rollup's gas token. This is the authoritative source of
+# truth for the gas token's decimals: unlike normal tokens (whose decimals are encoded in the last
+# byte of their id), the gas token id is a fixed constant whose last byte does NOT encode decimals.
+GAS_TOKEN_DECIMALS = 6
 # The HRP prefix that appears in all rollup addresses.
 ADDRESS_PREFIX = { const = "sov" }
 # The cost of credential id calculation.
