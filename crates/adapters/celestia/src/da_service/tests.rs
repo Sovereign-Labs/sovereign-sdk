@@ -1166,10 +1166,12 @@ async fn verification_fails_for_forged_total_len(forged_sequence_len: u64) {
     // Proofs are built for the honest, unread witness: one share per blob.
     let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
-    // Forge the witness through its serialized form, as a malicious prover would.
+    // Forge the witness through its serialized form, as a malicious prover would. The blob's
+    // DA-physical reader is nested under `EnvelopeReader::compressed`.
     let blob = relevant_blobs.batch_blobs.remove(0);
     let mut serialized = serde_json::to_value(&blob).unwrap();
-    serialized["blob"]["inner"]["sequence_len"] = serde_json::Value::from(forged_sequence_len);
+    serialized["blob"]["compressed"]["inner"]["sequence_len"] =
+        serde_json::Value::from(forged_sequence_len);
     let forged_blob: BlobWithSender = serde_json::from_value(serialized).unwrap();
     relevant_blobs.batch_blobs.insert(0, forged_blob);
 

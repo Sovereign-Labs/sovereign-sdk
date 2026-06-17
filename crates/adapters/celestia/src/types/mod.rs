@@ -14,7 +14,7 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHashTrait, CountedBufReader
 use sov_universal_wallet::schema::OverrideSchema;
 use sov_universal_wallet::UniversalWallet;
 
-use crate::envelope::{classify_and_decode, DecodedEnvelope, EnvelopeState};
+use crate::envelope::{classify_and_decode, EnvelopeState};
 use crate::shares::BlobIterator;
 use crate::verifier::address::CelestiaAddress;
 use crate::CelestiaHeader;
@@ -99,130 +99,114 @@ impl From<[u8; 32]> for TmHash {
     }
 }
 
+/// A streaming reader over one blob's authenticated DA-physical bytes that presents the
+/// *logical* (post-decompression) view.
+///
+/// It owns the [`CountedBufReader`] whose accumulator is the unit of authentication — the
+/// verifier, inclusion proofs, and all share-occupancy math operate over these
+/// DA-physical/"compressed" bytes — and lazily derives the logical payload from that
+/// authenticated prefix via [`classify_and_decode`], the single decoder shared by native
+/// reads and the guest verifier.
 #[derive(Clone, Debug, Serialize, Deserialize)]
-pub struct BlobWithSender {
-    pub(crate) blob: CountedBufReader<BlobIterator>,
-    // Range in the entire namespace
-    pub(crate) range_in_namespace: Range<usize>,
-    pub(crate) sender: CelestiaAddress,
-    pub hash: HexHash,
+pub(crate) struct EnvelopeReader {
+    /// The authenticated DA-physical reader. Its accumulator is the only serialized state.
+    compressed: CountedBufReader<BlobIterator>,
 
     /// Interior, serde-skipped cache of the blob's envelope classification and decode.
     ///
     /// Derived only from the authenticated DA-physical accumulator
-    /// ([`Self::compressed_verified_data`]); never a serialized witness claim.
-    /// Empty after construction and after every (de)serialization, then recomputed
-    /// deterministically by [`Self::logical_state`] (holding only `&self`). Ignored by
-    /// `PartialEq`.
+    /// ([`Self::compressed_verified_data`]); never a serialized witness claim. Empty after
+    /// construction and after every (de)serialization, then recomputed deterministically by
+    /// [`Self::logical_state`] (holding only `&self`). Ignored by `PartialEq`.
     #[serde(skip)]
-    envelope_state: OnceLock<EnvelopeState>,
-
-    /// Native-only incremental decode state for envelope reads. It is derived only from
-    /// the authenticated DA-physical accumulator and is skipped from the witness; the guest
-    /// recomputes the same logical view from `envelope_state`.
-    #[cfg(feature = "native")]
-    #[serde(skip)]
-    native_decode: Option<DecodedEnvelope>,
+    state: OnceLock<EnvelopeState>,
 }
 
-impl PartialEq for BlobWithSender {
+impl PartialEq for EnvelopeReader {
     fn eq(&self, other: &Self) -> bool {
-        // The envelope cache is derived state, not identity: two blobs with the
-        // same authenticated bytes are equal regardless of whether either has
-        // lazily computed its classification yet.
-        self.blob == other.blob
-            && self.range_in_namespace == other.range_in_namespace
-            && self.sender == other.sender
-            && self.hash == other.hash
+        // The envelope cache is derived state, not identity: two readers over the same
+        // authenticated bytes are equal regardless of whether either has lazily computed its
+        // classification yet.
+        self.compressed == other.compressed
     }
 }
 
-/// Celestia-private accessors distinguishing the two byte streams a blob represents:
+/// `EnvelopeReader` distinguishes the two byte streams a blob represents:
 ///
 /// * **DA-physical ("compressed")**: the payload bytes as actually posted to Celestia.
-///   Share-occupancy math (inclusion proofs, namespace continuity) is defined over
-///   these bytes and only these bytes.
+///   Share-occupancy math (inclusion proofs, namespace continuity) is defined over these
+///   bytes and only these bytes.
 /// * **Logical**: the payload bytes exposed to the rollup via [`BlobReaderTrait`].
 ///
-/// Today the two streams are identical. Once blobs can be posted in a compressed
-/// envelope, they diverge; proof generation and verification must keep using the
+/// For legacy (non-envelope) blobs the two streams are identical; once a blob is posted in a
+/// compressed envelope they diverge, and proof generation/verification keep using the
 /// `compressed_*` accessors so the share math stays tied to what is actually on DA.
-impl BlobWithSender {
-    /// DA-physical payload bytes consumed so far. These are the bytes that
-    /// inclusion proofs must cover.
-    pub(crate) fn compressed_verified_data(&self) -> &[u8] {
-        self.blob.accumulator()
+impl EnvelopeReader {
+    /// Wrap a blob's share iterator. For magic-prefixed blobs the fixed envelope header is
+    /// eagerly authenticated so the logical length and classification are pinned before any
+    /// size gate reads `total_len()`; legacy blobs read nothing here, preserving the
+    /// "a deferred blob proves no shares" DoS property.
+    #[cfg(feature = "native")]
+    pub(crate) fn new(iter: BlobIterator) -> Self {
+        // Peek the leading bytes (the first share's payload) to detect the envelope magic
+        // without consuming anything for legacy blobs.
+        let has_magic = crate::envelope::has_magic_prefix(prost::bytes::Buf::chunk(&iter));
+        let mut compressed = CountedBufReader::new(iter);
+        if has_magic {
+            // Eagerly authenticate the fixed envelope header so the logical length and
+            // classification are pinned before any size gate reads `total_len()`.
+            compressed.advance(crate::envelope::ENVELOPE_HEADER_LEN);
+        }
+        Self {
+            compressed,
+            state: OnceLock::new(),
+        }
     }
 
-    /// Total DA-physical payload length. Must always equal the `sequence_length`
-    /// recorded in the blob's first share; the verifier enforces this.
+    /// DA-physical payload bytes consumed so far. These are the bytes that inclusion proofs
+    /// must cover.
+    pub(crate) fn compressed_verified_data(&self) -> &[u8] {
+        self.compressed.accumulator()
+    }
+
+    /// Total DA-physical payload length. Must always equal the `sequence_length` recorded in
+    /// the blob's first share; the verifier enforces this.
     pub(crate) fn compressed_total_len(&self) -> usize {
-        self.blob.total_len()
+        self.compressed.total_len()
     }
 
     /// The blob's envelope classification + decode over the authenticated accumulator,
     /// computed once and cached. Recomputed after (de)serialization (the cache is
     /// `#[serde(skip)]`) and after a native read extends the accumulator.
     fn logical_state(&self) -> &EnvelopeState {
-        self.envelope_state
+        self.state
             .get_or_init(|| classify_and_decode(self.compressed_verified_data()))
     }
 
-    fn decoded_envelope(&self) -> Option<&DecodedEnvelope> {
-        #[cfg(feature = "native")]
-        if let Some(decoded) = self.native_decode.as_ref() {
-            return Some(decoded);
-        }
-
-        match self.logical_state() {
-            EnvelopeState::Envelope(decoded) => Some(decoded),
-            EnvelopeState::Legacy | EnvelopeState::Malformed => None,
-        }
-    }
-
-    /// Logical payload bytes observed by the rollup so far. For a compressed envelope
-    /// these are the bytes decoded from the complete chunks in the authenticated prefix;
-    /// for legacy/malformed blobs the logical and DA-physical bytes coincide.
+    /// Logical payload bytes observed by the rollup so far. For a compressed envelope these
+    /// are the bytes decoded from the complete chunks in the authenticated prefix; for
+    /// legacy/malformed blobs the logical and DA-physical bytes coincide.
     pub(crate) fn logical_verified_data(&self) -> &[u8] {
-        match self.decoded_envelope() {
-            Some(decoded) => &decoded.logical,
-            None => self.compressed_verified_data(),
+        match self.logical_state() {
+            EnvelopeState::Envelope(decoded) => &decoded.logical,
+            EnvelopeState::Legacy | EnvelopeState::Malformed => self.compressed_verified_data(),
         }
     }
 
-    /// Total length of the logical payload exposed to the rollup. For an envelope this is
-    /// the authenticated header `logical_len` (never the currently-decodable length, so it
-    /// stays stable as the blob is read); otherwise the DA-physical length.
+    /// Total length of the logical payload exposed to the rollup. For an envelope this is the
+    /// authenticated header `logical_len` (never the currently-decodable length, so it stays
+    /// stable as the blob is read); otherwise the DA-physical length.
     pub(crate) fn logical_total_len(&self) -> usize {
-        match self.decoded_envelope() {
-            Some(decoded) => decoded.header.logical_len as usize,
-            None => self.compressed_total_len(),
+        match self.logical_state() {
+            EnvelopeState::Envelope(decoded) => decoded.header.logical_len as usize,
+            EnvelopeState::Legacy | EnvelopeState::Malformed => self.compressed_total_len(),
         }
     }
-}
 
-impl BlobReaderTrait for BlobWithSender {
-    type Address = CelestiaAddress;
-    type BlobHash = TmHash;
-
-    fn sender(&self) -> CelestiaAddress {
-        self.sender
-    }
-
-    fn hash(&self) -> Self::BlobHash {
-        TmHash(tendermint::Hash::Sha256(self.hash.0))
-    }
-
-    fn verified_data(&self) -> &[u8] {
-        self.logical_verified_data()
-    }
-
-    fn total_len(&self) -> usize {
-        self.logical_total_len()
-    }
-
-    fn logical_decode_failed(&self) -> bool {
-        let Some(decoded) = self.decoded_envelope() else {
+    /// Whether the fully-provided authenticated bytes fail to decode into a clean, exact,
+    /// complete logical payload (see [`BlobReaderTrait::logical_decode_failed`]).
+    pub(crate) fn logical_decode_failed(&self) -> bool {
+        let EnvelopeState::Envelope(decoded) = self.logical_state() else {
             // Legacy and malformed-as-raw blobs expose their authenticated bytes
             // verbatim; there is no decode step that can fail.
             return false;
@@ -249,41 +233,56 @@ impl BlobReaderTrait for BlobWithSender {
         }
     }
 
+    /// Native incremental read: authenticate whole chunks until at least `num_bytes` more
+    /// logical bytes are covered, then re-derive the cached logical view with the single
+    /// decoder ([`classify_and_decode`]).
+    ///
+    /// The pull loop only decides *how many DA-physical bytes to authenticate*: it walks the
+    /// chunk framing, validating each chunk's framing BEFORE authenticating its
+    /// attacker-controlled-length payload and never reading past logical completion. So a
+    /// partial read authenticates only a prefix of the physical blob (the DoS property) and a
+    /// tiny-logical/huge-tail blob never forces the tail to be read. Decoding itself is left
+    /// entirely to `classify_and_decode`, so native and guest share one decoder.
+    ///
+    /// Re-decoding the authenticated prefix is O(prefix) per call; consumers read a blob once
+    /// via `full_data()`, so this is O(n) overall. Only a pathological stream of tiny
+    /// `advance` calls would be quadratic, which no consumer does.
     #[cfg(feature = "native")]
-    fn advance(&mut self, num_bytes: usize) -> &[u8] {
-        let Some(mut decoded) = self.decoded_envelope().cloned() else {
-            // Legacy/malformed: logical and DA-physical bytes coincide.
-            self.blob.advance(num_bytes);
-            return self.verified_data();
+    pub(crate) fn advance(&mut self, num_bytes: usize) -> &[u8] {
+        let (codec, logical_len, already) = match self.logical_state() {
+            EnvelopeState::Envelope(decoded) => (
+                decoded.header.codec,
+                decoded.header.logical_len,
+                decoded.logical.len(),
+            ),
+            EnvelopeState::Legacy | EnvelopeState::Malformed => {
+                // Legacy/malformed: logical and DA-physical bytes coincide.
+                self.compressed.advance(num_bytes);
+                return self.logical_verified_data();
+            }
         };
 
-        // Envelope: pull in whole chunks until at least `num_bytes` more logical bytes are
-        // covered (overshooting to a chunk boundary is expected). The accumulator always
-        // ends on a chunk boundary, so the next chunk's 4-byte framing starts at its
-        // current length. We validate each chunk's framing BEFORE authenticating its
-        // (attacker-controlled-length) payload, then append the decoded chunk to the
-        // native-only cache. A partial read therefore authenticates only a prefix of the
-        // physical blob and does not re-decode earlier chunks.
-        let codec = decoded.header.codec;
-        let logical_len = decoded.header.logical_len;
-        let mut covered = decoded.logical.len();
+        // Pull whole chunks (framing only — no decode) until at least `num_bytes` more logical
+        // bytes are covered. The accumulator always ends on a chunk boundary, so the next
+        // chunk's 4-byte framing starts at its current length.
+        let mut covered = already;
         let target = covered.saturating_add(num_bytes).min(logical_len as usize);
-        while decoded.clean && covered < target {
-            let pos = self.blob.accumulator().len();
-            if pos >= self.blob.total_len() {
+        while covered < target {
+            let pos = self.compressed.accumulator().len();
+            if pos >= self.compressed.total_len() {
                 break; // physical EOF
             }
-            self.blob.advance(crate::envelope::CHUNK_HEADER_LEN);
-            let acc = self.blob.accumulator();
+            self.compressed.advance(crate::envelope::CHUNK_HEADER_LEN);
+            let acc = self.compressed.accumulator();
             if acc.len() < pos + crate::envelope::CHUNK_HEADER_LEN {
                 break; // truncated framing at EOF
             }
             let chunk_logical = u16::from_le_bytes([acc[pos], acc[pos + 1]]);
             let chunk_encoded = u16::from_le_bytes([acc[pos + 2], acc[pos + 3]]);
-            // Enforce the per-chunk caps / sum / raw-length match before reading the
-            // payload, so a malicious framing can't make a 1-byte logical read authenticate
-            // a u16-sized payload. A structurally bad chunk stops the read; the subsequent
-            // decode marks it unclean and `logical_decode_failed()` slashes.
+            // Validate framing BEFORE authenticating the (attacker-controlled-length) payload,
+            // so a malicious framing can't make a 1-byte logical read authenticate a u16-sized
+            // payload. A structurally bad chunk stops the pull; `classify_and_decode` then
+            // marks the decode unclean and `logical_decode_failed()` slashes.
             if !crate::envelope::chunk_framing_valid(
                 codec,
                 chunk_logical,
@@ -291,36 +290,92 @@ impl BlobReaderTrait for BlobWithSender {
                 covered,
                 logical_len,
             ) {
-                decoded.clean = false;
                 break;
             }
-            self.blob.advance(chunk_encoded as usize);
-            if self.blob.accumulator().len()
+            self.compressed.advance(chunk_encoded as usize);
+            if self.compressed.accumulator().len()
                 < pos + crate::envelope::CHUNK_HEADER_LEN + chunk_encoded as usize
             {
                 break; // truncated payload at EOF
             }
-            let payload_start = pos + crate::envelope::CHUNK_HEADER_LEN;
-            let payload_end = payload_start + chunk_encoded as usize;
-            let payload = &self.blob.accumulator()[payload_start..payload_end];
-            let Some(chunk_logical_data) =
-                crate::envelope::decode_chunk_payload(codec, chunk_logical, payload)
-            else {
-                decoded.clean = false;
-                break;
-            };
-            decoded.logical.extend_from_slice(&chunk_logical_data);
-            decoded.consumed = payload_end;
             covered = covered.saturating_add(chunk_logical as usize);
         }
-        self.native_decode = Some(decoded);
-        self.verified_data()
+
+        // Single source of truth for the logical view: re-derive from the authenticated
+        // prefix with the one decoder the guest also uses.
+        self.state = OnceLock::new();
+        let _ = self
+            .state
+            .set(classify_and_decode(self.compressed_verified_data()));
+        self.logical_verified_data()
+    }
+}
+
+#[derive(Clone, Debug, Serialize, Deserialize)]
+pub struct BlobWithSender {
+    pub(crate) blob: EnvelopeReader,
+    // Range in the entire namespace
+    pub(crate) range_in_namespace: Range<usize>,
+    pub(crate) sender: CelestiaAddress,
+    pub hash: HexHash,
+}
+
+impl PartialEq for BlobWithSender {
+    fn eq(&self, other: &Self) -> bool {
+        self.blob == other.blob
+            && self.range_in_namespace == other.range_in_namespace
+            && self.sender == other.sender
+            && self.hash == other.hash
+    }
+}
+
+impl BlobWithSender {
+    /// DA-physical payload bytes consumed so far; see
+    /// [`EnvelopeReader::compressed_verified_data`]. Used by the verifier and proof
+    /// generation, which operate over the posted bytes.
+    pub(crate) fn compressed_verified_data(&self) -> &[u8] {
+        self.blob.compressed_verified_data()
+    }
+
+    /// Total DA-physical payload length; see [`EnvelopeReader::compressed_total_len`].
+    pub(crate) fn compressed_total_len(&self) -> usize {
+        self.blob.compressed_total_len()
+    }
+}
+
+impl BlobReaderTrait for BlobWithSender {
+    type Address = CelestiaAddress;
+    type BlobHash = TmHash;
+
+    fn sender(&self) -> CelestiaAddress {
+        self.sender
+    }
+
+    fn hash(&self) -> Self::BlobHash {
+        TmHash(tendermint::Hash::Sha256(self.hash.0))
+    }
+
+    fn verified_data(&self) -> &[u8] {
+        self.blob.logical_verified_data()
+    }
+
+    fn total_len(&self) -> usize {
+        self.blob.logical_total_len()
+    }
+
+    fn logical_decode_failed(&self) -> bool {
+        self.blob.logical_decode_failed()
+    }
+
+    #[cfg(feature = "native")]
+    fn advance(&mut self, num_bytes: usize) -> &[u8] {
+        self.blob.advance(num_bytes)
     }
 
     // `full_data()` uses the trait default: `advance(total_len() - verified_data().len())`.
-    // For an envelope that is `advance(logical_len - covered)`, which reads whole chunks up
-    // to logical completion and STOPS — it must not authenticate a trailing physical tail
-    // (a tiny-logical/huge-tail blob would otherwise force full-blob verification just to
+    // For an envelope that is `advance(logical_len - covered)`, which authenticates whole
+    // chunks up to logical completion and STOPS — it must not authenticate a trailing physical
+    // tail (a tiny-logical/huge-tail blob would otherwise force full-blob verification just to
     // slash it). For legacy/malformed blobs it advances over all remaining physical bytes.
 }
 
@@ -378,26 +433,11 @@ impl NamespaceRelevantData {
                 tracing::debug!("Blob without a signer, happens if blob is version 0");
                 continue;
             };
-            let iter = blob.into_iter();
-            // Peek the leading bytes (the first share's payload) to detect the envelope
-            // magic without consuming anything for legacy blobs.
-            let has_magic = crate::envelope::has_magic_prefix(prost::bytes::Buf::chunk(&iter));
-            let mut reader = CountedBufReader::new(iter);
-            if has_magic {
-                // Eagerly authenticate the fixed envelope header so the logical length and
-                // classification are pinned before any size gate reads `total_len()`.
-                // Legacy blobs read nothing here, preserving the "a deferred blob proves no
-                // shares" DoS property.
-                reader.advance(crate::envelope::ENVELOPE_HEADER_LEN);
-            }
             let blob_tx = BlobWithSender {
-                blob: reader,
+                blob: EnvelopeReader::new(blob.into_iter()),
                 range_in_namespace,
                 sender,
                 hash,
-                envelope_state: OnceLock::new(),
-                #[cfg(feature = "native")]
-                native_decode: None,
             };
             output.push(blob_tx);
         }
@@ -629,21 +669,21 @@ pub mod tests {
         // Reading the whole blob lazily populates the envelope cache.
         blob.full_data();
         assert!(
-            blob.envelope_state.get().is_some(),
+            blob.blob.state.get().is_some(),
             "reading the blob should populate the cache"
         );
         let expected_state = classify_and_decode(blob.compressed_verified_data());
 
         let json = serde_json::to_string(&blob).unwrap();
         assert!(
-            !json.contains("envelope_state"),
+            !json.contains("\"state\""),
             "skipped cache must not be serialized"
         );
 
         let restored: BlobWithSender = serde_json::from_str(&json).unwrap();
 
         // The cache is dropped on deserialize.
-        assert_eq!(restored.envelope_state.get(), None);
+        assert_eq!(restored.blob.state.get(), None);
         // Equality ignores the cache: populated original equals empty restored.
         assert_eq!(restored, blob);
         // Reconstruction from the authenticated bytes is deterministic.
@@ -662,12 +702,11 @@ pub mod tests {
 #[cfg(test)]
 mod envelope_blob_tests {
     use std::str::FromStr;
-    use std::sync::OnceLock;
 
     use sov_rollup_interface::common::HexHash;
-    use sov_rollup_interface::da::{BlobReaderTrait, CountedBufReader};
+    use sov_rollup_interface::da::BlobReaderTrait;
 
-    use super::BlobWithSender;
+    use super::{BlobWithSender, EnvelopeReader};
     use crate::envelope::{
         classify_and_decode, encode_for_submission, EnvelopeState, CODEC_LZ4, CODEC_RAW_CHUNK,
         ENVELOPE_HEADER_LEN, ENVELOPE_MAGIC, ENVELOPE_VERSION, MAX_LOGICAL_CHUNK_LEN,
@@ -676,8 +715,8 @@ mod envelope_blob_tests {
     use crate::verifier::address::CelestiaAddress;
 
     /// Build a [`BlobWithSender`] over `physical` exactly as `get_blobs_with_sender` would:
-    /// genuine Celestia v1 shares plus the eager fixed-header advance for magic-prefixed
-    /// blobs.
+    /// genuine Celestia v1 shares wrapped by [`EnvelopeReader::new`] (which eagerly
+    /// authenticates the fixed header for magic-prefixed blobs).
     fn blob_over_physical(physical: &[u8]) -> BlobWithSender {
         let signer = CelestiaAddress::from_str(ADDR_1).unwrap();
         let json =
@@ -685,20 +724,11 @@ mod envelope_blob_tests {
                 .expect("valid v1 blob");
         let shares = json.to_shares().expect("blob splits into shares");
         let range_in_namespace = 0..shares.len();
-        let iter = crate::shares::Blob(shares).into_iter();
-        let has_magic = crate::envelope::has_magic_prefix(prost::bytes::Buf::chunk(&iter));
-        let mut reader = CountedBufReader::new(iter);
-        if has_magic {
-            reader.advance(ENVELOPE_HEADER_LEN);
-        }
         BlobWithSender {
-            blob: reader,
+            blob: EnvelopeReader::new(crate::shares::Blob(shares).into_iter()),
             range_in_namespace,
             sender: signer,
             hash: HexHash::new([0u8; 32]),
-            envelope_state: OnceLock::new(),
-            #[cfg(feature = "native")]
-            native_decode: None,
         }
     }
 
@@ -762,25 +792,33 @@ mod envelope_blob_tests {
     }
 
     #[test]
-    fn repeated_partial_advances_extend_native_decode_state() {
+    fn repeated_partial_advances_extend_envelope_state() {
         let logical = vec![0x5Au8; 2000];
         let physical = encode_for_submission(&logical, true, 512).unwrap();
         let mut blob = blob_over_physical(&physical);
 
         blob.advance(1);
-        let first = blob
-            .native_decode
-            .as_ref()
-            .expect("first partial read initializes native decode");
+        let EnvelopeState::Envelope(first) = blob
+            .blob
+            .state
+            .get()
+            .expect("first partial read initializes envelope state")
+        else {
+            panic!("expected envelope state");
+        };
         let first_consumed = first.consumed;
         let first_logical_len = first.logical.len();
         assert_eq!(blob.verified_data().len(), first_logical_len);
 
         blob.advance(1);
-        let second = blob
-            .native_decode
-            .as_ref()
-            .expect("second partial read keeps native decode");
+        let EnvelopeState::Envelope(second) = blob
+            .blob
+            .state
+            .get()
+            .expect("second partial read keeps envelope state")
+        else {
+            panic!("expected envelope state");
+        };
         assert!(second.clean);
         assert!(second.consumed > first_consumed);
         assert!(second.logical.len() > first_logical_len);
@@ -902,6 +940,30 @@ mod envelope_blob_tests {
     }
 
     #[test]
+    fn corrupt_lz4_chunk_body_is_slashed() {
+        // Valid header and valid chunk framing, but the LZ4 body cannot decode to the
+        // declared `chunk_logical_len`. The framing-only pull still authenticates the chunk
+        // (it can't see LZ4 corruption); the single decoder then marks the envelope unclean,
+        // so `logical_decode_failed()` slashes — identically in native and guest, since both
+        // decode via `classify_and_decode`.
+        let mut physical = ENVELOPE_MAGIC.to_vec();
+        physical.push(ENVELOPE_VERSION);
+        physical.push(CODEC_LZ4);
+        physical.extend_from_slice(&0u16.to_le_bytes()); // flags
+        physical.extend_from_slice(&100u32.to_le_bytes()); // logical_len = 100
+        physical.extend_from_slice(&100u16.to_le_bytes()); // chunk_logical_len = 100 (<= cap)
+        physical.extend_from_slice(&1u16.to_le_bytes()); // chunk_encoded_len = 1 (valid framing)
+        physical.push(0x00); // a 1-byte "LZ4 block" cannot expand to 100 bytes -> decode error
+
+        let mut blob = blob_over_physical(&physical);
+        blob.full_data();
+        assert!(
+            blob.logical_decode_failed(),
+            "valid framing but an undecodable LZ4 body must slash"
+        );
+    }
+
+    #[test]
     fn serde_roundtrip_recomputes_envelope_decode() {
         let logical = vec![0x5Au8; 2000];
         let physical = encode_for_submission(&logical, true, 512).unwrap();
@@ -912,7 +974,7 @@ mod envelope_blob_tests {
         let json = serde_json::to_string(&blob).unwrap();
         let restored: BlobWithSender = serde_json::from_str(&json).unwrap();
         assert_eq!(
-            restored.envelope_state.get(),
+            restored.blob.state.get(),
             None,
             "cache dropped on deserialize"
         );
