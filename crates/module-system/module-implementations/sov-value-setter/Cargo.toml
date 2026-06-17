@@ -22,6 +22,8 @@ sov-value-setter = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-test-utils = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }
+criterion = "0.5.1"
+serde_json = { workspace = true }
 
 [dependencies]
 anyhow = { workspace = true }
@@ -42,3 +44,7 @@ native = [
     "sov-state/native",
     "sov-address/native"
 ]
+
+[[bench]]
+name = "set_value"
+harness = false
