@@ -98,6 +98,8 @@ pub(crate) struct BlobCompressionMeasurement {
     pub posted_bytes: usize,
     /// Encoding applied: `lz4`, `raw_escape`, or `passthrough`.
     pub mode: &'static str,
+    /// Number of chunks in a canonical emitted envelope; zero for passthrough.
+    pub chunk_count: usize,
 }
 
 impl Metric for BlobCompressionMeasurement {
@@ -110,6 +112,7 @@ impl Metric for BlobCompressionMeasurement {
         let mode = self.mode;
         let logical_bytes = self.logical_bytes;
         let posted_bytes = self.posted_bytes;
+        let chunk_count = self.chunk_count;
         // Bytes saved by encoding; negative when a magic-escape envelope expands the payload.
         let saved_bytes = logical_bytes as i64 - posted_bytes as i64;
         // Posted size as a fraction of logical, in basis points (10000 = unchanged).
@@ -120,7 +123,7 @@ impl Metric for BlobCompressionMeasurement {
         };
         write!(
             buffer,
-            "{name},mode={mode} logical_bytes={logical_bytes},posted_bytes={posted_bytes},saved_bytes={saved_bytes},ratio_bps={ratio_bps}"
+            "{name},mode={mode} logical_bytes={logical_bytes},posted_bytes={posted_bytes},saved_bytes={saved_bytes},ratio_bps={ratio_bps},chunk_count={chunk_count}"
         )
     }
 }

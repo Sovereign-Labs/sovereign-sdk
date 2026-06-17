@@ -222,6 +222,28 @@ pub(crate) fn chunk_framing_valid(
         && (codec != CODEC_RAW_CHUNK || chunk_encoded_len == chunk_logical_len)
 }
 
+/// Decode one already-framed chunk payload. The caller must have already validated the
+/// chunk framing and payload availability.
+pub(crate) fn decode_chunk_payload(
+    codec: u8,
+    chunk_logical_len: u16,
+    payload: &[u8],
+) -> Option<Vec<u8>> {
+    match codec {
+        CODEC_RAW_CHUNK if payload.len() == chunk_logical_len as usize => Some(payload.to_vec()),
+        CODEC_LZ4 => {
+            // Output buffer is exactly `chunk_logical_len` (<= MAX_LOGICAL_CHUNK_LEN),
+            // so decompression cannot overrun it.
+            let mut out = vec![0u8; chunk_logical_len as usize];
+            match lz4_flex::block::decompress_into(payload, &mut out) {
+                Ok(written) if written == out.len() => Some(out),
+                _ => None,
+            }
+        }
+        CODEC_RAW_CHUNK | _ => None,
+    }
+}
+
 /// Decode the chunk stream that follows the fixed header.
 ///
 /// `bytes` is everything after the 24-byte header (possibly a partial prefix). Returns
@@ -269,20 +291,8 @@ fn decode_chunks(bytes: &[u8], codec: u8, logical_len: u32) -> (Vec<u8>, usize, 
         }
         let payload = &bytes[payload_start..payload_end];
 
-        let chunk_logical = match codec {
-            // `chunk_framing_valid` already verified `encoded == logical` for the raw codec.
-            CODEC_RAW_CHUNK => payload.to_vec(),
-            CODEC_LZ4 => {
-                // Output buffer is exactly `chunk_logical_len` (<= MAX_LOGICAL_CHUNK_LEN),
-                // so decompression cannot overrun it.
-                let mut out = vec![0u8; chunk_logical_len as usize];
-                match lz4_flex::block::decompress_into(payload, &mut out) {
-                    Ok(written) if written == out.len() => out,
-                    _ => return (logical, pos, false),
-                }
-            }
-            // `parse_header` already rejected unknown codecs; defensive.
-            _ => return (logical, pos, false),
+        let Some(chunk_logical) = decode_chunk_payload(codec, chunk_logical_len, payload) else {
+            return (logical, pos, false);
         };
 
         logical.extend_from_slice(&chunk_logical);
@@ -358,6 +368,35 @@ pub(crate) enum EnvelopeEncodeError {
 pub(crate) fn encoded_codec(encoded: &[u8]) -> Option<u8> {
     (has_magic_prefix(encoded) && encoded.len() >= ENVELOPE_HEADER_LEN)
         .then(|| encoded[OFFSET_CODEC])
+}
+
+/// Count chunks in a canonical encoded envelope. Returns `None` for passthrough raw,
+/// malformed, or non-canonical data.
+#[cfg(feature = "native")]
+pub(crate) fn encoded_chunk_count(encoded: &[u8]) -> Option<usize> {
+    match classify_and_decode(encoded) {
+        EnvelopeState::Envelope(d)
+            if d.clean
+                && d.consumed == encoded.len()
+                && d.logical.len() == d.header.logical_len as usize =>
+        {
+            let mut pos = ENVELOPE_HEADER_LEN;
+            let mut chunks = 0usize;
+            while pos < encoded.len() {
+                if encoded.len() - pos < CHUNK_HEADER_LEN {
+                    return None;
+                }
+                let chunk_encoded_len =
+                    u16::from_le_bytes([encoded[pos + 2], encoded[pos + 3]]) as usize;
+                pos = pos
+                    .checked_add(CHUNK_HEADER_LEN)?
+                    .checked_add(chunk_encoded_len)?;
+                chunks = chunks.checked_add(1)?;
+            }
+            (pos == encoded.len()).then_some(chunks)
+        }
+        _ => None,
+    }
 }
 
 #[cfg(feature = "native")]
@@ -723,15 +762,13 @@ mod tests {
 
     #[test]
     fn encode_for_submission_rejects_oversized_magic_prefixed_payload() {
-        // Construct a magic-prefixed payload just over the cap (cheaply, without 64 MiB
-        // of real data is impossible here; use a smaller cap check via the public path).
-        // We assert the error variant shape using a payload that starts with magic and
-        // is reported too large by the encoder's own check is infeasible at 64 MiB in a
-        // unit test, so we only assert the happy escape path here; the oversize branch
-        // is covered by inspection.
-        let mut logical = ENVELOPE_MAGIC.to_vec();
-        logical.extend_from_slice(b"small");
-        // Not too large -> escaped, not an error.
-        assert!(encode_for_submission(&logical, false, 512).is_ok());
+        let mut logical = vec![0u8; MAX_LOGICAL_BLOB_LEN as usize + 1];
+        logical[..ENVELOPE_MAGIC.len()].copy_from_slice(&ENVELOPE_MAGIC);
+
+        assert!(matches!(
+            encode_for_submission(&logical, true, 512),
+            Err(EnvelopeEncodeError::PayloadTooLargeToEscape { len })
+                if len == MAX_LOGICAL_BLOB_LEN as usize + 1
+        ));
     }
 }

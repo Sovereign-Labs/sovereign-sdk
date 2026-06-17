@@ -199,11 +199,13 @@ impl CelestiaService {
             Some(crate::envelope::CODEC_RAW_CHUNK) => "raw_escape",
             _ => "passthrough",
         };
+        let chunk_count = crate::envelope::encoded_chunk_count(&encoded).unwrap_or(0);
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(BlobCompressionMeasurement {
                 logical_bytes: logical.len(),
                 posted_bytes: encoded.len(),
                 mode,
+                chunk_count,
             });
         });
         Ok(encoded)
