@@ -134,7 +134,7 @@ impl<S: Spec> BlobStorage<S> {
     // between the preferred and non-preferred paths.
     fn select_blobs_da_ordering_helper<'a>(
         &mut self,
-        blob_iter: impl Iterator<Item=BlobOrigin<'a, <S::Da as DaSpec>::BlobTransaction>>,
+        blob_iter: impl Iterator<Item = BlobOrigin<'a, <S::Da as DaSpec>::BlobTransaction>>,
         blobs_with_total_size_limit: &mut BlobsAccumulatorWithSizeLimit<S>,
         discarded_blobs: &mut Vec<DiscardedBlob>,
         account_for_deferral: bool,
@@ -660,7 +660,7 @@ impl<S: Spec> BlobStorage<S> {
         preferred_sender: &'a <S::Da as DaSpec>::Address,
     ) -> (
         Vec<BlobArrival>,
-        impl Iterator<Item=PreferredBlobDataWithId> + 'a,
+        impl Iterator<Item = PreferredBlobDataWithId> + 'a,
         u64,
     ) {
         let mut next_sequence_number = sequence_tracker.next_sequence_number;
@@ -964,7 +964,7 @@ impl<S: Spec> BlobStorage<S> {
     fn get_blobs_to_process_from_run(
         &mut self,
         next_run_of_blobs: Vec<BlobArrival>,
-        new_blobs_not_processed: impl Iterator<Item=PreferredBlobDataWithId>,
+        new_blobs_not_processed: impl Iterator<Item = PreferredBlobDataWithId>,
         next_sequence_number: u64,
         old_sequence_tracker: &mut SequencerNumberTracker,
         state: &mut KernelStateAccessor<'_, S>,
@@ -1232,7 +1232,7 @@ impl<S: Spec> BlobStorage<S> {
     /// Extracts all delayed non-preferred blobs that belong to the given slots.
     pub fn get_non_preferred_blobs(
         &mut self,
-        slot_range: impl Iterator<Item=SlotNumber>,
+        slot_range: impl Iterator<Item = SlotNumber>,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> Vec<ValidatedBlob<S, BatchWithId<S>>> {
         let discarded_blobs = &mut Vec::default();
