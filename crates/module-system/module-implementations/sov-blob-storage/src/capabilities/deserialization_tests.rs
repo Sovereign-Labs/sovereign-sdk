@@ -10,7 +10,10 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use sov_mock_da::{MockBlob, MOCK_SEQUENCER_DA_ADDRESS};
 use sov_modules_api::{BlobReaderTrait, FullyBakedTx};
 
-use super::{data_for_deserialization, is_borsh_truncated_input_error, PreferredBatchData};
+use super::{
+    data_for_deserialization, is_borsh_truncated_input_error, PreferredBatchData,
+    PreferredProofData, BORSH_UNEXPECTED_LENGTH_OF_INPUT,
+};
 
 fn mock_blob(data: Vec<u8>) -> MockBlob {
     MockBlob::new_with_hash(data, MOCK_SEQUENCER_DA_ADDRESS.into())
@@ -72,6 +75,7 @@ fn trailing_garbage_is_not_truncation() {
     let error = read_via_lazy::<FullyBakedTx>(&mut blob).unwrap_err();
 
     assert_eq!(error.kind(), ErrorKind::InvalidData);
+    assert_eq!(error.to_string(), "Not all bytes read");
     assert!(!is_borsh_truncated_input_error(&error));
 }
 
@@ -96,15 +100,22 @@ fn valid_blob_deserializes_and_consumes_entire_blob() {
 #[test]
 fn truncated_blob_is_fully_verified_before_reporting_truncation() {
     // The production guard in `deserialize_or_try_slash_sender` only trusts a truncation error if
-    // the whole blob was verified. Cover both shapes borsh uses for "ran out of input": a Vec<u8>
+    // the whole blob was verified. Cover both shapes borsh uses for "ran out of input" — a Vec<u8>
     // whose length prefix over-promises (InvalidData "Unexpected length of input") and a struct
-    // whose trailing fixed-size field is cut off (raw UnexpectedEof).
+    // whose trailing fixed-size field is cut off (raw UnexpectedEof) — across the payload types the
+    // production path actually deserializes.
     assert_truncated_blob_is_fully_verified(vec![1u8, 2, 3]);
     assert_truncated_blob_is_fully_verified(PreferredBatchData {
         sequence_number: 0x1234,
         data: Arc::new(vec![FullyBakedTx::new(vec![1, 2, 3])]),
         visible_slots_to_advance: NonZeroU8::new(1).unwrap(),
     });
+    assert_truncated_blob_is_fully_verified(FullyBakedTx::new(vec![1, 2, 3]));
+    assert_truncated_blob_is_fully_verified(PreferredProofData {
+        sequence_number: 1,
+        data: vec![1, 2, 3],
+    });
+    assert_truncated_blob_is_fully_verified(vec![FullyBakedTx::new(vec![1, 2, 3])]);
 }
 
 fn assert_truncated_blob_is_fully_verified<T: BorshSerialize + BorshDeserialize>(value: T) {
@@ -148,6 +159,36 @@ fn malformed_blob_fails_early_without_verifying_the_rest() {
         "reader verified {} of {} bytes; it must bail out early on malformed input",
         blob.verified_data().len(),
         blob.total_len(),
+    );
+}
+
+#[test]
+fn classifier_false_positive_before_reader_is_exhausted() {
+    // The classifier keys off the error message, so a deserializer that emits borsh's
+    // "Unexpected length of input" before draining the reader trips it while bytes remain
+    // unverified. This is why the production guard trusts a truncation verdict only when the whole
+    // blob was verified, not on the classifier alone.
+    #[derive(Debug)]
+    struct EarlyUnexpectedLengthError;
+
+    impl BorshDeserialize for EarlyUnexpectedLengthError {
+        fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> std::io::Result<Self> {
+            let mut first_byte = [0u8; 1];
+            reader.read_exact(&mut first_byte)?;
+            Err(std::io::Error::new(
+                ErrorKind::InvalidData,
+                BORSH_UNEXPECTED_LENGTH_OF_INPUT,
+            ))
+        }
+    }
+
+    let mut blob = mock_blob(vec![1, 2, 3]);
+    let error = read_via_lazy::<EarlyUnexpectedLengthError>(&mut blob).unwrap_err();
+
+    assert!(is_borsh_truncated_input_error(&error));
+    assert!(
+        blob.verified_data().len() < blob.total_len(),
+        "a classifier false positive can happen before the native reader consumes the full blob"
     );
 }
 
