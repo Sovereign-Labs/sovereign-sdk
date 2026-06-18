@@ -134,16 +134,15 @@ impl From<SimulateError> for ErrorObject {
         let (status, error) = match &value {
             SimulateError::InvalidInput(message) => (StatusCode::BAD_REQUEST, message.clone()),
             SimulateError::GasPriceRetrieval => (StatusCode::INTERNAL_SERVER_ERROR, "".to_string()),
-            SimulateError::ContextResolution(error) | SimulateError::SchemaConstruction(error) => {
+            SimulateError::ContextResolution(error)
+            | SimulateError::SchemaConstruction(error)
+            | SimulateError::UniquenessRetrieval(error) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
             }
             SimulateError::CallSerialization(error) => (StatusCode::BAD_REQUEST, error.to_string()),
             SimulateError::CallDecoding(error) => {
                 // Internal server error because if JSON to bytes serialization works
                 // then bytes to RuntimeCall should also work.
-                (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
-            }
-            SimulateError::UniquenessRetrieval(error) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
             }
         };
