@@ -7,6 +7,11 @@
 //! [risc0 adapter](https://github.com/Sovereign-Labs/sovereign-sdk/tree/main/adapters/risc0)
 //! maintained by the Sovereign Labs team.
 pub mod aggregated_proof;
+/// Off-circuit, host-side light-client support for verifying aggregated proofs.
+#[cfg(feature = "native")]
+pub mod light_client;
+#[cfg(feature = "native")]
+pub use light_client::ZkLightClient;
 use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};

@@ -163,6 +163,10 @@ name = "sov-demo-rollup"
 path = "src/main.rs"
 
 [[bin]]
+name = "light-client"
+path = "src/light_client/main.rs"
+
+[[bin]]
 name = "demo-celestia-tester"
 path = "src/da_tester/demo_celestia_tester.rs"
 

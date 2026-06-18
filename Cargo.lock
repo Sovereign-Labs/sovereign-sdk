@@ -11875,11 +11875,13 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arbitrary",
+ "async-trait",
  "bincode",
  "borsh",
  "ed25519-dalek",
  "hex",
  "rand 0.8.5",
+ "reqwest 0.13.3",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -12285,6 +12287,7 @@ dependencies = [
  "arbitrary",
  "async-trait",
  "backon",
+ "base64 0.22.1",
  "bincode",
  "borsh",
  "bytes",
@@ -12295,6 +12298,7 @@ dependencies = [
  "jsonschema",
  "proptest",
  "proptest-derive 0.5.1",
+ "reqwest 0.13.3",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -12520,6 +12524,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "arbitrary",
+ "async-trait",
  "bincode",
  "borsh",
  "ed25519-consensus",
@@ -12527,6 +12532,7 @@ dependencies = [
  "proptest",
  "rand 0.8.5",
  "reltester",
+ "reqwest 0.13.3",
  "schemars 1.2.1",
  "serde",
  "serde_json",
@@ -12545,6 +12551,7 @@ dependencies = [
  "sp1-sdk",
  "sp1-verifier",
  "sp1-zkvm",
+ "tokio",
 ]
 
 [[package]]
