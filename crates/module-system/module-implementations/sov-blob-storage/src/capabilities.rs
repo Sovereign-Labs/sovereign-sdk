@@ -28,7 +28,7 @@ use crate::{
 /// so we don't bother trying to deserialize them.
 const MAX_EMERGENCY_REGISTRATION_BLOB_SIZE: usize = 1000;
 // Borsh reports truncated input as `InvalidData` carrying this exact message (its private,
-// non-re-exported constant `ERROR_UNEXPECTED_LENGTH_OF_INPUT`; validated against borsh 1.5.7,
+// non-re-exported constant `ERROR_UNEXPECTED_LENGTH_OF_INPUT`; validated against borsh 1.6.1,
 // `src/de/mod.rs`), so we have to match the literal. `truncated_vec_u8_is_classified_as_truncation`
 // fails if a borsh upgrade changes the wording — update this string when it does.
 const BORSH_UNEXPECTED_LENGTH_OF_INPUT: &str = "Unexpected length of input";
@@ -1299,7 +1299,7 @@ impl<S: Spec> BlobStorage<S> {
 /// A [`std::io::Read`] adapter that verifies (`advance`s) only the bytes actually consumed by
 /// the reader, letting deserialization bail out early without verifying the whole blob.
 ///
-/// Current borsh (`1.5.7` in `Cargo.lock`) only requires `Read` here. Its `Vec<u8>` fast path caps
+/// Current borsh only requires `Read` here. Its `Vec<u8>` fast path caps
 /// the initial read/allocation at 1 MiB instead of allocating the claimed length, so `BufRead` is
 /// not needed for OOM protection. A lazy `BufRead::fill_buf` would either expose the whole blob and
 /// lose early-exit behavior, or expose only a chunk that does not represent the full remaining
