@@ -30,10 +30,10 @@ sov-chain-state = { workspace = true }
 
 
 [dev-dependencies]
+sov-blob-storage = { path = ".", features = ["native", "test-utils"] }
 schemars = { workspace = true }
 tempfile = { workspace = true }
 strum = { workspace = true }
-sov-blob-storage = { path = ".", features = ["native", "test-utils"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-bank = { workspace = true }
 sov-test-utils = { workspace = true }
