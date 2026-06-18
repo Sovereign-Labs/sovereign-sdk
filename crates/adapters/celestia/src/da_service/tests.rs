@@ -287,6 +287,38 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_submit_compressed_batch_round_trips() -> anyhow::Result<()> {
+    let rollup_params = ROLLUP_PARAMS_DEV;
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let mut config = dev_node.get_config().await?;
+    config.compression = crate::config::CompressOnSubmit::Lz4;
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let da_service = CelestiaService::new(config, rollup_params, shutdown_rx).await;
+    let signer = da_service
+        .get_signer()
+        .await
+        .expect("Should be configured with signer");
+
+    // A compressible, multi-share batch (8-byte period) so the posted envelope is
+    // strictly smaller than raw and spans several chunks.
+    let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
+    let blob: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
+    let height_before = da_service.get_head_block_header().await?.height();
+    let response = da_service.send_transaction(&blob).await.await??;
+
+    let (collected_batch_blobs, collected_proof_blobs) =
+        collect_all_blobs_between(&da_service, height_before).await?;
+    assert!(
+        collected_proof_blobs.is_empty(),
+        "Proof should not appear when sending batch blobs"
+    );
+    // The blob read back from Celestia decodes to the original logical payload, even
+    // though a smaller compressed envelope was the bytes actually posted on-DA.
+    assert_single_blob(collected_batch_blobs, signer, response.blob_hash, &blob);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_submit_proof_correct() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;

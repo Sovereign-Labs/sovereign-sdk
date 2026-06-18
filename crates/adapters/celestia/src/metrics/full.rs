@@ -89,6 +89,52 @@ impl Metric for BlobSubmitMeasurement {
     }
 }
 
+/// Batch-blob compression outcome at submission. Emitted for every batch submit
+/// (including `mode=off`) so the compression ratio is observable as a baseline.
+#[derive(Debug)]
+pub(crate) struct BlobCompressionMeasurement {
+    /// Emission mode tag: `off` or `lz4` (the configured policy).
+    pub mode: &'static str,
+    /// Logical (pre-encoding) payload length.
+    pub logical_bytes: usize,
+    /// Posted (on-DA) payload length after encoding.
+    pub posted_bytes: usize,
+}
+
+impl BlobCompressionMeasurement {
+    pub fn new(mode: &'static str, logical_bytes: usize, posted_bytes: usize) -> Self {
+        Self {
+            mode,
+            logical_bytes,
+            posted_bytes,
+        }
+    }
+}
+
+impl Metric for BlobCompressionMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_compress_blob"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let mode = self.mode;
+        let logical_bytes = self.logical_bytes;
+        let posted_bytes = self.posted_bytes;
+        let saved_bytes = logical_bytes.saturating_sub(posted_bytes);
+        // posted/logical in basis points (10000 = no reduction). Integer-only.
+        let ratio_bps = if logical_bytes == 0 {
+            10_000
+        } else {
+            (posted_bytes as u64 * 10_000) / logical_bytes as u64
+        };
+        write!(
+            buffer,
+            "{name},mode={mode} logical_bytes={logical_bytes},posted_bytes={posted_bytes},saved_bytes={saved_bytes},ratio_bps={ratio_bps}"
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct CelestiaAdapterStateMeasurement {
     pub signer: CelestiaAddress,

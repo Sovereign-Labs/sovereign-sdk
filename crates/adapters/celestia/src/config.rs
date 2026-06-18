@@ -114,6 +114,16 @@ pub struct CelestiaConfig {
     /// See [`backon::ExponentialBuilder`] for more details
     #[serde(default = "default_factor")]
     pub backoff_factor: f32,
+
+    /// Whether to compress batch blobs before submission. Emission only — never
+    /// affects how blobs are read or verified. Default: `Off`.
+    #[serde(default)]
+    pub compression: CompressOnSubmit,
+    /// Target logical chunk size (bytes) for the chunked compression envelope.
+    /// Clamped to the verifier's per-chunk cap. Default: 482 (one continuation
+    /// share payload, share-aligned).
+    #[serde(default = "default_compression_chunk_size")]
+    pub compression_chunk_size: usize,
 }
 
 impl fmt::Debug for CelestiaConfig {
@@ -148,6 +158,8 @@ impl fmt::Debug for CelestiaConfig {
             .field("backoff_max_delay_ms", &self.backoff_max_delay_ms)
             .field("backoff_max_times", &self.backoff_max_times)
             .field("backoff_factor", &self.backoff_factor)
+            .field("compression", &self.compression)
+            .field("compression_chunk_size", &self.compression_chunk_size)
             .finish()
     }
 }
@@ -190,6 +202,22 @@ pub enum VerifyOnFetchMode {
     ReturnError,
 }
 
+/// Whether the adapter compresses batch blobs before posting them to Celestia.
+///
+/// Controls **emission only** — read and verification semantics never depend on it.
+/// Operators must keep it `Off` until every node/prover on the network can read
+/// compression envelopes.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize, JsonSchema,
+)]
+pub enum CompressOnSubmit {
+    /// Post batch blobs verbatim (today's behavior).
+    #[default]
+    Off,
+    /// Wrap batch blobs in a chunked LZ4 envelope when it is strictly smaller than raw.
+    Lz4,
+}
+
 impl CelestiaConfig {
     /// Absolutely minimal config for client that is capable of reading
     pub fn minimal(rpc_url: String) -> Self {
@@ -211,6 +239,8 @@ impl CelestiaConfig {
             backoff_max_delay_ms: default_max_delay_ms(),
             backoff_max_times: default_max_times(),
             backoff_factor: default_factor(),
+            compression: CompressOnSubmit::default(),
+            compression_chunk_size: default_compression_chunk_size(),
         }
     }
 
@@ -274,6 +304,12 @@ impl CelestiaConfig {
 
 pub(crate) const fn default_safe_lead_time_ms() -> u64 {
     500
+}
+
+/// Default chunk size: one continuation sparse-share payload (share-aligned), equal
+/// to the verifier's per-chunk logical cap.
+pub(crate) const fn default_compression_chunk_size() -> usize {
+    crate::envelope::MAX_LOGICAL_CHUNK_LEN as usize
 }
 
 fn validate_rpc_url(rpc_url: &str) -> anyhow::Result<()> {
