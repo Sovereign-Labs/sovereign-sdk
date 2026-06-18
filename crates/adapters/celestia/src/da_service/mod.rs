@@ -635,7 +635,7 @@ impl DaService for CelestiaService {
     }
 
     async fn get_approximate_block_time(&self) -> Duration {
-        std::time::Duration::from_secs(6)
+        std::time::Duration::from_secs(3)
     }
 }
 
