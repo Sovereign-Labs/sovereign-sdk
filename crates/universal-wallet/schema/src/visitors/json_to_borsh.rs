@@ -245,13 +245,19 @@ impl<W: std::io::Write, L: LinkingScheme> TypeVisitor<L, ContainerSerdeMetadata>
 
         for (field, field_serde) in s.fields.iter().zip(serde_metadata.fields_or_variants) {
             // TODO: ensure skip is handled correctly
-            let json_value =
-                json_fields
-                    .remove(&field_serde.name)
-                    .ok_or(EncodeError::MissingType {
-                        name: format!("{}.{}", s.type_name, field.display_name),
-                    })?;
+
             let inner_type = schema.resolve_or_err(&field.value)?;
+            let json_value = if let Some(value) = json_fields.remove(&field_serde.name) {
+                value
+            } else {
+		// allow null values to be missing from the input
+                if !matches!(inner_type, Ty::Option { .. }) {
+                    return Err(EncodeError::MissingType {
+                        name: format!("{}.{}", s.type_name, field.display_name),
+                    });
+                }
+                Value::Null
+            };
             context.value = json_value;
             context.current_link = field.value.clone();
             // TODO: adjust `Context` so it can return references to views over the full JSON,
