@@ -377,10 +377,8 @@ impl CelestiaService {
                 }
             }
             VerifyOnFetchMode::ReturnError => {
-                self.verify_block_integrity(&block).map_err(|error| {
-                    anyhow::anyhow!(
-                        "Celestia block integrity verification failed at height {height}: {error}"
-                    )
+                self.verify_block_integrity(&block).with_context(|| {
+                    format!("Celestia block integrity verification failed at height {height}")
                 })?;
             }
         }
