@@ -60,10 +60,17 @@ pub(crate) const CHUNK_HEADER_LEN: usize = 4;
 /// unbounded allocation.
 pub(crate) const MAX_LOGICAL_BLOB_LEN: u32 = 64 * 1024 * 1024;
 
-/// Maximum decoded length of a single chunk: one continuation sparse-share
-/// payload (`CONTINUATION_SPARSE_SHARE_CONTENT_SIZE` = 482). Share-aligned, so it
-/// is both the per-byte DoS bound and the partial-read granularity.
-pub(crate) const MAX_LOGICAL_CHUNK_LEN: u16 = 482;
+/// Maximum decoded length of a single chunk: three continuation sparse-share
+/// payloads (3 × `CONTINUATION_SPARSE_SHARE_CONTENT_SIZE` = 1446). This is the
+/// per-byte DoS bound and the partial-read granularity. The default chunk size
+/// (`config::default_compression_chunk_size`, one share = 482) stays conservative;
+/// advanced operators may opt up to this cap, trading coarser partial-read
+/// granularity for a better ratio.
+///
+/// Raising this is a verifier-acceptance (consensus-relevant) change — every reader
+/// must agree on it — but it is safe to set before compression is ever emitted on a
+/// live network.
+pub(crate) const MAX_LOGICAL_CHUNK_LEN: u16 = 1446;
 
 /// Maximum posted length of a single chunk: the LZ4 block worst-case output for
 /// [`MAX_LOGICAL_CHUNK_LEN`] logical bytes (`n + n/255 + 16`). Bounds the bytes a
@@ -328,7 +335,14 @@ pub(crate) fn classify_and_decode(buf: &[u8]) -> EnvelopeState {
 /// passes the verifier's framing caps.
 #[cfg(feature = "native")]
 pub(crate) fn encode_chunked(logical: &[u8], codec: u8, chunk_size: usize) -> Vec<u8> {
-    let chunk_size = chunk_size.clamp(1, MAX_LOGICAL_CHUNK_LEN as usize);
+    // Callers pass a config-validated size (`validate_compression_chunk_size` in
+    // `config.rs`), so there is no silent clamp. The round-trip check in
+    // `encode_for_submission` is the release backstop: an out-of-range size would
+    // produce over-cap chunks that fail canonical re-decode and fall back to raw.
+    debug_assert!(
+        (1..=MAX_LOGICAL_CHUNK_LEN as usize).contains(&chunk_size),
+        "compression_chunk_size {chunk_size} out of range 1..={MAX_LOGICAL_CHUNK_LEN}"
+    );
     let mut out = Vec::with_capacity(ENVELOPE_HEADER_LEN + logical.len());
     out.extend_from_slice(&ENVELOPE_MAGIC);
     out.push(ENVELOPE_VERSION);
@@ -342,8 +356,8 @@ pub(crate) fn encode_chunked(logical: &[u8], codec: u8, chunk_size: usize) -> Ve
             // CODEC_LZ4: `compress` (no size prefix) — the framing carries the size.
             _ => lz4_flex::block::compress(chunk),
         };
-        // chunk_size <= MAX_LOGICAL_CHUNK_LEN (482) and LZ4 worst-case output of 482
-        // is MAX_ENCODED_CHUNK_LEN (499), so both lengths fit u16. The round-trip in
+        // chunk_size <= MAX_LOGICAL_CHUNK_LEN (1446) and LZ4 worst-case output of 1446
+        // is MAX_ENCODED_CHUNK_LEN (1467), so both lengths fit u16. The round-trip in
         // `is_canonical_encoding_of` is the backstop if that assumption ever breaks.
         out.extend_from_slice(&(chunk.len() as u16).to_le_bytes());
         out.extend_from_slice(&(encoded.len() as u16).to_le_bytes());
@@ -720,5 +734,19 @@ mod tests {
         assert_eq!(d.consumed, canonical_len, "stops at logical completion");
         assert!(d.consumed < frame.len(), "trailing bytes left unconsumed");
         assert!(!is_canonical_encoding_of(&frame, &logical));
+    }
+
+    #[test]
+    fn lz4_round_trips_at_max_chunk_size() {
+        // Exercises the widened per-chunk cap: a multi-chunk payload encoded at the
+        // maximum allowed chunk size must still decode clean and canonical.
+        let logical: Vec<u8> = (0..5000u32).map(|i| (i % 251) as u8).collect();
+        let frame = encode_chunked(&logical, CODEC_LZ4, MAX_LOGICAL_CHUNK_LEN as usize);
+        let d = envelope(&frame);
+        assert!(d.clean, "max-chunk-size LZ4 frame must decode clean");
+        assert_eq!(d.logical, logical);
+        assert_eq!(d.logical.len(), d.header.logical_len as usize);
+        assert_eq!(d.consumed, frame.len(), "canonical: chunks tile the frame");
+        assert!(is_canonical_encoding_of(&frame, &logical));
     }
 }

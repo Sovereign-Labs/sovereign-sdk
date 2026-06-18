@@ -120,8 +120,10 @@ pub struct CelestiaConfig {
     #[serde(default)]
     pub compression: CompressOnSubmit,
     /// Target logical chunk size (bytes) for the chunked compression envelope.
-    /// Clamped to the verifier's per-chunk cap. Default: 482 (one continuation
-    /// share payload, share-aligned).
+    /// Must be in `1..=1446` (the verifier's per-chunk cap, `MAX_LOGICAL_CHUNK_LEN`);
+    /// an out-of-range value is rejected at startup rather than silently clamped.
+    /// Default: 482 (one continuation share payload, share-aligned). Advanced knob —
+    /// larger chunks trade coarser partial-read granularity for a better ratio.
     #[serde(default = "default_compression_chunk_size")]
     pub compression_chunk_size: usize,
 }
@@ -264,6 +266,7 @@ impl CelestiaConfig {
 
     pub(crate) async fn build_client(&self) -> anyhow::Result<celestia_client::Client> {
         validate_rpc_url(&self.rpc_url)?;
+        validate_compression_chunk_size(self.compression_chunk_size)?;
 
         let api_request_timeout =
             std::time::Duration::from_secs(self.api_request_timeout_secs.get());
@@ -306,15 +309,32 @@ pub(crate) const fn default_safe_lead_time_ms() -> u64 {
     500
 }
 
-/// Default chunk size: one continuation sparse-share payload (share-aligned), equal
-/// to the verifier's per-chunk logical cap.
+/// Default chunk size: one continuation sparse-share payload (share-aligned).
+/// Decoupled from the per-chunk cap [`crate::envelope::MAX_LOGICAL_CHUNK_LEN`] so the
+/// conservative default does not move when the cap is raised.
 pub(crate) const fn default_compression_chunk_size() -> usize {
-    crate::envelope::MAX_LOGICAL_CHUNK_LEN as usize
+    // = CONTINUATION_SPARSE_SHARE_CONTENT_SIZE. A literal (not `MAX_LOGICAL_CHUNK_LEN`)
+    // keeps the default pinned to one share when the cap is raised.
+    482
 }
 
 fn validate_rpc_url(rpc_url: &str) -> anyhow::Result<()> {
     if rpc_url.trim().is_empty() {
         anyhow::bail!("`rpc_url` must be set in the config or via `SOV_CELESTIA_RPC_URL`");
+    }
+
+    Ok(())
+}
+
+/// Validate `compression_chunk_size` against the verifier's per-chunk logical cap.
+/// An out-of-range value would otherwise be silently clamped at encode time, so a
+/// misconfigured node would quietly emit different chunks than the operator requested.
+fn validate_compression_chunk_size(chunk_size: usize) -> anyhow::Result<()> {
+    let max = crate::envelope::MAX_LOGICAL_CHUNK_LEN as usize;
+    if !(1..=max).contains(&chunk_size) {
+        anyhow::bail!(
+            "`compression_chunk_size` must be between 1 and {max} (the verifier's per-chunk cap), got {chunk_size}"
+        );
     }
 
     Ok(())
@@ -397,7 +417,10 @@ pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_rpc_url, CelestiaConfig, GrpcEndpointConfig, VerifyOnFetchMode};
+    use super::{
+        default_compression_chunk_size, validate_compression_chunk_size, validate_rpc_url,
+        CelestiaConfig, GrpcEndpointConfig, VerifyOnFetchMode
+    };
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
     const GRPC_ENV_VAR: &str = "SOV_CELESTIA_GRPC_URL";
@@ -616,5 +639,26 @@ mod tests {
             let config = deserialize_config(json).expect(json);
             assert_eq!(config.verify_on_fetch_mode, expected);
         }
+    }
+
+    #[test]
+    fn compression_chunk_size_in_range_is_accepted() {
+        let max = crate::envelope::MAX_LOGICAL_CHUNK_LEN as usize;
+        assert!(validate_compression_chunk_size(1).is_ok());
+        assert!(validate_compression_chunk_size(default_compression_chunk_size()).is_ok());
+        assert!(validate_compression_chunk_size(max).is_ok());
+    }
+
+    #[test]
+    fn compression_chunk_size_out_of_range_is_rejected() {
+        let max = crate::envelope::MAX_LOGICAL_CHUNK_LEN as usize;
+        assert!(validate_compression_chunk_size(0).is_err());
+        assert!(validate_compression_chunk_size(max + 1).is_err());
+    }
+
+    #[test]
+    fn default_compression_chunk_size_is_one_continuation_share() {
+        // Guards against re-coupling the default to the per-chunk cap.
+        assert_eq!(default_compression_chunk_size(), 482);
     }
 }

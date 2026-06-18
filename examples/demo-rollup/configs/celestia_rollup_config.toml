@@ -75,8 +75,10 @@ signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e
 # how blobs are read or verified. Keep "Off" until every node/prover on the network can
 # read compression envelopes. Options: "Off", "Lz4". Default: "Off".
 #compression = "Off"
-# Target logical chunk size (bytes) for the chunked compression envelope. Clamped to the
-# verifier's per-chunk cap. Default: 482 (one continuation share payload, share-aligned).
+# Target logical chunk size (bytes) for the chunked compression envelope. Must be in
+# 1..=1446 (the verifier's per-chunk cap); an out-of-range value is rejected at startup.
+# Advanced knob — larger chunks trade partial-read granularity for a better ratio.
+# Default: 482 (one continuation share payload, share-aligned).
 #compression_chunk_size = 482
 
 # Exponential backoff configuration for retrying failed requests to Celestia node
