@@ -7,6 +7,7 @@ use std::num::NonZeroU8;
 use std::sync::Arc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
+use sov_mock_da::{MockAddress, MockHash};
 use sov_mock_da::{MockBlob, MOCK_SEQUENCER_DA_ADDRESS};
 use sov_modules_api::{BlobReaderTrait, FullyBakedTx};
 
@@ -21,7 +22,7 @@ fn mock_blob(data: Vec<u8>) -> MockBlob {
 
 /// Deserializes `B` through the production native reader (`LazyBlobReader`), leaving `blob`
 /// borrowable afterwards so the test can inspect how many bytes were verified.
-fn read_via_lazy<B: BorshDeserialize>(blob: &mut MockBlob) -> std::io::Result<B> {
+fn read_via_lazy<B: BorshDeserialize>(blob: &mut impl BlobReaderTrait) -> std::io::Result<B> {
     let mut reader = data_for_deserialization(blob);
     B::try_from_reader(&mut reader)
 }
@@ -31,6 +32,53 @@ fn read_via_lazy<B: BorshDeserialize>(blob: &mut MockBlob) -> std::io::Result<B>
 enum TwoVariants {
     First,
     Second,
+}
+
+#[derive(Debug, serde::Serialize, serde::Deserialize)]
+struct RecordingBlob {
+    data: Vec<u8>,
+    verified_len: usize,
+    max_advance_request: usize,
+}
+
+impl RecordingBlob {
+    fn new(data: Vec<u8>) -> Self {
+        Self {
+            data,
+            verified_len: 0,
+            max_advance_request: 0,
+        }
+    }
+}
+
+impl BlobReaderTrait for RecordingBlob {
+    type Address = MockAddress;
+    type BlobHash = MockHash;
+
+    fn sender(&self) -> Self::Address {
+        MockAddress::new(MOCK_SEQUENCER_DA_ADDRESS)
+    }
+
+    fn hash(&self) -> Self::BlobHash {
+        MockHash([0; 32])
+    }
+
+    fn verified_data(&self) -> &[u8] {
+        &self.data[..self.verified_len]
+    }
+
+    fn total_len(&self) -> usize {
+        self.data.len()
+    }
+
+    fn advance(&mut self, num_bytes: usize) -> &[u8] {
+        self.max_advance_request = self.max_advance_request.max(num_bytes);
+        self.verified_len = self
+            .verified_len
+            .saturating_add(num_bytes)
+            .min(self.data.len());
+        self.verified_data()
+    }
 }
 
 // `is_borsh_truncated_input_error`: telling "ran out of input" apart from other failures.
@@ -44,6 +92,28 @@ fn truncated_vec_u8_is_classified_as_truncation() {
     assert_eq!(error.kind(), ErrorKind::InvalidData);
     assert_eq!(error.to_string(), "Unexpected length of input");
     assert!(is_borsh_truncated_input_error(&error));
+}
+
+#[test]
+fn huge_vec_u8_claim_does_not_drive_huge_lazy_read() {
+    const BORSH_VEC_U8_INITIAL_READ_CAP: usize = 1024 * 1024;
+    let claimed_len = BORSH_VEC_U8_INITIAL_READ_CAP as u32 + 1;
+    let mut blob = RecordingBlob::new(claimed_len.to_le_bytes().to_vec());
+
+    let error = read_via_lazy::<Vec<u8>>(&mut blob).unwrap_err();
+
+    assert_eq!(error.kind(), ErrorKind::InvalidData);
+    assert_eq!(error.to_string(), "Unexpected length of input");
+    assert!(
+        blob.max_advance_request <= BORSH_VEC_U8_INITIAL_READ_CAP,
+        "borsh asked the lazy reader for {} bytes from a {} byte claim",
+        blob.max_advance_request,
+        claimed_len
+    );
+    assert!(
+        blob.max_advance_request < claimed_len as usize,
+        "borsh must not eagerly read the full claimed length"
+    );
 }
 
 #[test]

@@ -1272,6 +1272,12 @@ impl<S: Spec> BlobStorage<S> {
 
 /// A [`std::io::Read`] adapter that verifies (`advance`s) only the bytes actually consumed by
 /// the reader, letting deserialization bail out early without verifying the whole blob.
+///
+/// Current borsh (`1.5.7` in `Cargo.lock`) only requires `Read` here. Its `Vec<u8>` fast path caps
+/// the initial read/allocation at 1 MiB instead of allocating the claimed length, so `BufRead` is
+/// not needed for OOM protection. A lazy `BufRead::fill_buf` would either expose the whole blob and
+/// lose early-exit behavior, or expose only a chunk that does not represent the full remaining
+/// length.
 #[cfg(feature = "native")]
 struct LazyBlobReader<'a, B: BlobReaderTrait> {
     blob: &'a mut B,
