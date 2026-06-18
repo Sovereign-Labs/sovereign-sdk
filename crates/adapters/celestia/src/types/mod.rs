@@ -250,10 +250,13 @@ impl BlobReaderTrait for BlobWithSender {
         self.logical_total_len()
     }
 
-    // TODO: Why is this in `BlobReaderTrait` and not in normal BlobWithSender impl?
     /// True iff the fully-provided authenticated DA bytes do not decode into a
-    /// clean, exact, complete logical payload (PR-A's slash signal). Derived only
+    /// clean, exact, complete logical payload (the slash signal). Derived only
     /// from authenticated bytes, so it is identical in native and zk execution.
+    ///
+    /// Lives on [`BlobReaderTrait`] (not a celestia-only method) because the generic
+    /// `sov-blob-storage` accept path consults it: it cannot otherwise tell a corrupt
+    /// sender (slash) from a withholding prover (fail closed).
     fn logical_decode_failed(&self) -> bool {
         let EnvelopeState::Envelope(decoded) = self.logical_state() else {
             // Legacy / malformed-as-raw: no decode layer, keep default behavior.
@@ -280,32 +283,30 @@ impl BlobReaderTrait for BlobWithSender {
 
     #[cfg(feature = "native")]
     fn advance(&mut self, num_bytes: usize) -> &[u8] {
-        // Make sure the decode cache exists (a reader may not have touched it yet).
-        // TODO: Why we do that? this means. This is extra atomic set, better to fold into single branch.
-        if self.envelope_state.get().is_none() {
-            let _ = self
-                .envelope_state
-                .set(classify_and_decode(self.blob.accumulator()));
-        }
-        // `get_mut` borrows only the field (unlike `logical_state`, a `&self` method
-        // whose borrow would cover all of `self`), so the cached decode can be extended
-        // in place while `self.blob` is mutated below.
+        // Ensure the cache is populated (computed once), then take a `&mut` to extend it
+        // in place. `get_mut` borrows only the field — unlike `logical_state`, a `&self`
+        // method whose borrow would cover all of `self` and block mutating `self.blob`
+        // below.
+        let _ = self
+            .envelope_state
+            .get_or_init(|| classify_and_decode(self.blob.accumulator()));
         match self.envelope_state.get_mut() {
             Some(EnvelopeState::Envelope(decoded)) => {
                 let codec = decoded.header.codec;
                 let logical_len = decoded.header.logical_len as usize;
 
-                // Pull whole chunks (framing only — no decode) until at least
-                // `num_bytes` more logical bytes are covered, or EOF / invalid framing
-                // stops us. The accumulator always ends on a chunk boundary, so the next
-                // chunk's framing starts at its current length.
+                // Read at least `num_bytes` more logical bytes (capped at the blob's
+                // declared logical length).
                 let target = decoded
                     .logical
                     .len()
                     .saturating_add(num_bytes)
                     .min(logical_len);
                 let mut covered = decoded.logical.len();
-                // TODO: What is the purpose of this loop? Let's add short note
+                // Authenticate forward one whole chunk at a time — read each chunk's
+                // 4-byte framing, validate it, then pull its payload into the accumulator
+                // — until `covered` reaches `target` (or EOF / bad framing). The
+                // accumulator always ends on a chunk boundary. No decoding here.
                 while covered < target {
                     let pos = self.blob.accumulator().len();
                     if pos >= self.blob.total_len() {

@@ -177,21 +177,26 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
     /// differ from the number of bytes the blob occupies on the DA layer.
     fn total_len(&self) -> usize;
 
-    /// Returns `true` when the blob's fully-provided, authenticated DA bytes do not
-    /// decode into the logical payload they claim — for example, an adapter that posts a
-    /// compressed envelope whose authenticated bytes fail to decompress to the declared
-    /// logical length (or do not form a canonical, complete encoding).
+    /// The validity companion to [`Self::verified_data`]'s contract that an adapter may
+    /// post a *different physical representation* to the DA layer: returns `true` when an
+    /// adapter's authenticated DA bytes are **fully present but do not yield the complete,
+    /// valid logical payload they claim** (e.g. a compressed envelope whose authenticated
+    /// bytes don't decompress to the declared length, or aren't a canonical encoding).
     ///
-    /// This is distinct from a prover withholding bytes: it means the *sender* posted
-    /// structurally invalid content, so the consumer should slash/discard the blob
-    /// rather than treat the shortfall as missing data (which must fail the proof
-    /// closed). It is derived deterministically from the authenticated bytes — never a
-    /// serialized claim — so it is identical in native and zk execution, and it must be
-    /// consulted *before* trusting a successful deserialization (a short decoded prefix
-    /// can itself be a complete, valid value).
+    /// It exists because the generic consumer (`sov-blob-storage`'s accept path) otherwise
+    /// cannot tell this apart from a prover *withholding* bytes — both surface as fewer
+    /// logical bytes than [`Self::total_len`] — yet the two need opposite handling:
+    /// undecodable content is the *sender's* fault (slash/discard the blob), whereas
+    /// withheld bytes are the *prover's* (fail the proof closed). The distinguishing fact
+    /// (are all the authenticated DA bytes present?) is the adapter's physical-vs-logical
+    /// split, which the generic consumer cannot see — so a transforming adapter must report
+    /// it.
     ///
-    /// Adapters whose logical payload equals their DA-physical bytes (no decode layer)
-    /// keep the default `false`.
+    /// Derived deterministically from the authenticated bytes — never a serialized claim —
+    /// so it is identical in native and zk execution, and it must be consulted *before*
+    /// trusting a successful deserialization (a short decoded prefix can itself be a
+    /// complete, valid value). Adapters whose logical payload equals their DA-physical
+    /// bytes (no transform) keep the default `false`.
     fn logical_decode_failed(&self) -> bool {
         false
     }
