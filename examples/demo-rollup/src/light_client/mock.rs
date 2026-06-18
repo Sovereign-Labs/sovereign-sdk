@@ -22,8 +22,7 @@ type Root = <<MockRollupSpec<Native> as Spec>::Storage as Storage>::Root;
 pub async fn verify_latest_aggregated_proof(node_url: &str) -> anyhow::Result<()> {
     let (inner_code_commitment, outer_code_commitment) = read_mock_code_commitments_from_env();
 
-    let light_client =
-        MockLightClient::new(inner_code_commitment.to_hash(), outer_code_commitment);
+    let light_client = MockLightClient::new(inner_code_commitment.to_hash(), outer_code_commitment);
     let proof = NodeClient::new_unchecked(node_url)
         .fetch_latest_aggregated_proof()
         .await?;
