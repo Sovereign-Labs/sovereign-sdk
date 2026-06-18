@@ -320,14 +320,6 @@ impl NodeClient {
 
     /// Fetches the node's latest aggregated ("outer") proof from its REST API and
     /// returns the decoded bytes, without verifying them.
-    ///
-    /// Uses the generated typed [`get_latest_aggregated_proof`](sov_api_spec::Client::get_latest_aggregated_proof)
-    /// endpoint, so the request path and base64 decoding stay in sync with the
-    /// OpenAPI spec rather than being hand-rolled here.
-    ///
-    /// Verification is intentionally left to the caller: hand the returned proof
-    /// to a [`ZkLightClient`](sov_rollup_interface::zk::ZkLightClient)'s
-    /// `verify_aggregated_proof` to check it against trusted verification keys.
     pub async fn fetch_latest_aggregated_proof(&self) -> anyhow::Result<SerializedAggregatedProof> {
         self.client
             .get_latest_aggregated_proof()
