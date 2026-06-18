@@ -33,6 +33,7 @@ pub mod namespaces;
 /// Configuration for `sov-db`
 pub mod config;
 pub(crate) mod metrics;
+pub mod migration;
 /// Implements state pruning functionality for removing old versions of keys.
 pub mod pruner;
 /// Implements a wrapper around [NOMT](https://github.com/thrumdev/nomt) meant for storing rollup state.
