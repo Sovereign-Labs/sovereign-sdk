@@ -27,6 +27,10 @@ use crate::{
 /// A loose upper bound on the size of an emergency registration blob, in bytes. Blobs larger than this are statically known to be invalid
 /// so we don't bother trying to deserialize them.
 const MAX_EMERGENCY_REGISTRATION_BLOB_SIZE: usize = 1000;
+// Borsh reports truncated input as `InvalidData` carrying this exact message (its private,
+// non-re-exported constant `ERROR_UNEXPECTED_LENGTH_OF_INPUT`; validated against borsh 1.5.7,
+// `src/de/mod.rs`), so we have to match the literal. `truncated_vec_u8_is_classified_as_truncation`
+// fails if a borsh upgrade changes the wording — update this string when it does.
 const BORSH_UNEXPECTED_LENGTH_OF_INPUT: &str = "Unexpected length of input";
 
 fn is_borsh_truncated_input_error(error: &std::io::Error) -> bool {
