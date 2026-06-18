@@ -174,6 +174,9 @@ fn truncated_blob_is_fully_verified_before_reporting_truncation() {
     // whose length prefix over-promises (InvalidData "Unexpected length of input") and a struct
     // whose trailing fixed-size field is cut off (raw UnexpectedEof) — across the payload types the
     // production path actually deserializes.
+    //
+    // Keep this list in sync with the `impl BlobPayload` block in `capabilities.rs`: every
+    // implementor is allowed past the truncation guard, so every implementor must be proven here.
     assert_truncated_blob_is_fully_verified(vec![1u8, 2, 3]);
     assert_truncated_blob_is_fully_verified(PreferredBatchData {
         sequence_number: 0x1234,

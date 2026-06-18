@@ -39,6 +39,28 @@ fn is_borsh_truncated_input_error(error: &std::io::Error) -> bool {
             && error.to_string() == BORSH_UNEXPECTED_LENGTH_OF_INPUT)
 }
 
+/// Payload types that `deserialize_or_try_slash_sender` is permitted to decode from a DA blob.
+///
+/// `deserialize_or_try_slash_sender` asserts the *entire* blob was verified whenever borsh reports
+/// a truncation-classified error (`UnexpectedEof` / "Unexpected length of input"). That assertion
+/// is sound only for types whose `BorshDeserialize` impl reads the whole blob *before* emitting such
+/// an error. A type that bails out early with a truncation-classified error (see the
+/// `classifier_false_positive_before_reader_is_exhausted` test) would trip the assertion and frame
+/// an honest sequencer as malicious.
+///
+/// This trait is private, so only this crate can add implementors — and the `B: BlobPayload` bound
+/// makes decoding an un-vetted type a compile error rather than a silent risk. Before adding an
+/// `impl`:
+/// 1. add the type to `truncated_blob_is_fully_verified_before_reporting_truncation`, and
+/// 2. confirm that test passes (borsh consumes the full blob before reporting truncation).
+trait BlobPayload: BorshDeserialize {}
+
+impl BlobPayload for FullyBakedTx {}
+impl BlobPayload for PreferredProofData {}
+impl BlobPayload for PreferredBatchData {}
+impl BlobPayload for Vec<u8> {}
+impl BlobPayload for Vec<FullyBakedTx> {}
+
 #[derive(Debug)]
 enum SequencerStatus<S: Spec> {
     Registered(AllowedSequencer<S>),
@@ -1043,7 +1065,7 @@ impl<S: Spec> BlobStorage<S> {
     /// Deserialize a blob into a `Batch` or slash the sender if it's malformed.
     /// The sequencer might not exist if we're processing a blob submitted by an unregistered
     /// sequencer - in the case of direct sequencer registration via DA.
-    fn deserialize_or_try_slash_sender<B: BorshDeserialize>(
+    fn deserialize_or_try_slash_sender<B: BlobPayload>(
         &mut self,
         blob: &mut <S::Da as DaSpec>::BlobTransaction,
         charge_for_deserialization: Option<(&AllowedSequencer<S>, <S::Gas as Gas>::Price)>,
