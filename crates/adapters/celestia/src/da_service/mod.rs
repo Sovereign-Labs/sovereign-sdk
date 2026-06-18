@@ -451,25 +451,60 @@ impl CelestiaService {
     }
 
     fn verify_block_integrity(&self, block: &FilteredCelestiaBlock) -> anyhow::Result<()> {
-        let verifier = CelestiaVerifier::new(RollupParams {
-            rollup_batch_namespace: self.rollup_batch_namespace,
-            rollup_proof_namespace: self.rollup_proof_namespace,
-        });
+        verify_block_integrity_for_params(
+            block,
+            RollupParams {
+                rollup_batch_namespace: self.rollup_batch_namespace,
+                rollup_proof_namespace: self.rollup_proof_namespace,
+            },
+        )
+    }
+}
 
-        let mut relevant_blobs = extract_relevant_blobs(block);
-        // Advance full blob data first, then derive proofs for the consumed ranges.
-        for blob in relevant_blobs
-            .batch_blobs
-            .iter_mut()
-            .chain(relevant_blobs.proof_blobs.iter_mut())
-        {
-            blob.advance(blob.total_len());
-        }
-        let relevant_proofs = get_extraction_proof(block, &relevant_blobs);
+fn verify_block_integrity_for_params(
+    block: &FilteredCelestiaBlock,
+    rollup_params: RollupParams,
+) -> anyhow::Result<()> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        verify_block_integrity_inner(block, rollup_params)
+    }))
+    .map_err(|panic| {
+        anyhow::anyhow!(
+            "Celestia block integrity verification panicked: {}",
+            panic_payload_to_string(panic.as_ref())
+        )
+    })?
+}
 
-        verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)?;
+fn verify_block_integrity_inner(
+    block: &FilteredCelestiaBlock,
+    rollup_params: RollupParams,
+) -> anyhow::Result<()> {
+    let verifier = CelestiaVerifier::new(rollup_params);
 
-        Ok(())
+    let mut relevant_blobs = extract_relevant_blobs(block);
+    // Advance full blob data first, then derive proofs for the consumed ranges.
+    for blob in relevant_blobs
+        .batch_blobs
+        .iter_mut()
+        .chain(relevant_blobs.proof_blobs.iter_mut())
+    {
+        blob.advance(blob.total_len());
+    }
+    let relevant_proofs = get_extraction_proof(block, &relevant_blobs);
+
+    verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)?;
+
+    Ok(())
+}
+
+fn panic_payload_to_string(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_owned()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "non-string panic payload".to_owned()
     }
 }
 
