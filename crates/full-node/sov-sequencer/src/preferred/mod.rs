@@ -59,6 +59,7 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootTask;
 use std::boxed::Box;
@@ -153,13 +154,14 @@ where
         state_update_receiver: StateUpdateReceiver<S::Storage>,
         storage_path: &Path,
         config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+        max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         shutdown_sender: watch::Sender<()>,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        Builder::new(da, config)
+        Builder::new(da, config, max_concurrent_proof_blobs)
             .build(
                 state_update_receiver,
                 storage_path,
@@ -429,7 +431,7 @@ where
         }
 
         let (outer_res, nonce_to_mark_persisted) = match uniqueness {
-            UniquenessData::Generation(_) => (
+            UniquenessData::Generation(_) | UniquenessData::Window(_) => (
                 self.synchronized_state_updator
                     .accept_tx_msg(
                         &baked_tx,
@@ -479,15 +481,15 @@ where
                 Ok(result)
             }
             Err(e) => match e {
-                AcceptTxError::SequencerOverloaded503 => {
-                    return Err(sequencer_overloaded_503("Other"));
+                AcceptTxError::SequencerOverloaded503(reason) => {
+                    return Err(sequencer_overloaded_503(reason));
                 }
                 AcceptTxError::NotFullySynced(details) => {
                     return Err(error_not_fully_synced(details))
                 }
                 AcceptTxError::BatchError {
                     batch_creation_error,
-                    nb_of_concurrent_blob_submissions,
+                    nb_of_batch_blobs_in_flight,
                 } => match batch_creation_error {
                     BatchCreationError::NoFinalizedSlotAvailable => {
                         return Err(sequencer_overloaded_503("No finalized slots available"));
@@ -495,8 +497,8 @@ where
                     BatchCreationError::BlobSenderBusy => {
                         return Err(error_not_fully_synced(
                             SequencerNotReadyDetails::WaitingOnBlobSender {
-                                max_concurrent_blobs: self.config.max_concurrent_blobs,
-                                nb_of_blobs_in_flight: nb_of_concurrent_blob_submissions,
+                                max_concurrent_batch_blobs: self.config.max_concurrent_batch_blobs,
+                                nb_of_batch_blobs_in_flight,
                             },
                         ));
                     }
@@ -601,7 +603,7 @@ fn current_visible_slot_number_according_to_node<S: Spec, Rt: Runtime<S>>(
     info: &StateUpdateInfo<S::Storage>,
 ) -> SlotNumber {
     let mut runtime = Rt::default();
-    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &runtime.kernel(), None);
+    let node_checkpoint = StateCheckpoint::new(info.storage.clone(), &runtime.kernel());
     node_checkpoint.current_visible_slot_number().as_true()
 }
 
@@ -787,7 +789,7 @@ where
         // same logic.
         self.synchronized_state_updator
             .check_readiness_msg(
-                self.config.max_concurrent_blobs,
+                self.config.max_concurrent_batch_blobs,
                 self.stop_at_rollup_height,
                 "check_readiness",
             )
@@ -987,6 +989,13 @@ where
 
         Ok(())
     }
+
+    async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus> {
+        self.synchronized_state_updator
+            .proof_blob_sender_status_msg("proof_blob_sender_status")
+            .await
+            .map_err(|e| e.into_state_update_error())
+    }
 }
 
 /// Transaction confirmation data of [`PreferredSequencer`].
@@ -1029,8 +1038,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    let mut checkpoint =
-        StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
+    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
 
     runtime.kernel().next_sequence_number(&mut state)

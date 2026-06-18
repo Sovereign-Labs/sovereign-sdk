@@ -47,6 +47,7 @@ async fn test_metrics_macro() {
             max_datagram_size: Some(1),
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: sov_metrics::RpcAggregationConfig::standard(),
         },
         shutdown_receiver,
     );
@@ -57,7 +58,7 @@ async fn test_metrics_macro() {
 
     // We have one invocation of the metric here.
     let mut buf = [0; 1024];
-    timeout(
+    let (bytes_received, _) = timeout(
         std::time::Duration::from_secs(10),
         channel.recv_from(&mut buf),
     )
@@ -65,12 +66,15 @@ async fn test_metrics_macro() {
     .expect("Timeout while waiting for the UDP channel to receive data")
     .unwrap();
 
-    let mut parsed_buf = std::str::from_utf8(&buf[..]).unwrap().split(" ");
+    let received_metric = std::str::from_utf8(&buf[..bytes_received]).unwrap();
+    let mut parsed_buf = received_metric.split(' ');
     assert_eq!(
         parsed_buf.next().unwrap(),
-        "sov_rollup_gas_constant,name=test_metrics,constant=test,input=10"
+        "sov_rollup_gas_constant,name=test_metrics,constant=test"
     );
-    assert_eq!(parsed_buf.next().unwrap(), "num_invocations=1");
+    let fields = parsed_buf.next().unwrap();
+    assert!(fields.split(',').any(|field| field == "num_invocations=1"));
+    assert!(fields.split(',').any(|field| field == "input=\"10\""));
 }
 
 #[track_gas_constants_usage]
@@ -110,6 +114,7 @@ async fn test_metrics_macro_without_input() {
             max_datagram_size: Some(1),
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: sov_metrics::RpcAggregationConfig::standard(),
         },
         shutdown_receiver,
     );
@@ -118,7 +123,7 @@ async fn test_metrics_macro_without_input() {
 
     // We have one invocation of the metric here.
     let mut buf = [0; 1024];
-    timeout(
+    let (bytes_received, _) = timeout(
         std::time::Duration::from_secs(10),
         channel.recv_from(&mut buf),
     )
@@ -126,10 +131,12 @@ async fn test_metrics_macro_without_input() {
     .expect("Timeout while waiting for the UDP channel to receive data")
     .unwrap();
 
-    let mut parsed_buf = std::str::from_utf8(&buf[..]).unwrap().split(" ");
+    let received_metric = std::str::from_utf8(&buf[..bytes_received]).unwrap();
+    let mut parsed_buf = received_metric.split(' ');
     assert_eq!(
         parsed_buf.next().unwrap(),
         "sov_rollup_gas_constant,name=test_metrics_without_input,constant=test"
     );
-    assert_eq!(parsed_buf.next().unwrap(), "num_invocations=1");
+    let fields = parsed_buf.next().unwrap();
+    assert!(fields.split(',').any(|field| field == "num_invocations=1"));
 }

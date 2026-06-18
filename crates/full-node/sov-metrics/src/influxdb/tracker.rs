@@ -6,8 +6,8 @@ use std::sync::OnceLock;
 
 use crate::influxdb::KnownMetric;
 use crate::influxdb::{
-    publisher, safe_telegraf_string, Metric, SubmittableMetric, SubmittableMetricKind,
-    DROPPED_METRICS_COUNT,
+    publisher, safe_telegraf_string, write_metadata_fields_for_telegraf, Metric, SubmittableMetric,
+    SubmittableMetricKind, DROPPED_METRICS_COUNT,
 };
 use crate::{MetricsTracker, MonitoringConfig};
 
@@ -40,6 +40,11 @@ pub fn init_metrics_tracker(
 
 impl MetricsTracker {
     /// Quick way to submit a string metric without dealing with [`Metric`].
+    ///
+    /// Prefer defining a dedicated struct that implements [`Metric`] and calling
+    /// [`MetricsTracker::submit`] — this keeps the wire format reviewable and avoids the
+    /// per-call allocation that `ToString` forces. `submit_inline` is retained for
+    /// external SDK users whose downstream code still depends on it.
     pub fn submit_inline(&self, measurement: &'static str, rest: impl ToString) {
         #[derive(Debug)]
         struct InlineMetric(&'static str, String);
@@ -88,6 +93,9 @@ impl MetricsTracker {
         let timestamp = timestamp();
         let RunnerMetrics {
             da_height: da_height_processed,
+            rollup_height,
+            start_at_rollup_height,
+            stop_at_rollup_height,
             sync_distance,
             get_block_time,
             batches_processed,
@@ -106,6 +114,9 @@ impl MetricsTracker {
             timestamp,
             RunnerDaMetrics {
                 da_height: da_height_processed,
+                rollup_height,
+                start_at_rollup_height,
+                stop_at_rollup_height,
                 sync_distance,
                 get_block_time,
             },
@@ -148,6 +159,12 @@ pub fn timestamp() -> u128 {
 pub struct RunnerMetrics {
     /// DA height processed in this iteration.
     pub da_height: u64,
+    /// Rollup height produced in this iteration.
+    pub rollup_height: u64,
+    /// Configured rollup height the runner started syncing from, if set.
+    pub start_at_rollup_height: Option<u64>,
+    /// Configured rollup height the runner should stop at, if set.
+    pub stop_at_rollup_height: Option<u64>,
     /// Distance between processed DA height and DA head.
     pub sync_distance: i64,
     /// Time it took to fetch given block from DA layer.
@@ -182,6 +199,9 @@ pub struct RunnerMetrics {
 #[derive(Debug)]
 pub(crate) struct RunnerDaMetrics {
     pub da_height: u64,
+    pub rollup_height: u64,
+    pub start_at_rollup_height: Option<u64>,
+    pub stop_at_rollup_height: Option<u64>,
     pub sync_distance: i64,
     pub get_block_time: std::time::Duration,
 }
@@ -216,6 +236,8 @@ pub struct RunnerProcessStfChangesMetrics {
     pub aggregated_proofs_count: usize,
     /// A number of transitions have to be finalized.
     pub finalized_transitions_count: usize,
+    /// Slot number of the most recently finalized transition, if any were finalized in this batch.
+    pub last_finalized_slot_number: Option<u64>,
     /// Time the whole operation took.
     pub total_time: std::time::Duration,
     /// Time it took to identify which of the seen transitions can be considered as finalized.
@@ -315,12 +337,20 @@ impl Metric for RunnerDaMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} da_height={},sync_distance={},get_block_time_ms={}",
+            "{} da_height={},rollup_height={},sync_distance={},get_block_time_ms={}",
             self.measurement_name(),
             self.da_height,
+            self.rollup_height,
             self.sync_distance,
             self.get_block_time.as_millis(),
-        )
+        )?;
+        if let Some(h) = self.start_at_rollup_height {
+            write!(buffer, ",start_at_rollup_height={h}")?;
+        }
+        if let Some(h) = self.stop_at_rollup_height {
+            write!(buffer, ",stop_at_rollup_height={h}")?;
+        }
+        Ok(())
     }
 }
 
@@ -385,7 +415,11 @@ impl Metric for RunnerProcessStfChangesMetrics {
             self.committing_storage_time.as_micros(),
             self.updating_api_storage_time.as_micros(),
             self.sending_stf_info_time_to_prover_time.as_micros(),
-        )
+        )?;
+        if let Some(slot) = self.last_finalized_slot_number {
+            write!(buffer, ",last_finalized_slot_number={slot}")?;
+        }
+        Ok(())
     }
 }
 
@@ -613,9 +647,11 @@ impl KnownMetric for HttpMetrics {
 /// Representation of cycle count and free heap for a particular chunk of execution inside ZK VM guest.
 #[derive(Debug)]
 pub struct ZkVmExecutionChunk {
-    /// Name of the caller site, usually a function or method
+    /// Name of the caller site, usually a function or method. Emitted as the `name` tag.
     pub name: String,
-    /// Metadata associated with the metric. Usually input values collected from the caller function
+    /// Arbitrary key/value metadata captured from the caller's arguments.
+    /// Emitted as string **fields** (not tags) so unbounded values like hashes or heights
+    /// do not cause series-cardinality explosion in InfluxDB.
     pub metadata: Vec<(String, String)>,
     /// A number of ZKVM cycles have been spent on this call.
     pub cycles_count: u64,
@@ -652,32 +688,24 @@ impl Metric for ZkVmExecutionChunk {
     }
 
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
-        // We are adding the metadata as measurmement tags in the influxdb line protocol.
-        let metadata = self
-            .metadata
-            .iter()
-            .map(|(key, value)| {
-                // Uses special telegraf formatting
-                let telegraf_formatted_key = safe_telegraf_string(key);
-
-                format!("{telegraf_formatted_key}={value}")
-            })
-            .collect::<Vec<_>>()
-            .join(",");
-
+        // `name` is the only tag (bounded — one value per `#[cycle_tracker]`-annotated
+        // function identifier). `metadata` is emitted as string *fields* rather than tags
+        // because callers pass unbounded values (hashes, heights, tx ids) and using those
+        // as tags would explode InfluxDB series cardinality.
         write!(
             buffer,
-            "{},name={}{metadata} cycles_count={},free_heap_bytes={},memory_used={}",
+            "{},name={} cycles_count={},free_heap_bytes={},memory_used={}",
             self.measurement_name(),
             self.name,
             self.cycles_count,
             self.free_heap_bytes,
             self.memory_used
-        )
+        )?;
+        write_metadata_fields_for_telegraf(buffer, &self.metadata)
     }
 }
 
-#[derive(Debug)]
+#[derive(Debug, Clone, Copy)]
 #[allow(missing_docs)]
 pub enum ZkCircuit {
     Inner,

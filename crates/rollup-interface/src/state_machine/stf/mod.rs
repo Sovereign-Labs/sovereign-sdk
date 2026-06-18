@@ -27,6 +27,7 @@ pub use transaction::*;
 pub use verifier::StateTransitionVerifier;
 
 use super::optimistic::Attestation;
+use crate::common::SlotNumber;
 use crate::common::{HexHash, RollupHeight};
 use crate::da::{DaSpec, RelevantBlobIters};
 use crate::zk::aggregated_proof::{AggregatedProofPublicData, SerializedAggregatedProof};
@@ -254,7 +255,7 @@ pub enum ProofOutcomeEnum<Receipt> {
     /// The blob is some kind of valid proof
     Valid(Receipt),
     /// The blob is some kind of invalid proof
-    Invalid(InvalidProofError),
+    Invalid(InvalidProofError, Option<SerializedAggregatedProof>),
 }
 
 impl<Address, Da: DaSpec, Root, StorageProof> From<ProofOutcome<Address, Da, Root, StorageProof>>
@@ -264,7 +265,7 @@ impl<Address, Da: DaSpec, Root, StorageProof> From<ProofOutcome<Address, Da, Roo
         match value {
             ProofOutcomeEnum::Ignored => ProofOutcomeEnum::Ignored,
             ProofOutcomeEnum::Valid(receipt) => ProofOutcomeEnum::Valid(receipt.into()),
-            ProofOutcomeEnum::Invalid(error) => ProofOutcomeEnum::Invalid(error),
+            ProofOutcomeEnum::Invalid(error, proof) => ProofOutcomeEnum::Invalid(error, proof),
         }
     }
 }
@@ -329,6 +330,8 @@ pub struct ApplySlotOutputInner<Root, ChangeSet, BR, PR, Witness> {
     pub witness: Witness,
     /// The rollup height before applying the changes.
     pub rollup_height: RollupHeight,
+    /// The canonical slot number of the transition within the rollup's DA fork.
+    pub slot_number: SlotNumber,
 }
 
 /// The result of applying a slot to current state.

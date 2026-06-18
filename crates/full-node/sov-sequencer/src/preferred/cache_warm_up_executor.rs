@@ -62,7 +62,7 @@ impl<S: Spec> Clone for StartBlockNotification<S> {
             data: self.data.clone(),
             checkpoint: self
                 .checkpoint
-                .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache(),
+                .clone_with_empty_witness_dropping_temp_cache(),
             sequence_number: self.sequence_number,
         }
     }
@@ -212,7 +212,6 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                 exec_config,
                 seq_config.clone(),
                 Default::default(),
-                None, // TODO: Consider adding a pinned cache to the warmup executors
             );
 
             let mut maybe_executor_sequence_number = None;

@@ -27,7 +27,6 @@ codec = { package = "parity-scale-codec", version = "3.0.0", default-features = 
 tokio = { workspace = true, optional = true }
 futures = { workspace = true, optional = true }
 tracing = { workspace = true }
-tracing-subscriber = { workspace = true, features = ["fmt"] }
 async-trait = { workspace = true }
 anyhow = { workspace = true }
 serde = { workspace = true }

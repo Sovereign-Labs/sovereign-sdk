@@ -17,7 +17,6 @@ use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{CryptoSpec, OperatingMode, RawTx, Runtime, Spec, TxHash};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
-use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::logging::LogCollector;
 use sov_test_utils::test_rollup::StoragePath;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
@@ -107,11 +106,9 @@ async fn start_rollup(
             StoragePath::Tmp(rollup_storage_path.clone()),
             false,
         )
-        .enable_prover()
         .set_config(|c| {
-            c.rollup_prover_config = RollupProverConfig::Disabled;
             c.aggregated_proof_block_jump = 10;
-            c.max_concurrent_blobs = 92;
+            c.max_concurrent_batch_blobs = 92;
             if let SequencerKindConfig::Preferred(seq_config) = &mut c.sequencer_config {
                 seq_config.batch_execution_time_limit_millis =
                     TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 3;
@@ -177,7 +174,7 @@ async fn test_generate_mockda_dataset_for_resync() -> anyhow::Result<()> {
     let finalized_slot = test_rollup
         .client
         .client
-        .get_finalized_slot(Some(sov_api_spec::types::GetFinalizedSlotChildren::_0))
+        .get_finalized_slot(Some(sov_api_spec::types::GetFinalizedSlotChildren::X0))
         .await?;
     tracing::debug!("Finalized slot response: {finalized_slot:?}");
 
@@ -320,6 +317,7 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
         (Level::WARN, "slow statement: execution time exceeded alert threshold".to_string()),
         // TODO - investigate: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2978
         (Level::WARN, "Received error updating target height, stopping background task".to_string()),
+        (Level::WARN, "The node has a higher sequence number than the sequencer, but we're very close to the chain tip, i.e. we don't expect to be simply syncing. This could mean there is another preferred sequencer running (which is not supported and will likely lead to issues), or you very recently restarted the node and there's still some in-flight blobs. Resyncing to the chain tip.".to_string()),
         // This is expected for the second resync: since we have batches in the sequencer DB, we
         // are indeed causing a delay for users
         (Level::WARN, "The sequencer must pause because the node has lagged behind the DA blockchain. This might lead to a brief downtime for users.".to_string()),

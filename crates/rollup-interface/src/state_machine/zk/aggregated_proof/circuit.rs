@@ -29,7 +29,7 @@ type VerifyResult<Address, Da, Root> = VerifiedProofData<Address, <Da as DaSpec>
 /// Runs the aggregation circuit: reads a witness from the host, verifies inner
 /// proofs and an optional previous outer proof, checks DA and state-root
 /// continuity, then commits [`AggregatedProofPublicData`] as the public output.
-pub fn run_aggregation_program<Address, Da, Root, V, G>(guest: G)
+pub fn run_aggregation_program<Address, Da, Root, V, G>(guest: &G)
 where
     Address: Clone + Serialize + DeserializeOwned,
     Da: DaSpec,
@@ -45,13 +45,15 @@ where
     } = guest.read_from_host::<AggregatedProofWitness<Da>>();
 
     // Verify the previous aggregation proof if one exists. On the first aggregation
-    // after genesis, there is no predecessor, the chain starts here.
+    // after origin, there is no predecessor, the chain starts here.
     let previous_public_data = prev_outer_proof_witness.map(|prev_outer_proof_witness| {
-        let public_data = V::verify::<AggregatedProofPublicData<Address, Da, Root>>(
-            &prev_outer_proof_witness.public_values,
-            &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(outer_vkey_hash.clone()),
-        )
-        .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
+        let public_data =
+            V::verify_with_pub_values::<AggregatedProofPublicData<Address, Da, Root>>(
+                &prev_outer_proof_witness.public_values,
+                &<V::CodeCommitment as CodeCommitmentTrait>::try_from_hash(outer_vkey_hash.clone())
+                    .expect("outer_vkey_hash must be a canonical CodeCommitmentHash"),
+            )
+            .unwrap_or_else(|error| panic!("Failed to verify aggregated proof: {error:?}"));
 
         assert_eq!(
             public_data.inner_vkey_hash, inner_vkey_hash,
@@ -74,18 +76,32 @@ where
         rewarded_addresses,
     } = verified_proof_data;
 
-    // Propagate the genesis state root forward through recursive aggregations.
-    // For the very first aggregation, the genesis root is the initial state root
-    // of the first inner proof (i.e. the state root at chain genesis).
-    let genesis_state_root = previous_public_data
+    // Propagate the origin state root forward through recursive aggregations.
+    // For the very first aggregation (no predecessor), the origin root is the
+    // initial state root of the first inner proof.
+    let origin_state_root = previous_public_data
         .as_ref()
-        .map(|public_data| public_data.genesis_state_root.clone())
+        .map(|public_data| public_data.origin_state_root.clone())
         .unwrap_or_else(|| initial_boundary.state_root.clone());
+
+    // Slot number that origin_state_root corresponds to. Propagated from the
+    // predecessor when one exists; otherwise it is the slot immediately
+    // before the first inner proof. For a chain rooted at rollup genesis the
+    // first inner proof covers slot 1 and this evaluates to GENESIS, but the
+    // circuit doesn't itself enforce that — a chain that starts mid-flight
+    // (e.g. after a prover-service resync that intentionally skipped earlier
+    // slots) will produce an aggregation with `origin_slot_number > GENESIS`,
+    // which downstream consumers can use to detect the discontinuity.
+    let origin_slot_number = previous_public_data
+        .as_ref()
+        .map(|public_data| public_data.origin_slot_number)
+        .unwrap_or_else(|| initial_boundary.slot_number.prev());
 
     let aggregated_public_data = AggregatedProofPublicData::<Address, Da, Root> {
         initial_slot_number: initial_boundary.slot_number,
         final_slot_number: final_boundary.slot_number,
-        genesis_state_root,
+        origin_slot_number,
+        origin_state_root,
         initial_state_root: initial_boundary.state_root,
         final_state_root: final_boundary.state_root,
         initial_slot_hash: initial_boundary.slot_hash,
@@ -122,6 +138,9 @@ where
     let mut expected_prev_state_root =
         previous_agg_proof_public_data.map(|public_data| public_data.final_state_root.clone());
 
+    let mut expected_prev_slot_number =
+        previous_agg_proof_public_data.map(|public_data| public_data.final_slot_number);
+
     // We intentionally scope the output to the current set of inner proofs only.
     // The predecessor proof is verified for chain continuity, but its slot range
     // and rewards are not carried forward — each aggregation covers only the
@@ -132,13 +151,31 @@ where
     let mut rewarded_addresses = Vec::with_capacity(proof_inputs.len());
 
     for (index, proof_input) in proof_inputs.iter().enumerate() {
-        let stf_public_data = V::verify::<StateTransitionPublicData<Address, Da, Root>>(
-            &proof_input.public_values,
-            &<V::CodeCommitment as CodeCommitmentTrait>::from_hash(vkey_hash.clone()),
-        )
-        .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
+        let stf_public_data =
+            V::verify_with_pub_values::<StateTransitionPublicData<Address, Da, Root>>(
+                &proof_input.public_values,
+                &<V::CodeCommitment as CodeCommitmentTrait>::try_from_hash(vkey_hash.clone())
+                    .expect("vkey_hash must be a canonical CodeCommitmentHash"),
+            )
+            .unwrap_or_else(|error| panic!("Failed to verify inner proof: {error:?}"));
 
-        let current_slot_number = SlotNumber::new(proof_input.da_block_header.height());
+        let current_slot_number = stf_public_data.slot_number;
+
+        // Within a single aggregation, consecutive inner proofs must increment
+        // the slot number by exactly one — slots advance 1:1 with DA blocks on
+        // the canonical fork. When there's no predecessor outer proof, the
+        // first inner proof can start at any slot (the rollup may legitimately
+        // resume mid-flight after a resync that skipped earlier slots); the
+        // aggregation's `origin_slot_number` will reflect where this chain
+        // segment begins.
+        if let Some(prev) = expected_prev_slot_number {
+            let expected = prev.next();
+            assert_eq!(
+                current_slot_number, expected,
+                "Slot number discontinuity at index {index}: expected {expected}, got {current_slot_number}",
+            );
+        }
+        expected_prev_slot_number = Some(current_slot_number);
 
         // Verify DA block hash-chain continuity: each block's prev_hash must equal
         // the predecessor's hash. Also cross-check that the DA header hash matches
@@ -167,12 +204,11 @@ where
         // the predecessor's final_state_root, ensuring no gaps in the state
         // transition.
         {
-            if let Some(_expected_prev_state_root) = &expected_prev_state_root {
-                // TODO Fix NOMT bug.
-                // assert_eq!(
-                //     expected_prev_state_root, &stf_public_data.initial_state_root,
-                //     "State root discontinuity at index {index}: previous final_state_root != current initial_state_root"
-                // );
+            if let Some(expected_prev_state_root) = &expected_prev_state_root {
+                assert_eq!(
+                     expected_prev_state_root, &stf_public_data.initial_state_root,
+                     "State root discontinuity at index {index}: previous final_state_root != current initial_state_root"
+                 );
             }
 
             expected_prev_state_root = Some(stf_public_data.final_state_root.clone());

@@ -10,7 +10,7 @@ use sov_rollup_interface::zk::aggregated_proof::{
     BlockProof, OuterZkvmHost, SerializedAggregatedProof,
 };
 use sov_rollup_interface::zk::{
-    SerializedInnerProof, StateTransitionPublicData, StateTransitionWitness,
+    SerializedZkProof, StateTransitionPublicData, StateTransitionWitness,
     StateTransitionWitnessWithAddress, Zkvm, ZkvmHost,
 };
 use tokio::sync::oneshot;
@@ -42,7 +42,15 @@ where
     Da: DaService,
     Address:
         BorshSerialize + Serialize + DeserializeOwned + AsRef<[u8]> + Clone + Send + Sync + 'static,
-    StateRoot: Serialize + DeserializeOwned + Clone + AsRef<[u8]> + Send + Sync + 'static,
+    StateRoot: Serialize
+        + DeserializeOwned
+        + Clone
+        + AsRef<[u8]>
+        + PartialEq
+        + core::fmt::Debug
+        + Send
+        + Sync
+        + 'static,
     Witness: Serialize + DeserializeOwned + Send + Sync + 'static,
 {
     pub(crate) fn new(prover_address: Address, num_threads: usize) -> Self {
@@ -100,14 +108,27 @@ where
         if start_prover {
             prover_state.set_to_proving(block_header_hash.clone());
 
+            let StateTransitionInfo {
+                data,
+                aggregated_proofs,
+            } = state_transition_info;
+
+            let slot_number = data.slot_number;
+
             let data = StateTransitionWitnessWithAddress {
-                stf_witness: state_transition_info.data,
+                stf_witness: data,
                 prover_address: self.prover_address.clone(),
             };
 
+            let span_block_header_hash = block_header_hash.clone();
             self.pool.spawn(move || {
-                tracing::info_span!("guest_execution").in_scope(|| {
-                    let proof = make_inner_proof::<InnerVm>(inner_vm, &data);
+                tracing::info_span!("guest_execution", slot_number = %slot_number).in_scope(|| {
+                    info!(
+                        "Submitting inner proof for slot {} (slot_hash={})",
+                        slot_number, span_block_header_hash
+                    );
+                    let inner_proof =
+                        Self::make_inner_proof::<InnerVm>(inner_vm, &data, aggregated_proofs);
 
                     let mut prover_state = prover_state_clone.write().expect("Lock was poisoned");
 
@@ -129,15 +150,15 @@ where
                         .verify_relevant_tx_list(&da_block_header, &blobs, relevant_proofs)
                         .expect("An honest prover provided an invalid list of relevant txs. This is a bug in the prover - please report it.");
 
-                    let block_proof = proof.map(|p| BlockProof {
-                        proof: p,
+                    let block_proof = inner_proof.map(|proof| BlockProof {
+                        proof,
                         st: StateTransitionPublicData::<Address, Da::Spec, StateRoot> {
                             initial_state_root,
                             final_state_root,
+                            slot_number,
                             slot_hash: block_header_hash.clone(),
                             prover_address,
                         },
-                        slot_number: state_transition_info.slot_number,
                     });
 
                     prover_state.set_to_proved(block_header_hash, block_proof);
@@ -155,7 +176,6 @@ where
         &self,
         outer_vm: OuterVm,
         block_headers: &[<Da::Spec as DaSpec>::BlockHeader],
-        genesis_state_root: &StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus> {
         assert!(!block_headers.is_empty());
 
@@ -184,16 +204,25 @@ where
             headers_with_block_proofs
         };
 
-        let genesis_state_root = genesis_state_root.clone();
-
         let (tx, rx) = oneshot::channel();
         self.pool.spawn(move || {
-            let result =
-                outer_vm.run_proof_aggregation(genesis_state_root, headers_with_block_proofs);
+            let proving_start = std::time::Instant::now();
+            let result = outer_vm.run_proof_aggregation(headers_with_block_proofs);
+
+            sov_metrics::track_metrics(|tracker| {
+                let proving_time = proving_start.elapsed();
+                let is_success = result.is_ok();
+                tracker.submit(sov_metrics::ZkProvingTime {
+                    proving_time,
+                    is_success,
+                    zk_circuit: sov_metrics::ZkCircuit::Outer,
+                });
+            });
+
             let _ = tx.send(result);
         });
 
-        let raw_aggregated_proof = rx
+        let serialized_aggregated_proof = rx
             .await
             .map_err(|_| anyhow::anyhow!("Proof aggregation task terminated"))??;
 
@@ -206,43 +235,41 @@ where
             }
         }
 
-        let serialized_aggregated_proof = SerializedAggregatedProof {
-            raw_aggregated_proof,
-        };
-
         Ok(ProofAggregationStatus::Success(serialized_aggregated_proof))
     }
-}
 
-fn make_inner_proof<InnerVm>(
-    mut vm: InnerVm::Host,
-    hint: &impl Serialize,
-) -> anyhow::Result<SerializedInnerProof>
-where
-    InnerVm: Zkvm + 'static,
-{
-    let proving_start = std::time::Instant::now();
-    info!("Generating proof with {}", std::any::type_name::<InnerVm>());
-    let result = vm.add_hint_and_run(hint);
-    sov_metrics::track_metrics(|tracker| {
-        let proving_time = proving_start.elapsed();
-        let is_success = result.is_ok();
-        tracker.submit(sov_metrics::ZkProvingTime {
-            proving_time,
-            is_success,
-            zk_circuit: sov_metrics::ZkCircuit::Inner,
+    fn make_inner_proof<InnerVm>(
+        mut vm: InnerVm::Host,
+        hint: &StateTransitionWitnessWithAddress<Address, StateRoot, Witness, Da::Spec>,
+        serialized_agg_proofs: Vec<SerializedAggregatedProof>,
+    ) -> anyhow::Result<SerializedZkProof>
+    where
+        InnerVm: Zkvm + 'static,
+    {
+        let proving_start = std::time::Instant::now();
+        info!("Generating proof with {}", std::any::type_name::<InnerVm>());
+
+        let result = vm.add_hint_deferred_and_run(hint, serialized_agg_proofs);
+        sov_metrics::track_metrics(|tracker| {
+            let proving_time = proving_start.elapsed();
+            let is_success = result.is_ok();
+            tracker.submit(sov_metrics::ZkProvingTime {
+                proving_time,
+                is_success,
+                zk_circuit: sov_metrics::ZkCircuit::Inner,
+            });
         });
-    });
-    match result {
-        Ok(ref proof) => {
-            trace!(
-                bytes = proof.len(),
-                "Proof generation completed successfully"
-            );
+        match result {
+            Ok(ref proof) => {
+                trace!(
+                    bytes = proof.len(),
+                    "Proof generation completed successfully"
+                );
+            }
+            Err(ref e) => {
+                error!("Proof generation failed: {:?}", e);
+            }
         }
-        Err(ref e) => {
-            error!("Proof generation failed: {:?}", e);
-        }
+        result
     }
-    result.map(|raw_inner_proof| SerializedInnerProof { raw_inner_proof })
 }

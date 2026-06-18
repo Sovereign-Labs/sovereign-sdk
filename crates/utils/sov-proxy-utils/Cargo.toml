@@ -14,12 +14,17 @@ sov-metrics = { workspace = true, features = ["native"] }
 anyhow = { workspace = true }
 sqlx = { version = "0.8", features = ["runtime-tokio", "tls-rustls-ring-webpki", "postgres", "derive", "time"], default-features = false }
 time = { version = "0.3", default-features = false, features = ["formatting", "parsing"] }
-tokio = { workspace = true, features = ["time", "sync"], default-features = false }
+tokio = { workspace = true, features = ["time", "sync", "rt", "macros"], default-features = false }
 tracing = { workspace = true }
 async-trait = { workspace = true }
 serde = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 thiserror = { workspace = true }
+
+[dev-dependencies]
+sov-test-utils = { workspace = true }
+tokio = { workspace = true, features = ["macros", "net", "rt-multi-thread"] }
+axum = { workspace = true, features = ["http1", "tokio"] }
 
 
 [lints]

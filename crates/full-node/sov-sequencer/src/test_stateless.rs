@@ -49,6 +49,7 @@ pub struct TestStatelessSequencer<R, S: Spec, Da: DaService> {
     tx_status_manager: TxStatusManager<S::Da>,
     _r: PhantomData<R>,
     state_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
+    shutdown_receiver: watch::Receiver<()>,
     api_ledger_db: LedgerDb,
 }
 
@@ -77,11 +78,12 @@ where
         });
         let (state_sender, _rec) =
             watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-                StateCheckpoint::new(storage, &runtime.kernel(), None),
+                StateCheckpoint::new(storage, &runtime.kernel()),
             )));
         let tx_status_manager = TxStatusManager::default();
 
-        let nb_of_concurrent_blob_submissions = Arc::new(AtomicUsize::new(0));
+        let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
+        let nb_of_concurrent_proof_blob_submissions = Arc::new(AtomicUsize::new(0));
         let seq = Self {
             inner: inner.into(),
             blob_sender: Arc::new(Mutex::new(
@@ -94,7 +96,8 @@ where
                     Duration::from_secs(config.blob_processing_timeout_secs),
                     None,
                     Default::default(),
-                    nb_of_concurrent_blob_submissions,
+                    nb_of_concurrent_batch_blob_submissions,
+                    nb_of_concurrent_proof_blob_submissions,
                 )
                 .await?
                 .0,
@@ -102,6 +105,7 @@ where
             tx_status_manager,
             _r: Default::default(),
             state_sender,
+            shutdown_receiver: shutdown_receiver.clone(),
             api_ledger_db: ledger_db.clone(),
         };
 
@@ -159,7 +163,7 @@ where
     fn get_tx_hash(&self, tx: &FullyBakedTx, storage: S::Storage) -> TxHash {
         let mut runtime = R::default();
 
-        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
         let mut tx_scratchpad = checkpoint.to_working_set_unmetered();
 
         match R::Auth::authenticate(tx, &mut tx_scratchpad) {
@@ -197,6 +201,7 @@ where
             self.state_sender.subscribe(),
             runtime.kernel_with_slot_mapping(),
             None,
+            self.shutdown_receiver.clone(),
         )
     }
 

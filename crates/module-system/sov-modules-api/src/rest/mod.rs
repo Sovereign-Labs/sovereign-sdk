@@ -176,6 +176,9 @@ pub struct ApiState<S: Spec, T = ()> {
     kernel: Arc<dyn KernelWithSlotMapping<S>>,
     /// The `height` query parameter extracted from the request, when applicable.
     requested_height: Option<HeightParam>,
+    /// Signals node shutdown so long-lived handlers (e.g. WebSocket subscriptions)
+    /// can terminate gracefully.
+    shutdown_receiver: watch::Receiver<()>,
 }
 
 impl<S: Spec, T> ApiState<S, T> {
@@ -186,12 +189,14 @@ impl<S: Spec, T> ApiState<S, T> {
         checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         requested_height: Option<HeightParam>,
+        shutdown_receiver: watch::Receiver<()>,
     ) -> Self {
         Self {
             inner,
             checkpoint_receiver,
             kernel,
             requested_height,
+            shutdown_receiver,
         }
     }
 
@@ -202,6 +207,7 @@ impl<S: Spec, T> ApiState<S, T> {
             checkpoint_receiver: self.checkpoint_receiver,
             kernel: self.kernel,
             requested_height: self.requested_height,
+            shutdown_receiver: self.shutdown_receiver,
         }
     }
 
@@ -284,6 +290,12 @@ impl<S: Spec, T> ApiState<S, T> {
     /// Returns the checkpoint receiver.
     pub fn checkpoint_receiver(&self) -> watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>> {
         self.checkpoint_receiver.clone()
+    }
+
+    /// Returns a receiver that is notified on node shutdown. Long-lived handlers
+    /// (e.g. WebSocket subscriptions) should select on it to terminate gracefully.
+    pub fn shutdown_receiver(&self) -> watch::Receiver<()> {
+        self.shutdown_receiver.clone()
     }
 }
 

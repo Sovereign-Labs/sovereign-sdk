@@ -19,6 +19,14 @@ pub trait ReportableWsError: std::fmt::Debug + Sized + Send + Sync + 'static {
     }
 }
 
+/// Lets infallible subscription streams (`Result<T, Infallible>`) be served without
+/// each caller defining its own uninhabited error type.
+impl ReportableWsError for std::convert::Infallible {
+    fn to_json(&self) -> String {
+        match *self {}
+    }
+}
+
 /// A 404 response useful as a [`axum::Router::fallback`].
 pub async fn global_404(OriginalUri(uri): OriginalUri) -> Response {
     ErrorObject {

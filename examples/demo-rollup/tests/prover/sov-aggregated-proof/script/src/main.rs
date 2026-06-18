@@ -11,8 +11,7 @@ use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::{AggregatedProofPublicData, Spec, StateTransitionPublicData, Storage};
 use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::zk::aggregated_proof::BlockHeaderWithProof;
-use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
-use sov_rollup_interface::zk::ZkVerifier;
+use sov_rollup_interface::zk::{SerializedZkProof, ZkVerifier};
 use sov_sp1_adapter::host::SP1AggregationHost;
 use sov_sp1_adapter::SP1Verifier;
 use sov_sp1_adapter::SP1;
@@ -70,15 +69,15 @@ fn main() -> anyhow::Result<()> {
             batch_state_roots(&proof_batch)
                 .context("Failed to derive expected state roots from the current proof batch")?;
 
-        let outer_proof_bytes = SerializedAggregatedProof {
-            raw_aggregated_proof: prover.run::<MockDaSpec>(proof_batch)?,
+        let outer_proof_bytes = prover.run::<MockDaSpec>(proof_batch)?;
+        let serialized_outer_proof = SerializedZkProof {
+            raw_proof: outer_proof_bytes.raw_aggregated_proof.clone(),
         };
-
         let public_data: AggregatedProofPublicData<
             <S as Spec>::Address,
             MockDaSpec,
             <<S as Spec>::Storage as Storage>::Root,
-        > = SP1Verifier::verify(&outer_proof_bytes.raw_aggregated_proof, &code_commitment)
+        > = SP1Verifier::verify_with_proof(&serialized_outer_proof, &code_commitment)
             .context("Failed to verify the outer SP1 aggregation proof")?;
 
         println!(
@@ -176,7 +175,7 @@ fn batch_state_roots(
         MockDaSpec,
         <<S as Spec>::Storage as Storage>::Root,
     > = deserialize_pub_data(
-        sov_sp1_adapter::decode_sp1_proof(&first_proof.proof.raw_inner_proof)?
+        sov_sp1_adapter::decode_sp1_proof(&first_proof.proof)?
             .public_values
             .as_slice(),
     )?;
@@ -185,7 +184,7 @@ fn batch_state_roots(
         MockDaSpec,
         <<S as Spec>::Storage as Storage>::Root,
     > = deserialize_pub_data(
-        sov_sp1_adapter::decode_sp1_proof(&last_proof.proof.raw_inner_proof)?
+        sov_sp1_adapter::decode_sp1_proof(&last_proof.proof)?
             .public_values
             .as_slice(),
     )?;

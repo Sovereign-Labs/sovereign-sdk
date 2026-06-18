@@ -264,6 +264,7 @@ pub(crate) fn build_challenge(
     > = StateTransitionPublicData {
         initial_state_root: *current_transition.slot().prev_state_root(),
         final_state_root: *current_transition.post_state_root(),
+        slot_number: challenge_slot,
         slot_hash: *current_transition.slot().slot_hash(),
         prover_address,
     };
@@ -283,7 +284,7 @@ pub(crate) fn make_challenge_blob(
 ) -> Vec<u8> {
     let serialized_challenge = MockZkvmHost::create_serialized_proof(is_valid, challenge);
     let serialized_challenge = SerializedChallenge {
-        raw_challenge: serialized_challenge,
+        raw_challenge: serialized_challenge.raw_proof,
     };
 
     borsh::to_vec(

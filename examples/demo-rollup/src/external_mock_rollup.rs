@@ -9,41 +9,34 @@ use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmHost};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
-use sov_modules_api::CryptoSpec;
-use sov_modules_api::{NodeEndpoints, Spec, Storage, ZkVerifier};
+use sov_modules_api::{NodeEndpoints, Spec, Storage};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
-use sov_risc0_adapter::host::Risc0Host;
-use sov_risc0_adapter::Risc0;
-use sov_risc0_adapter::Risc0CryptoSpec;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::SyncStatus;
 use sov_sequencer::{ProofBlobSender, Sequencer};
-use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::DefaultStorageSpec;
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
 use crate::solana_offchain_endpoint::solana_offchain_router;
-
-type Hasher = <Risc0CryptoSpec as CryptoSpec>::Hasher;
-type NativeStorage =
-    NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
+use crate::{
+    create_mock_prover_service, read_mock_code_commitments_from_env, Hasher, NativeStorage,
+};
 
 /// The default spec of the rollup
 pub type ExternalMockRollupSpec<M> = ConfigurableSpec<
     MockDaSpec,
-    Risc0,
+    MockZkvm,
     MockZkvm,
     MultiAddressEvmSolana,
     M,
-    Risc0CryptoSpec,
+    MockZkvmCryptoSpec,
     NativeStorage,
 >;
 
@@ -87,12 +80,6 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
     >;
 
     type ProofSender = SovApiProofSender<Self::Spec>;
-
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
-        MockCodeCommitment::default()
-    }
 
     async fn create_endpoints(
         &self,
@@ -158,18 +145,11 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
         _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
-    ) -> Self::ProverService {
-        let inner_vm = Risc0Host::new(risc0::MOCK_DA_ELF);
-
-        let outer_vm = MockZkvmHost::new_non_blocking();
-        let da_verifier = Default::default();
-
-        ParallelProverService::new_with_default_workers(
-            inner_vm,
-            outer_vm,
-            da_verifier,
-            rollup_config.proof_manager.prover_address,
-        )
+        ledger_db: &LedgerDb,
+        start_fresh_outer_proof_on_resync: bool,
+    ) -> anyhow::Result<(Self::ProverService, Option<SlotNumber>)> {
+        create_mock_prover_service(rollup_config, ledger_db, start_fresh_outer_proof_on_resync)
+            .await
     }
 
     fn create_storage_manager(
@@ -186,5 +166,9 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
         sequence_number_provider: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(sequence_number_provider))
+    }
+
+    fn compute_code_commitments() -> anyhow::Result<(MockCodeCommitment, MockCodeCommitment)> {
+        Ok(read_mock_code_commitments_from_env())
     }
 }

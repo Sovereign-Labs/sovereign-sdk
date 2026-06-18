@@ -48,6 +48,12 @@ impl<S: Spec> SerializeProofWithDetails<S> {
     fn unmetered_deserialize_inner(buf: &mut &[u8]) -> Result<Self, io::Error> {
         let signature = <ProofType as BorshDeserialize>::deserialize(buf)?;
         let pub_key = <TxDetails<S> as BorshDeserialize>::deserialize(buf)?;
+        if !buf.is_empty() {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "Trailing bytes after proof blob",
+            ));
+        }
 
         Ok(Self {
             proof: signature,

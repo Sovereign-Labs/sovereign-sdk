@@ -13,11 +13,11 @@ use crate::postgres::CreatePostgresError;
 use crate::{Transaction, TEST_MOCK_DA_POLLING_INTERVAL};
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BLOBS,
+    TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MAX_CONCURRENT_PROOF_BLOBS,
 };
 use anyhow::Context;
-use derivative::Derivative;
 use serde::Deserialize;
+use sov_api_spec::types;
 use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
@@ -38,7 +38,7 @@ use sov_modules_api::ModuleExecutionConfig;
 use sov_modules_api::Spec;
 pub use sov_modules_rollup_blueprint::FullNodeBlueprint;
 use sov_modules_rollup_blueprint::RollupBlueprint;
-use sov_modules_stf_blueprint::{GenesisParams, Runtime};
+use sov_modules_stf_blueprint::Runtime;
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_interface::common::SlotNumber;
@@ -64,21 +64,7 @@ use tokio::time::timeout;
 use tokio::time::Duration;
 use tokio_stream::StreamExt;
 
-/// Specifies how to source the genesis data for a rollup.
-#[derive(Derivative)]
-#[derivative(Clone(bound = ""))]
-pub enum GenesisSource<S: Spec, R: Runtime<S>> {
-    /// Genesis data will be parsed from files found at the given paths.
-    ///
-    /// See [`FullNodeBlueprint::create_genesis_config`].
-    Paths(R::GenesisInput),
-    /// Genesis data provided explicitly using [`GenesisParams`].
-    ///
-    /// This is most useful when you're automatically generating genesis data
-    /// rather than parsing it. See e.g.
-    /// [`crate::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig::generate`].
-    CustomParams(GenesisParams<R::GenesisConfig>),
-}
+pub use sov_modules_rollup_blueprint::GenesisSource;
 
 #[derive(Clone)]
 pub enum StoragePath {
@@ -112,11 +98,13 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub axum_host: String,
     pub axum_port: u16,
     pub max_batch_size_bytes: usize,
-    pub max_concurrent_blobs: usize,
+    pub max_concurrent_batch_blobs: usize,
+    pub max_concurrent_proof_blobs: usize,
     pub blob_processing_timeout_secs: u64,
     pub start_at_rollup_height: Option<RollupHeight>,
     pub stop_at_rollup_height: Option<RollupHeight>,
     pub extension: Option<SeqConfigExtension>,
+    pub start_fresh_outer_proof_on_resync: bool,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -200,6 +188,12 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         self.disable_state_root_consistency_checks()
     }
 
+    /// Sets [`RollupBuilderConfig::start_fresh_outer_proof_on_resync`].
+    pub fn set_start_fresh_outer_proof_on_resync(mut self, start_fresh: bool) -> Self {
+        self.config.start_fresh_outer_proof_on_resync = start_fresh;
+        self
+    }
+
     /// Disable the state root consistency checks.
     pub fn disable_state_root_consistency_checks(mut self) -> Self {
         if let SequencerKindConfig::Preferred(ref mut config) = &mut self.config.sequencer_config {
@@ -267,32 +261,17 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         })?;
 
         let rollup_config = self.rollup_config();
-        let rollup = match &self.genesis {
-            GenesisSource::Paths(genesis_paths) => {
-                blueprint
-                    .create_new_rollup(
-                        genesis_paths,
-                        rollup_config.clone(),
-                        self.config.rollup_prover_config,
-                        self.config.start_at_rollup_height,
-                        self.config.stop_at_rollup_height,
-                        self.exec_config.clone(),
-                    )
-                    .await?
-            }
-            GenesisSource::CustomParams(genesis_params) => {
-                blueprint
-                    .create_new_rollup_with_genesis_params(
-                        genesis_params.clone(),
-                        rollup_config.clone(),
-                        self.config.rollup_prover_config,
-                        self.config.start_at_rollup_height,
-                        self.config.stop_at_rollup_height,
-                        self.exec_config.clone(),
-                    )
-                    .await?
-            }
-        };
+        let rollup = blueprint
+            .create_new_rollup_with_genesis_source(
+                self.genesis.clone(),
+                rollup_config.clone(),
+                self.config.rollup_prover_config,
+                self.config.start_at_rollup_height,
+                self.config.stop_at_rollup_height,
+                self.exec_config.clone(),
+                self.config.start_fresh_outer_proof_on_resync,
+            )
+            .await?;
 
         let shutdown_sender = rollup.shutdown_sender.clone();
 
@@ -361,7 +340,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 save_tx_bodies: false,
             },
             da: self.da_config.clone(),
-            proof_manager: ProofManagerConfig {
+            proof_manager: Some(ProofManagerConfig {
                 aggregated_proof_block_jump: NonZero::new(self.config.aggregated_proof_block_jump)
                     .unwrap(),
                 prover_address: FromStr::from_str(&self.config.prover_address)
@@ -370,7 +349,10 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_number_of_transitions_in_memory: NonZero::new(self.config.max_channel_size)
                     .unwrap(),
                 eager_proof_submission: true,
-            },
+                prover_thread_count_override: None,
+                max_number_of_aggregated_proofs_in_memory: NonZero::new(5).unwrap(),
+                max_concurrent_proof_blobs: self.config.max_concurrent_proof_blobs,
+            }),
             sequencer: SequencerConfig {
                 automatic_batch_production: self.config.automatic_batch_production,
                 max_allowed_node_distance_behind: self.config.max_allowed_node_distance_behind,
@@ -381,7 +363,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 admin_addresses: vec![],
                 sequencer_kind_config: self.config.sequencer_config.clone(),
                 max_batch_size_bytes: self.config.max_batch_size_bytes,
-                max_concurrent_blobs: self.config.max_concurrent_blobs,
+                max_concurrent_batch_blobs: self.config.max_concurrent_batch_blobs,
                 blob_processing_timeout_secs: self.config.blob_processing_timeout_secs,
                 extension: self.config.extension,
             },
@@ -391,6 +373,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_datagram_size: None,
                 max_pending_metrics: None,
                 tokio_runtime_metrics_interval_millis: 500,
+                rpc_aggregation: sov_stf_runner::RpcAggregationConfig::standard(),
             },
         }
     }
@@ -403,7 +386,8 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         RollupBuilderConfig {
             max_allowed_node_distance_behind: 10,
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
-            max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
+            max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
+            max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
             max_channel_size: 60,
             max_infos_in_db: 250 + finalization_blocks as u64,
             automatic_batch_production: true,
@@ -426,6 +410,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 max_log_limit: 20000,
                 response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
             }),
+            start_fresh_outer_proof_on_resync: false,
         }
     }
 }
@@ -735,12 +720,14 @@ where
     }
 
     /// Waits for the rollup to shutdown.
-    pub async fn wait_for_rollup_to_shutdown(self, t: tokio::time::Duration) {
+    pub async fn wait_for_rollup_to_shutdown(self, t: tokio::time::Duration) -> RollupBuilder<R> {
         timeout(t, self.rollup_task)
             .await
             .expect("Failed to join rollup task before timeout.")
             .expect("Rollup task panicked.")
             .expect("Rollup execution returned an error.");
+
+        self.builder
     }
 
     /// Waits for the rollup to shutdown without panicking on timeout.
@@ -1123,6 +1110,14 @@ where
     ) -> Result<TxInfoWithConfirmation, anyhow::Error> {
         let resp = self.client.client.send_tx_to_sequencer(&tx).await?;
         Ok(resp.into_inner())
+    }
+
+    pub async fn subscribe_finalized_slots(&self) -> WsSubscription<types::Slot> {
+        self.client.client.subscribe_finalized_slots().await
+    }
+
+    pub async fn subscribe_aggregated_proof(&self) -> WsSubscription<types::AggregatedProof> {
+        self.client.client.subscribe_aggregated_proof().await
     }
 }
 

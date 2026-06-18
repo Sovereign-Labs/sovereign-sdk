@@ -5,6 +5,8 @@ PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
                examples/demo-rollup/provers/sp1/guest-mock \
                examples/demo-rollup/provers/sp1/guest-aggregation-mock \
                examples/demo-rollup/provers/sp1/guest-celestia \
+               crates/bench/sp1-microbenches/guest-sha256 \
+               crates/bench/sp1-microbenches/guest-ed25519
 
 # Absolutely all dirs
 ALL_DIRS := $(PROVER_DIRS) \
@@ -94,7 +96,7 @@ install-dev-tools: install-cargo-tools install-risc0-toolchain install-sp1-toolc
 	cp .vscode/settings.default.json .vscode/settings.json
 	cargo install cargo-llvm-cov
 	cargo install cargo-hack
-	cargo install cargo-udeps
+	cargo install cargo-machete
 	cargo install cargo-deny
 	cargo install flaky-finder
 	cargo install cargo-insta
@@ -106,7 +108,7 @@ install-dev-tools: install-cargo-tools install-risc0-toolchain install-sp1-toolc
 install-cargo-tools:  ## Installs all necessary cargo helpers
 	cargo install cargo-llvm-cov
 	cargo install cargo-hack
-	cargo install cargo-udeps
+	cargo install cargo-machete
 	cargo install cargo-deny
 	cargo install flaky-finder
 	cargo install cargo-insta
@@ -124,7 +126,7 @@ install-risc0-toolchain:  ## install risc0 toolchain
 
 install-sp1-toolchain:  ## install SP1 toolchain
 	curl -L https://sp1up.succinct.xyz | bash
-	~/.sp1/bin/sp1up --version 6.0.2 $${GITHUB_TOKEN:+--token "$$GITHUB_TOKEN"}
+	~/.sp1/bin/sp1up $${GITHUB_TOKEN:+--token "$$GITHUB_TOKEN"} --version 6.2.2
 	~/.sp1/bin/cargo-prove prove --version
 	~/.sp1/bin/cargo-prove prove install-toolchain
 	@echo "SP1 toolchain version:"
@@ -138,6 +140,7 @@ lint:  ## cargo fmt, check and clippy.
 	zepter
 	zepter
 	zepter
+	cargo machete
 	if which cargo-dylint > /dev/null; then \
 		cargo dylint --all; \
 	else \

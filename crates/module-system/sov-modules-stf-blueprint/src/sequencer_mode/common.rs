@@ -1,6 +1,9 @@
 use borsh::BorshDeserialize;
 use sov_modules_api::capabilities::{AuthenticationError, AuthenticationOutput, FatalError};
-use sov_modules_api::capabilities::{HasCapabilities, SequencingDataHandler};
+use sov_modules_api::capabilities::{
+    HasCapabilities, SequencingDataHandler, TimelockCapability, TimelockProposalData,
+    TimelockProposalOutcome,
+};
 use sov_modules_api::transaction::AuthenticatedTransactionData;
 use sov_modules_api::{
     BatchSequencerReceipt, Context, DispatchCall, Error, IgnoredTransactionReceipt, Spec,
@@ -54,6 +57,8 @@ where
             ApplyTxResult::<S> {
                 transaction_consumption,
                 receipt,
+                #[cfg(feature = "native")]
+                sequencing_scratchpad: ctx.take_sequencing_scratchpad(),
             },
             tx_scratchpad,
         );
@@ -114,6 +119,8 @@ where
         ApplyTxResult::<S> {
             transaction_consumption,
             receipt,
+            #[cfg(feature = "native")]
+            sequencing_scratchpad: ctx.take_sequencing_scratchpad(),
         },
         tx_scratchpad,
     )
@@ -136,7 +143,23 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
 
     runtime.pre_dispatch_tx_hook(tx, state)?;
 
-    runtime.dispatch_call(message, state, ctx)?;
+    if let Some(policy) = runtime.timelock_for_callmessage(&message) {
+        let outcome = {
+            let mut timelock = runtime.timelock();
+            timelock.register_or_try_unlock_proposal(
+                ctx.sender(),
+                TimelockProposalData::call_message(RT::encode(&message)),
+                policy,
+                state,
+            )?
+        };
+        match outcome {
+            TimelockProposalOutcome::Registered => {}
+            TimelockProposalOutcome::Unlocked => runtime.dispatch_call(message, state, ctx)?,
+        }
+    } else {
+        runtime.dispatch_call(message, state, ctx)?;
+    }
 
     runtime.post_dispatch_tx_hook(tx, ctx, state)?;
 

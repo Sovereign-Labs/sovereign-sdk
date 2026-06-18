@@ -110,6 +110,17 @@ pub trait ChainState {
         state: &mut Reader,
     ) -> OperatingMode;
 
+    /// Returns the DA height at which the rollup performed genesis, or `None`
+    /// if genesis has not yet been executed.
+    fn genesis_da_height<
+        Reader: VersionReader
+            + StateReader<User, Error = Infallible>
+            + StateReader<Kernel, Error = Infallible>,
+    >(
+        &self,
+        state: &mut Reader,
+    ) -> Option<u64>;
+
     /// Returns the visible root hash accessible at the requested rollup height using the accessory state.
     ///
     /// ## Note

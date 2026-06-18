@@ -39,12 +39,12 @@ sov-rollup-interface = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 
 # For storable service
-sea-orm = { version = "1.1", features = [
-    "sqlx-sqlite",
-    "sqlx-postgres",
-    "runtime-tokio-rustls",
-    "macros",
-    "with-chrono",
+sqlx = { version = "0.8.6", features = [
+    "runtime-tokio",
+    "tls-rustls-ring-webpki",
+    "sqlite",
+    "time",
+    "chrono",
 ], default-features = false, optional = true }
 chrono = { workspace = true, optional = true }
 rand = { workspace = true, optional = true, features = ["small_rng"] }
@@ -92,7 +92,7 @@ arbitrary = [
 native = [
     "dep:chrono",
     "dep:futures",
-    "dep:sea-orm",
+    "dep:sqlx",
     "dep:tokio",
     "sov-mock-da/native",
     "sov-rollup-interface/native",
@@ -103,7 +103,7 @@ native = [
     "dep:clap",
     "dep:tracing-subscriber",
 ]
-postgres = ["native", "sea-orm/sqlx-postgres"]
+postgres = ["native", "sqlx/postgres"]
 
 [[bin]]
 name = "mock-da-server"

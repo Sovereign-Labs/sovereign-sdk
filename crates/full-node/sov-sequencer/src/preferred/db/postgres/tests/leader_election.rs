@@ -2,6 +2,43 @@ use super::*;
 use time::OffsetDateTime;
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_db_elected_resolution_returns_replica_when_leader_exists() {
+    let Some(postgres) = setup_test_postgres().await else {
+        return;
+    };
+
+    let leader = DB::new(
+        &postgres,
+        String::from("node_id_1"),
+        ConfiguredNodeRole::Leader,
+    )
+    .await;
+    let _ = leader.maybe_update_leader().await.unwrap();
+
+    let postgres_config = config_from_postgres_container(
+        &postgres,
+        String::from("node_id_2"),
+        ConfiguredNodeRole::DbElected,
+    )
+    .await
+    .unwrap();
+
+    let storage_dir = tempfile::tempdir().unwrap();
+    let bind_addr = SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
+    let (shutdown_sender, _) = tokio::sync::watch::channel(());
+    let (_db, role) = crate::preferred::db::PreferredSequencerDb::new(
+        shutdown_sender,
+        storage_dir.path(),
+        &Some(postgres_config),
+        bind_addr,
+    )
+    .await
+    .unwrap();
+
+    assert!(role.is_replica());
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_sequencer_leader_election() {
     let Some(postgres) = setup_test_postgres().await else {
         return;

@@ -5,12 +5,10 @@ pub mod capabilities;
 use std::io;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use capabilities::{HasCapabilities, HasKernel, TransactionAuthenticator};
+use capabilities::{HasCapabilities, HasKernel, TimelockPolicy, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
-#[cfg(feature = "native")]
-use sov_state::pinned_cache::PinnedCache;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
@@ -136,6 +134,20 @@ pub trait Runtime<S: Spec>:
         0
     }
 
+    /// The sequencer assigns a baseline probability of accepting each transaction given the current load.
+    /// When load is low, the probability is `1`. As load increases, the probability decreases to 0 in increments of about .1.
+    /// This function allows a modifier be applied to the probability given the priority of the transaction and the current acceptance probability.
+    fn accept_tx_probability(
+        &self,
+        priority: u32,
+        current_baseline_acceptance_probability: f64,
+    ) -> f64 {
+        #[allow(clippy::match_single_binding)]
+        match priority {
+            _ => current_baseline_acceptance_probability,
+        }
+    }
+
     /// Checks if a system transaction should be rejected based on the totality of its context.
     fn is_unauthorized_system_tx(
         &self,
@@ -146,8 +158,8 @@ pub trait Runtime<S: Spec>:
         false
     }
 
-    /// Populates the pinned state cache for the given storage if supported
-    fn populate_pinned_cache(_storage: &S::Storage) -> Option<PinnedCache> {
+    /// Gets the timelock policy for a call message, if the call must be timelocked.
+    fn timelock_for_callmessage(&self, _call: &Self::Decodable) -> Option<TimelockPolicy> {
         None
     }
 }
@@ -210,6 +222,11 @@ pub trait Runtime<S: Spec>:
         _state: &mut impl crate::TxState<S>,
     ) -> bool {
         false
+    }
+
+    /// Gets the timelock policy for a call message, if the call must be timelocked.
+    fn timelock_for_callmessage(&self, _call: &Self::Decodable) -> Option<TimelockPolicy> {
+        None
     }
 }
 

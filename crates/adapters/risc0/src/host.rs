@@ -7,15 +7,14 @@ use serde::Serialize;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::zk::aggregated_proof::BlockProof;
 use sov_rollup_interface::zk::aggregated_proof::OuterZkvmHost;
+use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
+use sov_rollup_interface::zk::SerializedZkProof;
 use sov_rollup_interface::zk::ZkvmHost;
 
 /// A [`Risc0Host`] stores a binary to execute in the Risc0 VM, and accumulates hints to be
 /// provided to its execution.
 #[derive(Clone)]
 pub struct Risc0Host<'a> {
-    #[cfg(feature = "bincode")]
-    env: Vec<u8>,
-    #[cfg(not(feature = "bincode"))]
     env: Vec<u32>,
     elf: &'a [u8],
 }
@@ -48,8 +47,6 @@ impl<'a> Risc0Host<'a> {
     /// This creates the "Session" trace without invoking the heavy cryptographic machinery.
     fn run_without_proving(&mut self) -> anyhow::Result<Session> {
         let mut env = add_benchmarking_callbacks(ExecutorEnvBuilder::default());
-        #[cfg(feature = "bincode")]
-        env.write_slice(&[self.env.len() as u32]);
         let env = env.write_slice(&self.env).build().unwrap();
         self.env.clear();
         let mut executor = ExecutorImpl::from_elf(env, self.elf)?;
@@ -72,15 +69,8 @@ impl<'a> Risc0Host<'a> {
         self.env
             .reserve(std::mem::size_of::<T>() / std::mem::size_of::<u32>());
 
-        #[cfg(not(feature = "bincode"))]
-        {
-            let mut serializer = risc0_zkvm::serde::Serializer::new(&mut self.env);
-            item.serialize(&mut serializer)
-                .expect("Risc0 hint serialization is infallible");
-        }
-
-        #[cfg(feature = "bincode")]
-        bincode::serialize_into(&mut self.env, item)
+        let mut serializer = risc0_zkvm::serde::Serializer::new(&mut self.env);
+        item.serialize(&mut serializer)
             .expect("Risc0 hint serialization is infallible");
     }
 
@@ -91,19 +81,19 @@ impl<'a> Risc0Host<'a> {
 }
 
 impl ZkvmHost for Risc0Host<'static> {
-    type HostArgs = &'static [u8];
-
-    fn from_args(args: &Self::HostArgs) -> Self {
-        Self::new(args)
-    }
-
     type Guest = Risc0Guest;
 
-    fn add_hint_and_run<T: serde::Serialize>(&mut self, item: &T) -> anyhow::Result<Vec<u8>> {
+    fn add_hint_deferred_and_run<T: Serialize>(
+        &mut self,
+        item: &T,
+        _agg_proofs: Vec<SerializedAggregatedProof>,
+    ) -> anyhow::Result<SerializedZkProof> {
         self.replace_hints(item);
         let session = self.run_without_proving()?;
         let receipt = session.prove()?.receipt;
-        Ok(bincode::serialize(&receipt)?)
+        Ok(SerializedZkProof {
+            raw_proof: bincode::serialize(&receipt)?,
+        })
     }
 
     fn code_commitment(&self) -> anyhow::Result<<<Self::Guest as sov_rollup_interface::zk::ZkvmGuest>::Verifier as sov_rollup_interface::zk::ZkVerifier>::CodeCommitment>{
@@ -114,11 +104,14 @@ impl ZkvmHost for Risc0Host<'static> {
 }
 
 impl OuterZkvmHost for Risc0Host<'static> {
-    fn run_proof_aggregation<Address: Serialize + Clone, Da: DaSpec, Root: Serialize + Clone>(
+    fn run_proof_aggregation<
+        Address: Serialize + Clone,
+        Da: DaSpec,
+        Root: Serialize + serde::de::DeserializeOwned + Clone + PartialEq + core::fmt::Debug,
+    >(
         &self,
-        _genesis_state_root: Root,
         _headers_with_block_proofs: Vec<(Da::BlockHeader, BlockProof<Address, Da, Root>)>,
-    ) -> anyhow::Result<Vec<u8>> {
+    ) -> anyhow::Result<SerializedAggregatedProof> {
         unimplemented!("Proof aggregation not supported for Risc0")
     }
 }

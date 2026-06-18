@@ -79,11 +79,20 @@ pub(crate) fn generate_default_tx(
             ))
         }
         UniquenessData::Generation(generation) => generate_value_setter_tx(generation, 10, admin),
+        UniquenessData::Window(_) => generate_value_setter_uniqueness_tx(uniqueness, 11, admin),
     }
 }
 
 pub(crate) fn generate_value_setter_tx(
     generation: u64,
+    value: u32,
+    admin: &TestUser<S>,
+) -> TransactionType<RT, S> {
+    generate_value_setter_uniqueness_tx(UniquenessData::Generation(generation), value, admin)
+}
+
+pub(crate) fn generate_value_setter_uniqueness_tx(
+    uniqueness: UniquenessData,
     value: u32,
     admin: &TestUser<S>,
 ) -> TransactionType<RT, S> {
@@ -98,7 +107,7 @@ pub(crate) fn generate_value_setter_tx(
         config_chain_id(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
-        UniquenessData::Generation(generation),
+        uniqueness,
         None,
     );
 

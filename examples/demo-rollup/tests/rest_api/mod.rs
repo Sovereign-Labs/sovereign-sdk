@@ -3,16 +3,17 @@ use std::time::Duration;
 
 use anyhow::Context;
 use demo_stf::runtime::{Runtime, RuntimeCall};
-use demo_stf_json_client::types::{RuntimeAnyJsonValue, RuntimeError};
+use demo_stf_json_client::types::RuntimeError;
 use demo_stf_json_client::Error;
-use futures::StreamExt;
+use futures::{SinkExt, StreamExt};
 use serde::Deserialize;
 use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_demo_rollup::MockDemoRollup;
 use sov_modules_api::execution_mode::Native;
+use sov_modules_api::transaction::Transaction;
 use sov_modules_api::OperatingMode;
-use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
+use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction_with_nonce, TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
     TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
@@ -34,7 +35,6 @@ async fn trailing_slashes_handled() -> anyhow::Result<()> {
         TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
         0,
     )
-    .enable_prover()
     .with_standard_sequencer()
     .start()
     .await?;
@@ -65,19 +65,26 @@ async fn trailing_slashes_handled() -> anyhow::Result<()> {
     Ok(())
 }
 
-async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
+/// Starts a rollup and warms it up so the sequencer is synced and ready to accept
+/// transactions. No prover is needed (these tests assert nothing about proofs), and the
+/// sequencer's state root consistency checks stay enabled: without proof blobs the
+/// sequencer and node state roots cannot diverge, so any mismatch is a real bug worth
+/// failing the test for.
+async fn start_warm_rollup() -> anyhow::Result<TestRollup<MockDemoRollup<Native>>> {
     let test_rollup = RollupBuilder::<MockDemoRollup<Native>>::new(
         test_genesis_source(OperatingMode::Zk),
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         0,
     )
-    .enable_prover()
     .start()
     .await?;
 
-    test_rollup.da_service.produce_n_blocks_now(5).await?;
-    tokio::time::sleep(Duration::from_millis(200)).await;
+    test_rollup.produce_enough_finalized_slots().await;
 
+    Ok(test_rollup)
+}
+
+fn synthetic_load_tx() -> Transaction<Runtime<TestSpec>, TestSpec> {
     // Based on an assumption that this key is admin in sov-value-setter
     let key_and_address = read_private_key::<TestSpec>("tx_signer_private_key.json");
     let msg = RuntimeCall::<TestSpec>::SyntheticLoad(
@@ -88,12 +95,18 @@ async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
         },
     );
 
-    let tx = default_test_signed_transaction_with_nonce::<Runtime<TestSpec>, TestSpec>(
+    default_test_signed_transaction_with_nonce::<Runtime<TestSpec>, TestSpec>(
         &key_and_address.private_key,
         &msg,
         0,
         &CHAIN_HASH,
-    );
+    )
+}
+
+async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
+    let test_rollup = start_warm_rollup().await?;
+
+    let tx = synthetic_load_tx();
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await?;
     test_rollup.client.client.send_tx_to_sequencer(&tx).await?;
     slot_subscription.next().await;
@@ -185,7 +198,7 @@ async fn check_state_value(client: &demo_stf_json_client::Client) -> anyhow::Res
     let finality_period = client
         .attester_incentives_rollup_finality_period_get_state_value(None, None)
         .await?;
-    let finality_period = if let RuntimeAnyJsonValue::Object(inner) = &**finality_period {
+    let finality_period = if let serde_json::Value::Object(inner) = &**finality_period {
         let value = inner
             .get("value")
             .cloned()
@@ -327,6 +340,136 @@ async fn check_historical_data(client: &demo_stf_json_client::Client) -> anyhow:
         "error",
         "Impossible to get the rollup state at the specified height. The requested height may have been pruned, or it may be in the future. Please ensure you have queried the correct height.",
     );
+    Ok(())
+}
+
+/// The chain-state module exposes a WebSocket subscription that streams the current
+/// rollup height (`current_heights.0`): the latest value on connection, then a new value
+/// each time the height advances.
+#[tokio::test(flavor = "multi_thread")]
+async fn chain_state_rollup_height_subscription_streams_live_height() -> anyhow::Result<()> {
+    let test_rollup = start_warm_rollup().await?;
+
+    let mut height_sub = test_rollup
+        .client
+        .client
+        .subscribe_to_ws::<u64>("/modules/chain-state/rollup-height/ws")
+        .await?;
+
+    // The current rollup height is pushed immediately on connection.
+    let first = tokio::time::timeout(Duration::from_secs(10), height_sub.next())
+        .await
+        .context("timed out waiting for the initial rollup height")?
+        .context("subscription closed before sending the initial rollup height")??;
+
+    // Submit a transaction and produce more blocks to advance the chain.
+    let tx = synthetic_load_tx();
+    test_rollup.client.client.send_tx_to_sequencer(&tx).await?;
+    test_rollup.da_service.produce_n_blocks_now(3).await?;
+
+    // Heights are pushed in order without skips or repeats, so the first push after the
+    // chain advances must be exactly the next height.
+    let next = tokio::time::timeout(Duration::from_secs(10), height_sub.next())
+        .await
+        .context("timed out waiting for the rollup height to advance")?
+        .context("subscription closed before the rollup height advanced")??;
+    assert_eq!(
+        next,
+        first + 1,
+        "subscription must push consecutive rollup heights, got {next} after {first}"
+    );
+
+    // The streamed value is the chain-state rollup height (`current_heights.0`): it tracks
+    // committed state and is never ahead of it. Re-read via REST as a race-free bound.
+    let current_heights = test_rollup
+        .client
+        .query_rest_endpoint::<ValueResponse>("/modules/chain-state/state/current-heights")
+        .await
+        .context("querying chain-state current-heights")?;
+    assert!(
+        next <= current_heights.value[0],
+        "streamed rollup height {next} must not exceed chain-state current_heights.0 ({})",
+        current_heights.value[0]
+    );
+
+    Ok(())
+}
+
+/// Opens a websocket subscription to `path` and keeps it actively engaged from a
+/// background task: pings the server every 100ms, replies to server pings, and drains
+/// pushed data frames. Returns once the server has answered a first ping, proving the
+/// subscription is live. The task exits when the connection is closed.
+async fn spawn_active_ws_subscription(
+    base_url: &str,
+    path: &str,
+) -> anyhow::Result<tokio::task::JoinHandle<()>> {
+    use tokio_tungstenite::tungstenite::{Bytes, Message};
+
+    let url = format!("{base_url}{path}").replace("http://", "ws://");
+    let (mut ws, _) = tokio_tungstenite::connect_async(&url).await?;
+
+    // One ping/pong roundtrip before returning: proves the server-side subscription
+    // loop is actually serving this connection.
+    ws.send(Message::Ping(Bytes::new())).await?;
+    tokio::time::timeout(Duration::from_secs(5), async {
+        loop {
+            match ws.next().await {
+                Some(Ok(Message::Pong(_))) => break Ok(()),
+                // Skip data frames, e.g. the initial rollup-height push.
+                Some(Ok(_)) => continue,
+                Some(Err(e)) => break Err(anyhow::Error::from(e)),
+                None => break Err(anyhow::anyhow!("ws closed before the first pong")),
+            }
+        }
+    })
+    .await
+    .context("server did not answer the first ping")??;
+
+    Ok(tokio::spawn(async move {
+        let mut ping_interval = tokio::time::interval(Duration::from_millis(100));
+        loop {
+            tokio::select! {
+                _ = ping_interval.tick() => {
+                    if ws.send(Message::Ping(Bytes::new())).await.is_err() {
+                        break; // The connection is closed.
+                    }
+                }
+                msg = ws.next() => match msg {
+                    Some(Ok(Message::Ping(data))) => {
+                        // A send failure means the connection is closing; the next
+                        // poll of the socket breaks the loop.
+                        let _ = ws.send(Message::Pong(data)).await;
+                    }
+                    Some(Ok(Message::Close(_))) | Some(Err(_)) | None => break,
+                    Some(Ok(_)) => {} // Drain data frames.
+                },
+            }
+        }
+    }))
+}
+
+/// The node must shut down cleanly while a websocket subscription is open and
+/// actively exchanging ping/pong traffic.
+#[tokio::test(flavor = "multi_thread")]
+async fn rollup_shuts_down_cleanly_with_active_ws_subscription() -> anyhow::Result<()> {
+    let test_rollup = start_warm_rollup().await?;
+
+    let ws_task = spawn_active_ws_subscription(
+        &test_rollup.client.base_url,
+        "/modules/chain-state/rollup-height/ws",
+    )
+    .await?;
+
+    // The open, actively pinging subscription must not block shutdown.
+    tokio::time::timeout(Duration::from_secs(3), test_rollup.shutdown())
+        .await
+        .context("rollup did not shut down within 3s while a ws subscription was open")??;
+
+    // Clean shutdown closes the connection, which ends the background task.
+    tokio::time::timeout(Duration::from_secs(3), ws_task)
+        .await
+        .context("server did not close the ws connection on shutdown")??;
+
     Ok(())
 }
 

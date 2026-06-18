@@ -27,28 +27,28 @@ serde = { workspace = true, features = [
     "derive",
 ] }
 sha2 = { workspace = true }
-sp1-lib = { version = "6.1.0" }
+sp1-lib = { workspace = true, default-features = true }
 
 sov-rollup-interface = { workspace = true }
 sov-universal-wallet = { workspace = true }
 sov-metrics = { workspace = true, features = ["sp1"], optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
-sp1-sdk = { version = "6.1.0", default-features = false, features = ["blocking"] }
-sp1-verifier = { version = "6.1.0", default-features = false, features = ["std"] }
-sp1-primitives = { version = "6.1.0", default-features = false }
-sp1-recursion-executor = { version = "6.1.0", default-features = false }
-slop-algebra = { version = "6.1.0", default-features = false }
+sp1-sdk = { workspace = true, features = ["blocking"] }
+sp1-verifier = { workspace = true, features = ["std"] }
+sp1-primitives = { workspace = true }
+sp1-recursion-executor = { workspace = true }
+slop-algebra = { workspace = true }
 
 [target.'cfg(all(target_os = "zkvm", target_vendor = "succinct"))'.dependencies]
-sp1-zkvm = { version = "6.1.0", features = ["verify"] }
+sp1-zkvm = { workspace = true, features = ["verify"] }
 
 [dev-dependencies]
 reltester = { workspace = true }
 serde_json = { workspace = true, features = ["alloc"] }
 sov-sp1-adapter = { path = ".", features = ["arbitrary", "native"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
-sp1-build = { version = "6.1.0" }
+sp1-build = { workspace = true }
 
 [build-dependencies]
 anyhow = { workspace = true }
@@ -60,13 +60,12 @@ native = [
     "rand",
     "sp1-sdk/network",
     "sov-rollup-interface/native",
-    "sov-metrics?/native",
+    "sov-metrics/native",
     "sov-sp1-adapter/native",
 ]
 bench = [
-    "sov-metrics/sp1",
+    "sov-metrics",
     "sov-sp1-adapter/bench",
-    "sp1-sdk/profiling",
 ]
 arbitrary = [
     "dep:arbitrary",

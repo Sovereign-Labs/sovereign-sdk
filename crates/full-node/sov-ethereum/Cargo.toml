@@ -49,9 +49,8 @@ proptest = { workspace = true }
 strum = { workspace = true }
 test-strategy = { workspace = true }
 
-# Enable the `local` feature on this crate for the integration test target so the
-# eth_accounts / eth_sendTransaction handlers are registered and the eth_signer field
-# of EthRpcConfig exists.
+# Enable test-only cfgs on this crate for the integration test target.
+# `local` registers eth_accounts / eth_sendTransaction handlers.
 sov-ethereum = { path = ".", features = ["local"] }
 
 sov-mock-da = { workspace = true, features = ["native"] }
@@ -63,9 +62,10 @@ sov-state = { workspace = true }
 sov-kernels = { workspace = true, features = ["native"] }
 sov-accounts = { workspace = true }
 sov-paymaster = { workspace = true, features = ["native"] }
+sov-blob-storage = { workspace = true }
 sov-test-utils = { workspace = true }
 
-alloy = { workspace = true, features = ["signers"] }
+alloy = { workspace = true, features = ["signers", "transport-http"] }
 alloy-provider = { workspace = true, features = ["debug-api", "reqwest", "ws"] }
 alloy-pubsub = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }

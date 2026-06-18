@@ -10,7 +10,10 @@ use crypto::{SP1PublicKey, SP1Signature};
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash;
+use sov_rollup_interface::common::strict_bincode_deserialize;
+use sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues;
+use sov_rollup_interface::zk::aggregated_proof::{CodeCommitmentDecodeError, CodeCommitmentHash};
+use sov_rollup_interface::zk::SerializedZkProof;
 use sov_rollup_interface::zk::{CryptoSpec, ZkVerifier};
 
 #[cfg(feature = "native")]
@@ -21,10 +24,7 @@ pub mod guest;
 #[cfg(feature = "native")]
 pub mod host;
 #[cfg(feature = "native")]
-pub mod network;
-
-#[cfg(all(feature = "native", feature = "bench"))]
-pub mod metrics;
+mod metrics;
 
 /// Uniquely identifies a SP1 binary. Stored as a serialized version of `SP1VerifyingKey`.
 ///
@@ -43,8 +43,8 @@ impl sov_rollup_interface::zk::CodeCommitmentTrait for SP1MethodId {
         CodeCommitmentHash::from_u32_array(self.0)
     }
 
-    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
-        Self(hash.to_u32_array())
+    fn try_from_hash(hash: CodeCommitmentHash) -> Result<Self, CodeCommitmentDecodeError> {
+        Ok(Self(hash.to_u32_array()?))
     }
 }
 
@@ -78,14 +78,51 @@ impl CryptoSpec for SP1CryptoSpec {
 #[derive(Default, Clone)]
 pub struct SP1Verifier;
 
+/// On-the-wire envelope for SP1 proofs carried in [`SerializedZkProof::raw_proof`].
+///
+/// `public_values` is placed first so the zkvm guest can decode only that field
+/// (via [`bincode::deserialize_from`] with an `&[u8]` reader) and skip the
+/// potentially-large `sp1_proof` body.
+#[cfg(not(target_os = "zkvm"))]
+#[derive(Serialize, Deserialize)]
+struct Sp1ProofEnvelope {
+    public_values: Vec<u8>,
+    /// Bincode-serialized [`sp1_sdk::SP1ProofWithPublicValues`].
+    sp1_proof: Vec<u8>,
+}
+
+/// Encodes an [`sp1_sdk::SP1ProofWithPublicValues`].
+#[cfg(not(target_os = "zkvm"))]
+pub fn encode_sp1_proof(
+    proof: &sp1_sdk::SP1ProofWithPublicValues,
+) -> anyhow::Result<SerializedZkProof> {
+    let envelope = Sp1ProofEnvelope {
+        public_values: proof.public_values.to_vec(),
+        sp1_proof: bincode::serialize(proof)?,
+    };
+    Ok(SerializedZkProof {
+        raw_proof: bincode::serialize(&envelope)?,
+    })
+}
+
 #[cfg(not(target_os = "zkvm"))]
 impl ZkVerifier for SP1Verifier {
     type CodeCommitment = SP1MethodId;
     type CryptoSpec = SP1CryptoSpec;
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        serialized_proof: &[u8],
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        _public_values: &SerializedPubValues,
+        _code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // SP1's `verify_with_pub_values` is only meaningful inside the guest.
+        unimplemented!(
+            "SP1Verifier::verify_with_pub_values is only available inside the zkvm guest"
+        )
+    }
+
+    fn verify_with_proof<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         use core::borrow::Borrow;
@@ -122,7 +159,16 @@ impl ZkVerifier for SP1Verifier {
             }
         }
 
-        Ok(bincode::deserialize(proof.public_values.as_slice())?)
+        Ok(strict_bincode_deserialize(proof.public_values.as_slice())?)
+    }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error> {
+        let envelope: Sp1ProofEnvelope = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+        Ok(strict_bincode_deserialize(
+            envelope.public_values.as_slice(),
+        )?)
     }
 }
 
@@ -139,9 +185,6 @@ impl sov_rollup_interface::zk::Zkvm for SP1 {
 
     #[cfg(feature = "native")]
     type OuterHost = crate::host::SP1AggregationHost;
-
-    #[cfg(feature = "native")]
-    type Network = crate::network::SP1Network;
 }
 
 #[cfg(target_os = "zkvm")]
@@ -152,23 +195,49 @@ impl ZkVerifier for SP1Verifier {
 
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        public_values: &[u8],
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        public_values: &SerializedPubValues,
         vkey_hash: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         use sha2::Digest;
+        let public_values = &public_values.pub_values;
         let public_values_digest: [u8; 32] = sha2::Sha256::digest(public_values).into();
         sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash.0, &public_values_digest);
-        Ok(bincode::deserialize(public_values)?)
+        Ok(strict_bincode_deserialize(public_values)?)
+    }
+
+    fn verify_with_proof<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+        vkey_hash: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        use sha2::Digest;
+
+        // The envelope lays out `public_values` before `sp1_proof`, so a reader-based
+        // bincode decode stops after consuming only the public values' length-prefix and bytes.
+        let mut reader: &[u8] = &serialized_proof.raw_proof;
+        let public_values: Vec<u8> = bincode::deserialize_from(&mut reader)?;
+
+        let public_values_digest: [u8; 32] = sha2::Sha256::digest(&public_values).into();
+        sp1_zkvm::lib::verify::verify_sp1_proof(&vkey_hash.0, &public_values_digest);
+        Ok(strict_bincode_deserialize(&public_values)?)
+    }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error> {
+        let mut reader: &[u8] = &serialized_proof.raw_proof;
+        let public_values: Vec<u8> = bincode::deserialize_from(&mut reader)?;
+        Ok(strict_bincode_deserialize(&public_values)?)
     }
 }
 
 /// Decodes a serialized SP1 proof.
 #[cfg(not(target_os = "zkvm"))]
 pub fn decode_sp1_proof(
-    serialized_proof: &[u8],
+    serialized_proof: &SerializedZkProof,
 ) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
-    Ok(bincode::deserialize(serialized_proof)?)
+    let envelope: Sp1ProofEnvelope = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+    Ok(strict_bincode_deserialize(&envelope.sp1_proof)?)
 }
 
 #[cfg(test)]

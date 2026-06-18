@@ -526,7 +526,17 @@ pub enum SequencerRole {
     BatchProducer,
 }
 
-pub struct PreferredSequencerDb {
+impl SequencerRole {
+    /// True when the node will operate as any kind of replica.
+    pub fn is_replica(self) -> bool {
+        matches!(
+            self,
+            SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica
+        )
+    }
+}
+
+pub(crate) struct PreferredSequencerDb {
     backend: Option<Box<dyn DbBackend>>,
     shutdown_sender: watch::Sender<()>,
 }
@@ -586,7 +596,7 @@ impl PreferredSequencerDb {
         Ok((
             Self {
                 backend,
-                shutdown_sender: shutdown_sender.clone(),
+                shutdown_sender,
             },
             role,
         ))
@@ -808,8 +818,7 @@ where
     S: Spec,
     Rt: Runtime<S>,
 {
-    let mut checkpoint =
-        StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel(), None);
+    let mut checkpoint = StateCheckpoint::new(latest_state_info.storage.clone(), &runtime.kernel());
     let mut state = KernelStateAccessor::from_checkpoint(&runtime.kernel(), &mut checkpoint);
     state.read_from_storage_at_slot_number(latest_state_info.latest_finalized_slot_number);
 

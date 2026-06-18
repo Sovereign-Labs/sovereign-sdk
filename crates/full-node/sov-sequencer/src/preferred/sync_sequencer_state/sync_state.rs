@@ -33,9 +33,9 @@ use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::{RollupHeight, SequencingDataHandler};
 use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
-use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint, VersionReader};
+use sov_modules_api::{FullyBakedTx, HexString, Runtime, Spec, StateCheckpoint, VersionReader};
 use sov_rollup_full_node_interface::StateUpdateInfo;
-use sov_state::Storage;
+use sov_state::{NativeStorage, ProvableNamespace, StateRoot, Storage};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
@@ -47,6 +47,8 @@ use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::debug;
 
+/// The minimum interval between updates for the PI controller.
+const MINIMUM_TICK_SIZE: Duration = Duration::from_millis(10);
 #[derive(Debug, PartialEq, Eq, Hash)]
 pub struct Priority {
     priority: u64,
@@ -84,6 +86,7 @@ where
     pub(super) runtime: Rt,
     pub(crate) test_only_state_update_notification_sender:
         broadcast::Sender<StateUpdateNotification>,
+    pub(crate) use_pi_rate_limiter: bool,
 }
 
 impl<S, Rt> SynchronizedSequencerState<S, Rt>
@@ -132,7 +135,7 @@ where
                         if let Message::AcceptTx { resp, .. } = lowest_priority_msg {
                             self.send_response(
                                 resp,
-                                Err(AcceptTxError::SequencerOverloaded503),
+                                Err(AcceptTxError::SequencerOverloaded503("Message heap full")),
                                 "accept_tx",
                             )
                             .await;
@@ -224,15 +227,23 @@ where
             }
             Message::CheckReadiness {
                 resp,
-                max_concurrent_blobs,
+                max_concurrent_batch_blobs,
                 height_to_stop_at,
                 reason,
             } => {
                 let ret = self
-                    .process_check_readiness(max_concurrent_blobs, height_to_stop_at, reason)
+                    .process_check_readiness(max_concurrent_batch_blobs, height_to_stop_at, reason)
                     .await;
 
                 self.send_response(resp, ret, "check_readiness").await;
+            }
+            Message::BlobSenderStatus { resp, reason } => {
+                let ret = {
+                    let inner = self.get_inner_with_timing(reason).await;
+                    inner.proof_blob_sender_status()
+                };
+                self.send_response(resp, ret, "proof_blob_sender_status")
+                    .await;
             }
             Message::AcceptTx {
                 resp,
@@ -611,13 +622,13 @@ where
 
     async fn process_check_readiness(
         &mut self,
-        max_concurrent_blobs: usize,
+        max_concurrent_batch_blobs: usize,
         height_to_stop_at: Option<RollupHeight>,
         reason: &'static str,
     ) -> Result<(), SequencerNotReadyDetails> {
         let inner = self.get_inner_with_timing(reason).await;
         inner
-            .check_readiness(max_concurrent_blobs, height_to_stop_at)
+            .check_readiness(max_concurrent_batch_blobs, height_to_stop_at)
             .await
     }
 
@@ -627,27 +638,29 @@ where
         // Note that we use `StateCheckpoint::new(info.storage.clone(), ...)` *without* passing any intermediate state. This
         // is because we want to see what the height of the checkpoint we just received is, not the height of the sequencer's intermediate state.
         let mut rt = Rt::default();
-        let new_rollup_height = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None)
-            .rollup_height_to_access();
+        let node_rollup_height =
+            StateCheckpoint::new(info.storage.clone(), &rt.kernel()).rollup_height_to_access();
 
         inner
             .executor
             .uncommitted_changes
-            .prune_changes_through(new_rollup_height.get());
+            .prune_changes_through(node_rollup_height.get());
         let uncommitted_changes = inner.executor.uncommitted_changes.clone();
         inner
             .executor
             .checkpoint
             .replace_storage(info.storage.clone(), Box::new(uncommitted_changes));
-        tracing::debug!(%new_rollup_height, "Storage has been replaced");
+        tracing::debug!(%node_rollup_height, "Storage has been replaced");
 
         Self::common_for_final_catchup_and_new_storage(&mut inner, info.clone()).await;
+
+        Self::check_cached_state_root_against_node(&inner, &info, node_rollup_height).await;
 
         // Compute finalized_rollup_height from the finalized slot to avoid over-pruning during reorgs.
         // Only prune state roots for heights that are finalized on the DA layer.
         let finalized_rollup_height = {
             let concurrent_checkpoint = Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-                StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None),
+                StateCheckpoint::new(info.storage.clone(), &rt.kernel()),
             ));
             let kernel_with_slot_mapping = rt.kernel_with_slot_mapping();
 
@@ -672,6 +685,51 @@ where
             .executor
             .state_roots
             .retain(|height, _| *height > finalized_rollup_height);
+    }
+
+    async fn check_cached_state_root_against_node(
+        inner: &Inner<S, Rt>,
+        info: &StateUpdateInfo<S::Storage>,
+        node_rollup_height: RollupHeight,
+    ) {
+        let Some(sequencer_root) = inner.executor.state_roots.get(&node_rollup_height) else {
+            debug!(
+                %node_rollup_height,
+                "Skipping sequencer/node state root sanity check; no cached sequencer root is available"
+            );
+            return;
+        };
+
+        let Some(node_root) = info.storage.get_root_hash(info.slot_number) else {
+            debug!(
+                %node_rollup_height,
+                slot_number = %info.slot_number,
+                "Skipping sequencer/node state root sanity check; node root is not available"
+            );
+            return;
+        };
+
+        let sequencer_user_root = sequencer_root.namespace_root(ProvableNamespace::User);
+        let node_user_root = node_root.namespace_root(ProvableNamespace::User);
+
+        if sequencer_user_root == node_user_root {
+            debug!(
+                %node_rollup_height,
+                slot_number = %info.slot_number,
+                user_root = %HexString(sequencer_user_root),
+                "Sequencer/node user state root sanity check passed"
+            );
+            return;
+        }
+
+        tracing::error!(
+            %node_rollup_height,
+            slot_number = %info.slot_number,
+            sequencer_user_root = %HexString(sequencer_user_root),
+            node_user_root = %HexString(node_user_root),
+            "Sequencer user state root does not match the node user state root. This indicates a sequencer/node state divergence."
+        );
+        crate::preferred::exit_rollup(&inner.shutdown_sender).await;
     }
 
     async fn process_final_catchup(
@@ -737,7 +795,7 @@ where
         }
 
         inner.executor_rebase_height =
-            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel(), None)
+            StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel())
                 .rollup_height_to_access();
 
         inner.is_ready = Ok(());
@@ -746,7 +804,7 @@ where
         let checkpoint = inner
             .executor
             .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache_and_ignoring_pinned_cache();
+            .clone_with_empty_witness_dropping_temp_cache();
         inner
             .executor_events_sender
             .force_update_api_state(checkpoint)
@@ -784,8 +842,7 @@ where
         let mut inner = self.get_inner_with_timing(reason).await;
 
         // Since we're entering recovery, we don't re-use any of the uncommitted changes.
-        // We don't need to populate the pinned cache because we'll replace the executor when we exit recovery before going back to normal operation.
-        let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info, None);
+        let recovery_executor = inner.new_executor_with_empty_uncommitted_changes(&info);
 
         inner
             .force_overwrite_state(info.clone(), recovery_executor)
@@ -820,7 +877,7 @@ where
 
         inner.latest_info = info.clone();
         // We update the API state, so users can query node state as it syncs.
-        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), None);
+        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
         inner
             .executor_events_sender
             .update_state_for_recovery(checkpoint)
@@ -871,6 +928,214 @@ where
         inner.trigger_batch_production().await;
     }
 
+    // Takes the current rate limits and returns the next byte and execution-time rates, along with the offered rates.
+    // This implements the P and I parts of a PID controller; this function is responsible for both updating the P term (every tick interval) and combining
+    // it with the I term to get the current rate. (The I term is updated on each batch close.)
+    #[allow(clippy::float_arithmetic)]
+    fn tick_rate_limiter(&mut self) -> RateLimitTick {
+        let minimum_offered_rate_per_second = 1.0 / MINIMUM_TICK_SIZE.as_secs_f64();
+        let now = std::time::Instant::now();
+        let time_since_last_tick = now.duration_since(self.inner.pi_controller.last_tick_time);
+        let (_, target_execution_time_rate) =
+            self.inner.get_target_execution_time_and_growth_rate();
+
+        // Early return if it's been less than 10 millis since our last tick
+        if time_since_last_tick < MINIMUM_TICK_SIZE {
+            let pi_controller = &self.inner.pi_controller;
+            return RateLimitTick {
+                current_accept_bytes_per_second: pi_controller
+                    .current_tx_accept_rate_bytes_per_second,
+                bytes_offered_per_second_ewma: pi_controller
+                    .bytes_offered_per_second_ewma
+                    .max(minimum_offered_rate_per_second),
+                current_accept_execution_micros_per_second: pi_controller
+                    .current_tx_accept_rate_execution_time_micros_per_second,
+                execution_time_offered_per_second_ewma: pi_controller
+                    .execution_time_offered_per_second_ewma
+                    .max(minimum_offered_rate_per_second),
+                configured_target_execution_micros_per_second: target_execution_time_rate,
+            };
+        }
+        // Set the last tick time to the current time
+        self.inner.pi_controller.last_tick_time = now;
+
+        // Set up variables we'll need
+        let accept_bytes_per_sec = self
+            .inner
+            .pi_controller
+            .current_tx_accept_rate_bytes_per_second;
+        let accept_execution_micros_per_sec = self
+            .inner
+            .pi_controller
+            .current_tx_accept_rate_execution_time_micros_per_second;
+        let (target_size, target_size_rate) = self.inner.get_target_batch_size_and_growth_rate();
+
+        let bytes_offered_per_second_ewma = update_offered_rate_ewma(
+            self.inner.pi_controller.bytes_offered_per_second_ewma,
+            self.inner.pi_controller.bytes_offered_since_last_tick as f64,
+            time_since_last_tick,
+            MINIMUM_TICK_SIZE,
+        );
+        self.inner.pi_controller.bytes_offered_since_last_tick = 0;
+        self.inner.pi_controller.bytes_offered_per_second_ewma = bytes_offered_per_second_ewma;
+
+        let execution_time_offered_per_second_ewma = update_offered_rate_ewma(
+            self.inner
+                .pi_controller
+                .execution_time_offered_per_second_ewma,
+            self.inner
+                .pi_controller
+                .execution_time_offered_since_last_tick,
+            time_since_last_tick,
+            MINIMUM_TICK_SIZE,
+        );
+        self.inner
+            .pi_controller
+            .execution_time_offered_since_last_tick = 0.0;
+        self.inner
+            .pi_controller
+            .execution_time_offered_per_second_ewma = execution_time_offered_per_second_ewma;
+
+        // Compute the offered rates of execution time and batch size.
+        if execution_time_offered_per_second_ewma <= target_execution_time_rate {
+            self.inner.pi_controller.execution_time_limit_bias =
+                self.inner.pi_controller.execution_time_limit_bias.max(0.0);
+        }
+
+        let time_since_batch_open = if self.inner.executor.has_in_progress_batch() {
+            self.inner.pi_controller.batch_start_time.elapsed()
+        } else {
+            Duration::ZERO
+        };
+        let approx_time_to_batch_close =
+            if time_since_batch_open < self.inner.pi_controller.approximate_block_time {
+                std::cmp::max(
+                    self.inner.pi_controller.approximate_block_time - time_since_batch_open,
+                    MINIMUM_TICK_SIZE,
+                )
+            } else {
+                MINIMUM_TICK_SIZE
+            };
+
+        // Compute the rate limit for the batch size controller
+        let next_size_growth_rate = {
+            // The ideal rate, of batch growth (in bytes/sec) if we weren't worried about over/under shedding.
+            // This is just the rate in bytes-per-second if we split the remaining batch size budget evenly over the estimated remaining time.
+            let goal_size_growth_rate = (target_size as f64
+                - self.inner.batch_size_tracker.current_batch_size as f64)
+                .max(0.0)
+                / approx_time_to_batch_close.as_secs_f64();
+
+            // Compute our next rate as the goal rate adjusted by the bias term (recall that the bias evolves over time based on our error), clamped to the slew limits.
+            let raw_next_size_growth_rate =
+                (goal_size_growth_rate + self.inner.pi_controller.size_limit_bias).max(0.0);
+            let clamped_next_size_growth_rate = slew_limited_rate(
+                raw_next_size_growth_rate,
+                accept_bytes_per_sec,
+                target_size_rate,
+                time_since_last_tick,
+            ); // Clamp the next rate within our slew limits.
+
+            // Save and return the result
+            self.inner
+                .pi_controller
+                .current_tx_accept_rate_bytes_per_second = clamped_next_size_growth_rate;
+            clamped_next_size_growth_rate
+        };
+
+        // Compute the rate limit for the execution time controller
+        let next_execution_time_rate = {
+            // Execution time is noisy and can hit the hard cap abruptly, so we just set our goal rate to the average target rate (batch execution time cap / block time) plus the bias term.
+            // Note that this is different from the size growth rate, which tries to speed up as we get closer to the close of the batch if the number of accepted bytes is too low.
+            let goal_execution_time_rate = (target_execution_time_rate
+                + self.inner.pi_controller.execution_time_limit_bias)
+                .max(0.0);
+
+            // Clamp to within our slew limits
+            let actual_next_execution_time_rate = slew_limited_rate(
+                goal_execution_time_rate,
+                accept_execution_micros_per_sec,
+                target_execution_time_rate,
+                time_since_last_tick,
+            );
+            // Save and return the result
+            self.inner
+                .pi_controller
+                .current_tx_accept_rate_execution_time_micros_per_second =
+                actual_next_execution_time_rate;
+            actual_next_execution_time_rate
+        };
+
+        RateLimitTick {
+            current_accept_bytes_per_second: next_size_growth_rate,
+            bytes_offered_per_second_ewma,
+            current_accept_execution_micros_per_second: next_execution_time_rate,
+            execution_time_offered_per_second_ewma,
+            configured_target_execution_micros_per_second: target_execution_time_rate,
+        }
+    }
+
+    /// Get the acceptance probability for a given transaction based on...
+    /// 1. the sync distance and the max allowed node distance behind.
+    /// 2. the current batch size, target batch size and frequency, and the rate of offered transactions.
+    #[allow(clippy::float_arithmetic)]
+    fn get_acceptance_probability(&mut self, baked_tx: &FullyBakedTx) -> f64 {
+        // 1. Probability based on batch size and offered rate.
+        self.inner.pi_controller.bytes_offered_since_last_tick += baked_tx.len() as u64;
+        self.inner
+            .pi_controller
+            .execution_time_offered_since_last_tick += self
+            .inner
+            .pi_controller
+            .estimated_tx_execution_time_micros
+            .max(1.0);
+        let RateLimitTick {
+            current_accept_bytes_per_second,
+            bytes_offered_per_second_ewma,
+            current_accept_execution_micros_per_second,
+            execution_time_offered_per_second_ewma,
+            configured_target_execution_micros_per_second,
+        } = self.tick_rate_limiter();
+
+        let accept_probability_batch_size =
+            (current_accept_bytes_per_second / bytes_offered_per_second_ewma).clamp(0.0, 1.0);
+        let accept_probability_execution_time = if execution_time_offered_per_second_ewma
+            <= configured_target_execution_micros_per_second
+        {
+            1.0
+        } else {
+            (current_accept_execution_micros_per_second / execution_time_offered_per_second_ewma)
+                .clamp(0.0, 1.0)
+        };
+
+        // 2. Probability based on sync distance.
+        //
+        // We subtract 1 from both the sync distance and the max_allowed_node distance so that a distance of 0 or 1 results in a 0% chance of shedding load
+        let sync_distance = self
+            .inner
+            .latest_info
+            .sync_status
+            .distance()
+            .saturating_sub(1) as f64;
+        let max_allowed_node_distance_behind = self
+            .inner
+            .seq_config
+            .max_allowed_node_distance_behind
+            .saturating_sub(1)
+            .max(1) as f64;
+        let drop_with_probability = sync_distance / max_allowed_node_distance_behind;
+        let accept_probability_sync_distance = (1.0 - drop_with_probability).clamp(0.0, 1.0);
+
+        // Take the min of the probabilities from the different factors: batch size, execution time and sync distance.
+        let accept_probability = accept_probability_batch_size
+            .min(accept_probability_execution_time)
+            .min(accept_probability_sync_distance);
+        self.runtime.accept_tx_probability(
+            self.runtime.get_transaction_priority(baked_tx),
+            accept_probability,
+        )
+    }
+
     async fn process_accept_tx(
         &mut self,
         baked_tx: FullyBakedTx,
@@ -883,6 +1148,11 @@ where
             .runtime
             .sequencing_data_handler()
             .create_sequencing_data();
+        let load_based_accept_probability = if self.use_pi_rate_limiter {
+            self.get_acceptance_probability(&baked_tx)
+        } else {
+            1.0
+        };
         let mut inner = self.get_inner_with_timing(reason).await;
 
         if inner.is_replica_role() {
@@ -895,12 +1165,14 @@ where
         let new_tx_queue_id = inner.tx_queue_id.load(Ordering::Acquire);
         if new_tx_queue_id != original_tx_queue_id {
             tracing::debug!(%tx_hash, "Transaction was queued before downtime. Dropping.");
-            return Err(AcceptTxError::SequencerOverloaded503);
+            return Err(AcceptTxError::SequencerOverloaded503(
+                "Transaction queued before downtime",
+            ));
         }
 
         inner
             .check_readiness(
-                inner.seq_config.max_concurrent_blobs,
+                inner.seq_config.max_concurrent_batch_blobs,
                 inner.stop_at_rollup_height,
             )
             .await
@@ -917,7 +1189,7 @@ where
 
             return Err(AcceptTxError::BatchError {
                 batch_creation_error,
-                nb_of_concurrent_blob_submissions: inner.nb_of_concurrent_blob_submissions(),
+                nb_of_batch_blobs_in_flight: inner.nb_of_concurrent_batch_blob_submissions(),
             });
         };
 
@@ -925,6 +1197,15 @@ where
             .rate_limiter
             .allow(ip_and_credential.ip_addr, ip_and_credential.address)
             .map_err(|err| AcceptTxError::RateLimiter(err))?;
+
+        // Shape probabilistic load shedding into a smooth accept stream. Independent random draws
+        // create accepted-transaction clusters, which is especially noisy when accepted txs are
+        // slow and rejected txs are cheap.
+        if !inner.should_accept_load_shed_tx(load_based_accept_probability) {
+            return Err(AcceptTxError::SequencerOverloaded503(
+                "Transaction rejected due to load shedding",
+            ));
+        }
 
         let mut baked_tx = baked_tx;
         // Important: we read the sequencing data from the baked tx inside apply_tx_to_in_progress_batch (which is called from do_new_tx)
@@ -935,6 +1216,11 @@ where
         // Do not use `?` or return early here. We must always call `rate_limiter.update`
         // to ensure the limits are updated even for unsuccessful transactions.
         let res = res.map_err(AcceptTxError::NewTxError);
+        if res.is_ok() {
+            inner.update_estimated_tx_execution_time_micros(
+                resource_used.inner.execution_time_micros,
+            );
+        }
         inner.rate_limiter.update(token, resource_used);
         let (rx, remaining_slot_gas) = res?;
 
@@ -1257,4 +1543,54 @@ fn completed_blobs_contain_batch(blobs: &[PreferredBlobToReplay]) -> bool {
     blobs
         .iter()
         .any(|blob| matches!(blob, PreferredBlobToReplay::Batch(_)))
+}
+
+#[allow(clippy::float_arithmetic)]
+fn update_offered_rate_ewma(
+    previous_rate_per_second: f64,
+    offered_since_last_tick: f64,
+    time_since_last_tick: Duration,
+    ewma_half_life: Duration,
+) -> f64 {
+    let elapsed_secs = time_since_last_tick.as_secs_f64();
+    let half_life_secs = ewma_half_life.as_secs_f64();
+    let previous_sample_weight = 0.5_f64.powf(elapsed_secs / half_life_secs);
+    let current_sample_weight = 1.0 - previous_sample_weight;
+    let current_rate_per_second = offered_since_last_tick / elapsed_secs;
+    let minimum_rate_per_second = 1.0 / half_life_secs;
+
+    (previous_rate_per_second * previous_sample_weight
+        + current_rate_per_second * current_sample_weight)
+        .max(minimum_rate_per_second)
+}
+
+#[allow(clippy::float_arithmetic)]
+fn slew_limited_rate(
+    goal_rate: f64,
+    current_rate: f64,
+    target_rate: f64,
+    elapsed: Duration,
+) -> f64 {
+    let elapsed_secs = elapsed.as_secs_f64();
+    let rate_up_per_sec = target_rate * 0.25;
+    let rate_down_per_sec = target_rate;
+    let max_up = (rate_up_per_sec * elapsed_secs).min(rate_up_per_sec);
+    let max_down = (rate_down_per_sec * elapsed_secs).min(rate_down_per_sec);
+
+    goal_rate.clamp(current_rate - max_down, current_rate + max_up)
+}
+
+#[derive(Debug)]
+struct RateLimitTick {
+    /// The rate at which to accept new txs in bytes/sec at the current moment (accounting for current batch size and time until close)
+    current_accept_bytes_per_second: f64,
+    /// The EWMA of the rate at which new txs are being offered in bytes/sec
+    bytes_offered_per_second_ewma: f64,
+    /// The rate at which to accept new txs in execution micros/sec given at the current moment (accounting for execution consumed and time until close)
+    current_accept_execution_micros_per_second: f64,
+    /// The EWMA of the rate at which new txs are being offered in execution micros/sec
+    execution_time_offered_per_second_ewma: f64,
+    /// The target execution time in micros/sec. This does not vary with current batch size or time until close.
+    /// We pass it around with the limiters for convenience
+    configured_target_execution_micros_per_second: f64,
 }

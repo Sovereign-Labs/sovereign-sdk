@@ -31,10 +31,12 @@ use sov_modules_api::GasSpec;
 use sov_modules_api::VersionReader;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::Storage;
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicU32, AtomicU64, AtomicUsize};
 use std::sync::Arc;
+use std::time::Duration;
 pub(crate) use sync_state::*;
 use tokio::sync::broadcast;
 use tokio::sync::{mpsc, oneshot, watch};
@@ -65,8 +67,12 @@ pub(super) enum Message<S: Spec, Rt: Runtime<S>> {
     },
     CheckReadiness {
         resp: oneshot::Sender<Result<(), SequencerNotReadyDetails>>,
-        max_concurrent_blobs: usize,
+        max_concurrent_batch_blobs: usize,
         height_to_stop_at: Option<RollupHeight>,
+        reason: &'static str,
+    },
+    BlobSenderStatus {
+        resp: oneshot::Sender<BlobSenderStatus>,
         reason: &'static str,
     },
 
@@ -165,16 +171,19 @@ pub(crate) fn create<S, Rt>(
     tx_queue_id: Arc<AtomicU64>,
     batch_execution_time_limit_micros: u64,
     seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+    max_concurrent_proof_blobs: usize,
     shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: watch::Sender<()>,
     executor_events_sender: ExecutorEventsSender<S, Rt>,
     sequence_number_of_next_blob: SequenceNumber,
-    in_flight_blobs: Arc<AtomicUsize>,
+    in_flight_batch_blobs: Arc<AtomicUsize>,
+    in_flight_proof_blobs: Arc<AtomicUsize>,
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
     cache_warm_up_executor: CacheWarmUpExecutor<S>,
     start_replica_task_notifier: EventReceiverStartNotifier,
+    approximate_block_time: Duration,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,
@@ -188,9 +197,11 @@ where
 
     let rate_limiter = SovRateLimiter::new(
         seq_config.sequencer_kind_config.rate_limiter.clone(),
-        seq_config
-            .sequencer_kind_config
-            .batch_execution_time_limit_millis,
+        Duration::from_millis(
+            seq_config
+                .sequencer_kind_config
+                .batch_execution_time_limit_millis,
+        ),
         seq_config.max_batch_size_bytes,
     );
 
@@ -199,7 +210,6 @@ where
         rollup_exec_config.clone(),
         seq_config.clone(),
         Default::default(),
-        None, // We'll populate the pinned cache on the first `update_state` call.
     );
     let executor_rebase_height = executor.checkpoint.rollup_height_to_access();
 
@@ -212,12 +222,14 @@ where
         batch_execution_time_limit_micros,
         batch_size_tracker: BatchSizeTracker::new(seq_config.max_batch_size_bytes),
         seq_config: seq_config.clone(),
+        max_concurrent_proof_blobs,
         shutdown_receiver: shutdown_receiver.clone(),
         shutdown_sender,
         executor_events_sender,
         sequence_number_of_open_batch: None,
         next_unassigned_sequence_number: sequence_number_of_next_blob,
-        in_flight_blobs,
+        in_flight_batch_blobs,
+        in_flight_proof_blobs,
         has_finished_startup: false,
         metrics: Vec::with_capacity(128),
         is_ready,
@@ -227,6 +239,12 @@ where
         cache_warm_up_executor,
         start_replica_task_notifier,
         rate_limiter,
+
+        pi_controller: PIController::new(
+            approximate_block_time,
+            seq_config.max_batch_size_bytes,
+            batch_execution_time_limit_micros,
+        ),
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
@@ -237,6 +255,7 @@ where
         heap: BTreeMap::new(),
         runtime: Default::default(),
         test_only_state_update_notification_sender: broadcast::channel(100).0,
+        use_pi_rate_limiter: seq_config.sequencer_kind_config.use_pi_rate_limiter,
     };
     let updator = SequencerStateUpdator {
         message_sender,
@@ -251,11 +270,11 @@ type AcceptTxRet<S, Rt> =
 
 #[derive(Debug)]
 pub(crate) enum AcceptTxError<S: Spec> {
-    SequencerOverloaded503,
+    SequencerOverloaded503(&'static str),
     NotFullySynced(SequencerNotReadyDetails),
     BatchError {
         batch_creation_error: BatchCreationError,
-        nb_of_concurrent_blob_submissions: usize,
+        nb_of_batch_blobs_in_flight: usize,
     },
     NewTxError(DoNewTxError<S>),
     ReplicaMode,
@@ -289,10 +308,8 @@ struct InitialStatus {
 
 impl InitialStatus {
     /// After startup, resync, or recovery, the sequencer's in-memory state is no longer guaranteed to be correct and up to date.
-    /// When this happens, we replay all soft-confirmed transactions to repopulate the tx and pinned-state caches.
-    /// Note: We may be able to optimize away reloading the pinned cache on resync; on startup we have to populate the pinned cache because
-    /// it doesn't exist yet, and on recovery we have to relaod it because it was (likely) incorrect - by on simple resync this shouldn't be necessary.
-    fn should_flush_tx_cache_and_pinned_cache(&self) -> bool {
+    /// When this happens, we replay all soft-confirmed transactions to repopulate the tx cache.
+    fn should_flush_tx_cache(&self) -> bool {
         self.is_startup || self.is_resync || self.is_recover
     }
 }

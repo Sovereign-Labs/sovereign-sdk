@@ -22,6 +22,7 @@ borsh = { workspace = true }
 derivative = { workspace = true }
 derive_more = { workspace = true }
 jsonschema = { workspace = true }
+strum = { workspace = true }
 tokio = { workspace = true, features = ["sync"] }
 serde = { workspace = true }
 schemars = { workspace = true }
@@ -64,7 +65,6 @@ sov-db = { workspace = true, features = ["test-utils"] }
 sov-state = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
-strum = { workspace = true }
 tempfile = { workspace = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"] }
 rockbound = { workspace = true }
@@ -86,3 +86,9 @@ arbitrary = [
 	"sov-bank/arbitrary",
 	"sov-paymaster/arbitrary",
 ]
+
+[package.metadata.cargo-machete]
+# sov-address is not used in sov-test-utils' own code, but its `arbitrary`
+# feature must propagate to satisfy the `BasicAddress: MaybeArbitrary` trait
+# bound for downstream consumers that enable `sov-test-utils/arbitrary`.
+ignored = ["strum", "sov-address"]

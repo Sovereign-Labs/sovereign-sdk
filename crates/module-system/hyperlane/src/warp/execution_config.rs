@@ -12,19 +12,30 @@ pub static WARP_EXECUTION_CONFIG: OnceLock<WarpExecutionConfig> = OnceLock::new(
 /// This configuration specifies which warp routes should have their rate limiter
 /// metrics emitted during block processing.
 #[derive(Clone, Default, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
+#[serde(deny_unknown_fields)]
 pub struct WarpExecutionConfig {
-    /// List of warp route IDs to monitor for metrics.
+    /// Warp routes to monitor for rate limiter metrics.
     ///
     /// Metrics will be emitted for the rate limiters of these routes at the end
-    /// of each block.
+    /// of each block, labelled with the operator-supplied name.
     #[serde(default)]
-    pub monitored_route_ids: Vec<WarpRouteId>,
+    pub monitored_routes: Vec<MonitoredRoute>,
+}
+
+/// A warp route to emit rate limiter metrics for, paired with a human-readable name.
+#[derive(Clone, Debug, serde::Serialize, serde::Deserialize, Eq, PartialEq)]
+pub struct MonitoredRoute {
+    /// The id of the route to monitor.
+    pub id: WarpRouteId,
+    /// Human-readable name used to label the route's metrics.
+    pub name: String,
 }
 
 impl<S: Spec> ExecutionInit for Warp<S> {
     type Config = WarpExecutionConfig;
 
     fn init(config: &Self::Config) -> Result<(), Box<dyn std::error::Error>> {
+        tracing::debug!(?config, "Initializing Warp execution config");
         WARP_EXECUTION_CONFIG
             .set(config.clone())
             .map_err(|_| "Warp execution config already initialized")?;
@@ -33,14 +44,14 @@ impl<S: Spec> ExecutionInit for Warp<S> {
 }
 
 impl<S: Spec> Warp<S> {
-    /// Returns the list of warp route IDs that should be monitored for metrics.
+    /// Returns the warp routes that should be monitored for metrics.
     ///
     /// This reads from the global execution configuration set at startup.
-    /// If no configuration is set, returns an empty vector.
-    pub(super) fn get_monitored_route_ids(&self) -> &[WarpRouteId] {
+    /// If no configuration is set, returns an empty slice.
+    pub(super) fn get_monitored_routes(&self) -> &[MonitoredRoute] {
         WARP_EXECUTION_CONFIG
             .get()
-            .map(|config| config.monitored_route_ids.as_slice())
+            .map(|config| config.monitored_routes.as_slice())
             .unwrap_or_default()
     }
 }

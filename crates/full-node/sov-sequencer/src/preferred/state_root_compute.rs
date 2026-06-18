@@ -192,7 +192,7 @@ async fn compute_state_root<S: Spec, Rt: Runtime<S>>(
                 }
 
                 storage
-                    .compute_state_update(state_accesses, &Default::default(), prev_root, None)
+                    .compute_state_update(state_accesses, &Default::default(), prev_root)
                     .expect("Failed to compute state update").0
             })
     });
@@ -359,36 +359,14 @@ mod tests {
     use sov_rollup_interface::storage::HierarchicalStorageManager;
     use sov_state::SlotKey;
     use sov_state::StateUpdate;
-    use sov_test_utils::storage::{
-        ForklessStorageManager, SimpleJmtStorageManager, SimpleStorageManager,
-    };
-    use sov_test_utils::{
-        generate_optimistic_runtime, TestHasher, TestJmtSpec, TestSpec, TestStorageSpec,
-    };
+    use sov_test_utils::storage::{ForklessStorageManager, SimpleStorageManager};
+    use sov_test_utils::{generate_optimistic_runtime, TestHasher, TestSpec, TestStorageSpec};
     use tokio::task::JoinHandle;
     use uuid::Uuid;
 
     generate_optimistic_runtime!(TestRuntime <=);
 
     use super::*;
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_jmt_new_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleJmtStorageManager::<TestStorageSpec>::new();
-        new_rollup_height_state_root_on_stale_storage::<TestJmtSpec, _, TestRuntime<TestJmtSpec>>(
-            storage_manager,
-        )
-        .await;
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_jmt_known_rollup_height_state_root_on_stale_storage() {
-        let storage_manager = SimpleJmtStorageManager::<TestStorageSpec>::new();
-        known_rollup_height_state_root_on_stale_storage::<TestJmtSpec, _, TestRuntime<TestJmtSpec>>(
-            storage_manager,
-        )
-        .await;
-    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_nomt_new_rollup_height_state_root_on_stale_storage() {
@@ -427,7 +405,7 @@ mod tests {
     ) -> Arc<RawStateChanges> {
         let mut rt = Rt::default();
         let mut kernel = rt.kernel();
-        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
+        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
         let mut state_with_partially_stale_heights =
             KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
         let height = header.height;
@@ -507,7 +485,7 @@ mod tests {
     {
         let mut rt = Rt::default();
         let mut kernel = rt.kernel();
-        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel, None);
+        let mut checkpoint = StateCheckpoint::new(storage.clone(), &kernel);
         let mut state_with_partially_stale_heights =
             KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
         let height = header.height;
@@ -626,7 +604,7 @@ mod tests {
         let writes_on_the_node = writes_only_kernel::<S, Rt>(&node_storage);
         let prev_root = <S::Storage as Storage>::PRE_GENESIS_ROOT;
         let (node_new_root, changes) = node_storage
-            .compute_state_update(writes_on_the_node, &Default::default(), prev_root, None)
+            .compute_state_update(writes_on_the_node, &Default::default(), prev_root)
             .unwrap();
         storage_manager.commit_state_update(node_storage, changes, node_new_root);
     }
@@ -655,7 +633,6 @@ mod tests {
                 writes_on_the_node.to_state_accesses_for_sequencer_state_root_computation(),
                 &Default::default(),
                 prev_root,
-                None,
             )
             .unwrap();
 
@@ -794,7 +771,7 @@ mod tests {
         let writes_on_the_node = writes_only_kernel::<S, Rt>(&node_storage);
         let mut prev_root = <S::Storage as Storage>::PRE_GENESIS_ROOT;
         let (node_new_root, changes) = node_storage
-            .compute_state_update(writes_on_the_node, &Default::default(), prev_root, None)
+            .compute_state_update(writes_on_the_node, &Default::default(), prev_root)
             .unwrap();
         prev_root = node_new_root;
         let to_commit = node_storage.materialize_changes(changes);
@@ -832,7 +809,6 @@ mod tests {
                     raw_state_changes.to_state_accesses_for_sequencer_state_root_computation(),
                     &Default::default(),
                     prev_root,
-                    None,
                 )
                 .unwrap();
             changes.add_accessory_items(
@@ -856,7 +832,7 @@ mod tests {
                 sequencer_storages: Vec::new(),
                 uncommitted_changes: uncommitted_changes.clone(),
                 rollup_height: RollupHeight::new(((idx + 1) / 2) as u64),
-                slot_number: SlotNumber::new_dangerous(idx as u64),
+                slot_number: SlotNumber::new(idx as u64),
             });
         }
 
@@ -953,7 +929,6 @@ mod tests {
                 writes_on_the_node.to_state_accesses_for_sequencer_state_root_computation(),
                 &Default::default(),
                 prev_root,
-                None,
             )
             .unwrap();
 

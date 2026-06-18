@@ -17,7 +17,10 @@ use std::convert::Infallible;
 #[cfg(feature = "native")]
 use std::ops::RangeInclusive;
 
-impl<S: Spec> BlockHooks for Evm<S> {
+impl<S: Spec, P> BlockHooks for Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     type Spec = S;
     /// Logic executed at the beginning of the slot. Here we set the root hash of the previous head.
     fn begin_rollup_block_hook(
@@ -164,7 +167,10 @@ impl<S: Spec> BlockHooks for Evm<S> {
 }
 
 #[cfg(feature = "native")]
-impl<S: Spec> FinalizeHook for Evm<S> {
+impl<S: Spec, P> FinalizeHook for Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     type Spec = S;
 
     /// This logic is executed after calculating the root hash.
@@ -229,7 +235,10 @@ impl<S: Spec> FinalizeHook for Evm<S> {
 }
 
 #[cfg(feature = "native")]
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     fn prune(&mut self, state: &mut impl AccessoryStateReaderAndWriter) -> Result<(), Infallible> {
         let block_pruning_threshold = config_value!("EVM_BLOCK_PRUNING_THRESHOLD");
         let block_numbers = self.block_numbers(state);

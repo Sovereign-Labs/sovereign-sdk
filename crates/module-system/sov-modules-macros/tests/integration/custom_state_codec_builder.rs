@@ -5,7 +5,8 @@ use std::marker::PhantomData;
 
 use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::{ModuleId, ModuleInfo, Spec, StateCheckpoint, StateValue};
-use sov_state::{DefaultStorageSpec, StateCodec, StateItemDecoder, StateItemEncoder, ZkStorage};
+use sov_state::nomt::zk_storage::NomtVerifierStorage;
+use sov_state::{DefaultStorageSpec, StateCodec, StateItemDecoder, StateItemEncoder};
 use sov_test_utils::{TestHasher, ZkTestSpec};
 
 #[derive(Clone, ModuleInfo)]
@@ -55,11 +56,11 @@ impl<V> StateItemDecoder<V> for CustomCodec {
 
 #[test]
 fn custom_builder_works() {
-    let storage: ZkStorage<DefaultStorageSpec<TestHasher>> = ZkStorage::new();
+    let storage: NomtVerifierStorage<DefaultStorageSpec<TestHasher>> = NomtVerifierStorage::new();
     let mut module: TestModule<ZkTestSpec> = TestModule::default();
 
     let mut state: StateCheckpoint<ZkTestSpec> =
-        StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default(), None);
+        StateCheckpoint::new(storage, &MockKernel::<ZkTestSpec>::default());
     module.state_value.set(&0u32, &mut state).unwrap();
 
     assert_eq!(std::env::var("TEST").unwrap(), "42");

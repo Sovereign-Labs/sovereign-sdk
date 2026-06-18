@@ -1,4 +1,4 @@
-use crate::docker::pull_image_with_retries;
+use crate::docker::prepull_image_best_effort;
 use serde_json::json;
 use std::net::{SocketAddr, ToSocketAddrs};
 use std::time::Duration;
@@ -58,7 +58,7 @@ pub struct ToxiProxySetup {
     container: ContainerAsync<SovToxiProxiImage>,
     client: reqwest::Client,
     api_base_url: String,
-    proxied_da_addr: SocketAddr,
+    proxied_da_addr: Option<SocketAddr>,
     proxied_postgres_connection_string: String,
 }
 
@@ -68,9 +68,18 @@ impl ToxiProxySetup {
         postgres_connection_string: &str,
         da_upstream_port: u16,
     ) -> Self {
-        pull_image_with_retries(SovToxiProxiImage)
-            .await
-            .expect("Failed to pull toxiproxy image");
+        Self::start(postgres_connection_string, Some(da_upstream_port)).await
+    }
+
+    /// Starts toxiproxy with only a Postgres proxy.
+    pub async fn start_for_postgres(postgres_connection_string: &str) -> Self {
+        Self::start(postgres_connection_string, None).await
+    }
+
+    /// Starts toxiproxy with a Postgres proxy, plus a DA proxy when
+    /// `da_upstream_port` is `Some`.
+    async fn start(postgres_connection_string: &str, da_upstream_port: Option<u16>) -> Self {
+        prepull_image_best_effort(SovToxiProxiImage).await;
 
         let toxiproxy = SovToxiProxiImage
             .with_host("host.docker.internal", Host::HostGateway)
@@ -97,10 +106,6 @@ impl ToxiProxySetup {
             .get_host_port_ipv4(TOXIPROXY_POSTGRES_PORT.tcp())
             .await
             .expect("Failed to map toxiproxy postgres port");
-        let toxiproxy_da_port = toxiproxy
-            .get_host_port_ipv4(TOXIPROXY_DA_PORT.tcp())
-            .await
-            .expect("Failed to map toxiproxy DA port");
 
         let client = reqwest::Client::builder()
             .timeout(TOXIPROXY_HTTP_REQUEST_TIMEOUT)
@@ -111,17 +116,28 @@ impl ToxiProxySetup {
 
         let postgres_port = Self::parse_postgres_port(postgres_connection_string);
         Self::create_postgres_proxy(&client, &api_base_url, postgres_port).await;
-        Self::create_da_proxy(&client, &api_base_url, da_upstream_port).await;
 
         let proxied_postgres_connection_string = Self::build_proxy_connection_string(
             postgres_connection_string,
             &toxiproxy_host,
             toxiproxy_postgres_port,
         );
-        let proxied_da_addr = SocketAddr::new(
-            Self::resolve_proxy_host_ip(&toxiproxy_host),
-            toxiproxy_da_port,
-        );
+
+        // The DA proxy is only created when the caller has DA traffic to route.
+        let proxied_da_addr = match da_upstream_port {
+            Some(da_upstream_port) => {
+                Self::create_da_proxy(&client, &api_base_url, da_upstream_port).await;
+                let toxiproxy_da_port = toxiproxy
+                    .get_host_port_ipv4(TOXIPROXY_DA_PORT.tcp())
+                    .await
+                    .expect("Failed to map toxiproxy DA port");
+                Some(SocketAddr::new(
+                    Self::resolve_proxy_host_ip(&toxiproxy_host),
+                    toxiproxy_da_port,
+                ))
+            }
+            None => None,
+        };
 
         Self {
             container: toxiproxy,
@@ -167,6 +183,7 @@ impl ToxiProxySetup {
     /// Returns the DA endpoint that points at toxiproxy.
     pub fn proxied_da_addr(&self) -> SocketAddr {
         self.proxied_da_addr
+            .expect("DA proxy was not configured; create the setup with start_for_postgres_and_da")
     }
 
     /// Returns the Postgres connection string rewritten to point at toxiproxy.

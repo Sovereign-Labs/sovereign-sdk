@@ -283,12 +283,12 @@ pub async fn start_test_rollup(
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         test_case.finalization_blocks,
     )
-    .enable_prover()
     .set_config(|c| {
-        c.max_concurrent_blobs = 16777216;
+        c.max_concurrent_batch_blobs = 16777216;
         c.rollup_prover_config = prover_config;
         c.blob_processing_timeout_secs = 180;
         c.aggregated_proof_block_jump = 5;
+        c.max_concurrent_proof_blobs = 1024;
         if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
             sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS
                 * std::cmp::max(1, test_case.finalization_blocks as u64);

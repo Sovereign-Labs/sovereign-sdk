@@ -270,6 +270,7 @@ pub(crate) async fn receive_with_timeout(
 mod tests {
     use super::*;
     use crate::influxdb::config::TelegrafSocketConfig;
+    use crate::influxdb::RpcAggregationConfig;
     use crate::influxdb::{Metric, SubmittableMetricKind};
     use tokio::io::AsyncReadExt;
     use tokio::sync::watch;
@@ -313,6 +314,7 @@ mod tests {
             // Does not matter, we set our own channel size.
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: RpcAggregationConfig::standard(),
         };
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
@@ -413,6 +415,7 @@ mod tests {
             max_datagram_size: Some(1),
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: RpcAggregationConfig::standard(),
         };
 
         let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());

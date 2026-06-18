@@ -12,7 +12,7 @@ env:
 
 jobs:
   promote:
-    runs-on: nscloud-ubuntu-22.04-amd64-2x4
+    runs-on: nscloud-ubuntu-24.04-amd64-2x4
     timeout-minutes: 10
     steps:
       - name: Log event details
@@ -32,7 +32,7 @@ jobs:
 
       - name: Checkout commit
         id: checkout
-        uses: actions/checkout@v5
+        uses: actions/checkout@v6
         with:
           ref: ${{ github.event.client_payload.commit_sha }}
           fetch-depth: 0

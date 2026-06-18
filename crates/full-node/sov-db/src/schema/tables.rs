@@ -17,18 +17,12 @@
 //! - `(EventKey, TxNumber) -> EventNumber`
 //! - `EventNumber -> (EventKey, EventValue)`
 //!
-//! JMT Tables, for each namespace:
-//! - `KeyHash -> Key`
-//! - `(Key, Version) -> StateValue`
-//! - `NodeKey -> Node`
-//!
 //! Module Accessory State Table:
 //! - `(ModuleIdBytes, Key) -> Value`
 
 use borsh::ser::BorshSerialize;
 use borsh::BorshDeserialize;
 use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
-use jmt::Version;
 use rockbound::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, ValueCodec};
 use rockbound::{CodecError, SchemaValue, SeekKeyEncoder};
 use sov_rollup_interface::common::SlotNumber;
@@ -42,6 +36,7 @@ use super::types::{
     LatestFinalizedSlotSingleton, ProofUniqueId, StateRootHashId, StfInfoUniqueId, StoredBatch,
     StoredSlot, StoredStfInfo, StoredTransaction, TxNumber,
 };
+use crate::schema::types::slot_key::SlotValue;
 use crate::schema::types::{DiscardedBlobNumber, StoredDiscardedBlob};
 
 /* Other tables used by the Rollup */
@@ -318,7 +313,7 @@ define_table_with_seek_key_codec!(
 );
 
 define_table_without_codec!(
-    /// Non-JMT state stored by a module for JSON-RPC use.
+    /// Non-provable state stored by a module for JSON-RPC use.
     (ModuleAccessoryState) (AccessoryKey, SlotNumber) => AccessoryStateValue
 );
 
@@ -328,13 +323,11 @@ define_table_without_codec!(
     (AccessoryKeysByVersion) (SlotNumber, AccessoryKey) => ()
 );
 
-impl KeyEncoder<ModuleAccessoryState> for (AccessoryKey, SlotNumber) {
+impl<K: AsRef<[u8]> + core::fmt::Debug> KeyEncoder<ModuleAccessoryState> for (K, SlotNumber) {
     fn encode_key(&self) -> rockbound::schema::Result<Vec<u8>> {
-        let mut out = Vec::with_capacity(self.0.len() + std::mem::size_of::<Version>() + 8);
-        self.0
-            .as_slice()
-            .serialize(&mut out)
-            .map_err(CodecError::from)?;
+        let key_bytes = self.0.as_ref();
+        let mut out = Vec::with_capacity(key_bytes.len() + std::mem::size_of::<u64>() + 8);
+        key_bytes.serialize(&mut out).map_err(CodecError::from)?;
         // Write the version in big-endian order so that sorting order is based on the most-significant bytes of the key
         out.write_u64::<BigEndian>(self.1.get())
             .expect("serialization to vec is infallible");
@@ -342,9 +335,9 @@ impl KeyEncoder<ModuleAccessoryState> for (AccessoryKey, SlotNumber) {
     }
 }
 
-impl SeekKeyEncoder<ModuleAccessoryState> for (AccessoryKey, SlotNumber) {
+impl<K: AsRef<[u8]> + core::fmt::Debug> SeekKeyEncoder<ModuleAccessoryState> for (K, SlotNumber) {
     fn encode_seek_key(&self) -> rockbound::schema::Result<Vec<u8>> {
-        <(AccessoryKey, SlotNumber) as KeyEncoder<ModuleAccessoryState>>::encode_key(self)
+        <Self as KeyEncoder<ModuleAccessoryState>>::encode_key(self)
     }
 }
 
@@ -353,7 +346,7 @@ impl KeyDecoder<ModuleAccessoryState> for (AccessoryKey, SlotNumber) {
         let mut cursor = std::io::Cursor::new(data);
         let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
         let version = cursor.read_u64::<BigEndian>()?;
-        Ok((key, SlotNumber::new_dangerous(version)))
+        Ok((key, SlotNumber::new(version)))
     }
 }
 
@@ -367,23 +360,33 @@ impl ValueCodec<ModuleAccessoryState> for AccessoryStateValue {
     }
 }
 
-impl KeyEncoder<AccessoryKeysByVersion> for (SlotNumber, AccessoryKey) {
+impl ValueCodec<ModuleAccessoryState> for Option<SlotValue> {
+    fn encode_value(&self) -> rockbound::schema::Result<Vec<u8>> {
+        let view: Option<&[u8]> = self.as_ref().map(|v| v.value());
+        borsh::to_vec(&view).map_err(CodecError::from)
+    }
+
+    fn decode_value(data: &[u8]) -> rockbound::schema::Result<Self> {
+        let opt = <Option<Vec<u8>>>::deserialize_reader(&mut &data[..])?;
+        Ok(opt.map(SlotValue::from))
+    }
+}
+
+impl<K: AsRef<[u8]> + core::fmt::Debug> KeyEncoder<AccessoryKeysByVersion> for (SlotNumber, K) {
     fn encode_key(&self) -> rockbound::schema::Result<Vec<u8>> {
-        let mut out = Vec::with_capacity(std::mem::size_of::<Version>() + self.1.len() + 8);
+        let key_bytes = self.1.as_ref();
+        let mut out = Vec::with_capacity(std::mem::size_of::<u64>() + key_bytes.len() + 8);
 
         out.write_u64::<BigEndian>(self.0.get())
             .expect("serialization to vec is infallible");
-        self.1
-            .as_slice()
-            .serialize(&mut out)
-            .map_err(CodecError::from)?;
+        key_bytes.serialize(&mut out).map_err(CodecError::from)?;
         Ok(out)
     }
 }
 
-impl SeekKeyEncoder<AccessoryKeysByVersion> for (SlotNumber, AccessoryKey) {
+impl<K: AsRef<[u8]> + core::fmt::Debug> SeekKeyEncoder<AccessoryKeysByVersion> for (SlotNumber, K) {
     fn encode_seek_key(&self) -> rockbound::schema::Result<Vec<u8>> {
-        <(SlotNumber, AccessoryKey) as KeyEncoder<AccessoryKeysByVersion>>::encode_key(self)
+        <Self as KeyEncoder<AccessoryKeysByVersion>>::encode_key(self)
     }
 }
 
@@ -392,7 +395,7 @@ impl KeyDecoder<AccessoryKeysByVersion> for (SlotNumber, AccessoryKey) {
         let mut cursor = std::io::Cursor::new(data);
         let version = cursor.read_u64::<BigEndian>()?;
         let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
-        Ok((SlotNumber::new_dangerous(version), key))
+        Ok((SlotNumber::new(version), key))
     }
 }
 

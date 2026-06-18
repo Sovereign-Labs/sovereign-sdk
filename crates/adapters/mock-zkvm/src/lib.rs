@@ -11,14 +11,13 @@ pub use guest::MockZkGuest;
 mod host;
 #[cfg(feature = "native")]
 pub use host::MockZkvmHost;
-#[cfg(feature = "native")]
-mod network;
-#[cfg(feature = "native")]
-pub use network::MockZkvmNetwork;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub mod crypto;
-use sov_rollup_interface::zk::{CryptoSpec, Zkvm};
+use sov_rollup_interface::common::strict_bincode_deserialize;
+use sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues;
+use sov_rollup_interface::zk::aggregated_proof::{CodeCommitmentDecodeError, CodeCommitmentHash};
+use sov_rollup_interface::zk::{CryptoSpec, SerializedZkProof, Zkvm};
 
 use crate::crypto::{Ed25519PublicKey, Ed25519Signature};
 
@@ -61,9 +60,6 @@ impl Zkvm for MockZkvm {
 
     #[cfg(feature = "native")]
     type OuterHost = crate::host::MockZkvmHost;
-
-    #[cfg(feature = "native")]
-    type Network = crate::network::MockZkvmNetwork;
 }
 /// A mock commitment to a particular zkVM program.
 #[derive(
@@ -72,18 +68,19 @@ impl Zkvm for MockZkvm {
 pub struct MockCodeCommitment(pub [u8; 8]);
 
 impl sov_rollup_interface::zk::CodeCommitmentTrait for MockCodeCommitment {
-    fn to_hash(&self) -> sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash {
+    fn to_hash(&self) -> CodeCommitmentHash {
         // Pad the 8-byte mock commitment to 32 bytes to match the canonical hash layout.
-        let mut bytes = vec![0u8; 32];
+        let mut bytes = [0u8; CodeCommitmentHash::HASH_LEN];
         bytes[..8].copy_from_slice(&self.0);
-        sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash(bytes)
+        CodeCommitmentHash::from_u8_array(bytes)
     }
 
-    fn from_hash(hash: sov_rollup_interface::zk::aggregated_proof::CodeCommitmentHash) -> Self {
+    fn try_from_hash(hash: CodeCommitmentHash) -> Result<Self, CodeCommitmentDecodeError> {
+        let words = hash.to_u32_array()?;
         let mut bytes = [0u8; 8];
-        let len = hash.0.len().min(8);
-        bytes[..len].copy_from_slice(&hash.0[..len]);
-        Self(bytes)
+        bytes[..4].copy_from_slice(&words[0].to_be_bytes());
+        bytes[4..].copy_from_slice(&words[1].to_be_bytes());
+        Ok(Self(bytes))
     }
 }
 
@@ -105,6 +102,22 @@ struct MockProof {
     is_valid: bool,
     /// Public input.
     pub_data: Vec<u8>,
+    /// The commitment.
+    code_commitment: MockCodeCommitment,
+}
+
+impl MockProof {
+    /// Bincode-encodes this proof. Only the native host path produces
+    /// `MockProof`s; verifiers read them via [`Self::deserialize`].
+    #[cfg(feature = "native")]
+    pub(crate) fn serialize(&self) -> bincode::Result<Vec<u8>> {
+        bincode::serialize(self)
+    }
+
+    /// Bincode-decodes a proof from `bytes`.
+    pub(crate) fn deserialize(bytes: &[u8]) -> bincode::Result<Self> {
+        strict_bincode_deserialize(bytes)
+    }
 }
 
 /// The verifier for mock zk proofs.
@@ -118,30 +131,67 @@ impl sov_rollup_interface::zk::ZkVerifier for MockZkVerifier {
 
     type Error = anyhow::Error;
 
-    fn verify<T: DeserializeOwned>(
-        serialized_proof: &[u8],
-        _code_commitment: &Self::CodeCommitment,
+    fn verify_with_pub_values<T: DeserializeOwned>(
+        public_values: &SerializedPubValues,
+        code_commitment: &Self::CodeCommitment,
+    ) -> Result<T, Self::Error> {
+        // The mock encodes a complete `MockProof` in `pub_values.pub_values` —
+        // mirroring SP1's deferred-proof channel, but in-band so the circuit
+        // can run natively.
+        let MockProof {
+            is_valid,
+            pub_data,
+            code_commitment: claimed,
+        } = MockProof::deserialize(&public_values.pub_values)?;
+        if !is_valid {
+            anyhow::bail!("Proof is not valid");
+        }
+        if &claimed != code_commitment {
+            anyhow::bail!(
+                "Code commitment mismatch: proof claims {claimed:?}, verifier expects {code_commitment:?}"
+            );
+        }
+        Ok(strict_bincode_deserialize(&pub_data)?)
+    }
+
+    fn verify_with_proof<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+        code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
         let MockProof {
             is_valid,
             pub_data: input,
-        } = bincode::deserialize(serialized_proof)?;
-        if is_valid {
-            Ok(bincode::deserialize(&input)?)
-        } else {
-            anyhow::bail!("Proof is not valid")
+            code_commitment: claimed,
+        } = MockProof::deserialize(&serialized_proof.raw_proof)?;
+        if !is_valid {
+            anyhow::bail!("Proof is not valid");
         }
+        if &claimed != code_commitment {
+            anyhow::bail!(
+                "Code commitment mismatch: proof claims {claimed:?}, verifier expects {code_commitment:?}"
+            );
+        }
+        Ok(strict_bincode_deserialize(&input)?)
+    }
+
+    fn extract_public_data<T: DeserializeOwned>(
+        serialized_proof: &SerializedZkProof,
+    ) -> Result<T, Self::Error> {
+        let MockProof {
+            pub_data: input, ..
+        } = MockProof::deserialize(&serialized_proof.raw_proof)?;
+        Ok(strict_bincode_deserialize(&input)?)
     }
 }
 
 #[cfg(test)]
 mod tests {
     use sov_rollup_interface::crypto::PublicKey;
-    use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost, ZkvmNetwork};
+    use sov_rollup_interface::zk::{ZkVerifier, ZkvmHost};
 
     use super::*;
 
-    #[derive(Serialize, Deserialize, Debug, PartialEq, Eq)]
+    #[derive(Serialize, Deserialize, Debug, PartialEq, Eq, Clone)]
     struct TestPublicData {
         hint: String,
     }
@@ -158,17 +208,12 @@ mod tests {
 
     #[test]
     fn test_mock_vm() -> anyhow::Result<()> {
-        let pub_data = TestPublicData {
-            hint: "Test".to_owned(),
-        };
-
         let mut vm = MockZkvmHost::new();
         vm.make_proof();
-        let proof = vm.add_hint_and_run(&pub_data).unwrap();
-        let verified_pub_data =
-            MockZkVerifier::verify::<TestPublicData>(&proof, &Default::default())?;
-
-        assert_eq!(verified_pub_data, pub_data);
+        // Inner mock proofs commit nothing (no guest to derive public output
+        // from the hint); verification asserts validity + matching commitment.
+        let proof = vm.add_hint_deferred_and_run(&(), Default::default())?;
+        MockZkVerifier::verify_with_proof::<()>(&proof, &Default::default())?;
         Ok(())
     }
 
@@ -176,62 +221,44 @@ mod tests {
     fn test_proof_serialization() -> anyhow::Result<()> {
         let proof = MockZkvmHost::create_serialized_proof(true, "Valid");
         let verified_pub_data =
-            MockZkVerifier::verify::<TestPublicData>(&proof, &Default::default());
+            MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &Default::default());
 
         assert!(verified_pub_data.is_ok());
 
         let proof = MockZkvmHost::create_serialized_proof(false, "Invalid");
         let verified_pub_data =
-            MockZkVerifier::verify::<TestPublicData>(&proof, &Default::default());
+            MockZkVerifier::verify_with_proof::<TestPublicData>(&proof, &Default::default());
 
         assert!(verified_pub_data.is_err());
 
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_mock_network() -> anyhow::Result<()> {
-        let network = MockZkvmNetwork::new(false);
-        let pub_data = TestPublicData {
-            hint: "NetworkTest".to_owned(),
-        };
-
-        let handle = network.add_hint_and_submit(&pub_data).await?;
-
-        // Proof should be pending
-        assert_eq!(network.poll(&handle).await?, None);
-
-        // Complete the proof
-        network.complete_proof(handle);
-
-        // Now poll should return the proof bytes
-        let proof_bytes = network
-            .poll(&handle)
-            .await?
-            .expect("proof should be ready after complete_proof");
-
-        let verified = MockZkVerifier::verify::<TestPublicData>(&proof_bytes, &Default::default())?;
-        assert_eq!(verified, pub_data);
+    #[test]
+    fn test_verify_accepts_matching_code_commitment() -> anyhow::Result<()> {
+        let commitment = MockCodeCommitment(*b"binary01");
+        let mut vm = MockZkvmHost::new().with_code_commitment(commitment.clone());
+        vm.make_proof();
+        let proof = vm.add_hint_deferred_and_run(&(), Default::default())?;
+        MockZkVerifier::verify_with_proof::<()>(&proof, &commitment)?;
         Ok(())
     }
 
-    #[tokio::test]
-    async fn test_mock_network_auto_complete() -> anyhow::Result<()> {
-        let network = MockZkvmNetwork::new(true);
-        let pub_data = TestPublicData {
-            hint: "AutoComplete".to_owned(),
-        };
+    #[test]
+    fn test_verify_rejects_mismatched_code_commitment() {
+        let v1 = MockCodeCommitment(*b"binary01");
+        let v2 = MockCodeCommitment(*b"binary02");
 
-        let handle = network.add_hint_and_submit(&pub_data).await?;
+        let mut vm = MockZkvmHost::new().with_code_commitment(v1);
+        vm.make_proof();
+        let proof = vm
+            .add_hint_deferred_and_run(&(), Default::default())
+            .unwrap();
 
-        // Proof should be immediately ready
-        let proof_bytes = network
-            .poll(&handle)
-            .await?
-            .expect("auto-complete proof should be immediately ready");
-
-        let verified = MockZkVerifier::verify::<TestPublicData>(&proof_bytes, &Default::default())?;
-        assert_eq!(verified, pub_data);
-        Ok(())
+        let err = MockZkVerifier::verify_with_proof::<()>(&proof, &v2).unwrap_err();
+        assert!(
+            err.to_string().contains("Code commitment mismatch"),
+            "expected commitment-mismatch error, got: {err}"
+        );
     }
 }

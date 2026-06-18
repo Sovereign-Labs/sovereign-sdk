@@ -121,22 +121,22 @@ error[E0277]: the trait bound `RuntimeEvent<S>: serde::Deserialize<'de>` is not 
 6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
   |                                          ^^^^^ unsatisfied trait bound
   |
-help: the trait `for<'de> Deserialize<'de>` is not implemented for `RuntimeEvent<S>`
+help: the trait `for<'de> _::_serde::Deserialize<'de>` is not implemented for `RuntimeEvent<S>`
  --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
   |
 6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
   |                                          ^^^^^
   = note: for local types consider adding `#[derive(serde::Deserialize)]` to your `RuntimeEvent<S>` type
   = note: for types from other crates check whether the crate offers a `serde` feature flag
-  = help: the following other types implement trait `Deserialize<'de>`:
-            `&'a JsonRawValue` implements `Deserialize<'de>`
-            `&'a [u8]` implements `Deserialize<'de>`
-            `&'a std::path::Path` implements `Deserialize<'de>`
-            `&'a str` implements `Deserialize<'de>`
-            `()` implements `Deserialize<'de>`
-            `(T,)` implements `Deserialize<'de>`
-            `(T0, T1)` implements `Deserialize<'de>`
-            `(T0, T1, T2)` implements `Deserialize<'de>`
+  = help: the following other types implement trait `_::_serde::Deserialize<'de>`:
+            `&'a JsonRawValue` implements `_::_serde::Deserialize<'de>`
+            `&'a [u8]` implements `_::_serde::Deserialize<'de>`
+            `&'a std::path::Path` implements `_::_serde::Deserialize<'de>`
+            `&'a str` implements `_::_serde::Deserialize<'de>`
+            `()` implements `_::_serde::Deserialize<'de>`
+            `(T,)` implements `_::_serde::Deserialize<'de>`
+            `(T0, T1)` implements `_::_serde::Deserialize<'de>`
+            `(T0, T1, T2)` implements `_::_serde::Deserialize<'de>`
           and $N others
   = note: required for `<Runtime<S> as RuntimeEventProcessor>::RuntimeEvent` to implement `DeserializeOwned`
 note: required by a bound in `sov_modules_api::RuntimeEventProcessor::RuntimeEvent`
@@ -155,14 +155,14 @@ error[E0277]: the trait bound `RuntimeEvent<S>: serde::Serialize` is not satisfi
 6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
   |                                          ^^^^^ unsatisfied trait bound
   |
-help: the trait `Serialize` is not implemented for `RuntimeEvent<S>`
+help: the trait `_::_serde::Serialize` is not implemented for `RuntimeEvent<S>`
  --> tests/integration/trybuild/dispatch/derive_event_no_default_attrs.rs:6:42
   |
 6 | #[derive(Default, Genesis, DispatchCall, Event, MessageCodec)]
   |                                          ^^^^^
   = note: for local types consider adding `#[derive(serde::Serialize)]` to your `RuntimeEvent<S>` type
   = note: for types from other crates check whether the crate offers a `serde` feature flag
-  = help: the following other types implement trait `Serialize`:
+  = help: the following other types implement trait `_::_serde::Serialize`:
             &'a T
             &'a mut T
             ()

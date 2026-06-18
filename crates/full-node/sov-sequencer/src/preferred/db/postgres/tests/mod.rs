@@ -1,4 +1,5 @@
 mod db_operations;
+mod deregister;
 mod leader_election;
 mod migrations;
 

@@ -22,7 +22,7 @@ use sov_hyperlane_integration::EthAddress;
 use sov_modules_api::{CryptoSpec, HexHash, HexString, Spec};
 use sov_sequencer::preferred::PreferredSequencerConfig;
 use sov_sequencer::SequencerKindConfig;
-use sov_test_utils::docker::pull_image_with_retries;
+use sov_test_utils::docker::prepull_image_best_effort;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConfig, TestRollup};
 use sov_test_utils::{RtAgnosticBlueprint, TestProver, TestSequencer, TestSpec, TestUser};
@@ -217,7 +217,7 @@ impl HyperlaneBuilder {
 
         // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/sovereign-lander-integration
         let docker_image = docker_image
-            .unwrap_or_else(|_| "ghcr.io/ross-weir/hyperlane-agent:integration-lander-1".into());
+            .unwrap_or_else(|_| "ghcr.io/ross-weir/hyperlane-agent:integration-lander-2".into());
         let (name, tag) = docker_image
             .split_once(':')
             .unwrap_or((&docker_image, "latest"));
@@ -228,9 +228,7 @@ impl HyperlaneBuilder {
         // try to pull the image from registry before starting tests
         // but don't pull custom images, as they can be local and it would fail
         if !has_custom_image {
-            pull_image_with_retries(image.clone())
-                .await
-                .expect("failed to pull image");
+            prepull_image_best_effort(image.clone()).await;
         }
 
         Self {

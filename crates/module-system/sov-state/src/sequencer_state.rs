@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, VecDeque},
+    collections::{BTreeMap, HashMap, VecDeque},
     marker::PhantomData,
     sync::Arc,
 };
@@ -305,6 +305,55 @@ impl<H: Digest<OutputSize = typenum::U32> + Send + Sync + 'static> StateGetter
         }
     }
 
+    fn maybe_iter_prefix_exclusive(
+        &self,
+        namespace: Namespace,
+        prefix: &SlotKey,
+        cursor: Option<SlotKey>,
+    ) -> Option<Box<dyn Iterator<Item = (SlotKey, Option<SlotValue>)> + '_>> {
+        let mut merged = BTreeMap::<SlotKey, Option<SlotValue>>::new();
+
+        for change_set in self.changes.iter().flatten() {
+            match namespace {
+                Namespace::User => {
+                    for (key, value) in change_set.user.get_writes() {
+                        merge_entry_if_matches_prefix_and_cursor(
+                            key,
+                            value.cloned(),
+                            prefix,
+                            &cursor,
+                            &mut merged,
+                        );
+                    }
+                }
+                Namespace::Kernel => {
+                    for (key, value) in change_set.kernel.get_writes() {
+                        merge_entry_if_matches_prefix_and_cursor(
+                            key,
+                            value.cloned(),
+                            prefix,
+                            &cursor,
+                            &mut merged,
+                        );
+                    }
+                }
+                Namespace::Accessory => {
+                    for (key, write) in &change_set.accessory {
+                        merge_entry_if_matches_prefix_and_cursor(
+                            key,
+                            write.value.clone(),
+                            prefix,
+                            &cursor,
+                            &mut merged,
+                        );
+                    }
+                }
+            }
+        }
+
+        Some(Box::new(merged.into_iter()))
+    }
+
     fn latest_rollup_height(&self) -> Option<sov_rollup_interface::common::RollupHeight> {
         self.changes.as_ref().and_then(|changes| {
             changes
@@ -315,5 +364,23 @@ impl<H: Digest<OutputSize = typenum::U32> + Send + Sync + 'static> StateGetter
 
     fn box_clone(&self) -> Box<dyn StateGetter> {
         Box::new(self.clone())
+    }
+}
+
+fn merge_entry_if_matches_prefix_and_cursor(
+    key: &SlotKey,
+    value: Option<SlotValue>,
+    prefix: &SlotKey,
+    cursor: &Option<SlotKey>,
+    merged: &mut BTreeMap<SlotKey, Option<SlotValue>>,
+) {
+    if key.as_ref().starts_with(prefix.as_ref()) {
+        if let Some(cursor) = cursor {
+            if key <= cursor {
+                return;
+            }
+        }
+        // We iterate from newest to oldest, so if an entry is already present for the key we don't want to overwrite it.
+        merged.entry(key.clone()).or_insert(value);
     }
 }

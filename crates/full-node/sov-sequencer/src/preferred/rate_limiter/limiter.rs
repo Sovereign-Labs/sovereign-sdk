@@ -25,12 +25,6 @@ pub(crate) struct ResourceUsed<G: Gas> {
 }
 
 impl<G: Gas> ResourceUsed<G> {
-    pub(crate) fn zero() -> Self {
-        Self {
-            inner: Resource::zero(),
-        }
-    }
-
     pub(crate) fn new(
         req_counter: u64,
         tx_size_in_bytes: usize,
@@ -39,11 +33,11 @@ impl<G: Gas> ResourceUsed<G> {
     ) -> Self {
         Self {
             inner: Resource {
-                req_counter,
+                milli_req_counter: req_counter * 1000,
                 // This cast is safe because a single transaction can never use more than u64::MAX bytes.
                 space_in_bytes: tx_size_in_bytes
                     .try_into()
-                    .expect("Alowed transactions size overflows u64::MAX"),
+                    .expect("Allowed transactions size overflows u64::MAX"),
                 execution_time_micros,
                 gas_used,
             },
@@ -65,7 +59,7 @@ impl<G: Gas> RefillRatePerMillis<G> {
     }
 }
 
-/// The total resource usage for a given key (see [`Throttler`] bellow]).
+/// The total resource usage for a given key (see [`Throttler`] bellow).
 #[derive(Debug, Clone, Copy)]
 pub(crate) struct TotalResources<G: Gas> {
     pub(crate) inner: Resource<G>,
@@ -125,18 +119,17 @@ impl<G: Gas> Throttler<G> {
         refill_rate: &RefillRatePerMillis<G>,
     ) -> Result<Self, LimitExceeded<G>> {
         let how_much_to_fill = {
-            let since_last_refil = now
+            let since_last_refill = now
                 .duration_since(self.last_refill)
                 .as_millis()
                 .try_into()
                 .expect("The throttler has not been evicted from the RateLimiter for more than u64::MAX milliseconds. This is a bug");
 
-            refill_rate.mul_by_millis(since_last_refil)
+            refill_rate.mul_by_millis(since_last_refill)
         };
 
         let total_resource_used_after_refill =
             self.total_resource_used.refill_tokens(&how_much_to_fill);
-
         total_resource_used_after_refill.allow(max_allowed_resources)?;
 
         Ok(Throttler {
@@ -151,7 +144,7 @@ impl<G: Gas> Throttler<G> {
         let used = match self.total_resource_used.combine(&resource_used) {
             Some(used) => used,
             None => {
-                // On overflow we issue an error but we won't panic.
+                // On overflow, we issue an error, but we won't panic.
                 tracing::error!(
                     "Throttler for {:?} overflowed: Initial total resource used {:?}, resource increase {:?}",
                     key,
@@ -248,13 +241,12 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
     pub(crate) fn new(
         limiter_type: &'static str,
         max_nb_of_concurrent_users: u64,
-        ttl_in_millis: u64,
+        ttl: Duration,
         default_config: RateLimiterConfig<S>,
         special_configs: HashMap<K, RateLimiterConfig<S>>,
     ) -> Self {
-        let data: Cache<K, Throttler<<S as Spec>::Gas>> = Cache::builder()
-            .time_to_live(Duration::from_millis(ttl_in_millis))
-            .build();
+        let data: Cache<K, Throttler<<S as Spec>::Gas>> =
+            Cache::builder().time_to_live(ttl).build();
 
         Self {
             limiter_type,
@@ -330,6 +322,11 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
     fn get_config(&self, k: &K) -> &RateLimiterConfig<S> {
         self.special_configs.get(k).unwrap_or(&self.default_config)
     }
+
+    #[inline]
+    pub(crate) fn contains_special_config(&self, k: &K) -> bool {
+        self.special_configs.contains_key(k)
+    }
 }
 
 #[cfg(test)]
@@ -345,7 +342,7 @@ mod tests {
     const MAX_REQ_COUNT: u64 = 10_000;
     const MAX_SPACE_IN_BYTES: u64 = 100_0000;
     const MAX_EXECUTION_TIME_MICROS: u64 = 1_000_000;
-    const TTL_IN_MILLIS: u64 = 1_000_000;
+    const TTL: Duration = Duration::from_millis(1_000_000);
     const MAX_NB_OF_CONCURRENT_USERS: u64 = 10_000;
 
     #[test]
@@ -361,7 +358,7 @@ mod tests {
 
         let mut rollup_simulator = Simulator::new(
             MAX_NB_OF_CONCURRENT_USERS,
-            TTL_IN_MILLIS,
+            TTL,
             config,
             resource_used_per_run,
             Default::default(),
@@ -402,7 +399,7 @@ mod tests {
                 .unwrap();
         }
 
-        // New address has fresh rate limiter throtler.
+        // New address has fresh rate limiter throttler.
         let addr_2 = <TestSpec as Spec>::Address::from([2; 28]);
         let now = Instant::now();
         {
@@ -413,12 +410,12 @@ mod tests {
     }
 
     #[test]
-    fn test_rate_limiter_happy_path_sepcial_address() {
+    fn test_rate_limiter_happy_path_special_address() {
         let resource_used_per_run = small_resource_used_per_run();
         let default_config = RateLimiterConfig::<TestSpec> {
             max_allowed_resources: TotalResources {
                 inner: Resource {
-                    req_counter: resource_used_per_run.inner.req_counter + 1,
+                    milli_req_counter: resource_used_per_run.inner.milli_req_counter + 1,
                     space_in_bytes: resource_used_per_run.inner.space_in_bytes + 1,
                     execution_time_micros: resource_used_per_run.inner.execution_time_micros + 1,
                     gas_used: Gas::from([0, 0]),
@@ -440,7 +437,7 @@ mod tests {
 
         let mut rollup_simulator = Simulator::new(
             MAX_NB_OF_CONCURRENT_USERS,
-            TTL_IN_MILLIS,
+            TTL,
             default_config,
             resource_used_per_run,
             special_keys,
@@ -468,7 +465,7 @@ mod tests {
                 .unwrap();
         }
 
-        // After two runs, the standard addr is rate limitied but special_addr has higher limits.
+        // After two runs, the standard addr is rate limited but special_addr has higher limits.
         {
             let expected_rate_limiter_usage = rollup_simulator.resource_used_per_run.mul(3);
             rollup_simulator
@@ -494,7 +491,7 @@ mod tests {
 
         let mut rollup_simulator = Simulator::new(
             MAX_NB_OF_CONCURRENT_USERS,
-            TTL_IN_MILLIS,
+            TTL,
             config,
             resource_used_per_run,
             Default::default(),
@@ -575,7 +572,7 @@ mod tests {
 
         let mut rollup_simulator = Simulator::new(
             MAX_NB_OF_CONCURRENT_USERS,
-            2,
+            Duration::from_millis(2),
             config,
             resource_used_per_run,
             Default::default(),
@@ -612,7 +609,7 @@ mod tests {
 
         let mut rollup_simulator = Simulator::new(
             max_nb_of_concurrent_users,
-            2,
+            std::time::Duration::from_millis(2),
             config,
             resource_used_per_run,
             Default::default(),
@@ -656,7 +653,7 @@ mod tests {
     impl Simulator {
         fn new(
             max_nb_of_concurrent_users: u64,
-            ttl_in_millis: u64,
+            ttl: Duration,
             config: RateLimiterConfig<TestSpec>,
             resource_used_per_run: ResourceUsed<Gas>,
             special_configs: HashMap<<TestSpec as Spec>::Address, RateLimiterConfig<TestSpec>>,
@@ -664,7 +661,7 @@ mod tests {
             let rate_limiter = RateLimiter::new(
                 "by_addr",
                 max_nb_of_concurrent_users,
-                ttl_in_millis,
+                ttl,
                 config,
                 special_configs,
             );
@@ -724,7 +721,7 @@ mod tests {
     fn max_allowed_resources() -> TotalResources<Gas> {
         TotalResources {
             inner: Resource {
-                req_counter: MAX_REQ_COUNT,
+                milli_req_counter: MAX_REQ_COUNT,
                 space_in_bytes: MAX_SPACE_IN_BYTES,
                 execution_time_micros: MAX_EXECUTION_TIME_MICROS,
                 gas_used: Gas::from([0, 0]),
@@ -735,7 +732,7 @@ mod tests {
     fn small_resource_used_per_run() -> ResourceUsed<Gas> {
         ResourceUsed {
             inner: Resource {
-                req_counter: MAX_REQ_COUNT / 100,
+                milli_req_counter: MAX_REQ_COUNT / 100,
                 space_in_bytes: MAX_SPACE_IN_BYTES / 200,
                 execution_time_micros: MAX_EXECUTION_TIME_MICROS / 300,
                 gas_used: Gas::from([0, 0]),
@@ -746,7 +743,7 @@ mod tests {
     fn big_resource_used_per_run() -> ResourceUsed<Gas> {
         ResourceUsed {
             inner: Resource {
-                req_counter: MAX_REQ_COUNT / 2 + 10,
+                milli_req_counter: MAX_REQ_COUNT / 2 + 10,
                 space_in_bytes: MAX_SPACE_IN_BYTES / 3,
                 execution_time_micros: MAX_EXECUTION_TIME_MICROS / 4,
                 gas_used: Gas::from([0, 0]),
@@ -757,7 +754,7 @@ mod tests {
     fn refill_rate() -> RefillRatePerMillis<Gas> {
         RefillRatePerMillis {
             token_resource_per_ms: Resource {
-                req_counter: 2,
+                milli_req_counter: 2,
                 space_in_bytes: 30,
                 execution_time_micros: 400,
                 gas_used: Gas::from([0, 0]),

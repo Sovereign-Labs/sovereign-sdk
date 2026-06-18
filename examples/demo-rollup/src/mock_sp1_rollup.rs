@@ -11,24 +11,24 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
-use sov_modules_api::{CryptoSpec, NodeEndpoints, Spec, ZkVerifier};
+use sov_modules_api::{NodeEndpoints, Spec};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
 use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
 use sov_rollup_full_node_interface::StateUpdateReceiver;
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::SyncStatus;
-use sov_rollup_interface::zk::ZkvmHost;
 use sov_sequencer::{ProofBlobSender, Sequencer};
-use sov_sp1_adapter::host::{SP1AggregationHost, SP1Host};
-use sov_sp1_adapter::{SP1CryptoSpec, SP1};
-use sov_state::nomt::prover_storage::NomtProverStorage;
-use sov_state::{DefaultStorageSpec, Storage};
-use sov_stf_runner::processes::{ParallelProverService, ProverService, RollupProverConfig};
+use sov_sp1_adapter::{SP1MethodId, SP1};
+use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::RollupConfig;
 
 use crate::eth_dev_signer;
 use crate::solana_offchain_endpoint::solana_offchain_router;
+use crate::sp1_helper::{
+    compute_sp1_code_commitments, create_sp1_prover_service, Sp1Hasher, Sp1NativeStorage,
+    Sp1ProverService,
+};
 
 /// Rollup with a [`ConfigurableSpec`] with [`MockDaSpec`] as Da spec, and [`SP1`] for both inner and outer vm
 #[derive(Default, Clone, Copy)]
@@ -36,13 +36,16 @@ pub struct MockSp1DemoRollup<M> {
     phantom: std::marker::PhantomData<M>,
 }
 
-type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;
-type NativeStorage =
-    NomtProverStorage<DefaultStorageSpec<Hasher>, <MockDaSpec as DaSpec>::SlotHash>;
-
 /// The default spec of the rollup
-pub type MockSp1RollupSpec<M> =
-    ConfigurableSpec<MockDaSpec, SP1, SP1, MultiAddressEvmSolana, M, SP1CryptoSpec, NativeStorage>;
+pub type MockSp1RollupSpec<M> = ConfigurableSpec<
+    MockDaSpec,
+    SP1,
+    SP1,
+    MultiAddressEvmSolana,
+    M,
+    sov_sp1_adapter::SP1CryptoSpec,
+    Sp1NativeStorage,
+>;
 
 impl RollupBlueprint<Native> for MockSp1DemoRollup<Native>
 where
@@ -66,28 +69,11 @@ where
 impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
     type DaService = StorableMockDaService;
 
-    type StorageManager = NomtStorageManager<MockDaSpec, Hasher, NativeStorage>;
+    type StorageManager = NomtStorageManager<MockDaSpec, Sp1Hasher, Sp1NativeStorage>;
 
-    type ProverService = ParallelProverService<
-        <Self::Spec as Spec>::Address,
-        <<Self::Spec as Spec>::Storage as Storage>::Root,
-        <<Self::Spec as Spec>::Storage as Storage>::Witness,
-        Self::DaService,
-        <Self::Spec as Spec>::InnerZkvm,
-        <Self::Spec as Spec>::OuterZkvm,
-    >;
+    type ProverService = Sp1ProverService<Self::DaService>;
 
     type ProofSender = SovApiProofSender<Self::Spec>;
-
-    fn create_outer_code_commitment(
-        &self,
-    ) -> <<Self::ProverService as ProverService>::Verifier as ZkVerifier>::CodeCommitment {
-        let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
-        SP1Host::new(agg_elf)
-            .expect("Failed to create SP1Host from aggregation guest ELF")
-            .code_commitment()
-            .expect("SP1 aggregation code commitment should be created successfully")
-    }
 
     async fn create_endpoints(
         &self,
@@ -152,34 +138,10 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         _prover_config: RollupProverConfig,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         _da_service: &Self::DaService,
-    ) -> Self::ProverService {
-        let elf: &[u8] = *sp1::SP1_GUEST_MOCK_ELF;
-
-        // SP1's blocking CPU prover spins up its own tokio runtime during setup,
-        // so it must be constructed off the async executor thread.
-        let inner_vm = tokio::task::spawn_blocking(move || SP1Host::new(elf))
-            .await
-            .expect("SP1Host setup task panicked")
-            .expect("Failed to create SP1Host from guest ELF");
-
-        let inner_verifying_key = inner_vm.verifying_key().clone();
-
-        let agg_elf: &[u8] = *sp1::SP1_GUEST_AGGREGATION_MOCK_ELF;
-        let outer_vm = tokio::task::spawn_blocking(move || {
-            SP1AggregationHost::new(agg_elf, inner_verifying_key)
-                .expect("Failed to create SP1AggregationHost from aggregation guest ELF")
-        })
-        .await
-        .expect("SP1AggregationHost setup task panicked");
-
-        let da_verifier = Default::default();
-
-        ParallelProverService::new_with_default_workers(
-            inner_vm,
-            outer_vm,
-            da_verifier,
-            rollup_config.proof_manager.prover_address,
-        )
+        ledger_db: &LedgerDb,
+        start_fresh_outer_proof_on_resync: bool,
+    ) -> anyhow::Result<(Self::ProverService, Option<SlotNumber>)> {
+        create_sp1_prover_service(rollup_config, ledger_db, start_fresh_outer_proof_on_resync).await
     }
 
     fn create_storage_manager(
@@ -196,5 +158,9 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
         sequence_number_provider: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
         Ok(Self::ProofSender::new(sequence_number_provider))
+    }
+
+    fn compute_code_commitments() -> anyhow::Result<(SP1MethodId, SP1MethodId)> {
+        compute_sp1_code_commitments()
     }
 }

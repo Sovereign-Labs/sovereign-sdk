@@ -34,7 +34,7 @@ const sampleUnsignedTx = {
       },
     },
   },
-  generation: "12345",
+  uniqueness: { generation: "12345" },
   details: {
     max_priority_fee_bips: "1000",
     max_fee: "10000",

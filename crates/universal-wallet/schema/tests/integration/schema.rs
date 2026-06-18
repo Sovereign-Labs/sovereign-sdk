@@ -206,6 +206,46 @@ fn test_enum_with_discriminants_disabled_in_borsh() {
     );
 }
 
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
+#[serde(rename_all = "snake_case")]
+pub enum DelegateCall {
+    DelegateUser,
+    DelegateUserV1,
+    DelegateUserV2 { name: SafeString },
+}
+
+// Pins down a JSON variant-name mismatch between universal-wallet and serde:
+// `convert_case::Case::Snake` renders `DelegateUserV2` as `delegate_user_v_2`,
+// but serde's `rename_all = "snake_case"` renders it as `delegate_user_v2`. The
+// server rejects wallet-emitted JSON with: unknown variant `delegate_user_v_2`,
+// expected ... `delegate_user_v2`.
+#[test]
+fn test_snake_case_variant_with_trailing_digit() {
+    let call = DelegateCall::DelegateUserV2 {
+        name: SafeString::from_str("asdada").unwrap(),
+    };
+    let schema = Schema::of_single_type::<DelegateCall>().unwrap();
+
+    // The wallet schema must accept the literal serde-produced variant name.
+    let serde_name_json = r#"{"delegate_user_v2":{"name":"asdada"}}"#;
+    let borsh_via_serde_name = schema
+        .json_to_borsh(0, serde_name_json)
+        .expect("schema must accept serde's `delegate_user_v2` variant name");
+    assert_eq!(borsh_via_serde_name, borsh::to_vec(&call).unwrap());
+
+    // ...and must NOT accept convert_case's mangled name. This is the case
+    // that previously succeeded due to the bug.
+    let convert_case_name_json = r#"{"delegate_user_v_2":{"name":"asdada"}}"#;
+    assert!(
+        schema.json_to_borsh(0, convert_case_name_json).is_err(),
+        "schema must reject convert_case's `delegate_user_v_2` variant name"
+    );
+
+    // End-to-end round-trip via the serde-produced JSON, plus display rendering.
+    encode_decode_tests!(DelegateCall, call, "DelegateUserV2 { name: \"asdada\" }");
+}
+
 #[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone, BorshSerialize, BorshDeserialize)]
 /// A type which doesn't derive `UniversalWallet` and doesn't have a schema gen implementation
 pub struct NoSchemaU64Wrapper(pub u64);
@@ -1070,6 +1110,56 @@ fn test_struct_with_integer_fixedpoints() {
 
     encode_decode_tests!(StructWithIntegerDisplays, my_struct,
         "{ direct_fp: 0.04, from_field_before: -0.0021, from_field_after: 40, from_field_self: 0.003 }"
+    );
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
+pub struct StructWithOverrideFixedPoint {
+    // Use byte 31 of `id` for decimals, unless `id` equals `[9; 32]`, in which case use 6.
+    #[cfg_attr(
+        test,
+        sov_wallet(fixed_point(from_field(
+            1,
+            offset = 31,
+            override_eq = [9u8; 32],
+            override_decimals = 6u8
+        )))
+    )]
+    amount: u64,
+    #[cfg_attr(test, sov_wallet(hidden))]
+    id: [u8; 32],
+}
+
+#[test]
+fn test_override_fixed_point_uses_constant_when_field_matches() {
+    let my_struct = StructWithOverrideFixedPoint {
+        amount: 123_456_789,
+        id: [9u8; 32],
+    };
+
+    // `id` matches `override_eq`, so the override decimals (6) are used, not byte 31 (= 9).
+    encode_decode_tests!(
+        StructWithOverrideFixedPoint,
+        my_struct,
+        "{ amount: 123.456789 }"
+    );
+}
+
+#[test]
+fn test_override_fixed_point_falls_back_to_byte_when_field_differs() {
+    let mut id = [1u8; 32];
+    id[31] = 4;
+    let my_struct = StructWithOverrideFixedPoint {
+        amount: 1_234_567,
+        id,
+    };
+
+    // `id` does not match `override_eq`, so byte 31 (= 4) is used, not the override's 6.
+    encode_decode_tests!(
+        StructWithOverrideFixedPoint,
+        my_struct,
+        "{ amount: 123.4567 }"
     );
 }
 

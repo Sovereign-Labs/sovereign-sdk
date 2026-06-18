@@ -38,7 +38,7 @@ use sov_test_utils::{
     default_test_signed_transaction, default_test_tx_details, test_signed_transaction, EncodeCall,
     MessageGenerator, RtAgnosticBlueprint, TestPrivateKey, TestSpec, TransactionType,
     TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
-    TEST_MAX_CONCURRENT_BLOBS,
+    TEST_MAX_CONCURRENT_BATCH_BLOBS,
 };
 use sov_value_setter::ValueSetter;
 
@@ -326,7 +326,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
                 preferred_sequencer_config.disable_state_root_consistency_checks = true;
             }
         }
-        c.max_concurrent_blobs = TEST_MAX_CONCURRENT_BLOBS;
+        c.max_concurrent_batch_blobs = TEST_MAX_CONCURRENT_BATCH_BLOBS;
     })
     .set_da_config(|c| c.sender_address = seq_da_address)
     .set_persistent_da()

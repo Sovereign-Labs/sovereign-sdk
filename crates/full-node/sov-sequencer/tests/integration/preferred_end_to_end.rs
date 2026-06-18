@@ -17,7 +17,7 @@ use sov_api_spec::types::{
     self as api_types, ApiError, SequencerListEventsPage, SequencerListEventsResponse,
     TxInfoWithConfirmation, TxReceiptResult,
 };
-use sov_api_spec::{types, Error, ResponseValue, WsSubscription};
+use sov_api_spec::{types, ClientInfo, Error, ResponseValue, WsSubscription};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
@@ -42,7 +42,7 @@ use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConf
 use sov_test_utils::{
     generate_optimistic_runtime_with_kernel, RtAgnosticBlueprint, TestSpec, TestUser,
     TEST_DEFAULT_MOCK_DA_ON_SUBMIT, TEST_FINALIZATION_BLOCKS, TEST_MAX_BATCH_SIZE,
-    TEST_MAX_CONCURRENT_BLOBS, TEST_NORMAL_SHUTDOWN_TIMEOUT,
+    TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_NORMAL_SHUTDOWN_TIMEOUT,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::collections::HashMap;
@@ -768,6 +768,41 @@ async fn txs_below_min_fee_are_rejected() {
     let err_message = error.to_string();
     assert!(
         err_message.contains("This transaction did not pay a sufficient net fee."),
+        "Full error message does not contain expect part: {err_message}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn duplicate_txs_are_rejected() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let client = test_rollup.api_client().clone();
+    let tx = tx_set_value(&admin.private_key, 0, 7);
+    let mut tx_mal = tx.clone();
+    tx_mal.data.push(1);
+    let _ok = client
+        .send_raw_tx_to_sequencer(&tx)
+        .await
+        .expect("Tx must have been accepted");
+
+    let error = client
+        .send_raw_tx_to_sequencer(&tx_mal)
+        .await
+        .expect_err("Tx must have been rejected for trailing bytes");
+    let err_message = error.to_string();
+    assert!(
+        err_message.contains("1 trailing bytes after transaction deserialization"),
         "Full error message does not contain expect part: {err_message}"
     );
 }
@@ -1585,7 +1620,11 @@ async fn test_sequencer_getters() {
     while i < all_events.len() {
         let response = test_rollup
             .api_client()
-            .sequencer_list_events(Some(page), page_cursor.as_deref(), Some(9)) // Use page size 9 because it's relatively prime to our number of events. This should trigger more edge cases
+            .sequencer_list_events(
+                Some(page),
+                page_cursor.as_deref(),
+                Some(std::num::NonZeroU32::new(9).unwrap()),
+            ) // Use page size 9 because it's relatively prime to our number of events. This should trigger more edge cases
             .await
             .unwrap()
             .into_inner();
@@ -2207,7 +2246,7 @@ async fn sequencer_back_pressure() {
 
         let mut bytes_submitted = 0;
         let max_batch_size = TEST_MAX_BATCH_SIZE * 100 / 99;
-        let max_total = max_batch_size * TEST_MAX_CONCURRENT_BLOBS;
+        let max_total = max_batch_size * TEST_MAX_CONCURRENT_BATCH_BLOBS;
         let mut has_hit_backpressure = false;
         while bytes_submitted < max_total {
             let tx = tx_set_value(&admin.private_key, generation, generation + 10);
@@ -2427,10 +2466,12 @@ async fn test_gas_limit_update() {
 
     // 4. Main loop Submit a tx and save the receipt. Then, force close the batch and produce a block.
     for i in 0..20_u64 {
-        // 4.1 Submit a tx and save the receipt.
+        // 4.1 Submit a tx and save the receipt. Use the retrying client so that transient
+        //     `WaitingOnBlobSender` 503s from blob-sender backpressure are retried with backoff
+        //     instead of failing the test outright (one historical Mode-C failure mode).
         let receipt = test_rollup
             .api_client()
-            .send_raw_tx_to_sequencer(&tx_set_value_nonce::<TestRuntime<TestSpec>>(
+            .send_raw_tx_to_sequencer_with_retry(&tx_set_value_nonce::<TestRuntime<TestSpec>>(
                 &admin.private_key,
                 nonce,
                 i,
@@ -2483,14 +2524,49 @@ async fn test_gas_limit_update() {
         }
     }
 
-    // 5. Produce more blocks to ensure the ledger DB finishes populating. Save the ledger DB contents.
-    for _ in 0..10 {
+    // 5. Drain the blob-sender pipeline: produce DA blocks until every sequencer-accepted tx has
+    //    appeared in a slot, or we've produced an unreasonable number of blocks. Under load, the
+    //    `force_close_batch + produce_block` pattern in the loop can produce empty DA blocks while
+    //    the just-closed batch is still on its way to DA, so the tx appears in a later block.
+    //    Observe the base fee along the way too — when previously-pending batches finally land, the
+    //    gas_used in those rollup blocks pushes the base fee above 7, and we may only see that rise
+    //    during the drain (not the main loop).
+    let expected_tx_count = sequencer_receipts.len();
+    let mut drain_blocks = 0u32;
+    while ledger_receipts.len() < expected_tx_count {
         test_rollup.da_service.produce_block_now().await.unwrap();
+        drain_blocks += 1;
         let slot = slot_subscription.next().await.unwrap().unwrap();
         for batch in slot.batches {
             for tx in batch.txs {
                 ledger_receipts.push(tx);
             }
+        }
+        let drain_height = test_rollup.height().await.get();
+        if drain_height > CHANGE_GAS_LIMIT_AFTER_HEIGHT as u64 {
+            let base_fee_per_gas = test_rollup
+                .client
+                .http_get("/rollup/base-fee-per-gas/latest")
+                .await
+                .unwrap();
+            let current_base_fee = base_fee_per_gas
+                .trim()
+                .trim_start_matches(r#"{"base_fee_per_gas":[""#)
+                .split('"')
+                .next()
+                .unwrap()
+                .parse::<u64>()
+                .unwrap_or_else(|_| panic!("Failed to parse base fee per gas: {base_fee_per_gas}"));
+            if current_base_fee > max_base_fee_per_gas_observed_after_update {
+                max_base_fee_per_gas_observed_after_update = current_base_fee;
+            }
+        }
+        if drain_blocks > 60 {
+            panic!(
+                "Produced 60 drain blocks but only collected {} of {} expected txs in the ledger",
+                ledger_receipts.len(),
+                expected_tx_count
+            );
         }
     }
 
@@ -2750,7 +2826,7 @@ async fn test_no_crashes_on_resync_with_transactions() {
     let rollup_storage_path = builder.storage_path();
     // Next, delete everything except the preferred sequencer DB. Resync again to verify that this
     // doesn't interfere.
-    // NOMT uses different directories than JMT:
+    // NOMT persists state in these directories:
     // - user_nomt_db, kernel_nomt_db (NOMT state)
     // - state-db, archival-state-db (FlatStateDb)
     // - accessory, ledger, blob_sender (common to both)

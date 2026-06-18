@@ -189,7 +189,7 @@ impl From<IncludeChildren> for QueryMode {
     bound = "B: Serialize + DeserializeOwned, Tx: TxReceiptContents, E: Serialize + DeserializeOwned"
 )]
 pub struct SlotResponse<B, Tx: TxReceiptContents, E> {
-    /// The rollup height.
+    /// The slot number.
     pub number: u64,
     /// The hex encoded slot hash.
     #[serde(with = "hex_string_serde")]
@@ -225,7 +225,7 @@ pub struct BatchResponse<B, Tx: TxReceiptContents, E> {
     /// The custom receipt specified by the rollup. This typically contains
     /// information about the outcome of the batch.
     pub receipt: B,
-    /// The rollup height this batch belongs to.
+    /// The slot number this batch belongs to.
     pub slot_number: SlotNumber,
 }
 
@@ -264,9 +264,9 @@ pub enum ItemOrHash<T> {
 /// An RPC response for the latest aggregated proof info.
 #[derive(Debug, PartialEq, Eq, Clone, serde::Serialize, serde::Deserialize)]
 pub struct ProofInfoResponse {
-    /// Initial rollup height
+    /// The initial slot number.
     pub initial_slot_number: u64,
-    /// Final rollup height.
+    /// The final slot number.
     pub final_slot_number: u64,
 }
 
@@ -293,10 +293,10 @@ pub trait LedgerStateProvider {
     /// The error type for fallible methods on this trait.
     type Error: std::fmt::Display + Send + Sync + 'static;
 
-    /// Get the latest rollup height in the ledger.
+    /// Get the latest slot number in the ledger.
     async fn get_head_slot_number(&self) -> Result<SlotNumber, Self::Error>;
 
-    /// Get the latest rollup height in the ledger.
+    /// Get the latest finalized slot number in the ledger.
     async fn get_latest_finalized_slot_number(&self) -> Result<SlotNumber, Self::Error>;
 
     /// Get the latest slot in the ledger.
@@ -543,7 +543,7 @@ pub trait LedgerStateProvider {
         T: TxReceiptContents,
         E: for<'a> TryFrom<(u64, &'a StoredEvent), Error = anyhow::Error> + Send + Sync;
 
-    /// Resolve a [`SlotIdentifier`] into a rollup height.
+    /// Resolve a [`SlotIdentifier`] into a slot number.
     async fn resolve_slot_identifier(
         &self,
         slot_id: &SlotIdentifier,

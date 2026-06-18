@@ -177,6 +177,7 @@ mod tests {
     use crate::accessory_db::AccessoryDb;
     use crate::pruner::Pruner;
     use crate::schema::tables::ModuleAccessoryState;
+    use crate::schema::types::slot_key::SlotValue;
 
     #[test]
     fn test_pruner() {
@@ -204,11 +205,11 @@ mod tests {
         // Version 0: C=0, D=0, E=0, F=0, G=0
         let data_0 = AccessoryDb::materialize_values(
             vec![
-                (b"C".to_vec(), Some(vec![0])),
-                (b"D".to_vec(), Some(vec![0])),
-                (b"E".to_vec(), Some(vec![0])),
-                (b"F".to_vec(), Some(vec![0])),
-                (b"G".to_vec(), Some(vec![0])),
+                (b"C".to_vec(), Some(SlotValue::from(vec![0]))),
+                (b"D".to_vec(), Some(SlotValue::from(vec![0]))),
+                (b"E".to_vec(), Some(SlotValue::from(vec![0]))),
+                (b"F".to_vec(), Some(SlotValue::from(vec![0]))),
+                (b"G".to_vec(), Some(SlotValue::from(vec![0]))),
             ],
             SlotNumber::new(0),
         )
@@ -218,9 +219,9 @@ mod tests {
         // Version 1: C=1, E=1, F=1
         let data_1 = AccessoryDb::materialize_values(
             vec![
-                (b"C".to_vec(), Some(vec![1])),
-                (b"E".to_vec(), Some(vec![1])),
-                (b"F".to_vec(), Some(vec![1])),
+                (b"C".to_vec(), Some(SlotValue::from(vec![1]))),
+                (b"E".to_vec(), Some(SlotValue::from(vec![1]))),
+                (b"F".to_vec(), Some(SlotValue::from(vec![1]))),
             ],
             SlotNumber::new(1),
         )
@@ -230,9 +231,9 @@ mod tests {
         // Version 2: C=2, E=2, F=2
         let data_2 = AccessoryDb::materialize_values(
             vec![
-                (b"C".to_vec(), Some(vec![2])),
-                (b"E".to_vec(), Some(vec![2])),
-                (b"F".to_vec(), Some(vec![2])),
+                (b"C".to_vec(), Some(SlotValue::from(vec![2]))),
+                (b"E".to_vec(), Some(SlotValue::from(vec![2]))),
+                (b"F".to_vec(), Some(SlotValue::from(vec![2]))),
             ],
             SlotNumber::new(2),
         )
@@ -242,9 +243,9 @@ mod tests {
         // Version 3: C=3, D=1, F=3
         let data_3 = AccessoryDb::materialize_values(
             vec![
-                (b"C".to_vec(), Some(vec![3])),
-                (b"D".to_vec(), Some(vec![1])),
-                (b"F".to_vec(), Some(vec![3])),
+                (b"C".to_vec(), Some(SlotValue::from(vec![3]))),
+                (b"D".to_vec(), Some(SlotValue::from(vec![1]))),
+                (b"F".to_vec(), Some(SlotValue::from(vec![3]))),
             ],
             SlotNumber::new(3),
         )
@@ -253,7 +254,7 @@ mod tests {
 
         // Version 4: C=4
         let data_4 = AccessoryDb::materialize_values(
-            vec![(b"C".to_vec(), Some(vec![4]))],
+            vec![(b"C".to_vec(), Some(SlotValue::from(vec![4])))],
             SlotNumber::new(4),
         )
         .unwrap();
@@ -261,7 +262,7 @@ mod tests {
 
         // Version 5: C=5
         let data_5 = AccessoryDb::materialize_values(
-            vec![(b"C".to_vec(), Some(vec![5]))],
+            vec![(b"C".to_vec(), Some(SlotValue::from(vec![5])))],
             SlotNumber::new(5),
         )
         .unwrap();
@@ -270,9 +271,9 @@ mod tests {
         // Version 6: A=0, C=6, D=2
         let data_6 = AccessoryDb::materialize_values(
             vec![
-                (b"A".to_vec(), Some(vec![0])),
-                (b"C".to_vec(), Some(vec![6])),
-                (b"D".to_vec(), Some(vec![2])),
+                (b"A".to_vec(), Some(SlotValue::from(vec![0]))),
+                (b"C".to_vec(), Some(SlotValue::from(vec![6]))),
+                (b"D".to_vec(), Some(SlotValue::from(vec![2]))),
             ],
             SlotNumber::new(6),
         )
@@ -282,10 +283,10 @@ mod tests {
         // Version 7: A=1, B=0, C=7, G=1
         let data_7 = AccessoryDb::materialize_values(
             vec![
-                (b"A".to_vec(), Some(vec![1])),
-                (b"B".to_vec(), Some(vec![0])),
-                (b"C".to_vec(), Some(vec![7])),
-                (b"G".to_vec(), Some(vec![1])),
+                (b"A".to_vec(), Some(SlotValue::from(vec![1]))),
+                (b"B".to_vec(), Some(SlotValue::from(vec![0]))),
+                (b"C".to_vec(), Some(SlotValue::from(vec![7]))),
+                (b"G".to_vec(), Some(SlotValue::from(vec![1]))),
             ],
             SlotNumber::new(7),
         )
@@ -295,10 +296,10 @@ mod tests {
         // Version 8: A=2, B=1, C=8, G=2
         let data_8 = AccessoryDb::materialize_values(
             vec![
-                (b"A".to_vec(), Some(vec![2])),
-                (b"B".to_vec(), Some(vec![1])),
-                (b"C".to_vec(), Some(vec![8])),
-                (b"G".to_vec(), Some(vec![2])),
+                (b"A".to_vec(), Some(SlotValue::from(vec![2]))),
+                (b"B".to_vec(), Some(SlotValue::from(vec![1]))),
+                (b"C".to_vec(), Some(SlotValue::from(vec![8]))),
+                (b"G".to_vec(), Some(SlotValue::from(vec![2]))),
             ],
             SlotNumber::new(8),
         )
@@ -308,11 +309,11 @@ mod tests {
         // Version 9: A=3, B=2, C=9, D=3, G=3
         let data_9 = AccessoryDb::materialize_values(
             vec![
-                (b"A".to_vec(), Some(vec![3])),
-                (b"B".to_vec(), Some(vec![2])),
-                (b"C".to_vec(), Some(vec![9])),
-                (b"D".to_vec(), Some(vec![3])),
-                (b"G".to_vec(), Some(vec![3])),
+                (b"A".to_vec(), Some(SlotValue::from(vec![3]))),
+                (b"B".to_vec(), Some(SlotValue::from(vec![2]))),
+                (b"C".to_vec(), Some(SlotValue::from(vec![9]))),
+                (b"D".to_vec(), Some(SlotValue::from(vec![3]))),
+                (b"G".to_vec(), Some(SlotValue::from(vec![3]))),
             ],
             SlotNumber::new(9),
         )

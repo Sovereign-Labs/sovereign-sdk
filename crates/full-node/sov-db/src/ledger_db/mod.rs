@@ -40,7 +40,7 @@ pub(crate) const DB_LOCK_POISONED: &str = "Internal db lock is poisoned";
 #[derive(Default, Clone, Debug)]
 #[cfg_attr(feature = "arbitrary", derive(proptest_derive::Arbitrary))]
 pub struct ItemNumbers {
-    /// The rollup height
+    /// The slot number
     pub slot_number: SlotNumber,
     /// The batch number
     pub batch_number: u64,
@@ -260,8 +260,6 @@ pub struct LedgerDb {
 
 // Db key for the latest height of the written STF info.
 const WRITE_ROLLUP_HEIGHT_ID: StfInfoUniqueId = StfInfoUniqueId(0);
-// DB key for the latest height of the retrieved STF info.
-const NEXT_SLOT_NUMBER_TO_RECEIVE_ID: StfInfoUniqueId = StfInfoUniqueId(1);
 // Db key for the oldest saved STF info.
 const LAST_SLOT_NUMBER_ID: StfInfoUniqueId = StfInfoUniqueId(2);
 
@@ -633,7 +631,7 @@ impl LedgerDb {
         Ok(schema_batch)
     }
 
-    /// Get [`StoredStfInfo`] for the given rollup height.
+    /// Get [`StoredStfInfo`] for the given slot number.
     pub fn get_stf_info(&self, slot_num: SlotNumber) -> anyhow::Result<Option<StoredStfInfo>> {
         let db = self.db.read().expect(DB_LOCK_POISONED).clone();
         db.get::<StfInfoByNumber>(&slot_num)
@@ -653,25 +651,6 @@ impl LedgerDb {
     pub async fn get_stf_info_write_slot_number(&self) -> anyhow::Result<Option<SlotNumber>> {
         let db = self.db.read().expect(DB_LOCK_POISONED).clone();
         db.get_async::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID)
-            .await
-    }
-
-    /// Materializes the latest height of the retrieved STF info.
-    pub fn materialize_stf_info_next_slot_number_to_receive(
-        &self,
-        read_slot_number: SlotNumber,
-    ) -> anyhow::Result<SchemaBatch> {
-        let mut schema_batch = SchemaBatch::new();
-        schema_batch.put::<StfInfoMetadata>(&NEXT_SLOT_NUMBER_TO_RECEIVE_ID, &read_slot_number)?;
-        Ok(schema_batch)
-    }
-
-    /// Gets the latest height of the submitted STF info.
-    pub async fn get_stf_info_next_slot_number_to_receive(
-        &self,
-    ) -> anyhow::Result<Option<SlotNumber>> {
-        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
-        db.get_async::<StfInfoMetadata>(&NEXT_SLOT_NUMBER_TO_RECEIVE_ID)
             .await
     }
 

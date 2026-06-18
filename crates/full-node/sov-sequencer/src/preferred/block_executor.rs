@@ -9,7 +9,7 @@ use borsh::BorshDeserialize;
 use sov_blob_storage::PreferredProofData;
 use sov_modules_api::capabilities::{
     get_maybe_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState,
-    FatalError, RollupHeight, TransactionAuthenticator,
+    FatalError, HasCapabilities, RollupHeight, SequencingDataHandler, TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
@@ -22,7 +22,6 @@ use sov_modules_api::{CryptoSpec, HDTimestamp};
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rest_utils::{json_obj, ErrorObject};
 use sov_rollup_full_node_interface::StateUpdateInfo;
-use sov_state::pinned_cache::PinnedCache;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};
 use tokio::sync::broadcast;
@@ -193,7 +192,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
-        pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
         Self::new_helper(
             info,
@@ -201,7 +199,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             rollup_exec_config,
             seq_config,
             uncommitted_changes,
-            pinned_cache,
         )
     }
 
@@ -211,7 +208,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
-        pinned_cache: Option<PinnedCache>,
     ) -> RollupBlockExecutor<S, Rt> {
         Self::new_helper(
             info,
@@ -219,7 +215,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             rollup_exec_config,
             seq_config,
             uncommitted_changes,
-            pinned_cache,
         )
     }
 
@@ -229,10 +224,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         rollup_exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         uncommitted_changes: SequencerStateChanges<Hasher<S>>,
-        pinned_cache: Option<PinnedCache>,
     ) -> Self {
         let mut rt = Rt::default();
-        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel(), pinned_cache);
+        let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
 
         let RollupBlockExecutorConfig {
             da_address,
@@ -309,8 +303,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
 
         match result {
-            Ok((receipt, remaining_slot_gas, execution_time_micros, tx_changes)) => {
-                let accepted_tx = self.process_tx_receipt(&receipt, timestamp);
+            Ok((receipt, tx, remaining_slot_gas, execution_time_micros, tx_changes)) => {
+                let accepted_tx = self.process_tx_receipt(receipt, tx, timestamp);
                 if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
                     writer.insert(accepted_tx.clone()).await;
                 }
@@ -331,7 +325,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         &mut self,
         baked_tx: FullyBakedTxWithMaybeChangeSet,
     ) -> Result<
-        (TransactionReceipt<S>, <S as Spec>::Gas, u64, TxChangeSet),
+        (
+            TransactionReceipt<S>,
+            FullyBakedTx,
+            <S as Spec>::Gas,
+            u64,
+            TxChangeSet,
+        ),
         RollupBlockExecutorErrorWithBudget<S>,
     > {
         let Some(task_state) = self.rollup_block_task_state.as_mut() else {
@@ -372,9 +372,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         } = result;
 
         let ExecutedTxResponse {
-            receipt,
+            mut receipt,
             tx_changes,
             remaining_slot_gas,
+            sequencing_scratchpad,
         } = inner_result.map_err(|reason| RollupBlockExecutorErrorWithBudget {
             execution_time_micros,
             gas_used,
@@ -392,10 +393,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             });
         }
 
+        let mut tx = receipt
+            .body_to_save
+            .take()
+            .expect("Transaction receipts contain bodies when using sov-modules-stf-blueprint");
+        Self::finalize_tx_sequencing_data(&mut tx, sequencing_scratchpad);
+
         self.checkpoint.apply_tx_changes(tx_changes.clone());
 
         Ok((
             receipt,
+            tx,
             remaining_slot_gas,
             execution_time_micros,
             tx_changes,
@@ -602,7 +610,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             let ctx = RollupBlockTaskContext {
                 checkpoint: self
                     .checkpoint
-                    .clone_with_empty_witness_dropping_temp_cache_but_taking_pinned_cache(), // Pass the pinned cache through to the actual executor
+                    .clone_with_empty_witness_dropping_temp_cache(),
                 tx_receiver,
                 setup_sender,
                 old_visible_slot_number,
@@ -645,12 +653,18 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     fn process_tx_receipt(
         &mut self,
-        tx_receipt: &TransactionReceipt<S>,
+        tx_receipt: TransactionReceipt<S>,
+        tx: FullyBakedTx,
         timestamp: Option<HDTimestamp>,
     ) -> AcceptedTx<Confirmation<S, Rt>> {
+        let TransactionReceipt {
+            tx_hash,
+            body_to_save: _,
+            events,
+            receipt,
+        } = tx_receipt;
         let tx_number = self.next_tx_number;
-        let events = tx_receipt
-            .events
+        let events = events
             .iter()
             .zip(self.next_event_number..)
             .map(|(event, number)| {
@@ -664,18 +678,33 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.next_event_number += events.len() as u64;
         self.next_tx_number += 1;
         AcceptedTx {
-            tx: tx_receipt
-                .body_to_save
-                .clone()
-                .expect("Transaction receipts contain bodies when using sov-modules-stf-blueprint"),
-            tx_hash: tx_receipt.tx_hash,
+            tx,
+            tx_hash,
             confirmation: Confirmation {
                 events,
-                receipt: tx_receipt.receipt.clone().into(),
+                receipt: receipt.into(),
                 tx_number,
                 timestamp_nanos: timestamp,
             },
         }
+    }
+
+    fn finalize_tx_sequencing_data(
+        tx: &mut FullyBakedTx,
+        scratchpad: Option<sov_rollup_interface::Bytes>,
+    ) {
+        let Some(data) = tx.sequencing_data.as_ref() else {
+            return;
+        };
+        let Ok(decoded) = <Rt as HasCapabilities<S>>::SequencingData::try_from_slice(data) else {
+            tracing::warn!("Failed to deserialize sequencing data while finalizing transaction");
+            return;
+        };
+
+        let mut runtime = Rt::default();
+        let mut handler = runtime.sequencing_data_handler();
+        let finalized = handler.finalize_sequencing_data(decoded, scratchpad);
+        tx.set_sequencing_metadata(&finalized);
     }
 
     fn update_kernel_with_user_state_root(&mut self) {
@@ -777,7 +806,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         trace!("Ending rollup block");
 
         let rollup_height = self.checkpoint.rollup_height_to_access();
-        let (batch_receipts, mut new_checkpoint) = self
+        let (batch_receipts, new_checkpoint) = self
             .rollup_block_task_state
             .take()
             .expect("No in-progress rollup block, nothing to do. This is a bug, please report it")
@@ -792,8 +821,11 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             if batch_receipt.inner.da_address == self.da_address {
                 continue;
             }
-            for tx_receipt in batch_receipt.tx_receipts {
-                let accepted_tx = self.process_tx_receipt(&tx_receipt, None);
+            for mut tx_receipt in batch_receipt.tx_receipts {
+                let tx = tx_receipt.body_to_save.take().expect(
+                    "Transaction receipts contain bodies when using sov-modules-stf-blueprint",
+                );
+                let accepted_tx = self.process_tx_receipt(tx_receipt, tx, None);
                 forced_txs.push(accepted_tx);
             }
         }
@@ -809,8 +841,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             "Sending state root computation request to background task");
         let (response_channel, response_receiver) = oneshot::channel();
         self.state_root_responses.push_back(response_receiver);
-        // TODO: Combine these methods into one
-        let pinned_cache = new_checkpoint.take_pinned_cache();
         let changes = Arc::new(new_checkpoint.to_raw_state_changes());
 
         if self
@@ -836,7 +866,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             self.checkpoint.storage().clone(),
             &Rt::default().kernel(),
             Box::new(self.uncommitted_changes.clone()),
-            pinned_cache,
         );
 
         trace!(%rollup_height, "Successfully ended rollup block");

@@ -153,13 +153,14 @@ fn create_test_rt_genesis_config<S: Spec>(
             minimum_attester_bond: user_stake,
             minimum_challenger_bond: user_stake,
             initial_attesters: vec![(admin, user_stake.value(S::initial_base_fee_per_gas()))],
-            rollup_finality_period: SlotNumber::new_dangerous(TEST_ROLLUP_FINALITY_PERIOD),
+            rollup_finality_period: SlotNumber::new(TEST_ROLLUP_FINALITY_PERIOD),
             maximum_attested_height: TEST_MAX_ATTESTED_HEIGHT,
             light_client_finalized_height: TEST_LIGHT_CLIENT_FINALIZED_HEIGHT,
         },
         prover_incentives: ProverIncentivesConfig {
             minimum_bond: user_stake,
             proving_penalty: { user_stake.scalar_division(2) },
+            admin: Some(prover_placeholder.address()),
             initial_provers: vec![(prover_placeholder.address(), prover_placeholder.balance())],
         },
         bank: BankConfig {

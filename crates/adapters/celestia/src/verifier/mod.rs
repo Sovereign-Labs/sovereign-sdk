@@ -442,6 +442,20 @@ fn authenticate_blob_data(
     // Failure means a bug.
     debug_assert!(signer_checked, "Bug. Signer checking has been skipped");
     let sequence_length = sequence_length.expect("sequence length should be set by this point");
+
+    // `total_len()` is read from the untrusted witness and is never otherwise checked against
+    // the DA shares (only the accumulator *content* is authenticated, as a prefix). Pin it to
+    // the sequence length proven from the first share so downstream consumers in the STF (the
+    // size limits, deserialization gas charge, and the malformed-blob slash check in
+    // sov-blob-storage) cannot be fed a forged length.
+    let claimed_total_len = blob.blob.total_len();
+    if claimed_total_len != sequence_length as usize {
+        return Err(InvalidBlobData(BlobDataError::MismatchedBlobLength {
+            expected: sequence_length as usize,
+            actual: claimed_total_len,
+        }));
+    }
+
     let shares_occupied_total =
         shares_needed_for_bytes_with_signer(sequence_length as usize, has_signer);
     Ok(shares_occupied_total)

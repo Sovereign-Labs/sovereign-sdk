@@ -1,11 +1,9 @@
-mod network;
 mod parallel;
 
 use std::fmt::Debug;
 
 use async_trait::async_trait;
 use borsh::BorshSerialize;
-pub use network::NetworkProverService;
 pub use parallel::ParallelProverService;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
@@ -136,7 +134,6 @@ pub trait ProverService: Send + Sync + 'static {
     async fn create_aggregated_proof(
         &self,
         block_headers: &[<<Self::DaService as DaService>::Spec as DaSpec>::BlockHeader],
-        genesis_state_root: &Self::StateRoot,
     ) -> anyhow::Result<ProofAggregationStatus>;
 }
 

@@ -16,7 +16,6 @@ pub use sov_blob_storage::BlobStorage;
 use sov_blob_storage::PreferredBatchData;
 pub use sov_capabilities::StandardProvenRollupCapabilities;
 pub use sov_chain_state::{ChainState, ChainStateConfig};
-use sov_db::storage_manager::NativeChangeSet;
 pub use sov_kernels::basic::BasicKernel;
 pub use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 use sov_mock_da::{MockAddress, MockBlob, MockBlockHeader, MockDaSpec};
@@ -179,6 +178,9 @@ pub struct TestRunner<
     checkpoint_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
     /// The corresponding receiving end of the channel.
     checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
+    /// Held for the runner's lifetime so REST API handlers only observe shutdown
+    /// when the runner is dropped.
+    shutdown_sender: watch::Sender<()>,
     axum_server: axum_server::Handle<std::net::SocketAddr>,
     /// Test runner configuration.
     pub config: RunnerConfig<S::Da>,
@@ -198,7 +200,7 @@ pub struct RunnerOutput<S: Spec> {
     /// The slot receipt emitted at the end of the slot execution
     pub receipt: SlotReceipt<S>,
     /// The change set containing the delta of the state after the slot execution
-    pub change_set: NativeChangeSet,
+    pub change_set: <<S as Spec>::Storage as Storage>::ChangeSet,
     /// The root of the state after the slot execution
     pub root: <<S as Spec>::Storage as Storage>::Root,
 }
@@ -347,7 +349,7 @@ where
         let mut runtime = RT::default();
         let kernel = runtime.kernel();
 
-        let mut state_checkpoint = StateCheckpoint::<S>::new(stf_state.clone(), &kernel, None);
+        let mut state_checkpoint = StateCheckpoint::<S>::new(stf_state.clone(), &kernel);
         let base_fee_per_gas = RT::default()
             .chain_state()
             .base_fee_per_gas(&mut state_checkpoint).expect("Impossible to get the base fee per gas for the current slot. This is a bug. Please report it");
@@ -370,7 +372,7 @@ where
         let mut runtime = RT::default();
         let kernel = runtime.kernel();
 
-        let mut state_checkpoint = StateCheckpoint::<S>::new(stf_state.clone(), &kernel, None);
+        let mut state_checkpoint = StateCheckpoint::<S>::new(stf_state.clone(), &kernel);
         let base_fee_per_gas = RT::default()
             .chain_state()
             .base_fee_per_gas(&mut state_checkpoint).expect("Impossible to get the base fee per gas for the current slot. This is a bug. Please report it");
@@ -433,7 +435,7 @@ where
 
         let mut runtime = RT::default();
 
-        let mut state = StateCheckpoint::<S>::new(stf_state.clone(), &runtime.kernel(), None);
+        let mut state = StateCheckpoint::<S>::new(stf_state.clone(), &runtime.kernel());
 
         let mut kernel_state = runtime.kernel().accessor(&mut state);
 
@@ -464,7 +466,7 @@ where
     fn synchronize_storage_channel(&mut self) {
         let storage = self.storage_manager.create_prover_storage();
         self.checkpoint_sender
-            .send(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(StateCheckpoint::new(storage, &RT::default().kernel(), None))))
+            .send(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(StateCheckpoint::new(storage, &RT::default().kernel()))))
             .expect("Failed to send storage, the storage channel is closed. This is a bug. Please report it.");
     }
 
@@ -488,7 +490,7 @@ where
 
         let (sender, receiver) =
             watch::channel(Arc::new(ConcurrentStateCheckpoint::from_state_checkpoint(
-                StateCheckpoint::new(stf_state.clone(), &RT::default().kernel(), None),
+                StateCheckpoint::new(stf_state.clone(), &RT::default().kernel()),
             )));
 
         let (state_root, change_set) =
@@ -513,6 +515,7 @@ where
             axum_server: Default::default(),
             checkpoint_sender: sender,
             checkpoint_receiver: receiver,
+            shutdown_sender: watch::channel(()).0,
             config,
         };
 
@@ -900,6 +903,7 @@ where
             self.checkpoint_receiver.clone(),
             self.runtime().kernel_with_slot_mapping(),
             None,
+            self.shutdown_sender.subscribe(),
         );
 
         let router = self.runtime().rest_api(state);

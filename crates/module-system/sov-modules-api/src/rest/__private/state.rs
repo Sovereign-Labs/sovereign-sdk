@@ -11,7 +11,9 @@
 //!    state items are marked with `include`. See
 //!    [`StateItemRestApiExists`].se std::marker::PhantomData;
 
+use axum::response::Response;
 use sov_state::Prefix;
+use std::collections::HashMap;
 use std::convert::Infallible;
 use std::fmt::Display;
 use std::marker::PhantomData;
@@ -23,7 +25,10 @@ use serde::Serialize;
 use sov_rest_utils::errors::not_found_404;
 use sov_rest_utils::{ApiResult, ErrorObject, Path, Query};
 use sov_rollup_interface::common::SlotNumber;
-use sov_state::{CompileTimeNamespace, Kernel, Namespace, StateCodec, StateItemCodec};
+use sov_state::{
+    CompileTimeNamespace, Kernel, Namespace, NativeStorage, SlotKey, StateCodec, StateItemCodec,
+    StateItemDecoder,
+};
 use unwrap_infallible::UnwrapInfallible;
 
 use super::types::StateItemContents;
@@ -32,7 +37,7 @@ use crate::map::NamespacedStateMap;
 use crate::rest::{json_obj, StatusCode};
 use crate::value::NamespacedStateValue;
 use crate::vec::NamespacedStateVec;
-use crate::{ApiStateAccessor, ModuleInfo, StateReader, VersionedStateValue};
+use crate::{ApiStateAccessor, ModuleInfo, Spec, StateReader, VersionedStateValue};
 
 #[derive(Debug, Clone, Serialize)]
 #[serde(rename_all = "snake_case")]
@@ -77,6 +82,51 @@ where
                     "error": e.to_string(),
                 }),
             })
+    }
+}
+
+struct StateMapItemsQuery {
+    pagination: sov_rest_utils::Pagination<String>,
+    historical_height_requested: bool,
+}
+
+impl<S> FromRequestParts<S> for StateMapItemsQuery
+where
+    S: Send + Sync,
+{
+    type Rejection = ErrorObject;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        if parts.uri.query().is_none() {
+            return Ok(Self {
+                pagination: Default::default(),
+                historical_height_requested: false,
+            });
+        }
+
+        let query_params = Query::<HashMap<String, String>>::try_from_uri(&parts.uri)?.0;
+        let historical_height_requested =
+            query_params.contains_key("rollup_height") || query_params.contains_key("slot_number");
+        if historical_height_requested {
+            Query::<HeightParam>::try_from_uri(&parts.uri)?;
+        }
+
+        let pagination = if query_params.contains_key("page")
+            || query_params.contains_key("page[size]")
+            || query_params.contains_key("page[cursor]")
+        {
+            Query::<sov_rest_utils::Pagination<String>>::try_from_uri(&parts.uri)?.0
+        } else {
+            Default::default()
+        };
+
+        Ok(Self {
+            pagination,
+            historical_height_requested,
+        })
     }
 }
 
@@ -252,6 +302,117 @@ where
     }
 }
 
+impl<N, M, K, V, Codec> StateItemRestApiImpl<M, NamespacedStateMap<N, K, V, Codec>>
+where
+    N: CompileTimeNamespace,
+    M: ModuleSendSync,
+    <M::Spec as Spec>::Storage: NativeStorage,
+    ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
+    K: Serialize + serde::de::DeserializeOwned + FromStr + Display + Clone,
+    V: Serialize,
+    Codec: StateCodec,
+    Codec::KeyCodec: StateItemCodec<K>,
+    Codec::ValueCodec: StateItemCodec<V>,
+{
+    async fn get_state_map_items_route(
+        State(state): State<Self>,
+        query: StateMapItemsQuery,
+    ) -> ApiResult<sov_rest_utils::PaginatedResponse<StateItemContents<K, V>, String>> {
+        if query.historical_height_requested {
+            return Err(sov_rest_utils::errors::not_implemented_501());
+        }
+
+        let pagination = query.pagination;
+        let prefix = Prefix::new(
+            state.module_discriminant,
+            state.state_item_info.item_discriminant,
+        );
+        let state_map = NamespacedStateMap::<N, K, V, Codec>::with_codec(prefix, Codec::default());
+        let slot_prefix = SlotKey::singleton(&prefix);
+        let accessor = state
+            .api_state
+            .build_api_state_accessor(None)
+            .map_err(|e| {
+                sov_rest_utils::errors::internal_server_error_response_500(format!(
+                    "Failed to build current state accessor: {e}"
+                ))
+            })?;
+
+        let page_size = pagination
+            .size
+            .try_into()
+            .expect("u32 can always be converted to usize");
+        let cursor_key = match &pagination.selection {
+            sov_rest_utils::PageSelection::First => None,
+            sov_rest_utils::PageSelection::Next { cursor } => {
+                let key = K::from_str(cursor).map_err(|_| {
+                    sov_rest_utils::errors::bad_request_400(
+                        "Invalid cursor",
+                        "cursor must be a valid key",
+                    )
+                })?;
+                Some(state_map.slot_key(&key))
+            }
+            sov_rest_utils::PageSelection::Last => {
+                return Err(sov_rest_utils::errors::bad_request_400(
+                    "Unsupported pagination",
+                    "page=last is not supported for map iteration",
+                ));
+            }
+        };
+
+        // Load the next `limit` entries from state
+        let entries = accessor
+            .current_values_with_prefix(N::NAMESPACE, &slot_prefix, cursor_key.clone(), page_size)
+            .map_err(|e| {
+                sov_rest_utils::errors::internal_server_error_response_500(format!(
+                    "Failed to iterate map: {e}"
+                ))
+            })?;
+        let entries = entries.ok_or_else(sov_rest_utils::errors::not_implemented_501)?;
+        let should_paginate = entries.len() > page_size;
+
+        // Decode into k/v pairs
+        let items = entries
+            .into_iter()
+            .take(page_size)
+            .map(|(slot_key, slot_value)| {
+                let key_bytes = slot_key.without_prefix();
+                let key: K = state_map
+                    .codec()
+                    .key_codec()
+                    .try_decode(key_bytes)
+                    .map_err(|_| {
+                        sov_rest_utils::errors::internal_server_error_response_500(
+                            "Failed to decode map key",
+                        )
+                    })?;
+
+                let value: V = state_map
+                    .codec()
+                    .value_codec()
+                    .try_decode(slot_value.value())
+                    .map_err(|_| {
+                        sov_rest_utils::errors::internal_server_error_response_500(
+                            "Failed to decode map value",
+                        )
+                    })?;
+
+                Ok(StateItemContents::MapElement { key, value })
+            })
+            .collect::<Result<Vec<_>, Response>>()?;
+
+        let next_cursor = if should_paginate {
+            items
+                .last()
+                .and_then(|item| item.key().map(|key| key.to_string()))
+        } else {
+            None
+        };
+        Ok(sov_rest_utils::PaginatedResponse { items, next_cursor }.into())
+    }
+}
+
 impl<M, V, Codec> StateItemRestApiImpl<M, VersionedStateValue<V, Codec>>
 where
     M: ModuleSendSync,
@@ -281,6 +442,7 @@ impl<N, M, K, V, Codec> StateItemRestApi
 where
     N: CompileTimeNamespace,
     M: ModuleSendSync,
+    <M::Spec as Spec>::Storage: NativeStorage,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Display + FromStr + Serialize + serde::de::DeserializeOwned + Clone + Send + Sync + 'static,
     V: Serialize + Clone + Send + Sync + 'static,
@@ -291,6 +453,7 @@ where
     fn state_item_rest_api(&self) -> axum::Router<()> {
         axum::Router::new()
             .route("/", get(Self::get_state_map_route))
+            .route("/items", get(Self::get_state_map_items_route))
             .route("/items/{key}", get(Self::get_state_map_item_route))
             .with_state(self.clone())
     }

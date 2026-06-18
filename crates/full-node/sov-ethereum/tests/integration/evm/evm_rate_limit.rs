@@ -22,8 +22,9 @@ const X_FORWARDED_FOR: &str = "123.123.123.123";
 fn make_client_with_x_forwarded_for_header(http_addr: SocketAddr, priv_key: &str) -> DynProvider {
     let mut headers = HeaderMap::new();
     headers.insert("x-forwarded-for", HeaderValue::from_static(X_FORWARDED_FOR));
-    let client_builder =
-        |builder: reqwest::ClientBuilder| builder.default_headers(headers).build().unwrap();
+    let client_builder = |builder: alloy::transports::http::reqwest::ClientBuilder| {
+        builder.default_headers(headers).build().unwrap()
+    };
     alloy_client_with_reqwest(http_addr, client_builder, priv_key)
 }
 

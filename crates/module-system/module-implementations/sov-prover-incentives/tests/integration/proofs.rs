@@ -141,7 +141,7 @@ fn test_valid_proof_penalized_if_reward_already_claimed() {
         input: ProofInput(serialize_proof(aggregated_proof)),
         assert: Box::new(move |result, state| {
             match result.proof_receipt.clone().unwrap().outcome {
-                ProofOutcome::Invalid(InvalidProofError::ProverPenalized(_)) => {}
+                ProofOutcome::Invalid(InvalidProofError::ProverPenalized(_), _) => {}
                 _ => panic!("Expected prover to be penalized"),
             }
 

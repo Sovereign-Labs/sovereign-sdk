@@ -132,7 +132,15 @@ where
 pub struct Coins {
     /// The number of tokens
     #[sov_wallet(template("transfer" = input("amount")))]
-    #[sov_wallet(fixed_point(from_field(1, offset = 31)))]
+    // Decimals are normally encoded in the last byte of the token id. The gas token is the
+    // exception: its id is a fixed constant whose last byte does not encode its decimals, so when
+    // the token id is the gas token id we use the `GAS_TOKEN_DECIMALS` constant instead.
+    #[sov_wallet(fixed_point(from_field(
+        1,
+        offset = 31,
+        override_eq = *crate::config_gas_token_id().as_bytes(),
+        override_decimals = crate::config_gas_token_decimals()
+    )))]
     pub amount: Amount,
     /// The ID of the token
     #[sov_wallet(template("transfer" = input("token_id")))]

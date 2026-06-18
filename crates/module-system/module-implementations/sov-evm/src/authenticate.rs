@@ -36,7 +36,10 @@ use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATUR
 static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<Address>> =
     std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
-impl<S: Spec> Evm<S> {
+impl<S: Spec, P> Evm<S, P>
+where
+    P: crate::precompiles::EvmPrecompileSet<S>,
+{
     /// Validates the user's max fee per gas against the rollup's base fee and returns a gas multiplier.
     ///
     /// The max fee check is only enforced when:

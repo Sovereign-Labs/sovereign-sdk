@@ -42,11 +42,11 @@ impl CredentialId {
 }
 
 impl schemars::JsonSchema for CredentialId {
-    fn schema_name() -> String {
-        "CredentialId".to_string()
+    fn schema_name() -> std::borrow::Cow<'static, str> {
+        "CredentialId".into()
     }
 
-    fn json_schema(gen: &mut schemars::gen::SchemaGenerator) -> schemars::schema::Schema {
+    fn json_schema(gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         HexHash::json_schema(gen)
     }
 }
@@ -97,13 +97,13 @@ mod tests {
     }
 
     #[allow(clippy::result_large_err)]
-    fn validate_schema<T>(item: &T) -> Result<(), jsonschema::error::ValidationErrorKind>
+    fn validate_schema<T>(item: &T) -> Result<(), jsonschema::error::ValidationError<'static>>
     where
         T: schemars::JsonSchema + serde::Serialize,
     {
         let schema = serde_json::to_value(schemars::schema_for!(T)).unwrap();
         let json = serde_json::to_value(item).unwrap();
 
-        jsonschema::validate(&schema, &json).map_err(|e| e.kind)
+        jsonschema::validate(&schema, &json).map_err(|e| e.to_owned())
     }
 }

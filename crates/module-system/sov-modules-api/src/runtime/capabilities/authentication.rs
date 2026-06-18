@@ -472,6 +472,17 @@ pub fn authenticate<
             }
         };
 
+    // Verify that the transaction is fully deserialized
+    if !raw_tx.is_empty() {
+        return Err(AuthenticationError::FatalError(
+            FatalError::DeserializationFailed(format!(
+                "{} trailing bytes after transaction deserialization",
+                raw_tx.len()
+            )),
+            raw_tx_hash,
+        ));
+    }
+
     verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
 }
 

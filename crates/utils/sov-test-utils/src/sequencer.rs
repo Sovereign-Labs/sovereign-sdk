@@ -7,7 +7,7 @@ use crate::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use crate::runtime::{GenesisConfig, TestOptimisticRuntime};
 use crate::{
     TestHasher, TestPrivateKey, TestSlotHash, TestSpec, TestStfBlueprint, TestStorageManager,
-    TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BLOBS,
+    TEST_MAX_BATCH_SIZE, TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MAX_CONCURRENT_PROOF_BLOBS,
 };
 use sov_api_spec::Client;
 use sov_db::config::RollupDbConfig;
@@ -153,7 +153,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             dropped_tx_ttl_secs: 0,
             sequencer_kind_config: sequencer_config,
             max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
-            max_concurrent_blobs: TEST_MAX_CONCURRENT_BLOBS,
+            max_concurrent_batch_blobs: TEST_MAX_CONCURRENT_BATCH_BLOBS,
             blob_processing_timeout_secs: 60,
             extension: None,
         };
@@ -164,6 +164,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             da_sync_state,
             dir.path(),
             &config,
+            TEST_MAX_CONCURRENT_PROOF_BLOBS,
             ledger_db,
             api_ledger_db,
             shutdown_sender.clone(),
@@ -257,7 +258,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
         .await
     }
 
-    /// Creates a new [`TestSequencerSetup`]. Instantiates a new [`TestOptimisticRuntime`], [`NativeStorageManager`], executes genesis
+    /// Creates a new [`TestSequencerSetup`]. Instantiates a new [`TestOptimisticRuntime`], executes genesis
     /// and then builds a new [`StdSequencer`]. Instantiates an Axum server in a separate thread.
     pub async fn with_real_sequencer() -> anyhow::Result<Self> {
         Self::with_real_sequencer_and_mempool_max_txs_count(NonZero::new(usize::MAX).unwrap()).await

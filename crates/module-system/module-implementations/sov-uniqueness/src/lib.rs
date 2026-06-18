@@ -3,6 +3,7 @@
 mod capabilities;
 mod generations;
 mod nonces;
+mod window;
 use std::collections::{BTreeMap, HashSet};
 
 use sov_modules_api::{
@@ -10,6 +11,8 @@ use sov_modules_api::{
     NotInstantiable, Spec, StateMap, StateReader, TxHash, TxState,
 };
 use sov_state::User;
+
+pub use crate::window::Window;
 
 /// A module responsible for managing transaction deduplication for the rollup.
 /// Deduplication is done in two ways:
@@ -33,6 +36,10 @@ pub struct Uniqueness<S: Spec> {
     /// Mapping from a credential id to a nonce.
     #[state]
     pub(crate) nonces: StateMap<CredentialId, u64>,
+
+    /// Mapping from a credential id to a window of seen nonces.
+    #[state]
+    pub(crate) window: StateMap<CredentialId, Window>,
 
     #[phantom]
     phantom: std::marker::PhantomData<S>,
@@ -92,6 +99,18 @@ impl<S: Spec> Uniqueness<S> {
             .nonces
             .get(credential_id, state)
             .map(|maybe_nonce| maybe_nonce.unwrap_or_default())?)
+    }
+
+    /// Retrieves the nonce window for a given credential id.
+    ///
+    /// # Errors
+    /// May return an error if state access fails (e.g if we run out of gas).
+    pub fn window<Reader: StateReader<User>>(
+        &self,
+        credential_id: &CredentialId,
+        state: &mut Reader,
+    ) -> Result<Option<Window>, Reader::Error> {
+        self.window.get(credential_id, state)
     }
 }
 

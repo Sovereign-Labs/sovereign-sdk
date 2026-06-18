@@ -18,48 +18,129 @@ switcheroo = "run --manifest-path scripts/switcheroo/Cargo.toml --"
 
 [profile.dev.package.sov-sp1-adapter]
 opt-level = 2
+
+# SP1 v6 packages
 [profile.dev.package.sp1-sdk]
 opt-level = 2
 [profile.dev.package.sp1-prover]
 opt-level = 2
-[profile.dev.package.sp1-core]
+[profile.dev.package.sp1-prover-types]
 opt-level = 2
-[profile.dev.package.sp1-recursion-program]
+[profile.dev.package.sp1-core-executor]
 opt-level = 2
-[profile.dev.package.sp1-recursion-compiler]
+[profile.dev.package.sp1-core-executor-runner]
 opt-level = 2
-[profile.dev.package.sp1-recursion-derive]
+[profile.dev.package.sp1-core-machine]
 opt-level = 2
-[profile.dev.package.sp1-recursion-gnark-ffi]
+[profile.dev.package.sp1-curves]
 opt-level = 2
-[profile.dev.package.sp1-recursion-core]
+[profile.dev.package.sp1-derive]
+opt-level = 2
+[profile.dev.package.sp1-hypercube]
+opt-level = 2
+[profile.dev.package.sp1-jit]
+opt-level = 2
+[profile.dev.package.sp1-primitives]
 opt-level = 2
 [profile.dev.package.sp1-recursion-circuit]
 opt-level = 2
+[profile.dev.package.sp1-recursion-compiler]
+opt-level = 2
+[profile.dev.package.sp1-recursion-executor]
+opt-level = 2
+[profile.dev.package.sp1-recursion-gnark-ffi]
+opt-level = 2
+[profile.dev.package.sp1-recursion-machine]
+opt-level = 2
+[profile.dev.package.sp1-verifier]
+opt-level = 2
+
+# SLOP packages (SP1's commitment / proving framework, replacing legacy sp1-recursion-* layers)
+[profile.dev.package.slop-air]
+opt-level = 2
+[profile.dev.package.slop-algebra]
+opt-level = 2
+[profile.dev.package.slop-alloc]
+opt-level = 2
+[profile.dev.package.slop-baby-bear]
+opt-level = 2
+[profile.dev.package.slop-basefold]
+opt-level = 2
+[profile.dev.package.slop-basefold-prover]
+opt-level = 2
+[profile.dev.package.slop-bn254]
+opt-level = 2
+[profile.dev.package.slop-challenger]
+opt-level = 2
+[profile.dev.package.slop-commit]
+opt-level = 2
+[profile.dev.package.slop-dft]
+opt-level = 2
+[profile.dev.package.slop-fri]
+opt-level = 2
+[profile.dev.package.slop-futures]
+opt-level = 2
+[profile.dev.package.slop-jagged]
+opt-level = 2
+[profile.dev.package.slop-keccak-air]
+opt-level = 2
+[profile.dev.package.slop-koala-bear]
+opt-level = 2
+[profile.dev.package.slop-matrix]
+opt-level = 2
+[profile.dev.package.slop-maybe-rayon]
+opt-level = 2
+[profile.dev.package.slop-merkle-tree]
+opt-level = 2
+[profile.dev.package.slop-multilinear]
+opt-level = 2
+[profile.dev.package.slop-poseidon2]
+opt-level = 2
+[profile.dev.package.slop-primitives]
+opt-level = 2
+[profile.dev.package.slop-stacked]
+opt-level = 2
+[profile.dev.package.slop-sumcheck]
+opt-level = 2
+[profile.dev.package.slop-symmetric]
+opt-level = 2
+[profile.dev.package.slop-tensor]
+opt-level = 2
+[profile.dev.package.slop-uni-stark]
+opt-level = 2
+[profile.dev.package.slop-utils]
+opt-level = 2
+[profile.dev.package.slop-whir]
+opt-level = 2
+
 # Plonky3 packages
 [profile.dev.package.p3-air]
 opt-level = 2
-[profile.dev.package.p3-field]
-opt-level = 2
-[profile.dev.package.p3-commit]
-opt-level = 2
-[profile.dev.package.p3-matrix]
-opt-level = 2
 [profile.dev.package.p3-baby-bear]
 opt-level = 2
-[profile.dev.package.p3-util]
+[profile.dev.package.p3-bn254-fr]
 opt-level = 2
 [profile.dev.package.p3-challenger]
 opt-level = 2
+[profile.dev.package.p3-commit]
+opt-level = 2
 [profile.dev.package.p3-dft]
+opt-level = 2
+[profile.dev.package.p3-field]
 opt-level = 2
 [profile.dev.package.p3-fri]
 opt-level = 2
-[profile.dev.package.p3-keccak]
+[profile.dev.package.p3-interpolation]
 opt-level = 2
 [profile.dev.package.p3-keccak-air]
 opt-level = 2
-[profile.dev.package.p3-blake3]
+[profile.dev.package.p3-koala-bear]
+opt-level = 2
+[profile.dev.package.p3-matrix]
+opt-level = 2
+[profile.dev.package.p3-maybe-rayon]
+opt-level = 2
+[profile.dev.package.p3-mds]
 opt-level = 2
 [profile.dev.package.p3-merkle-tree]
 opt-level = 2
@@ -69,7 +150,5 @@ opt-level = 2
 opt-level = 2
 [profile.dev.package.p3-uni-stark]
 opt-level = 2
-[profile.dev.package.p3-maybe-rayon]
-opt-level = 2
-[profile.dev.package.p3-bn254-fr]
+[profile.dev.package.p3-util]
 opt-level = 2

@@ -7,8 +7,10 @@ use sov_stf_runner::processes::{
     ProverServiceError,
 };
 
-use super::{make_header, make_transition_info, wait_for_aggregated_proof, Address, StateRoot};
-use crate::helpers::genesis_state_root;
+use super::{
+    make_chained_headers, make_header, make_transition_info, wait_for_aggregated_proof, Address,
+    StateRoot,
+};
 
 struct TestProver {
     prover_service:
@@ -44,26 +46,22 @@ async fn test_successful_prover_execution() -> Result<(), ProverServiceError> {
         ..
     } = make_new_prover();
 
-    let header = make_header(MockHash::from([0; 32]), 1);
+    let header = make_header(MockHash::from([0; 32]), 0);
     prover_service
         .prove(make_transition_info(header.clone()))
         .await?;
 
     inner_vm.make_proof();
 
-    let status = wait_for_aggregated_proof(
-        std::slice::from_ref(&header),
-        &genesis_state_root(),
-        &prover_service,
-    )
-    .await
-    .unwrap();
+    let status = wait_for_aggregated_proof(std::slice::from_ref(&header), &prover_service)
+        .await
+        .unwrap();
 
     assert!(matches!(status, ProofAggregationStatus::Success(_)));
 
     // The proof has already been sent, and the prover_service no longer has a reference to it.
     let err = prover_service
-        .create_aggregated_proof(&[header], &genesis_state_root().0)
+        .create_aggregated_proof(&[header])
         .await
         .unwrap_err();
 
@@ -84,11 +82,9 @@ async fn test_prover_status_busy() -> anyhow::Result<()> {
         ..
     } = make_new_prover();
 
-    let genesis_state_root = genesis_state_root();
-
-    let headers: Vec<_> = (1..num_worker_threads + 1)
-        .map(|height| make_header(MockHash::from([height as u8; 32]), height as u64))
-        .collect();
+    // Headers must form a DA hash chain so consecutive single-header
+    // aggregations satisfy the circuit's cross-aggregation continuity check.
+    let headers = make_chained_headers(num_worker_threads);
 
     // Saturate the prover.
     for header in &headers {
@@ -101,7 +97,7 @@ async fn test_prover_status_busy() -> anyhow::Result<()> {
         ));
 
         let proof_submission_status = prover_service
-            .create_aggregated_proof(std::slice::from_ref(header), &genesis_state_root.0)
+            .create_aggregated_proof(std::slice::from_ref(header))
             .await?;
 
         assert_eq!(
@@ -124,7 +120,7 @@ async fn test_prover_status_busy() -> anyhow::Result<()> {
         ));
 
         let err = prover_service
-            .create_aggregated_proof(&[header], &genesis_state_root.0)
+            .create_aggregated_proof(&[header])
             .await
             .unwrap_err();
 
@@ -140,13 +136,9 @@ async fn test_prover_status_busy() -> anyhow::Result<()> {
     }
 
     for header in &headers {
-        let status = wait_for_aggregated_proof(
-            std::slice::from_ref(header),
-            &genesis_state_root,
-            &prover_service,
-        )
-        .await
-        .unwrap();
+        let status = wait_for_aggregated_proof(std::slice::from_ref(header), &prover_service)
+            .await
+            .unwrap();
         assert!(matches!(status, ProofAggregationStatus::Success(_)));
     }
 
@@ -202,11 +194,7 @@ async fn test_aggregated_proof() -> Result<(), ProverServiceError> {
         ..
     } = make_new_prover();
 
-    let headers: Vec<_> = (0..total_nb_of_blocks)
-        .map(|height| make_header(MockHash::from([height as u8; 32]), height as u64))
-        .collect();
-
-    let genesis_state_root = genesis_state_root();
+    let headers: Vec<_> = make_chained_headers(total_nb_of_blocks);
 
     // Prove blocks form 0 to jump, where the number of submitted witnesses is equal to end_block.
     {
@@ -214,10 +202,9 @@ async fn test_aggregated_proof() -> Result<(), ProverServiceError> {
             prover_service.prove(make_transition_info(header)).await?;
         }
 
-        let status =
-            wait_for_aggregated_proof(&headers[0..jump], &genesis_state_root, &prover_service)
-                .await
-                .unwrap();
+        let status = wait_for_aggregated_proof(&headers[0..jump], &prover_service)
+            .await
+            .unwrap();
         // Waiting for the proof.
         assert!(matches!(
             status,
@@ -229,22 +216,20 @@ async fn test_aggregated_proof() -> Result<(), ProverServiceError> {
             inner_vm.make_proof();
         }
 
-        let status =
-            wait_for_aggregated_proof(&headers[0..jump], &genesis_state_root, &prover_service)
-                .await
-                .unwrap();
+        let status = wait_for_aggregated_proof(&headers[0..jump], &prover_service)
+            .await
+            .unwrap();
 
         match status {
             ProofAggregationStatus::Success(proof) => {
-                let public_data = <MockZkVerifier as ZkVerifier>::verify::<
-                    AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
-                >(
-                    proof.raw_aggregated_proof.as_ref(),
-                    &MockCodeCommitment::default(),
-                )
-                .unwrap();
-                assert_eq!(public_data.initial_slot_number.get(), 0);
-                assert_eq!(public_data.final_slot_number.get(), (jump - 1) as u64);
+                let serialized_proof = proof.to_serialized_zk_proof();
+                let public_data =
+                    <MockZkVerifier as ZkVerifier>::verify_with_proof::<
+                        AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
+                    >(&serialized_proof, &MockCodeCommitment::default())
+                    .unwrap();
+                assert_eq!(public_data.initial_slot_number.get(), 1);
+                assert_eq!(public_data.final_slot_number.get(), jump as u64);
             }
             ProofAggregationStatus::ProofGenerationInProgress => panic!("Prover should succeed"),
         }
@@ -257,27 +242,22 @@ async fn test_aggregated_proof() -> Result<(), ProverServiceError> {
             inner_vm.make_proof();
         }
 
-        let status = wait_for_aggregated_proof(
-            &headers[jump..total_nb_of_blocks],
-            &genesis_state_root,
-            &prover_service,
-        )
-        .await
-        .unwrap();
+        let status = wait_for_aggregated_proof(&headers[jump..total_nb_of_blocks], &prover_service)
+            .await
+            .unwrap();
 
         match status {
             ProofAggregationStatus::Success(proof) => {
-                let public_data = <MockZkVerifier as ZkVerifier>::verify::<
-                    AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
-                >(
-                    proof.raw_aggregated_proof.as_ref(),
-                    &MockCodeCommitment::default(),
-                )
-                .unwrap();
-                assert_eq!(public_data.initial_slot_number.get() as usize, jump);
+                let serialized_proof = proof.to_serialized_zk_proof();
+                let public_data =
+                    <MockZkVerifier as ZkVerifier>::verify_with_proof::<
+                        AggregatedProofPublicData<Address, MockDaSpec, StateRoot>,
+                    >(&serialized_proof, &MockCodeCommitment::default())
+                    .unwrap();
+                assert_eq!(public_data.initial_slot_number.get() as usize, jump + 1);
                 assert_eq!(
                     public_data.final_slot_number.get() as usize,
-                    total_nb_of_blocks - 1
+                    total_nb_of_blocks
                 );
             }
             ProofAggregationStatus::ProofGenerationInProgress => panic!("Proves should succeed"),

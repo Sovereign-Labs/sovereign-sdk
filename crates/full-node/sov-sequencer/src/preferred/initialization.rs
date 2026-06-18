@@ -24,6 +24,7 @@ where
 {
     da: Da,
     config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+    max_concurrent_proof_blobs: usize,
     _phantom: PhantomData<(S, Rt)>,
 }
 
@@ -37,10 +38,12 @@ where
     pub fn new(
         da: Da,
         config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
+        max_concurrent_proof_blobs: usize,
     ) -> Self {
         Self {
             da,
             config,
+            max_concurrent_proof_blobs,
             _phantom: PhantomData,
         }
     }
@@ -80,7 +83,10 @@ where
 
         let tx_status_manager = TxStatusManager::default();
 
-        let (api_state, checkpoint_sender) = Self::api_state(latest_state_update.storage.clone());
+        let (api_state, checkpoint_sender) = Self::api_state(
+            latest_state_update.storage.clone(),
+            shutdown_sender.subscribe(),
+        );
 
         let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
 
@@ -95,6 +101,7 @@ where
         let (next_sequence_number, db_cache) = db.initial_data().await?;
         let mut handles = vec![];
 
+        let approximate_block_time = self.da.get_approximate_block_time().await; // Load the block time before moving the DA service to the blob sender
         let (blob_sender, blob_sender_handle) = PreferredBlobSender::new(
             self.da,
             ledger_db.clone(),
@@ -107,6 +114,20 @@ where
             seq_role,
         )
         .await?;
+
+        if let Some(blob_sender_sequence_number) =
+            blob_sender.highest_sequence_number_to_send_after_restart()?
+        {
+            if blob_sender_sequence_number >= next_sequence_number {
+                let _ = shutdown_sender.send(());
+                let preferred_db_highest_sequence_number = next_sequence_number
+                    .checked_sub(1)
+                    .map_or_else(|| "none".to_owned(), |seq| seq.to_string());
+                anyhow::bail!(
+                    "Node state is inconsistent, aborting startup: BlobSender DB contains a higher blob sequence number than the Preferred Sequencer DB. BlobSender has blobs up to {blob_sender_sequence_number}, but the preferred sequencer only has blobs up to {preferred_db_highest_sequence_number}. This could mean the preferred sequencer DB was wiped; this is not supported, but to proceed, the BlobSender DB must also be deleted in the rollup state directory. Otherwise, this as a bug, please report it."
+                );
+            }
+        }
 
         if let Some(blob_sender_handle) = blob_sender_handle {
             handles.push(blob_sender_handle);
@@ -128,7 +149,8 @@ where
         let (executor_events_sender, executor_events_receiver) =
             ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
 
-        let in_flight_blobs = blob_sender.nb_of_in_flight_blobs();
+        let in_flight_batch_blobs = blob_sender.nb_of_in_flight_batch_blobs();
+        let in_flight_proof_blobs = blob_sender.nb_of_in_flight_proof_blobs();
 
         let (forced_tx_batch_notifier, _) = broadcast::channel(1);
         let rollup_exec_config = RollupBlockExecutorConfig {
@@ -164,16 +186,19 @@ where
             tx_queue_id.clone(),
             batch_execution_time_limit_micros,
             config.clone(),
+            self.max_concurrent_proof_blobs,
             shutdown_receiver.clone(),
             shutdown_sender.clone(),
             executor_events_sender,
             next_sequence_number,
-            in_flight_blobs,
+            in_flight_batch_blobs,
+            in_flight_proof_blobs,
             stop_at_rollup_height,
             rollup_exec_config.clone(),
             cached_txs.write_handle(),
             cache_warm_up_executor,
             start_replica_task_notifier,
+            approximate_block_time,
         );
 
         let test_only_state_update_notification_receiver = synchronized_state
@@ -288,7 +313,7 @@ where
     ) -> anyhow::Result<()> {
         let mut runtime: Rt = Default::default();
         let mut checkpoint =
-            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel(), None);
+            StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel());
         let registry_preferred = runtime
             .sequencer_remuneration()
             .preferred_sequencer(&mut checkpoint);
@@ -313,6 +338,7 @@ where
 
     fn api_state(
         storage: S::Storage,
+        shutdown_receiver: watch::Receiver<()>,
     ) -> (
         ApiState<S>,
         watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
@@ -322,7 +348,7 @@ where
             accepts_preferred_batches(runtime.blob_selector()),
             "Attempting to use preferred sequencer with an incompatible rollup. Set your sequencer config to `standard` in your rollup's config.toml file or change your kernel to be compatible with soft confirmations."
         );
-        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel(), None);
+        let checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
         // Preferred sequencer deliberately treats the latest available slot as finalized
         // when initializing API state (soft-confirmation semantics).
         let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
@@ -333,6 +359,7 @@ where
             checkpoint_receiver,
             runtime.kernel_with_slot_mapping(),
             None,
+            shutdown_receiver,
         );
         (api_state, checkpoint_sender)
     }

@@ -1,16 +1,17 @@
 use sov_metrics::StateAccessMetric;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::execution_mode;
+use sov_state::nomt::zk_storage::NomtVerifierStorage;
 use sov_state::{
     AccessSize, ArrayWitness, BorshCodec, IsValueCached, Namespace, OrderedReadsAndWrites, Prefix,
-    StateAccesses, Storage, ZkStorage,
+    StateAccesses, Storage,
 };
-use sov_test_utils::storage::SimpleJmtStorageManager;
+use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::{validate_and_materialize, MockDaSpec, TestStorageSpec};
 
 use super::seal::UniversalStateAccessor;
 use crate::capabilities::mocks::MockKernel;
-use crate::{Spec, StateCheckpoint, StateValue};
+use crate::{KernelStateValue, Spec, StateCheckpoint, StateValue};
 
 type Native =
     crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, execution_mode::Native>;
@@ -22,14 +23,23 @@ const PRE_SET_VAL_ID_2: u8 = 1;
 const VAL_ID_1: u8 = 2;
 const NAMESPACE: Namespace = Namespace::User;
 
+fn kernel_marker_write() -> (sov_state::SlotKey, Option<sov_state::SlotValue>) {
+    let state_value = KernelStateValue::<u64>::with_codec(Prefix::new(255, 0), BorshCodec);
+    (state_value.slot_key(), Some(state_value.slot_value(&0)))
+}
+
+fn write_kernel_marker<S: Spec>(state: &mut StateCheckpoint<S>) {
+    let mut state_value = KernelStateValue::<u64>::with_codec(Prefix::new(255, 0), BorshCodec);
+    state_value.set(&0, state).unwrap();
+}
+
 fn create_storage_manager(
     initial_values: Vec<(Vec<u8>, u64)>,
 ) -> (
-    SimpleJmtStorageManager<TestStorageSpec>,
+    SimpleStorageManager<TestStorageSpec>,
     <<Native as Spec>::Storage as Storage>::Root,
-) /*ProverStorage<DefaultStorageSpec<sha2::Sha256>>*/
-{
-    let mut storage_manager = SimpleJmtStorageManager::new();
+) {
+    let mut storage_manager = SimpleStorageManager::new();
     let storage = storage_manager.create_storage();
 
     let (root, genesis_change_set) = validate_and_materialize(
@@ -46,12 +56,15 @@ fn create_storage_manager(
                     })
                     .collect(),
             },
-            kernel: Default::default(),
+            kernel: OrderedReadsAndWrites {
+                ordered_reads: Default::default(),
+                ordered_writes: vec![kernel_marker_write()],
+            },
         },
         &ArrayWitness::default(),
         <Native as Spec>::Storage::PRE_GENESIS_ROOT,
     )
-    .expect("Native jmt validation should succeed");
+    .expect("Native validation should succeed");
     storage_manager.commit(genesis_change_set);
     (storage_manager, root)
 }
@@ -66,28 +79,25 @@ fn test_witness_generation() {
         ]);
         let storage = manager.create_storage();
 
-        let mut state =
-            StateCheckpoint::new(storage.clone(), &MockKernel::<Native>::default(), None);
+        let mut state = StateCheckpoint::new(storage.clone(), &MockKernel::<Native>::default());
 
         test_values(&mut state);
+        write_kernel_marker(&mut state);
         let (cache_log, _, witness) = state.freeze();
 
         let _ = validate_and_materialize(storage, cache_log, &witness, root)
-            .expect("Native jmt validation should succeed");
+            .expect("Native validation should succeed");
         (witness, root)
     };
 
     // Run the test with Zk storage and consume the witness.
     {
-        let storage = ZkStorage::new();
-        let mut state = StateCheckpoint::with_witness(
-            storage.clone(),
-            witness,
-            &MockKernel::<Zk>::default(),
-            None,
-        );
+        let storage = NomtVerifierStorage::new();
+        let mut state =
+            StateCheckpoint::with_witness(storage.clone(), witness, &MockKernel::<Zk>::default());
 
         test_values(&mut state);
+        write_kernel_marker(&mut state);
 
         let (cache_log, _, witness) = state.freeze();
 
@@ -179,8 +189,7 @@ fn test_discard_tx_cache() {
 
     // Not discarded values are present after the freeze.
     {
-        let mut state =
-            StateCheckpoint::new(storage.clone(), &MockKernel::<Native>::default(), None);
+        let mut state = StateCheckpoint::new(storage.clone(), &MockKernel::<Native>::default());
 
         let _ = state_value_to_read.get(&mut state).unwrap();
         state_value_to_set.set(&99, &mut state).unwrap();
@@ -195,8 +204,7 @@ fn test_discard_tx_cache() {
 
     // Discarded values are empty after the freeze.
     {
-        let mut state =
-            StateCheckpoint::new(storage.clone(), &MockKernel::<Native>::default(), None);
+        let mut state = StateCheckpoint::new(storage.clone(), &MockKernel::<Native>::default());
         let _ = state_value_to_read.get(&mut state).unwrap();
         state_value_to_set.set(&99, &mut state).unwrap();
 

@@ -1,5 +1,6 @@
 use super::metrics::{RateLimiterCapacityMetrics, RateLimiterDirection};
 use super::Warp;
+use sov_modules_api::prelude::UnwrapInfallible as _;
 use sov_modules_api::{BlockHooks, Spec, StateCheckpoint, VersionReader as _};
 
 impl<S: Spec> BlockHooks for Warp<S> {
@@ -12,45 +13,62 @@ impl<S: Spec> BlockHooks for Warp<S> {
 
 impl<S: Spec> Warp<S> {
     fn emit_rate_limiter_metrics(&self, state: &mut StateCheckpoint<S>) {
-        let route_ids = self.get_monitored_route_ids();
+        let monitored_routes = self.get_monitored_routes();
         let visible_slot = state.current_visible_slot_number();
 
-        for route_id in route_ids {
-            if let Ok(Some(route)) = self.warp_routes.get(route_id, state) {
-                let route_id = *route_id;
+        for monitored_route in monitored_routes {
+            let Some(route) = self
+                .warp_routes
+                .get(&monitored_route.id, state)
+                .unwrap_infallible()
+            else {
+                tracing::debug!(
+                    route_id = %monitored_route.id,
+                    route_name = %monitored_route.name,
+                    "Monitored warp route not found; skipping rate limiter metrics",
+                );
+                continue;
+            };
 
-                for &remote_domain in &route.enrolled_destinations {
-                    let inbound_metrics = RateLimiterCapacityMetrics {
-                        max_capacity: route.inbound_rate_limiter.max_limit(),
-                        current_capacity: route
-                            .inbound_rate_limiter
-                            .current_limit_with_replenishment(visible_slot),
-                        replenishment_per_slot: route
-                            .inbound_rate_limiter
-                            .limit_replenishment_per_slot(),
-                        direction: RateLimiterDirection::Inbound,
-                        route_id,
-                        remote_domain,
-                    };
+            let route_id = monitored_route.id;
+            let route_name = &monitored_route.name;
+            let decimals = route.token_source.local_decimals();
 
-                    let outbound_metrics = RateLimiterCapacityMetrics {
-                        max_capacity: route.outbound_rate_limiter.max_limit(),
-                        current_capacity: route
-                            .outbound_rate_limiter
-                            .current_limit_with_replenishment(visible_slot),
-                        replenishment_per_slot: route
-                            .outbound_rate_limiter
-                            .limit_replenishment_per_slot(),
-                        direction: RateLimiterDirection::Outbound,
-                        route_id,
-                        remote_domain,
-                    };
+            for &remote_domain in &route.enrolled_destinations {
+                let inbound_metrics = RateLimiterCapacityMetrics {
+                    max_capacity: route.inbound_rate_limiter.max_limit(),
+                    current_capacity: route
+                        .inbound_rate_limiter
+                        .current_limit_with_replenishment(visible_slot),
+                    replenishment_per_slot: route
+                        .inbound_rate_limiter
+                        .limit_replenishment_per_slot(),
+                    direction: RateLimiterDirection::Inbound,
+                    route_id,
+                    remote_domain,
+                    route_name: route_name.clone(),
+                    decimals,
+                };
 
-                    sov_metrics::track_metrics(|tracker| {
-                        tracker.submit(inbound_metrics);
-                        tracker.submit(outbound_metrics);
-                    });
-                }
+                let outbound_metrics = RateLimiterCapacityMetrics {
+                    max_capacity: route.outbound_rate_limiter.max_limit(),
+                    current_capacity: route
+                        .outbound_rate_limiter
+                        .current_limit_with_replenishment(visible_slot),
+                    replenishment_per_slot: route
+                        .outbound_rate_limiter
+                        .limit_replenishment_per_slot(),
+                    direction: RateLimiterDirection::Outbound,
+                    route_id,
+                    remote_domain,
+                    route_name: route_name.clone(),
+                    decimals,
+                };
+
+                sov_metrics::track_metrics(|tracker| {
+                    tracker.submit(inbound_metrics);
+                    tracker.submit(outbound_metrics);
+                });
             }
         }
     }

@@ -8,12 +8,13 @@ use axum::middleware::Next;
 use axum::response::IntoResponse;
 use axum::serve::ListenerExt;
 use axum::ServiceExt;
+use jsonrpsee::server::middleware::rpc::RpcServiceBuilder;
 use jsonrpsee::server::{
-    stop_channel, ServerBuilder, ServerConfig, ServerHandle, StopHandle, TowerService,
+    stop_channel, Methods, ServerBuilder, ServerConfig, ServerHandle, StopHandle, TowerService,
 };
 use jsonrpsee::types::{ErrorCode, ErrorObject};
 use jsonrpsee::RpcModule;
-use sov_metrics::{track_metrics, HttpMetrics};
+use sov_metrics::{track_metrics, HttpMetrics, RpcAggregationConfig, RpcStatsAggregator};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
@@ -22,8 +23,10 @@ use tokio::task::JoinHandle;
 use tower::BoxError;
 use tower_http::cors::CorsLayer;
 use tower_http::normalize_path::NormalizePathLayer;
-use tower_layer::{Identity, Layer};
+use tower_layer::{Identity, Layer, Stack};
 mod id_provider;
+mod rpc_metrics;
+use rpc_metrics::RpcMetricsLayer;
 use sov_rest_utils::get_client_ip;
 use sov_rest_utils::GetIPResult;
 
@@ -75,15 +78,34 @@ where
     }
 }
 
+pub struct HttpServerStart {
+    pub http_server_handle: JoinHandle<anyhow::Result<()>>,
+    pub rpc_metrics_flush_handle: JoinHandle<anyhow::Result<()>>,
+}
+
+/// Starts the HTTP server and the RPC metrics flush task, returning both
+/// join handles so callers can observe either task's termination.
 pub(crate) async fn start_http_server(
     axum_listener: TcpListener,
     router: axum::Router<()>,
     methods: RpcModule<()>,
     mut shutdown_receiver: watch::Receiver<()>,
     cors_configuration: CorsConfiguration,
-) -> anyhow::Result<JoinHandle<anyhow::Result<()>>> {
+    rpc_aggregation: RpcAggregationConfig,
+) -> anyhow::Result<HttpServerStart> {
     let rest_address = axum_listener.local_addr()?;
-    let (rpc_router, server_handle) = rpc_module_to_router(methods, cors_configuration);
+    let (rpc_router, server_handle, aggregator) =
+        rpc_module_to_router(methods, cors_configuration, rpc_aggregation);
+
+    // Drives the aggregator until the RPC server has fully stopped; the final
+    // flush then captures calls that completed during graceful shutdown.
+    let server_stopped = server_handle.clone();
+    let flush_handle = tokio::spawn(async move {
+        aggregator
+            .run_flush_loop(async move { server_stopped.stopped().await })
+            .await;
+        anyhow::Ok(())
+    });
 
     let handle = tokio::spawn(async move {
         tracing::info!(%rest_address, "Starting HTTP server");
@@ -119,22 +141,53 @@ pub(crate) async fn start_http_server(
 
         result
     });
-    Ok(handle)
+    Ok(HttpServerStart {
+        http_server_handle: handle,
+        rpc_metrics_flush_handle: flush_handle,
+    })
 }
 
 /// Build [`axum::Router`] from [`jsonrpsee::RpcModule`] with support of websocket.
+///
+/// Also returns the per-call statistics aggregator wired into the RPC
+/// services. The caller must drive [`RpcStatsAggregator::run_flush_loop`]
+/// (typically via `tokio::spawn`, observing the task) for aggregated metrics
+/// to be emitted; without it, recorded events are silently discarded once the
+/// aggregator's internal channel fills up, channel-overflow warnings are never
+/// logged, and individual slow-call points — which initially work, since they
+/// are emitted directly from the recording path — stop permanently once the
+/// per-window cap fills, because the cap is only reset at flush time.
 pub fn rpc_module_to_router(
     methods: RpcModule<()>,
     cors_config: CorsConfiguration,
-) -> (axum::Router, ServerHandle) {
+    rpc_aggregation: RpcAggregationConfig,
+) -> (axum::Router, ServerHandle, Arc<RpcStatsAggregator>) {
     let (stop_handle, server_handle) = stop_channel();
     let cors_layer = match cors_config {
         CorsConfiguration::Permissive => CorsLayer::permissive(),
         // New does not set any CORS headers
         CorsConfiguration::Restrictive => CorsLayer::new(),
     };
-    let ws_service = ws_service(methods.clone(), stop_handle.clone());
-    let http_service = http_service(methods, stop_handle);
+
+    // Per-call metrics are aggregated in-process and flushed periodically; see
+    // `sov_metrics::RpcStatsAggregator`. The registered method names seed the
+    // cardinality guard for the `method` tag.
+    let methods: Methods = methods.into();
+    let aggregator = Arc::new(RpcStatsAggregator::new(
+        rpc_aggregation,
+        methods.method_names(),
+    ));
+
+    let ws_service = ws_service(
+        methods.clone(),
+        stop_handle.clone(),
+        RpcMetricsLayer::new(aggregator.clone(), true),
+    );
+    let http_service = http_service(
+        methods,
+        stop_handle,
+        RpcMetricsLayer::new(aggregator.clone(), false),
+    );
     let error_layer = HandleErrorLayer::new(|error: BoxError| async move {
         let error = ErrorObject::owned(
             ErrorCode::InternalError.code(),
@@ -155,13 +208,18 @@ pub fn rpc_module_to_router(
     let router = axum::routing::get_service(ws_service)
         .post_service(http_service)
         .layer(cors_layer);
-    (axum::Router::new().route("/", router), server_handle)
+    (
+        axum::Router::new().route("/", router),
+        server_handle,
+        aggregator,
+    )
 }
 
 fn http_service(
-    methods: RpcModule<()>,
+    methods: Methods,
     stop_handle: StopHandle,
-) -> TowerService<Identity, Identity> {
+    metrics: RpcMetricsLayer,
+) -> TowerService<Stack<RpcMetricsLayer, Identity>, Identity> {
     // TODO: Into config.toml
     let config = ServerConfig::builder()
         .http_only()
@@ -169,11 +227,16 @@ fn http_service(
         .build();
 
     ServerBuilder::with_config(config)
+        .set_rpc_middleware(RpcServiceBuilder::new().layer(metrics))
         .to_service_builder()
         .build(methods, stop_handle)
 }
 
-fn ws_service(methods: RpcModule<()>, stop_handle: StopHandle) -> TowerService<Identity, Identity> {
+fn ws_service(
+    methods: Methods,
+    stop_handle: StopHandle,
+    metrics: RpcMetricsLayer,
+) -> TowerService<Stack<RpcMetricsLayer, Identity>, Identity> {
     // TODO: Into config.toml
     let config = ServerConfig::builder()
         .set_id_provider(HexIdProvider::default())
@@ -182,6 +245,7 @@ fn ws_service(methods: RpcModule<()>, stop_handle: StopHandle) -> TowerService<I
         .max_subscriptions_per_connection(100)
         .build();
     ServerBuilder::with_config(config)
+        .set_rpc_middleware(RpcServiceBuilder::new().layer(metrics))
         .to_service_builder()
         .build(methods, stop_handle)
 }
@@ -299,12 +363,13 @@ mod tests {
         shutdown_receiver.mark_unchanged();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
-        let _join_handle = start_http_server(
+        let _ = start_http_server(
             listener,
             axum_router,
             methods,
             shutdown_receiver,
             CorsConfiguration::Restrictive,
+            RpcAggregationConfig::standard(),
         )
         .await
         .unwrap();

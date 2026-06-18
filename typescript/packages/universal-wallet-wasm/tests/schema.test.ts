@@ -30,7 +30,7 @@ describe("Schema", () => {
   describe("chainHash", () => {
     it("should calculate the chain hash successfully", () => {
       const expected =
-        "672f49a623e325540b52fe25a255a584f4cdf8e2b0c5c1fca13eab8a92c610ed";
+        "83cce3858536593b556abf4c469ab91b73e7a63bc3c34920bea516851b208735";
       const actual = bytesToHex(schema.chainHash);
 
       expect(actual).toEqual(expected);
@@ -39,7 +39,7 @@ describe("Schema", () => {
   describe("metadataHash", () => {
     it("should restore the metadata hash successfully", () => {
       const expected =
-        "57c66aa8f2935ec352980d39e4f48d6aa10faf322d96254c63ec64eed82eb5b3";
+        "292f10626cba6b48356c9e9fe284c1c576f4d7df510982d2bd188d3bbf0bb2d7";
       const actual = bytesToHex(schema.metadataHash);
 
       expect(actual).toEqual(expected);
@@ -138,7 +138,7 @@ describe("Schema", () => {
 
       const unsignedTransaction = {
         runtime_call: call,
-        generation: "0",
+        uniqueness: { generation: "0" },
         details: {
           max_priority_fee_bips: "1000",
           max_fee: "10000",
@@ -168,7 +168,7 @@ describe("Schema", () => {
 
       expect(parsed.primaryType).toBe("UnsignedTransaction");
       expect(JSON.stringify(parsed)).toEqual(
-        `{"domain":{"name":"TestChain","chainId":"0x10e1","salt":"0x672f49a623e325540b52fe25a255a584f4cdf8e2b0c5c1fca13eab8a92c610ed"},"types":{"Bank":[{"type":"Transfer","name":"Transfer"}],"Coins":[{"type":"uint128","name":"amount"},{"type":"string","name":"token_id"}],"EIP712Domain":[{"type":"string","name":"name"},{"type":"uint256","name":"chainId"},{"type":"bytes32","name":"salt"}],"MultiAddress":[{"type":"string","name":"Standard"}],"RuntimeCall":[{"type":"Bank","name":"Bank"}],"Transfer":[{"type":"MultiAddress","name":"to"},{"type":"Coins","name":"coins"}],"TxDetails":[{"type":"uint64","name":"max_priority_fee_bips"},{"type":"uint128","name":"max_fee"},{"type":"uint64","name":"chain_id"}],"UnsignedTransaction":[{"type":"RuntimeCall","name":"runtime_call"},{"type":"uint64","name":"generation"},{"type":"TxDetails","name":"details"}]},"primaryType":"UnsignedTransaction","message":{"details":{"chain_id":"1","max_fee":"10000","max_priority_fee_bips":"1000"},"generation":"0","runtime_call":{"Bank":{"Transfer":{"coins":{"amount":"1000","token_id":"token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"},"to":{"Standard":"sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"}}}}}}`
+        `{"domain":{"name":"TestChain","chainId":"0x10e1","salt":"0x83cce3858536593b556abf4c469ab91b73e7a63bc3c34920bea516851b208735"},"types":{"Bank":[{"type":"Transfer","name":"Transfer"}],"Coins":[{"type":"uint128","name":"amount"},{"type":"string","name":"token_id"}],"EIP712Domain":[{"type":"string","name":"name"},{"type":"uint256","name":"chainId"},{"type":"bytes32","name":"salt"}],"MultiAddressEvmSolana":[{"type":"string","name":"Standard"}],"RuntimeCall":[{"type":"Bank","name":"Bank"}],"Transfer":[{"type":"MultiAddressEvmSolana","name":"to"},{"type":"Coins","name":"coins"}],"TxDetails":[{"type":"uint64","name":"max_priority_fee_bips"},{"type":"uint128","name":"max_fee"},{"type":"uint64","name":"chain_id"}],"UniquenessData":[{"type":"uint64","name":"Generation"}],"UnsignedTransaction":[{"type":"RuntimeCall","name":"runtime_call"},{"type":"UniquenessData","name":"uniqueness"},{"type":"TxDetails","name":"details"}]},"primaryType":"UnsignedTransaction","message":{"details":{"chain_id":"1","max_fee":"10000","max_priority_fee_bips":"1000"},"runtime_call":{"Bank":{"Transfer":{"coins":{"amount":"1000","token_id":"token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6"},"to":{"Standard":"sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"}}}},"uniqueness":{"Generation":"0"}}}`
       );
     });
   });
@@ -193,7 +193,7 @@ describe("Schema", () => {
 
       const unsignedTransaction = {
         runtime_call: call,
-        generation: "0",
+        uniqueness: { generation: "0" },
         details: {
           max_priority_fee_bips: "1000",
           max_fee: "10000",
@@ -215,7 +215,7 @@ describe("Schema", () => {
       // Should return a 32-byte hash
       expect(signingHash).toHaveLength(32);
       expect(bytesToHex(signingHash)).toEqual(
-        "4afeb093d3faef4587d0074eac770e5cbde89c2392b3d5b1ae3f3674d53a8cc4"
+        "a2f5f311607051903708529be350cf09d7042f6a6174077274c94785b81af04f"
       );
     });
   });

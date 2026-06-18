@@ -8,8 +8,6 @@ use nomt_core::trie::{KeyPath, LeafData, Node, ValueHash};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::reexports::digest::Digest;
 
-use crate::nomt::NomtMultiProof;
-use crate::pinned_cache::PinnedCache;
 use crate::storage::ReadType;
 use crate::{
     MerkleProofSpec, NodeLeafAndMaybeValue, OrderedReadsAndWrites, ProvableCompileTimeNamespace,
@@ -41,6 +39,10 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
             ordered_reads: state_reads,
             ordered_writes: state_writes,
         } = state_accesses;
+
+        if state_reads.is_empty() && state_writes.is_empty() {
+            return Ok(prev_root);
+        }
 
         let multi_proof: MultiProof = array_witness.get_hint();
         let verified_multi_proof = nomt_core::proof::verify_multi_proof::<BinaryHasher<S::Hasher>>(
@@ -107,7 +109,7 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
 impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     type Hasher = S::Hasher;
     type Witness = S::Witness;
-    type Proof = NomtMultiProof;
+    type Proof = MultiProof;
     type Root = StorageRoot<S>;
     type StateUpdate = ();
     type ChangeSet = ();
@@ -136,7 +138,7 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
     }
 
     fn get_accessory(&self, _key: &SlotKey) -> Option<SlotValue> {
-        unimplemented!("The NomtZkStorage does not have the accessory state yet.")
+        unimplemented!("The NomtVerifierStorage does not have the accessory state yet.")
     }
 
     fn compute_state_update(
@@ -144,7 +146,6 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
         state_accesses: StateAccesses,
         witness: &Self::Witness,
         prev_state_root: Self::Root,
-        _pinned_cache: Option<PinnedCache>,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let StateAccesses { user, kernel } = state_accesses;
 
@@ -169,8 +170,8 @@ impl<S: MerkleProofSpec> Storage for NomtVerifierStorage<S> {
 }
 
 #[cfg(all(feature = "test-utils", feature = "native"))]
-// `NativeStorage`` is implemented for `ZkStorage` solely for testing purposes.
-// In some tests, we use both `ProverStorage`` and `ZkStorage`.
+// `NativeStorage` is implemented for `NomtVerifierStorage` solely for testing purposes.
+// In some tests, we use both `NomtProverStorage` and `NomtVerifierStorage`.
 // Due to feature unification, we must provide this implementation even though it is not used.
 impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S> {
     fn latest_version(&self) -> SlotNumber {
@@ -214,11 +215,11 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
         unimplemented!("The NomtVerifierStorage should not be used to generate merkle proofs! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 
-    fn get_root_hash(&self, version: SlotNumber) -> anyhow::Result<Self::Root> {
+    fn get_root_hash(&self, version: SlotNumber) -> Option<Self::Root> {
         self.get_root_hash_unbound(version)
     }
 
-    fn get_root_hash_unbound(&self, _version: SlotNumber) -> anyhow::Result<Self::Root> {
+    fn get_root_hash_unbound(&self, _version: SlotNumber) -> Option<Self::Root> {
         unimplemented!("The NomtVerifierStorage should not be used to get root hash! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 
@@ -237,6 +238,7 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
     fn maybe_iter_user_values_with_prefix(
         &self,
         _prefix: SlotKey,
+        _cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
         unimplemented!("The NomtVerifierStorage does not support `iter_with_prefix`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
         // We have to put this here to allow type inference, but we prefer to panic since calling this method is a bug.
@@ -247,14 +249,11 @@ impl<S: MerkleProofSpec> crate::storage::NativeStorage for NomtVerifierStorage<S
     fn maybe_iter_kernel_values_with_prefix(
         &self,
         _prefix: SlotKey,
+        _cursor: Option<SlotKey>,
     ) -> anyhow::Result<Option<impl Iterator<Item = (SlotKey, SlotValue)>>> {
         unimplemented!("The NomtVerifierStorage does not support `iter_with_prefix`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
         // We have to put this here to allow type inference, but we prefer to panic since calling this method is a bug.
         #[allow(unreachable_code)]
         Ok(Option::<std::iter::Once<(SlotKey, SlotValue)>>::None)
-    }
-
-    fn try_load_saved_pinned_cache(&mut self) -> Option<PinnedCache> {
-        unimplemented!("The NomtVerifierStorage does not support `take_pinned_cache`! The NativeStorage trait is only implemented to allow for the use of the NomtVerifierStorage in tests.");
     }
 }

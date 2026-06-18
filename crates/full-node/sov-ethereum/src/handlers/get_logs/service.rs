@@ -117,7 +117,7 @@ where
         }
     }
 
-    pub async fn logs_for_filter(self) -> Result<LogsWithMaybeCursor> {
+    pub fn logs_for_filter(self) -> Result<LogsWithMaybeCursor> {
         match self.filter.block_option {
             FilterBlockOption::AtBlockHash(block_hash) => self.by_hash(block_hash),
             FilterBlockOption::Range {

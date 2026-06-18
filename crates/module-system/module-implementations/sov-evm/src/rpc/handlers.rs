@@ -17,7 +17,6 @@ use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::state::PinnedCacheAccessor;
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
 use sov_state::{NativeStorage, Storage, StorageProof, User};
@@ -36,9 +35,10 @@ pub struct GetProofResponse<S: Spec> {
 }
 
 #[rpc_gen(client, server)]
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     /// Handler for `net_version`
     #[rpc_method(name = "net_version")]
@@ -63,7 +63,7 @@ where
     }
 
     /// Handler for `eth_getBlockByHash`
-    #[rpc_method(name = "eth_getBlockByHash")]
+    #[rpc_method(name = "eth_getBlockByHash", blocking)]
     pub fn get_block_by_hash(
         &self,
         block_hash: B256,
@@ -83,7 +83,7 @@ where
     }
 
     /// Handler for: `eth_getBlockByNumber`
-    #[rpc_method(name = "eth_getBlockByNumber")]
+    #[rpc_method(name = "eth_getBlockByNumber", blocking)]
     pub fn get_block_by_number(
         &self,
         block_id: Option<BlockId>,
@@ -235,7 +235,7 @@ where
     ///
     /// This endpoint helps wallets and users determine appropriate gas prices
     /// by exposing the rollup's EIP-1559 style base fee history.
-    #[rpc_method(name = "eth_feeHistory")]
+    #[rpc_method(name = "eth_feeHistory", blocking)]
     pub fn fee_history(
         &self,
         block_count: U64,
@@ -325,7 +325,7 @@ where
     }
 
     /// Handler for: `eth_getBlockReceipts`
-    #[rpc_method(name = "eth_getBlockReceipts")]
+    #[rpc_method(name = "eth_getBlockReceipts", blocking)]
     pub fn get_block_receipts(
         &self,
         block_id: Option<BlockId>,
@@ -376,8 +376,7 @@ where
     ///
     /// References:
     /// - Geth `doCall`: <https://github.com/ethereum/go-ethereum/blob/master/internal/ethapi/api.go>
-    /// - Reth `call`: <https://github.com/paradigmxyz/reth/blob/main/crates/rpc/rpc-eth-api/src/helpers/call.rs>
-    #[rpc_method(name = "eth_call")]
+    #[rpc_method(name = "eth_call", blocking)]
     pub fn eth_call(
         &self,
         request: TransactionRequest,
@@ -413,7 +412,7 @@ where
     ///
     /// See [`prepare_call_env`](crate::helpers::prepare_call_env) for the full
     /// affordability analysis and current divergence from geth.
-    #[rpc_method(name = "eth_createAccessList")]
+    #[rpc_method(name = "eth_createAccessList", blocking)]
     pub fn eth_create_access_list(
         &self,
         request: TransactionRequest,
@@ -441,9 +440,18 @@ where
         let evm_db = self.db(maybe_archival_state.deref_mut());
 
         let mut inspector = AccessListInspector::new(initial_access_list);
-        let execution =
-            crate::executor::inspect(evm_db, &block_env, tx_env, cfg_env, &mut inspector)
-                .map_err(EthApiError::from)?;
+        let precompiles = self
+            .precompile_provider(None)
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+        let execution = crate::executor::inspect(
+            evm_db,
+            &block_env,
+            tx_env,
+            cfg_env,
+            &mut inspector,
+            precompiles,
+        )
+        .map_err(EthApiError::from)?;
 
         let (gas_used, error) = match execution.result {
             ExecutionResult::Success { gas_used, .. } => (U256::from(gas_used), None),
@@ -474,7 +482,7 @@ where
     }
 
     /// Handler for `debug_traceBlockByNumber`
-    #[rpc_method(name = "debug_traceBlockByNumber")]
+    #[rpc_method(name = "debug_traceBlockByNumber", blocking)]
     pub fn debug_trace_block_by_number(
         &self,
         block: BlockNumberOrTag,
@@ -489,7 +497,7 @@ where
     }
 
     /// Handler for: `debug_traceTransaction`
-    #[rpc_method(name = "debug_traceTransaction")]
+    #[rpc_method(name = "debug_traceTransaction", blocking)]
     pub fn debug_trace_transaction(
         &self,
         tx_hash: B256,
@@ -560,8 +568,13 @@ where
             method = "eth_getBlockTransactionCountByNumber",
             "EVM module JSON-RPC request"
         );
-        let block = self.get_maybe_synthetic_block_for_rpc(block_id, false.into(), state)?;
-        Ok(block.map(|b| U64::from(b.transactions.len())))
+        let result = self
+            .get_maybe_sealed_block_by_id(block_id.unwrap_or_else(BlockId::latest), state)
+            .map(|block| {
+                block
+                    .map(|b| U64::from(b.transactions_end().saturating_sub(b.transactions_start())))
+            })?;
+        Ok(result)
     }
 
     /// Handler for: `eth_getBlockTransactionCountByHash`
@@ -599,9 +612,10 @@ where
 /// Methods that are NOT auto-registered via `#[rpc_gen]`.
 /// `eth_estimate_gas` is registered by `sov-ethereum` which wraps it with
 /// paymaster-aware affordability checks.
-impl<S: Spec> Evm<S>
+impl<S: Spec, P> Evm<S, P>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     /// Validates request-shape and base-fee rules for `eth_estimateGas` before any
     /// transport-specific affordability checks run.
@@ -670,14 +684,15 @@ where
     }
 }
 
-fn get_transaction_for_block_index<S: Spec>(
-    evm: &Evm<S>,
+fn get_transaction_for_block_index<S: Spec, P>(
+    evm: &Evm<S, P>,
     block: crate::MaybeSealedBlock,
     index: u64,
     state: &mut ApiStateAccessor<S>,
 ) -> Result<Option<Transaction>, EthApiError>
 where
     S::Address: FromVmAddress<EthereumAddress>,
+    P: crate::precompiles::EvmPrecompileSet<S>,
 {
     let tx_count = block
         .transactions_end()

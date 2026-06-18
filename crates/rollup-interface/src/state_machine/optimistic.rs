@@ -8,7 +8,7 @@ use crate::da::DaSpec;
 use crate::zk::StateTransitionPublicData;
 
 /// A proof that the attester was bonded at the `rollup_height`.
-/// For rollups using the `jmt`, this will be a `jmt::SparseMerkleProof`
+/// The concrete proof type is storage-backend-specific.
 #[derive(
     Debug,
     Clone,

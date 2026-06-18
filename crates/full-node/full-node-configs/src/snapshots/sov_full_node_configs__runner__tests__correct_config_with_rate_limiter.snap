@@ -50,9 +50,12 @@ expression: config
   "proof_manager": {
     "aggregated_proof_block_jump": 22,
     "prover_address": "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
-    "max_number_of_transitions_in_db": 1025,
-    "max_number_of_transitions_in_memory": 768,
-    "eager_proof_submission": true
+    "max_number_of_transitions_in_db": 1000,
+    "max_number_of_transitions_in_memory": 100,
+    "eager_proof_submission": true,
+    "prover_thread_count_override": null,
+    "max_number_of_aggregated_proofs_in_memory": 5,
+    "max_concurrent_proof_blobs": 16
   },
   "sequencer": {
     "automatic_batch_production": true,
@@ -68,7 +71,7 @@ expression: config
         "node_id": "node_1",
         "node_role": "Leader",
         "leader_election": {
-          "leader_timeout_millis": 500,
+          "leader_timeout_millis": 1000,
           "grace_period_millis": 10000,
           "heartbeat_interval_millis": 100
         }
@@ -97,14 +100,14 @@ expression: config
         ],
         "ip_custom_limits": [
           [
-            "157.180.14.244",
+            "157.180.14.244/32",
             {
               "resources_per_bucket": 10,
               "refill_rate": 2
             }
           ],
           [
-            "157.180.34.249",
+            "157.180.34.249/32",
             {
               "resources_per_bucket": 8,
               "refill_rate": 2
@@ -113,10 +116,11 @@ expression: config
         ]
       },
       "maximum_future_nonce_delta": 100,
-      "future_nonce_transaction_timeout_millis": 2000
+      "future_nonce_transaction_timeout_millis": 2000,
+      "use_pi_rate_limiter": false
     },
     "max_batch_size_bytes": 1048576,
-    "max_concurrent_blobs": 16,
+    "max_concurrent_batch_blobs": 16,
     "blob_processing_timeout_secs": 60,
     "extension": null
   },
@@ -124,6 +128,11 @@ expression: config
     "telegraf_address": "udp://192.168.4.5:8543",
     "max_datagram_size": 1024,
     "max_pending_metrics": 2560,
-    "tokio_runtime_metrics_interval_millis": 500
+    "tokio_runtime_metrics_interval_millis": 500,
+    "rpc_aggregation": {
+      "flush_interval_secs": 10,
+      "slow_call_threshold_ms": 500,
+      "max_slow_call_points_per_window": 10
+    }
   }
 }

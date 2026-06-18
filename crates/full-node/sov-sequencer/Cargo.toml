@@ -21,19 +21,16 @@ axum = { workspace = true, features = ["http1", "http2", "ws", "json", "query"] 
 base64 = { workspace = true }
 bincode = { workspace = true }
 borsh = { workspace = true }
-dashmap = { workspace = true }
 derivative = { workspace = true }
 derive_more = { workspace = true }
 futures = { workspace = true }
 hex = { workspace = true }
-jsonrpsee = { workspace = true, default-features = false, features = ["client", "server"] }
 mini-moka = "0.10"
 sov-full-node-configs = { workspace = true }
 rockbound = { workspace = true }
 schemars = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
-serde_yaml = { workspace = true }
 serde_with = { workspace = true, features = ["base64"] }
 sov-blob-sender = { workspace = true }
 sov-blob-storage = { workspace = true, features = ["native"] }
@@ -52,12 +49,11 @@ strum = { workspace = true }
 tracing = { workspace = true }
 tokio = { workspace = true, features = ["sync", "rt"] }
 tokio-stream = { workspace = true }
-uuid = { workspace = true, features = ["std", "v7", "serde",] }
-utoipa-swagger-ui = { workspace = true, features = ["axum"] }
-openapiv3 = { workspace = true }
+uuid = { workspace = true, features = ["std", "v7", "serde"] }
 backon = { workspace = true }
 flume = { workspace = true }
 time = "0.3"
+ipnet = { workspace = true }
 
 [dev-dependencies]
 tracing-subscriber = { workspace = true }
@@ -91,3 +87,6 @@ default = []
 test-utils = [
     "sov-modules-api/test-utils"
 ]
+
+[package.metadata.cargo-machete]
+ignored = ["bincode"]

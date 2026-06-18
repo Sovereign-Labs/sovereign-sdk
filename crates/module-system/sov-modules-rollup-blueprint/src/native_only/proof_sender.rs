@@ -10,10 +10,11 @@ use sov_modules_api::transaction::{PriorityFeeBips, TxDetails};
 use sov_modules_api::{Amount, ProofSender, Spec};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChallenge};
+use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_sequencer::{ProofBlobSender, SerializedProofWithDetailsBytes};
 
-const MAX_FEE: Amount = Amount::new(10_000_000);
+const MAX_FEE: Amount = Amount::new(100_000_000);
 
 /// Adds metadata about gas & fees to the proof blob.
 pub struct SovApiProofSender<S: Spec> {
@@ -38,11 +39,7 @@ impl<S: Spec> ProofSender for SovApiProofSender<S> {
         serialized_proof: SerializedAggregatedProof,
     ) -> anyhow::Result<()> {
         let proof_data = serialize_proof_blob_with_metadata::<S>(serialized_proof)?;
-        self.inner
-            .produce_and_publish_proof_blob(proof_data)
-            .await?;
-
-        Ok(())
+        self.inner.produce_and_publish_proof_blob(proof_data).await
     }
 
     async fn publish_attestation_blob_with_metadata(
@@ -50,11 +47,7 @@ impl<S: Spec> ProofSender for SovApiProofSender<S> {
         serialized_attestation: SerializedAttestation,
     ) -> anyhow::Result<()> {
         let proof_data = serialize_attestation_blob_with_metadata::<S>(serialized_attestation)?;
-        self.inner
-            .produce_and_publish_proof_blob(proof_data)
-            .await?;
-
-        Ok(())
+        self.inner.produce_and_publish_proof_blob(proof_data).await
     }
 
     async fn publish_challenge_blob_with_metadata(
@@ -64,11 +57,11 @@ impl<S: Spec> ProofSender for SovApiProofSender<S> {
     ) -> anyhow::Result<()> {
         let proof_data =
             serialize_challenge_blob_with_metadata::<S>(serialized_challenge, slot_height)?;
-        self.inner
-            .produce_and_publish_proof_blob(proof_data)
-            .await?;
+        self.inner.produce_and_publish_proof_blob(proof_data).await
+    }
 
-        Ok(())
+    async fn proof_blob_sender_status(&self) -> anyhow::Result<BlobSenderStatus> {
+        self.inner.proof_blob_sender_status().await
     }
 }
 

@@ -30,6 +30,7 @@ use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{DefaultStorageSpec, Storage};
 use sov_stf_runner::processes::{ParallelProverService, RollupProverConfig};
 use sov_stf_runner::RollupConfig;
+use sov_test_utils::ledger_db::sov_api_spec::ClientInfo;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{MockDaSpec, ProverFactory, RtAgnosticBlueprint};
 use sov_transaction_generator::generators::basic::{BasicChangeLogEntry, BasicClientConfig};
@@ -72,11 +73,16 @@ where
         let inner_vm = Risc0Host::new(risc0::MOCK_DA_ELF);
         let outer_vm = MockZkvmHost::new_non_blocking();
 
+        let proof_manager = rollup_config
+            .proof_manager
+            .as_ref()
+            .expect("proof_manager must be set when prover is enabled");
         ParallelProverService::new_with_default_workers(
             inner_vm,
             outer_vm,
             Default::default(),
-            rollup_config.proof_manager.prover_address,
+            proof_manager.prover_address,
+            5,
         )
     }
 }
@@ -145,7 +151,7 @@ pub async fn setup_rollup(
     )
     .enable_prover()
     .set_config(|config| {
-        config.max_concurrent_blobs = 1024;
+        config.max_concurrent_batch_blobs = 1024;
         config.prover_address = prover_address.to_string();
         config.automatic_batch_production = true;
         config.telegraf_address = telegraf_address;
@@ -286,7 +292,7 @@ async fn runner(
         assert_logs_against_state(
             log_accumulator,
             Arc::new(BasicClientConfig {
-                url: rollup.api_client().baseurl().clone(),
+                url: rollup.api_client().baseurl().to_string(),
                 rollup_height: None,
             }),
             assert_logs,

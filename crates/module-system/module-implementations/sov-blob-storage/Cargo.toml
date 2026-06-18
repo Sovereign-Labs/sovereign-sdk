@@ -19,7 +19,6 @@ borsh = { workspace = true }
 derive_more = { workspace = true }
 tracing = { workspace = true }
 hex = { workspace = true }
-schemars = { workspace = true }
 serde = { workspace = true }
 
 sov-modules-api = { workspace = true }
@@ -31,6 +30,7 @@ sov-chain-state = { workspace = true }
 
 
 [dev-dependencies]
+schemars = { workspace = true }
 tempfile = { workspace = true }
 strum = { workspace = true }
 sov-blob-storage = { path = ".", features = ["native", "test-utils"] }
@@ -58,3 +58,6 @@ native = [
 	"sov-rollup-interface/native",
 	"sov-value-setter/native",
 ]
+
+[package.metadata.cargo-machete]
+ignored = ["schemars"]
