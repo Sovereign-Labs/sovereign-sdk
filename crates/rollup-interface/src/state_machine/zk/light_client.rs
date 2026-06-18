@@ -1,45 +1,62 @@
 //! Off-circuit, host-side light-client support, shared across zkVMs.
 //!
 //! A light client verifies a rollup's latest aggregated ("outer") proof without
-//! running a full node: it fetches the proof from a running node's REST API,
-//! cryptographically verifies it, and returns the committed public values. The
-//! fetch step is identical for every zkVM, so it lives here; each adapter only
-//! provides its own [`ZkLightClient::verify_aggregated_proof`] implementation.
+//! running a full node: given an already-fetched serialized proof (typically
+//! retrieved from a running node's REST API), it cryptographically verifies the
+//! proof and returns the committed public values. The verification is identical
+//! for every zkVM, so it lives here; each adapter only declares its
+//! [`ZkLightClient::Verifier`] and exposes its trusted outer code commitment and
+//! inner verification-key hash.
 //!
-//! This module is only available under the `native` feature, since fetching and
-//! verifying a proof is a host-side concern.
+//! Fetching the proof over the network is intentionally left to the caller, so
+//! this core crate stays free of an HTTP-client dependency. See the demo rollup's
+//! `light-client` binary for an example of fetching and decoding the proof before
+//! handing it to [`ZkLightClient::verify_aggregated_proof`].
+//!
+//! This module is only available under the `native` feature, since verifying a
+//! proof is a host-side concern.
 
-use std::time::Duration;
-
-use anyhow::Context as _;
-use base64::Engine as _;
 use serde::de::DeserializeOwned;
 
 use crate::da::DaSpec;
-use crate::zk::aggregated_proof::{AggregatedProofPublicData, SerializedAggregatedProof};
-
-/// Total timeout for a single light-client request, including connecting,
-/// sending the request, and reading the full response body.
-const HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(10);
-
-/// Timeout for establishing the TCP connection to the node.
-const HTTP_CONNECT_TIMEOUT: Duration = Duration::from_secs(5);
+use crate::zk::aggregated_proof::{
+    AggregateProofVerifier, AggregatedProofPublicData, CodeCommitmentHash,
+    SerializedAggregatedProof,
+};
+use crate::zk::{CodeCommitmentTrait, ZkVerifier};
 
 /// Verifies a rollup's latest aggregated ("outer") proof without running a full
 /// node.
 ///
-/// A light client stores no state and replays no blocks. It only fetches the
-/// latest aggregated proof from a running node, derives the outer verification
-/// key for its zkVM, cryptographically verifies the proof, and returns its
-/// public values.
+/// A light client stores no state and replays no blocks. Given a serialized
+/// aggregated proof, it derives the outer verification key for its zkVM,
+/// cryptographically verifies the proof, and returns its public values.
 ///
 /// Implementations are provided per zkVM by the respective adapter crates (e.g.
 /// `sov_sp1_adapter::light_client::Sp1LightClient`,
 /// `sov_mock_zkvm::light_client::MockLightClient`).
-#[async_trait::async_trait]
 pub trait ZkLightClient {
+    /// The zkVM verifier used to cryptographically verify aggregated proofs.
+    type Verifier: ZkVerifier;
+
+    /// The trusted outer code commitment the node uses to produce aggregated
+    /// proofs.
+    ///
+    /// This is the full commitment (not just its hash) because verifying a proof
+    /// requires constructing an [`AggregateProofVerifier`] from it; the expected
+    /// outer hash is derived from it internally.
+    fn outer_code_commitment(&self) -> &<Self::Verifier as ZkVerifier>::CodeCommitment;
+
+    /// The inner code commitment hash the rollup's state-transition ("inner")
+    /// proofs are expected to commit to.
+    fn expected_inner_vkey_hash(&self) -> &CodeCommitmentHash;
+
     /// Verifies an already-fetched serialized aggregated proof against this
     /// client's trusted verification keys and returns its public values.
+    ///
+    /// Cryptographically verifies the proof against [`Self::outer_code_commitment`],
+    /// then checks that the proof's committed outer and inner verification-key
+    /// hashes match the trusted ones before returning the public values.
     fn verify_aggregated_proof<Address, Da, Root>(
         &self,
         proof: SerializedAggregatedProof,
@@ -47,62 +64,30 @@ pub trait ZkLightClient {
     where
         Address: DeserializeOwned,
         Da: DaSpec,
-        Root: DeserializeOwned;
-
-    /// Returns the [`reqwest::Client`] used to fetch proofs from the node.
-    fn http_client(&self) -> &reqwest::Client;
-
-    /// Builds the [`reqwest::Client`] every [`ZkLightClient`] uses to fetch
-    /// proofs, preconfigured with the light client's default request and
-    /// connection timeouts.
-    fn build_http_client() -> reqwest::Client {
-        reqwest::Client::builder()
-            .timeout(HTTP_REQUEST_TIMEOUT)
-            .connect_timeout(HTTP_CONNECT_TIMEOUT)
-            .build()
-            .expect("Failed to build the light-client HTTP client")
-    }
-
-    /// Fetches the latest aggregated proof from the node at `url`.
-    async fn fetch_and_verify_latest_aggregated_proof<Address, Da, Root>(
-        &self,
-        url: &str,
-    ) -> anyhow::Result<AggregatedProofPublicData<Address, Da, Root>>
-    where
-        Address: DeserializeOwned,
-        Da: DaSpec,
         Root: DeserializeOwned,
     {
-        let proof = fetch_latest_aggregated_proof(self.http_client(), url).await?;
-        self.verify_aggregated_proof(proof)
+        let outer_code_commitment = self.outer_code_commitment();
+        let expected_outer_vkey_hash = outer_code_commitment.to_hash();
+        let public_data =
+            AggregateProofVerifier::<Self::Verifier>::new(outer_code_commitment.clone())
+                .verify(&proof)
+                .map_err(|e| anyhow::anyhow!("Aggregated proof verification failed: {e:?}"))?;
+
+        anyhow::ensure!(
+            public_data.outer_vk_hash == expected_outer_vkey_hash,
+            "Aggregated proof outer code commitment mismatch: proof claims {}, light client expects {}",
+            public_data.outer_vk_hash,
+            expected_outer_vkey_hash
+        );
+
+        let expected_inner_vkey_hash = self.expected_inner_vkey_hash();
+        anyhow::ensure!(
+            public_data.inner_vkey_hash == *expected_inner_vkey_hash,
+            "Aggregated proof inner code commitment mismatch: proof claims {}, light client expects {}",
+            public_data.inner_vkey_hash,
+            expected_inner_vkey_hash
+        );
+
+        Ok(public_data)
     }
-}
-
-#[derive(serde::Deserialize)]
-struct AggregatedProofResponse {
-    proof: String,
-}
-
-async fn fetch_latest_aggregated_proof(
-    client: &reqwest::Client,
-    url: &str,
-) -> anyhow::Result<SerializedAggregatedProof> {
-    let response: AggregatedProofResponse = client
-        .get(url)
-        .send()
-        .await
-        .with_context(|| format!("Failed to request the latest aggregated proof from {url}"))?
-        .error_for_status()
-        .context("Node returned an error for the latest aggregated proof")?
-        .json()
-        .await
-        .context("Failed to decode the aggregated proof response")?;
-
-    let raw_aggregated_proof = base64::engine::general_purpose::STANDARD
-        .decode(response.proof)
-        .context("Failed to base64-decode the aggregated proof")?;
-
-    Ok(SerializedAggregatedProof {
-        raw_aggregated_proof,
-    })
 }

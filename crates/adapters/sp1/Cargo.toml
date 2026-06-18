@@ -15,7 +15,6 @@ workspace = true
 [dependencies]
 anyhow = { workspace = true }
 arbitrary = { workspace = true, features = ["derive"], optional = true }
-async-trait = { workspace = true, optional = true }
 bincode = { workspace = true }
 borsh = { workspace = true, features = ["derive"] }
 ed25519-consensus = { version = "=2.1.0" }
@@ -34,7 +33,6 @@ sov-rollup-interface = { workspace = true }
 sov-universal-wallet = { workspace = true }
 sov-metrics = { workspace = true, features = ["sp1"], optional = true }
 tokio = { workspace = true, features = ["rt"], optional = true }
-reqwest = { workspace = true, optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 sp1-sdk = { workspace = true, features = ["blocking"] }
@@ -60,8 +58,6 @@ sov-zkvm-utils = { workspace = true }
 [features]
 default = []
 native = [
-    "dep:async-trait",
-    "dep:reqwest",
     "rand",
     "dep:tokio",
     "sp1-sdk/network",

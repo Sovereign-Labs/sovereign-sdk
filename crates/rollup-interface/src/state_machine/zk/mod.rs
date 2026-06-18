@@ -10,9 +10,9 @@ pub mod aggregated_proof;
 /// Off-circuit, host-side light-client support for verifying aggregated proofs.
 #[cfg(feature = "native")]
 pub mod light_client;
+use core::fmt::Debug;
 #[cfg(feature = "native")]
 pub use light_client::ZkLightClient;
-use core::fmt::Debug;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::typenum::U32;

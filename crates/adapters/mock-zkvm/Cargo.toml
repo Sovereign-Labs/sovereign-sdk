@@ -14,7 +14,6 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
-async-trait = { workspace = true, optional = true }
 borsh = { workspace = true }
 bincode = { workspace = true }
 serde = { workspace = true }
@@ -28,7 +27,6 @@ thiserror = { workspace = true }
 schemars = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 rand = { workspace = true, optional = true }
-reqwest = { workspace = true, optional = true }
 
 [dev-dependencies]
 serde_json = { workspace = true }
@@ -38,8 +36,6 @@ tokio = { workspace = true, features = ["macros", "rt"] }
 [features]
 default = []
 native = [
-    "dep:async-trait",
-    "dep:reqwest",
     "ed25519-dalek/default",
     "ed25519-dalek/rand_core",
     "rand",

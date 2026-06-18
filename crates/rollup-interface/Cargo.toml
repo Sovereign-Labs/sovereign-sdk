@@ -19,7 +19,6 @@ anyhow = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 async-trait = { workspace = true }
 backon = { workspace = true, optional = true }
-base64 = { workspace = true, optional = true }
 bincode = { workspace = true }
 borsh = { workspace = true, features = ["bytes"] }
 bytes = { workspace = true, features = ["serde"] }
@@ -37,7 +36,6 @@ hex = { workspace = true }
 # Proptest should be a dev-dependency, but those can't be optional
 proptest = { workspace = true, optional = true }
 proptest-derive = { workspace = true, optional = true }
-reqwest = { workspace = true, features = ["json"], optional = true }
 schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
@@ -61,9 +59,7 @@ tokio = { workspace = true, features = ["sync", "macros", "rt-multi-thread"] }
 [features]
 native = [
     "backon",
-    "base64",
     "futures",
-    "reqwest",
     "sov-rollup-interface/native",
     "tracing",
     "tokio",

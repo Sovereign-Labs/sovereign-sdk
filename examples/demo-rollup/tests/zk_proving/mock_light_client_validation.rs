@@ -6,6 +6,7 @@ use futures::StreamExt;
 use sov_demo_rollup::read_mock_code_commitments_from_env;
 use sov_mock_zkvm::light_client::MockLightClient;
 use sov_modules_api::{CodeCommitmentTrait, Spec};
+use sov_node_client::NodeClient;
 use sov_rollup_interface::zk::ZkLightClient;
 use sov_state::Storage;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
@@ -30,20 +31,19 @@ async fn light_client_validates_aggregated_proof() -> anyhow::Result<()> {
     let mut aggregated_proof_subscription = test_rollup.subscribe_aggregated_proof().await?;
     let _ = aggregated_proof_subscription.next().await.unwrap()?;
 
-    // 2. Validate the latest aggregated proof with a MockLightClient. It talks to
-    //    the node's `/ledger/aggregated-proofs/latest` endpoint and verifies the
-    //    proof against the inner and outer code commitments the node was
-    //    configured with.
-    let url = format!(
-        "http://{}/ledger/aggregated-proofs/latest",
-        test_rollup.http_addr
-    );
+    // 2. Validate the latest aggregated proof with a MockLightClient. The
+    //    NodeClient talks to the node's `/ledger/aggregated-proofs/latest`
+    //    endpoint and the light client verifies the proof against the inner and
+    //    outer code commitments the node was configured with.
+    let node_url = format!("http://{}", test_rollup.http_addr);
     let (inner_code_commitment, outer_code_commitment) = read_mock_code_commitments_from_env();
 
+    let light_client = MockLightClient::new(inner_code_commitment.to_hash(), outer_code_commitment);
+    let proof = NodeClient::new_unchecked(&node_url)
+        .fetch_latest_aggregated_proof()
+        .await?;
     let public_data: ProofPublicData =
-        MockLightClient::new(inner_code_commitment.to_hash(), outer_code_commitment)
-            .fetch_and_verify_latest_aggregated_proof::<Address, Da, Root>(&url)
-            .await?;
+        light_client.verify_aggregated_proof::<Address, Da, Root>(proof)?;
 
     // 3. The verified public data describes a non-empty slot range.
     assert!(
