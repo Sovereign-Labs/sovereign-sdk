@@ -227,8 +227,15 @@ pub(crate) fn chunk_framing_valid(
     true
 }
 
-/// Decode the chunk stream `payload` (everything after the fixed header) of a
-/// codec-`codec` envelope declaring `logical_len` total logical bytes.
+/// Decode the chunk stream `payload` (the bytes after the fixed header, or the
+/// not-yet-decoded suffix when extending incrementally) of a codec-`codec` envelope,
+/// producing at most `max_logical` logical bytes.
+///
+/// `classify_and_decode` passes the header's full `logical_len` (wholesale decode);
+/// native `advance` passes the *remaining* budget (`logical_len − already_decoded`) over
+/// `&accumulator[consumed..]` to decode only the newly-authenticated chunks. Because each
+/// chunk is an independent LZ4 block, concatenating incremental decodes is byte-for-byte
+/// identical to one wholesale decode.
 ///
 /// Returns `(logical, consumed, clean)`:
 /// * `logical` — bytes from the complete chunks decoded,
@@ -239,8 +246,8 @@ pub(crate) fn chunk_framing_valid(
 ///
 /// Never panics: every read is bounds-checked, and each chunk's output is sized
 /// from the (cap-validated) framing, so allocation is bounded per chunk.
-fn decode_chunks(payload: &[u8], codec: u8, logical_len: u32) -> (Vec<u8>, usize, bool) {
-    let logical_len = logical_len as usize;
+pub(crate) fn decode_chunks(payload: &[u8], codec: u8, max_logical: u32) -> (Vec<u8>, usize, bool) {
+    let logical_len = max_logical as usize;
     let mut out = Vec::new();
     let mut pos = 0usize;
     let mut covered = 0usize;

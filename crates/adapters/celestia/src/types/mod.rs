@@ -114,9 +114,21 @@ pub struct BlobWithSender {
     /// Empty after construction and after every (de)serialization, then
     /// recomputed deterministically. Ignored by `PartialEq`.
     ///
-    /// Filled lazily by the accessors via `get_or_init` while holding only `&self`
-    /// (and recomputed by native `advance`), so the guest reconstructs it identically.
-    // TODO: Add explanation why
+    /// Filled lazily by the `&self` accessors via `get_or_init`; native `advance`
+    /// (which holds `&mut self`) extends it in place as it authenticates more chunks.
+    /// The guest reconstructs it identically.
+    ///
+    /// Why `OnceLock` and not another cell:
+    /// * The `&self` accessors (`verified_data`/`total_len`/`logical_decode_failed`) —
+    ///   the only blob read path compiled into the zk guest — must decode once and
+    ///   return a `&[u8]` into owned storage, which requires interior mutability under
+    ///   `&self`.
+    /// * [`BlobReaderTrait`] is `Send + Sync`, so the cell must be `Sync`. That rules
+    ///   out `RefCell`/`Cell`; `Mutex`/`RwLock` are `Sync` but add runtime locking and
+    ///   poisoning for a value written at most once — overkill. `OnceLock::get_or_init`
+    ///   is exactly "compute once under `&self`, hand out a reference."
+    /// * Decoding stays lazy (first access), so a blob that is only size-gated decodes
+    ///   nothing — preserving the partial-read / DoS bound.
     #[serde(skip)]
     envelope_state: OnceLock<EnvelopeState>,
 }
@@ -173,7 +185,6 @@ impl BlobWithSender {
         }
     }
 
-    // TODO: Why this is here and not in normal impl
     /// Total length of the logical payload exposed to the rollup. For an envelope
     /// this is the authenticated header `logical_len` (never the decodable length, so
     /// the STF completeness assert keeps its teeth); otherwise the DA-physical length.
@@ -239,6 +250,7 @@ impl BlobReaderTrait for BlobWithSender {
         self.logical_total_len()
     }
 
+    // TODO: Why is this in `BlobReaderTrait` and not in normal BlobWithSender impl?
     /// True iff the fully-provided authenticated DA bytes do not decode into a
     /// clean, exact, complete logical payload (PR-A's slash signal). Derived only
     /// from authenticated bytes, so it is identical in native and zk execution.
@@ -268,69 +280,85 @@ impl BlobReaderTrait for BlobWithSender {
 
     #[cfg(feature = "native")]
     fn advance(&mut self, num_bytes: usize) -> &[u8] {
-        // Snapshot the mode + header as owned `Copy` values so no borrow of `self`
-        // is held while the reader is mutated below.
-        let envelope = match self.logical_state() {
-            EnvelopeState::Envelope(d) => Some((
-                d.header.codec,
-                d.header.logical_len as usize,
-                d.logical.len(),
-            )),
-            EnvelopeState::Legacy | EnvelopeState::Malformed => None,
-        };
-        let Some((codec, logical_len, already)) = envelope else {
-            // Legacy / malformed: logical and DA-physical bytes coincide.
-            self.blob.advance(num_bytes);
-            return self.verified_data();
-        };
-
-        // Pull whole chunks (framing only — no decode) until at least `num_bytes`
-        // more logical bytes are covered, or EOF / invalid framing stops us. The
-        // accumulator always ends on a chunk boundary, so the next chunk's framing
-        // starts at its current length.
-        let target = already.saturating_add(num_bytes).min(logical_len);
-        let mut covered = already;
-        while covered < target {
-            let pos = self.blob.accumulator().len();
-            if pos >= self.blob.total_len() {
-                break; // physical EOF
-            }
-            self.blob.advance(crate::envelope::CHUNK_HEADER_LEN);
-            let acc = self.blob.accumulator();
-            if acc.len() < pos + crate::envelope::CHUNK_HEADER_LEN {
-                break; // truncated framing at EOF
-            }
-            let chunk_logical = u16::from_le_bytes([acc[pos], acc[pos + 1]]);
-            let chunk_encoded = u16::from_le_bytes([acc[pos + 2], acc[pos + 3]]);
-            // Validate framing BEFORE authenticating the (attacker-controlled-length)
-            // payload, so a 1-byte logical read cannot be made to authenticate a
-            // u16-sized payload. A structurally bad chunk stops the pull;
-            // `classify_and_decode` then marks the decode unclean and
-            // `logical_decode_failed()` slashes.
-            if !crate::envelope::chunk_framing_valid(
-                codec,
-                chunk_logical,
-                chunk_encoded,
-                covered,
-                logical_len,
-            ) {
-                break;
-            }
-            self.blob.advance(chunk_encoded as usize);
-            if self.blob.accumulator().len()
-                < pos + crate::envelope::CHUNK_HEADER_LEN + chunk_encoded as usize
-            {
-                break; // truncated payload at EOF
-            }
-            covered = covered.saturating_add(chunk_logical as usize);
+        // Make sure the decode cache exists (a reader may not have touched it yet).
+        // TODO: Why we do that? this means. This is extra atomic set, better to fold into single branch.
+        if self.envelope_state.get().is_none() {
+            let _ = self
+                .envelope_state
+                .set(classify_and_decode(self.blob.accumulator()));
         }
+        // `get_mut` borrows only the field (unlike `logical_state`, a `&self` method
+        // whose borrow would cover all of `self`), so the cached decode can be extended
+        // in place while `self.blob` is mutated below.
+        match self.envelope_state.get_mut() {
+            Some(EnvelopeState::Envelope(decoded)) => {
+                let codec = decoded.header.codec;
+                let logical_len = decoded.header.logical_len as usize;
 
-        // Re-derive the cache from the (now larger) authenticated prefix using the
-        // single decoder the guest also runs.
-        self.envelope_state = OnceLock::new();
-        let _ = self
-            .envelope_state
-            .set(classify_and_decode(self.blob.accumulator()));
+                // Pull whole chunks (framing only — no decode) until at least
+                // `num_bytes` more logical bytes are covered, or EOF / invalid framing
+                // stops us. The accumulator always ends on a chunk boundary, so the next
+                // chunk's framing starts at its current length.
+                let target = decoded
+                    .logical
+                    .len()
+                    .saturating_add(num_bytes)
+                    .min(logical_len);
+                let mut covered = decoded.logical.len();
+                // TODO: What is the purpose of this loop? Let's add short note
+                while covered < target {
+                    let pos = self.blob.accumulator().len();
+                    if pos >= self.blob.total_len() {
+                        break; // physical EOF
+                    }
+                    self.blob.advance(crate::envelope::CHUNK_HEADER_LEN);
+                    let acc = self.blob.accumulator();
+                    if acc.len() < pos + crate::envelope::CHUNK_HEADER_LEN {
+                        break; // truncated framing at EOF
+                    }
+                    let chunk_logical = u16::from_le_bytes([acc[pos], acc[pos + 1]]);
+                    let chunk_encoded = u16::from_le_bytes([acc[pos + 2], acc[pos + 3]]);
+                    // Validate framing BEFORE authenticating the (attacker-controlled-
+                    // length) payload, so a 1-byte logical read cannot be made to
+                    // authenticate a u16-sized payload.
+                    if !crate::envelope::chunk_framing_valid(
+                        codec,
+                        chunk_logical,
+                        chunk_encoded,
+                        covered,
+                        logical_len,
+                    ) {
+                        break;
+                    }
+                    self.blob.advance(chunk_encoded as usize);
+                    if self.blob.accumulator().len()
+                        < pos + crate::envelope::CHUNK_HEADER_LEN + chunk_encoded as usize
+                    {
+                        break; // truncated payload at EOF
+                    }
+                    covered = covered.saturating_add(chunk_logical as usize);
+                }
+
+                // Decode ONLY the bytes appended since the last decode, with the shared
+                // decoder, and extend in place — O(bytes pulled) per call, not O(total).
+                // `decoded.consumed` is the chunk-boundary offset where the previous
+                // decode stopped, so `[consumed..]` is exactly the new chunks (a partial
+                // trailing chunk is left unconsumed). Each chunk is an independent LZ4
+                // block, so this equals a wholesale `classify_and_decode` of the full
+                // prefix byte-for-byte — native and guest stay in lockstep.
+                let remaining = (logical_len - decoded.logical.len()) as u32;
+                let acc = self.blob.accumulator();
+                let (new_logical, new_consumed, new_clean) =
+                    crate::envelope::decode_chunks(&acc[decoded.consumed..], codec, remaining);
+                decoded.logical.extend_from_slice(&new_logical);
+                decoded.consumed += new_consumed;
+                decoded.clean &= new_clean;
+            }
+            // Legacy / malformed-as-raw: logical and DA-physical bytes coincide.
+            _ => {
+                self.blob.advance(num_bytes);
+            }
+        }
         self.verified_data()
     }
 }
@@ -778,5 +806,88 @@ pub mod tests {
         // the verifier authenticates only the chunks consumed (the DoS bound).
         assert!(!blob.logical_decode_failed());
         assert!(blob.compressed_verified_data().len() < blob.compressed_total_len());
+    }
+
+    /// Body-start offset of chunk index `k` in a posted frame, found by walking the
+    /// per-chunk framing.
+    fn nth_chunk_body_start(posted: &[u8], k: usize) -> usize {
+        let mut off = crate::envelope::ENVELOPE_HEADER_LEN;
+        for _ in 0..k {
+            let enc = u16::from_le_bytes([posted[off + 2], posted[off + 3]]) as usize;
+            off += crate::envelope::CHUNK_HEADER_LEN + enc;
+        }
+        off + crate::envelope::CHUNK_HEADER_LEN
+    }
+
+    #[test]
+    fn incremental_advance_matches_wholesale() {
+        // A compressible, multi-chunk envelope (small chunks => many chunks).
+        let logical = compressible_payload(4000);
+        let posted = crate::envelope::encode_for_submission(&logical, true, 200);
+        assert!(
+            crate::envelope::has_magic_prefix(&posted),
+            "compressible payload should encode to an envelope"
+        );
+
+        // Read `a` incrementally in small steps; read `b` in one shot.
+        let mut a = blob_with_posted_payload(&posted);
+        let mut b = blob_with_posted_payload(&posted);
+
+        // An intermediate small advance yields a chunk-aligned prefix of the logical.
+        let prefix = a.advance(700).to_vec();
+        assert!(
+            !prefix.is_empty() && prefix.len() < logical.len(),
+            "a chunk-aligned logical prefix"
+        );
+        assert_eq!(&logical[..prefix.len()], prefix.as_slice());
+
+        // Finish `a` with more small advances; finish `b` in one `full_data`.
+        for _ in 0..40 {
+            if a.verified_data().len() >= a.total_len() {
+                break;
+            }
+            a.advance(700);
+        }
+        let _ = b.full_data();
+
+        // Incremental == wholesale, byte-for-byte.
+        assert_eq!(a.verified_data(), logical.as_slice());
+        assert_eq!(a.verified_data(), b.verified_data());
+        assert_eq!(a.total_len(), b.total_len());
+        assert_eq!(a.logical_decode_failed(), b.logical_decode_failed());
+        assert!(!a.logical_decode_failed());
+    }
+
+    #[test]
+    fn incremental_advance_detects_corrupt_chunk_mid_stream() {
+        let logical = compressible_payload(4000);
+        let mut posted = crate::envelope::encode_for_submission(&logical, true, 200);
+        assert!(crate::envelope::has_magic_prefix(&posted));
+        // Corrupt the LZ4 token byte of chunk 5, so the decode fails only after several
+        // clean chunks have already been decoded incrementally.
+        let corrupt_at = nth_chunk_body_start(&posted, 5);
+        posted[corrupt_at] ^= 0xFF;
+
+        let mut a = blob_with_posted_payload(&posted);
+        let mut b = blob_with_posted_payload(&posted);
+
+        // Drive `a` incrementally (bounded loop); `b` in one shot.
+        for _ in 0..40 {
+            let before = a.verified_data().len();
+            a.advance(300);
+            if a.logical_decode_failed() || a.verified_data().len() == before {
+                break;
+            }
+        }
+        let _ = b.full_data();
+
+        assert!(
+            a.logical_decode_failed(),
+            "incremental advance must surface a mid-stream corrupt chunk"
+        );
+        assert_eq!(a.logical_decode_failed(), b.logical_decode_failed());
+        // Both expose the same clean prefix decoded before the corrupt chunk.
+        assert_eq!(a.verified_data(), b.verified_data());
+        assert_eq!(&logical[..a.verified_data().len()], a.verified_data());
     }
 }
