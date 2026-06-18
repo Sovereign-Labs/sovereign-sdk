@@ -36,6 +36,17 @@ mod external_mock_rollup;
 pub use external_mock_rollup::*;
 mod solana_offchain_endpoint;
 
+/// The zkVM a rollup runs on. Selected at runtime via the `--zk-vm` flag and
+/// shared by both the node binary (which picks the rollup to run) and the
+/// light-client binary (which picks the proof verifier).
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq, Eq)]
+pub enum SupportedZkVm {
+    /// The mock zkVM used for fast, proof-free local development.
+    Mock,
+    /// The SP1 zkVM.
+    Sp1,
+}
+
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant by modifying BATCH_NAMESPACE in constants.toml
 pub const ROLLUP_BATCH_NAMESPACE: Namespace = Namespace::const_v0(config_value!("BATCH_NAMESPACE"));

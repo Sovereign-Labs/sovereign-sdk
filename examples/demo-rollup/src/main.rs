@@ -12,7 +12,7 @@ use sov_db::config::{
 };
 use sov_demo_rollup::{
     override_code_commitments_in_chain_state, CelestiaDemoRollup, ExternalMockDemoRollup,
-    ExternalMockSp1DemoRollup, MockDemoRollup, MockSp1DemoRollup,
+    ExternalMockSp1DemoRollup, MockDemoRollup, MockSp1DemoRollup, SupportedZkVm,
 };
 use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::storable::StorableMockDaService;
@@ -71,12 +71,6 @@ enum SupportedDaLayer {
     Celestia,
     Mock,
     ExternalMock,
-}
-
-#[derive(clap::ValueEnum, Clone, Debug, PartialEq, Eq)]
-enum SupportedZkVm {
-    Mock,
-    Sp1,
 }
 
 #[tokio::main]

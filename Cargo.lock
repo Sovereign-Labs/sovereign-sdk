@@ -11419,6 +11419,7 @@ dependencies = [
  "sov-modules-macros",
  "sov-modules-rollup-blueprint",
  "sov-modules-stf-blueprint",
+ "sov-node-client",
  "sov-paymaster",
  "sov-proxy-utils",
  "sov-risc0-adapter",
@@ -12545,6 +12546,7 @@ dependencies = [
  "sp1-sdk",
  "sp1-verifier",
  "sp1-zkvm",
+ "tokio",
 ]
 
 [[package]]

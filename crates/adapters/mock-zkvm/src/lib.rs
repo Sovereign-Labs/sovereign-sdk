@@ -11,6 +11,8 @@ pub use guest::MockZkGuest;
 mod host;
 #[cfg(feature = "native")]
 pub use host::MockZkvmHost;
+#[cfg(feature = "native")]
+pub mod light_client;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 pub mod crypto;
