@@ -33,6 +33,7 @@ sov-ethereum = { workspace = true, features = ["local"] }
 sov-kernels = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
+sov-node-client = { workspace = true }
 sov-modules-rollup-blueprint = { workspace = true, features = ["native"] }
 sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-solana-offchain-auth = { workspace = true }
@@ -161,6 +162,10 @@ path = "src/sov-cli/main.rs"
 [[bin]]
 name = "sov-demo-rollup"
 path = "src/main.rs"
+
+[[bin]]
+name = "light-client"
+path = "src/light_client/main.rs"
 
 [[bin]]
 name = "demo-celestia-tester"

@@ -12,6 +12,7 @@ mod helpers_soft_confirmations;
 
 mod base_sequencing;
 mod recovery_mode;
+mod slashing;
 mod soft_confirmation;
 mod unregistered_sequencer;
 

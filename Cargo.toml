@@ -223,7 +223,12 @@ arbitrary = { version = "1.3.2", features = ["derive"] }
 backon = { version = "1.5.1", default-features = false, features = ["tokio-sleep"] }
 base64 = "0.22"
 bs58 = { version = "0.5.1", default-features = false, features = ["std", "alloc"] }
-borsh = { version = "1", features = ["derive"] }
+# Pinned exactly (`=`): `sov-blob-storage`'s lazy blob deserialization depends on
+# borsh-internal error wording and read behavior. 1.6.1 was verified byte-identical
+# to 1.5.7 for those paths. Bump deliberately, in lockstep with downstream lockfiles
+# (e.g. rollup-starter), and re-run its `deserialization_tests`; a silent `cargo
+# update` must not move it.
+borsh = { version = "=1.6.1", features = ["derive"] }
 # TODO: Consider replacing this serialization format
 #     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283
 bincode = "1.3.3"
