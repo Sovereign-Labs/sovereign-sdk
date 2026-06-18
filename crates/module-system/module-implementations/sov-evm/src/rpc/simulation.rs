@@ -189,6 +189,7 @@ where
         self.resolve_simulation_nonce(&mut request, &mut maybe_archival_state)?;
 
         if !has_overrides {
+            // The precompile constructor clones the active precompiles state item and then drops the reference
             let precompiles = self
                 .precompile_provider(None, maybe_archival_state.deref_mut())
                 .map_err(|e| EthApiError::other(into_rpc_error(e)))?;

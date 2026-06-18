@@ -2,6 +2,7 @@ use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
 use revm::primitives::hardfork::SpecId;
 use schemars::JsonSchema;
+use sov_address::EthereumAddress;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{HexString, SafeVec, Spec, ETHEREUM_BLOCK_GAS_LIMIT, ETHEREUM_TX_GAS_LIMIT};
 use sov_universal_wallet::UniversalWallet;
@@ -218,9 +219,9 @@ impl<S: Spec> EvmRuntimeConfigUpdate<S> {
 #[serde(rename = "enabled_custom_precompiles_update")]
 pub struct EnabledCustomPrecompilesUpdate {
     /// Custom precompile addresses to enable.
-    pub add: SafeVec<HexString<[u8; 20]>, 32>,
+    pub add: SafeVec<EthereumAddress, 32>,
     /// Custom precompile addresses to disable.
-    pub remove: SafeVec<HexString<[u8; 20]>, 32>,
+    pub remove: SafeVec<EthereumAddress, 32>,
 }
 
 #[derive(

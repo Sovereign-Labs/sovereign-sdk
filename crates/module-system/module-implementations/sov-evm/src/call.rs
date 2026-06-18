@@ -182,7 +182,7 @@ where
         let mut enabled = self.enabled_custom_precompile_addresses(state)?;
 
         for address in update.add {
-            let address = Address::from(address.0);
+            let address = Address::from(address);
             ensure!(
                 P::ADDRESSES.contains(&address),
                 "custom EVM precompile address {address} is not available in this runtime"
@@ -191,7 +191,7 @@ where
         }
 
         for address in update.remove {
-            let address = Address::from(address.0);
+            let address = Address::from(address);
             enabled.remove(&address);
         }
 
