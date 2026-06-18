@@ -123,6 +123,10 @@ pub enum SimulateError {
     /// Failed to decode the call bytes into a runtime call.
     #[error("Failed to decode call message into a runtime call")]
     CallDecoding(#[from] std::io::Error),
+
+    /// Failed to compute the next uniqueness generation for the sender.
+    #[error("Failed to compute uniqueness generation")]
+    UniquenessRetrieval(#[source] anyhow::Error),
 }
 
 impl From<SimulateError> for ErrorObject {
@@ -137,6 +141,9 @@ impl From<SimulateError> for ErrorObject {
             SimulateError::CallDecoding(error) => {
                 // Internal server error because if JSON to bytes serialization works
                 // then bytes to RuntimeCall should also work.
+                (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
+            }
+            SimulateError::UniquenessRetrieval(error) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
             }
         };
@@ -308,12 +315,15 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
         let credential_id = CredentialId::from_str(&params.sender).map_err(|e| {
             SimulateError::InvalidInput(format!("failed to parse sender credential id: {e}"))
         })?;
-        let uniqueness = params.uniqueness.unwrap_or_else(|| {
-            let generation = Uniqueness::<S>::default()
-                .next_generation(&credential_id, state)
-                .unwrap();
-            UniquenessData::Generation(generation)
-        });
+        let uniqueness = match params.uniqueness {
+            Some(uniqueness) => uniqueness,
+            None => {
+                let generation = Uniqueness::<S>::default()
+                    .next_generation(&credential_id, state)
+                    .map_err(SimulateError::UniquenessRetrieval)?;
+                UniquenessData::Generation(generation)
+            }
+        };
 
         Ok(AuthorizationData {
             tx_hash: NULL_TX_HASH,
