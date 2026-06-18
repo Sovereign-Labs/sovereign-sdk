@@ -20,6 +20,6 @@ pub use sov_rollup_interface::da::*;
 pub use sov_rollup_interface::node::da::*;
 
 #[cfg(feature = "native")]
-pub use da_service::{CelestiaConfig, CelestiaService};
+pub use da_service::{CelestiaConfig, CelestiaService, VerifyOnFetchMode};
 
 pub use crate::celestia::*;

@@ -9,7 +9,7 @@ use crate::config::{
     default_tx_status_polling_millis,
 };
 use crate::verifier::address::CelestiaAddress;
-use crate::{CelestiaConfig, CelestiaService};
+use crate::{CelestiaConfig, CelestiaService, VerifyOnFetchMode};
 use anyhow::{anyhow, Context};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
@@ -291,6 +291,7 @@ impl CelestiaDevNode {
             api_request_timeout_secs: default_api_request_timeout_secs(),
             tx_status_polling_millis: default_tx_status_polling_millis(),
             background_stat_polling_interval_secs: default_background_stat_polling_interval_secs(),
+            verify_on_fetch_mode: VerifyOnFetchMode::ReturnError,
             safe_lead_time_ms: default_safe_lead_time_ms(),
             tx_priority: default_tx_priority(),
             backoff_min_delay_ms: default_min_delay_ms(),

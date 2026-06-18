@@ -1,3 +1,7 @@
+# 2026-04-20
+- #2764 Celestia adapter: re-adds block integrity verification on fetch. Replaces the previously-reverted boolean toggle (PR #2489 / reverted in PR #2520) with a
+  `verify_on_fetch_mode` enum accepting `"off"` (default), `"log_error"`, or `"return_error"`. `log_error` runs verification and logs via `tracing::error!` on failure while still returning the block, enabling staged rollouts without breaking the node.
+  The underlying verifier bug fix from PR #2525 is already in place.
 # 2026-06-18
 - #2985 blob-storage: Deserialize DA blobs lazily. Borsh reads through a reader that verifies (`advance`s) only the bytes it consumes, instead of verifying the whole blob via `full_data()`. A blob that fails to deserialize early now verifies only a few DA shares rather than all of them, lowering ZK proving cost. Slashing is unchanged: a truncation error counts as "malformed" only when the whole blob was verified; otherwise it signals a withholding prover and aborts. Pins `borsh` to `=1.6.1` (the path depends on borsh-internal error wording; test-guarded).
   * Not state- or API-breaking — slashing decisions and processed data are identical. Affects ZK rollups only through a smaller proof footprint (fewer shares verified for early-failing blobs); prover and verifier must run the matching binary, as with any STF change.

@@ -1059,9 +1059,37 @@ async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
 #[tokio::test(flavor = "multi_thread")]
 #[should_panic(expected = "invalid proof self-check: InvalidRoot")]
 async fn verification_fails_if_sender_changed() {
+    let block = block_with_changed_sender();
+    let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
+
+    // This is how it is observed
+    verification_error(block, "InvalidRoot", rollup_params)
+        .await
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn fetch_integrity_verification_catches_proof_generation_panic() {
+    let block = block_with_changed_sender();
+
+    let error =
+        super::verify_block_integrity_for_params(&block, with_rollup_batch_data::ROLLUP_PARAMS)
+            .unwrap_err()
+            .to_string();
+
+    assert!(
+        error.contains("Celestia block integrity verification panicked"),
+        "Actual error: {error}"
+    );
+    assert!(
+        error.contains("invalid proof self-check: InvalidRoot"),
+        "Actual error: {error}"
+    );
+}
+
+fn block_with_changed_sender() -> FilteredCelestiaBlock {
     // This is the preparation part, consider it as malicious native code:
     let mut block = with_rollup_batch_data::filtered_block();
-    let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
     let addr_1 = CelestiaAddress::from_str(ADDR_1).unwrap();
     let addr_2 = CelestiaAddress::from_str(crate::test_helper::ADDR_2).unwrap();
     let addr_len = addr_1.as_ref().len();
@@ -1090,10 +1118,7 @@ async fn verification_fails_if_sender_changed() {
 
     block.rollup_batch_data.data = malicious_ns_data;
 
-    // This is how it is observed
-    verification_error(block, "InvalidRoot", rollup_params)
-        .await
-        .unwrap();
+    block
 }
 
 async fn verification_error(

@@ -1,7 +1,7 @@
 #[cfg(test)]
 mod tests;
 
-pub use crate::config::CelestiaConfig;
+pub use crate::config::{CelestiaConfig, VerifyOnFetchMode};
 use crate::metrics::client::{
     BlobGetAllMeasurement, GetBlockHeaderMeasurement, GetChainHeadMeasurement,
     GetNamespaceDataMeasurement, HeaderSyncStateMeasurement, StateBalanceForAddressMeasurement,
@@ -28,7 +28,9 @@ use celestia_types::nmt::Namespace;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_rollup_interface::common::HexHash;
-use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
+use sov_rollup_interface::da::{
+    BlobReaderTrait, DaProof, DaSpec, DaVerifier, RelevantBlobs, RelevantProofs,
+};
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
@@ -45,6 +47,7 @@ pub struct CelestiaService {
     client: Arc<celestia_client::Client>,
     rollup_batch_namespace: Namespace,
     rollup_proof_namespace: Namespace,
+    verify_on_fetch_mode: VerifyOnFetchMode,
     signer_address: Option<CelestiaAddress>,
     safe_lead_time: Duration,
     backoff_policy: ExponentialBuilder,
@@ -54,10 +57,12 @@ pub struct CelestiaService {
 }
 
 impl CelestiaService {
+    #[allow(clippy::too_many_arguments)]
     fn with_client(
         client: celestia_client::Client,
         rollup_batch_namespace: Namespace,
         rollup_proof_namespace: Namespace,
+        verify_on_fetch_mode: VerifyOnFetchMode,
         signer_address: Option<CelestiaAddress>,
         safe_lead_time: Duration,
         backoff_policy: ExponentialBuilder,
@@ -69,6 +74,7 @@ impl CelestiaService {
             client: Arc::new(client),
             rollup_batch_namespace,
             rollup_proof_namespace,
+            verify_on_fetch_mode,
             signer_address,
             safe_lead_time,
             backoff_policy,
@@ -231,6 +237,7 @@ impl CelestiaService {
             client,
             chain_params.rollup_batch_namespace,
             chain_params.rollup_proof_namespace,
+            config.verify_on_fetch_mode,
             fetched_signer,
             Duration::from_millis(config.safe_lead_time_ms),
             backoff_policy,
@@ -356,7 +363,26 @@ impl CelestiaService {
             tracker.submit(get_block_measurement);
         });
         tracing::trace!(height, "get_block_at metrics send, returning");
-        FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)
+        let block = FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)?;
+        match self.verify_on_fetch_mode {
+            VerifyOnFetchMode::Off => {}
+            VerifyOnFetchMode::LogError => {
+                if let Err(error) = self.verify_block_integrity(&block) {
+                    tracing::error!(
+                        height,
+                        ?error,
+                        "Celestia block integrity verification failed; continuing because \
+                         verify_on_fetch_mode is `log_error`"
+                    );
+                }
+            }
+            VerifyOnFetchMode::ReturnError => {
+                self.verify_block_integrity(&block).with_context(|| {
+                    format!("Celestia block integrity verification failed at height {height}")
+                })?;
+            }
+        }
+        Ok(block)
     }
 
     async fn get_head_block_header_inner(
@@ -422,6 +448,63 @@ impl CelestiaService {
             .subscribe()
             .map(|res| res.map(CelestiaHeader::from).map_err(|e| e.into()))
             .boxed())
+    }
+
+    fn verify_block_integrity(&self, block: &FilteredCelestiaBlock) -> anyhow::Result<()> {
+        verify_block_integrity_for_params(
+            block,
+            RollupParams {
+                rollup_batch_namespace: self.rollup_batch_namespace,
+                rollup_proof_namespace: self.rollup_proof_namespace,
+            },
+        )
+    }
+}
+
+fn verify_block_integrity_for_params(
+    block: &FilteredCelestiaBlock,
+    rollup_params: RollupParams,
+) -> anyhow::Result<()> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        verify_block_integrity_inner(block, rollup_params)
+    }))
+    .map_err(|panic| {
+        anyhow::anyhow!(
+            "Celestia block integrity verification panicked: {}",
+            panic_payload_to_string(panic.as_ref())
+        )
+    })?
+}
+
+fn verify_block_integrity_inner(
+    block: &FilteredCelestiaBlock,
+    rollup_params: RollupParams,
+) -> anyhow::Result<()> {
+    let verifier = CelestiaVerifier::new(rollup_params);
+
+    let mut relevant_blobs = extract_relevant_blobs(block);
+    // Advance full blob data first, then derive proofs for the consumed ranges.
+    for blob in relevant_blobs
+        .batch_blobs
+        .iter_mut()
+        .chain(relevant_blobs.proof_blobs.iter_mut())
+    {
+        blob.advance(blob.total_len());
+    }
+    let relevant_proofs = get_extraction_proof(block, &relevant_blobs);
+
+    verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)?;
+
+    Ok(())
+}
+
+fn panic_payload_to_string(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_owned()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "non-string panic payload".to_owned()
     }
 }
 

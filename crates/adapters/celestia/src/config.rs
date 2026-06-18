@@ -87,6 +87,10 @@ pub struct CelestiaConfig {
     /// Default: 30.
     #[serde(default = "default_background_stat_polling_interval_secs")]
     pub background_stat_polling_interval_secs: u64,
+    /// Controls how fetched Celestia blocks are verified against their Data Availability
+    /// Header before `get_block_at` returns. See [`VerifyOnFetchMode`].
+    #[serde(default)]
+    pub verify_on_fetch_mode: VerifyOnFetchMode,
     /// See [`sov_rollup_interface::node::da::DaService::safe_lead_time`].
     #[serde(default = "default_safe_lead_time_ms")]
     pub safe_lead_time_ms: u64,
@@ -137,6 +141,7 @@ impl fmt::Debug for CelestiaConfig {
                 "background_stat_polling_interval_secs",
                 &self.background_stat_polling_interval_secs,
             )
+            .field("verify_on_fetch_mode", &self.verify_on_fetch_mode)
             .field("safe_lead_time_ms", &self.safe_lead_time_ms)
             .field("tx_priority", &self.tx_priority)
             .field("backoff_min_delay_ms", &self.backoff_min_delay_ms)
@@ -165,6 +170,26 @@ impl From<TxPriority> for celestia_client::tx::TxPriority {
     }
 }
 
+/// Controls how fetched Celestia blocks are verified against their Data Availability Header
+/// before `get_block_at` returns.
+///
+/// Verification guards against silent consensus-breaking forks when the connected RPC node
+/// returns corrupted namespace data, at the cost of per-block overhead.
+#[derive(
+    Debug, Clone, Copy, Default, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema,
+)]
+#[serde(rename_all = "snake_case")]
+pub enum VerifyOnFetchMode {
+    /// Skip verification entirely.
+    #[default]
+    Off,
+    /// Run verification; on failure log via `tracing::error!` and return the block anyway.
+    /// Recommended during staged rollouts when visibility matters more than hard enforcement.
+    LogError,
+    /// Run verification; on failure propagate the error so `get_block_at` fails.
+    ReturnError,
+}
+
 impl CelestiaConfig {
     /// Absolutely minimal config for client that is capable of reading
     pub fn minimal(rpc_url: String) -> Self {
@@ -179,6 +204,7 @@ impl CelestiaConfig {
             api_request_timeout_secs: default_api_request_timeout_secs(),
             tx_status_polling_millis: default_tx_status_polling_millis(),
             background_stat_polling_interval_secs: default_background_stat_polling_interval_secs(),
+            verify_on_fetch_mode: VerifyOnFetchMode::default(),
             safe_lead_time_ms: default_safe_lead_time_ms(),
             tx_priority: default_tx_priority(),
             backoff_min_delay_ms: default_min_delay_ms(),
@@ -335,7 +361,7 @@ pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_rpc_url, CelestiaConfig, GrpcEndpointConfig};
+    use super::{validate_rpc_url, CelestiaConfig, GrpcEndpointConfig, VerifyOnFetchMode};
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
     const GRPC_ENV_VAR: &str = "SOV_CELESTIA_GRPC_URL";
@@ -523,5 +549,36 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: CelestiaConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(config, deserialized);
+    }
+
+    #[test]
+    fn verify_on_fetch_mode_defaults_to_off() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let config = deserialize_config("{}").unwrap();
+        assert_eq!(config.verify_on_fetch_mode, VerifyOnFetchMode::Off);
+    }
+
+    #[test]
+    fn verify_on_fetch_mode_accepts_all_variants() {
+        let cases = [
+            (r#"{"verify_on_fetch_mode":"off"}"#, VerifyOnFetchMode::Off),
+            (
+                r#"{"verify_on_fetch_mode":"log_error"}"#,
+                VerifyOnFetchMode::LogError,
+            ),
+            (
+                r#"{"verify_on_fetch_mode":"return_error"}"#,
+                VerifyOnFetchMode::ReturnError,
+            ),
+        ];
+        for (json, expected) in cases {
+            let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+            let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+            let config = deserialize_config(json).expect(json);
+            assert_eq!(config.verify_on_fetch_mode, expected);
+        }
     }
 }
