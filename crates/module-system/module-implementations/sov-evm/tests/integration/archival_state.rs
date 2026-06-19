@@ -122,7 +122,6 @@ fn update_tx_gas_limit(runner: &mut TestRunner<RT, S>, admin: &TestUser<S>, new_
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
                 new_contract_creation_policy: None,
-                enabled_custom_precompiles: None,
                 chain_spec_update: Some(ChainSpecUpdate {
                     new_limit_contract_code_size: None,
                     new_block_gas_limit: None,

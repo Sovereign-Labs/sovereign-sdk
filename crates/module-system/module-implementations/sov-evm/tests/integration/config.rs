@@ -31,7 +31,6 @@ fn test_empty_config_update_is_noop() {
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
                 new_contract_creation_policy: None,
-                enabled_custom_precompiles: None,
                 chain_spec_update: None,
                 new_admin: None,
             },
@@ -66,7 +65,6 @@ fn test_update_hardfork() {
             EvmRuntimeConfigUpdate {
                 new_hardfork: Some((100, BorshSpecId(SpecId::PRAGUE))),
                 new_contract_creation_policy: None,
-                enabled_custom_precompiles: None,
                 chain_spec_update: None,
                 new_admin: None,
             },
@@ -99,9 +97,7 @@ fn test_update_hardfork() {
         input: admin.create_plain_message::<RT, Evm<S>>(CallMessage::UpdateRuntimeConfig (
             EvmRuntimeConfigUpdate {
                 new_hardfork: Some((105, BorshSpecId(SpecId::PRAGUE))),
-                new_contract_creation_policy: None,
-                enabled_custom_precompiles: None,
-                chain_spec_update: None,
+                new_contract_creation_policy: None,                chain_spec_update: None,
                 new_admin: None,
             },
         )),
@@ -118,9 +114,7 @@ fn test_update_hardfork() {
         input: admin.create_plain_message::<RT, Evm<S>>(CallMessage::UpdateRuntimeConfig (
             EvmRuntimeConfigUpdate {
                 new_hardfork: Some((100, BorshSpecId(SpecId::OSAKA))),
-                new_contract_creation_policy: None,
-                enabled_custom_precompiles: None,
-                chain_spec_update: None,
+                new_contract_creation_policy: None,                chain_spec_update: None,
                 new_admin: None,
             },
         )),
@@ -155,7 +149,6 @@ fn test_update_contract_creation_policy() {
                     add: SafeVec::try_from(vec![new_admin_address_hex_string]).unwrap(),
                     remove: SafeVec::try_from(vec![another_address_hex_string]).unwrap(),
                 }),
-                enabled_custom_precompiles: None,
                 chain_spec_update: None,
                 new_admin: None,
             },
@@ -188,7 +181,6 @@ fn test_update_contract_creation_policy() {
                     add: SafeVec::try_from(vec![another_address_hex_string]).unwrap(),
                     remove: SafeVec::try_from(vec![new_admin_address_hex_string]).unwrap(),
                 }),
-                enabled_custom_precompiles: None,
                 chain_spec_update: None,
                 new_admin: None,
             },
@@ -213,7 +205,6 @@ fn test_update_contract_creation_policy() {
                     add: SafeVec::try_from(vec![]).unwrap(),
                     remove: SafeVec::try_from(vec![another_address_hex_string]).unwrap(),
                 }),
-                enabled_custom_precompiles: None,
                 chain_spec_update: None,
                 new_admin: None,
             },
@@ -233,7 +224,6 @@ fn test_update_contract_creation_policy() {
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
                 new_contract_creation_policy: Some(ContractCreationPolicyUpdate::Everyone),
-                enabled_custom_precompiles: None,
                 chain_spec_update: None,
                 new_admin: None,
             },
@@ -263,7 +253,6 @@ fn test_update_admin() {
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
                 new_contract_creation_policy: None,
-                enabled_custom_precompiles: None,
                 chain_spec_update: None,
                 new_admin: Some(new_admin_address_alloy),
             },
@@ -290,9 +279,7 @@ fn test_update_admin() {
         input: admin.create_plain_message::<RT, Evm<S>>(CallMessage::UpdateRuntimeConfig (
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
-                new_contract_creation_policy: Some(ContractCreationPolicyUpdate::Everyone),
-                enabled_custom_precompiles: None,
-                chain_spec_update: None,
+                new_contract_creation_policy: Some(ContractCreationPolicyUpdate::Everyone),                chain_spec_update: None,
                 new_admin: None,
             },
         )),
@@ -318,7 +305,6 @@ fn test_update_chain_spec() {
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
                 new_contract_creation_policy: None,
-                enabled_custom_precompiles: None,
                 chain_spec_update: Some(ChainSpecUpdate {
                     new_limit_contract_code_size: Some(1000),
                     new_block_gas_limit: None,
@@ -350,7 +336,6 @@ fn test_update_chain_spec() {
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
                 new_contract_creation_policy: None,
-                enabled_custom_precompiles: None,
                 chain_spec_update: Some(ChainSpecUpdate {
                     new_limit_contract_code_size: None,
                     new_block_gas_limit: Some(50_000_000),
@@ -378,7 +363,6 @@ fn test_update_chain_spec() {
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
                 new_contract_creation_policy: None,
-                enabled_custom_precompiles: None,
                 chain_spec_update: Some(ChainSpecUpdate {
                     new_limit_contract_code_size: None,
                     new_block_gas_limit: Some(50_000_000),
@@ -413,7 +397,6 @@ fn test_disable_max_fee_check() {
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
                 new_contract_creation_policy: Some(ContractCreationPolicyUpdate::Everyone),
-                enabled_custom_precompiles: None,
                 chain_spec_update: None,
                 new_admin: None,
             },
@@ -436,7 +419,6 @@ fn test_disable_max_fee_check() {
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
                 new_contract_creation_policy: None,
-                enabled_custom_precompiles: None,
                 chain_spec_update: None,
                 new_admin: None,
             },

@@ -53,6 +53,13 @@ pub enum CallMessage<S: Spec> {
     Call(RlpEvmTransaction),
     /// Update the runtime configuration
     UpdateRuntimeConfig(EvmRuntimeConfigUpdate<S>),
+    /// Enable or disable custom EVM precompiles.
+    ///
+    /// This is a dedicated message (rather than a field of [`EvmRuntimeConfigUpdate`]) so that the
+    /// borsh layout of the pre-existing call messages is preserved: appending a variant keeps the
+    /// existing variant discriminants, and `EvmRuntimeConfigUpdate` keeps its original fields, so
+    /// transactions created before custom precompiles existed still decode identically.
+    UpdateEnabledCustomPrecompiles(EnabledCustomPrecompilesUpdate),
 }
 
 impl<S: Spec, P> Evm<S, P>
@@ -122,7 +129,6 @@ where
         let EvmRuntimeConfigUpdate {
             new_hardfork,
             new_contract_creation_policy,
-            enabled_custom_precompiles,
             chain_spec_update,
             new_admin,
         } = update;
@@ -161,10 +167,6 @@ where
             }
         }
 
-        if let Some(enabled_custom_precompiles) = enabled_custom_precompiles {
-            self.apply_enabled_custom_precompiles_update(enabled_custom_precompiles, state)?;
-        }
-
         // Update the chain spec
         if let Some(chain_spec_update) = chain_spec_update {
             self.apply_chain_spec_update(chain_spec_update, &mut cfg)?;
@@ -172,6 +174,23 @@ where
 
         self.cfg.set(&cfg, state)?;
         Ok(())
+    }
+
+    pub(crate) fn update_enabled_custom_precompiles(
+        &mut self,
+        update: EnabledCustomPrecompilesUpdate,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        let Some(admin) = self.admin.get(state)? else {
+            bail!("No EVM admin is configured. The config cannot be updated without an admin.");
+        };
+        ensure!(
+            context.sender() == &admin,
+            "Only the admin can update the enabled custom precompiles. Got {} but expected {admin}",
+            context.sender()
+        );
+        self.apply_enabled_custom_precompiles_update(update, state)
     }
 
     fn apply_enabled_custom_precompiles_update(

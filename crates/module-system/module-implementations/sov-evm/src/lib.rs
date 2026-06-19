@@ -265,6 +265,9 @@ where
             CallMessage::UpdateRuntimeConfig(update) => {
                 Ok(self.update_runtime_config(update, context, state)?)
             }
+            CallMessage::UpdateEnabledCustomPrecompiles(update) => {
+                Ok(self.update_enabled_custom_precompiles(update, context, state)?)
+            }
         }
     }
 }
