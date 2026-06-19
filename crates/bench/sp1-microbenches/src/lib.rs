@@ -3,11 +3,12 @@
 #![allow(clippy::float_arithmetic)]
 
 pub mod cmd;
-pub mod fit;
 
 use anyhow::Context;
 use serde::{Deserialize, Serialize};
 use sp1_sdk::blocking::Elf;
+
+pub use sov_gas_tools::fit::LinearFit;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct BenchResult {
@@ -27,6 +28,16 @@ impl BenchResult {
     pub fn per_iter_region_cycles(&self) -> f64 {
         self.region_cycles as f64 / self.iterations.max(1) as f64
     }
+}
+
+/// Fit `prover_gas_per_call = bias + per_byte * input_size` over the bench results.
+///
+/// The OLS math lives in `sov-gas-tools` (shared with the native microbenches);
+/// this only extracts `(input_size, per-call prover gas)` from [`BenchResult`].
+pub fn fit_prover_gas_per_byte(results: &[BenchResult]) -> anyhow::Result<LinearFit> {
+    let input_sizes: Vec<f64> = results.iter().map(|r| r.input_size as f64).collect();
+    let prover_gas: Vec<f64> = results.iter().map(|r| r.per_iter_prover_gas()).collect();
+    sov_gas_tools::fit::fit_linear(&input_sizes, &prover_gas)
 }
 
 pub fn load_guest_elf(path: &str) -> anyhow::Result<Elf> {

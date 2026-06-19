@@ -6,9 +6,7 @@
 //! We deliberately make gas finer than a nanosecond (`gas = ns / 0.01 = ns * 100`)
 //! so that sub-1ns per-byte costs survive integer rounding. At `1 ns = 1 gas`
 //! every cheap per-byte cost (hash ~0.44 ns/byte, etc.) would ceil to `1` —
-//! indistinguishable and over-charging large inputs 2-5x. The absolute scale is
-//! economically free: the EIP-1559 base fee (`INITIAL_BASE_FEE_PER_GAS`)
-//! auto-adjusts, so only `INITIAL_GAS_LIMIT` needs to move with the scale.
+//! indistinguishable and over-charging large inputs 2-5x.
 
 use std::path::PathBuf;
 
@@ -67,6 +65,10 @@ fn ns_to_gas(ns: f64) -> u64 {
 /// Read a finished size-sweep from criterion, fit `ns = bias + per_byte * size`,
 /// and print the suggested two-part constant (`[X, 0]`, the single charged
 /// dimension), converting ns to gas at `1 gas = 0.01 ns`.
+///
+/// Only prints on a plain `cargo bench` run: `--save-baseline` or size filtering
+/// relocates/omits the `new/estimates.json` files, in which case this returns an
+/// error (the caller downgrades it to a warning).
 pub fn report_size_sweep(
     group: &str,
     sizes: &[u64],
@@ -83,6 +85,17 @@ pub fn report_size_sweep(
         ns_per_call.push(ns);
     }
     let fit = fit_linear(&input_sizes, &ns_per_call)?;
+
+    // A negative coefficient is a degenerate fit (too few / too noisy points). It
+    // would silently floor to 1 gas and look like a real constant, so flag it.
+    if fit.bias < 0.0 || fit.per_byte < 0.0 {
+        eprintln!(
+            "warn: degenerate fit (bias={:.2} ns, per_byte={:.4} ns/byte) — a negative \
+             coefficient floors to 1 gas; the suggested constant is NOT meaningful. \
+             Re-run with more samples / a wider size sweep.",
+            fit.bias, fit.per_byte
+        );
+    }
 
     println!("\n=== fit: ns/call = bias + per_byte * size   (1 gas = 0.01 ns) ===");
     println!("  bias         = {:.2} ns", fit.bias);
