@@ -1204,7 +1204,7 @@ async fn verification_fails_for_forged_total_len(forged_sequence_len: u64) {
         .unwrap_err();
 
     assert!(
-        error.to_string().contains("TotalLenMismatch"),
+        error.to_string().contains("MismatchedBlobLength"),
         "Actual error: {error}"
     );
 }

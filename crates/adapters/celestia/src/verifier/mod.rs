@@ -444,28 +444,19 @@ fn authenticate_blob_data(
     debug_assert!(signer_checked, "Bug. Signer checking has been skipped");
     let sequence_length = sequence_length.expect("sequence length should be set by this point");
 
-    // `total_len()` is read from the untrusted witness and is never otherwise checked against
-    // the DA shares (only the accumulator *content* is authenticated, as a prefix). Pin it to
-    // the sequence length proven from the first share so downstream consumers in the STF (the
-    // size limits, deserialization gas charge, and the malformed-blob slash check in
-    // sov-blob-storage) cannot be fed a forged length.
-    let claimed_total_len = blob.blob.total_len();
-    if claimed_total_len != sequence_length as usize {
+    // `compressed_total_len()` is backed by the prover-supplied witness (it backs
+    // `BlobReaderTrait::total_len()`), which feeds gas accounting, size gates, and the
+    // malformed-blob slash check in the STF / sov-blob-storage. The witness is never
+    // otherwise checked against the DA shares (only the accumulator *content* is
+    // authenticated, as a prefix), so pin it to the `sequence_length` proven from the
+    // authenticated first share — otherwise a malicious prover could attest a state
+    // transition computed over a forged blob length. Use the compression-aware
+    // `compressed_total_len()` accessor so the comparison stays tied to the DA-physical bytes.
+    let claimed_total_len = blob.compressed_total_len() as u64;
+    if claimed_total_len != sequence_length {
         return Err(InvalidBlobData(BlobDataError::MismatchedBlobLength {
-            expected: sequence_length as usize,
-            actual: claimed_total_len,
-        }));
-    }
-
-    // The blob's record of its total payload length is a prover-supplied witness claim:
-    // it backs `BlobReaderTrait::total_len()`, which feeds gas accounting and size gates
-    // inside the STF. It must match the `sequence_length` of the authenticated first
-    // share, otherwise a malicious prover could attest a state transition computed over
-    // a forged blob length.
-    if blob.compressed_total_len() as u64 != sequence_length {
-        return Err(InvalidBlobData(BlobDataError::TotalLenMismatch {
             expected: sequence_length,
-            actual: blob.compressed_total_len() as u64,
+            actual: claimed_total_len,
         }));
     }
     let shares_occupied_total =
