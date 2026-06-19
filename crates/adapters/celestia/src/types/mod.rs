@@ -167,40 +167,6 @@ impl BlobWithSender {
     }
 }
 
-/// Celestia-private accessors distinguishing the two byte streams a blob represents:
-///
-/// * **DA-physical ("compressed")**: the payload bytes as actually posted to Celestia.
-///   Share-occupancy math (inclusion proofs, namespace continuity) is defined over
-///   these bytes and only these bytes.
-/// * **Logical**: the payload bytes exposed to the rollup via [`BlobReaderTrait`].
-///
-/// Today the two streams are identical. Once blobs can be posted in a compressed
-/// envelope, they diverge; proof generation and verification must keep using the
-/// `compressed_*` accessors so the share math stays tied to what is actually on DA.
-impl BlobWithSender {
-    /// DA-physical payload bytes consumed so far. These are the bytes that
-    /// inclusion proofs must cover.
-    pub(crate) fn compressed_verified_data(&self) -> &[u8] {
-        self.blob.accumulator()
-    }
-
-    /// Total DA-physical payload length. Must always equal the `sequence_length`
-    /// recorded in the blob's first share; the verifier enforces this.
-    pub(crate) fn compressed_total_len(&self) -> usize {
-        self.blob.total_len()
-    }
-
-    /// Logical payload bytes observed by the rollup so far.
-    pub(crate) fn logical_verified_data(&self) -> &[u8] {
-        self.compressed_verified_data()
-    }
-
-    /// Total length of the logical payload exposed to the rollup.
-    pub(crate) fn logical_total_len(&self) -> usize {
-        self.compressed_total_len()
-    }
-}
-
 impl BlobReaderTrait for BlobWithSender {
     type Address = CelestiaAddress;
     type BlobHash = TmHash;
@@ -388,6 +354,8 @@ pub mod tests {
 
     use sov_rollup_interface::da::BlobReaderTrait;
 
+    use super::BlobWithSender;
+    use crate::envelope::{classify, EnvelopeState};
     use crate::test_helper::files::*;
     use crate::test_helper::ROLLUP_BATCH_NAMESPACE;
     use crate::types::{NamespaceData, NamespaceRelevantData, TmHash};
@@ -507,73 +475,6 @@ pub mod tests {
 
     #[test]
     fn serde_roundtrip_drops_envelope_cache_and_recomputes() {
-        use super::BlobWithSender;
-        use crate::envelope::{classify, EnvelopeState};
-
-        let path = make_test_path(with_rollup_batch_data::DATA_PATH);
-        let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
-        let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
-
-        let mut blob = ns_data.get_blobs_with_sender().remove(0);
-
-        // Read the whole physical frame so the accumulator carries the bytes to classify.
-        let total = blob.compressed_total_len();
-        blob.advance(total);
-
-        // Simulate PR3's lazy fill so we can prove the cache is dropped on serialize.
-        let expected_state = classify(blob.compressed_verified_data());
-        blob.envelope_state
-            .set(expected_state.clone())
-            .expect("cache starts empty");
-        assert!(blob.envelope_state.get().is_some());
-
-        let json = serde_json::to_string(&blob).unwrap();
-        assert!(
-            !json.contains("envelope_state"),
-            "skipped cache must not be serialized"
-        );
-
-        let restored: BlobWithSender = serde_json::from_str(&json).unwrap();
-
-        // The cache is dropped on deserialize.
-        assert_eq!(restored.envelope_state.get(), None);
-        // Equality ignores the cache: populated original equals empty restored.
-        assert_eq!(restored, blob);
-        // Reconstruction from the authenticated bytes is deterministic.
-        assert_eq!(
-            classify(restored.compressed_verified_data()),
-            expected_state
-        );
-        // This fixture is a raw (non-envelope) blob.
-        assert_eq!(expected_state, EnvelopeState::Legacy);
-        assert_eq!(blob.total_len(), 277);
-    }
-
-    #[test]
-    fn accessors_match_trait_view_for_raw_blobs() {
-        let path = make_test_path(with_rollup_batch_data::DATA_PATH);
-        let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
-
-        let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
-
-        let mut blob = ns_data.get_blobs_with_sender().remove(0);
-
-        // For raw (uncompressed) blobs the DA-physical and logical views are identical,
-        // both before and after a partial read.
-        assert_eq!(blob.compressed_total_len(), blob.total_len());
-        assert_eq!(blob.compressed_verified_data(), blob.verified_data());
-
-        blob.advance(10);
-        assert_eq!(blob.verified_data().len(), 10);
-        assert_eq!(blob.compressed_verified_data(), blob.verified_data());
-        assert_eq!(blob.compressed_total_len(), blob.total_len());
-    }
-
-    #[test]
-    fn serde_roundtrip_drops_envelope_cache_and_recomputes() {
-        use super::BlobWithSender;
-        use crate::envelope::{classify, EnvelopeState};
-
         let path = make_test_path(with_rollup_batch_data::DATA_PATH);
         let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
         let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);

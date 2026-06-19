@@ -1093,13 +1093,14 @@ impl<S: Spec> BlobStorage<S> {
             B::try_from_reader(&mut reader)
         };
 
-        // Decide, *before* trusting Borsh, what to do with the fully-read blob. The
-        // branch order is security-critical (and unit-tested via
-        // `blob_deserialization_gate`): a sender that posted authenticated-but-undecodable
-        // content is slashed, and a prover that withheld bytes fails closed — both before
-        // deserialization, because a short prefix can itself be a complete valid `B`.
+        // Decide what to do with the blob *before* trusting the deserialization outcome. The
+        // branch order is security-critical (and unit-tested via `blob_deserialization_gate`): a
+        // sender that posted authenticated-but-undecodable content is slashed, and a prover that
+        // exposed a valid prefix while withholding the tail fails closed — the completeness check
+        // must gate the `Ok`, because a short prefix can itself be a complete valid `B`.
         match blob_deserialization_gate(
             blob.logical_decode_failed(),
+            deserialized.is_ok(),
             blob.verified_data().len(),
             blob.total_len(),
         ) {
@@ -1118,15 +1119,15 @@ impl<S: Spec> BlobStorage<S> {
                 }
                 return None;
             }
-            // Fewer logical bytes than claimed, not a decode failure: the prover withheld
-            // data. Fail the proof closed.
+            // Borsh accepted a prefix but authenticated bytes remain: the prover withheld the
+            // tail behind a valid prefix. Fail the proof closed.
             BlobDeserGate::WithheldFailClosed => panic!(
-                "Blob data not fully provided before deserialization (have {} of {} logical bytes). The prover might be malicious",
+                "Blob deserialized from a prefix but authenticated bytes remain (used {} of {} logical bytes). The prover might be malicious",
                 blob.verified_data().len(),
                 blob.total_len(),
             ),
-            // Full, decodable logical payload present: safe to attempt deserialization.
-            BlobDeserGate::Deserialize => {}
+            // No pre-emptive verdict: handle the deserialization result below.
+            BlobDeserGate::Proceed => {}
         }
 
         match deserialized {
@@ -1333,6 +1334,48 @@ impl<S: Spec> BlobStorage<S> {
     }
 }
 
+/// Decision taken from the already-computed deserialization outcome, before the result is
+/// trusted (PR-A). A pure function so the security-critical branch *order* stays unit-testable:
+/// `logical_decode_failed` (authenticated bytes present but undecodable — the sender's fault)
+/// slashes and takes precedence; a successful decode that consumed fewer than `total_len` bytes
+/// means the prover withheld a tail behind a valid prefix and fails closed. The completeness
+/// check gates only the `Ok` path — a short prefix can be a complete valid value, and the `Err`
+/// arm cannot see it — so a deserialize `Err` is left to that arm (slash / truncation guard).
+#[derive(Debug, PartialEq, Eq)]
+enum BlobDeserGate {
+    /// Authenticated bytes are fully present but do not decode into the claimed logical
+    /// payload — slash the sender.
+    SlashUndecodable,
+    /// Borsh decoded an `Ok` from a prefix while authenticated bytes remain (`verified_len <
+    /// total_len`) — the prover withheld the trailing data; fail closed.
+    WithheldFailClosed,
+    /// No pre-emptive verdict — handle the deserialization result (accept it, or let the error
+    /// arm slash a malformed blob / fail closed on a truncated one).
+    Proceed,
+}
+
+fn blob_deserialization_gate(
+    logical_decode_failed: bool,
+    deserialize_ok: bool,
+    verified_len: usize,
+    total_len: usize,
+) -> BlobDeserGate {
+    if logical_decode_failed {
+        // Takes precedence over the length check: a non-canonical envelope can decode to
+        // exactly `logical_len` yet still be undecodable (e.g. trailing/extra bytes).
+        BlobDeserGate::SlashUndecodable
+    } else if deserialize_ok && verified_len != total_len {
+        // Only a prefix `Ok` is dangerous here: borsh accepted a value but the authenticated
+        // blob has more bytes, so the prover withheld the tail. A deserialize `Err` with
+        // `verified_len < total_len` is left to the error arm (early-exit malformed input or a
+        // fully present blob with trailing garbage), so this never fires on a fully-read native
+        // blob — there an `Ok` implies `verified_len == total_len`.
+        BlobDeserGate::WithheldFailClosed
+    } else {
+        BlobDeserGate::Proceed
+    }
+}
+
 /// A [`std::io::Read`] adapter that verifies (`advance`s) only the bytes actually consumed by
 /// the reader, letting deserialization bail out early without verifying the whole blob.
 ///
@@ -1341,40 +1384,6 @@ impl<S: Spec> BlobStorage<S> {
 /// not needed for OOM protection. A lazy `BufRead::fill_buf` would either expose the whole blob and
 /// lose early-exit behavior, or expose only a chunk that does not represent the full remaining
 /// length.
-/// Pre-deserialization decision for a fully-read blob (PR-A). Kept as a pure function
-/// so the security-critical branch *order* is unit-testable in isolation: a blob whose
-/// authenticated DA bytes are fully present but do not decode (the sender's fault) is
-/// slashed, and a blob with fewer logical bytes than it claims (the prover withheld
-/// data) fails the proof closed — both decided *before* Borsh, because a short prefix
-/// can itself be a complete valid value.
-#[derive(Debug, PartialEq, Eq)]
-enum BlobDeserGate {
-    /// Authenticated bytes are fully present but do not decode into the claimed logical
-    /// payload — slash the sender.
-    SlashUndecodable,
-    /// Fewer logical bytes than `total_len` and not a decode failure — the prover
-    /// withheld data; fail closed.
-    WithheldFailClosed,
-    /// A complete, decodable logical payload is present — safe to attempt Borsh.
-    Deserialize,
-}
-
-fn blob_deserialization_gate(
-    logical_decode_failed: bool,
-    verified_len: usize,
-    total_len: usize,
-) -> BlobDeserGate {
-    if logical_decode_failed {
-        // Takes precedence over the length check: a non-canonical envelope can decode to
-        // exactly `logical_len` yet still be undecodable (e.g. trailing/extra bytes).
-        BlobDeserGate::SlashUndecodable
-    } else if verified_len != total_len {
-        BlobDeserGate::WithheldFailClosed
-    } else {
-        BlobDeserGate::Deserialize
-    }
-}
-
 #[cfg(feature = "native")]
 struct LazyBlobReader<'a, B: BlobReaderTrait> {
     blob: &'a mut B,
@@ -1427,49 +1436,64 @@ mod tests {
         PreferredProofData, SequencerNumberTracker,
     };
 
-    // PR-A: the pre-Borsh gate must (a) slash a blob whose authenticated DA bytes are
-    // fully present but undecodable, and (b) fail closed when fewer logical bytes are
-    // provided than claimed — both *before* deserialization, since a (decoded) short
-    // prefix can itself be a complete valid value.
+    // PR-A: the gate's branch order is security-critical. `logical_decode_failed` slashes and
+    // takes precedence; a successful decode that left authenticated bytes unread fails closed
+    // (prover withheld a tail behind a valid prefix); everything else proceeds to the result.
     #[test]
-    fn deser_gate_decode_failure_slashes_before_borsh() {
-        // Decode failure takes precedence over the length check: a non-canonical
-        // envelope can decode to exactly `logical_len` yet still be undecodable.
+    fn deser_gate_decode_failure_slashes_first() {
+        // Decode failure takes precedence over both the length check and the deserialize
+        // outcome: a non-canonical envelope can decode to exactly `logical_len` yet still be
+        // undecodable.
         assert_eq!(
-            blob_deserialization_gate(true, 5, 10),
+            blob_deserialization_gate(true, true, 10, 10),
             BlobDeserGate::SlashUndecodable
         );
         assert_eq!(
-            blob_deserialization_gate(true, 10, 10),
+            blob_deserialization_gate(true, false, 5, 10),
             BlobDeserGate::SlashUndecodable
         );
     }
 
     #[test]
-    fn deser_gate_incomplete_read_fails_closed_before_borsh() {
-        // A prover-withheld prefix (verified < total) is rejected regardless of whether
-        // the provided bytes would themselves deserialize — the gate never returns
-        // `Deserialize` here, so Borsh is never reached.
+    fn deser_gate_ok_prefix_with_bytes_remaining_fails_closed() {
+        // A successful decode (`Ok`) that consumed fewer than `total_len` bytes means the prover
+        // withheld the tail behind a valid prefix; fail closed before the `Ok` is trusted.
         assert_eq!(
-            blob_deserialization_gate(false, 5, 10),
+            blob_deserialization_gate(false, true, 5, 10),
             BlobDeserGate::WithheldFailClosed
         );
         assert_eq!(
-            blob_deserialization_gate(false, 0, 10),
+            blob_deserialization_gate(false, true, 0, 10),
             BlobDeserGate::WithheldFailClosed
         );
     }
 
     #[test]
-    fn deser_gate_complete_decodable_payload_deserializes() {
+    fn deser_gate_deserialize_error_proceeds_to_error_arm() {
+        // A deserialize `Err` with `verified < total` (early-exit malformed input, or a fully
+        // present blob with trailing garbage) must NOT fail closed here — it is routed to the
+        // error arm, which slashes a malformed sender instead of panicking the node.
         assert_eq!(
-            blob_deserialization_gate(false, 10, 10),
-            BlobDeserGate::Deserialize
+            blob_deserialization_gate(false, false, 5, 10),
+            BlobDeserGate::Proceed
+        );
+        assert_eq!(
+            blob_deserialization_gate(false, false, 6, 10),
+            BlobDeserGate::Proceed
+        );
+    }
+
+    #[test]
+    fn deser_gate_complete_payload_proceeds() {
+        // `Ok` that consumed the whole blob proceeds to be accepted.
+        assert_eq!(
+            blob_deserialization_gate(false, true, 10, 10),
+            BlobDeserGate::Proceed
         );
         // Empty blob: nothing withheld, nothing to decode-fail.
         assert_eq!(
-            blob_deserialization_gate(false, 0, 0),
-            BlobDeserGate::Deserialize
+            blob_deserialization_gate(false, true, 0, 0),
+            BlobDeserGate::Proceed
         );
     }
 
