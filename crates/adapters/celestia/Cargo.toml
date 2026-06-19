@@ -37,7 +37,7 @@ hex = { workspace = true, features = ["serde"] }
 # Bare `default-features = false` selects lz4_flex's *unsafe* codec; the guest decodes
 # adversarial bytes, so keep the bounds-checked safe encode/decode paths. Dropping the
 # default `frame` feature also keeps the dependency `std`-free for the guest build.
-lz4_flex = { version = "0.11", default-features = false, features = [
+lz4_flex = { workspace = true, default-features = false, features = [
     "safe-encode",
     "safe-decode",
 ] }

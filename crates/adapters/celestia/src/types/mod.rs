@@ -305,6 +305,11 @@ impl BlobReaderTrait for BlobWithSender {
                         covered,
                         logical_len,
                     ) {
+                        // Bad framing: the 4 header bytes just advanced stay in the
+                        // (authenticated) accumulator past `decoded.consumed`. Benign — the
+                        // decoder below stops at the same boundary, and the guest's wholesale
+                        // decode sees the identical accumulator, so both mark the blob unclean.
+                        // Slightly wasteful, never a native/guest divergence.
                         break;
                     }
                     self.blob.advance(chunk_encoded as usize);
@@ -399,6 +404,12 @@ impl NamespaceRelevantData {
             // `total_len()` is the authenticated `logical_len` before any size gate
             // runs. Legacy blobs read nothing here, preserving their partial-read
             // savings.
+            //
+            // Load-bearing: `chunk()` must expose at least the 16-byte magic for any
+            // real envelope (it returns the first share's whole payload, ~482 B). A
+            // false negative would cache `Legacy` on first access while the guest
+            // reclassifies the full accumulator as `Envelope` — a silent native/guest
+            // divergence. Pinned by `first_share_chunk_exposes_envelope_magic`.
             let iter = blob.into_iter();
             let is_envelope = crate::envelope::has_magic_prefix(prost::bytes::Buf::chunk(&iter));
             let mut reader = CountedBufReader::new(iter);
@@ -705,6 +716,43 @@ pub mod tests {
     fn compressible_payload(len: usize) -> Vec<u8> {
         const PATTERN: [u8; 8] = [0xDE, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
         PATTERN.iter().copied().cycle().take(len).collect()
+    }
+
+    /// Pins the load-bearing assumption behind the eager-header read in
+    /// `get_blobs_with_sender`: the first share's `Buf::chunk()` must expose at least the
+    /// full envelope header. If it ever returned fewer than the 16-byte magic for a real
+    /// envelope, native would cache `Legacy` on first access while the guest reclassifies
+    /// the full accumulator as `Envelope` — a silent native/guest divergence.
+    #[test]
+    fn first_share_chunk_exposes_envelope_magic() {
+        use prost::bytes::Buf;
+
+        use crate::verifier::address::CelestiaAddress;
+
+        // A real, multi-chunk compressed envelope spanning several Celestia shares.
+        let logical = compressible_payload(4000);
+        let posted = crate::envelope::encode_for_submission(&logical, true, 482);
+        assert!(
+            crate::envelope::has_magic_prefix(&posted),
+            "fixture must be an envelope"
+        );
+
+        let signer = CelestiaAddress::from_str(crate::test_helper::ADDR_1).unwrap();
+        let cblob =
+            crate::test_helper::blob_from_data(ROLLUP_BATCH_NAMESPACE, posted, &signer).unwrap();
+        let shares = cblob.to_shares().unwrap();
+        let iter = crate::shares::Blob(shares).into_iter();
+
+        let first_chunk = Buf::chunk(&iter);
+        assert!(
+            first_chunk.len() >= crate::envelope::ENVELOPE_HEADER_LEN,
+            "first share chunk must expose the whole fixed header, got {} bytes",
+            first_chunk.len()
+        );
+        assert!(
+            crate::envelope::has_magic_prefix(first_chunk),
+            "eager-header detection must see the magic in the first chunk"
+        );
     }
 
     #[test]

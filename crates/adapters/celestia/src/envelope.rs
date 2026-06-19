@@ -114,6 +114,19 @@ pub(crate) struct DecodedEnvelope {
     pub clean: bool,
 }
 
+#[cfg(feature = "native")]
+impl DecodedEnvelope {
+    /// True iff this is a canonical decode of a `frame_len`-byte frame: clean, the
+    /// chunks consumed the whole frame, and the decoded length equals the declared
+    /// `logical_len`. It does not check *which* bytes decoded — callers that must pin
+    /// the exact payload add `&& self.logical == expected`.
+    fn is_canonical_for_frame_len(&self, frame_len: usize) -> bool {
+        self.clean
+            && self.consumed == frame_len
+            && self.logical.len() == self.header.logical_len as usize
+    }
+}
+
 /// Classification of a blob's authenticated DA-physical bytes.
 ///
 /// Derived purely from the bytes, so it is identical on native and guest builds.
@@ -373,10 +386,7 @@ pub(crate) fn encode_chunked(logical: &[u8], codec: u8, chunk_size: usize) -> Ve
 pub(crate) fn is_canonical_encoding_of(frame: &[u8], logical: &[u8]) -> bool {
     match classify_and_decode(frame) {
         EnvelopeState::Envelope(d) => {
-            d.clean
-                && d.consumed == frame.len()
-                && d.logical.len() == d.header.logical_len as usize
-                && d.logical == logical
+            d.is_canonical_for_frame_len(frame.len()) && d.logical == logical
         }
         EnvelopeState::Legacy | EnvelopeState::Malformed => false,
     }
@@ -417,13 +427,7 @@ pub(crate) fn encode_for_submission(logical: &[u8], compress: bool, chunk_size: 
 #[cfg(feature = "native")]
 pub(crate) fn decode_for_read(buf: &[u8]) -> Vec<u8> {
     match classify_and_decode(buf) {
-        EnvelopeState::Envelope(d)
-            if d.clean
-                && d.consumed == buf.len()
-                && d.logical.len() == d.header.logical_len as usize =>
-        {
-            d.logical
-        }
+        EnvelopeState::Envelope(d) if d.is_canonical_for_frame_len(buf.len()) => d.logical,
         // Legacy / malformed-magic / non-canonical: posted bytes verbatim.
         _ => buf.to_vec(),
     }
