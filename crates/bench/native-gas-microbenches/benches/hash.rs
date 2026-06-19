@@ -9,7 +9,7 @@
 use std::hint::black_box;
 
 use criterion::{criterion_group, criterion_main, BenchmarkId, Criterion};
-use native_gas_microbenches::report_size_sweep;
+use sov_gas_tools::report::report_size_sweep;
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::default_spec::DefaultSpec;

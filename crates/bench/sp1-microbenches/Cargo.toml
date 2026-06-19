@@ -15,7 +15,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 clap = { workspace = true }
-cost-model-fit = { workspace = true }
+sov-gas-tools = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-sp1-adapter = { workspace = true, features = ["native"] }

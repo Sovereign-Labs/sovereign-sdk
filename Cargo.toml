@@ -27,6 +27,7 @@ members = [
     "crates/utils/sov-rest-utils",
     "crates/utils/rest-api-load-testing",
     "crates/utils/nearly-linear",
+    "crates/utils/sov-gas-tools",
     "crates/utils/sov-zkvm-utils",
     "crates/utils/sov-build",
     "crates/utils/sov-rpc-eth-types",
@@ -135,7 +136,7 @@ float_arithmetic = "deny"              # Can cause subtle bugs due to different 
 #doc_markdown = "warn"
 
 [workspace.dependencies]
-cost-model-fit = { path = "crates/bench/cost-model-fit", default-features = false, version = "0.3" }
+sov-gas-tools = { path = "crates/utils/sov-gas-tools", default-features = false, version = "0.3" }
 demo-stf = { path = "examples/demo-rollup/stf", default-features = false, version = "0.3" }
 demo-stf-declaration = { path = "examples/demo-rollup/stf/stf-declaration", default-features = false, version = "0.3" }
 sov-soak-testing-lib = { path = "crates/utils/sov-soak-testing-lib", default-features = false }

@@ -1,6 +1,6 @@
 [package]
-name = "cost-model-fit"
-description = "Ordinary-least-squares fit of the gas cost model `cost = bias + per_byte * size`. Shared by the SP1 (prover-gas) and native (wall-clock) microbenches, and reusable by downstream rollup benches."
+name = "sov-gas-tools"
+description = "Utilities for calibrating and pricing gas constants: OLS cost-model fitting and native-microbench reporting helpers."
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }
@@ -14,3 +14,5 @@ workspace = true
 
 [dependencies]
 anyhow = { workspace = true }
+serde = { workspace = true }
+serde_json = { workspace = true }

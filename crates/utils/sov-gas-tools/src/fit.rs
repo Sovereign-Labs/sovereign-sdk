@@ -1,19 +1,10 @@
 //! Ordinary-least-squares fit of the gas cost model `cost = bias + per_byte * size`.
 //!
-//! This is the shared math behind every gas-constant microbench, independent of
-//! how `cost` was measured:
-//! - the SP1 microbenches feed it **prover gas** per call,
-//! - the native microbenches feed it **wall-clock ns** per call (1 ns = 1 gas),
-//! - downstream rollup benches can feed it whatever their gas basis is.
-//!
-//! It extracts the two numbers the gas model needs — a per-call fixed overhead
-//! (`bias`, the intercept) and a per-byte marginal cost (`per_byte`, the slope) —
-//! plus `r_squared` / `max_residual` so callers can judge fit quality.
-//!
-//! Host-only post-processing — never compiled into a zkVM guest, so the workspace
-//! `clippy::float_arithmetic` deny (which guards against native/zkVM divergence)
-//! doesn't apply.
-#![allow(clippy::float_arithmetic)]
+//! Independent of how `cost` was measured: the SP1 microbenches feed prover gas,
+//! the native microbenches feed wall-clock ns, and downstream benches feed
+//! whatever their gas basis is. Returns the per-call fixed overhead (`bias`, the
+//! intercept) and per-byte marginal cost (`per_byte`, the slope), plus
+//! `r_squared` / `max_residual` so callers can judge fit quality.
 
 #[derive(Debug, Clone)]
 pub struct LinearFit {
