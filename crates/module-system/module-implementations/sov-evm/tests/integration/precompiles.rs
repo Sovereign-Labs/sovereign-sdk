@@ -16,7 +16,7 @@ use sov_evm::precompiles::{
 use sov_evm::{
     AccountData, CallMessage, ContractCreationPolicy, EnabledCustomPrecompilesUpdate,
     EthereumAuthenticator, Evm, EvmAuthenticatorInput, EvmChainSpec, EvmGenesisConfig,
-    EvmRuntimeConfigUpdate, RlpEvmTransaction, SpecId,
+    RlpEvmTransaction, SpecId,
 };
 use sov_evm_test_utils::{PrecompileTester, SolCall};
 use sov_modules_api::capabilities::TransactionAuthenticator;
@@ -337,23 +337,20 @@ fn update_enabled_custom_precompiles(
     runner.execute_transaction(TransactionTestCase {
         input: admin
             .create_plain_message::<composite_runtime::RT, Evm<S, CompositePrecompiles<S>>>(
-                CallMessage::UpdateRuntimeConfig(EvmRuntimeConfigUpdate {
-                    enabled_custom_precompiles: Some(EnabledCustomPrecompilesUpdate {
-                        add: SafeVec::try_from(
-                            add.into_iter()
-                                .map(EthereumAddress::from)
-                                .collect::<Vec<_>>(),
-                        )
-                        .unwrap(),
-                        remove: SafeVec::try_from(
-                            remove
-                                .into_iter()
-                                .map(EthereumAddress::from)
-                                .collect::<Vec<_>>(),
-                        )
-                        .unwrap(),
-                    }),
-                    ..EvmRuntimeConfigUpdate::empty()
+                CallMessage::UpdateEnabledCustomPrecompiles(EnabledCustomPrecompilesUpdate {
+                    add: SafeVec::try_from(
+                        add.into_iter()
+                            .map(EthereumAddress::from)
+                            .collect::<Vec<_>>(),
+                    )
+                    .unwrap(),
+                    remove: SafeVec::try_from(
+                        remove
+                            .into_iter()
+                            .map(EthereumAddress::from)
+                            .collect::<Vec<_>>(),
+                    )
+                    .unwrap(),
                 }),
             ),
         assert: Box::new(|ctx, _state| {
@@ -582,13 +579,10 @@ fn admin_update_rejects_unavailable_custom_precompile() {
     runner.execute_transaction(TransactionTestCase {
         input: admin
             .create_plain_message::<composite_runtime::RT, Evm<S, CompositePrecompiles<S>>>(
-                CallMessage::UpdateRuntimeConfig(EvmRuntimeConfigUpdate {
-                    enabled_custom_precompiles: Some(EnabledCustomPrecompilesUpdate {
-                        add: SafeVec::try_from(vec![EthereumAddress::from(unavailable_precompile)])
-                            .unwrap(),
-                        remove: SafeVec::try_from(vec![]).unwrap(),
-                    }),
-                    ..EvmRuntimeConfigUpdate::empty()
+                CallMessage::UpdateEnabledCustomPrecompiles(EnabledCustomPrecompilesUpdate {
+                    add: SafeVec::try_from(vec![EthereumAddress::from(unavailable_precompile)])
+                        .unwrap(),
+                    remove: SafeVec::try_from(vec![]).unwrap(),
                 }),
             ),
         assert: Box::new(|ctx, _state| {

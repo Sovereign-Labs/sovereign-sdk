@@ -174,9 +174,6 @@ pub struct EvmRuntimeConfigUpdate<S: Spec> {
     pub new_hardfork: Option<(u64, BorshSpecId)>,
     /// A new contract creation policy to apply. None means "no change"
     pub new_contract_creation_policy: Option<ContractCreationPolicyUpdate>,
-    /// Custom precompiles to enable or disable. None means "no change"
-    #[serde(default)]
-    pub enabled_custom_precompiles: Option<EnabledCustomPrecompilesUpdate>,
     /// A new chain spec to apply. None means "no change"
     pub chain_spec_update: Option<ChainSpecUpdate>,
     /// A new admin address to set. None means "no change"
@@ -190,7 +187,6 @@ impl<S: Spec> EvmRuntimeConfigUpdate<S> {
         Self {
             new_hardfork: None,
             new_contract_creation_policy: None,
-            enabled_custom_precompiles: None,
             chain_spec_update: None,
             new_admin: None,
         }
