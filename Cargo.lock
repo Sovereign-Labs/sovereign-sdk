@@ -3029,6 +3029,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "cost-model-fit"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+]
+
+[[package]]
 name = "cpp_demangle"
 version = "0.4.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6715,6 +6722,20 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "6a51313c5820b0b02bd422f4b44776fbf47961755c74ce64afc73bfad10226c3"
 dependencies = [
  "getrandom 0.2.16",
+]
+
+[[package]]
+name = "native-gas-microbenches"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "cost-model-fit",
+ "criterion",
+ "serde",
+ "serde_json",
+ "sov-mock-da",
+ "sov-mock-zkvm",
+ "sov-modules-api",
 ]
 
 [[package]]
@@ -13199,6 +13220,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "clap",
+ "cost-model-fit",
  "serde",
  "sov-rollup-interface",
  "sov-sp1-adapter",

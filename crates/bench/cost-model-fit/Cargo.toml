@@ -1,0 +1,16 @@
+[package]
+name = "cost-model-fit"
+description = "Ordinary-least-squares fit of the gas cost model `cost = bias + per_byte * size`. Shared by the SP1 (prover-gas) and native (wall-clock) microbenches, and reusable by downstream rollup benches."
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+publish = false
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
