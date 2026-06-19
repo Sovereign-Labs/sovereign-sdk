@@ -1324,6 +1324,93 @@ async fn verification_fails_if_blob_total_len_is_forged() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn verification_rejects_compressed_envelope_witness_without_header() -> anyhow::Result<()> {
+    use crate::shares::BlobIterator;
+    use sov_rollup_interface::da::CountedBufReader;
+
+    let rollup_params = ROLLUP_PARAMS_DEV;
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let mut config = dev_node.get_config().await?;
+    config.compression = crate::config::CompressOnSubmit::Lz4;
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let da_service = CelestiaService::new(config, rollup_params, shutdown_rx).await;
+
+    // A compressible batch whose DA-physical envelope is shorter than the logical payload.
+    let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
+    let logical_blob: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
+    let height_before = da_service.get_head_block_header().await?.height();
+    let response = da_service.send_transaction(&logical_blob).await.await??;
+    let height_after = da_service
+        .get_head_block_header()
+        .await?
+        .height()
+        .saturating_add(1);
+
+    let mut matching_block = None;
+    for height in height_before..=height_after {
+        let block = da_service.get_block_at(height).await?;
+        let relevant_blobs = extract_relevant_blobs(&block);
+        if relevant_blobs
+            .batch_blobs
+            .iter()
+            .any(|blob| blob.hash == response.blob_hash)
+        {
+            matching_block = Some(block);
+            break;
+        }
+    }
+    let block = matching_block.context("submitted compressed blob was not found")?;
+
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    let blob_idx = relevant_blobs
+        .batch_blobs
+        .iter()
+        .position(|blob| blob.hash == response.blob_hash)
+        .context("submitted compressed blob was not extracted")?;
+
+    let physical_len = relevant_blobs.batch_blobs[blob_idx].compressed_total_len();
+    assert!(
+        relevant_blobs.batch_blobs[blob_idx]
+            .compressed_verified_data()
+            .starts_with(&crate::envelope::ENVELOPE_MAGIC),
+        "native extraction should eagerly authenticate the envelope header",
+    );
+    assert_ne!(
+        physical_len,
+        logical_blob.len(),
+        "fixture must distinguish DA-physical and logical lengths",
+    );
+    assert_eq!(
+        relevant_blobs.batch_blobs[blob_idx].clone().total_len(),
+        logical_blob.len(),
+        "honest native witness should expose the envelope logical length",
+    );
+
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    relevant_blobs.batch_blobs[blob_idx].blob =
+        CountedBufReader::new(BlobIterator::with_forged_len(physical_len));
+    assert_eq!(
+        relevant_blobs.batch_blobs[blob_idx]
+            .compressed_verified_data()
+            .len(),
+        0,
+        "forged witness omits the authenticated envelope header",
+    );
+    assert_eq!(
+        relevant_blobs.batch_blobs[blob_idx].total_len(),
+        physical_len,
+        "without the header, the witness is classified as legacy and exposes physical length",
+    );
+
+    let verifier = CelestiaVerifier::new(rollup_params);
+    verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .expect_err("verifier accepted an envelope witness that omitted the header");
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_blobs_from_padded_namespace() {
     let block: FilteredCelestiaBlock = with_namespace_padding::filtered_block();
     let relevant_blobs = extract_relevant_blobs(&block);
