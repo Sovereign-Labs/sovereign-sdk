@@ -352,6 +352,17 @@ fn authenticate_blob_data(
     let blob_data_read = blob.compressed_verified_data();
     let first_share = blob_row_proof.first_share().map_err(InvalidRowProof)?;
     let has_signer = first_share.signer().is_some();
+    let first_share_payload = first_share
+        .payload()
+        // Parity share namespace should not be verified
+        .ok_or(InvalidBlobData(BlobDataError::UnexpectedBlobs))?;
+    if crate::envelope::has_magic_prefix(first_share_payload) {
+        let required_prefix_len =
+            crate::envelope::ENVELOPE_HEADER_LEN.min(blob.compressed_total_len());
+        if blob_data_read.len() < required_prefix_len {
+            return Err(InvalidBlobData(BlobDataError::NonMatchingShare));
+        }
+    }
     let num_shares_to_prove =
         shares_needed_for_bytes_with_signer(blob_data_read.len(), has_signer).max(1);
     let num_shares_with_proofs = blob_row_proof
