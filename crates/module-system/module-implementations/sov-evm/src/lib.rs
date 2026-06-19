@@ -318,6 +318,15 @@ where
     where
         Reader: StateReader<User, Error = E>,
     {
+        // When the runtime has no compiled-in custom precompiles, the enabled set can never have
+        // any effect: a custom precompile is only ever activated if it is also present in
+        // `P::ADDRESSES` (see `SovPrecompileProvider::custom_precompile_enabled`). Skip the state
+        // read entirely in that case.
+        // This both avoids a tiny bit of extra gas usage for rollups not using custom precompiles,
+        // and provides backwards compatibility for existing pre-precompile rollups.
+        if P::ADDRESSES.is_empty() {
+            return Ok(BTreeSet::new());
+        }
         Ok(self
             .enabled_custom_precompiles
             .get(state)?
