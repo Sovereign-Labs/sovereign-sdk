@@ -419,7 +419,7 @@ pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
 mod tests {
     use super::{
         default_compression_chunk_size, validate_compression_chunk_size, validate_rpc_url,
-        CelestiaConfig, GrpcEndpointConfig, VerifyOnFetchMode
+        CelestiaConfig, GrpcEndpointConfig, VerifyOnFetchMode,
     };
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";

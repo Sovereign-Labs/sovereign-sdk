@@ -206,30 +206,6 @@ impl BlobWithSender {
 /// Today the two streams are identical. Once blobs can be posted in a compressed
 /// envelope, they diverge; proof generation and verification must keep using the
 /// `compressed_*` accessors so the share math stays tied to what is actually on DA.
-impl BlobWithSender {
-    /// DA-physical payload bytes consumed so far. These are the bytes that
-    /// inclusion proofs must cover.
-    pub(crate) fn compressed_verified_data(&self) -> &[u8] {
-        self.blob.accumulator()
-    }
-
-    /// Total DA-physical payload length. Must always equal the `sequence_length`
-    /// recorded in the blob's first share; the verifier enforces this.
-    pub(crate) fn compressed_total_len(&self) -> usize {
-        self.blob.total_len()
-    }
-
-    /// Logical payload bytes observed by the rollup so far.
-    pub(crate) fn logical_verified_data(&self) -> &[u8] {
-        self.compressed_verified_data()
-    }
-
-    /// Total length of the logical payload exposed to the rollup.
-    pub(crate) fn logical_total_len(&self) -> usize {
-        self.compressed_total_len()
-    }
-}
-
 impl BlobReaderTrait for BlobWithSender {
     type Address = CelestiaAddress;
     type BlobHash = TmHash;
@@ -536,7 +512,7 @@ pub mod tests {
     use sov_rollup_interface::da::BlobReaderTrait;
 
     use super::BlobWithSender;
-    use crate::envelope::{classify, EnvelopeState};
+    use crate::envelope::{classify_and_decode, EnvelopeState};
     use crate::test_helper::files::*;
     use crate::test_helper::ROLLUP_BATCH_NAMESPACE;
     use crate::types::{NamespaceData, NamespaceRelevantData, TmHash};
