@@ -4,7 +4,7 @@ Simple implementation of based sequencer generic over batch builder and DA servi
 
 ### Submit transactions
 
-Please see [`demo-rollup` README](../../examples/demo-rollup/README.md#how-to-submit-transactions).
+Please see [`demo-rollup` README](../../../examples/demo-rollup/README.md#how-to-submit-transactions).
 
 ### Publish blob
 
