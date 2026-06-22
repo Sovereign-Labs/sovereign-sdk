@@ -387,7 +387,7 @@ where
         baked_tx: FullyBakedTx,
         ip_addr: IpAddr,
     ) -> Result<AcceptedTx<<Self as Sequencer>::Confirmation>, ErrorObject> {
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.shutdown_sender.has_changed() {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return Err(shut_down());
         }

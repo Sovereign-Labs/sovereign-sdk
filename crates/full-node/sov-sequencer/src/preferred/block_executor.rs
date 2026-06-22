@@ -264,7 +264,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     #[tracing::instrument(skip_all, level = "trace")]
     pub async fn replace_state(&mut self, other: Self) {
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.shutdown_sender.has_changed() {
             tracing::info!("The sequencer is shutting down. Exiting replace_state");
             return;
         }
@@ -427,7 +427,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         )
         .await;
 
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.shutdown_sender.has_changed() {
             tracing::info!("The sequencer is shutting down. Exiting replay_batch");
             return Ok(());
         }

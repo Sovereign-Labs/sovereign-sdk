@@ -44,7 +44,7 @@ where
         // On shutdown exit early. This prevents duplicate subscriptions to the DB events channel, which would cause spurious warnings.
         // Note that we only need to detect whether a previous `replay_soft_confirmations_on_top_of_node_state` was aborted due to shutdown
         // *while its subscription was active*, so a single check at the start is sufficient.
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.shutdown_sender.has_changed() {
             tracing::info!("The sequencer is shutting down. Exiting replay_soft_confirmations_on_top_of_node_state without completing replay.");
             return Ok(());
         }
@@ -147,7 +147,7 @@ where
                         executor
                             .replay_batch(&batch, proofs_to_replay, &node_state_root)
                             .await?;
-                        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+                        if self.shutdown_sender.has_changed() {
                             tracing::info!("The sequencer is shutting down. Exiting replay_soft_confirmations_on_top_of_node_state.");
                             return Ok(());
                         }
@@ -205,7 +205,7 @@ where
         // Just get close, then lock the sequencer. This will keep p99 reasonable while hopefully
         // minimizing the risk of extremely long catchup periods in `update_state`.
         while db_event_subscription.len() > 1 {
-            if self.shutdown_receiver.has_changed().unwrap_or(true) {
+            if self.shutdown_sender.has_changed() {
                 tracing::info!("The sequencer is shutting down. Exiting replay_batch");
                 return Ok(());
             }
@@ -275,7 +275,7 @@ where
             t.submit(metrics);
         });
 
-        if !self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if !self.shutdown_sender.has_changed() {
             self.synchronized_state_updator
                 .prune_sequencer_db_msg("update_state::prune_sequencer_db")
                 .await
@@ -293,7 +293,7 @@ where
             .send_simple_state_update_msg(info)
             .await
             .map_err(|e| e.into_state_update_error())?;
-        if !self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if !self.shutdown_sender.has_changed() {
             self.synchronized_state_updator
                 .prune_sequencer_db_msg("update_state::prune_sequencer_db")
                 .await

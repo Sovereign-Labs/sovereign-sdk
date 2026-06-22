@@ -55,6 +55,20 @@ impl PrimaryShutdownController {
         let _ = receiver.changed().await;
     }
 
+    /// Returns `true` if a shutdown has already been triggered.
+    ///
+    /// This is the synchronous, non-awaiting counterpart to
+    /// [`recv_shutdown`](Self::recv_shutdown), for code that needs to branch on
+    /// the shutdown state without suspending. It inspects the controller's
+    /// reference receiver, which is never advanced past the channel's initial
+    /// version, so it reflects whether [`trigger`](Self::trigger) was ever
+    /// called.
+    pub fn has_changed(&self) -> bool {
+        // The controller always holds a receiver, so the channel is never
+        // closed and `has_changed` cannot error here.
+        self.receiver.has_changed().unwrap_or(false)
+    }
+
     /// Triggers the primary shutdown.
     ///
     /// Returns `false` if the signal could not be delivered because every
