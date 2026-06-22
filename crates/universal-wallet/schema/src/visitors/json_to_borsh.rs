@@ -250,7 +250,7 @@ impl<W: std::io::Write, L: LinkingScheme> TypeVisitor<L, ContainerSerdeMetadata>
             let json_value = if let Some(value) = json_fields.remove(&field_serde.name) {
                 value
             } else {
-		// allow null values to be missing from the input
+                // allow null values to be missing from the input
                 if !matches!(inner_type, Ty::Option { .. }) {
                     return Err(EncodeError::MissingType {
                         name: format!("{}.{}", s.type_name, field.display_name),
