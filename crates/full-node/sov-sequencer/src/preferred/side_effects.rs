@@ -2,6 +2,7 @@ use std::collections::VecDeque;
 
 use anyhow::Result;
 use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_interface::node::da::DaService;
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
@@ -30,7 +31,7 @@ where
     pub db: PreferredSequencerDb,
     pub api_ledger_db: LedgerDb,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
-    pub shutdown_sender: watch::Sender<()>,
+    pub shutdown_sender: PrimaryShutdownController,
     pub transaction_cache: TxResultWriter<S, Rt>,
 }
 
@@ -331,7 +332,7 @@ where
                 if let Err(e) = self.handle_executor_event(&mut event_queue).await {
                     tracing::error!(error = ?e, "Error handling executor event");
                     // If we've already started shutting down, this might fail - but then we're happy.
-                    let _ = self.shutdown_sender.send(());
+                    self.shutdown_sender.trigger();
                     break;
                 }
             }

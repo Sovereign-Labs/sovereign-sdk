@@ -41,12 +41,6 @@ impl PrimaryShutdownController {
         self.receiver.clone()
     }
 
-    /// Returns a clone of the sender, for components that may need to initiate
-    /// the primary shutdown themselves (e.g. on a fatal error).
-    pub fn sender(&self) -> watch::Sender<()> {
-        self.sender.clone()
-    }
-
     /// Triggers the primary shutdown.
     ///
     /// Returns `false` if the signal could not be delivered because every

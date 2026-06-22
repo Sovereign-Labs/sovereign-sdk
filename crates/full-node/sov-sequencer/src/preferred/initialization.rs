@@ -5,6 +5,7 @@ use anyhow::Context;
 use anyhow::Result;
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::SequencerRemuneration;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use std::net::SocketAddr;
 use std::path::Path;
@@ -55,7 +56,7 @@ where
         storage_path: &Path,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
@@ -119,7 +120,7 @@ where
             blob_sender.highest_sequence_number_to_send_after_restart()?
         {
             if blob_sender_sequence_number >= next_sequence_number {
-                let _ = shutdown_sender.send(());
+                shutdown_sender.trigger();
                 let preferred_db_highest_sequence_number = next_sequence_number
                     .checked_sub(1)
                     .map_or_else(|| "none".to_owned(), |seq| seq.to_string());

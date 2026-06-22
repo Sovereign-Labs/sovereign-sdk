@@ -1,7 +1,6 @@
 mod endpoints;
 pub mod logging;
 pub mod proof_sender;
-mod shutdown;
 mod telemetry;
 mod wallet;
 use anyhow::Context;
@@ -21,9 +20,9 @@ use sov_modules_api::{
     VersionReader,
 };
 use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
-pub use shutdown::PrimaryShutdownController;
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
 use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
@@ -256,11 +255,11 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         ledger_db: &LedgerDb,
         api_ledger_db: &LedgerDb,
         da_service: &Self::DaService,
-        shutdown_receiver: watch::Receiver<()>,
-        shutdown_sender: tokio::sync::watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<SequencerCreationReceipt<Self::Spec>> {
+        let shutdown_receiver = primary_shutdown.subscribe();
         let max_concurrent_proof_blobs = rollup_config
             .proof_manager
             .as_ref()
@@ -279,7 +278,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         max_concurrent_proof_blobs,
                         ledger_db.clone(),
                         api_ledger_db.clone(),
-                        shutdown_sender,
+                        primary_shutdown,
                     )
                     .await?;
 
@@ -321,7 +320,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         max_concurrent_proof_blobs,
                         ledger_db.clone(),
                         api_ledger_db.clone(),
-                        shutdown_sender.clone(),
+                        primary_shutdown,
                         stop_at_rollup_height,
                         bind_addr,
                     )
@@ -624,8 +623,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 &ledger_db,
                 &api_ledger_db,
                 &da_service,
-                primary_shutdown.subscribe(),
-                primary_shutdown.sender(),
+                primary_shutdown.clone(),
                 stop_at_rollup_height,
                 axum_socket_addr,
             )
@@ -754,7 +752,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         stf_info_receiver,
                         runner.da_sync_state(),
                         secondary_shutdown_receiver,
-                        primary_shutdown.sender(),
+                        primary_shutdown.clone(),
                         start_fresh_outer_proof_on_resync,
                     )
                     .await
@@ -814,7 +812,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         background_handles.extend(sequencer.background_handles);
 
-        spawn_os_signal_handler(primary_shutdown.sender());
+        spawn_os_signal_handler(primary_shutdown.clone());
 
         Ok(Rollup {
             runner,
@@ -987,7 +985,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
             .context("Failed to start Axum Server")?;
 
         let monitoring_task =
-            spawn_task_monitor(self.primary_shutdown.sender(), self.background_handles);
+            spawn_task_monitor(self.primary_shutdown.clone(), self.background_handles);
 
         runner.run_in_process().await?;
         tracing::info!("STF Runner has completed execution");
@@ -1025,17 +1023,17 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
 }
 
 fn spawn_task_monitor(
-    shutdown_sender: tokio::sync::watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
     handles: Vec<tokio::task::JoinHandle<()>>,
 ) -> tokio::task::JoinHandle<Result<(), anyhow::Error>> {
     tokio::spawn(async move {
-        let shutdown_recv = shutdown_sender.subscribe();
+        let shutdown_recv = primary_shutdown.subscribe();
         tracing::trace!("blocking until a background task joins or rollup shutdown");
         let (result, _, handles) = futures::future::select_all(handles).await;
 
         let mut was_graceful = if let Err(error) = result {
             tracing::error!(error = %error, "background task joined with error");
-            _ = shutdown_sender.send(());
+            primary_shutdown.trigger();
             false
         } else {
             // If shutdown receiver hasn't changed then it's implied that one of the handles
@@ -1046,7 +1044,7 @@ fn spawn_task_monitor(
             } else {
                 tracing::error!("background task joined with success status but no shutdown signal had been sent at the time. This is a bug! Please report it.");
                 // Start graceful shutdown
-                _ = shutdown_sender.send(());
+                primary_shutdown.trigger();
                 false
             }
         };
@@ -1056,7 +1054,7 @@ fn spawn_task_monitor(
         for handle in handles {
             if let Err(error) = handle.await {
                 tracing::error!(error = %error, "Additional background task joined with error");
-                _ = shutdown_sender.send(());
+                primary_shutdown.trigger();
                 was_graceful = false;
             }
         }
@@ -1070,9 +1068,9 @@ fn spawn_task_monitor(
     })
 }
 
-fn spawn_os_signal_handler(shutdown_sender: tokio::sync::watch::Sender<()>) {
+fn spawn_os_signal_handler(primary_shutdown: PrimaryShutdownController) {
     tokio::spawn(async move {
-        let mut api_shutdown = shutdown_sender.subscribe();
+        let mut api_shutdown = primary_shutdown.subscribe();
         let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
             .expect("Failed to set up SIGTERM handler");
         let mut quit = tokio::signal::unix::signal(SignalKind::quit())
@@ -1087,9 +1085,10 @@ fn spawn_os_signal_handler(shutdown_sender: tokio::sync::watch::Sender<()>) {
                 return;
             }
         }
-        shutdown_sender
-            .send(())
-            .expect("Failed to send shutdown signal");
+        assert!(
+            primary_shutdown.trigger(),
+            "Failed to send shutdown signal"
+        );
     });
 }
 

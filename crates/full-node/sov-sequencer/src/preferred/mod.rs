@@ -55,6 +55,7 @@ use sov_modules_stf_blueprint::PreExecError;
 use sov_rest_utils::errors::internal_server_error_500;
 use sov_rest_utils::errors::{database_error_500, sequencer_overloaded_503};
 use sov_rest_utils::json_obj;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
@@ -127,7 +128,7 @@ where
     nonce_buffer_input: NonceBufferInputSender<SequencerTxExecutionBackend<S, Rt>, S, Rt>,
     shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
     // Used to track which txs need to be ignored after the sequencer had downtime (in the sense of giving out 503s)
     tx_queue_id: Arc<AtomicU64>,
     stop_at_rollup_height: Option<RollupHeight>,
@@ -157,7 +158,7 @@ where
         max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
@@ -1119,20 +1120,20 @@ fn accepts_preferred_batches<B: BlobSelector>(_blob_selector: B) -> bool {
 
 #[track_caller]
 pub(crate) fn exit_rollup(
-    shutdown_sender: &watch::Sender<()>,
+    shutdown_sender: &PrimaryShutdownController,
 ) -> impl std::future::Future<Output = ()> {
     let location = std::panic::Location::caller();
     exit_rollup_inner(shutdown_sender.clone(), location)
 }
 
 async fn exit_rollup_inner(
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
     location: &'static std::panic::Location<'static>,
 ) {
     // In the Kubernetes environment, logs are sometimes lost during shutdown.
     // This delay ensures logs have time to be flushed before the application exits.
     tracing::info!("Shutting down the rollup");
-    if shutdown_sender.send(()).is_err() {
+    if !shutdown_sender.trigger() {
         tracing::error!(%location, "Failed to send shutdown signal");
     }
     let sleep_time = Duration::from_secs(5);

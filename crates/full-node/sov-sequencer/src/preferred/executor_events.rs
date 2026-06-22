@@ -4,9 +4,9 @@ use rockbound::cache::delta_reader::DeltaReader;
 use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{Runtime, Spec, StateCheckpoint, TxChangeSet, VisibleSlotNumber};
-use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::{PrimaryShutdownController, StateUpdateInfo};
 use tokio::sync::mpsc::error::TrySendError;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot};
 
 use crate::common::AcceptedTx;
 use crate::metrics::{track_in_progress_batch_size, PreferredSequencerExecutorEventSendingMetrics};
@@ -22,12 +22,12 @@ const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
 pub(crate) struct ExecutorEventsSender<S: Spec, Rt: Runtime<S>> {
     events_sender: mpsc::Sender<ExecutorEvent<S, Rt>>,
     cache: BlobsCache,
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
 }
 
 impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
     pub fn new(
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         cache: BlobsCache,
     ) -> (Self, mpsc::Receiver<ExecutorEvent<S, Rt>>) {
         let (sender, receiver) = mpsc::channel(MAX_EXECUTOR_EVENT_QUEUE_DEPTH);

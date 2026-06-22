@@ -11,8 +11,10 @@
 #![deny(missing_docs)]
 
 mod da_sync_state;
+mod shutdown;
 
 pub use da_sync_state::DaSyncState;
+pub use shutdown::PrimaryShutdownController;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::SyncStatus;
 
