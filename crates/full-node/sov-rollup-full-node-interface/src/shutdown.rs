@@ -7,17 +7,16 @@ use tokio::sync::watch;
 /// The primary shutdown signal tears down the whole rollup: when it fires, the
 /// runner's main loop stops and every background task subscribed to it begins
 /// its graceful shutdown. The controller is the single source of truth for this
-/// channel — it is created once during startup, hands out [`subscribe`] receivers
-/// to background tasks, hands out [`sender`] clones to components that may need to
-/// initiate shutdown themselves (e.g. fatal-error paths), and exposes [`trigger`]
-/// for the orchestration layer to start the shutdown.
+/// channel — it is created once during startup, lets callers [`trigger`] the
+/// shutdown, await it via [`recv_shutdown`], or obtain a raw receiver with
+/// [`subscribe`] for the lower-level APIs that consume one directly.
 ///
 /// This is distinct from the *secondary* shutdown signal, which is fired only
 /// after the runner's main loop has finished, to drain the HTTP/RPC servers and
 /// other peripheral tasks in the correct order.
 ///
 /// [`subscribe`]: PrimaryShutdownController::subscribe
-/// [`sender`]: PrimaryShutdownController::sender
+/// [`recv_shutdown`]: PrimaryShutdownController::recv_shutdown
 /// [`trigger`]: PrimaryShutdownController::trigger
 #[derive(Clone, Debug)]
 pub struct PrimaryShutdownController {
@@ -39,6 +38,21 @@ impl PrimaryShutdownController {
     /// Returns a fresh receiver for a background task to listen for shutdown on.
     pub fn subscribe(&self) -> watch::Receiver<()> {
         self.receiver.clone()
+    }
+
+    /// Resolves once a shutdown has been triggered — including if it was
+    /// already triggered before this method was called.
+    ///
+    /// This is the convenient way for a task to await shutdown in a
+    /// [`tokio::select!`] arm. For APIs that consume a [`watch::Receiver`]
+    /// directly (e.g. synchronous `has_changed` polls or combinators that take
+    /// a receiver), use [`subscribe`](Self::subscribe) instead.
+    pub async fn recv_shutdown(&self) {
+        // Clone the controller's reference receiver, which is never advanced
+        // past the channel's initial version. A clone therefore still observes
+        // a shutdown that fired before this call, rather than blocking forever.
+        let mut receiver = self.receiver.clone();
+        let _ = receiver.changed().await;
     }
 
     /// Triggers the primary shutdown.

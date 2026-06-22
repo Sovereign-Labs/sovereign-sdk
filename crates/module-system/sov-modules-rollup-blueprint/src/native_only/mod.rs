@@ -1070,7 +1070,6 @@ fn spawn_task_monitor(
 
 fn spawn_os_signal_handler(primary_shutdown: PrimaryShutdownController) {
     tokio::spawn(async move {
-        let mut api_shutdown = primary_shutdown.subscribe();
         let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
             .expect("Failed to set up SIGTERM handler");
         let mut quit = tokio::signal::unix::signal(SignalKind::quit())
@@ -1080,7 +1079,7 @@ fn spawn_os_signal_handler(primary_shutdown: PrimaryShutdownController) {
             _ = tokio::signal::ctrl_c() => tracing::info!("Received Ctrl+C"),
             _ = terminate.recv() => tracing::info!("Received SIGTERM"),
             _ = quit.recv() => tracing::info!("Received SIGQUIT"),
-            _ = api_shutdown.changed() => {
+            _ = primary_shutdown.recv_shutdown() => {
                 tracing::debug!("Stopping OS signal handling task, as rollup has been stopped programmatically");
                 return;
             }
