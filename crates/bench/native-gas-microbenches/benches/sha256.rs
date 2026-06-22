@@ -1,4 +1,4 @@
-//! Native calibration of the hashing gas constants.
+//! Native calibration of sha256 gas constants.
 //!
 //! Mirrors the SP1 `sha256` microbench's call site (`MeteredHasher::digest`) and
 //! input sweep, but measures native wall-clock instead of prover gas. Fits

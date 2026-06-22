@@ -31,9 +31,6 @@ impl BenchResult {
 }
 
 /// Fit `prover_gas_per_call = bias + per_byte * input_size` over the bench results.
-///
-/// The OLS math lives in `sov-gas-tools` (shared with the native microbenches);
-/// this only extracts `(input_size, per-call prover gas)` from [`BenchResult`].
 pub fn fit_prover_gas_per_byte(results: &[BenchResult]) -> anyhow::Result<LinearFit> {
     let input_sizes: Vec<f64> = results.iter().map(|r| r.input_size as f64).collect();
     let prover_gas: Vec<f64> = results.iter().map(|r| r.per_iter_prover_gas()).collect();

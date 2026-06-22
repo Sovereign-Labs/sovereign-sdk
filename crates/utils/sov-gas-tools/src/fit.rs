@@ -6,6 +6,25 @@
 //! intercept) and per-byte marginal cost (`per_byte`, the slope), plus
 //! `r_squared` / `max_residual` so callers can judge fit quality.
 
+/// Why a [`fit_linear`] call could not produce a fit.
+#[derive(Debug, thiserror::Error)]
+pub enum FitError {
+    /// The two input slices had different lengths, so points can't be paired up.
+    #[error("inputs ({inputs}) and measurements ({measurements}) must have equal length")]
+    LengthMismatch {
+        /// Number of input (x) values supplied.
+        inputs: usize,
+        /// Number of measurement (y) values supplied.
+        measurements: usize,
+    },
+    /// Fewer than two points were supplied; a line needs at least two.
+    #[error("need at least 2 data points to fit a line, got {0}")]
+    TooFewPoints(usize),
+    /// All input (x) values are identical, so the slope is undefined.
+    #[error("cannot fit: all input values are identical")]
+    IdenticalInputs,
+}
+
 #[derive(Debug, Clone)]
 pub struct LinearFit {
     /// Intercept of the fitted line: estimated per-call fixed overhead (cost at size = 0).
@@ -27,19 +46,15 @@ pub struct LinearFit {
 /// OLS is a few lines of closed-form arithmetic, we don't need confidence
 /// intervals or p-values, and avoiding the dependency keeps `ndarray` and
 /// friends out of the build graph.
-pub fn fit_linear(inputs: &[f64], measurements: &[f64]) -> anyhow::Result<LinearFit> {
+pub fn fit_linear(inputs: &[f64], measurements: &[f64]) -> Result<LinearFit, FitError> {
     if inputs.len() != measurements.len() {
-        anyhow::bail!(
-            "inputs ({}) and measurements ({}) must have equal length",
-            inputs.len(),
-            measurements.len()
-        );
+        return Err(FitError::LengthMismatch {
+            inputs: inputs.len(),
+            measurements: measurements.len(),
+        });
     }
     if inputs.len() < 2 {
-        anyhow::bail!(
-            "need at least 2 data points to fit a line, got {}",
-            inputs.len()
-        );
+        return Err(FitError::TooFewPoints(inputs.len()));
     }
 
     let sample_count = inputs.len() as f64;
@@ -50,7 +65,7 @@ pub fn fit_linear(inputs: &[f64], measurements: &[f64]) -> anyhow::Result<Linear
 
     let slope_denominator = sample_count * sum_x_squared - sum_x * sum_x;
     if slope_denominator.abs() < f64::EPSILON {
-        anyhow::bail!("cannot fit: all input values are identical");
+        return Err(FitError::IdenticalInputs);
     }
     let slope = (sample_count * sum_xy - sum_x * sum_y) / slope_denominator;
     let intercept = (sum_y - slope * sum_x) / sample_count;

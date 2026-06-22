@@ -1,6 +1,6 @@
 [package]
 name = "native-gas-microbenches"
-description = "Native (non-zkVM) wall-clock microbenches for calibrating gas constants (1 gas = 0.01 ns)"
+description = "Native (non-zkVM) wall-clock microbenches for calibrating gas constants"
 authors = { workspace = true }
 edition = { workspace = true }
 homepage = { workspace = true }

@@ -24,10 +24,7 @@ struct Estimates {
     mean: Point,
 }
 
-/// Workspace `target/` directory (honours `CARGO_TARGET_DIR`).
 pub fn target_dir() -> PathBuf {
-    // CARGO_TARGET_DIR is optional; falling back to a walk up to the workspace
-    // root when it's unset is intentional.
     if let Ok(dir) = std::env::var("CARGO_TARGET_DIR") {
         return PathBuf::from(dir);
     }
@@ -92,8 +89,6 @@ pub fn report_size_sweep(
     }
     let fit = fit_linear(&input_sizes, &ns_per_call)?;
 
-    // A negative coefficient is a degenerate fit (too few / too noisy points). It
-    // would silently floor to 1 gas and look like a real constant, so flag it.
     if fit.bias < 0.0 || fit.per_byte < 0.0 {
         eprintln!(
             "warn: degenerate fit (bias={:.2} ns, per_byte={:.4} ns/byte) — a negative \
@@ -106,7 +101,7 @@ pub fn report_size_sweep(
     // Base = directly-measured fixed cost (size=0), not the fitted intercept.
     // Over a wide size range the OLS intercept is high-leverage and unstable
     // (it swung 29-131 ns across runs while size=0 stayed ~56-60 ns) and can
-    // undercharge; the size=0 point is stable and anchors a conservative line.
+    // undercharge; the size=0 point is stable
     let base_ns = match sizes.iter().position(|&s| s == 0) {
         Some(i) => ns_per_call[i],
         None => {
