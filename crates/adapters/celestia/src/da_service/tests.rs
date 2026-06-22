@@ -1736,6 +1736,19 @@ async fn generate_mocha_multi_candidate_rows_fixture() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "should be run manually if need to regenerate data"]
+async fn generate_mainnet_real_rollup_data() -> anyhow::Result<()> {
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://celestia-mainnet-da.itrocket.net:26658")
+        .build()
+        .await?;
+
+    from_mainnet_real_rollup_average::update_test_data(&client).await;
+    from_mainnet_real_rollup_p99::update_test_data(&client).await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "should be run manually if need to regenerate data"]
 async fn mocha_shares_panic() -> anyhow::Result<()> {
     // Install the ring crypto provider for rustls (required for TLS connections)
     let _ = rustls::crypto::ring::default_provider().install_default();
