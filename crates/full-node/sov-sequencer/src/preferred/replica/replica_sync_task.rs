@@ -77,7 +77,7 @@ impl ReplicaSyncTask {
         .await;
 
         let data_fetcher_handle = event_receiver.spawn_db_data_fetcher().await;
-        let shutdown_receiver = self.primary_shutdown_controller.subscribe();
+        let shutdown_receiver = self.primary_shutdown_controller.subscribe_shutdown();
 
         let sync_task_handle = tokio::spawn(async move {
             Self::run_handler(handler, db_data_receiver, shutdown_receiver).await;

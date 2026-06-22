@@ -9,13 +9,13 @@ use tokio::sync::watch;
 /// its graceful shutdown. The controller is the single source of truth for this
 /// channel — it is created once during startup, lets callers [`trigger`] the
 /// shutdown, await it via [`recv_shutdown`], or obtain a raw receiver with
-/// [`subscribe`] for the lower-level APIs that consume one directly.
+/// [`subscribe_shutdown`] for the lower-level APIs that consume one directly.
 ///
 /// This is distinct from the *secondary* shutdown signal, which is fired only
 /// after the runner's main loop has finished, to drain the HTTP/RPC servers and
 /// other peripheral tasks in the correct order.
 ///
-/// [`subscribe`]: PrimaryShutdownController::subscribe
+/// [`subscribe_shutdown`]: PrimaryShutdownController::subscribe_shutdown
 /// [`recv_shutdown`]: PrimaryShutdownController::recv_shutdown
 /// [`trigger`]: PrimaryShutdownController::trigger
 #[derive(Clone, Debug)]
@@ -36,7 +36,7 @@ impl PrimaryShutdownController {
     }
 
     /// Returns a fresh receiver for a background task to listen for shutdown on.
-    pub fn subscribe(&self) -> watch::Receiver<()> {
+    pub fn subscribe_shutdown(&self) -> watch::Receiver<()> {
         self.receiver.clone()
     }
 
@@ -46,7 +46,7 @@ impl PrimaryShutdownController {
     /// This is the convenient way for a task to await shutdown in a
     /// [`tokio::select!`] arm. For APIs that consume a [`watch::Receiver`]
     /// directly (e.g. synchronous `has_changed` polls or combinators that take
-    /// a receiver), use [`subscribe`](Self::subscribe) instead.
+    /// a receiver), use [`subscribe_shutdown`](Self::subscribe_shutdown) instead.
     pub async fn recv_shutdown(&self) {
         // Clone the controller's reference receiver, which is never advanced
         // past the channel's initial version. A clone therefore still observes

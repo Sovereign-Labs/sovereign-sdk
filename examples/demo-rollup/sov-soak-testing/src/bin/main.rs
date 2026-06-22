@@ -74,7 +74,7 @@ where
     R::Spec: sov_modules_api::Spec<Da = sov_mock_da::MockDaSpec>,
 {
     let rollup = builder.start().await.expect("Impossible to start rollup");
-    let mut shutdown_recv = rollup.primary_shutdown_controller.subscribe();
+    let mut shutdown_recv = rollup.primary_shutdown_controller.subscribe_shutdown();
 
     let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
         .expect("Failed to set up SIGTERM handler");

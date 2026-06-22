@@ -70,7 +70,7 @@ where
         ledger_db: LedgerDb,
         primary_shutdown_controller: PrimaryShutdownController,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = primary_shutdown_controller.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
         let mut runtime = R::default();
         let storage = state_update_receiver.borrow().storage.clone();
         let inner = Mutex::new(Inner {

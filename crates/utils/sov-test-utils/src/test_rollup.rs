@@ -595,7 +595,7 @@ where
         sov_api_spec::client::Client,
         watch::Sender<StateUpdateInfo<<R::Spec as Spec>::Storage>>,
     )> {
-        let mut shutdown_receiver = primary_shutdown_controller.subscribe();
+        let mut shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
         let blueprint: R = Default::default();
 
         let mut storage_manager = blueprint.create_storage_manager(&rollup_config, false)?;

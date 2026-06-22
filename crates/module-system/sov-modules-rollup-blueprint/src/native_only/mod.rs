@@ -259,7 +259,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<SequencerCreationReceipt<Self::Spec>> {
-        let shutdown_receiver = primary_shutdown.subscribe();
+        let shutdown_receiver = primary_shutdown.subscribe_shutdown();
         let max_concurrent_proof_blobs = rollup_config
             .proof_manager
             .as_ref()
@@ -679,7 +679,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             state_channel,
             prev_state_root,
             visible_state_height_tracker,
-            primary_shutdown.subscribe(),
+            primary_shutdown.subscribe_shutdown(),
             start_at_rollup_height,
             stop_at_rollup_height,
             da_sync_state.clone(),
@@ -783,7 +783,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             .create_endpoints(
                 state_update_receiver,
                 sync_status_receiver,
-                primary_shutdown.subscribe(),
+                primary_shutdown.subscribe_shutdown(),
                 &api_ledger_db,
                 &sequencer,
                 &da_service,
@@ -1027,7 +1027,7 @@ fn spawn_task_monitor(
     handles: Vec<tokio::task::JoinHandle<()>>,
 ) -> tokio::task::JoinHandle<Result<(), anyhow::Error>> {
     tokio::spawn(async move {
-        let shutdown_recv = primary_shutdown.subscribe();
+        let shutdown_recv = primary_shutdown.subscribe_shutdown();
         tracing::trace!("blocking until a background task joins or rollup shutdown");
         let (result, _, handles) = futures::future::select_all(handles).await;
 

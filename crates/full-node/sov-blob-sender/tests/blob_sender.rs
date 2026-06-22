@@ -278,7 +278,7 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
     subscriber.init();
 
     let deps = create_deps().await;
-    let mut shutdown_receiver = deps.primary_shutdown_controller.subscribe();
+    let mut shutdown_receiver = deps.primary_shutdown_controller.subscribe_shutdown();
 
     let (mut blob_sender, blob_sender_handle) = create_blob_sender(
         Duration::from_secs(1),
@@ -513,7 +513,7 @@ struct Deps {
 async fn create_deps() -> Deps {
     let da_dir = tempfile::tempdir().unwrap();
     let primary_shutdown_controller = PrimaryShutdownController::new();
-    let shutdown_receiver = primary_shutdown_controller.subscribe();
+    let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
     let da = create_da(&da_dir).await;
     let storage_dir = tempfile::tempdir().unwrap();
 

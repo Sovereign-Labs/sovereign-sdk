@@ -140,7 +140,7 @@ impl EventReceiver {
 
     pub(crate) async fn spawn_db_data_fetcher(mut self) -> JoinHandle<()> {
         let mut nb_of_consecutive_db_errors = 0;
-        let shutdown_receiver = self.primary_shutdown_controller.subscribe();
+        let shutdown_receiver = self.primary_shutdown_controller.subscribe_shutdown();
         let mut start_replica_task_receiver = self.ready_to_process_db_events_recv.clone();
 
         tokio::spawn(async move {

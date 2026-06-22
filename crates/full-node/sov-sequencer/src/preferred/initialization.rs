@@ -60,7 +60,7 @@ where
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = primary_shutdown_controller.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
         let latest_state_update = state_update_receiver.borrow().clone();
 
         let da_address = self
@@ -86,7 +86,7 @@ where
 
         let (api_state, checkpoint_sender) = Self::api_state(
             latest_state_update.storage.clone(),
-            primary_shutdown_controller.subscribe(),
+            primary_shutdown_controller.subscribe_shutdown(),
         );
 
         let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);

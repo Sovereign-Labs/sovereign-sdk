@@ -144,7 +144,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
 
         let (state_update_sender, state_update_receiver) = watch::channel(state_update_info);
         let primary_shutdown_controller = PrimaryShutdownController::new();
-        let shutdown_receiver = primary_shutdown_controller.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
 
         let config = SequencerConfig {
             rollup_address: sequencer_rollup_address,

@@ -65,7 +65,7 @@ impl HeartBeatTask {
         heartbeat_interval: Duration,
     ) -> Result<Self> {
         let backend = PostgresBackend::connect(&postgres_config, bind_addr).await?;
-        let shutdown_receiver = primary_shutdown_controller.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
 
         Ok(Self {
             backend,

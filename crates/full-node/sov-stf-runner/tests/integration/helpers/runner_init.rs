@@ -205,7 +205,7 @@ pub async fn initialize_runner_with_stop_at(
 
     let mut tasks = JoinSet::new();
     let primary_shutdown_controller = PrimaryShutdownController::new();
-    let shutdown_receiver = primary_shutdown_controller.subscribe();
+    let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
 
     let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
         da_service.clone(),

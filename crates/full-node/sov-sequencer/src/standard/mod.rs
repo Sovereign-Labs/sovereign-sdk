@@ -137,7 +137,7 @@ where
         api_ledger_db: LedgerDb,
         primary_shutdown_controller: PrimaryShutdownController,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = primary_shutdown_controller.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
         let mut runtime = Rt::default();
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
 

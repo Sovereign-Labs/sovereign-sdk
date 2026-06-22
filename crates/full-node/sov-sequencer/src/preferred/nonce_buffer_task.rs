@@ -833,7 +833,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
     ) -> (JoinHandle<()>, NonceBufferInputSender<E, S, Rt>) {
         let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
         let (timeout_sender, timeout_receiver) = mpsc::channel(MAX_BUFFERED_TXS);
-        let mut shutdown_receiver = primary_shutdown_controller.subscribe();
+        let mut shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
 
         let timeout_task = TimeoutQueueTask {
             input: timeout_receiver,
@@ -1443,7 +1443,7 @@ mod tests {
         let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
         let (timeout_sender, _timeout_receiver) = mpsc::channel(MAX_BUFFERED_TXS);
         let primary_shutdown_controller = PrimaryShutdownController::new();
-        let shutdown_receiver = primary_shutdown_controller.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
         let (_forced_tx_batch_notifier, forced_tx_batch_receiver) = broadcast::channel(1);
         let input_sender = NonceBufferInputSender {
             buffer_sender_channel: buffer_sender_channel.clone(),

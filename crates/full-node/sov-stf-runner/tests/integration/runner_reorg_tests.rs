@@ -47,7 +47,7 @@ async fn test_runner_with_background_da_service(
     da_config: MockDaConfig,
 ) -> anyhow::Result<()> {
     let primary_shutdown_controller = PrimaryShutdownController::new();
-    let shutdown_receiver = primary_shutdown_controller.subscribe();
+    let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
 
     let da_service =
         StorableMockDaService::from_config(da_config.clone(), shutdown_receiver.clone()).await;

@@ -140,7 +140,7 @@ where
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
         nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
-        let shutdown_receiver = primary_shutdown_controller.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
         let db = Arc::new(BlobSenderDb::new(storage_path).await?);
 
         let mut all_blobs = db.get_all::<Da::Spec>().await?;
