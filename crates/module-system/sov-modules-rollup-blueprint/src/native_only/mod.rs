@@ -1027,7 +1027,6 @@ fn spawn_task_monitor(
     handles: Vec<tokio::task::JoinHandle<()>>,
 ) -> tokio::task::JoinHandle<Result<(), anyhow::Error>> {
     tokio::spawn(async move {
-        let shutdown_recv = primary_shutdown.subscribe_shutdown();
         tracing::trace!("blocking until a background task joins or rollup shutdown");
         let (result, _, handles) = futures::future::select_all(handles).await;
 
@@ -1036,10 +1035,10 @@ fn spawn_task_monitor(
             primary_shutdown.trigger();
             false
         } else {
-            // If shutdown receiver hasn't changed then it's implied that one of the handles
+            // If no shutdown has been signaled then it's implied that one of the handles
             // joined early before a shutdown signal was sent. This likely indicates
             // incorrect behaviour and so we send the signal ourselves to begin the shutdown process.
-            if let Ok(true) = shutdown_recv.has_changed() {
+            if primary_shutdown.has_changed() {
                 true
             } else {
                 tracing::error!("background task joined with success status but no shutdown signal had been sent at the time. This is a bug! Please report it.");

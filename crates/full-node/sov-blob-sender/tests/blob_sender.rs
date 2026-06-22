@@ -278,7 +278,6 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
     subscriber.init();
 
     let deps = create_deps().await;
-    let mut shutdown_receiver = deps.primary_shutdown_controller.subscribe_shutdown();
 
     let (mut blob_sender, blob_sender_handle) = create_blob_sender(
         Duration::from_secs(1),
@@ -296,10 +295,7 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
 
     // Blob publication fails due to the absence of DA blocks.
     // After MAX_NB_OF_BLOB_SUBMISSION_RETRIES attempts, BlobSender should request shutdown.
-    shutdown_receiver
-        .changed()
-        .await
-        .expect("The BlobSender should request shutdown after failing to process blobs.");
+    deps.primary_shutdown_controller.recv_shutdown().await;
 
     blob_sender_handle.await.unwrap();
 
