@@ -26,9 +26,9 @@ use sov_rest_utils::{
     PaginatedResponse, Pagination, Path, Query, WsSubscriptionConfig,
 };
 use sov_rest_utils::{get_client_ip, WsMessage};
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_interface::TxHash;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
@@ -458,8 +458,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 .await
                 .ok();
 
-            serve_generic_ws_subscription(socket, subscription, state.primary_shutdown_controller.subscribe_shutdown())
-                .await;
+            serve_generic_ws_subscription(
+                socket,
+                subscription,
+                state.primary_shutdown_controller.subscribe_shutdown(),
+            )
+            .await;
         })
     }
 
@@ -620,7 +624,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             let stream = broadcast_to_subscription_stream(
                 state.sequencer.subscribe_blobs_from_blob_sender().await,
             );
-            serve_generic_ws_subscription(socket, stream, state.primary_shutdown_controller.subscribe_shutdown()).await;
+            serve_generic_ws_subscription(
+                socket,
+                stream,
+                state.primary_shutdown_controller.subscribe_shutdown(),
+            )
+            .await;
         })
     }
 
@@ -647,7 +656,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             let stream = broadcast_to_subscription_stream(
                 state.sequencer.subscribe_state_updates_unstable().await,
             );
-            serve_generic_ws_subscription(socket, stream, state.primary_shutdown_controller.subscribe_shutdown()).await;
+            serve_generic_ws_subscription(
+                socket,
+                stream,
+                state.primary_shutdown_controller.subscribe_shutdown(),
+            )
+            .await;
         })
     }
 
@@ -660,7 +674,12 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             let stream = broadcast_to_subscription_stream(
                 state.sequencer.subscribe_forced_tx_batches_unstable().await,
             );
-            serve_generic_ws_subscription(socket, stream, state.primary_shutdown_controller.subscribe_shutdown()).await;
+            serve_generic_ws_subscription(
+                socket,
+                stream,
+                state.primary_shutdown_controller.subscribe_shutdown(),
+            )
+            .await;
         })
     }
 

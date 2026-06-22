@@ -1,4 +1,3 @@
-use sov_rollup_full_node_interface::PrimaryShutdownController;
 use crate::preferred::db::SequencerRole;
 use crate::preferred::replica::db_data::row_to_event;
 use crate::preferred::replica::db_data::rows;
@@ -7,6 +6,7 @@ use crate::preferred::replica::db_data::EventType;
 use crate::preferred::replica::db_data::EventsNotificationPayload;
 use crate::preferred::replica::db_data::ParsingError;
 use crate::SequencerNotReadyDetails;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_interface::node::FutureOrShutdownOutput;
 use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
@@ -164,8 +164,11 @@ impl EventReceiver {
 
             debug!("Replica event receiver started.");
             loop {
-                let fut = primary_shutdown_controller
-                    .future_or_shutdown(self.fetch_data(start_event_id, prev_event_type, &mut listener));
+                let fut = primary_shutdown_controller.future_or_shutdown(self.fetch_data(
+                    start_event_id,
+                    prev_event_type,
+                    &mut listener,
+                ));
 
                 let FutureOrShutdownOutput::Output(res) = fut.await else {
                     break;

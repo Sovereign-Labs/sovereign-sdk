@@ -172,8 +172,10 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
         .await?;
 
         let (axum_addr, sequencer_axum_server) = {
-            let router =
-                SequencerApis::rest_api_server(sequencer.clone(), primary_shutdown_controller.clone());
+            let router = SequencerApis::rest_api_server(
+                sequencer.clone(),
+                primary_shutdown_controller.clone(),
+            );
             let handle = axum_server::Handle::new();
 
             let handle1 = handle.clone();

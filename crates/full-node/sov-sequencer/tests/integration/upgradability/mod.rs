@@ -341,7 +341,10 @@ async fn check_start_at(finalization_blocks: u32) {
     assert_eq!(last_height, stop_at_height);
 
     // Let's wait for the shutdown.
-    test_rollup.primary_shutdown_controller.recv_shutdown().await;
+    test_rollup
+        .primary_shutdown_controller
+        .recv_shutdown()
+        .await;
 
     pause_update_state::set(true);
 

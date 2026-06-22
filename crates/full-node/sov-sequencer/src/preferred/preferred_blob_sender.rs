@@ -1,9 +1,9 @@
-use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_blob_sender::BlobExecutionStatus;
 use sov_blob_sender::{BlobInternalId, BlobSender, BlobToSend};
 use sov_blob_storage::{PreferredBatchData, PreferredProofData};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::TxHash;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_interface::node::da::DaService;
 use std::{
     path::Path,

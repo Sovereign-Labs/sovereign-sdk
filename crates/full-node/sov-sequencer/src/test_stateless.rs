@@ -1,7 +1,6 @@
 #![allow(dead_code)]
 
 //! Sequencer without any validation or state.
-use sov_rollup_full_node_interface::PrimaryShutdownController;
 use async_trait::async_trait;
 use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
@@ -11,6 +10,7 @@ use sov_modules_api::ConcurrentStateCheckpoint;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec, StateCheckpoint};
 use sov_rest_utils::ErrorObject;
 use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::da::DaSpec;

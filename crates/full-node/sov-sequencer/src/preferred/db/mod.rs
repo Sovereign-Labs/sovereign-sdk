@@ -12,7 +12,6 @@
 pub mod heartbeat_task;
 pub mod postgres;
 pub mod rocksdb;
-use sov_rollup_full_node_interface::PrimaryShutdownController;
 use crate::preferred::PostgresBackend;
 use crate::preferred::PreferredProofToReplay;
 use crate::preferred::RocksDbBackend;
@@ -28,6 +27,7 @@ use sov_modules_api::capabilities::BlobSelector;
 use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, TxHash, VisibleSlotNumber,
 };
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;

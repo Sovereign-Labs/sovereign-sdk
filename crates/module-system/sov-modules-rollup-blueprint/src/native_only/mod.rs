@@ -1083,10 +1083,7 @@ fn spawn_os_signal_handler(primary_shutdown: PrimaryShutdownController) {
                 return;
             }
         }
-        assert!(
-            primary_shutdown.trigger(),
-            "Failed to send shutdown signal"
-        );
+        assert!(primary_shutdown.trigger(), "Failed to send shutdown signal");
     });
 }
 

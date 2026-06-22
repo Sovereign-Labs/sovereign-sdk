@@ -2,7 +2,6 @@
 
 mod mempool;
 
-use sov_rollup_full_node_interface::PrimaryShutdownController;
 use self::mempool::{Mempool, MempoolCursor, MempoolTx};
 use crate::common::{
     loop_call_update_state, loop_send_tx_notifications, pre_exec_err_to_accept_tx_err,
@@ -29,6 +28,7 @@ use sov_modules_api::*;
 use sov_modules_stf_blueprint::{process_tx_and_reward_prover, ApplyTxResult, PreExecError};
 use sov_rest_utils::json_obj;
 use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::da::DaService;

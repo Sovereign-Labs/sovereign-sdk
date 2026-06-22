@@ -376,8 +376,13 @@ where
         primary_shutdown_controller: &PrimaryShutdownController,
         current_info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
-        self.wait_for_node_resync(state_update_receiver, primary_shutdown_controller, 1, current_info)
-            .await
+        self.wait_for_node_resync(
+            state_update_receiver,
+            primary_shutdown_controller,
+            1,
+            current_info,
+        )
+        .await
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
@@ -578,9 +583,12 @@ async fn update_state_task<S, Rt, Da>(
     Da: DaService<Spec = S::Da>,
 {
     loop {
-        if let Err(e) =
-            update_state_task_inner(seq.clone(), &mut state_update_receiver, &primary_shutdown_controller)
-                .await
+        if let Err(e) = update_state_task_inner(
+            seq.clone(),
+            &mut state_update_receiver,
+            &primary_shutdown_controller,
+        )
+        .await
         {
             // Thrown when polling for state updates is aborted due to a shutdown signal. Don't
             // re-send a second signal: we're already shutting down.
@@ -652,8 +660,12 @@ where
     Rt: Runtime<S>,
     Da: DaService<Spec = S::Da>,
 {
-    let info =
-        poll_state_update::<S>(state_update_receiver, primary_shutdown_controller, "update_state").await?;
+    let info = poll_state_update::<S>(
+        state_update_receiver,
+        primary_shutdown_controller,
+        "update_state",
+    )
+    .await?;
 
     if cfg!(debug_assertions)
         && should_skip_update_state(seq.config.sequencer_kind_config.postgres_config.as_ref())
@@ -717,8 +729,12 @@ where
         }
 
         PreferredSeqOperation::WaitForNodeResyncToTip => {
-            seq.wait_for_node_resync_to_tip(state_update_receiver, primary_shutdown_controller, info)
-                .await?;
+            seq.wait_for_node_resync_to_tip(
+                state_update_receiver,
+                primary_shutdown_controller,
+                info,
+            )
+            .await?;
         }
 
         PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack => {

@@ -1,10 +1,10 @@
-use sov_rollup_full_node_interface::PrimaryShutdownController;
 use crate::preferred::db::SequencerRole;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
 use crate::preferred::replica::event_receiver::EventReceiverStartNotifier;
 use async_trait::async_trait;
 use sov_full_node_configs::sequencer::PostgresConfig;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_interface::node::FutureOrShutdownOutput;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -113,8 +113,8 @@ impl ReplicaSyncTask {
                     Err(DBDataRejected::ExecutorAhead(executor_seq_nr)) => {
                         // The executor is ahead of the db. Drain the queue and wait until we catch up.
                         loop {
-                            let fut =
-                                primary_shutdown_controller.future_or_shutdown(db_data_receiver.recv());
+                            let fut = primary_shutdown_controller
+                                .future_or_shutdown(db_data_receiver.recv());
 
                             let FutureOrShutdownOutput::Output(Some(new_data)) = fut.await else {
                                 break 'outer;
@@ -157,8 +157,8 @@ impl ReplicaSyncTask {
                         // stop height, this will need to be taken into account for replicas.
                         tracing::info!("Replica reached stop height, stopping event processing. Draining db events until node shutdown.");
                         loop {
-                            let fut =
-                                primary_shutdown_controller.future_or_shutdown(db_data_receiver.recv());
+                            let fut = primary_shutdown_controller
+                                .future_or_shutdown(db_data_receiver.recv());
                             match fut.await {
                                 FutureOrShutdownOutput::Shutdown
                                 | FutureOrShutdownOutput::Output(None) => {
@@ -553,7 +553,12 @@ mod tests {
 
         let (test_handler, mut recv) = TestHandler::new(exec_seq_nr);
         tokio::task::spawn(async move {
-            ReplicaSyncTask::run_handler(test_handler, db_data_receiver, primary_shutdown_controller).await;
+            ReplicaSyncTask::run_handler(
+                test_handler,
+                db_data_receiver,
+                primary_shutdown_controller,
+            )
+            .await;
         });
 
         for exp in expected.into_iter() {
@@ -581,7 +586,12 @@ mod tests {
         let test_handler_clone = test_handler.clone();
 
         tokio::task::spawn(async move {
-            ReplicaSyncTask::run_handler(test_handler, db_data_receiver, primary_shutdown_controller).await;
+            ReplicaSyncTask::run_handler(
+                test_handler,
+                db_data_receiver,
+                primary_shutdown_controller,
+            )
+            .await;
         });
 
         for exp in expected {
