@@ -307,10 +307,10 @@ async fn runner(
         "Shutting down rollup..."
     );
 
-    rollup
-        .shutdown_sender
-        .send(())
-        .expect("Failed to send shutdown signal");
+    assert!(
+        rollup.shutdown_sender.trigger(),
+        "Failed to send shutdown signal"
+    );
     let _x = rollup
         .rollup_task
         .await

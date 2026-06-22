@@ -31,7 +31,6 @@ use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::{TestStorage, TestStorageManager, TEST_MOCK_DA_POLLING_INTERVAL};
 use tempfile::TempDir;
 use tokio::net::TcpListener;
-use tokio::sync::watch;
 
 type MockInitVariant = InitVariant<HashStf, MockDaService>;
 

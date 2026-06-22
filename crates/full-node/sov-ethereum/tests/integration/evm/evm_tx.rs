@@ -22,7 +22,7 @@ async fn evm_tx_test(finalization_blocks: u32) -> anyhow::Result<()> {
     sanity_checks(&test_client).await;
     execute_evm_tests(&test_client, &test_rollup).await.unwrap();
 
-    test_rollup.shutdown_sender.send(()).unwrap();
+    assert!(test_rollup.shutdown_sender.trigger());
     Ok(())
 }
 

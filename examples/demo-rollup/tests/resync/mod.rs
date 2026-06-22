@@ -459,7 +459,7 @@ async fn sync_rollup_with_path(
 
     drop(da_service);
     tracing::info!("Triggering shutdown....");
-    shutdown_sender.send(())?;
+    shutdown_sender.trigger();
     tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, rollup_task)
         .await
         .context("Joining rollup task failed")???;
