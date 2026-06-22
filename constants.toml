@@ -35,6 +35,20 @@ PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }
 
 # The number of bytes a transaction can have.
 MAX_TX_SIZE=1_048_576
+
+# Celestia compression — max UNCOMPRESSED (decoded) bytes in one envelope chunk: 16 KiB.
+# This is the decompression-bomb bound: the verifier allocates at most this many bytes per
+# chunk and rejects any chunk claiming to decode larger. Consensus-relevant — every reader
+# (native node + ZK guest) compiled for a deployment must agree; only change it before
+# compression is ever emitted on a live network. Must fit u16 and stay well below 65535.
+CELESTIA_MAX_ROLLUP_CHUNK_LEN = { const = 16384 }
+# Celestia compression — max COMPRESSED (on-DA) bytes in one envelope chunk: must fit 3 signed
+# shares. Bounds how many Celestia shares a single chunk read forces the prover to authenticate
+# in ZK (DoS protection against spam that overloads the prover): 1394 = three signed-v1 shares
+# (458 + 2*482 = 1422 payload bytes) minus the 24-byte envelope header minus the 4-byte chunk
+# header. Consensus-relevant — same rules as above.
+CELESTIA_MAX_COMPRESSED_CHUNK_SIZE = { const = 1394 }
+
 # We will keep only this many blocks in the EVM module.
 EVM_BLOCK_PRUNING_THRESHOLD = 10000
 # Rollup for production and EVM for benchmarks

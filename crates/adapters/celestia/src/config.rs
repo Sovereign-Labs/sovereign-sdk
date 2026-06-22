@@ -119,11 +119,13 @@ pub struct CelestiaConfig {
     /// affects how blobs are read or verified. Default: `Off`.
     #[serde(default)]
     pub compression: CompressOnSubmit,
-    /// Target rollup chunk size (bytes) for the chunked compression envelope.
-    /// Must be in `1..=1446` (the verifier's per-chunk cap, `MAX_ROLLUP_CHUNK_LEN`);
-    /// an out-of-range value is rejected at startup rather than silently clamped.
-    /// Default: 482 (one continuation share payload, share-aligned). Advanced knob —
-    /// larger chunks trade coarser partial-read granularity for a better ratio.
+    /// Target chunk size (uncompressed bytes) for the chunked compression envelope.
+    /// Must be in `1..=MAX_ROLLUP_CHUNK_LEN` (16384 by default — the verifier's per-chunk
+    /// rollup cap); an out-of-range value is rejected at startup rather than silently clamped.
+    /// Default: 482 (one continuation share payload, share-aligned). Advanced knob — larger
+    /// chunks trade coarser partial-read granularity for a better ratio, but a chunk that does
+    /// not compress below the per-chunk compressed cap (`MAX_COMPRESSED_CHUNK_LEN`) makes the
+    /// envelope non-canonical, so that batch is posted verbatim (uncompressed), not rejected.
     #[serde(default = "default_compression_chunk_size")]
     pub compression_chunk_size: usize,
 }

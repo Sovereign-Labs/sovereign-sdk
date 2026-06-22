@@ -21,7 +21,7 @@
 //!   rollup_len   [4]  u32 LE, total decoded length, <= MAX_ROLLUP_BLOB_LEN
 //! then a sequence of independently-decodable chunks (the payload):
 //!   chunk_rollup_len [2]  u16 LE, 1..=MAX_ROLLUP_CHUNK_LEN
-//!   chunk_encoded_len [2]  u16 LE, 1..=MAX_ENCODED_CHUNK_LEN
+//!   chunk_encoded_len [2]  u16 LE, 1..=MAX_COMPRESSED_CHUNK_LEN
 //!   chunk_payload     [chunk_encoded_len]
 //! ```
 //!
@@ -60,23 +60,25 @@ pub(crate) const CHUNK_HEADER_LEN: usize = 4;
 /// unbounded allocation.
 pub(crate) const MAX_ROLLUP_BLOB_LEN: u32 = 64 * 1024 * 1024;
 
-/// Maximum decoded length of a single chunk: three continuation sparse-share
-/// payloads (3 × `CONTINUATION_SPARSE_SHARE_CONTENT_SIZE` = 1446). This is the
-/// per-byte DoS bound and the partial-read granularity. The default chunk size
-/// (`config::default_compression_chunk_size`, one share = 482) stays conservative;
-/// advanced operators may opt up to this cap, trading coarser partial-read
-/// granularity for a better ratio.
+/// Maximum UNCOMPRESSED (decoded) length of a single chunk — the decompression-bomb bound.
+/// Sourced from `CELESTIA_MAX_ROLLUP_CHUNK_LEN` in `constants.toml` (16 KiB) so an operator can
+/// tune it without an SDK release. The verifier allocates at most this many bytes per chunk and
+/// rejects any chunk claiming to decode larger; it also sets the partial-read granularity. The
+/// default chunk size (`config::default_compression_chunk_size`, one share = 482) stays
+/// conservative; advanced operators may opt up to this cap.
 ///
-/// Raising this is a verifier-acceptance (consensus-relevant) change — every reader
-/// must agree on it — but it is safe to set before compression is ever emitted on a
-/// live network.
-pub(crate) const MAX_ROLLUP_CHUNK_LEN: u16 = 1446;
+/// Consensus-relevant: every reader must agree on it, but it is safe to set before compression is
+/// ever emitted on a live network. Typed `u16`, so a `constants.toml` value above 65535 is a
+/// compile error — and it must stay well below that for the LZ4 worst-case framing to fit `u16`.
+pub(crate) const MAX_ROLLUP_CHUNK_LEN: u16 =
+    sov_modules_macros::config_value!("CELESTIA_MAX_ROLLUP_CHUNK_LEN");
 
-/// Maximum DA length of a single chunk: the LZ4 block worst-case output for
-/// [`MAX_ROLLUP_CHUNK_LEN`] rollup bytes (`n + n/255 + 16`). Bounds the bytes a
-/// single-chunk read can be forced to authenticate.
-pub(crate) const MAX_ENCODED_CHUNK_LEN: u16 =
-    MAX_ROLLUP_CHUNK_LEN + MAX_ROLLUP_CHUNK_LEN / 255 + 16;
+/// Maximum COMPRESSED (on-DA) length of a single chunk — must fit three signed Celestia shares.
+/// Sourced from `CELESTIA_MAX_COMPRESSED_CHUNK_SIZE` in `constants.toml` (1394). Bounds the shares
+/// a single-chunk read forces the prover to authenticate in ZK, i.e. the DoS cost of spam.
+/// Consensus-relevant — same rules as [`MAX_ROLLUP_CHUNK_LEN`].
+pub(crate) const MAX_COMPRESSED_CHUNK_LEN: u16 =
+    sov_modules_macros::config_value!("CELESTIA_MAX_COMPRESSED_CHUNK_SIZE");
 
 // Header field offsets within the fixed header.
 const OFFSET_VERSION: usize = 16;
@@ -233,7 +235,7 @@ pub(crate) fn chunk_framing_valid(
     if chunk_rollup == 0 || chunk_rollup > MAX_ROLLUP_CHUNK_LEN {
         return false;
     }
-    if chunk_encoded == 0 || chunk_encoded > MAX_ENCODED_CHUNK_LEN {
+    if chunk_encoded == 0 || chunk_encoded > MAX_COMPRESSED_CHUNK_LEN {
         return false;
     }
     // The running sum must never overrun the declared rollup length.
@@ -341,8 +343,10 @@ pub(crate) fn classify_and_decode(buf: &[u8]) -> EnvelopeState {
 
 /// Encode `rollup` as a chunked envelope with the given codec and chunk size.
 ///
-/// `chunk_size` is clamped to `1..=MAX_ROLLUP_CHUNK_LEN` so every produced chunk
-/// passes the verifier's framing caps.
+/// `chunk_size` is the uncompressed bytes per chunk, passed in `1..=MAX_ROLLUP_CHUNK_LEN`, so
+/// each chunk's rollup length satisfies the rollup cap by construction. A chunk's *encoded*
+/// length must also satisfy [`MAX_COMPRESSED_CHUNK_LEN`]; a poorly-compressing chunk can exceed
+/// it, which the canonical re-decode in `encode_for_submission` catches and falls back to raw.
 #[cfg(feature = "native")]
 pub(crate) fn encode_chunked(rollup: &[u8], codec: u8, chunk_size: usize) -> Vec<u8> {
     // Callers pass a config-validated size (`validate_compression_chunk_size` in
@@ -366,9 +370,11 @@ pub(crate) fn encode_chunked(rollup: &[u8], codec: u8, chunk_size: usize) -> Vec
             // CODEC_LZ4: `compress` (no size prefix) — the framing carries the size.
             _ => lz4_flex::block::compress(chunk),
         };
-        // chunk_size <= MAX_ROLLUP_CHUNK_LEN (1446) and LZ4 worst-case output of 1446
-        // is MAX_ENCODED_CHUNK_LEN (1467), so both lengths fit u16. The round-trip in
-        // `is_canonical_encoding_of` is the backstop if that assumption ever breaks.
+        // chunk.len() <= chunk_size <= MAX_ROLLUP_CHUNK_LEN, and LZ4's worst-case output for
+        // that (n + n/255 + 16) also fits u16 for any sane cap, so neither `as u16` truncates.
+        // A chunk whose encoded length exceeds MAX_COMPRESSED_CHUNK_LEN is rejected by
+        // `chunk_framing_valid` on re-decode, so `is_canonical_encoding_of` is the backstop
+        // that falls back to verbatim.
         out.extend_from_slice(&(chunk.len() as u16).to_le_bytes());
         out.extend_from_slice(&(encoded.len() as u16).to_le_bytes());
         out.extend_from_slice(&encoded);
@@ -409,7 +415,12 @@ pub(crate) fn encode_for_submission(rollup: &[u8], compress: bool, chunk_size: u
     }
 
     if has_magic_prefix(rollup) {
-        let escaped = encode_chunked(rollup, CODEC_RAW_ESCAPE, chunk_size);
+        // Raw chunks carry rollup bytes verbatim (encoded == rollup), so they must honor the
+        // compressed cap; clamp the chunk size so the escape is always canonical even when
+        // `chunk_size` targets the larger rollup cap. Escaping is what stops a reader from
+        // mis-parsing a magic-prefixed payload, so it must never silently fail.
+        let escape_chunk_size = chunk_size.min(MAX_COMPRESSED_CHUNK_LEN as usize);
+        let escaped = encode_chunked(rollup, CODEC_RAW_ESCAPE, escape_chunk_size);
         if is_canonical_encoding_of(&escaped, rollup) {
             return escaped;
         }
@@ -529,9 +540,10 @@ mod tests {
 
     #[test]
     fn lz4_round_trips_clean_and_canonical() {
-        // Compressible, multi-chunk, asymmetric content > 256 bytes.
+        // Compressible, asymmetric content > 256 bytes. A small chunk size (one share) forces
+        // several chunks so the test exercises multi-chunk tiling, not a single chunk.
         let rollup: Vec<u8> = (0..2000u32).map(|i| (i % 251) as u8).collect();
-        let frame = encode_chunked(&rollup, CODEC_LZ4, MAX_ROLLUP_CHUNK_LEN as usize);
+        let frame = encode_chunked(&rollup, CODEC_LZ4, 482);
         let d = envelope(&frame);
         assert!(d.clean, "honest LZ4 frame must decode clean");
         assert_eq!(d.rollup, rollup);
@@ -542,8 +554,10 @@ mod tests {
 
     #[test]
     fn raw_escape_round_trips_clean_and_canonical() {
+        // Raw chunks carry rollup bytes verbatim, so each must fit the compressed cap; a small
+        // chunk size keeps every chunk within `MAX_COMPRESSED_CHUNK_LEN` and forces several chunks.
         let rollup: Vec<u8> = (0..1500u32).map(|i| (i % 97 + 1) as u8).collect();
-        let frame = encode_chunked(&rollup, CODEC_RAW_ESCAPE, MAX_ROLLUP_CHUNK_LEN as usize);
+        let frame = encode_chunked(&rollup, CODEC_RAW_ESCAPE, 482);
         let d = envelope(&frame);
         assert!(d.clean);
         assert_eq!(d.rollup, rollup);
@@ -566,7 +580,7 @@ mod tests {
         // A strict prefix of a multi-chunk frame: clean, fewer rollup bytes,
         // consumed ends on a chunk boundary (the partial trailing chunk is dropped).
         let rollup: Vec<u8> = (0..2000u32).map(|i| (i % 251) as u8).collect();
-        let frame = encode_chunked(&rollup, CODEC_LZ4, MAX_ROLLUP_CHUNK_LEN as usize);
+        let frame = encode_chunked(&rollup, CODEC_LZ4, 482);
         // Cut somewhere inside the chunk stream (past header, before the end).
         let cut = frame.len() - 7;
         let d = envelope(&frame[..cut]);
@@ -625,7 +639,7 @@ mod tests {
         assert!(!chunk_framing_valid(
             CODEC_LZ4,
             10,
-            MAX_ENCODED_CHUNK_LEN + 1,
+            MAX_COMPRESSED_CHUNK_LEN + 1,
             0,
             100_000
         ));
@@ -718,6 +732,21 @@ mod tests {
     }
 
     #[test]
+    fn encode_for_submission_escapes_magic_prefix_with_oversized_chunk_size() {
+        // With a chunk_size above the compressed cap, raw escape chunks would be over-cap and
+        // the escape would fail, posting the magic-prefixed payload verbatim — which a reader
+        // could mis-parse. The escape path clamps the chunk size to `MAX_COMPRESSED_CHUNK_LEN`,
+        // so the payload is still escaped.
+        let mut rollup = ENVELOPE_MAGIC.to_vec();
+        rollup.extend(incompressible(2000));
+        let da_payload = encode_for_submission(&rollup, true, MAX_ROLLUP_CHUNK_LEN as usize);
+        assert!(has_magic_prefix(&da_payload));
+        assert_ne!(da_payload, rollup, "must be escaped, not posted verbatim");
+        assert_eq!(decode_for_read(&da_payload), rollup, "escape round-trips");
+        assert_eq!(envelope(&da_payload).header.codec, CODEC_RAW_ESCAPE);
+    }
+
+    #[test]
     fn decode_for_read_passes_through_legacy() {
         let legacy = b"a legacy raw batch payload with no magic prefix at all..".to_vec();
         assert_eq!(decode_for_read(&legacy), legacy);
@@ -741,16 +770,39 @@ mod tests {
     }
 
     #[test]
-    fn lz4_round_trips_at_max_chunk_size() {
-        // Exercises the widened per-chunk cap: a multi-chunk payload encoded at the
-        // maximum allowed chunk size must still decode clean and canonical.
-        let rollup: Vec<u8> = (0..5000u32).map(|i| (i % 251) as u8).collect();
-        let frame = encode_chunked(&rollup, CODEC_LZ4, MAX_ROLLUP_CHUNK_LEN as usize);
+    fn lz4_round_trips_at_max_rollup_chunk_size() {
+        // The decoupled caps let a chunk decode up to MAX_ROLLUP_CHUNK_LEN (16 KiB) as long as
+        // its compressed form fits MAX_COMPRESSED_CHUNK_LEN. A highly compressible payload at
+        // exactly the rollup cap exercises that >11x ratio and the decompression-bomb boundary.
+        let chunk_len = MAX_ROLLUP_CHUNK_LEN as usize;
+        let rollup: Vec<u8> = (0..chunk_len).map(|i| (i % 251) as u8).collect();
+        let frame = encode_chunked(&rollup, CODEC_LZ4, chunk_len);
+
+        // One chunk carrying the full rollup cap, compressed within the compressed cap.
+        let chunk_rollup =
+            u16::from_le_bytes([frame[ENVELOPE_HEADER_LEN], frame[ENVELOPE_HEADER_LEN + 1]]);
+        let chunk_encoded = u16::from_le_bytes([
+            frame[ENVELOPE_HEADER_LEN + 2],
+            frame[ENVELOPE_HEADER_LEN + 3],
+        ]);
+        assert_eq!(
+            chunk_rollup, MAX_ROLLUP_CHUNK_LEN,
+            "single chunk at the rollup cap"
+        );
+        assert!(
+            chunk_encoded <= MAX_COMPRESSED_CHUNK_LEN,
+            "compressed chunk must fit the compressed cap: {chunk_encoded} > {MAX_COMPRESSED_CHUNK_LEN}"
+        );
+
         let d = envelope(&frame);
-        assert!(d.clean, "max-chunk-size LZ4 frame must decode clean");
+        assert!(d.clean, "max-rollup-chunk LZ4 frame must decode clean");
         assert_eq!(d.rollup, rollup);
         assert_eq!(d.rollup.len(), d.header.rollup_len as usize);
-        assert_eq!(d.consumed, frame.len(), "canonical: chunks tile the frame");
+        assert_eq!(
+            d.consumed,
+            frame.len(),
+            "canonical: the chunk tiles the frame"
+        );
         assert!(is_canonical_encoding_of(&frame, &rollup));
     }
 }
