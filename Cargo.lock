@@ -11146,6 +11146,7 @@ dependencies = [
  "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
+ "sov-rollup-full-node-interface",
  "sov-rollup-interface",
  "sov-test-utils",
  "tempfile",

@@ -248,7 +248,6 @@ where
             _runtime: PhantomData,
             config: config.clone(),
             nonce_buffer_input,
-            shutdown_receiver: shutdown_receiver.clone(),
             shutdown_sender: shutdown_sender.clone(),
             tx_queue_id,
             stop_at_rollup_height,

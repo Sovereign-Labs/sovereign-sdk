@@ -1,6 +1,7 @@
 #![allow(dead_code)]
 
 //! Sequencer without any validation or state.
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use async_trait::async_trait;
 use sov_blob_sender::{new_blob_id, BlobSender};
 use sov_db::ledger_db::LedgerDb;
@@ -67,7 +68,7 @@ where
         storage_path: &Path,
         config: &SequencerConfig<<S as Spec>::Address, ()>,
         ledger_db: LedgerDb,
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let mut runtime = R::default();

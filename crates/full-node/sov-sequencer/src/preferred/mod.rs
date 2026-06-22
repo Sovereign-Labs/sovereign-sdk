@@ -126,7 +126,6 @@ where
     pub(crate) config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     /// Used for intelligently buffering nonce-based TXs if they arrive out of order.
     nonce_buffer_input: NonceBufferInputSender<SequencerTxExecutionBackend<S, Rt>, S, Rt>,
-    shutdown_receiver: watch::Receiver<()>,
     transaction_cache: TransactionCache<S, Rt>,
     shutdown_sender: PrimaryShutdownController,
     // Used to track which txs need to be ignored after the sequencer had downtime (in the sense of giving out 503s)

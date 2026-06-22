@@ -7,6 +7,7 @@
 //! - **DbElected replicas** run a heartbeat while competing for leadership; if acquired, they restart as leader.
 //! - **Static replicas** run a heartbeat for registration only, never competing for leadership.
 
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use std::net::SocketAddr;
 use std::time::{Duration, Instant};
 
@@ -50,7 +51,7 @@ impl std::fmt::Display for LeadershipRole {
 pub struct HeartBeatTask {
     backend: PostgresBackend,
     node_id: String,
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
     shutdown_receiver: watch::Receiver<()>,
     postgres_config: PostgresConfig,
     heartbeat_interval: Duration,
@@ -59,7 +60,7 @@ pub struct HeartBeatTask {
 impl HeartBeatTask {
     pub async fn new(
         postgres_config: PostgresConfig,
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         bind_addr: SocketAddr,
         heartbeat_interval: Duration,
     ) -> Result<Self> {
@@ -270,7 +271,7 @@ impl HeartBeatTask {
                     node_id = %self.node_id,
                     "Replica acquired leadership! Exiting to restart as leader."
                 );
-                let _ = self.shutdown_sender.send(());
+                self.shutdown_sender.trigger();
                 true
             }
             Ok(LeadershipRole::Replica) => {

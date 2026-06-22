@@ -149,7 +149,6 @@ where
 {
     pub checkpoint: StateCheckpoint<S>,
     seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
-    shutdown_receiver: watch::Receiver<()>,
     shutdown_sender: PrimaryShutdownController,
 
     rollup_block_task_state: Option<BackgroundTaskState<S>>,
@@ -232,9 +231,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             da_address,
             shutdown_notifier,
             state_root_request_sender,
-            shutdown_receiver,
             shutdown_sender,
             forced_tx_batch_notifier,
+            ..
         } = rollup_exec_config;
 
         Self {
@@ -249,7 +248,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             state_roots: Default::default(),
             state_root_responses: Default::default(),
             id: Uuid::now_v7(),
-            shutdown_receiver,
             shutdown_sender,
             startup_transaction_cache_writer: tx_cache_writer,
             uncommitted_changes,

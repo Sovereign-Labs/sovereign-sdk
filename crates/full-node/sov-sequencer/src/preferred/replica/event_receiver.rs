@@ -1,3 +1,4 @@
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use crate::preferred::db::SequencerRole;
 use crate::preferred::replica::db_data::row_to_event;
 use crate::preferred::replica::db_data::rows;
@@ -97,7 +98,7 @@ impl EventReceiverStartNotifier {
 pub(crate) struct EventReceiver {
     connection_string: String,
     db_data_sender: tokio::sync::mpsc::Sender<DbData>,
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
     query_pool: PgPool,
     page_size: usize,
     ready_to_process_db_events_recv: watch::Receiver<()>,
@@ -106,7 +107,7 @@ pub(crate) struct EventReceiver {
 impl EventReceiver {
     pub(crate) async fn new(
         connection_string: String,
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         page_size: usize,
         ready_to_process_db_events_recv: watch::Receiver<()>,
     ) -> (Self, tokio::sync::mpsc::Receiver<DbData>) {

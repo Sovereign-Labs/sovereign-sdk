@@ -2,7 +2,7 @@ use std::num::NonZero;
 use std::sync::Arc;
 
 use backon::{BackoffBuilder, ExponentialBuilder};
-use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::{DaSyncState, PrimaryShutdownController};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput, SyncStatus};
@@ -36,7 +36,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
-    shutdown_sender: tokio::sync::watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
     start_fresh_outer_proof_on_resync: bool,
 }
 
@@ -55,7 +55,7 @@ where
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
         da_sync_state: Arc<DaSyncState>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
-        shutdown_sender: tokio::sync::watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         start_fresh_outer_proof_on_resync: bool,
     ) -> Self {
         Self {
@@ -323,7 +323,7 @@ struct AggregatorTask<Ps: ProverService> {
     backoff_policy: ExponentialBuilder,
     metadata_rx: mpsc::Receiver<(AggregateProofMetadata<Ps>, u64)>,
     cursor: CursorHandle,
-    shutdown_sender: tokio::sync::watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
 }
 
 impl<Ps: ProverService> AggregatorTask<Ps>
@@ -348,7 +348,7 @@ where
                     max_concurrent_proof_blobs = status.max_concurrent,
                     "The zk proof blob sender is busy, which means proofs are not being confirmed by the rollup on time. Triggering shutdown."
                 );
-                if self.shutdown_sender.send(()).is_err() {
+                if !self.shutdown_sender.trigger() {
                     tracing::error!("Failed to send primary shutdown signal.");
                 }
                 break;

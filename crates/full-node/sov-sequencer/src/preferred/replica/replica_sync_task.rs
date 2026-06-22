@@ -1,3 +1,4 @@
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use crate::preferred::db::SequencerRole;
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_receiver::EventReceiver;
@@ -32,21 +33,21 @@ pub(crate) struct ReplicaTaskHandles {
 }
 
 pub(crate) struct ReplicaSyncTask {
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
     page_size: usize,
     start_replica_task_receiver: watch::Receiver<()>,
 }
 
 impl ReplicaSyncTask {
     pub(crate) async fn new(
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         seq_role: SequencerRole,
     ) -> anyhow::Result<(Self, EventReceiverStartNotifier)> {
         Self::new_with_page_size(shutdown_sender, PAGE_SIZE, seq_role).await
     }
 
     pub(crate) async fn new_with_page_size(
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         page_size: usize,
         seq_role: SequencerRole,
     ) -> anyhow::Result<(Self, EventReceiverStartNotifier)> {

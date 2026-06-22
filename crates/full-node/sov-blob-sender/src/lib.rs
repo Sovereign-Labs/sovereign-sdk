@@ -15,6 +15,7 @@ use in_flight_blob::{InFlightBlob, InFlightBlobInfo, InFlightBlobsCount};
 use metrics::{submit_blobs_enter_scope_marker, submit_blobs_exit_scope_marker};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::{DaSpec, EventModuleName, RuntimeEventResponse};
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::{DaService, SubmitBlobReceipt};
 use sov_rollup_interface::node::ledger_api::{LedgerStateProvider, QueryMode};
@@ -81,7 +82,7 @@ pub struct BlobSender<Da: DaService, H, FM: FinalizationManager> {
     hooks: Arc<H>,
     in_flight_blobs: Arc<Mutex<HashMap<BlobInternalId, InFlightBlob<Da::Spec>>>>,
     shutdown_receiver: watch::Receiver<()>,
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
     da: Da,
     finalization_manager: FM,
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
@@ -103,7 +104,7 @@ where
         finalization_manager: FM,
         storage_path: &Path,
         hooks: H,
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         blob_processing_timeout: Duration,
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
@@ -131,7 +132,7 @@ where
         finalization_manager: FM,
         storage_path: &Path,
         hooks: H,
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         blob_processing_timeout: Duration,
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         ledger_pool_interval: Duration,
@@ -500,7 +501,7 @@ struct TaskState<Da: DaService, FM: FinalizationManager> {
     blob_processing_timeout: Duration,
     ledger_pool_interval: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
 }
 
 impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
@@ -633,7 +634,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         .is_err()
                     {
                         // If we can't save the state, we shut down.
-                        let _ = self.shutdown_sender.send(());
+                        self.shutdown_sender.trigger();
                         return;
                     }
 
@@ -654,7 +655,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                 ?blob_status,
                                 "BlobSender: unable to send blob. Shutting down."
                             );
-                            let _ = self.shutdown_sender.send(());
+                            self.shutdown_sender.trigger();
                             return;
                         }
                     }
@@ -670,7 +671,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         .is_err()
                     {
                         // If we can't save the state, we shut down.
-                        let _ = self.shutdown_sender.send(());
+                        self.shutdown_sender.trigger();
                         return;
                     }
 
@@ -695,7 +696,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                     %blob_hash,
                                     "Shutting down the rollup. Blob processing wasn't completed on time."
                                 );
-                                let _ = self.shutdown_sender.send(());
+                                self.shutdown_sender.trigger();
                                 return;
                             }
 
@@ -721,7 +722,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                             // Error is logged inside the method
                             Err(_) => {
                                 // If we can't check the finality status, we shut down.
-                                let _ = self.shutdown_sender.send(());
+                                self.shutdown_sender.trigger();
                                 return;
                             }
                         };
@@ -756,7 +757,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         .is_err()
                     {
                         // If we can't save the state, we shut down.
-                        let _ = self.shutdown_sender.send(());
+                        self.shutdown_sender.trigger();
                         return;
                     }
 
@@ -772,7 +773,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                             Ok(finality_status) => finality_status,
                             Err(_) => {
                                 // If we can't check the finality status, we shut down.
-                                let _ = self.shutdown_sender.send(());
+                                self.shutdown_sender.trigger();
                                 return;
                             }
                         };

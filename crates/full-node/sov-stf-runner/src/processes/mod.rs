@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use op_manager::attestations::AttestationsManager;
 pub use prover_service::*;
-use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::{DaSyncState, PrimaryShutdownController};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::optimistic::BondingProofService;
 use sov_rollup_interface::stf::ProofSender;
@@ -29,7 +29,7 @@ pub async fn start_zk_workflow_in_background<Ps>(
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
-    shutdown_sender: tokio::sync::watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
     start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<JoinHandle<()>>
 where

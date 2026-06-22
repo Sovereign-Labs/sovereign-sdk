@@ -1,3 +1,4 @@
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_blob_sender::BlobExecutionStatus;
 use sov_blob_sender::{BlobInternalId, BlobSender, BlobToSend};
 use sov_blob_storage::{PreferredBatchData, PreferredProofData};
@@ -9,7 +10,6 @@ use std::{
     sync::{atomic::AtomicUsize, Arc},
 };
 use tokio::sync::broadcast;
-use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tracing::debug;
@@ -36,7 +36,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         all_completed_blobs: Vec<ReadBlob>,
         storage_path: Box<Path>,
         tx_status_manager: TxStatusManager<Da::Spec>,
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         blob_processing_timeout: Duration,
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
         seq_role: SequencerRole,

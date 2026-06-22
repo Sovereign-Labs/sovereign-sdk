@@ -12,6 +12,7 @@
 pub mod heartbeat_task;
 pub mod postgres;
 pub mod rocksdb;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use crate::preferred::PostgresBackend;
 use crate::preferred::PreferredProofToReplay;
 use crate::preferred::RocksDbBackend;
@@ -33,7 +34,7 @@ use std::net::SocketAddr;
 use std::num::NonZero;
 use std::path::Path;
 use std::sync::Arc;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::mpsc;
 
 use crate::common::WithCachedTxHashes;
 use crate::preferred::{exit_rollup, track_in_progress_batch_size};
@@ -227,14 +228,14 @@ pub struct BlobsCache {
     proofs_and_completed_batches: BTreeMap<SequenceNumber, ReadBlob>,
     in_progress_batch: Option<InProgressBatch>,
     event_stream: Option<mpsc::Sender<DbEvent>>,
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
 }
 
 impl BlobsCache {
     pub fn new(
         completed_blobs: BTreeMap<SequenceNumber, ReadBlob>,
         in_progress_batch: Option<InProgressBatch>,
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
     ) -> Self {
         Self {
             proofs_and_completed_batches: completed_blobs,
@@ -538,12 +539,12 @@ impl SequencerRole {
 
 pub(crate) struct PreferredSequencerDb {
     backend: Option<Box<dyn DbBackend>>,
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
 }
 
 impl PreferredSequencerDb {
     pub(crate) async fn new(
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
         storage_path: &Path,
         postgres_config: &Option<PostgresConfig>,
         bind_addr: SocketAddr,
@@ -783,7 +784,7 @@ impl PreferredSequencerDb {
     async fn debug_assert_in_progress_batch_is_none(
         msg: &str,
         backend: &mut Box<dyn DbBackend>,
-        shutdown_sender: &watch::Sender<()>,
+        shutdown_sender: &PrimaryShutdownController,
     ) {
         if cfg!(debug_assertions) {
             match backend.read_in_progress_batch().await {

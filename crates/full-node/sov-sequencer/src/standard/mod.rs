@@ -2,6 +2,7 @@
 
 mod mempool;
 
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use self::mempool::{Mempool, MempoolCursor, MempoolTx};
 use crate::common::{
     loop_call_update_state, loop_send_tx_notifications, pre_exec_err_to_accept_tx_err,
@@ -134,7 +135,7 @@ where
         max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
-        shutdown_sender: watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
         let shutdown_receiver = shutdown_sender.subscribe();
         let mut runtime = Rt::default();
