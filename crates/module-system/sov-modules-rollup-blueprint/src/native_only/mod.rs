@@ -679,7 +679,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             state_channel,
             prev_state_root,
             visible_state_height_tracker,
-            primary_shutdown.subscribe_shutdown(),
+            primary_shutdown.clone(),
             start_at_rollup_height,
             stop_at_rollup_height,
             da_sync_state.clone(),

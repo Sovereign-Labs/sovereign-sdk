@@ -258,7 +258,7 @@ pub async fn initialize_runner_with_stop_at(
         let ledger_updates = ledger_db.clone();
         react_to_state_updates::<TestSpec, _>(
             state_update_recv,
-            shutdown_receiver.clone(),
+            primary_shutdown_controller.clone(),
             "ledger_updates",
             move |info| {
                 let ledger_updates = ledger_updates.clone();
@@ -291,7 +291,7 @@ pub async fn initialize_runner_with_stop_at(
         state_channel,
         prev_state_root,
         Box::new(InfiniteHeight),
-        shutdown_receiver.clone(),
+        primary_shutdown_controller.clone(),
         None,
         stop_at_rollup_height,
         da_sync_state,

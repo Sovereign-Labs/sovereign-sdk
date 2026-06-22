@@ -27,7 +27,7 @@ use sov_state::{StateRoot, Storage};
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
-use tokio::sync::{oneshot, watch};
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::trace;
 use uuid::Uuid;
@@ -134,7 +134,6 @@ pub struct StartBlockData<S: Spec> {
 pub struct RollupBlockExecutorConfig<S: Spec> {
     pub da_address: <S::Da as DaSpec>::Address,
     pub shutdown_notifier: Sender<()>,
-    pub shutdown_receiver: watch::Receiver<()>,
     pub primary_shutdown_controller: PrimaryShutdownController,
     pub state_root_request_sender: Sender<StateRootComputeRequest<S>>,
     pub forced_tx_batch_notifier: broadcast::Sender<ForcedTxBatchNotification>,

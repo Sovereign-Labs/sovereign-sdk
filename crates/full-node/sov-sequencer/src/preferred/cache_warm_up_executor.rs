@@ -206,7 +206,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         >,
     ) -> JoinHandle<()> {
         tokio::spawn(async move {
-            let mut shutdown_receiver = exec_config.shutdown_receiver.clone();
+            let primary_shutdown_controller = exec_config.primary_shutdown_controller.clone();
             let mut executor = RollupBlockExecutor::<_, Rt>::new(
                 &info,
                 exec_config,
@@ -272,7 +272,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
                         }
 
                     }
-                   _ = shutdown_receiver.changed() => {
+                   _ = primary_shutdown_controller.recv_shutdown() => {
                         // Quit on shutdown.
                         return;
                    }

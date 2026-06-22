@@ -50,7 +50,7 @@ pub struct TestStatelessSequencer<R, S: Spec, Da: DaService> {
     tx_status_manager: TxStatusManager<S::Da>,
     _r: PhantomData<R>,
     state_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
-    shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown_controller: PrimaryShutdownController,
     api_ledger_db: LedgerDb,
 }
 
@@ -70,7 +70,6 @@ where
         ledger_db: LedgerDb,
         primary_shutdown_controller: PrimaryShutdownController,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
         let mut runtime = R::default();
         let storage = state_update_receiver.borrow().storage.clone();
         let inner = Mutex::new(Inner {
@@ -93,7 +92,7 @@ where
                     ledger_db.clone(),
                     storage_path,
                     TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-                    primary_shutdown_controller,
+                    primary_shutdown_controller.clone(),
                     Duration::from_secs(config.blob_processing_timeout_secs),
                     None,
                     Default::default(),
@@ -106,7 +105,7 @@ where
             tx_status_manager,
             _r: Default::default(),
             state_sender,
-            shutdown_receiver: shutdown_receiver.clone(),
+            primary_shutdown_controller: primary_shutdown_controller.clone(),
             api_ledger_db: ledger_db.clone(),
         };
 
@@ -115,7 +114,7 @@ where
             loop_call_update_state(
                 seq.clone(),
                 state_update_receiver.clone(),
-                shutdown_receiver.clone(),
+                primary_shutdown_controller.clone(),
             )
         }));
         handles.push(tokio::spawn({
@@ -124,7 +123,7 @@ where
             async move {
                 loop_send_tx_notifications::<S, R>(
                     state_update_receiver,
-                    shutdown_receiver,
+                    primary_shutdown_controller,
                     &ledger_db,
                     seq.tx_status_manager(),
                 )
@@ -202,7 +201,7 @@ where
             self.state_sender.subscribe(),
             runtime.kernel_with_slot_mapping(),
             None,
-            self.shutdown_receiver.clone(),
+            self.primary_shutdown_controller.subscribe_shutdown(),
         )
     }
 

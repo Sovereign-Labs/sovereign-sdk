@@ -21,13 +21,14 @@ use sov_modules_api::*;
 use sov_modules_stf_blueprint::{PreExecError, Runtime};
 use sov_rest_utils::errors::ReportableWsError;
 use sov_rest_utils::{json_obj, to_json_object};
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{ItemOrHash, LedgerStateProvider, QueryMode};
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_rollup_interface::node::FutureOrShutdownOutput;
 use thiserror::Error;
-use tokio::sync::{broadcast, watch, Mutex, RwLock};
+use tokio::sync::{broadcast, Mutex, RwLock};
 use tokio::time::timeout;
 use tracing::{info, trace};
 
@@ -399,7 +400,7 @@ pub enum StateUpdateError {
 /// Polls for the next state update, handling shutdown, timeout, and debug flags
 pub async fn poll_state_update<S: Spec>(
     state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-    shutdown_receiver: &watch::Receiver<()>,
+    primary_shutdown_controller: &PrimaryShutdownController,
     task_name: &'static str,
 ) -> Result<StateUpdateInfo<S::Storage>, StateUpdateError> {
     loop {
@@ -408,7 +409,7 @@ pub async fn poll_state_update<S: Spec>(
             state_update_receiver.changed(),
         );
 
-        let fut = future_or_shutdown(changed_with_timeout, shutdown_receiver);
+        let fut = primary_shutdown_controller.future_or_shutdown(changed_with_timeout);
         let FutureOrShutdownOutput::Output(timeout_result) = fut.await else {
             return Err(StateUpdateError::Shutdown);
         };
@@ -442,7 +443,7 @@ pub async fn poll_state_update<S: Spec>(
 /// Automagically handles shutdown and error checking for you.
 pub async fn react_to_state_updates<S, Fut>(
     mut state_update_receiver: StateUpdateReceiver<S::Storage>,
-    shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown_controller: PrimaryShutdownController,
     task_name: &'static str,
     mut closure: impl FnMut(StateUpdateInfo<S::Storage>) -> Fut,
 ) where
@@ -450,8 +451,12 @@ pub async fn react_to_state_updates<S, Fut>(
     Fut: Future<Output = anyhow::Result<()>>,
 {
     loop {
-        let poll_result =
-            poll_state_update::<S>(&mut state_update_receiver, &shutdown_receiver, task_name).await;
+        let poll_result = poll_state_update::<S>(
+            &mut state_update_receiver,
+            &primary_shutdown_controller,
+            task_name,
+        )
+        .await;
 
         match poll_result {
             Ok(info) => {
@@ -474,11 +479,11 @@ pub async fn react_to_state_updates<S, Fut>(
 pub async fn loop_call_update_state<Seq: Sequencer>(
     seq: Seq,
     state_update_receiver: StateUpdateReceiver<<Seq::Spec as Spec>::Storage>,
-    shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown_controller: PrimaryShutdownController,
 ) {
     react_to_state_updates::<Seq::Spec, _>(
         state_update_receiver,
-        shutdown_receiver,
+        primary_shutdown_controller,
         "loop_call_update_state",
         |info| async {
             if cfg!(debug_assertions) {
@@ -500,7 +505,7 @@ pub async fn loop_call_update_state<Seq: Sequencer>(
 #[tracing::instrument(skip_all, level = "trace")]
 pub async fn loop_send_tx_notifications<S: Spec, Rt: RuntimeEventProcessor>(
     state_update_receiver: StateUpdateReceiver<S::Storage>,
-    shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown_controller: PrimaryShutdownController,
     ledger_db: &LedgerDb,
     txsm: &TxStatusManager<S::Da>,
 ) {
@@ -513,7 +518,7 @@ pub async fn loop_send_tx_notifications<S: Spec, Rt: RuntimeEventProcessor>(
         state_update_receiver.borrow().slot_number.next(),
     ));
 
-    react_to_state_updates::<S, _>(state_update_receiver, shutdown_receiver, "loop_send_tx_notifications", move |info| {
+    react_to_state_updates::<S, _>(state_update_receiver, primary_shutdown_controller, "loop_send_tx_notifications", move |info| {
         let next_slot_to_process = next_slot_to_process.clone();
         async move {
             let storage_slot_number = info.slot_number;

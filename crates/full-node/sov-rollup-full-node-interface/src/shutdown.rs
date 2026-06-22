@@ -1,5 +1,8 @@
 //! The primary ("main") shutdown signal for a running rollup.
 
+use std::future::Future;
+
+use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use tokio::sync::watch;
 
 /// Owns both ends of the rollup's *primary* shutdown channel.
@@ -68,6 +71,19 @@ impl PrimaryShutdownController {
         // `has_changed` errors), assume we are shutting down. Callers branch as
         // `if has_changed() { /* stop */ }`, so `true` is the safe fallback.
         self.receiver.has_changed().unwrap_or(true)
+    }
+
+    /// Runs `fut` until it completes or a shutdown is triggered, whichever
+    /// happens first.
+    ///
+    /// This is the controller-native form of the free [`future_or_shutdown`]
+    /// combinator: it lets a task race a future against shutdown without having
+    /// to hold a [`watch::Receiver`] itself. Like [`recv_shutdown`], it observes
+    /// a shutdown that fired before the call.
+    ///
+    /// [`recv_shutdown`]: Self::recv_shutdown
+    pub async fn future_or_shutdown<F: Future>(&self, fut: F) -> FutureOrShutdownOutput<F::Output> {
+        future_or_shutdown(fut, &self.receiver).await
     }
 
     /// Triggers the primary shutdown.

@@ -73,7 +73,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use sync_sequencer_state::*;
-use tokio::sync::{broadcast, watch};
+use tokio::sync::broadcast;
 use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tracing::{error, info, trace};
@@ -210,7 +210,7 @@ where
     async fn recover_and_catch_up(
         &self,
         state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-        shutdown_receiver: &watch::Receiver<()>,
+        primary_shutdown_controller: &PrimaryShutdownController,
         mut info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
         let mut rt = Rt::default();
@@ -240,7 +240,7 @@ where
                     }
                     info = poll_state_update::<S>(
                         state_update_receiver,
-                        shutdown_receiver,
+                        primary_shutdown_controller,
                         "update_state_task",
                     )
                     .await?;
@@ -281,7 +281,7 @@ where
 
                 info = poll_state_update::<S>(
                     state_update_receiver,
-                    shutdown_receiver,
+                    primary_shutdown_controller,
                     "update_state_task",
                 )
                 .await?;
@@ -324,7 +324,7 @@ where
     async fn wait_for_node_resync(
         &self,
         state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-        shutdown_receiver: &watch::Receiver<()>,
+        primary_shutdown_controller: &PrimaryShutdownController,
         distance_to_tip: u64,
         current_info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
@@ -346,7 +346,7 @@ where
             // Else, poll a state update for the next iteration
             info = poll_state_update::<S>(
                 state_update_receiver,
-                shutdown_receiver,
+                primary_shutdown_controller,
                 "update_state_task",
             )
             .await?;
@@ -357,12 +357,12 @@ where
     async fn wait_for_node_resync_with_allowed_slack(
         &self,
         state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-        shutdown_receiver: &watch::Receiver<()>,
+        primary_shutdown_controller: &PrimaryShutdownController,
         current_info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
         self.wait_for_node_resync(
             state_update_receiver,
-            shutdown_receiver,
+            primary_shutdown_controller,
             // Catch up a bit extra to avoid immediately triggering another resync
             self.config.max_allowed_node_distance_behind.div_ceil(2),
             current_info,
@@ -373,10 +373,10 @@ where
     async fn wait_for_node_resync_to_tip(
         &self,
         state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-        shutdown_receiver: &watch::Receiver<()>,
+        primary_shutdown_controller: &PrimaryShutdownController,
         current_info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
-        self.wait_for_node_resync(state_update_receiver, shutdown_receiver, 1, current_info)
+        self.wait_for_node_resync(state_update_receiver, primary_shutdown_controller, 1, current_info)
             .await
     }
 
@@ -571,7 +571,7 @@ fn raw_max_deferred_slots_delay(max_allowed_node_distance_behind: u64) -> u64 {
 async fn update_state_task<S, Rt, Da>(
     seq: PreferredSequencer<S, Rt, Da>,
     mut state_update_receiver: StateUpdateReceiver<S::Storage>,
-    shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown_controller: PrimaryShutdownController,
 ) where
     S: Spec,
     Rt: Runtime<S>,
@@ -579,7 +579,7 @@ async fn update_state_task<S, Rt, Da>(
 {
     loop {
         if let Err(e) =
-            update_state_task_inner(seq.clone(), &mut state_update_receiver, &shutdown_receiver)
+            update_state_task_inner(seq.clone(), &mut state_update_receiver, &primary_shutdown_controller)
                 .await
         {
             // Thrown when polling for state updates is aborted due to a shutdown signal. Don't
@@ -645,7 +645,7 @@ fn should_skip_update_state(postgres_config: Option<&PostgresConfig>) -> bool {
 async fn update_state_task_inner<S, Rt, Da>(
     seq: PreferredSequencer<S, Rt, Da>,
     state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-    shutdown_receiver: &watch::Receiver<()>,
+    primary_shutdown_controller: &PrimaryShutdownController,
 ) -> anyhow::Result<()>
 where
     S: Spec,
@@ -653,7 +653,7 @@ where
     Da: DaService<Spec = S::Da>,
 {
     let info =
-        poll_state_update::<S>(state_update_receiver, shutdown_receiver, "update_state").await?;
+        poll_state_update::<S>(state_update_receiver, primary_shutdown_controller, "update_state").await?;
 
     if cfg!(debug_assertions)
         && should_skip_update_state(seq.config.sequencer_kind_config.postgres_config.as_ref())
@@ -717,20 +717,20 @@ where
         }
 
         PreferredSeqOperation::WaitForNodeResyncToTip => {
-            seq.wait_for_node_resync_to_tip(state_update_receiver, shutdown_receiver, info)
+            seq.wait_for_node_resync_to_tip(state_update_receiver, primary_shutdown_controller, info)
                 .await?;
         }
 
         PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack => {
             seq.wait_for_node_resync_with_allowed_slack(
                 state_update_receiver,
-                shutdown_receiver,
+                primary_shutdown_controller,
                 info,
             )
             .await?;
         }
         PreferredSeqOperation::RecoverAndCatchUp => {
-            seq.recover_and_catch_up(state_update_receiver, shutdown_receiver, info)
+            seq.recover_and_catch_up(state_update_receiver, primary_shutdown_controller, info)
                 .await?;
         }
 

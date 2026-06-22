@@ -5,7 +5,6 @@ use crate::preferred::replica::event_receiver::EventReceiver;
 use crate::preferred::replica::event_receiver::EventReceiverStartNotifier;
 use async_trait::async_trait;
 use sov_full_node_configs::sequencer::PostgresConfig;
-use sov_rollup_interface::node::future_or_shutdown;
 use sov_rollup_interface::node::FutureOrShutdownOutput;
 use tokio::sync::watch;
 use tokio::task::JoinHandle;
@@ -77,10 +76,10 @@ impl ReplicaSyncTask {
         .await;
 
         let data_fetcher_handle = event_receiver.spawn_db_data_fetcher().await;
-        let shutdown_receiver = self.primary_shutdown_controller.subscribe_shutdown();
+        let primary_shutdown_controller = self.primary_shutdown_controller.clone();
 
         let sync_task_handle = tokio::spawn(async move {
-            Self::run_handler(handler, db_data_receiver, shutdown_receiver).await;
+            Self::run_handler(handler, db_data_receiver, primary_shutdown_controller).await;
         });
 
         ReplicaTaskHandles {
@@ -92,16 +91,16 @@ impl ReplicaSyncTask {
     async fn run_handler<R: ReplicaEventHandler>(
         handler: R,
         mut db_data_receiver: tokio::sync::mpsc::Receiver<DbData>,
-        shutdown_receiver: watch::Receiver<()>,
+        primary_shutdown_controller: PrimaryShutdownController,
     ) {
         'outer: loop {
-            let fut = future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
+            let fut = primary_shutdown_controller.future_or_shutdown(db_data_receiver.recv());
             let FutureOrShutdownOutput::Output(Some(mut data)) = fut.await else {
                 break 'outer;
             };
 
             'inner: loop {
-                if shutdown_receiver.has_changed().unwrap_or(true) {
+                if primary_shutdown_controller.has_changed() {
                     break 'outer;
                 }
 
@@ -115,7 +114,7 @@ impl ReplicaSyncTask {
                         // The executor is ahead of the db. Drain the queue and wait until we catch up.
                         loop {
                             let fut =
-                                future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
+                                primary_shutdown_controller.future_or_shutdown(db_data_receiver.recv());
 
                             let FutureOrShutdownOutput::Output(Some(new_data)) = fut.await else {
                                 break 'outer;
@@ -159,7 +158,7 @@ impl ReplicaSyncTask {
                         tracing::info!("Replica reached stop height, stopping event processing. Draining db events until node shutdown.");
                         loop {
                             let fut =
-                                future_or_shutdown(db_data_receiver.recv(), &shutdown_receiver);
+                                primary_shutdown_controller.future_or_shutdown(db_data_receiver.recv());
                             match fut.await {
                                 FutureOrShutdownOutput::Shutdown
                                 | FutureOrShutdownOutput::Output(None) => {
@@ -545,7 +544,7 @@ mod tests {
     }
 
     async fn check_sync_task(test_cases: Vec<DbData>, expected: Vec<DbData>, exec_seq_nr: u64) {
-        let (_shutdown_snd, shutdown_rcv) = watch::channel(());
+        let primary_shutdown_controller = PrimaryShutdownController::new();
         let (db_data_sender, db_data_receiver) = tokio::sync::mpsc::channel(100);
 
         for db_data in test_cases.clone() {
@@ -554,7 +553,7 @@ mod tests {
 
         let (test_handler, mut recv) = TestHandler::new(exec_seq_nr);
         tokio::task::spawn(async move {
-            ReplicaSyncTask::run_handler(test_handler, db_data_receiver, shutdown_rcv).await;
+            ReplicaSyncTask::run_handler(test_handler, db_data_receiver, primary_shutdown_controller).await;
         });
 
         for exp in expected.into_iter() {
@@ -571,7 +570,7 @@ mod tests {
         let test_case = to_db_data(&test_case);
         let expected = test_case.clone();
 
-        let (_shutdown_snd, shutdown_rcv) = watch::channel(());
+        let primary_shutdown_controller = PrimaryShutdownController::new();
         let (db_data_sender, db_data_receiver) = tokio::sync::mpsc::channel(100);
 
         for db_data in test_case.clone() {
@@ -582,7 +581,7 @@ mod tests {
         let test_handler_clone = test_handler.clone();
 
         tokio::task::spawn(async move {
-            ReplicaSyncTask::run_handler(test_handler, db_data_receiver, shutdown_rcv).await;
+            ReplicaSyncTask::run_handler(test_handler, db_data_receiver, primary_shutdown_controller).await;
         });
 
         for exp in expected {

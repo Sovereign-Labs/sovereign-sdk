@@ -13,8 +13,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use sov_full_node_configs::sequencer::{ConfiguredNodeRole, PostgresConfig};
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
-use tokio::sync::watch;
+use sov_rollup_interface::node::FutureOrShutdownOutput;
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn, Instrument};
 
@@ -52,7 +51,6 @@ pub struct HeartBeatTask {
     backend: PostgresBackend,
     node_id: String,
     primary_shutdown_controller: PrimaryShutdownController,
-    shutdown_receiver: watch::Receiver<()>,
     postgres_config: PostgresConfig,
     heartbeat_interval: Duration,
 }
@@ -65,13 +63,11 @@ impl HeartBeatTask {
         heartbeat_interval: Duration,
     ) -> Result<Self> {
         let backend = PostgresBackend::connect(&postgres_config, bind_addr).await?;
-        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
 
         Ok(Self {
             backend,
             node_id: postgres_config.node_id.clone(),
             primary_shutdown_controller,
-            shutdown_receiver,
             postgres_config,
             heartbeat_interval,
         })
@@ -186,7 +182,7 @@ impl HeartBeatTask {
                     // makes the tick fire late, so `tick_elapsed` (below) overshoots
                     // the heartbeat interval.
                     let tick_start = Instant::now();
-                    match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
+                    match self.primary_shutdown_controller.future_or_shutdown(interval.tick()).await {
                         FutureOrShutdownOutput::Shutdown => {
                             info!("Shutdown signal received, stopping heartbeat task");
                             // Only a replica deregisters; the leader is removed via the
@@ -303,7 +299,7 @@ impl HeartBeatTask {
                 let mut interval = tokio::time::interval(self.heartbeat_interval);
 
                 loop {
-                    match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
+                    match self.primary_shutdown_controller.future_or_shutdown(interval.tick()).await {
                         FutureOrShutdownOutput::Shutdown => {
                             info!(node_id = %self.node_id, "Shutdown signal received, stopping registration task.");
                             self.deregister_on_shutdown_best_effort().await;

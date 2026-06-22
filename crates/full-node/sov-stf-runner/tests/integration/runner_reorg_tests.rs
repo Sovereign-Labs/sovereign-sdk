@@ -114,7 +114,7 @@ async fn test_runner_with_background_da_service(
         state_channel,
         prev_state_root,
         Box::new(InfiniteHeight),
-        shutdown_receiver.clone(),
+        primary_shutdown_controller.clone(),
         None,
         None,
         da_sync_state,

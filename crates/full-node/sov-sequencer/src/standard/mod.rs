@@ -173,7 +173,7 @@ where
             ledger_db.clone(),
             storage_path,
             TxStatusBlobSenderHooks::new(txsm.clone()),
-            primary_shutdown_controller,
+            primary_shutdown_controller.clone(),
             Duration::from_secs(config.blob_processing_timeout_secs),
             None,
             Default::default(),
@@ -215,7 +215,7 @@ where
             loop_call_update_state(
                 seq.clone(),
                 state_update_receiver.clone(),
-                shutdown_receiver.clone(),
+                primary_shutdown_controller.clone(),
             )
         }));
         handles.push(tokio::spawn({
@@ -224,7 +224,7 @@ where
             async move {
                 loop_send_tx_notifications::<S, Rt>(
                     state_update_receiver,
-                    shutdown_receiver,
+                    primary_shutdown_controller,
                     &ledger_db,
                     seq.tx_status_manager(),
                 )

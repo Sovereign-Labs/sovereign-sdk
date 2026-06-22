@@ -60,7 +60,6 @@ where
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
         let latest_state_update = state_update_receiver.borrow().clone();
 
         let da_address = self
@@ -86,7 +85,7 @@ where
 
         let (api_state, checkpoint_sender) = Self::api_state(
             latest_state_update.storage.clone(),
-            primary_shutdown_controller.subscribe_shutdown(),
+            primary_shutdown_controller.clone(),
         );
 
         let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
@@ -158,7 +157,6 @@ where
             da_address,
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
             state_root_request_sender: state_root_task.request_sender.clone(),
-            shutdown_receiver: shutdown_receiver.clone(),
             primary_shutdown_controller: primary_shutdown_controller.clone(),
             forced_tx_batch_notifier: forced_tx_batch_notifier.clone(),
         };
@@ -285,13 +283,13 @@ where
         handles.push(tokio::spawn(update_state_task(
             seq.clone(),
             state_update_receiver.clone(),
-            shutdown_receiver.clone(),
+            primary_shutdown_controller.clone(),
         )));
 
         handles.push(tokio::spawn({
             let ledger_db = ledger_db.clone();
             let seq = seq.clone();
-            let shutdown_rx = shutdown_receiver.clone();
+            let shutdown_rx = primary_shutdown_controller.clone();
             async move {
                 loop_send_tx_notifications::<S, Rt>(
                     state_update_receiver,
@@ -337,7 +335,7 @@ where
 
     fn api_state(
         storage: S::Storage,
-        shutdown_receiver: watch::Receiver<()>,
+        primary_shutdown_controller: PrimaryShutdownController,
     ) -> (
         ApiState<S>,
         watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
@@ -358,7 +356,7 @@ where
             checkpoint_receiver,
             runtime.kernel_with_slot_mapping(),
             None,
-            shutdown_receiver,
+            primary_shutdown_controller.subscribe_shutdown(),
         );
         (api_state, checkpoint_sender)
     }
