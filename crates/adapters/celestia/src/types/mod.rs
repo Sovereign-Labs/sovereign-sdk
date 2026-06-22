@@ -896,7 +896,7 @@ pub mod tests {
         while rollup.len() < 3 * crate::envelope::DICT_WINDOW {
             rollup.extend_from_slice(&block);
         }
-        let da_payload = crate::envelope::encode_for_submission(&rollup, true, 482);
+        let da_payload = crate::envelope::encode_for_submission(&rollup, true, 256);
         assert!(
             crate::envelope::has_magic_prefix(&da_payload),
             "repeated block should compress to an envelope"

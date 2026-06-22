@@ -69,7 +69,7 @@ pub(crate) const MAX_ROLLUP_BLOB_LEN: u32 = 64 * 1024 * 1024;
 /// Sourced from `CELESTIA_MAX_ROLLUP_CHUNK_LEN` in `constants.toml` (16 KiB) so an operator can
 /// tune it without an SDK release. The verifier allocates at most this many bytes per chunk and
 /// rejects any chunk claiming to decode larger; it also sets the partial-read granularity. The
-/// default chunk size (`config::default_compression_chunk_size`, one share = 482) stays
+/// default chunk size (`config::default_compression_chunk_size`, the compressed cap = 430) stays
 /// conservative; advanced operators may opt up to this cap.
 ///
 /// Consensus-relevant: every reader must agree on it, but it is safe to set before compression is
@@ -78,10 +78,11 @@ pub(crate) const MAX_ROLLUP_BLOB_LEN: u32 = 64 * 1024 * 1024;
 pub(crate) const MAX_ROLLUP_CHUNK_LEN: u16 =
     sov_modules_macros::config_value!("CELESTIA_MAX_ROLLUP_CHUNK_LEN");
 
-/// Maximum COMPRESSED (on-DA) length of a single chunk — must fit three signed Celestia shares.
-/// Sourced from `CELESTIA_MAX_COMPRESSED_CHUNK_SIZE` in `constants.toml` (1394). Bounds the shares
-/// a single-chunk read forces the prover to authenticate in ZK, i.e. the DoS cost of spam.
-/// Consensus-relevant — same rules as [`MAX_ROLLUP_CHUNK_LEN`].
+/// Maximum COMPRESSED (on-DA) length of a single chunk — sized so one chunk never spills past the
+/// first Celestia share. Sourced from `CELESTIA_MAX_COMPRESSED_CHUNK_SIZE` in `constants.toml`
+/// (430 = one signed-v1 first share, 458 payload bytes, minus the 24-byte envelope header minus the
+/// 4-byte chunk header). Bounds the shares a single-chunk read forces the prover to authenticate in
+/// ZK, i.e. the DoS cost of spam. Consensus-relevant — same rules as [`MAX_ROLLUP_CHUNK_LEN`].
 pub(crate) const MAX_COMPRESSED_CHUNK_LEN: u16 =
     sov_modules_macros::config_value!("CELESTIA_MAX_COMPRESSED_CHUNK_SIZE");
 
@@ -529,7 +530,7 @@ mod tests {
         // Several times the dict window, so encode/decode slide the rolling 64 KiB window (chunk
         // offsets exceed DICT_WINDOW). Must still decode clean, canonical and byte-exact.
         let rollup = repeated_block(4096, 3 * DICT_WINDOW);
-        let frame = encode_chunked(&rollup, CODEC_LZ4, 482);
+        let frame = encode_chunked(&rollup, CODEC_LZ4, 256);
         let d = envelope(&frame);
         assert!(
             d.clean,
@@ -546,10 +547,10 @@ mod tests {
     #[test]
     fn lz4_dict_beats_independent_on_cross_chunk_redundancy() {
         // A 4 KiB block repeated 40× (160 KiB): the redundancy recurs every 4 KiB, far beyond a
-        // 482-byte chunk, so only the rolling dictionary can exploit it. Each chunk compressed
+        // 256-byte chunk, so only the rolling dictionary can exploit it. Each chunk compressed
         // independently (no dict) cannot, so the linked frame is far smaller.
         let rollup = repeated_block(4096, 40 * 4096);
-        let cs = 482usize;
+        let cs = 256usize;
         let frame = encode_chunked(&rollup, CODEC_LZ4, cs);
         assert!(
             is_canonical_encoding_of(&frame, &rollup),
@@ -654,7 +655,7 @@ mod tests {
         // Raw chunks carry rollup bytes verbatim, so each must fit the compressed cap; a small
         // chunk size keeps every chunk within `MAX_COMPRESSED_CHUNK_LEN` and forces several chunks.
         let rollup: Vec<u8> = (0..1500u32).map(|i| (i % 97 + 1) as u8).collect();
-        let frame = encode_chunked(&rollup, CODEC_RAW_ESCAPE, 482);
+        let frame = encode_chunked(&rollup, CODEC_RAW_ESCAPE, 256);
         let d = envelope(&frame);
         assert!(d.clean);
         assert_eq!(d.rollup, rollup);

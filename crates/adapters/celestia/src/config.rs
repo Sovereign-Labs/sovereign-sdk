@@ -122,10 +122,11 @@ pub struct CelestiaConfig {
     /// Target chunk size (uncompressed bytes) for the chunked compression envelope.
     /// Must be in `1..=MAX_ROLLUP_CHUNK_LEN` (16384 by default — the verifier's per-chunk
     /// rollup cap); an out-of-range value is rejected at startup rather than silently clamped.
-    /// Default: 482 (one continuation share payload, share-aligned). Advanced knob — larger
-    /// chunks trade coarser partial-read granularity for a better ratio, but a chunk that does
-    /// not compress below the per-chunk compressed cap (`MAX_COMPRESSED_CHUNK_LEN`) makes the
-    /// envelope non-canonical, so that batch is posted verbatim (uncompressed), not rejected.
+    /// Default: 430 (the per-chunk compressed cap — one signed-v1 first share minus the envelope
+    /// and chunk headers), so a default-config chunk stays within a single Celestia share. Advanced
+    /// knob — larger chunks trade coarser partial-read granularity for a better ratio, but a chunk
+    /// that does not compress below the per-chunk compressed cap (`MAX_COMPRESSED_CHUNK_LEN`) makes
+    /// the envelope non-canonical, so that batch is posted verbatim (uncompressed), not rejected.
     #[serde(default = "default_compression_chunk_size")]
     pub compression_chunk_size: usize,
 }
@@ -329,12 +330,13 @@ pub(crate) const fn default_safe_lead_time_ms() -> u64 {
     500
 }
 
-/// Default chunk size: one continuation sparse-share payload, so the default tracks
-/// Celestia's share geometry if the share size ever changes. Pinned to one share — not
-/// the per-chunk cap [`crate::envelope::MAX_ROLLUP_CHUNK_LEN`] — so the conservative
-/// default does not move when the cap is raised.
+/// Default chunk size: the per-chunk compressed cap [`crate::envelope::MAX_COMPRESSED_CHUNK_LEN`]
+/// (one signed-v1 first share minus the envelope and chunk headers). Tying the default to that cap
+/// keeps a default-config chunk within a single authenticated Celestia share and guarantees the
+/// uncompressed chunk size can never exceed the cap. A raw (incompressible) chunk then exactly
+/// fills the first share; a compressible one is smaller.
 pub(crate) const fn default_compression_chunk_size() -> usize {
-    celestia_types::consts::appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE
+    crate::envelope::MAX_COMPRESSED_CHUNK_LEN as usize
 }
 
 fn validate_rpc_url(rpc_url: &str) -> anyhow::Result<()> {
@@ -676,8 +678,11 @@ mod tests {
     }
 
     #[test]
-    fn default_compression_chunk_size_is_one_continuation_share() {
-        // Guards against re-coupling the default to the per-chunk cap.
-        assert_eq!(default_compression_chunk_size(), 482);
+    fn default_compression_chunk_size_matches_compressed_cap() {
+        // The default is tied to the compressed cap so a default-config chunk can never exceed it.
+        assert_eq!(
+            default_compression_chunk_size(),
+            crate::envelope::MAX_COMPRESSED_CHUNK_LEN as usize
+        );
     }
 }
