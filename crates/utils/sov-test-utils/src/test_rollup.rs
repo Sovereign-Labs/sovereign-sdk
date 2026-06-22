@@ -40,6 +40,7 @@ pub use sov_modules_rollup_blueprint::FullNodeBlueprint;
 use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_blueprint::Runtime;
 use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
@@ -273,7 +274,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             )
             .await?;
 
-        let shutdown_sender = rollup.primary_shutdown.sender();
+        let shutdown_sender = rollup.primary_shutdown.clone();
 
         let mut other_handles = Vec::new();
         let da_service = rollup.runner.da_service();
@@ -589,7 +590,7 @@ where
     async fn start_secondary_sequencer(
         secondary_da_service: StorableMockDaService,
         rollup_config: RollupConfig<<R::Spec as Spec>::Address, R::DaService>,
-        shutdown_sender: tokio::sync::watch::Sender<()>,
+        shutdown_sender: PrimaryShutdownController,
     ) -> anyhow::Result<(
         sov_api_spec::client::Client,
         watch::Sender<StateUpdateInfo<<R::Spec as Spec>::Storage>>,
@@ -691,7 +692,7 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>> {
         Arc<<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService>,
     /// Allows programmatically initialize shutdown of the test-rollup.
     /// Used for checking graceful shutdown and restart.
-    pub shutdown_sender: watch::Sender<()>,
+    pub shutdown_sender: PrimaryShutdownController,
     /// Used for cleanup/shutdown logic.
     pub rollup_task: JoinHandle<anyhow::Result<()>>,
     /// For optional handles to background tasks.
@@ -822,8 +823,8 @@ where
 
     /// Shuts down the rollup and waits for all background tasks to finish.
     pub async fn shutdown(self) -> anyhow::Result<RollupBuilder<R>> {
-        if let Err(error) = self.shutdown_sender.send(()) {
-            tracing::info!(%error, "shutdown triggered elsewhere, this is probably OK");
+        if !self.shutdown_sender.trigger() {
+            tracing::info!("shutdown triggered elsewhere, this is probably OK");
         }
         self.rollup_task.await.expect("Can't join rollup task")?;
 
