@@ -311,18 +311,22 @@ impl BlobReaderTrait for BlobWithSender {
                     covered = covered.saturating_add(chunk_rollup as usize);
                 }
 
-                // Decode ONLY the bytes appended since the last decode, with the shared
-                // decoder, and extend in place — O(bytes pulled) per call, not O(total).
-                // `decoded.consumed` is the chunk-boundary offset where the previous
-                // decode stopped, so `[consumed..]` is exactly the new chunks (a partial
-                // trailing chunk is left unconsumed). Each chunk is an independent LZ4
-                // block, so this equals a wholesale `classify_and_decode` of the full
-                // prefix byte-for-byte — native and guest stay in lockstep.
-                let remaining = (rollup_len - decoded.rollup.len()) as u32;
+                // Decode ONLY the chunks appended since the last decode, in place into
+                // `decoded.rollup` (which already holds the prefix). `decoded.consumed` is the
+                // chunk-boundary offset where the previous decode stopped, so `[consumed..]` is
+                // exactly the new chunks (a partial trailing chunk is left unconsumed). Decoding
+                // into the prefix buffer is required by the linked codec — its rolling dictionary
+                // is the tail of the decoded output — and makes concatenated incremental decodes
+                // equal a wholesale `classify_and_decode` byte-for-byte, so native and guest stay
+                // in lockstep. O(bytes pulled) per call, not O(total).
+                let consumed = decoded.consumed;
                 let acc = self.blob.accumulator();
-                let (new_rollup, new_consumed, new_clean) =
-                    crate::envelope::decode_chunks(&acc[decoded.consumed..], codec, remaining);
-                decoded.rollup.extend_from_slice(&new_rollup);
+                let (new_consumed, new_clean) = crate::envelope::decode_chunks(
+                    &mut decoded.rollup,
+                    &acc[consumed..],
+                    codec,
+                    rollup_len,
+                );
                 decoded.consumed += new_consumed;
                 decoded.clean &= new_clean;
             }
@@ -873,6 +877,54 @@ pub mod tests {
         assert_eq!(a.verified_data(), b.verified_data());
         assert_eq!(a.total_len(), b.total_len());
         assert_eq!(a.rollup_decode_failed(), b.rollup_decode_failed());
+        assert!(!a.rollup_decode_failed());
+    }
+
+    #[test]
+    fn incremental_advance_matches_wholesale_across_dict_window() {
+        // A payload several times the 64 KiB dict window: a 4 KiB pseudo-random block repeated so
+        // each repeat is matchable only via the rolling dictionary. Reading it incrementally slides
+        // the window (decoded prefix > DICT_WINDOW); a window-slide bug would corrupt the
+        // incremental decode. Real batches are ~110-135 KiB, so this is the production case.
+        let block: Vec<u8> = (0..4096u32)
+            .map(|i| {
+                let x = i.wrapping_mul(2_654_435_761);
+                (x ^ (x >> 15)) as u8
+            })
+            .collect();
+        let mut rollup = Vec::new();
+        while rollup.len() < 3 * crate::envelope::DICT_WINDOW {
+            rollup.extend_from_slice(&block);
+        }
+        let da_payload = crate::envelope::encode_for_submission(&rollup, true, 482);
+        assert!(
+            crate::envelope::has_magic_prefix(&da_payload),
+            "repeated block should compress to an envelope"
+        );
+
+        let mut a = blob_with_da_payload(&da_payload);
+        let mut b = blob_with_da_payload(&da_payload);
+
+        // Drain `a` in many small steps that cross the window boundary; `b` in one shot.
+        for _ in 0..2000 {
+            let before = a.verified_data().len();
+            a.advance(4096);
+            if a.verified_data().len() >= a.total_len() || a.verified_data().len() == before {
+                break;
+            }
+        }
+        let _ = b.full_data();
+
+        assert_eq!(
+            a.verified_data().len(),
+            rollup.len(),
+            "incremental drain reads the whole rollup across the window"
+        );
+        assert_eq!(
+            a.verified_data(),
+            b.verified_data(),
+            "incremental == wholesale across the sliding dict window"
+        );
         assert!(!a.rollup_decode_failed());
     }
 

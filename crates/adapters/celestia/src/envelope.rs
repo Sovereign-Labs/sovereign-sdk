@@ -16,18 +16,21 @@
 //! fixed header (24 bytes):
 //!   magic        [16] b"SOV_CELESTIA_CMP"
 //!   version      [1]  = 1
-//!   codec        [1]  0 = raw chunk (escape); 1 = LZ4 block
+//!   codec        [1]  0 = raw chunk (escape); 1 = LZ4 linked block
 //!   flags        [2]  must be 0
 //!   rollup_len   [4]  u32 LE, total decoded length, <= MAX_ROLLUP_BLOB_LEN
-//! then a sequence of independently-decodable chunks (the payload):
+//! then a sequence of chunks (the payload):
 //!   chunk_rollup_len [2]  u16 LE, 1..=MAX_ROLLUP_CHUNK_LEN
 //!   chunk_encoded_len [2]  u16 LE, 1..=MAX_COMPRESSED_CHUNK_LEN
 //!   chunk_payload     [chunk_encoded_len]
 //! ```
 //!
-//! Chunks are decodable on their own, so reading the first N rollup bytes only
-//! authenticates and decodes the chunks covering them: verifier/guest work scales
-//! with bytes consumed, not blob size.
+//! LZ4 chunks are *linked*: each is compressed against the rolling [`DICT_WINDOW`]-byte tail of the
+//! preceding decoded output, recovering most of the whole-blob ratio that small chunks would
+//! otherwise throw away. They are decoded in order, front-to-back (chunk K needs chunk K-1's
+//! output as its dictionary) — but still *forward-only*: reading the first N rollup bytes decodes
+//! only the chunks covering them (`0..⌈N/chunk_size⌉`), never a later chunk, so verifier/guest work
+//! still scales with bytes consumed, not blob size.
 
 /// Envelope magic prefix. 128 bits, chosen so a standard Borsh batch/proof
 /// payload beginning with these exact bytes would already be malformed in
@@ -42,8 +45,10 @@ pub(crate) const ENVELOPE_VERSION: u8 = 1;
 /// that naturally begin with [`ENVELOPE_MAGIC`].
 pub(crate) const CODEC_RAW_ESCAPE: u8 = 0;
 
-/// LZ4-block codec. Each chunk is an independent LZ4 block decodable without any
-/// later chunk, using the framing-supplied output size.
+/// LZ4 linked-block codec. Each chunk is an LZ4 block compressed against the rolling
+/// [`DICT_WINDOW`]-byte tail of the preceding decoded output, decoded with the framing-supplied
+/// output size. Chunks decode in order — chunk K uses chunk K-1's output as its dictionary — but
+/// never depend on a *later* chunk, so forward/prefix reads stay proportional to bytes consumed.
 pub(crate) const CODEC_LZ4: u8 = 1;
 
 /// Fixed header size: magic[16] + version[1] + codec[1] + flags[2] + rollup_len[4].
@@ -79,6 +84,13 @@ pub(crate) const MAX_ROLLUP_CHUNK_LEN: u16 =
 /// Consensus-relevant — same rules as [`MAX_ROLLUP_CHUNK_LEN`].
 pub(crate) const MAX_COMPRESSED_CHUNK_LEN: u16 =
     sov_modules_macros::config_value!("CELESTIA_MAX_COMPRESSED_CHUNK_SIZE");
+
+/// Rolling dictionary window for the LZ4 linked-block codec ([`CODEC_LZ4`]): each chunk is
+/// (de)compressed against the last `DICT_WINDOW` bytes of the preceding decoded output. 64 KiB is
+/// LZ4's maximum match distance (`MAX_DISTANCE` = 65535), so a wider window cannot be referenced
+/// anyway. Consensus-relevant: the encoder and decoder must use the identical window, so it is a
+/// fixed constant (not operator-tunable) compiled into both native and guest.
+pub(crate) const DICT_WINDOW: usize = 64 * 1024;
 
 // Header field offsets within the fixed header.
 const OFFSET_VERSION: usize = 16;
@@ -249,36 +261,34 @@ pub(crate) fn chunk_framing_valid(
     true
 }
 
-/// Decode the chunk stream `payload` (the bytes after the fixed header, or the
-/// not-yet-decoded suffix when extending incrementally) of a codec-`codec` envelope,
-/// producing at most `max_rollup` rollup bytes.
+/// Decode the chunk stream `payload` of a codec-`codec` envelope, appending the decoded rollup
+/// bytes onto `out` until `out.len()` reaches `rollup_len` (the header's declared total) or
+/// `payload` is exhausted.
 ///
-/// `classify_and_decode` passes the header's full `rollup_len` (wholesale decode);
-/// native `advance` passes the *remaining* budget (`rollup_len − already_decoded`) over
-/// `&accumulator[consumed..]` to decode only the newly-authenticated chunks. Because each
-/// chunk is an independent LZ4 block, concatenating incremental decodes is byte-for-byte
-/// identical to one wholesale decode.
+/// `out` MUST already hold the rollup bytes decoded from all earlier chunks — empty for a wholesale
+/// `classify_and_decode`, or the prefix decoded so far for native `advance` (which passes the
+/// not-yet-decoded accumulator suffix as `payload`). LZ4 chunks are linked — each is decompressed
+/// against the rolling [`DICT_WINDOW`]-byte tail of `out` — so the decode must run forward and `out`
+/// must carry the real decoded history. Because that history is identical however the reads are
+/// split, concatenating incremental decodes is byte-for-byte identical to one wholesale decode:
+/// the property that keeps the prover (incremental) and guest (wholesale) in lockstep.
 ///
-/// Returns `(rollup, consumed, clean)`:
-/// * `rollup` — bytes from the complete chunks decoded,
-/// * `consumed` — payload bytes consumed (whole chunks only),
-/// * `clean` — `false` iff a structural error was hit (cap violation, overrun,
-///   raw length mismatch, LZ4 failure); `true` if the decode is well-formed,
-///   even when merely incomplete (a partial trailing chunk left unconsumed).
+/// Returns `(consumed, clean)`:
+/// * `consumed` — `payload` bytes consumed (whole chunks only; a partial trailing chunk is left),
+/// * `clean` — `false` iff a structural error was hit (cap violation, overrun, raw length mismatch,
+///   LZ4 failure); `true` if the decode is well-formed, even when merely incomplete.
 ///
-/// Never panics: every read is bounds-checked, and each chunk decodes into a single reused
-/// buffer sized to the (cap-validated) per-chunk maximum, so memory use is bounded.
-pub(crate) fn decode_chunks(payload: &[u8], codec: u8, max_rollup: u32) -> (Vec<u8>, usize, bool) {
-    let rollup_len = max_rollup as usize;
-    let mut out = Vec::new();
+/// Never panics: every read is bounds-checked, and each chunk decodes straight into `out`'s tail
+/// sized to the (cap-validated) framing — so allocation is bounded and there is no per-chunk copy.
+pub(crate) fn decode_chunks(
+    out: &mut Vec<u8>,
+    payload: &[u8],
+    codec: u8,
+    rollup_len: usize,
+) -> (usize, bool) {
     let mut pos = 0usize;
-    let mut covered = 0usize;
-    // Reused across chunks so the LZ4 arm doesn't allocate (and zero) a fresh buffer per
-    // chunk. Sized to the per-chunk cap and sliced to each chunk's length; only the bytes a
-    // chunk decodes into are ever read back. Matters most in the guest, where this decode runs.
-    let mut scratch = [0u8; MAX_ROLLUP_CHUNK_LEN as usize];
 
-    while covered < rollup_len {
+    while out.len() < rollup_len {
         // Need the 4-byte framing for the next chunk.
         if pos + CHUNK_HEADER_LEN > payload.len() {
             break; // truncated framing: incomplete, not corrupt
@@ -286,9 +296,10 @@ pub(crate) fn decode_chunks(payload: &[u8], codec: u8, max_rollup: u32) -> (Vec<
         let chunk_rollup = u16::from_le_bytes([payload[pos], payload[pos + 1]]);
         let chunk_encoded = u16::from_le_bytes([payload[pos + 2], payload[pos + 3]]);
 
-        // Validate framing before touching the payload bytes.
-        if !chunk_framing_valid(codec, chunk_rollup, chunk_encoded, covered, rollup_len) {
-            return (out, pos, false);
+        // Validate framing before touching the payload bytes. `out.len()` is the running sum of
+        // rollup bytes decoded so far (`covered`).
+        if !chunk_framing_valid(codec, chunk_rollup, chunk_encoded, out.len(), rollup_len) {
+            return (pos, false);
         }
 
         let body_start = pos + CHUNK_HEADER_LEN;
@@ -304,23 +315,32 @@ pub(crate) fn decode_chunks(payload: &[u8], codec: u8, max_rollup: u32) -> (Vec<
                 out.extend_from_slice(body);
             }
             CODEC_LZ4 => {
-                let dst = &mut scratch[..chunk_rollup as usize];
-                match lz4_flex::block::decompress_into(body, dst) {
-                    // Output size is the framing-supplied known size; reject any
-                    // chunk that does not decode to exactly that many bytes.
-                    Ok(n) if n == chunk_rollup as usize => out.extend_from_slice(dst),
-                    _ => return (out, pos, false),
+                // Linked block: decompress against the rolling DICT_WINDOW-byte tail of the
+                // already-decoded output, straight into out's freshly-grown tail. `split_at_mut`
+                // yields the disjoint history (dict) and destination slices from one buffer, so
+                // there is no scratch buffer and no per-chunk copy.
+                let start = out.len();
+                out.resize(start + chunk_rollup as usize, 0);
+                let (history, dst) = out.split_at_mut(start);
+                let dict = &history[start.saturating_sub(DICT_WINDOW)..];
+                match lz4_flex::block::decompress_into_with_dict(body, dst, dict) {
+                    // Output size is the framing-supplied known size; reject any chunk that does
+                    // not decode to exactly that many bytes.
+                    Ok(n) if n == chunk_rollup as usize => {}
+                    _ => {
+                        out.truncate(start); // drop the partially-written chunk
+                        return (pos, false);
+                    }
                 }
             }
             // Unreachable: the header parse rejects unknown codecs. Fail closed.
-            _ => return (out, pos, false),
+            _ => return (pos, false),
         }
 
-        covered += chunk_rollup as usize;
         pos = body_end;
     }
 
-    (out, pos, true)
+    (pos, true)
 }
 
 /// Classify and decode a blob's authenticated DA bytes.
@@ -335,8 +355,13 @@ pub(crate) fn classify_and_decode(buf: &[u8]) -> EnvelopeState {
         Ok(header) => header,
         Err(_) => return EnvelopeState::Malformed,
     };
-    let (rollup, chunk_consumed, clean) =
-        decode_chunks(&buf[ENVELOPE_HEADER_LEN..], header.codec, header.rollup_len);
+    let mut rollup = Vec::new();
+    let (chunk_consumed, clean) = decode_chunks(
+        &mut rollup,
+        &buf[ENVELOPE_HEADER_LEN..],
+        header.codec,
+        header.rollup_len as usize,
+    );
     EnvelopeState::Envelope(DecodedEnvelope {
         header,
         rollup,
@@ -368,11 +393,17 @@ pub(crate) fn encode_chunked(rollup: &[u8], codec: u8, chunk_size: usize) -> Vec
     out.extend_from_slice(&0u16.to_le_bytes()); // flags
     out.extend_from_slice(&(rollup.len() as u32).to_le_bytes());
 
+    let mut off = 0usize;
     for chunk in rollup.chunks(chunk_size) {
         let encoded = match codec {
             CODEC_RAW_ESCAPE => chunk.to_vec(),
-            // CODEC_LZ4: `compress` (no size prefix) — the framing carries the size.
-            _ => lz4_flex::block::compress(chunk),
+            // CODEC_LZ4 linked block: compress against the rolling DICT_WINDOW-byte tail of the
+            // preceding rollup bytes — the same window the decoder reconstructs. No size prefix;
+            // the framing carries the size.
+            _ => lz4_flex::block::compress_with_dict(
+                chunk,
+                &rollup[off.saturating_sub(DICT_WINDOW)..off],
+            ),
         };
         // chunk.len() <= chunk_size <= MAX_ROLLUP_CHUNK_LEN, and LZ4's worst-case output for
         // that (n + n/255 + 16) also fits u16 for any sane cap, so neither `as u16` truncates.
@@ -382,6 +413,7 @@ pub(crate) fn encode_chunked(rollup: &[u8], codec: u8, chunk_size: usize) -> Vec
         out.extend_from_slice(&(chunk.len() as u16).to_le_bytes());
         out.extend_from_slice(&(encoded.len() as u16).to_le_bytes());
         out.extend_from_slice(&encoded);
+        off += chunk.len();
     }
     out
 }
@@ -472,6 +504,62 @@ mod tests {
             EnvelopeState::Envelope(d) => d,
             other => panic!("expected Envelope, got {other:?}"),
         }
+    }
+
+    /// A repeated high-entropy block, larger than the dict window. Each occurrence is
+    /// incompressible on its own, so the redundancy lives only *across* chunks — exactly what the
+    /// rolling dictionary exists to exploit.
+    fn repeated_block(block_len: usize, total_len: usize) -> Vec<u8> {
+        let block = incompressible(block_len);
+        let mut out = Vec::with_capacity(total_len);
+        while out.len() < total_len {
+            out.extend_from_slice(&block);
+        }
+        out.truncate(total_len);
+        out
+    }
+
+    #[test]
+    fn lz4_dict_round_trips_across_window_boundary() {
+        // Several times the dict window, so encode/decode slide the rolling 64 KiB window (chunk
+        // offsets exceed DICT_WINDOW). Must still decode clean, canonical and byte-exact.
+        let rollup = repeated_block(4096, 3 * DICT_WINDOW);
+        let frame = encode_chunked(&rollup, CODEC_LZ4, 482);
+        let d = envelope(&frame);
+        assert!(
+            d.clean,
+            "linked frame across the sliding window must decode clean"
+        );
+        assert_eq!(
+            d.rollup, rollup,
+            "round-trips exactly across the window boundary"
+        );
+        assert_eq!(d.consumed, frame.len(), "canonical: chunks tile the frame");
+        assert!(is_canonical_encoding_of(&frame, &rollup));
+    }
+
+    #[test]
+    fn lz4_dict_beats_independent_on_cross_chunk_redundancy() {
+        // A 4 KiB block repeated 40× (160 KiB): the redundancy recurs every 4 KiB, far beyond a
+        // 482-byte chunk, so only the rolling dictionary can exploit it. Each chunk compressed
+        // independently (no dict) cannot, so the linked frame is far smaller.
+        let rollup = repeated_block(4096, 40 * 4096);
+        let cs = 482usize;
+        let frame = encode_chunked(&rollup, CODEC_LZ4, cs);
+        assert!(
+            is_canonical_encoding_of(&frame, &rollup),
+            "linked frame round-trips"
+        );
+        let independent: usize = rollup
+            .chunks(cs)
+            .map(|c| lz4_flex::block::compress(c).len() + CHUNK_HEADER_LEN)
+            .sum();
+        assert!(
+            frame.len() * 2 < independent,
+            "linked dict ({}) must be far smaller than independent per-chunk ({})",
+            frame.len(),
+            independent,
+        );
     }
 
     #[test]
