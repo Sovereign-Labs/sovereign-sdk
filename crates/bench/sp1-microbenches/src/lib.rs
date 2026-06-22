@@ -34,7 +34,7 @@ impl BenchResult {
 pub fn fit_prover_gas_per_byte(results: &[BenchResult]) -> anyhow::Result<LinearFit> {
     let input_sizes: Vec<f64> = results.iter().map(|r| r.input_size as f64).collect();
     let prover_gas: Vec<f64> = results.iter().map(|r| r.per_iter_prover_gas()).collect();
-    sov_gas_tools::fit::fit_linear(&input_sizes, &prover_gas)
+    Ok(sov_gas_tools::fit::fit_linear(&input_sizes, &prover_gas)?)
 }
 
 pub fn load_guest_elf(path: &str) -> anyhow::Result<Elf> {
