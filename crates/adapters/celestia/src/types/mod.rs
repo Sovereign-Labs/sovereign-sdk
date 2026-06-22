@@ -823,8 +823,8 @@ pub mod tests {
             "a chunk-aligned logical prefix"
         );
         assert_eq!(
-            &logical[..prefix.len()],
             prefix.as_slice(),
+            &logical[..prefix.len()],
             "prefix matches logical"
         );
         // A genuine partial read (more physical still available) is not a decode failure;
@@ -864,7 +864,7 @@ pub mod tests {
             !prefix.is_empty() && prefix.len() < logical.len(),
             "a chunk-aligned logical prefix"
         );
-        assert_eq!(&logical[..prefix.len()], prefix.as_slice());
+        assert_eq!(prefix.as_slice(), &logical[..prefix.len()]);
 
         // Finish `a` with more small advances; finish `b` in one `full_data`.
         for _ in 0..40 {
@@ -913,6 +913,6 @@ pub mod tests {
         assert_eq!(a.logical_decode_failed(), b.logical_decode_failed());
         // Both expose the same clean prefix decoded before the corrupt chunk.
         assert_eq!(a.verified_data(), b.verified_data());
-        assert_eq!(&logical[..a.verified_data().len()], a.verified_data());
+        assert_eq!(a.verified_data(), &logical[..a.verified_data().len()]);
     }
 }

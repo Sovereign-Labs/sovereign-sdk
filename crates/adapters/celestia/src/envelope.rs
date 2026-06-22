@@ -579,8 +579,8 @@ mod tests {
         );
         assert!(d.logical.len() < logical.len());
         assert_eq!(
-            &logical[..d.logical.len()],
             &d.logical[..],
+            &logical[..d.logical.len()],
             "decoded a prefix"
         );
         assert!(d.consumed <= cut);
