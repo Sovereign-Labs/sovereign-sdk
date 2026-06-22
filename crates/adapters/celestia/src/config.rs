@@ -327,13 +327,12 @@ pub(crate) const fn default_safe_lead_time_ms() -> u64 {
     500
 }
 
-/// Default chunk size: one continuation sparse-share payload (share-aligned).
-/// Decoupled from the per-chunk cap [`crate::envelope::MAX_LOGICAL_CHUNK_LEN`] so the
-/// conservative default does not move when the cap is raised.
+/// Default chunk size: one continuation sparse-share payload, so the default tracks
+/// Celestia's share geometry if the share size ever changes. Pinned to one share — not
+/// the per-chunk cap [`crate::envelope::MAX_LOGICAL_CHUNK_LEN`] — so the conservative
+/// default does not move when the cap is raised.
 pub(crate) const fn default_compression_chunk_size() -> usize {
-    // = CONTINUATION_SPARSE_SHARE_CONTENT_SIZE. A literal (not `MAX_LOGICAL_CHUNK_LEN`)
-    // keeps the default pinned to one share when the cap is raised.
-    482
+    celestia_types::consts::appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE
 }
 
 fn validate_rpc_url(rpc_url: &str) -> anyhow::Result<()> {

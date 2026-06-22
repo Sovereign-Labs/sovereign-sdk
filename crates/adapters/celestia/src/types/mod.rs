@@ -152,9 +152,9 @@ impl PartialEq for BlobWithSender {
 ///   these bytes and only these bytes.
 /// * **Logical**: the payload bytes exposed to the rollup via [`BlobReaderTrait`].
 ///
-/// Today the two streams are identical. Once blobs can be posted in a compressed
-/// envelope, they diverge; proof generation and verification must keep using the
-/// `compressed_*` accessors so the share math stays tied to what is actually on DA.
+/// The two streams diverge when a blob is posted as a compressed envelope (they
+/// coincide for legacy raw blobs); proof generation and verification must keep using
+/// the `compressed_*` accessors so the share math stays tied to what is actually on DA.
 impl BlobWithSender {
     /// DA-physical payload bytes consumed so far. These are the bytes that
     /// inclusion proofs must cover.
@@ -196,16 +196,6 @@ impl BlobWithSender {
     }
 }
 
-/// Celestia-private accessors distinguishing the two byte streams a blob represents:
-///
-/// * **DA-physical ("compressed")**: the payload bytes as actually posted to Celestia.
-///   Share-occupancy math (inclusion proofs, namespace continuity) is defined over
-///   these bytes and only these bytes.
-/// * **Logical**: the payload bytes exposed to the rollup via [`BlobReaderTrait`].
-///
-/// Today the two streams are identical. Once blobs can be posted in a compressed
-/// envelope, they diverge; proof generation and verification must keep using the
-/// `compressed_*` accessors so the share math stays tied to what is actually on DA.
 impl BlobReaderTrait for BlobWithSender {
     type Address = CelestiaAddress;
     type BlobHash = TmHash;

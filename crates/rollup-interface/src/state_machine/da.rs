@@ -175,6 +175,12 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
     ///
     /// Like [`Self::verified_data`], this is the length of the *logical* payload, which may
     /// differ from the number of bytes the blob occupies on the DA layer.
+    ///
+    /// Implementations MUST derive this length from authenticated DA bytes (e.g. a field
+    /// of an authenticated envelope header), never from a host-supplied claim. The
+    /// blob-storage accept path trusts `total_len()` to distinguish a prover withholding
+    /// bytes (short read → fail closed) from a complete blob, so a host-forgeable length
+    /// would let a malicious prover bypass that check.
     fn total_len(&self) -> usize;
 
     /// The validity companion to [`Self::verified_data`]'s contract that an adapter may
