@@ -129,16 +129,12 @@ impl CelestiaService {
         let posted = if matches!(ns, RollupNamespace::Batch) {
             let posted = crate::envelope::encode_for_submission(
                 blob,
-                matches!(self.compression, crate::config::CompressOnSubmit::Lz4),
+                self.compression.is_enabled(),
                 self.compression_chunk_size,
             );
-            let mode = match self.compression {
-                crate::config::CompressOnSubmit::Off => "off",
-                crate::config::CompressOnSubmit::Lz4 => "lz4",
-            };
             sov_metrics::track_metrics(|tracker| {
                 tracker.submit(BlobCompressionMeasurement::new(
-                    mode,
+                    self.compression,
                     logical_len,
                     posted.len(),
                 ));

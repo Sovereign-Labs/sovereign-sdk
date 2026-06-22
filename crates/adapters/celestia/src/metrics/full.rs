@@ -3,6 +3,7 @@
 //! Always measured on success.
 use crate::metrics::RollupNamespace;
 use crate::verifier::address::CelestiaAddress;
+use crate::CompressOnSubmit;
 use celestia_types::namespace_data::NamespaceData;
 use sov_metrics::Metric;
 use std::io::Write;
@@ -94,7 +95,7 @@ impl Metric for BlobSubmitMeasurement {
 #[derive(Debug)]
 pub(crate) struct BlobCompressionMeasurement {
     /// Emission mode tag: `off` or `lz4` (the configured policy).
-    pub mode: &'static str,
+    pub mode: CompressOnSubmit,
     /// Logical (pre-encoding) payload length.
     pub logical_bytes: usize,
     /// Posted (on-DA) payload length after encoding.
@@ -102,7 +103,7 @@ pub(crate) struct BlobCompressionMeasurement {
 }
 
 impl BlobCompressionMeasurement {
-    pub fn new(mode: &'static str, logical_bytes: usize, posted_bytes: usize) -> Self {
+    pub fn new(mode: CompressOnSubmit, logical_bytes: usize, posted_bytes: usize) -> Self {
         Self {
             mode,
             logical_bytes,

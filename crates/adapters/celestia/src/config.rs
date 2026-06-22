@@ -220,6 +220,24 @@ pub enum CompressOnSubmit {
     Lz4,
 }
 
+impl CompressOnSubmit {
+    pub(crate) fn is_enabled(&self) -> bool {
+        match self {
+            CompressOnSubmit::Off => false,
+            CompressOnSubmit::Lz4 => true,
+        }
+    }
+}
+
+impl fmt::Display for CompressOnSubmit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompressOnSubmit::Off => f.write_str("off"),
+            CompressOnSubmit::Lz4 => f.write_str("lz4"),
+        }
+    }
+}
+
 impl CelestiaConfig {
     /// Absolutely minimal config for client that is capable of reading
     pub fn minimal(rpc_url: String) -> Self {
