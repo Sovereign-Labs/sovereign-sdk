@@ -73,7 +73,7 @@ pub fn report_size_sweep(
     bias_const: &str,
     per_byte_const: &str,
 ) -> anyhow::Result<()> {
-    println!("\n[fit] {group} — reading criterion estimates test");
+    println!("\n[fit] {group} — reading criterion estimates");
     eprintln!(
         "warn: constants suggestion assumes a fresh full sweep; if you ran a filtered \
          benchmark, delete {} before relying on this output",
