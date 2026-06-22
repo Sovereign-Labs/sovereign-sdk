@@ -273,10 +273,15 @@ pub(crate) fn chunk_framing_valid(
 /// split, concatenating incremental decodes is byte-for-byte identical to one wholesale decode:
 /// the property that keeps the prover (incremental) and guest (wholesale) in lockstep.
 ///
-/// Returns `(consumed, clean)`:
-/// * `consumed` — `payload` bytes consumed (whole chunks only; a partial trailing chunk is left),
-/// * `clean` — `false` iff a structural error was hit (cap violation, overrun, raw length mismatch,
-///   LZ4 failure); `true` if the decode is well-formed, even when merely incomplete.
+/// Returns `(consumed, clean)` — deliberately not a `Result`, because decoding never *fails*: it
+/// always produces a valid partial result (the bytes appended to `out`, plus `consumed`) alongside a
+/// "was it well-formed?" status. There are three outcomes, only the last a fault:
+/// * **complete & clean** — `out.len() == rollup_len`, `clean == true`;
+/// * **incomplete but clean** — a truncated trailing chunk on a legitimate partial read; `clean ==
+///   true` with fewer bytes decoded, and the caller resumes from `consumed`;
+/// * **corrupt** — a structural error (cap violation, running-sum overrun, raw-codec length
+///   mismatch, or LZ4 failure); `clean == false`, while `consumed` and the bytes already in `out`
+///   stay valid.
 ///
 /// Never panics: every read is bounds-checked, and each chunk decodes straight into `out`'s tail
 /// sized to the (cap-validated) framing — so allocation is bounded and there is no per-chunk copy.
