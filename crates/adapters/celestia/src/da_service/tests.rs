@@ -318,6 +318,83 @@ async fn test_submit_compressed_batch_round_trips() -> anyhow::Result<()> {
     Ok(())
 }
 
+/// A single, config-free reader decodes blobs from two senders that compressed with
+/// *different* `compression_chunk_size` values back to the identical logical payload.
+/// This guards the failover-safety invariant: chunk size is emission-only, so a replica
+/// leader configured differently from the master still produces universally-decodable
+/// blobs. Each chunk carries its own framing, so decode never consults the encoder's size.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_two_senders_different_chunk_sizes_decode_identically() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let base = dev_node.get_config().await?;
+
+    // Sender A: default share-aligned chunk size.
+    let mut config_a = base.clone();
+    config_a.compression = crate::config::CompressOnSubmit::Lz4;
+    config_a.compression_chunk_size = 482;
+
+    // Sender B: a deliberately different chunk size (the per-chunk cap), signer key 1.
+    let mut config_b = base;
+    config_b.signer_private_key = Some(dev_node.export_signer_key(1).await?);
+    config_b.compression = crate::config::CompressOnSubmit::Lz4;
+    config_b.compression_chunk_size = 1446;
+
+    // Compressible, multi-chunk payload at both sizes (8-byte period): ~9 chunks at 482,
+    // ~3 chunks at 1446.
+    let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
+    let payload: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
+
+    // Guard: both configs really emit a chunked envelope (not a raw fallback), otherwise
+    // the round-trip below would not exercise the chunked decode path at all.
+    for cs in [482usize, 1446] {
+        let posted = crate::envelope::encode_for_submission(&payload, true, cs);
+        assert!(
+            posted.starts_with(&crate::envelope::ENVELOPE_MAGIC) && posted.len() < payload.len(),
+            "payload must compress to a chunked envelope at chunk size {cs}"
+        );
+    }
+
+    let (_tx_a, rx_a) = tokio::sync::watch::channel(());
+    let (_tx_b, rx_b) = tokio::sync::watch::channel(());
+    let service_a = CelestiaService::new(config_a, ROLLUP_PARAMS_DEV, rx_a).await;
+    let service_b = CelestiaService::new(config_b, ROLLUP_PARAMS_DEV, rx_b).await;
+    let signer_a = service_a
+        .get_signer()
+        .await
+        .expect("signer A should be configured");
+    let signer_b = service_b
+        .get_signer()
+        .await
+        .expect("signer B should be configured");
+
+    let height_before = service_a.get_head_block_header().await?.height();
+    let resp_a = service_a.send_transaction(&payload).await.await??;
+    let resp_b = service_b.send_transaction(&payload).await.await??;
+
+    // The read path is config-free, so either service reads both senders' blobs.
+    let (mut batch_blobs, proof_blobs) =
+        collect_all_blobs_between(&service_a, height_before).await?;
+    assert!(
+        proof_blobs.is_empty(),
+        "no proofs expected for batch submissions"
+    );
+    assert_eq!(batch_blobs.len(), 2, "exactly two batch blobs expected");
+
+    // Each sender's blob — encoded with a different chunk size — decodes to the same
+    // original payload under the single, config-free reader.
+    for (signer, expected_hash) in [(signer_a, resp_a.blob_hash), (signer_b, resp_b.blob_hash)] {
+        let blob = batch_blobs
+            .iter_mut()
+            .find(|b| b.sender == signer)
+            .unwrap_or_else(|| panic!("no blob found from sender {signer}"));
+        assert_eq!(blob.hash, expected_hash);
+        let total_len = blob.total_len();
+        blob.advance(total_len);
+        assert_eq!(blob.verified_data(), payload.as_slice());
+    }
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_proof_correct() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
