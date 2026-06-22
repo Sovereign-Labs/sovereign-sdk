@@ -39,7 +39,7 @@ use std::sync::Arc;
 use std::time::Duration;
 pub(crate) use sync_state::*;
 use tokio::sync::broadcast;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot};
 pub(crate) use updator::*;
 
 mod conditions_table;

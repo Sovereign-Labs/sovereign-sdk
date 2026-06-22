@@ -4,6 +4,7 @@ use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
     FullyBakedTx, Gas, Runtime, SkippedTxContents, Spec, TransactionReceipt, TxProcessingError,
 };
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_interface::{
     crypto::CredentialId,
     node::{future_or_shutdown, FutureOrShutdownOutput},
@@ -384,7 +385,7 @@ impl<S: Spec, Rt: Runtime<S>> TxExecutionBackend<S, Rt> for SequencerTxExecution
 pub struct NonceBufferInputSender<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
     buffer_sender_channel: mpsc::Sender<NonceBufferInput<S, Rt>>,
     execution_backend: E,
-    shutdown_receiver: watch::Receiver<()>,
+    shutdown_sender: PrimaryShutdownController,
 }
 
 pub struct NonceBufferTask<E: TxExecutionBackend<S, Rt>, S: Spec, Rt: Runtime<S>> {
@@ -828,10 +829,11 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         maximum_future_nonce_delta: u64,
         future_nonce_transaction_timeout_millis: u64,
         forced_tx_batch_receiver: broadcast::Receiver<ForcedTxBatchNotification>,
-        mut shutdown_receiver: watch::Receiver<()>,
+        shutdown_sender: PrimaryShutdownController,
     ) -> (JoinHandle<()>, NonceBufferInputSender<E, S, Rt>) {
         let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
         let (timeout_sender, timeout_receiver) = mpsc::channel(MAX_BUFFERED_TXS);
+        let mut shutdown_receiver = shutdown_sender.subscribe();
 
         let timeout_task = TimeoutQueueTask {
             input: timeout_receiver,
@@ -843,7 +845,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         let input_sender = NonceBufferInputSender {
             buffer_sender_channel,
             execution_backend: execution_backend.clone(),
-            shutdown_receiver: shutdown_receiver.clone(),
+            shutdown_sender: shutdown_sender.clone(),
         };
 
         let mut main_task = NonceBufferTask {
@@ -872,7 +874,7 @@ impl<E: TxExecutionBackend<S, Rt> + Send + 'static, S: Spec, Rt: Runtime<S>>
     NonceBufferInputSender<E, S, Rt>
 {
     fn is_shutting_down(&self) -> bool {
-        self.shutdown_receiver.has_changed().unwrap_or(true)
+        self.shutdown_sender.has_changed()
     }
 
     /// Send a message to the main input queue with metrics tracking.
@@ -1406,16 +1408,16 @@ mod tests {
         timeout_override: Option<u64>,
     ) -> (
         NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
-        watch::Sender<()>,
+        PrimaryShutdownController,
     ) {
-        let (shutdown_sender, shutdown_receiver) = watch::channel(());
+        let shutdown_sender = PrimaryShutdownController::new();
         let (_forced_tx_batch_notifier, forced_tx_batch_receiver) = broadcast::channel(1);
         let (_handle, sender) = NonceBufferTask::spawn(
             backend.clone(),
             DEFAULT_TEST_MAX_QUEUE_SIZE,
             timeout_override.unwrap_or(DEFAULT_TEST_QUEUE_TIMEOUT_MS),
             forced_tx_batch_receiver,
-            shutdown_receiver,
+            shutdown_sender.clone(),
         );
         (sender, shutdown_sender)
     }
@@ -1423,7 +1425,7 @@ mod tests {
     fn default_test_buffer_task() -> (
         MockTxExecutionBackend,
         NonceBufferInputSender<MockTxExecutionBackend, TestSpec, TestRuntime>,
-        watch::Sender<()>,
+        PrimaryShutdownController,
     ) {
         let backend = MockTxExecutionBackend::new();
         let (sender, shutdown_sender) = test_buffer_task(&backend, None);
@@ -1433,19 +1435,20 @@ mod tests {
     type DrainTaskParts = (
         NonceBufferTask<MockTxExecutionBackend, TestSpec, TestRuntime>,
         mpsc::Sender<NonceBufferInput<TestSpec, TestRuntime>>,
-        watch::Sender<()>,
+        PrimaryShutdownController,
         watch::Receiver<()>,
     );
 
     fn build_task_with_channels(backend: MockTxExecutionBackend) -> DrainTaskParts {
         let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
         let (timeout_sender, _timeout_receiver) = mpsc::channel(MAX_BUFFERED_TXS);
-        let (shutdown_sender, shutdown_receiver) = watch::channel(());
+        let shutdown_sender = PrimaryShutdownController::new();
+        let shutdown_receiver = shutdown_sender.subscribe();
         let (_forced_tx_batch_notifier, forced_tx_batch_receiver) = broadcast::channel(1);
         let input_sender = NonceBufferInputSender {
             buffer_sender_channel: buffer_sender_channel.clone(),
             execution_backend: backend.clone(),
-            shutdown_receiver: shutdown_sender.subscribe(),
+            shutdown_sender: shutdown_sender.clone(),
         };
         let task = NonceBufferTask {
             buffers: Default::default(),
@@ -2127,7 +2130,7 @@ mod tests {
 
         let handles = submit_transactions(sender.clone(), (0..5).collect()).await;
         tokio::time::sleep(Duration::from_millis(450)).await;
-        let _ = shutdown_sender.send(());
+        shutdown_sender.trigger();
         let results = collect_results(handles).await;
         let executed = backend.get_executed_nonces().len();
         assert!(
@@ -2176,7 +2179,7 @@ mod tests {
             .await
             .unwrap();
         drop(input_sender);
-        let _ = shutdown_sender.send(());
+        shutdown_sender.trigger();
 
         let run_handle = tokio::spawn(async move {
             task.run(&mut shutdown_receiver).await;
@@ -2269,7 +2272,7 @@ mod tests {
         )
         .await;
 
-        let _ = shutdown_sender.send(());
+        shutdown_sender.trigger();
         run_handle.await.unwrap();
     }
 }

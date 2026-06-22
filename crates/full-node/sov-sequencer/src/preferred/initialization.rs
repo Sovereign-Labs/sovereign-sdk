@@ -188,7 +188,6 @@ where
             batch_execution_time_limit_micros,
             config.clone(),
             self.max_concurrent_proof_blobs,
-            shutdown_receiver.clone(),
             shutdown_sender.clone(),
             executor_events_sender,
             next_sequence_number,
@@ -235,7 +234,7 @@ where
             preferred_config.maximum_future_nonce_delta,
             preferred_config.future_nonce_transaction_timeout_millis,
             forced_tx_batch_notifier.subscribe(),
-            shutdown_receiver.clone(),
+            shutdown_sender.clone(),
         );
         handles.push(nonce_buffer_task);
 

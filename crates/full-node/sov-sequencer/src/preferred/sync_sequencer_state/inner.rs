@@ -42,7 +42,7 @@ use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::{oneshot, watch};
+use tokio::sync::oneshot;
 use tracing::{debug, info, warn};
 
 /// These two constants are used to calculate the comfortable batch size limit.

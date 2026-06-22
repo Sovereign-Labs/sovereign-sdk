@@ -24,7 +24,7 @@ use sov_state::Storage;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 
 pub(crate) struct SequencerStateUpdator<S, Rt>
