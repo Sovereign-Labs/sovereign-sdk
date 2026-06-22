@@ -1,6 +1,7 @@
 mod endpoints;
 pub mod logging;
 pub mod proof_sender;
+mod shutdown;
 mod telemetry;
 mod wallet;
 use anyhow::Context;
@@ -20,6 +21,7 @@ use sov_modules_api::{
     VersionReader,
 };
 use sov_modules_api::{GenesisParamsTrait, ModuleExecutionConfig};
+pub use shutdown::PrimaryShutdownController;
 use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait, StfBlueprint};
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_full_node_interface::StateChannel;
@@ -378,8 +380,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             <<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::configure(exec_config).map_err(|e|anyhow::anyhow!(e))?;
         }
 
-        let (main_shutdown_sender, mut main_shutdown_receiver) = tokio::sync::watch::channel(());
-        main_shutdown_receiver.mark_unchanged();
+        let primary_shutdown = PrimaryShutdownController::new();
         let (secondary_shutdown_sender, mut secondary_shutdown_receiver) =
             tokio::sync::watch::channel(());
         secondary_shutdown_receiver.mark_unchanged();
@@ -416,7 +417,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     Ok(value) => value,
                     Err(error) => {
                         cleanup_failed_startup_before_sequencer(
-                            &main_shutdown_sender,
+                            &primary_shutdown,
                             &secondary_shutdown_sender,
                             &mut background_handles,
                         )
@@ -623,8 +624,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 &ledger_db,
                 &api_ledger_db,
                 &da_service,
-                main_shutdown_receiver.clone(),
-                main_shutdown_sender.clone(),
+                primary_shutdown.subscribe(),
+                primary_shutdown.sender(),
                 stop_at_rollup_height,
                 axum_socket_addr,
             )
@@ -652,7 +653,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 Ok((svc, slot)) => (Some(svc), slot),
                 Err(error) => {
                     cleanup_failed_startup(
-                        &main_shutdown_sender,
+                        &primary_shutdown,
                         &secondary_shutdown_sender,
                         &mut background_handles,
                         &mut sequencer,
@@ -680,7 +681,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             state_channel,
             prev_state_root,
             visible_state_height_tracker,
-            main_shutdown_receiver.clone(),
+            primary_shutdown.subscribe(),
             start_at_rollup_height,
             stop_at_rollup_height,
             da_sync_state.clone(),
@@ -693,7 +694,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             Ok(runner) => runner,
             Err(error) => {
                 cleanup_failed_startup(
-                    &main_shutdown_sender,
+                    &primary_shutdown,
                     &secondary_shutdown_sender,
                     &mut background_handles,
                     &mut sequencer,
@@ -712,7 +713,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     Err(error) => {
                         let _ = runner.shutdown_before_run().await;
                         cleanup_failed_startup(
-                            &main_shutdown_sender,
+                            &primary_shutdown,
                             &secondary_shutdown_sender,
                             &mut background_handles,
                             &mut sequencer,
@@ -753,7 +754,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         stf_info_receiver,
                         runner.da_sync_state(),
                         secondary_shutdown_receiver,
-                        main_shutdown_sender.clone(),
+                        primary_shutdown.sender(),
                         start_fresh_outer_proof_on_resync,
                     )
                     .await
@@ -767,7 +768,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 Err(error) => {
                     let _ = runner.shutdown_before_run().await;
                     cleanup_failed_startup(
-                        &main_shutdown_sender,
+                        &primary_shutdown,
                         &secondary_shutdown_sender,
                         &mut background_handles,
                         &mut sequencer,
@@ -784,7 +785,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             .create_endpoints(
                 state_update_receiver,
                 sync_status_receiver,
-                main_shutdown_receiver.clone(),
+                primary_shutdown.subscribe(),
                 &api_ledger_db,
                 &sequencer,
                 &da_service,
@@ -796,7 +797,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             Err(error) => {
                 let _ = runner.shutdown_before_run().await;
                 cleanup_failed_startup(
-                    &main_shutdown_sender,
+                    &primary_shutdown,
                     &secondary_shutdown_sender,
                     &mut background_handles,
                     &mut sequencer,
@@ -813,12 +814,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         background_handles.extend(sequencer.background_handles);
 
-        spawn_os_signal_handler(main_shutdown_sender.clone());
+        spawn_os_signal_handler(primary_shutdown.sender());
 
         Ok(Rollup {
             runner,
             endpoints,
-            shutdown_sender: main_shutdown_sender,
+            primary_shutdown,
             secondary_shutdown_sender,
             background_handles,
             genesis_slot_number: genesis_da_height,
@@ -848,12 +849,12 @@ fn validate_operating_mode_config(
 }
 
 async fn cleanup_failed_startup<S: Spec>(
-    main_shutdown_sender: &watch::Sender<()>,
+    primary_shutdown: &PrimaryShutdownController,
     secondary_shutdown_sender: &watch::Sender<()>,
     background_handles: &mut Vec<JoinHandle<()>>,
     sequencer: &mut SequencerCreationReceipt<S>,
 ) {
-    let _ = main_shutdown_sender.send(());
+    primary_shutdown.trigger();
     let _ = secondary_shutdown_sender.send(());
 
     let background_handles_to_join = std::mem::take(background_handles);
@@ -869,11 +870,11 @@ async fn cleanup_failed_startup<S: Spec>(
 }
 
 async fn cleanup_failed_startup_before_sequencer(
-    main_shutdown_sender: &watch::Sender<()>,
+    primary_shutdown: &PrimaryShutdownController,
     secondary_shutdown_sender: &watch::Sender<()>,
     background_handles: &mut Vec<JoinHandle<()>>,
 ) {
-    let _ = main_shutdown_sender.send(());
+    primary_shutdown.trigger();
     let _ = secondary_shutdown_sender.send(());
 
     let background_handles_to_join = std::mem::take(background_handles);
@@ -952,8 +953,9 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
     /// Server endpoints for the rollup.
     pub endpoints: NodeEndpointsContainer,
 
-    /// A way to gracefully shut down background tasks.
-    pub shutdown_sender: tokio::sync::watch::Sender<()>,
+    /// The primary shutdown controller — a way to gracefully shut down the
+    /// rollup and all of its background tasks.
+    pub primary_shutdown: PrimaryShutdownController,
 
     /// The genesis slot number.
     pub genesis_slot_number: u64,
@@ -985,12 +987,12 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
             .context("Failed to start Axum Server")?;
 
         let monitoring_task =
-            spawn_task_monitor(self.shutdown_sender.clone(), self.background_handles);
+            spawn_task_monitor(self.primary_shutdown.sender(), self.background_handles);
 
         runner.run_in_process().await?;
         tracing::info!("STF Runner has completed execution");
 
-        if self.shutdown_sender.send(()).is_err() {
+        if !self.primary_shutdown.trigger() {
             tracing::info!(
                 "Failed to send primary shutdown signal because all receivers have been dropped"
             );

@@ -273,7 +273,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             )
             .await?;
 
-        let shutdown_sender = rollup.shutdown_sender.clone();
+        let shutdown_sender = rollup.primary_shutdown.sender();
 
         let mut other_handles = Vec::new();
         let da_service = rollup.runner.da_service();
