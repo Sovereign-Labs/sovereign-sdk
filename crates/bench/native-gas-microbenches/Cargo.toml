@@ -20,5 +20,5 @@ sov-mock-da = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 
 [[bench]]
-name = "hash"
+name = "sha256"
 harness = false

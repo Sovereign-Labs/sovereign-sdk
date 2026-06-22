@@ -19,11 +19,11 @@ use sov_modules_api::{CryptoSpec, MeteredHasher, Spec, UnlimitedGasMeter};
 type MicrobenchSpec = DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
 type Hasher = <<MicrobenchSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher;
 
-const GROUP: &str = "hash";
+const GROUP: &str = "sha256";
 // Mirror the SP1 sha256 sweep so native and ZK calibrations are comparable.
 const SIZES: &[u64] = &[0, 1, 32, 64, 128, 256, 512, 1024, 4096, 16384, 65536];
 
-fn bench_hash(c: &mut Criterion) {
+fn bench_sha256(c: &mut Criterion) {
     let mut group = c.benchmark_group(GROUP);
     for &size in SIZES {
         let buf: Vec<u8> = (0..size).map(|i| (i as u8).wrapping_mul(0xAB)).collect();
@@ -52,5 +52,5 @@ fn bench_hash(c: &mut Criterion) {
     }
 }
 
-criterion_group!(benches, bench_hash);
+criterion_group!(benches, bench_sha256);
 criterion_main!(benches);
