@@ -135,7 +135,7 @@ pub struct RollupBlockExecutorConfig<S: Spec> {
     pub da_address: <S::Da as DaSpec>::Address,
     pub shutdown_notifier: Sender<()>,
     pub shutdown_receiver: watch::Receiver<()>,
-    pub shutdown_sender: PrimaryShutdownController,
+    pub primary_shutdown_controller: PrimaryShutdownController,
     pub state_root_request_sender: Sender<StateRootComputeRequest<S>>,
     pub forced_tx_batch_notifier: broadcast::Sender<ForcedTxBatchNotification>,
 }
@@ -149,7 +149,7 @@ where
 {
     pub checkpoint: StateCheckpoint<S>,
     seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
 
     rollup_block_task_state: Option<BackgroundTaskState<S>>,
     next_event_number: u64,
@@ -231,7 +231,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             da_address,
             shutdown_notifier,
             state_root_request_sender,
-            shutdown_sender,
+            primary_shutdown_controller,
             forced_tx_batch_notifier,
             ..
         } = rollup_exec_config;
@@ -248,7 +248,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             state_roots: Default::default(),
             state_root_responses: Default::default(),
             id: Uuid::now_v7(),
-            shutdown_sender,
+            primary_shutdown_controller,
             startup_transaction_cache_writer: tx_cache_writer,
             uncommitted_changes,
             forced_tx_batch_notifier,
@@ -262,7 +262,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     #[tracing::instrument(skip_all, level = "trace")]
     pub async fn replace_state(&mut self, other: Self) {
-        if self.shutdown_sender.has_changed() {
+        if self.primary_shutdown_controller.has_changed() {
             tracing::info!("The sequencer is shutting down. Exiting replace_state");
             return;
         }
@@ -355,7 +355,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         let Some(result) = task_state.result_receiver.recv().await else {
             tracing::error!("The rollup block executor task failed unexpectedly. Gracefully shutting down the sequencer.");
-            self.shutdown_sender.trigger(); // We don't care if this fails, because that would mean the sequencer is already shutting down - which is exactly what we want.
+            self.primary_shutdown_controller.trigger(); // We don't care if this fails, because that would mean the sequencer is already shutting down - which is exactly what we want.
             return Err(RollupBlockExecutorErrorWithBudget {
                 execution_time_micros: 0,
                 gas_used: <S as Spec>::Gas::zero(),
@@ -425,7 +425,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         )
         .await;
 
-        if self.shutdown_sender.has_changed() {
+        if self.primary_shutdown_controller.has_changed() {
             tracing::info!("The sequencer is shutting down. Exiting replay_batch");
             return Ok(());
         }
@@ -515,7 +515,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                         executor_output_hash = %output.accepted_tx.tx_hash,
                         "The executor returned a different tx hash than expected"
                     );
-                    exit_rollup(&self.shutdown_sender).await;
+                    exit_rollup(&self.primary_shutdown_controller).await;
                     unreachable!()
                 }
                 output.execution_time_micros
@@ -527,7 +527,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                     "Transaction was soft-confirmed but failed to be re-applied; this is a bug, please report it",
                 );
 
-                exit_rollup(&self.shutdown_sender).await;
+                exit_rollup(&self.primary_shutdown_controller).await;
                 unreachable!()
             }
         }

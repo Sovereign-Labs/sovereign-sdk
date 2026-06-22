@@ -182,7 +182,7 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
 
     // Wait for the blob task to start.
     status_reciever.recv().await.unwrap();
-    assert!(deps.shutdown_sender.trigger());
+    assert!(deps.primary_shutdown_controller.trigger());
     handle.await.unwrap();
 
     let mut records = collector.records();
@@ -217,7 +217,7 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
                 .await?;
             data
         };
-        assert!(deps.shutdown_sender.trigger());
+        assert!(deps.primary_shutdown_controller.trigger());
         handle.await.unwrap();
     }
 
@@ -278,7 +278,7 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
     subscriber.init();
 
     let deps = create_deps().await;
-    let mut shutdown_receiver = deps.shutdown_sender.subscribe();
+    let mut shutdown_receiver = deps.primary_shutdown_controller.subscribe();
 
     let (mut blob_sender, blob_sender_handle) = create_blob_sender(
         Duration::from_secs(1),
@@ -504,7 +504,7 @@ async fn proofs_in_flight_do_not_block_batch_gate() -> anyhow::Result<()> {
 
 struct Deps {
     _da_dir: TempDir,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
     _shutdown_receiver: watch::Receiver<()>,
     da: StorableMockDaService,
     storage_dir: TempDir,
@@ -512,14 +512,14 @@ struct Deps {
 
 async fn create_deps() -> Deps {
     let da_dir = tempfile::tempdir().unwrap();
-    let shutdown_sender = PrimaryShutdownController::new();
-    let shutdown_receiver = shutdown_sender.subscribe();
+    let primary_shutdown_controller = PrimaryShutdownController::new();
+    let shutdown_receiver = primary_shutdown_controller.subscribe();
     let da = create_da(&da_dir).await;
     let storage_dir = tempfile::tempdir().unwrap();
 
     Deps {
         _da_dir: da_dir,
-        shutdown_sender,
+        primary_shutdown_controller,
         _shutdown_receiver: shutdown_receiver,
         da,
         storage_dir,
@@ -559,7 +559,7 @@ async fn create_blob_sender(
         finalization_manager,
         deps.storage_dir.path(),
         hooks,
-        deps.shutdown_sender.clone(),
+        deps.primary_shutdown_controller.clone(),
         blob_processing_timeout,
         blob_status_sender,
         Duration::from_millis(1000),

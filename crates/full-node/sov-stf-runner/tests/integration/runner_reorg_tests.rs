@@ -46,8 +46,8 @@ async fn test_runner_with_background_da_service(
     target_height: u64,
     da_config: MockDaConfig,
 ) -> anyhow::Result<()> {
-    let shutdown_sender = PrimaryShutdownController::new();
-    let shutdown_receiver = shutdown_sender.subscribe();
+    let primary_shutdown_controller = PrimaryShutdownController::new();
+    let shutdown_receiver = primary_shutdown_controller.subscribe();
 
     let da_service =
         StorableMockDaService::from_config(da_config.clone(), shutdown_receiver.clone()).await;
@@ -175,7 +175,7 @@ async fn test_runner_with_background_da_service(
         }
     }
 
-    shutdown_sender.trigger();
+    primary_shutdown_controller.trigger();
     runner_task
         .await?
         .context("Runner did not completed with success")?;

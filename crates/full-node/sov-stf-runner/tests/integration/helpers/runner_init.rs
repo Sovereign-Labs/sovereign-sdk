@@ -63,7 +63,7 @@ pub struct TestNode {
     tasks: JoinSet<()>,
     // Just to remove warnings from logs
     _sync_status_receiver: watch::Receiver<SyncStatus>,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
 }
 
 impl TestNode {
@@ -109,7 +109,7 @@ impl TestNode {
     }
 
     pub async fn stop(self) {
-        assert!(self.shutdown_sender.trigger());
+        assert!(self.primary_shutdown_controller.trigger());
         let _ = self.tasks.join_all().await;
     }
 }
@@ -204,8 +204,8 @@ pub async fn initialize_runner_with_stop_at(
     let rollup_config = rollup_config(&da_service, path, aggregated_proof_block_jump);
 
     let mut tasks = JoinSet::new();
-    let shutdown_sender = PrimaryShutdownController::new();
-    let shutdown_receiver = shutdown_sender.subscribe();
+    let primary_shutdown_controller = PrimaryShutdownController::new();
+    let shutdown_receiver = primary_shutdown_controller.subscribe();
 
     let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
         da_service.clone(),
@@ -325,7 +325,7 @@ pub async fn initialize_runner_with_stop_at(
             stf_info_receiver,
             runner.da_sync_state(),
             shutdown_receiver.clone(),
-            shutdown_sender.clone(),
+            primary_shutdown_controller.clone(),
             false,
         )
         .await
@@ -350,7 +350,7 @@ pub async fn initialize_runner_with_stop_at(
             inner_vm,
             _outer_vm: outer_vm,
             tasks,
-            shutdown_sender,
+            primary_shutdown_controller,
             _sync_status_receiver,
         },
     )

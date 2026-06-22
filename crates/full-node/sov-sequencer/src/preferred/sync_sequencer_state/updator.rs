@@ -34,7 +34,7 @@ where
 {
     pub(crate) channel_size: Arc<AtomicU32>,
     pub(crate) message_sender: mpsc::Sender<Message<S, Rt>>,
-    pub(crate) shutdown_sender: PrimaryShutdownController,
+    pub(crate) primary_shutdown_controller: PrimaryShutdownController,
 }
 
 #[derive(Debug)]
@@ -240,7 +240,7 @@ where
         match recv.await {
             Ok(result) => Ok(result),
             Err(_) => {
-                if self.shutdown_sender.has_changed() {
+                if self.primary_shutdown_controller.has_changed() {
                     info!("SequencerStateUpdator(force_close_current_batch) task exited, this is ok since the sequencer is shutting down.");
                     return Err(SequencerStateUpdatorError::Shutdown);
                 }
@@ -281,7 +281,7 @@ where
     async fn send(&self, message: Message<S, Rt>) -> Result<(), SequencerStateUpdatorError> {
         self.channel_size.fetch_add(1, Ordering::Relaxed);
         if self.message_sender.send(message).await.is_err() {
-            if self.shutdown_sender.has_changed() {
+            if self.primary_shutdown_controller.has_changed() {
                 info!("SynchronizedSequencerState(send) task exited, this is ok since the sequencer is shutting down.");
                 return Err(SequencerStateUpdatorError::Shutdown);
             }
@@ -294,7 +294,7 @@ where
         if let Ok(ret) = recv.await {
             Ok(ret)
         } else {
-            if self.shutdown_sender.has_changed() {
+            if self.primary_shutdown_controller.has_changed() {
                 info!("SynchronizedSequencerState(recv) task exited, this is ok since the sequencer is shutting down.");
                 return Err(SequencerStateUpdatorError::Shutdown);
             }

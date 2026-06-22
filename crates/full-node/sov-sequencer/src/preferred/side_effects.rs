@@ -31,7 +31,7 @@ where
     pub db: PreferredSequencerDb,
     pub api_ledger_db: LedgerDb,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
-    pub shutdown_sender: PrimaryShutdownController,
+    pub primary_shutdown_controller: PrimaryShutdownController,
     pub transaction_cache: TxResultWriter<S, Rt>,
 }
 
@@ -142,7 +142,7 @@ where
                 RecoveryStrategy::None => {
                     // Shut down
                     error!(RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY);
-                    exit_rollup(&self.shutdown_sender).await;
+                    exit_rollup(&self.primary_shutdown_controller).await;
                 }
             }
         } else {
@@ -332,7 +332,7 @@ where
                 if let Err(e) = self.handle_executor_event(&mut event_queue).await {
                     tracing::error!(error = ?e, "Error handling executor event");
                     // If we've already started shutting down, this might fail - but then we're happy.
-                    self.shutdown_sender.trigger();
+                    self.primary_shutdown_controller.trigger();
                     break;
                 }
             }

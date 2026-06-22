@@ -51,7 +51,7 @@ impl std::fmt::Display for LeadershipRole {
 pub struct HeartBeatTask {
     backend: PostgresBackend,
     node_id: String,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
     shutdown_receiver: watch::Receiver<()>,
     postgres_config: PostgresConfig,
     heartbeat_interval: Duration,
@@ -60,17 +60,17 @@ pub struct HeartBeatTask {
 impl HeartBeatTask {
     pub async fn new(
         postgres_config: PostgresConfig,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         bind_addr: SocketAddr,
         heartbeat_interval: Duration,
     ) -> Result<Self> {
         let backend = PostgresBackend::connect(&postgres_config, bind_addr).await?;
-        let shutdown_receiver = shutdown_sender.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe();
 
         Ok(Self {
             backend,
             node_id: postgres_config.node_id.clone(),
-            shutdown_sender,
+            primary_shutdown_controller,
             shutdown_receiver,
             postgres_config,
             heartbeat_interval,
@@ -249,7 +249,7 @@ impl HeartBeatTask {
                     node_id = %self.node_id,
                     "Leadership lost! Another node has taken over. Initiating graceful shutdown."
                 );
-                exit_rollup(&self.shutdown_sender).await;
+                exit_rollup(&self.primary_shutdown_controller).await;
             }
             Err(e) => {
                 error!(
@@ -257,7 +257,7 @@ impl HeartBeatTask {
                     error = ?e,
                     "Heartbeat error! Unable to communicate with database. Initiating graceful shutdown."
                 );
-                exit_rollup(&self.shutdown_sender).await;
+                exit_rollup(&self.primary_shutdown_controller).await;
             }
         }
     }
@@ -271,7 +271,7 @@ impl HeartBeatTask {
                     node_id = %self.node_id,
                     "Replica acquired leadership! Exiting to restart as leader."
                 );
-                self.shutdown_sender.trigger();
+                self.primary_shutdown_controller.trigger();
                 true
             }
             Ok(LeadershipRole::Replica) => {

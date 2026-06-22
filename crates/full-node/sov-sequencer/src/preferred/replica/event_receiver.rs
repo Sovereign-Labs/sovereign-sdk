@@ -98,7 +98,7 @@ impl EventReceiverStartNotifier {
 pub(crate) struct EventReceiver {
     connection_string: String,
     db_data_sender: tokio::sync::mpsc::Sender<DbData>,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
     query_pool: PgPool,
     page_size: usize,
     ready_to_process_db_events_recv: watch::Receiver<()>,
@@ -107,7 +107,7 @@ pub(crate) struct EventReceiver {
 impl EventReceiver {
     pub(crate) async fn new(
         connection_string: String,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         page_size: usize,
         ready_to_process_db_events_recv: watch::Receiver<()>,
     ) -> (Self, tokio::sync::mpsc::Receiver<DbData>) {
@@ -129,7 +129,7 @@ impl EventReceiver {
             Self {
                 connection_string,
                 db_data_sender,
-                shutdown_sender,
+                primary_shutdown_controller,
                 query_pool,
                 page_size,
                 ready_to_process_db_events_recv,
@@ -140,7 +140,7 @@ impl EventReceiver {
 
     pub(crate) async fn spawn_db_data_fetcher(mut self) -> JoinHandle<()> {
         let mut nb_of_consecutive_db_errors = 0;
-        let shutdown_receiver = self.shutdown_sender.subscribe();
+        let shutdown_receiver = self.primary_shutdown_controller.subscribe();
         let mut start_replica_task_receiver = self.ready_to_process_db_events_recv.clone();
 
         tokio::spawn(async move {

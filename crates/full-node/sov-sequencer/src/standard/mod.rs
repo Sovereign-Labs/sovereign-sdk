@@ -135,9 +135,9 @@ where
         max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = shutdown_sender.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe();
         let mut runtime = Rt::default();
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
 
@@ -173,7 +173,7 @@ where
             ledger_db.clone(),
             storage_path,
             TxStatusBlobSenderHooks::new(txsm.clone()),
-            shutdown_sender,
+            primary_shutdown_controller,
             Duration::from_secs(config.blob_processing_timeout_secs),
             None,
             Default::default(),

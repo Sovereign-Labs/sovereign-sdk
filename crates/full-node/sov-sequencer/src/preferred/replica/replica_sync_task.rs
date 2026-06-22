@@ -33,21 +33,21 @@ pub(crate) struct ReplicaTaskHandles {
 }
 
 pub(crate) struct ReplicaSyncTask {
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
     page_size: usize,
     start_replica_task_receiver: watch::Receiver<()>,
 }
 
 impl ReplicaSyncTask {
     pub(crate) async fn new(
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         seq_role: SequencerRole,
     ) -> anyhow::Result<(Self, EventReceiverStartNotifier)> {
-        Self::new_with_page_size(shutdown_sender, PAGE_SIZE, seq_role).await
+        Self::new_with_page_size(primary_shutdown_controller, PAGE_SIZE, seq_role).await
     }
 
     pub(crate) async fn new_with_page_size(
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         page_size: usize,
         seq_role: SequencerRole,
     ) -> anyhow::Result<(Self, EventReceiverStartNotifier)> {
@@ -55,7 +55,7 @@ impl ReplicaSyncTask {
             EventReceiverStartNotifier::new(seq_role);
         Ok((
             Self {
-                shutdown_sender,
+                primary_shutdown_controller,
                 page_size,
                 start_replica_task_receiver,
             },
@@ -70,14 +70,14 @@ impl ReplicaSyncTask {
     ) -> ReplicaTaskHandles {
         let (event_receiver, db_data_receiver) = EventReceiver::new(
             postgres_config.postgres_connection_string.clone(),
-            self.shutdown_sender.clone(),
+            self.primary_shutdown_controller.clone(),
             self.page_size,
             self.start_replica_task_receiver.clone(),
         )
         .await;
 
         let data_fetcher_handle = event_receiver.spawn_db_data_fetcher().await;
-        let shutdown_receiver = self.shutdown_sender.subscribe();
+        let shutdown_receiver = self.primary_shutdown_controller.subscribe();
 
         let sync_task_handle = tokio::spawn(async move {
             Self::run_handler(handler, db_data_receiver, shutdown_receiver).await;

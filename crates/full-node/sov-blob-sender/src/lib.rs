@@ -82,7 +82,7 @@ pub struct BlobSender<Da: DaService, H, FM: FinalizationManager> {
     hooks: Arc<H>,
     in_flight_blobs: Arc<Mutex<HashMap<BlobInternalId, InFlightBlob<Da::Spec>>>>,
     shutdown_receiver: watch::Receiver<()>,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
     da: Da,
     finalization_manager: FM,
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
@@ -104,7 +104,7 @@ where
         finalization_manager: FM,
         storage_path: &Path,
         hooks: H,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         blob_processing_timeout: Duration,
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
@@ -116,7 +116,7 @@ where
             finalization_manager,
             storage_path,
             hooks,
-            shutdown_sender,
+            primary_shutdown_controller,
             blob_processing_timeout,
             blob_sender_channel,
             LEDGER_POLL_INTERVAL,
@@ -132,7 +132,7 @@ where
         finalization_manager: FM,
         storage_path: &Path,
         hooks: H,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         blob_processing_timeout: Duration,
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         ledger_pool_interval: Duration,
@@ -140,7 +140,7 @@ where
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
         nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
     ) -> anyhow::Result<(Self, JoinHandle<()>)> {
-        let shutdown_receiver = shutdown_sender.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe();
         let db = Arc::new(BlobSenderDb::new(storage_path).await?);
 
         let mut all_blobs = db.get_all::<Da::Spec>().await?;
@@ -167,7 +167,7 @@ where
             hooks,
             in_flight_blobs: in_flight_blobs.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
-            shutdown_sender,
+            primary_shutdown_controller,
             da,
             finalization_manager,
             nb_of_concurrent_batch_blob_submissions,
@@ -326,7 +326,7 @@ where
             blob_processing_timeout: self.blob_processing_timeout,
             ledger_pool_interval: self.ledger_pool_interval,
             blob_sender_channel: self.blob_sender_channel.clone(),
-            shutdown_sender: self.shutdown_sender.clone(),
+            primary_shutdown_controller: self.primary_shutdown_controller.clone(),
         };
 
         let shutdown_receiver = self.shutdown_receiver.clone();
@@ -501,7 +501,7 @@ struct TaskState<Da: DaService, FM: FinalizationManager> {
     blob_processing_timeout: Duration,
     ledger_pool_interval: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
 }
 
 impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
@@ -634,7 +634,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         .is_err()
                     {
                         // If we can't save the state, we shut down.
-                        self.shutdown_sender.trigger();
+                        self.primary_shutdown_controller.trigger();
                         return;
                     }
 
@@ -655,7 +655,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                 ?blob_status,
                                 "BlobSender: unable to send blob. Shutting down."
                             );
-                            self.shutdown_sender.trigger();
+                            self.primary_shutdown_controller.trigger();
                             return;
                         }
                     }
@@ -671,7 +671,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         .is_err()
                     {
                         // If we can't save the state, we shut down.
-                        self.shutdown_sender.trigger();
+                        self.primary_shutdown_controller.trigger();
                         return;
                     }
 
@@ -696,7 +696,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                     %blob_hash,
                                     "Shutting down the rollup. Blob processing wasn't completed on time."
                                 );
-                                self.shutdown_sender.trigger();
+                                self.primary_shutdown_controller.trigger();
                                 return;
                             }
 
@@ -722,7 +722,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                             // Error is logged inside the method
                             Err(_) => {
                                 // If we can't check the finality status, we shut down.
-                                self.shutdown_sender.trigger();
+                                self.primary_shutdown_controller.trigger();
                                 return;
                             }
                         };
@@ -757,7 +757,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         .is_err()
                     {
                         // If we can't save the state, we shut down.
-                        self.shutdown_sender.trigger();
+                        self.primary_shutdown_controller.trigger();
                         return;
                     }
 
@@ -773,7 +773,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                             Ok(finality_status) => finality_status,
                             Err(_) => {
                                 // If we can't check the finality status, we shut down.
-                                self.shutdown_sender.trigger();
+                                self.primary_shutdown_controller.trigger();
                                 return;
                             }
                         };

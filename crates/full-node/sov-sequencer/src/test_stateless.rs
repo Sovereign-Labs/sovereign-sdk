@@ -68,9 +68,9 @@ where
         storage_path: &Path,
         config: &SequencerConfig<<S as Spec>::Address, ()>,
         ledger_db: LedgerDb,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = shutdown_sender.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe();
         let mut runtime = R::default();
         let storage = state_update_receiver.borrow().storage.clone();
         let inner = Mutex::new(Inner {
@@ -93,7 +93,7 @@ where
                     ledger_db.clone(),
                     storage_path,
                     TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-                    shutdown_sender,
+                    primary_shutdown_controller,
                     Duration::from_secs(config.blob_processing_timeout_secs),
                     None,
                     Default::default(),

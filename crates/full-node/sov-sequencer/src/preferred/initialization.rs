@@ -56,11 +56,11 @@ where
         storage_path: &Path,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = shutdown_sender.subscribe();
+        let shutdown_receiver = primary_shutdown_controller.subscribe();
         let latest_state_update = state_update_receiver.borrow().clone();
 
         let da_address = self
@@ -86,13 +86,13 @@ where
 
         let (api_state, checkpoint_sender) = Self::api_state(
             latest_state_update.storage.clone(),
-            shutdown_sender.subscribe(),
+            primary_shutdown_controller.subscribe(),
         );
 
         let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
 
         let (db, seq_role) = PreferredSequencerDb::new(
-            shutdown_sender.clone(),
+            primary_shutdown_controller.clone(),
             storage_path,
             &preferred_config.postgres_config,
             bind_addr,
@@ -109,7 +109,7 @@ where
             db_cache.all_proofs_and_completed_blobs().clone(),
             storage_path.into(),
             tx_status_manager.clone(),
-            shutdown_sender.clone(),
+            primary_shutdown_controller.clone(),
             Duration::from_secs(config.blob_processing_timeout_secs),
             blobs_sender_channel.clone(),
             seq_role,
@@ -120,7 +120,7 @@ where
             blob_sender.highest_sequence_number_to_send_after_restart()?
         {
             if blob_sender_sequence_number >= next_sequence_number {
-                shutdown_sender.trigger();
+                primary_shutdown_controller.trigger();
                 let preferred_db_highest_sequence_number = next_sequence_number
                     .checked_sub(1)
                     .map_or_else(|| "none".to_owned(), |seq| seq.to_string());
@@ -148,7 +148,7 @@ where
         );
 
         let (executor_events_sender, executor_events_receiver) =
-            ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
+            ExecutorEventsSender::new(primary_shutdown_controller.clone(), db_cache);
 
         let in_flight_batch_blobs = blob_sender.nb_of_in_flight_batch_blobs();
         let in_flight_proof_blobs = blob_sender.nb_of_in_flight_proof_blobs();
@@ -159,7 +159,7 @@ where
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
             state_root_request_sender: state_root_task.request_sender.clone(),
             shutdown_receiver: shutdown_receiver.clone(),
-            shutdown_sender: shutdown_sender.clone(),
+            primary_shutdown_controller: primary_shutdown_controller.clone(),
             forced_tx_batch_notifier: forced_tx_batch_notifier.clone(),
         };
 
@@ -176,7 +176,7 @@ where
         }
 
         let (mut replica_task, start_replica_task_notifier) =
-            ReplicaSyncTask::new(shutdown_sender.clone(), seq_role).await?;
+            ReplicaSyncTask::new(primary_shutdown_controller.clone(), seq_role).await?;
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let batch_execution_time_limit_micros =
@@ -188,7 +188,7 @@ where
             batch_execution_time_limit_micros,
             config.clone(),
             self.max_concurrent_proof_blobs,
-            shutdown_sender.clone(),
+            primary_shutdown_controller.clone(),
             executor_events_sender,
             next_sequence_number,
             in_flight_batch_blobs,
@@ -217,7 +217,7 @@ where
             executor_events_receiver,
             db,
             api_ledger_db,
-            shutdown_sender: shutdown_sender.clone(),
+            primary_shutdown_controller: primary_shutdown_controller.clone(),
             transaction_cache: cached_txs.write_handle(),
         }
         .spawn();
@@ -234,7 +234,7 @@ where
             preferred_config.maximum_future_nonce_delta,
             preferred_config.future_nonce_transaction_timeout_millis,
             forced_tx_batch_notifier.subscribe(),
-            shutdown_sender.clone(),
+            primary_shutdown_controller.clone(),
         );
         handles.push(nonce_buffer_task);
 
@@ -248,7 +248,7 @@ where
             _runtime: PhantomData,
             config: config.clone(),
             nonce_buffer_input,
-            shutdown_sender: shutdown_sender.clone(),
+            primary_shutdown_controller: primary_shutdown_controller.clone(),
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_receiver,
@@ -273,7 +273,7 @@ where
         if let Some(postgres_config) = &preferred_config.postgres_config {
             let heartbeat_task = HeartBeatTask::new(
                 postgres_config.clone(),
-                shutdown_sender.clone(),
+                primary_shutdown_controller.clone(),
                 bind_addr,
                 postgres_config.leader_election.heartbeat_interval(),
             )

@@ -228,20 +228,20 @@ pub struct BlobsCache {
     proofs_and_completed_batches: BTreeMap<SequenceNumber, ReadBlob>,
     in_progress_batch: Option<InProgressBatch>,
     event_stream: Option<mpsc::Sender<DbEvent>>,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
 }
 
 impl BlobsCache {
     pub fn new(
         completed_blobs: BTreeMap<SequenceNumber, ReadBlob>,
         in_progress_batch: Option<InProgressBatch>,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
     ) -> Self {
         Self {
             proofs_and_completed_batches: completed_blobs,
             in_progress_batch,
             event_stream: None,
-            shutdown_sender,
+            primary_shutdown_controller,
         }
     }
 
@@ -360,7 +360,7 @@ impl BlobsCache {
     pub async fn insert_tx(&mut self, tx: FullyBakedTx, hash: TxHash) {
         let Some(batch) = self.in_progress_batch.as_mut() else {
             tracing::error!("No in-progress batch; this is a bug, please report it");
-            exit_rollup(&self.shutdown_sender).await;
+            exit_rollup(&self.primary_shutdown_controller).await;
             unreachable!();
         };
         batch.txs.push(tx.clone());
@@ -409,7 +409,7 @@ impl BlobsCache {
             tracing::error!(
                 "There's already an in-progress batch; this is a bug, please report it"
             );
-            exit_rollup(&self.shutdown_sender).await;
+            exit_rollup(&self.primary_shutdown_controller).await;
         };
         let blob_id = new_blob_id();
         self.in_progress_batch = Some(ReadBatch {
@@ -460,14 +460,14 @@ impl BlobsCache {
     pub async fn terminate_batch(&mut self) -> ReadBatch {
         let Some(in_progress_batch) = self.in_progress_batch.as_ref() else {
             tracing::error!("No in-progress batch; this is a bug, please report it");
-            exit_rollup(&self.shutdown_sender).await;
+            exit_rollup(&self.primary_shutdown_controller).await;
             unreachable!();
         };
 
         let sequence_number = in_progress_batch.sequence_number;
         let Some(batch) = self.in_progress_batch.take() else {
             tracing::error!("No in-progress batch; this is a bug, please report it");
-            exit_rollup(&self.shutdown_sender).await;
+            exit_rollup(&self.primary_shutdown_controller).await;
             unreachable!();
         };
 
@@ -539,12 +539,12 @@ impl SequencerRole {
 
 pub(crate) struct PreferredSequencerDb {
     backend: Option<Box<dyn DbBackend>>,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
 }
 
 impl PreferredSequencerDb {
     pub(crate) async fn new(
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         storage_path: &Path,
         postgres_config: &Option<PostgresConfig>,
         bind_addr: SocketAddr,
@@ -597,7 +597,7 @@ impl PreferredSequencerDb {
         Ok((
             Self {
                 backend,
-                shutdown_sender,
+                primary_shutdown_controller,
             },
             role,
         ))
@@ -630,7 +630,7 @@ impl PreferredSequencerDb {
                         BlobsCache::new(
                             completed_blobs,
                             in_progress_batch,
-                            self.shutdown_sender.clone(),
+                            self.primary_shutdown_controller.clone(),
                         ),
                     ))
                 }
@@ -644,7 +644,7 @@ impl PreferredSequencerDb {
                         %operation,
                         "The primary has become a replica. Shutting down.",
                     );
-                    exit_rollup(&self.shutdown_sender).await;
+                    exit_rollup(&self.primary_shutdown_controller).await;
                     unreachable!()
                 }
             }
@@ -654,7 +654,7 @@ impl PreferredSequencerDb {
                 BlobsCache::new(
                     Default::default(),
                     Option::None,
-                    self.shutdown_sender.clone(),
+                    self.primary_shutdown_controller.clone(),
                 ),
             ))
         }
@@ -691,7 +691,7 @@ impl PreferredSequencerDb {
             Self::debug_assert_in_progress_batch_is_none(
                 "Cached in-progress batch state (None) didn't match backend db state",
                 backend,
-                &self.shutdown_sender,
+                &self.primary_shutdown_controller,
             )
             .await;
 
@@ -730,7 +730,7 @@ impl PreferredSequencerDb {
                     %operation,
                     "The primary has become a replica. Shutting down.",
                 );
-                exit_rollup(&self.shutdown_sender).await;
+                exit_rollup(&self.primary_shutdown_controller).await;
                 unreachable!()
             }
         }
@@ -761,7 +761,7 @@ impl PreferredSequencerDb {
             Self::debug_assert_in_progress_batch_is_none(
                 "Backend didn't remove in-progress batch from database when ending rollup block",
                 backend,
-                &self.shutdown_sender,
+                &self.primary_shutdown_controller,
             )
             .await;
         }
@@ -784,14 +784,14 @@ impl PreferredSequencerDb {
     async fn debug_assert_in_progress_batch_is_none(
         msg: &str,
         backend: &mut Box<dyn DbBackend>,
-        shutdown_sender: &PrimaryShutdownController,
+        primary_shutdown_controller: &PrimaryShutdownController,
     ) {
         if cfg!(debug_assertions) {
             match backend.read_in_progress_batch().await {
                 Ok(_) => {}
                 other => {
                     tracing::error!("{msg}: {other:?}");
-                    exit_rollup(shutdown_sender).await;
+                    exit_rollup(primary_shutdown_controller).await;
                 }
             }
         }

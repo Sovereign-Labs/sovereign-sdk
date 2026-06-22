@@ -82,7 +82,7 @@ where
     pub(crate) seq_role: SequencerRole,
     pub(crate) seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     pub(crate) max_concurrent_proof_blobs: usize,
-    pub(crate) shutdown_sender: PrimaryShutdownController,
+    pub(crate) primary_shutdown_controller: PrimaryShutdownController,
 
     pub(crate) executor: RollupBlockExecutor<S, Rt>,
     /// The rollup height of the latest node checkpoint applied to this executor's storage.
@@ -508,7 +508,7 @@ where
         }
 
         // If the node is shutting down, we may not be able to terminate the batch. In that case, just return early.
-        if self.shutdown_sender.has_changed() {
+        if self.primary_shutdown_controller.has_changed() {
             info!("The sequencer is shutting down. Exiting trigger_batch_production.");
             return;
         }
@@ -765,7 +765,7 @@ where
         // Even if this method return early it uses 1 request slot.
         let request_used = ResourceUsed::new(1, 0, 0, <S as Spec>::Gas::zero());
 
-        if self.shutdown_sender.has_changed() {
+        if self.primary_shutdown_controller.has_changed() {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return (Err(DoNewTxError::Shutdown), request_used);
         }

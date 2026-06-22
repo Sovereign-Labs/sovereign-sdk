@@ -36,7 +36,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
     start_fresh_outer_proof_on_resync: bool,
 }
 
@@ -55,7 +55,7 @@ where
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
         da_sync_state: Arc<DaSyncState>,
         shutdown_receiver: tokio::sync::watch::Receiver<()>,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         start_fresh_outer_proof_on_resync: bool,
     ) -> Self {
         Self {
@@ -72,7 +72,7 @@ where
             stf_info_receiver,
             da_sync_state,
             shutdown_receiver,
-            shutdown_sender,
+            primary_shutdown_controller,
             start_fresh_outer_proof_on_resync,
         }
     }
@@ -101,7 +101,7 @@ where
                 backoff_policy: self.backoff_policy,
                 metadata_rx,
                 cursor: cursor.clone(),
-                shutdown_sender: self.shutdown_sender,
+                primary_shutdown_controller: self.primary_shutdown_controller,
             };
 
             let aggregator_shutdown = self.shutdown_receiver.clone();
@@ -323,7 +323,7 @@ struct AggregatorTask<Ps: ProverService> {
     backoff_policy: ExponentialBuilder,
     metadata_rx: mpsc::Receiver<(AggregateProofMetadata<Ps>, u64)>,
     cursor: CursorHandle,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
 }
 
 impl<Ps: ProverService> AggregatorTask<Ps>
@@ -348,7 +348,7 @@ where
                     max_concurrent_proof_blobs = status.max_concurrent,
                     "The zk proof blob sender is busy, which means proofs are not being confirmed by the rollup on time. Triggering shutdown."
                 );
-                if !self.shutdown_sender.trigger() {
+                if !self.primary_shutdown_controller.trigger() {
                     tracing::error!("Failed to send primary shutdown signal.");
                 }
                 break;

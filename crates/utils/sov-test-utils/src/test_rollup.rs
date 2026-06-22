@@ -274,7 +274,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             )
             .await?;
 
-        let shutdown_sender = rollup.primary_shutdown.clone();
+        let primary_shutdown_controller = rollup.primary_shutdown.clone();
 
         let mut other_handles = Vec::new();
         let da_service = rollup.runner.da_service();
@@ -317,7 +317,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             node_id,
             client,
             da_service,
-            shutdown_sender,
+            primary_shutdown_controller,
             secondary_test_sequencer_client: None,
             _secondary_sequencer_state_sender: None,
             other_handles,
@@ -559,7 +559,7 @@ where
         let da_service = test_rollup.da_service.clone();
 
         let rollup_config = test_rollup.rollup_config.clone();
-        let shutdown_sender = test_rollup.shutdown_sender.clone();
+        let primary_shutdown_controller = test_rollup.primary_shutdown_controller.clone();
         let (secondary_test_sequencer_client, secondary_sequencer_state_sender) =
             match with_secondary_sequencer {
                 Some(addr) => {
@@ -573,7 +573,7 @@ where
                     let (client, sender) = Self::start_secondary_sequencer(
                         da_service.another_on_the_same_layer(addr).await,
                         rollup_config.clone(),
-                        shutdown_sender.clone(),
+                        primary_shutdown_controller.clone(),
                     )
                     .await?;
                     (Some(client), Some(sender))
@@ -590,12 +590,12 @@ where
     async fn start_secondary_sequencer(
         secondary_da_service: StorableMockDaService,
         rollup_config: RollupConfig<<R::Spec as Spec>::Address, R::DaService>,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
     ) -> anyhow::Result<(
         sov_api_spec::client::Client,
         watch::Sender<StateUpdateInfo<<R::Spec as Spec>::Storage>>,
     )> {
-        let mut shutdown_receiver = shutdown_sender.subscribe();
+        let mut shutdown_receiver = primary_shutdown_controller.subscribe();
         let blueprint: R = Default::default();
 
         let mut storage_manager = blueprint.create_storage_manager(&rollup_config, false)?;
@@ -632,7 +632,7 @@ where
                 &rollup_config.storage.path,
                 &rollup_config.sequencer.with_seq_config(()),
                 ledger_db,
-                shutdown_sender,
+                primary_shutdown_controller,
             )
             .await?;
 
@@ -692,7 +692,7 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>> {
         Arc<<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService>,
     /// Allows programmatically initialize shutdown of the test-rollup.
     /// Used for checking graceful shutdown and restart.
-    pub shutdown_sender: PrimaryShutdownController,
+    pub primary_shutdown_controller: PrimaryShutdownController,
     /// Used for cleanup/shutdown logic.
     pub rollup_task: JoinHandle<anyhow::Result<()>>,
     /// For optional handles to background tasks.
@@ -823,7 +823,7 @@ where
 
     /// Shuts down the rollup and waits for all background tasks to finish.
     pub async fn shutdown(self) -> anyhow::Result<RollupBuilder<R>> {
-        if !self.shutdown_sender.trigger() {
+        if !self.primary_shutdown_controller.trigger() {
             tracing::info!("shutdown triggered elsewhere, this is probably OK");
         }
         self.rollup_task.await.expect("Can't join rollup task")?;

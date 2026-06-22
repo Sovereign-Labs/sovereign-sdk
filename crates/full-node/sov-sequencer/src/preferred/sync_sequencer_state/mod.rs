@@ -172,7 +172,7 @@ pub(crate) fn create<S, Rt>(
     batch_execution_time_limit_micros: u64,
     seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     max_concurrent_proof_blobs: usize,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
     executor_events_sender: ExecutorEventsSender<S, Rt>,
     sequence_number_of_next_blob: SequenceNumber,
     in_flight_batch_blobs: Arc<AtomicUsize>,
@@ -222,7 +222,7 @@ where
         batch_size_tracker: BatchSizeTracker::new(seq_config.max_batch_size_bytes),
         seq_config: seq_config.clone(),
         max_concurrent_proof_blobs,
-        shutdown_sender: shutdown_sender.clone(),
+        primary_shutdown_controller: primary_shutdown_controller.clone(),
         executor_events_sender,
         sequence_number_of_open_batch: None,
         next_unassigned_sequence_number: sequence_number_of_next_blob,
@@ -258,7 +258,7 @@ where
     let updator = SequencerStateUpdator {
         message_sender,
         channel_size,
-        shutdown_sender,
+        primary_shutdown_controller,
     };
     (state, updator)
 }

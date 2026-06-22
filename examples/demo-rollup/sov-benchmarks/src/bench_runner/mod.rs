@@ -308,7 +308,7 @@ async fn runner(
     );
 
     assert!(
-        rollup.shutdown_sender.trigger(),
+        rollup.primary_shutdown_controller.trigger(),
         "Failed to send shutdown signal"
     );
     let _x = rollup

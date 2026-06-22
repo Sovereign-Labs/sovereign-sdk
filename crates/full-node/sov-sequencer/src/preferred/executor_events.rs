@@ -22,19 +22,19 @@ const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
 pub(crate) struct ExecutorEventsSender<S: Spec, Rt: Runtime<S>> {
     events_sender: mpsc::Sender<ExecutorEvent<S, Rt>>,
     cache: BlobsCache,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
 }
 
 impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
     pub fn new(
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         cache: BlobsCache,
     ) -> (Self, mpsc::Receiver<ExecutorEvent<S, Rt>>) {
         let (sender, receiver) = mpsc::channel(MAX_EXECUTOR_EVENT_QUEUE_DEPTH);
         (
             Self {
                 events_sender: sender,
-                shutdown_sender,
+                primary_shutdown_controller,
                 cache,
             },
             receiver,
@@ -43,7 +43,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
 
     async fn shutdown_on_error(&self) {
         tracing::error!("Failed to send executor event because the receiver was dropped. This indicates that the database is no longer available. Shutting down.");
-        exit_rollup(&self.shutdown_sender).await;
+        exit_rollup(&self.primary_shutdown_controller).await;
     }
 
     /// Send an event tracking metrics on the queue depth and blocking time and shutting down on error.

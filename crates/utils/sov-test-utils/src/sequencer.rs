@@ -58,13 +58,13 @@ pub struct TestSequencerSetup<Rt: Runtime<TestSpec>> {
     /// The Axum server address.
     pub axum_addr: SocketAddr,
     /// Handler for shutdown of sequencer
-    pub shutdown_sender: PrimaryShutdownController,
+    pub primary_shutdown_controller: PrimaryShutdownController,
 }
 
 impl<Rt: Runtime<TestSpec>> Drop for TestSequencerSetup<Rt> {
     fn drop(&mut self) {
         // Error means that senders are already shut down.
-        self.shutdown_sender.trigger();
+        self.primary_shutdown_controller.trigger();
         self.axum_server_handle.shutdown();
     }
 }
@@ -143,8 +143,8 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             query_state_update_info(&ledger_db, stf_state, da_sync_state.as_ref()).await?;
 
         let (state_update_sender, state_update_receiver) = watch::channel(state_update_info);
-        let shutdown_sender = PrimaryShutdownController::new();
-        let shutdown_receiver = shutdown_sender.subscribe();
+        let primary_shutdown_controller = PrimaryShutdownController::new();
+        let shutdown_receiver = primary_shutdown_controller.subscribe();
 
         let config = SequencerConfig {
             rollup_address: sequencer_rollup_address,
@@ -168,7 +168,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             TEST_MAX_CONCURRENT_PROOF_BLOBS,
             ledger_db,
             api_ledger_db,
-            shutdown_sender.clone(),
+            primary_shutdown_controller.clone(),
         )
         .await?;
 
@@ -198,7 +198,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             admin_private_key: admin.private_key,
             axum_server_handle: sequencer_axum_server,
             axum_addr,
-            shutdown_sender,
+            primary_shutdown_controller,
         })
     }
 

@@ -127,7 +127,7 @@ where
     /// Used for intelligently buffering nonce-based TXs if they arrive out of order.
     nonce_buffer_input: NonceBufferInputSender<SequencerTxExecutionBackend<S, Rt>, S, Rt>,
     transaction_cache: TransactionCache<S, Rt>,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
     // Used to track which txs need to be ignored after the sequencer had downtime (in the sense of giving out 503s)
     tx_queue_id: Arc<AtomicU64>,
     stop_at_rollup_height: Option<RollupHeight>,
@@ -157,7 +157,7 @@ where
         max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
-        shutdown_sender: PrimaryShutdownController,
+        primary_shutdown_controller: PrimaryShutdownController,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
@@ -167,7 +167,7 @@ where
                 storage_path,
                 ledger_db,
                 api_ledger_db,
-                shutdown_sender,
+                primary_shutdown_controller,
                 stop_at_rollup_height,
                 bind_addr,
             )
@@ -386,7 +386,7 @@ where
         baked_tx: FullyBakedTx,
         ip_addr: IpAddr,
     ) -> Result<AcceptedTx<<Self as Sequencer>::Confirmation>, ErrorObject> {
-        if self.shutdown_sender.has_changed() {
+        if self.primary_shutdown_controller.has_changed() {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return Err(shut_down());
         }
@@ -594,7 +594,7 @@ async fn update_state_task<S, Rt, Da>(
                 error = ?e,
                 "Error in preferred sequencer update state task. Shutting down rollup."
             );
-            exit_rollup(&seq.shutdown_sender).await;
+            exit_rollup(&seq.primary_shutdown_controller).await;
         }
     }
 }
@@ -1119,20 +1119,20 @@ fn accepts_preferred_batches<B: BlobSelector>(_blob_selector: B) -> bool {
 
 #[track_caller]
 pub(crate) fn exit_rollup(
-    shutdown_sender: &PrimaryShutdownController,
+    primary_shutdown_controller: &PrimaryShutdownController,
 ) -> impl std::future::Future<Output = ()> {
     let location = std::panic::Location::caller();
-    exit_rollup_inner(shutdown_sender.clone(), location)
+    exit_rollup_inner(primary_shutdown_controller.clone(), location)
 }
 
 async fn exit_rollup_inner(
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
     location: &'static std::panic::Location<'static>,
 ) {
     // In the Kubernetes environment, logs are sometimes lost during shutdown.
     // This delay ensures logs have time to be flushed before the application exits.
     tracing::info!("Shutting down the rollup");
-    if !shutdown_sender.trigger() {
+    if !primary_shutdown_controller.trigger() {
         tracing::error!(%location, "Failed to send shutdown signal");
     }
     let sleep_time = Duration::from_secs(5);

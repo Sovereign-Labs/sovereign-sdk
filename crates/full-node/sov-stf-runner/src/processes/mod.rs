@@ -29,7 +29,7 @@ pub async fn start_zk_workflow_in_background<Ps>(
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
     shutdown_receiver: tokio::sync::watch::Receiver<()>,
-    shutdown_sender: PrimaryShutdownController,
+    primary_shutdown_controller: PrimaryShutdownController,
     start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<JoinHandle<()>>
 where
@@ -45,7 +45,7 @@ where
         stf_info_receiver,
         da_sync_state,
         shutdown_receiver,
-        shutdown_sender,
+        primary_shutdown_controller,
         start_fresh_outer_proof_on_resync,
     )
     .post_aggregated_proof_to_da_in_background()
