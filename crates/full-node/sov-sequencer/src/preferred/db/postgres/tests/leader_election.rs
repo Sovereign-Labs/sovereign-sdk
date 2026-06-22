@@ -1,4 +1,5 @@
 use super::*;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use time::OffsetDateTime;
 
 #[tokio::test(flavor = "multi_thread")]
@@ -25,7 +26,7 @@ async fn test_db_elected_resolution_returns_replica_when_leader_exists() {
 
     let storage_dir = tempfile::tempdir().unwrap();
     let bind_addr = SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
-    let (shutdown_sender, _) = tokio::sync::watch::channel(());
+    let shutdown_sender = PrimaryShutdownController::new();
     let (_db, role) = crate::preferred::db::PreferredSequencerDb::new(
         shutdown_sender,
         storage_dir.path(),

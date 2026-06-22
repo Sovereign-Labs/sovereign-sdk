@@ -64,9 +64,10 @@ impl PrimaryShutdownController {
     /// version, so it reflects whether [`trigger`](Self::trigger) was ever
     /// called.
     pub fn has_changed(&self) -> bool {
-        // The controller always holds a receiver, so the channel is never
-        // closed and `has_changed` cannot error here.
-        self.receiver.has_changed().unwrap_or(false)
+        // Conservative default: if the channel is closed (the underlying
+        // `has_changed` errors), assume we are shutting down. Callers branch as
+        // `if has_changed() { /* stop */ }`, so `true` is the safe fallback.
+        self.receiver.has_changed().unwrap_or(true)
     }
 
     /// Triggers the primary shutdown.

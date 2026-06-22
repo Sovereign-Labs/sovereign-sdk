@@ -11,6 +11,7 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockAddress, MockDaSpec};
 use sov_modules_api::da::BlockHeaderTrait;
 use sov_modules_api::HexHash;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::BlobDiscardReason;
@@ -181,7 +182,7 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
 
     // Wait for the blob task to start.
     status_reciever.recv().await.unwrap();
-    deps.shutdown_sender.send(()).unwrap();
+    assert!(deps.shutdown_sender.trigger());
     handle.await.unwrap();
 
     let mut records = collector.records();
@@ -216,7 +217,7 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
                 .await?;
             data
         };
-        deps.shutdown_sender.send(()).unwrap();
+        assert!(deps.shutdown_sender.trigger());
         handle.await.unwrap();
     }
 
@@ -503,7 +504,7 @@ async fn proofs_in_flight_do_not_block_batch_gate() -> anyhow::Result<()> {
 
 struct Deps {
     _da_dir: TempDir,
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
     _shutdown_receiver: watch::Receiver<()>,
     da: StorableMockDaService,
     storage_dir: TempDir,
@@ -511,7 +512,8 @@ struct Deps {
 
 async fn create_deps() -> Deps {
     let da_dir = tempfile::tempdir().unwrap();
-    let (shutdown_sender, shutdown_receiver) = watch::channel(());
+    let shutdown_sender = PrimaryShutdownController::new();
+    let shutdown_receiver = shutdown_sender.subscribe();
     let da = create_da(&da_dir).await;
     let storage_dir = tempfile::tempdir().unwrap();
 

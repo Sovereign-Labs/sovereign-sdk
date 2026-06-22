@@ -20,6 +20,7 @@ use sov_mock_zkvm::{MockZkvm, MockZkvmHost};
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{FullyBakedTx, ProofSender, StateTransitionFunction};
 use sov_rollup_full_node_interface::DaSyncState;
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_full_node_interface::{StateChannel, StateUpdateInfo};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
@@ -62,7 +63,7 @@ pub struct TestNode {
     tasks: JoinSet<()>,
     // Just to remove warnings from logs
     _sync_status_receiver: watch::Receiver<SyncStatus>,
-    shutdown_sender: watch::Sender<()>,
+    shutdown_sender: PrimaryShutdownController,
 }
 
 impl TestNode {
@@ -108,7 +109,7 @@ impl TestNode {
     }
 
     pub async fn stop(self) {
-        self.shutdown_sender.send(()).unwrap();
+        assert!(self.shutdown_sender.trigger());
         let _ = self.tasks.join_all().await;
     }
 }
@@ -203,8 +204,8 @@ pub async fn initialize_runner_with_stop_at(
     let rollup_config = rollup_config(&da_service, path, aggregated_proof_block_jump);
 
     let mut tasks = JoinSet::new();
-    let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
-    shutdown_receiver.mark_unchanged();
+    let shutdown_sender = PrimaryShutdownController::new();
+    let shutdown_receiver = shutdown_sender.subscribe();
 
     let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
         da_service.clone(),

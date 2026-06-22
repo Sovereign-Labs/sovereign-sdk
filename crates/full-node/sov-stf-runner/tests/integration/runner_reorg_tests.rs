@@ -18,6 +18,7 @@ use sov_mock_da::{
 
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
+use sov_rollup_full_node_interface::PrimaryShutdownController;
 use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::node::da::{DaService, SlotData};
@@ -46,8 +47,8 @@ async fn test_runner_with_background_da_service(
     target_height: u64,
     da_config: MockDaConfig,
 ) -> anyhow::Result<()> {
-    let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
-    shutdown_receiver.mark_unchanged();
+    let shutdown_sender = PrimaryShutdownController::new();
+    let shutdown_receiver = shutdown_sender.subscribe();
 
     let da_service =
         StorableMockDaService::from_config(da_config.clone(), shutdown_receiver.clone()).await;
@@ -175,7 +176,7 @@ async fn test_runner_with_background_da_service(
         }
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.trigger();
     runner_task
         .await?
         .context("Runner did not completed with success")?;
