@@ -155,7 +155,7 @@ where
                                 return;
                             }
                             SequencerStateUpdatorError::Unexpected => {
-                                self.inner.shutdown_sender.send(()).unwrap();
+                                assert!(self.inner.shutdown_sender.trigger());
                                 panic!("The sequencer experienced an unexpected error and cannot accept transactions! See logs for more details.");
                             }
                         }
@@ -751,7 +751,7 @@ where
         // Some events might come in while we're waiting to grab the lock.
         // Replay them.
         while let Ok(event) = db_event_subscription.try_recv() {
-            if inner.shutdown_receiver.has_changed().unwrap_or(true) {
+            if inner.shutdown_sender.has_changed() {
                 tracing::info!("The sequencer is shutting down. Exiting replay_batch");
                 return Ok(data);
             }

@@ -30,7 +30,7 @@ use sov_modules_api::GasArray;
 use sov_modules_api::GasSpec;
 use sov_modules_api::VersionReader;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
-use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_full_node_interface::{PrimaryShutdownController, StateUpdateInfo};
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::Storage;
 use std::collections::BTreeMap;
@@ -258,7 +258,7 @@ where
     let updator = SequencerStateUpdator {
         message_sender,
         channel_size,
-        shutdown_receiver,
+        shutdown_sender,
     };
     (state, updator)
 }
