@@ -595,7 +595,6 @@ where
         sov_api_spec::client::Client,
         watch::Sender<StateUpdateInfo<<R::Spec as Spec>::Storage>>,
     )> {
-        let mut shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
         let blueprint: R = Default::default();
 
         let mut storage_manager = blueprint.create_storage_manager(&rollup_config, false)?;
@@ -632,11 +631,12 @@ where
                 &rollup_config.storage.path,
                 &rollup_config.sequencer.with_seq_config(()),
                 ledger_db,
-                primary_shutdown_controller,
+                primary_shutdown_controller.clone(),
             )
             .await?;
 
-        let router = SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver.clone());
+        let router =
+            SequencerApis::rest_api_server(sequencer.clone(), primary_shutdown_controller.clone());
 
         let addr = SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
         let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -649,7 +649,7 @@ where
                 ServiceExt::<Request>::into_make_service_with_connect_info::<SocketAddr>(router),
             )
             .with_graceful_shutdown(async move {
-                shutdown_receiver.changed().await.ok();
+                primary_shutdown_controller.recv_shutdown().await;
             })
             .await
         });

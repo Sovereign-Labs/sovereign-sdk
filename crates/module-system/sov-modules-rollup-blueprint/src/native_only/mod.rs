@@ -278,7 +278,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         max_concurrent_proof_blobs,
                         ledger_db.clone(),
                         api_ledger_db.clone(),
-                        primary_shutdown,
+                        primary_shutdown.clone(),
                     )
                     .await?;
 
@@ -294,7 +294,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
-                    SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
+                    SequencerApis::rest_api_server(sequencer.clone(), primary_shutdown),
                 );
 
                 Ok(SequencerCreationReceipt {
@@ -320,7 +320,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         max_concurrent_proof_blobs,
                         ledger_db.clone(),
                         api_ledger_db.clone(),
-                        primary_shutdown,
+                        primary_shutdown.clone(),
                         stop_at_rollup_height,
                         bind_addr,
                     )
@@ -339,7 +339,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
-                    SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
+                    SequencerApis::rest_api_server(sequencer.clone(), primary_shutdown),
                 );
 
                 Ok(SequencerCreationReceipt {

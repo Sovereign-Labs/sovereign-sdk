@@ -144,7 +144,6 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
 
         let (state_update_sender, state_update_receiver) = watch::channel(state_update_info);
         let primary_shutdown_controller = PrimaryShutdownController::new();
-        let shutdown_receiver = primary_shutdown_controller.subscribe_shutdown();
 
         let config = SequencerConfig {
             rollup_address: sequencer_rollup_address,
@@ -173,7 +172,8 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
         .await?;
 
         let (axum_addr, sequencer_axum_server) = {
-            let router = SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver);
+            let router =
+                SequencerApis::rest_api_server(sequencer.clone(), primary_shutdown_controller.clone());
             let handle = axum_server::Handle::new();
 
             let handle1 = handle.clone();
