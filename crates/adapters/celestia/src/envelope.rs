@@ -266,13 +266,17 @@ pub(crate) fn chunk_framing_valid(
 ///   raw length mismatch, LZ4 failure); `true` if the decode is well-formed,
 ///   even when merely incomplete (a partial trailing chunk left unconsumed).
 ///
-/// Never panics: every read is bounds-checked, and each chunk's output is sized
-/// from the (cap-validated) framing, so allocation is bounded per chunk.
+/// Never panics: every read is bounds-checked, and each chunk decodes into a single reused
+/// buffer sized to the (cap-validated) per-chunk maximum, so memory use is bounded.
 pub(crate) fn decode_chunks(payload: &[u8], codec: u8, max_rollup: u32) -> (Vec<u8>, usize, bool) {
     let rollup_len = max_rollup as usize;
     let mut out = Vec::new();
     let mut pos = 0usize;
     let mut covered = 0usize;
+    // Reused across chunks so the LZ4 arm doesn't allocate (and zero) a fresh buffer per
+    // chunk. Sized to the per-chunk cap and sliced to each chunk's length; only the bytes a
+    // chunk decodes into are ever read back. Matters most in the guest, where this decode runs.
+    let mut scratch = [0u8; MAX_ROLLUP_CHUNK_LEN as usize];
 
     while covered < rollup_len {
         // Need the 4-byte framing for the next chunk.
@@ -300,11 +304,11 @@ pub(crate) fn decode_chunks(payload: &[u8], codec: u8, max_rollup: u32) -> (Vec<
                 out.extend_from_slice(body);
             }
             CODEC_LZ4 => {
-                let mut dst = vec![0u8; chunk_rollup as usize];
-                match lz4_flex::block::decompress_into(body, &mut dst) {
+                let dst = &mut scratch[..chunk_rollup as usize];
+                match lz4_flex::block::decompress_into(body, dst) {
                     // Output size is the framing-supplied known size; reject any
                     // chunk that does not decode to exactly that many bytes.
-                    Ok(n) if n == chunk_rollup as usize => out.extend_from_slice(&dst),
+                    Ok(n) if n == chunk_rollup as usize => out.extend_from_slice(dst),
                     _ => return (out, pos, false),
                 }
             }
