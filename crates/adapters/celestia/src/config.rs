@@ -119,8 +119,8 @@ pub struct CelestiaConfig {
     /// affects how blobs are read or verified. Default: `Off`.
     #[serde(default)]
     pub compression: CompressOnSubmit,
-    /// Target logical chunk size (bytes) for the chunked compression envelope.
-    /// Must be in `1..=1446` (the verifier's per-chunk cap, `MAX_LOGICAL_CHUNK_LEN`);
+    /// Target rollup chunk size (bytes) for the chunked compression envelope.
+    /// Must be in `1..=1446` (the verifier's per-chunk cap, `MAX_ROLLUP_CHUNK_LEN`);
     /// an out-of-range value is rejected at startup rather than silently clamped.
     /// Default: 482 (one continuation share payload, share-aligned). Advanced knob —
     /// larger chunks trade coarser partial-read granularity for a better ratio.
@@ -329,7 +329,7 @@ pub(crate) const fn default_safe_lead_time_ms() -> u64 {
 
 /// Default chunk size: one continuation sparse-share payload, so the default tracks
 /// Celestia's share geometry if the share size ever changes. Pinned to one share — not
-/// the per-chunk cap [`crate::envelope::MAX_LOGICAL_CHUNK_LEN`] — so the conservative
+/// the per-chunk cap [`crate::envelope::MAX_ROLLUP_CHUNK_LEN`] — so the conservative
 /// default does not move when the cap is raised.
 pub(crate) const fn default_compression_chunk_size() -> usize {
     celestia_types::consts::appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE
@@ -343,11 +343,11 @@ fn validate_rpc_url(rpc_url: &str) -> anyhow::Result<()> {
     Ok(())
 }
 
-/// Validate `compression_chunk_size` against the verifier's per-chunk logical cap.
+/// Validate `compression_chunk_size` against the verifier's per-chunk rollup cap.
 /// An out-of-range value would otherwise be silently clamped at encode time, so a
 /// misconfigured node would quietly emit different chunks than the operator requested.
 fn validate_compression_chunk_size(chunk_size: usize) -> anyhow::Result<()> {
-    let max = crate::envelope::MAX_LOGICAL_CHUNK_LEN as usize;
+    let max = crate::envelope::MAX_ROLLUP_CHUNK_LEN as usize;
     if !(1..=max).contains(&chunk_size) {
         anyhow::bail!(
             "`compression_chunk_size` must be between 1 and {max} (the verifier's per-chunk cap), got {chunk_size}"
@@ -660,7 +660,7 @@ mod tests {
 
     #[test]
     fn compression_chunk_size_in_range_is_accepted() {
-        let max = crate::envelope::MAX_LOGICAL_CHUNK_LEN as usize;
+        let max = crate::envelope::MAX_ROLLUP_CHUNK_LEN as usize;
         assert!(validate_compression_chunk_size(1).is_ok());
         assert!(validate_compression_chunk_size(default_compression_chunk_size()).is_ok());
         assert!(validate_compression_chunk_size(max).is_ok());
@@ -668,7 +668,7 @@ mod tests {
 
     #[test]
     fn compression_chunk_size_out_of_range_is_rejected() {
-        let max = crate::envelope::MAX_LOGICAL_CHUNK_LEN as usize;
+        let max = crate::envelope::MAX_ROLLUP_CHUNK_LEN as usize;
         assert!(validate_compression_chunk_size(0).is_err());
         assert!(validate_compression_chunk_size(max + 1).is_err());
     }

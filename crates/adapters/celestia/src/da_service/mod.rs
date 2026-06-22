@@ -116,7 +116,7 @@ impl CelestiaService {
         namespace: Namespace,
     ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
         let start = std::time::Instant::now();
-        let logical_len = blob.len();
+        let rollup_len = blob.len();
         let ns = self.rollup_namespace(&namespace);
 
         let Some(signer) = &self.signer_address else {
@@ -126,8 +126,8 @@ impl CelestiaService {
 
         // Compress batch blobs when configured; proofs always post verbatim. This is
         // emission only — read/verify semantics never depend on it.
-        let posted = if matches!(ns, RollupNamespace::Batch) {
-            let posted = crate::envelope::encode_for_submission(
+        let da_payload = if matches!(ns, RollupNamespace::Batch) {
+            let da_payload = crate::envelope::encode_for_submission(
                 blob,
                 self.compression.is_enabled(),
                 self.compression_chunk_size,
@@ -135,19 +135,19 @@ impl CelestiaService {
             sov_metrics::track_metrics(|tracker| {
                 tracker.submit(BlobCompressionMeasurement::new(
                     self.compression,
-                    logical_len,
-                    posted.len(),
+                    rollup_len,
+                    da_payload.len(),
                 ));
             });
-            posted
+            da_payload
         } else {
             blob.to_vec()
         };
-        let bytes = posted.len();
-        tracing::debug!(logical_len, bytes, namespace = ?ns, "Sending data to Celestia");
+        let bytes = da_payload.len();
+        tracing::debug!(rollup_len, bytes, namespace = ?ns, "Sending data to Celestia");
 
         let blob =
-            JsonBlob::new(namespace, posted, Some(signer.0)).expect("Bug in CelestiaAdapter");
+            JsonBlob::new(namespace, da_payload, Some(signer.0)).expect("Bug in CelestiaAdapter");
         let blob_hash = HexHash::new(*blob.commitment.hash());
         tracing::debug!(
             namespace = ?ns,
@@ -468,7 +468,7 @@ impl CelestiaService {
                 blobs
                     .into_iter()
                     // Proofs post verbatim, but decode defensively so any node reads
-                    // back the logical bytes regardless of who emitted the blob.
+                    // back the rollup bytes regardless of who emitted the blob.
                     .map(|blob| crate::envelope::decode_for_read(&blob.data))
                     .collect()
             })

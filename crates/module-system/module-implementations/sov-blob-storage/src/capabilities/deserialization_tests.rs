@@ -306,7 +306,7 @@ fn multibyte_trailing_garbage_proceeds_to_the_slash_path() {
 
     assert_eq!(
         blob_deserialization_gate(
-            blob.logical_decode_failed(),
+            blob.rollup_decode_failed(),
             result.is_ok(),
             blob.verified_data().len(),
             blob.total_len(),

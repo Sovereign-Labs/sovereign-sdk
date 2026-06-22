@@ -1099,7 +1099,7 @@ impl<S: Spec> BlobStorage<S> {
         // exposed a valid prefix while withholding the tail fails closed — the completeness check
         // must gate the `Ok`, because a short prefix can itself be a complete valid `B`.
         match blob_deserialization_gate(
-            blob.logical_decode_failed(),
+            blob.rollup_decode_failed(),
             deserialized.is_ok(),
             blob.verified_data().len(),
             blob.total_len(),
@@ -1122,7 +1122,7 @@ impl<S: Spec> BlobStorage<S> {
             // Borsh accepted a prefix but authenticated bytes remain: the prover withheld the
             // tail behind a valid prefix. Fail the proof closed.
             BlobDeserGate::WithheldFailClosed => panic!(
-                "Blob deserialized from a prefix but authenticated bytes remain (used {} of {} logical bytes). The prover might be malicious",
+                "Blob deserialized from a prefix but authenticated bytes remain (used {} of {} rollup bytes). The prover might be malicious",
                 blob.verified_data().len(),
                 blob.total_len(),
             ),
@@ -1336,14 +1336,14 @@ impl<S: Spec> BlobStorage<S> {
 
 /// Decision taken from the already-computed deserialization outcome, before the result is
 /// trusted (PR-A). A pure function so the security-critical branch *order* stays unit-testable:
-/// `logical_decode_failed` (authenticated bytes present but undecodable — the sender's fault)
+/// `rollup_decode_failed` (authenticated bytes present but undecodable — the sender's fault)
 /// slashes and takes precedence; a successful decode that consumed fewer than `total_len` bytes
 /// means the prover withheld a tail behind a valid prefix and fails closed. The completeness
 /// check gates only the `Ok` path — a short prefix can be a complete valid value, and the `Err`
 /// arm cannot see it — so a deserialize `Err` is left to that arm (slash / truncation guard).
 #[derive(Debug, PartialEq, Eq)]
 enum BlobDeserGate {
-    /// Authenticated bytes are fully present but do not decode into the claimed logical
+    /// Authenticated bytes are fully present but do not decode into the claimed rollup
     /// payload — slash the sender.
     SlashUndecodable,
     /// Borsh decoded an `Ok` from a prefix while authenticated bytes remain (`verified_len <
@@ -1355,14 +1355,14 @@ enum BlobDeserGate {
 }
 
 fn blob_deserialization_gate(
-    logical_decode_failed: bool,
+    rollup_decode_failed: bool,
     deserialize_ok: bool,
     verified_len: usize,
     total_len: usize,
 ) -> BlobDeserGate {
-    if logical_decode_failed {
+    if rollup_decode_failed {
         // Takes precedence over the length check: a non-canonical envelope can decode to
-        // exactly `logical_len` yet still be undecodable (e.g. trailing/extra bytes).
+        // exactly `rollup_len` yet still be undecodable (e.g. trailing/extra bytes).
         BlobDeserGate::SlashUndecodable
     } else if deserialize_ok && verified_len != total_len {
         // Only a prefix `Ok` is dangerous here: borsh accepted a value but the authenticated
@@ -1436,13 +1436,13 @@ mod tests {
         PreferredProofData, SequencerNumberTracker,
     };
 
-    // PR-A: the gate's branch order is security-critical. `logical_decode_failed` slashes and
+    // PR-A: the gate's branch order is security-critical. `rollup_decode_failed` slashes and
     // takes precedence; a successful decode that left authenticated bytes unread fails closed
     // (prover withheld a tail behind a valid prefix); everything else proceeds to the result.
     #[test]
     fn deser_gate_decode_failure_slashes_first() {
         // Decode failure takes precedence over both the length check and the deserialize
-        // outcome: a non-canonical envelope can decode to exactly `logical_len` yet still be
+        // outcome: a non-canonical envelope can decode to exactly `rollup_len` yet still be
         // undecodable.
         assert_eq!(
             blob_deserialization_gate(true, true, 10, 10),

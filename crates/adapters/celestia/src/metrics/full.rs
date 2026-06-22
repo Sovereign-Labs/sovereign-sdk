@@ -96,18 +96,18 @@ impl Metric for BlobSubmitMeasurement {
 pub(crate) struct BlobCompressionMeasurement {
     /// Emission mode tag: `off` or `lz4` (the configured policy).
     pub mode: CompressOnSubmit,
-    /// Logical (pre-encoding) payload length.
-    pub logical_bytes: usize,
-    /// Posted (on-DA) payload length after encoding.
-    pub posted_bytes: usize,
+    /// Rollup (pre-encoding) payload length.
+    pub rollup_bytes: usize,
+    /// DA (post-encoding) payload length.
+    pub da_bytes: usize,
 }
 
 impl BlobCompressionMeasurement {
-    pub fn new(mode: CompressOnSubmit, logical_bytes: usize, posted_bytes: usize) -> Self {
+    pub fn new(mode: CompressOnSubmit, rollup_bytes: usize, da_bytes: usize) -> Self {
         Self {
             mode,
-            logical_bytes,
-            posted_bytes,
+            rollup_bytes,
+            da_bytes,
         }
     }
 }
@@ -120,18 +120,18 @@ impl Metric for BlobCompressionMeasurement {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         let name = self.measurement_name();
         let mode = self.mode;
-        let logical_bytes = self.logical_bytes;
-        let posted_bytes = self.posted_bytes;
-        let saved_bytes = logical_bytes.saturating_sub(posted_bytes);
-        // posted/logical in basis points (10000 = no reduction). Integer-only.
-        let ratio_bps = if logical_bytes == 0 {
+        let rollup_bytes = self.rollup_bytes;
+        let da_bytes = self.da_bytes;
+        let saved_bytes = rollup_bytes.saturating_sub(da_bytes);
+        // da/rollup in basis points (10000 = no reduction). Integer-only.
+        let ratio_bps = if rollup_bytes == 0 {
             10_000
         } else {
-            (posted_bytes as u64 * 10_000) / logical_bytes as u64
+            (da_bytes as u64 * 10_000) / rollup_bytes as u64
         };
         write!(
             buffer,
-            "{name},mode={mode} logical_bytes={logical_bytes},posted_bytes={posted_bytes},saved_bytes={saved_bytes},ratio_bps={ratio_bps}"
+            "{name},mode={mode} rollup_bytes={rollup_bytes},da_bytes={da_bytes},saved_bytes={saved_bytes},ratio_bps={ratio_bps}"
         )
     }
 }

@@ -348,7 +348,7 @@ fn authenticate_blob_data(
     }
     // The accumulator length is considered trusted as a record of the bytes that the rollup saw.
     // This does not mean that it can be trusted to contain the correct bytes.
-    // Share-occupancy math is defined over DA-physical bytes, hence the compressed accessor.
+    // Share-occupancy math is defined over DA bytes, hence the compressed accessor.
     let blob_data_read = blob.compressed_verified_data();
     let first_share = blob_row_proof.first_share().map_err(InvalidRowProof)?;
     let has_signer = first_share.signer().is_some();
@@ -462,7 +462,7 @@ fn authenticate_blob_data(
     // authenticated, as a prefix), so pin it to the `sequence_length` proven from the
     // authenticated first share — otherwise a malicious prover could attest a state
     // transition computed over a forged blob length. Use the compression-aware
-    // `compressed_total_len()` accessor so the comparison stays tied to the DA-physical bytes.
+    // `compressed_total_len()` accessor so the comparison stays tied to the DA bytes.
     let claimed_total_len = blob.compressed_total_len() as u64;
     if claimed_total_len != sequence_length {
         return Err(InvalidBlobData(BlobDataError::MismatchedBlobLength {

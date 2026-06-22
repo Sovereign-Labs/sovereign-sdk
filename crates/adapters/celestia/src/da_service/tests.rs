@@ -299,7 +299,7 @@ async fn test_submit_compressed_batch_round_trips() -> anyhow::Result<()> {
         .await
         .expect("Should be configured with signer");
 
-    // A compressible, multi-share batch (8-byte period) so the posted envelope is
+    // A compressible, multi-share batch (8-byte period) so the DA envelope is
     // strictly smaller than raw and spans several chunks.
     let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
     let blob: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
@@ -312,14 +312,14 @@ async fn test_submit_compressed_batch_round_trips() -> anyhow::Result<()> {
         collected_proof_blobs.is_empty(),
         "Proof should not appear when sending batch blobs"
     );
-    // The blob read back from Celestia decodes to the original logical payload, even
+    // The blob read back from Celestia decodes to the original rollup payload, even
     // though a smaller compressed envelope was the bytes actually posted on-DA.
     assert_single_blob(collected_batch_blobs, signer, response.blob_hash, &blob);
     Ok(())
 }
 
 /// A single, config-free reader decodes blobs from two senders that compressed with
-/// *different* `compression_chunk_size` values back to the identical logical payload.
+/// *different* `compression_chunk_size` values back to the identical rollup payload.
 /// This guards the failover-safety invariant: chunk size is emission-only, so a replica
 /// leader configured differently from the master still produces universally-decodable
 /// blobs. Each chunk carries its own framing, so decode never consults the encoder's size.
@@ -347,9 +347,10 @@ async fn test_two_senders_different_chunk_sizes_decode_identically() -> anyhow::
     // Guard: both configs really emit a chunked envelope (not a raw fallback), otherwise
     // the round-trip below would not exercise the chunked decode path at all.
     for cs in [482usize, 1446] {
-        let posted = crate::envelope::encode_for_submission(&payload, true, cs);
+        let da_payload = crate::envelope::encode_for_submission(&payload, true, cs);
         assert!(
-            posted.starts_with(&crate::envelope::ENVELOPE_MAGIC) && posted.len() < payload.len(),
+            da_payload.starts_with(&crate::envelope::ENVELOPE_MAGIC)
+                && da_payload.len() < payload.len(),
             "payload must compress to a chunked envelope at chunk size {cs}"
         );
     }
@@ -1412,11 +1413,11 @@ async fn verification_rejects_compressed_envelope_witness_without_header() -> an
     let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
     let da_service = CelestiaService::new(config, rollup_params, shutdown_rx).await;
 
-    // A compressible batch whose DA-physical envelope is shorter than the logical payload.
+    // A compressible batch whose DA envelope is shorter than the rollup payload.
     let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
-    let logical_blob: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
+    let rollup_blob: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
     let height_before = da_service.get_head_block_header().await?.height();
-    let response = da_service.send_transaction(&logical_blob).await.await??;
+    let response = da_service.send_transaction(&rollup_blob).await.await??;
     let height_after = da_service
         .get_head_block_header()
         .await?
@@ -1445,7 +1446,7 @@ async fn verification_rejects_compressed_envelope_witness_without_header() -> an
         .position(|blob| blob.hash == response.blob_hash)
         .context("submitted compressed blob was not extracted")?;
 
-    let physical_len = relevant_blobs.batch_blobs[blob_idx].compressed_total_len();
+    let da_len = relevant_blobs.batch_blobs[blob_idx].compressed_total_len();
     assert!(
         relevant_blobs.batch_blobs[blob_idx]
             .compressed_verified_data()
@@ -1453,19 +1454,19 @@ async fn verification_rejects_compressed_envelope_witness_without_header() -> an
         "native extraction should eagerly authenticate the envelope header",
     );
     assert_ne!(
-        physical_len,
-        logical_blob.len(),
-        "fixture must distinguish DA-physical and logical lengths",
+        da_len,
+        rollup_blob.len(),
+        "fixture must distinguish DA and rollup lengths",
     );
     assert_eq!(
         relevant_blobs.batch_blobs[blob_idx].clone().total_len(),
-        logical_blob.len(),
-        "honest native witness should expose the envelope logical length",
+        rollup_blob.len(),
+        "honest native witness should expose the envelope rollup length",
     );
 
     let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
     relevant_blobs.batch_blobs[blob_idx].blob =
-        CountedBufReader::new(BlobIterator::with_forged_len(physical_len));
+        CountedBufReader::new(BlobIterator::with_forged_len(da_len));
     assert_eq!(
         relevant_blobs.batch_blobs[blob_idx]
             .compressed_verified_data()
@@ -1475,8 +1476,8 @@ async fn verification_rejects_compressed_envelope_witness_without_header() -> an
     );
     assert_eq!(
         relevant_blobs.batch_blobs[blob_idx].total_len(),
-        physical_len,
-        "without the header, the witness is classified as legacy and exposes physical length",
+        da_len,
+        "without the header, the witness is classified as legacy and exposes DA length",
     );
 
     let verifier = CelestiaVerifier::new(rollup_params);
