@@ -1,7 +1,10 @@
-//! Implements a wrapper around RocksDB for storing proof manager state.
+//! Implements a wrapper around RocksDB for storing the proof-manager STF-info queue.
 //!
-//! This database persists proof-manager state independently from the ledger
-//! commit loop.
+//! This database persists only the re-provable `StateTransitionInfo` rows, keyed by
+//! `(slot, DA block hash)` so competing forks at the same slot are distinct rows. It holds **no**
+//! cursor metadata: `next_height_to_receive`, the finalized-visible cutoff, and the prune lower
+//! bound are all in-memory and recomputed on startup from the ledger view plus the stored key
+//! range. Fewer persisted values means fewer cross-DB invariants to reconcile after a crash.
 
 use std::num::NonZero;
 use std::sync::Arc;
@@ -9,18 +12,15 @@ use std::sync::Arc;
 use rockbound::{SchemaBatch, DB};
 use sov_rollup_interface::common::SlotNumber;
 
-use crate::schema::tables::{StfInfoByNumber, StfInfoMetadata, PROOF_MANAGER_TABLES};
-use crate::schema::types::{StfInfoUniqueId, StoredStfInfo};
+use crate::schema::tables::{StfInfoByNumber, PROOF_MANAGER_TABLES};
+use crate::schema::types::{DbHash, StoredStfInfo};
 use crate::schema::DeltaReader;
 use crate::DbOptions;
 
-/// DB key for the latest height of the written STF info.
-const WRITE_ROLLUP_HEIGHT_ID: StfInfoUniqueId = StfInfoUniqueId(0);
-/// DB key for the next height to be received/processed by the proof manager.
-const NEXT_SLOT_NUMBER_TO_RECEIVE_ID: StfInfoUniqueId = StfInfoUniqueId(1);
-/// DB key for the oldest saved STF info (used for pruning).
-const OLDEST_SLOT_NUMBER_ID: StfInfoUniqueId = StfInfoUniqueId(2);
-/// Database for proof manager state that persists independently from ledger commits.
+/// Smallest possible DA hash — the low bound of a slot's key range.
+const MIN_HASH: DbHash = [u8::MIN; 32];
+
+/// Database for the proof-manager STF-info queue, persisted independently from ledger commits.
 #[derive(Clone, Debug)]
 pub struct ProofManagerDb {
     db: Arc<DB>,
@@ -50,275 +50,164 @@ impl ProofManagerDb {
         Ok(Self::new(Arc::new(db)))
     }
 
-    /// Store STF info for a slot.
-    pub fn put_stf_info(&self, slot: SlotNumber, info: &StoredStfInfo) -> anyhow::Result<()> {
-        let mut batch = SchemaBatch::new();
-        batch.put::<StfInfoByNumber>(&slot, info)?;
-        self.db.write_schemas(&batch)?;
-        Ok(())
-    }
-
-    /// Get STF info for a specific slot.
-    pub fn get_stf_info(&self, slot: SlotNumber) -> anyhow::Result<Option<StoredStfInfo>> {
-        self.db.get::<StfInfoByNumber>(&slot)
-    }
-
-    /// Delete STF info for a slot.
-    pub fn delete_stf_info(&self, slot: SlotNumber) -> anyhow::Result<()> {
-        let mut batch = SchemaBatch::new();
-        batch.delete::<StfInfoByNumber>(&slot)?;
-        self.db.write_schemas(&batch)?;
-        Ok(())
-    }
-
-    /// Set the write height (highest finalized STF slot visible to proof-manager consumers).
-    ///
-    /// STF rows for later non-finalized slots may already be staged in the DB, but they must
-    /// remain hidden until ledger finality reaches them.
-    pub fn set_write_height(&self, slot: SlotNumber) -> anyhow::Result<()> {
-        let mut batch = SchemaBatch::new();
-        batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &slot)?;
-        self.db.write_schemas(&batch)?;
-        Ok(())
-    }
-
-    /// Get the write height (highest finalized STF slot visible to proof-manager consumers).
-    pub fn get_write_height(&self) -> anyhow::Result<Option<SlotNumber>> {
-        self.db.get::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID)
-    }
-
-    /// Set next_height_to_receive.
-    ///
-    /// Immediate persistence is critical: if this update waited for the next
-    /// ledger commit, a crash after proof posting but before the commit would
-    /// cause the node to re-submit the same aggregated proof on restart.
-    pub fn set_next_height_to_receive(&self, slot: SlotNumber) -> anyhow::Result<()> {
-        let mut batch = SchemaBatch::new();
-        batch.put::<StfInfoMetadata>(&NEXT_SLOT_NUMBER_TO_RECEIVE_ID, &slot)?;
-        self.db.write_schemas(&batch)?;
-        tracing::trace!(%slot, "Persisted next_height_to_receive immediately");
-        Ok(())
-    }
-
-    /// Get the next height to receive.
-    pub fn get_next_height_to_receive(&self) -> anyhow::Result<Option<SlotNumber>> {
-        self.db
-            .get::<StfInfoMetadata>(&NEXT_SLOT_NUMBER_TO_RECEIVE_ID)
-    }
-
-    /// Set the oldest height.
-    pub fn set_oldest_height(&self, slot: SlotNumber) -> anyhow::Result<()> {
-        let mut batch = SchemaBatch::new();
-        batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &slot)?;
-        self.db.write_schemas(&batch)?;
-        Ok(())
-    }
-
-    /// Get the oldest height.
-    pub fn get_oldest_height(&self) -> anyhow::Result<Option<SlotNumber>> {
-        self.db.get::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID)
-    }
-
-    /// Commit the finalized-visible STF height and prune old STF info rows in one DB batch.
-    pub fn commit_visible_height_and_prune(
+    /// Store STF info for a `(slot, DA block hash)`.
+    pub fn put_stf_info(
         &self,
-        write_height: SlotNumber,
+        slot: SlotNumber,
+        hash: DbHash,
+        info: &StoredStfInfo,
+    ) -> anyhow::Result<()> {
+        let mut batch = SchemaBatch::new();
+        batch.put::<StfInfoByNumber>(&(slot, hash), info)?;
+        self.db.write_schemas(&batch)?;
+        Ok(())
+    }
+
+    /// Get STF info for a specific `(slot, DA block hash)`.
+    pub fn get_stf_info(
+        &self,
+        slot: SlotNumber,
+        hash: DbHash,
+    ) -> anyhow::Result<Option<StoredStfInfo>> {
+        self.db.get::<StfInfoByNumber>(&(slot, hash))
+    }
+
+    /// Delete STF info for a specific `(slot, DA block hash)`.
+    pub fn delete_stf_info(&self, slot: SlotNumber, hash: DbHash) -> anyhow::Result<()> {
+        let mut batch = SchemaBatch::new();
+        batch.delete::<StfInfoByNumber>(&(slot, hash))?;
+        self.db.write_schemas(&batch)?;
+        Ok(())
+    }
+
+    /// Oldest slot with any stored STF row (seek-first), if the queue is non-empty.
+    pub fn oldest_present_slot(&self) -> anyhow::Result<Option<SlotNumber>> {
+        Ok(self
+            .reader()
+            .get_smallest::<StfInfoByNumber>()?
+            .map(|((slot, _hash), _)| slot))
+    }
+
+    /// Highest slot with any stored STF row (seek-last), if the queue is non-empty.
+    pub fn highest_present_slot(&self) -> anyhow::Result<Option<SlotNumber>> {
+        Ok(self
+            .reader()
+            .get_largest::<StfInfoByNumber>()?
+            .map(|((slot, _hash), _)| slot))
+    }
+
+    /// Whether any fork row exists at `slot` (across all hashes).
+    pub fn has_row_at_slot(&self, slot: SlotNumber) -> anyhow::Result<bool> {
+        // `get_prev` returns the largest key <= the seek key; a row exists at `slot` iff that
+        // key's slot component equals `slot`. `[u8::MAX; 32]` is the largest hash at the slot.
+        Ok(self
+            .reader()
+            .get_prev::<StfInfoByNumber>(&(slot, [u8::MAX; 32]))?
+            .is_some_and(|((found_slot, _hash), _)| found_slot == slot))
+    }
+
+    /// Prune every stored STF row strictly below the retention window, sweeping orphan forks.
+    ///
+    /// Keeps the most recent `max_entries` finalized-visible slots. Never prunes at or above
+    /// `next_height_to_receive` (the consumer cursor), so unconsumed slots survive even if the
+    /// window would otherwise drop them.
+    pub fn prune(
+        &self,
+        finalized_visible_height: SlotNumber,
         next_height_to_receive: SlotNumber,
         max_entries: NonZero<u64>,
     ) -> anyhow::Result<()> {
-        let current_write_height = self.get_write_height()?.unwrap_or(SlotNumber::GENESIS);
-        assert!(
-            current_write_height <= write_height,
-            "write({write_height}) is smaller than current write_height({current_write_height})"
-        );
-
-        let mut batch = SchemaBatch::new();
-        batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &write_height)?;
-
-        let Some(prune_up_to) = write_height.checked_sub(max_entries.get()) else {
-            self.db.write_schemas(&batch)?;
+        let Some(window_floor) = finalized_visible_height.checked_sub(max_entries.get()) else {
+            // Not enough finalized history to prune yet.
             return Ok(());
         };
 
-        let oldest_height = self.get_oldest_height()?.unwrap_or(SlotNumber::ONE);
-        for slot in oldest_height.range_exclusive(prune_up_to) {
-            if slot >= next_height_to_receive {
-                tracing::warn!(
-                    %next_height_to_receive,
-                    ?prune_up_to,
-                    "State Transition Info is not consumed fast enough, cannot prune older entries. Please check that consumer works."
-                );
-                break;
-            }
-            batch.delete::<StfInfoByNumber>(&slot)?;
+        if next_height_to_receive < window_floor {
+            tracing::warn!(
+                %next_height_to_receive,
+                %window_floor,
+                "State Transition Info is not consumed fast enough; retaining unconsumed slots. Please check that the consumer works."
+            );
         }
+        let prune_below = window_floor.min(next_height_to_receive);
 
-        if prune_up_to > oldest_height {
-            batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &prune_up_to)?;
-        }
-
+        let mut batch = SchemaBatch::new();
+        batch.delete_range::<StfInfoByNumber>(
+            &(SlotNumber::GENESIS, MIN_HASH),
+            &(prune_below, MIN_HASH),
+        )?;
         self.db.write_schemas(&batch)?;
         Ok(())
     }
 
-    /// Validate ProofManagerDb state against the ledger view on startup and
-    /// recover finalized-visible `write_height` if metadata lagged behind stored STF info.
+    /// Recompute the finalized-visible cutoff from the ledger view, **without persisting any
+    /// metadata**.
     ///
-    /// Enforces the invariants:
-    /// - proof-manager STF rows must not exist above `ledger_head`
-    /// - `write_height` must not advance above `latest_finalized_slot_number`
+    /// Performs the one correctness-critical write: deletes staged rows above `ledger_head`
+    /// (post-crash / reorg debris staged before a ledger commit that never landed).
     ///
-    /// Staged STF rows between `latest_finalized_slot_number + 1` and `ledger_head` are preserved
-    /// but remain hidden from `notify()` until those slots finalize.
-    pub fn validate_and_recover_write_height(
+    /// Returns the finalized-visible height: the highest finalized slot reachable by a contiguous
+    /// run of present **canonical** rows from the oldest retained slot, or [`SlotNumber::GENESIS`]
+    /// when nothing is visible. `canonical_hash` maps a slot to the ledger's finalized DA hash so
+    /// presence is checked against the canonical fork (an orphan row alone is not "present").
+    pub fn recompute_visible_state(
         &self,
         ledger_head: SlotNumber,
         latest_finalized_slot_number: SlotNumber,
-    ) -> anyhow::Result<()> {
-        let latest_finalized_slot_number = latest_finalized_slot_number.min(ledger_head);
-        let maybe_write_height = self.get_write_height()?;
-        let mut write_height = maybe_write_height.unwrap_or(SlotNumber::GENESIS);
-        let maybe_next_height_to_receive = self.get_next_height_to_receive()?;
-        let maybe_oldest_height = self.get_oldest_height()?;
-        let max_next_height = ledger_head.saturating_add(1);
-        let proof_manager_reader = DeltaReader::new(self.db.clone(), Vec::new());
-        let highest_stored_slot = proof_manager_reader
-            .get_largest::<StfInfoByNumber>()?
-            .map(|v| v.0);
-        let highest_retained_slot = match highest_stored_slot {
-            Some(highest_stored_slot) if highest_stored_slot > ledger_head => {
-                self.find_largest_stored_slot_at_or_below(ledger_head)?
-            }
-            Some(highest_stored_slot) => Some(highest_stored_slot),
-            None => None,
-        };
-        let mut batch = SchemaBatch::new();
-        let mut batch_changed = false;
+        canonical_hash: impl Fn(SlotNumber) -> Option<DbHash>,
+    ) -> anyhow::Result<SlotNumber> {
+        let latest_finalized = latest_finalized_slot_number.min(ledger_head);
 
-        // Remove staged rows beyond the current ledger head. This must use the largest stored slot,
-        // not `write_height`, because non-finalized rows are staged ahead of finalized visibility.
-        if let Some(highest_stored_slot) = highest_stored_slot {
-            if let Some(first_to_remove) = ledger_head.checked_add(1) {
-                if highest_stored_slot >= first_to_remove {
-                    for slot in first_to_remove.range_inclusive(highest_stored_slot) {
-                        batch.delete::<StfInfoByNumber>(&slot)?;
-                    }
-                    batch_changed = true;
+        // 1. Drop staged rows the ledger has not committed (every fork above the ledger head).
+        if let Some(highest_present) = self.highest_present_slot()? {
+            if highest_present > ledger_head {
+                if let Some(first_to_remove) = ledger_head.checked_add(1) {
+                    let mut batch = SchemaBatch::new();
+                    batch.delete_range::<StfInfoByNumber>(
+                        &(first_to_remove, MIN_HASH),
+                        &(highest_present.saturating_add(1), MIN_HASH),
+                    )?;
+                    self.db.write_schemas(&batch)?;
+                    tracing::warn!(
+                        %ledger_head,
+                        %highest_present,
+                        "Dropped staged STF rows above the ledger head"
+                    );
                 }
             }
         }
 
-        if write_height > latest_finalized_slot_number {
-            let old_write_height = write_height;
-            batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &latest_finalized_slot_number)?;
-            batch_changed = true;
-            write_height = latest_finalized_slot_number;
-
-            tracing::warn!(
-                %ledger_head,
-                %latest_finalized_slot_number,
-                old_proof_manager_write_height = %old_write_height,
-                "Clamped ProofManagerDb write_height to the latest finalized slot"
-            );
-        }
-
-        let min_next_height = if highest_retained_slot.is_some() {
-            maybe_oldest_height.unwrap_or(SlotNumber::ONE)
-        } else {
-            write_height.saturating_add(1)
+        // 2. Walk contiguous present canonical rows from the oldest retained slot, bounded by the
+        //    latest finalized slot.
+        let Some(oldest) = self.oldest_present_slot()? else {
+            return Ok(SlotNumber::GENESIS);
         };
-        let clamped_next_height = match maybe_next_height_to_receive {
-            Some(next_height) => Some(next_height.max(min_next_height).min(max_next_height)),
-            None if maybe_write_height.is_some() => Some(min_next_height.min(max_next_height)),
-            None => None,
+
+        let canonical_present = |slot: SlotNumber| -> anyhow::Result<bool> {
+            match canonical_hash(slot) {
+                Some(hash) => Ok(self.get_stf_info(slot, hash)?.is_some()),
+                None => Ok(false),
+            }
         };
-        if clamped_next_height != maybe_next_height_to_receive {
-            if let Some(clamped_next_height) = clamped_next_height {
-                batch.put::<StfInfoMetadata>(
-                    &NEXT_SLOT_NUMBER_TO_RECEIVE_ID,
-                    &clamped_next_height,
-                )?;
-                batch_changed = true;
-            }
+
+        if oldest > latest_finalized || !canonical_present(oldest)? {
+            return Ok(SlotNumber::GENESIS);
         }
-
-        let min_oldest_height = if highest_retained_slot.is_some() {
-            maybe_oldest_height.unwrap_or(SlotNumber::ONE)
-        } else {
-            max_next_height
-        };
-        let clamped_oldest_height = match maybe_oldest_height {
-            Some(oldest_height) => Some(oldest_height.max(min_oldest_height).min(max_next_height)),
-            None if maybe_write_height.is_some() => Some(min_oldest_height),
-            None => None,
-        };
-        if clamped_oldest_height != maybe_oldest_height {
-            if let Some(clamped_oldest_height) = clamped_oldest_height {
-                batch.put::<StfInfoMetadata>(&OLDEST_SLOT_NUMBER_ID, &clamped_oldest_height)?;
-                batch_changed = true;
-            }
-        }
-
-        if batch_changed {
-            self.db.write_schemas(&batch)?;
-        }
-
-        // Recover write_height forward if metadata lagged behind already-finalized STF info.
-        match self.recover_contiguous_write_height(write_height, latest_finalized_slot_number)? {
-            Some(recovered_write_height) => {
-                self.set_write_height(recovered_write_height)?;
-                tracing::info!(
-                    %recovered_write_height,
-                    "Recovered ProofManagerDb write_height from stored STF info"
-                );
-            }
-            None if maybe_write_height.is_none() => {
-                tracing::debug!("ProofManagerDb has no metadata to recover");
-            }
-            None => {}
-        }
-
-        Ok(())
-    }
-
-    /// Advances `write_height` over contiguous STF rows that the ledger has already finalized.
-    ///
-    /// Starting just above `from`, walks forward while each next slot is both at-or-below
-    /// `latest_finalized_slot_number` and present in the DB. Returns the new (higher) write
-    /// height, or `None` if nothing could be advanced.
-    fn recover_contiguous_write_height(
-        &self,
-        from: SlotNumber,
-        latest_finalized_slot_number: SlotNumber,
-    ) -> anyhow::Result<Option<SlotNumber>> {
-        let mut current = from;
-        let mut advanced = false;
+        let mut cutoff = oldest;
         loop {
-            let Some(next) = current.checked_add(1) else {
+            let Some(next) = cutoff.checked_add(1) else {
                 break;
             };
-            if next > latest_finalized_slot_number {
+            if next > latest_finalized || !canonical_present(next)? {
                 break;
             }
-            if self.get_stf_info(next)?.is_some() {
-                current = next;
-                advanced = true;
-            } else {
-                break;
-            }
+            cutoff = next;
         }
-
-        Ok(advanced.then_some(current))
+        Ok(cutoff)
     }
 
-    fn find_largest_stored_slot_at_or_below(
-        &self,
-        upper_bound: SlotNumber,
-    ) -> anyhow::Result<Option<SlotNumber>> {
-        let proof_manager_reader = DeltaReader::new(self.db.clone(), Vec::new());
-        Ok(proof_manager_reader
-            .get_prev::<StfInfoByNumber>(&upper_bound)?
-            .map(|(slot, _)| slot))
+    fn reader(&self) -> DeltaReader {
+        DeltaReader::new(self.db.clone(), Vec::new())
     }
 }
 
@@ -338,10 +227,20 @@ mod tests {
         ProofManagerDb::new(Arc::new(raw_db))
     }
 
+    /// Deterministic canonical hash for a slot, used both when staging rows and as the resolver.
+    fn hash_for(slot: u64) -> DbHash {
+        [slot as u8; 32]
+    }
+
     fn make_stf_info(slot: u64) -> StoredStfInfo {
         StoredStfInfo {
             data: vec![slot as u8; 32],
         }
+    }
+
+    fn put_canonical(db: &ProofManagerDb, slot: u64) {
+        db.put_stf_info(SlotNumber::new(slot), hash_for(slot), &make_stf_info(slot))
+            .unwrap();
     }
 
     #[test]
@@ -350,166 +249,222 @@ mod tests {
         let db = create_test_db(temp_dir.path());
 
         let slot = SlotNumber::new(1);
+        let hash = hash_for(1);
         let info = make_stf_info(1);
 
-        // Initially empty
-        assert!(db.get_stf_info(slot).unwrap().is_none());
+        // Initially empty.
+        assert_eq!(db.get_stf_info(slot, hash).unwrap(), None);
 
-        // Put and get
-        db.put_stf_info(slot, &info).unwrap();
-        let retrieved = db.get_stf_info(slot).unwrap().unwrap();
-        assert_eq!(retrieved.data, info.data);
+        // Put and get.
+        db.put_stf_info(slot, hash, &info).unwrap();
+        assert_eq!(db.get_stf_info(slot, hash).unwrap(), Some(info));
 
-        // Delete
-        db.delete_stf_info(slot).unwrap();
-        assert!(db.get_stf_info(slot).unwrap().is_none());
+        // Delete.
+        db.delete_stf_info(slot, hash).unwrap();
+        assert_eq!(db.get_stf_info(slot, hash).unwrap(), None);
     }
 
     #[test]
-    fn test_metadata_operations() {
+    fn test_present_slot_helpers_track_key_range() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db = create_test_db(temp_dir.path());
 
-        // Initially all metadata is None
-        assert!(db.get_write_height().unwrap().is_none());
-        assert!(db.get_next_height_to_receive().unwrap().is_none());
-        assert!(db.get_oldest_height().unwrap().is_none());
+        assert_eq!(db.oldest_present_slot().unwrap(), None);
+        assert_eq!(db.highest_present_slot().unwrap(), None);
 
-        // Set and get write height
-        let slot = SlotNumber::new(10);
-        db.set_write_height(slot).unwrap();
-        assert_eq!(db.get_write_height().unwrap(), Some(slot));
+        for slot in 3..=7 {
+            put_canonical(&db, slot);
+        }
 
-        // Set and get next_height_to_receive
-        let next_slot = SlotNumber::new(5);
-        db.set_next_height_to_receive(next_slot).unwrap();
-        assert_eq!(db.get_next_height_to_receive().unwrap(), Some(next_slot));
-
-        // Set and get oldest height
-        let oldest_slot = SlotNumber::new(3);
-        db.set_oldest_height(oldest_slot).unwrap();
-        assert_eq!(db.get_oldest_height().unwrap(), Some(oldest_slot));
+        assert_eq!(db.oldest_present_slot().unwrap(), Some(SlotNumber::new(3)));
+        assert_eq!(db.highest_present_slot().unwrap(), Some(SlotNumber::new(7)));
+        assert!(db.has_row_at_slot(SlotNumber::new(5)).unwrap());
+        assert!(!db.has_row_at_slot(SlotNumber::new(2)).unwrap());
+        assert!(!db.has_row_at_slot(SlotNumber::new(8)).unwrap());
     }
 
     #[test]
-    fn test_commit_visible_height_and_prune() {
+    fn test_prune_keeps_window_and_respects_consumer_cursor() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db = create_test_db(temp_dir.path());
 
         for slot in 1..=5 {
-            let slot = SlotNumber::new(slot);
-            db.put_stf_info(slot, &make_stf_info(slot.get())).unwrap();
+            put_canonical(&db, slot);
         }
 
-        db.commit_visible_height_and_prune(
+        // finalized_visible=5, consumer at 4, keep last 2 → prune below min(5-2, 4) = 3.
+        db.prune(
             SlotNumber::new(5),
             SlotNumber::new(4),
             NonZero::new(2).unwrap(),
         )
         .unwrap();
 
-        assert_eq!(db.get_write_height().unwrap(), Some(SlotNumber::new(5)));
-        assert_eq!(db.get_oldest_height().unwrap(), Some(SlotNumber::new(3)));
-        assert!(db.get_stf_info(SlotNumber::ONE).unwrap().is_none());
-        assert!(db.get_stf_info(SlotNumber::new(2)).unwrap().is_none());
-        assert!(db.get_stf_info(SlotNumber::new(3)).unwrap().is_some());
+        assert_eq!(db.get_stf_info(SlotNumber::ONE, hash_for(1)).unwrap(), None);
+        assert_eq!(
+            db.get_stf_info(SlotNumber::new(2), hash_for(2)).unwrap(),
+            None
+        );
+        assert!(db
+            .get_stf_info(SlotNumber::new(3), hash_for(3))
+            .unwrap()
+            .is_some());
+        assert_eq!(db.oldest_present_slot().unwrap(), Some(SlotNumber::new(3)));
     }
 
     #[test]
-    fn test_validate_and_recover_empty_db() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db = create_test_db(temp_dir.path());
-
-        // Empty db should validate without issues
-        db.validate_and_recover_write_height(SlotNumber::new(100), SlotNumber::new(50))
-            .unwrap();
-    }
-
-    #[test]
-    fn test_validate_and_recover_consistent_state() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let db = create_test_db(temp_dir.path());
-
-        // Set up ProofManagerDb with write_height <= ledger_head
-        let write_height = SlotNumber::new(50);
-        db.set_write_height(write_height).unwrap();
-        db.set_next_height_to_receive(SlotNumber::new(10)).unwrap();
-
-        // Validate with ledger_head >= write_height
-        let ledger_head = SlotNumber::new(100);
-        db.validate_and_recover_write_height(ledger_head, write_height)
-            .unwrap();
-
-        // State should remain unchanged
-        assert_eq!(db.get_write_height().unwrap(), Some(write_height));
-    }
-
-    #[test]
-    fn test_validate_clamps_write_height_to_latest_finalized() {
+    fn test_prune_never_drops_unconsumed_slots() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db = create_test_db(temp_dir.path());
 
         for slot in 1..=10 {
-            let slot = SlotNumber::new(slot);
-            db.put_stf_info(slot, &make_stf_info(slot.get())).unwrap();
+            put_canonical(&db, slot);
         }
-        db.set_write_height(SlotNumber::new(10)).unwrap();
-        db.set_next_height_to_receive(SlotNumber::new(12)).unwrap();
 
-        db.validate_and_recover_write_height(SlotNumber::new(7), SlotNumber::new(5))
-            .unwrap();
+        // Window would prune below 8, but the consumer has only reached slot 2: keep everything
+        // from slot 2 up.
+        db.prune(
+            SlotNumber::new(10),
+            SlotNumber::new(2),
+            NonZero::new(2).unwrap(),
+        )
+        .unwrap();
 
-        assert_eq!(db.get_write_height().unwrap(), Some(SlotNumber::new(5)));
-        assert!(db.get_stf_info(SlotNumber::new(8)).unwrap().is_none());
-        assert!(db.get_stf_info(SlotNumber::new(6)).unwrap().is_some());
-        assert!(db.get_stf_info(SlotNumber::new(7)).unwrap().is_some());
-        assert_eq!(
-            db.get_next_height_to_receive().unwrap(),
-            Some(SlotNumber::new(8))
-        );
+        assert_eq!(db.get_stf_info(SlotNumber::ONE, hash_for(1)).unwrap(), None);
+        assert_eq!(db.oldest_present_slot().unwrap(), Some(SlotNumber::new(2)));
     }
 
     #[test]
-    fn test_validate_and_recover_advances_write_height() {
+    fn test_prune_sweeps_orphan_forks_below_cutoff() {
         let temp_dir = tempfile::tempdir().unwrap();
         let db = create_test_db(temp_dir.path());
 
-        // Stage STF info for slots 1..=3
-        for slot in 1..=3 {
-            let s = SlotNumber::new(slot);
-            db.put_stf_info(s, &make_stf_info(slot)).unwrap();
-        }
-
-        // Metadata lags behind (write_height is None)
-        db.validate_and_recover_write_height(SlotNumber::new(10), SlotNumber::new(2))
+        // Two competing forks at slot 3, plus canonical rows elsewhere.
+        db.put_stf_info(SlotNumber::new(3), [0xAA; 32], &make_stf_info(3))
             .unwrap();
+        db.put_stf_info(SlotNumber::new(3), [0xBB; 32], &make_stf_info(3))
+            .unwrap();
+        put_canonical(&db, 4);
 
-        // write_height should advance only to the last contiguous finalized slot.
-        assert_eq!(db.get_write_height().unwrap(), Some(SlotNumber::new(2)));
+        // Prune below min(5-1, 5) = 4 → both slot-3 forks are swept, slot 4 survives.
+        db.prune(
+            SlotNumber::new(5),
+            SlotNumber::new(5),
+            NonZero::new(1).unwrap(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            db.get_stf_info(SlotNumber::new(3), [0xAA; 32]).unwrap(),
+            None
+        );
+        assert_eq!(
+            db.get_stf_info(SlotNumber::new(3), [0xBB; 32]).unwrap(),
+            None
+        );
+        assert!(db
+            .get_stf_info(SlotNumber::new(4), hash_for(4))
+            .unwrap()
+            .is_some());
     }
 
     #[test]
-    fn test_persistence_across_restarts() {
+    fn test_recompute_empty_db_is_genesis() {
         let temp_dir = tempfile::tempdir().unwrap();
+        let db = create_test_db(temp_dir.path());
 
-        // Write data with first instance
-        {
-            let db = create_test_db(temp_dir.path());
-            let slot = SlotNumber::new(5);
-            db.put_stf_info(slot, &make_stf_info(5)).unwrap();
-            db.set_write_height(slot).unwrap();
-            db.set_next_height_to_receive(SlotNumber::new(3)).unwrap();
+        let cutoff = db
+            .recompute_visible_state(SlotNumber::new(100), SlotNumber::new(50), |slot| {
+                Some(hash_for(slot.get()))
+            })
+            .unwrap();
+        assert_eq!(cutoff, SlotNumber::GENESIS);
+    }
+
+    #[test]
+    fn test_recompute_walks_contiguous_finalized_rows() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db = create_test_db(temp_dir.path());
+
+        for slot in 1..=3 {
+            put_canonical(&db, slot);
         }
 
-        // Read data with second instance (simulating restart)
+        // ledger_head well above, but only slots <= 2 are finalized → cutoff stops at 2.
+        let cutoff = db
+            .recompute_visible_state(SlotNumber::new(10), SlotNumber::new(2), |slot| {
+                Some(hash_for(slot.get()))
+            })
+            .unwrap();
+        assert_eq!(cutoff, SlotNumber::new(2));
+    }
+
+    #[test]
+    fn test_recompute_stops_at_first_missing_canonical_row() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db = create_test_db(temp_dir.path());
+
+        // Hole at slot 3 (1,2,4,5 present); contiguity from oldest stops at 2.
+        for slot in [1, 2, 4, 5] {
+            put_canonical(&db, slot);
+        }
+
+        let cutoff = db
+            .recompute_visible_state(SlotNumber::new(10), SlotNumber::new(5), |slot| {
+                Some(hash_for(slot.get()))
+            })
+            .unwrap();
+        assert_eq!(cutoff, SlotNumber::new(2));
+    }
+
+    #[test]
+    fn test_recompute_drops_rows_above_ledger_head() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db = create_test_db(temp_dir.path());
+
+        for slot in 1..=10 {
+            put_canonical(&db, slot);
+        }
+
+        // ledger_head=7, finalized=5 → drop staged slots 8..=10, keep 6..=7 hidden, cutoff=5.
+        let cutoff = db
+            .recompute_visible_state(SlotNumber::new(7), SlotNumber::new(5), |slot| {
+                Some(hash_for(slot.get()))
+            })
+            .unwrap();
+
+        assert_eq!(cutoff, SlotNumber::new(5));
+        assert_eq!(
+            db.get_stf_info(SlotNumber::new(8), hash_for(8)).unwrap(),
+            None
+        );
+        assert!(db
+            .get_stf_info(SlotNumber::new(6), hash_for(6))
+            .unwrap()
+            .is_some());
+        assert!(db
+            .get_stf_info(SlotNumber::new(7), hash_for(7))
+            .unwrap()
+            .is_some());
+        assert_eq!(db.highest_present_slot().unwrap(), Some(SlotNumber::new(7)));
+    }
+
+    #[test]
+    fn test_only_stf_rows_persist_across_restarts() {
+        let temp_dir = tempfile::tempdir().unwrap();
+
         {
             let db = create_test_db(temp_dir.path());
-            assert!(db.get_stf_info(SlotNumber::new(5)).unwrap().is_some());
-            assert_eq!(db.get_write_height().unwrap(), Some(SlotNumber::new(5)));
-            assert_eq!(
-                db.get_next_height_to_receive().unwrap(),
-                Some(SlotNumber::new(3))
-            );
+            put_canonical(&db, 5);
+        }
+
+        {
+            let db = create_test_db(temp_dir.path());
+            assert!(db
+                .get_stf_info(SlotNumber::new(5), hash_for(5))
+                .unwrap()
+                .is_some());
+            assert_eq!(db.oldest_present_slot().unwrap(), Some(SlotNumber::new(5)));
         }
     }
 }

@@ -78,8 +78,7 @@ pub const ACCESSORY_TABLES: &[ColumnFamilyName] = &[
 /// A list of all tables used by the ProofManagerDb. These tables store
 /// proof-manager-specific data like STF info and metadata, persisted
 /// independently from the ledger commit loop.
-pub const PROOF_MANAGER_TABLES: &[ColumnFamilyName] =
-    &[StfInfoByNumber::table_name(), StfInfoMetadata::table_name()];
+pub const PROOF_MANAGER_TABLES: &[ColumnFamilyName] = &[StfInfoByNumber::table_name()];
 
 /// Macro to define a table that implements [`rockbound::Schema`].
 /// `KeyCodec<Schema>` and `ValueCodec<Schema>` must be implemented separately.
@@ -241,8 +240,11 @@ define_table_with_seek_key_codec!(
 );
 
 define_table_with_seek_key_codec!(
-    /// The primary source for state transition info data.
-    (StfInfoByNumber) SlotNumber => StoredStfInfo
+    /// The primary source for state transition info data, keyed by `(slot, DA block hash)` so
+    /// competing forks at the same slot are distinct rows. The consumer reads the finalized fork
+    /// (selected by the canonical hash carried on the notification); pruning sweeps all rows
+    /// below the cutoff by a slot-prefix range, removing orphan forks for free.
+    (StfInfoByNumber) (SlotNumber, DbHash) => StoredStfInfo
 );
 
 define_table_with_default_codec!(
