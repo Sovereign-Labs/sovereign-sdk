@@ -2,7 +2,7 @@
 name = "sov-universal-wallet"
 description = "Universal wallet schema and display utilities for Sovereign rollups"
 authors = { workspace = true }
-version = "0.4.0"
+version = "0.4.1"
 edition = "2021"
 license = "MIT OR Apache-2.0"
 homepage = { workspace = true }
