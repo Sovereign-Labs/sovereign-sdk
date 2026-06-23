@@ -35,9 +35,7 @@ where
             stf_info_receiver,
             bonding_proof_service,
             proof_sender,
-            secondary_shutdown_controller: SecondaryShutdownController::clone(
-                secondary_shutdown_controller,
-            ),
+            secondary_shutdown_controller: secondary_shutdown_controller.clone(),
         }
     }
 
@@ -54,7 +52,7 @@ where
         loop {
             match self
                 .secondary_shutdown_controller
-                .future_or_shutdown_secondary(self.stf_info_receiver.read_next())
+                .future_or_shutdown(self.stf_info_receiver.read_next())
                 .await
             {
                 FutureOrShutdownOutput::Shutdown => {

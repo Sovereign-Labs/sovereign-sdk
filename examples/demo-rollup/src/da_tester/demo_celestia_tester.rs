@@ -50,6 +50,6 @@ async fn main() -> anyhow::Result<()> {
     .await;
 
     sov_celestia_adapter::checker::check_da_service(&da_service, args.rounds).await?;
-    let _ = secondary_shutdown_controller.shutdown();
+    secondary_shutdown_controller.shutdown();
     Ok(())
 }

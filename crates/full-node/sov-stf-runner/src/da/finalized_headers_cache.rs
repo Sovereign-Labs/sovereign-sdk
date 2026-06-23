@@ -268,7 +268,7 @@ async fn background_header_fetch_task<Da: DaService>(
     loop {
         // Wait for the next tick or shutdown
         match secondary_shutdown_controller
-            .future_or_shutdown_secondary(interval.tick())
+            .future_or_shutdown(interval.tick())
             .await
         {
             FutureOrShutdownOutput::Shutdown => {
@@ -278,7 +278,7 @@ async fn background_header_fetch_task<Da: DaService>(
             FutureOrShutdownOutput::Output(_) => {
                 // Fetch finalized header
                 match secondary_shutdown_controller
-                    .future_or_shutdown_secondary(da_service.get_last_finalized_block_header())
+                    .future_or_shutdown(da_service.get_last_finalized_block_header())
                     .await
                 {
                     FutureOrShutdownOutput::Shutdown => {
@@ -342,7 +342,7 @@ mod tests {
         assert_eq!(cached_header.height(), 6);
         da_service.send_transaction(&[3; 32]).await.await??;
 
-        secondary_shutdown_controller.shutdown()?;
+        secondary_shutdown_controller.shutdown();
         Ok(())
     }
 
@@ -371,7 +371,7 @@ mod tests {
         let header_9 = cache.get_block_header_at(9).await?;
         assert_eq!(header_9.height(), 9);
 
-        secondary_shutdown_controller.shutdown()?;
+        secondary_shutdown_controller.shutdown();
         Ok(())
     }
 
@@ -407,7 +407,7 @@ mod tests {
             "Cache size {cache_size} exceeds MAX_RECENT_HEADERS {MAX_RECENT_HEADERS}"
         );
 
-        secondary_shutdown_controller.shutdown()?;
+        secondary_shutdown_controller.shutdown();
         Ok(())
     }
 
@@ -429,7 +429,7 @@ mod tests {
         // Task should be running
         assert!(!cache.finalized_headers_task.is_finished());
 
-        secondary_shutdown_controller.shutdown()?;
+        secondary_shutdown_controller.shutdown();
 
         // Wait a bit for the task to finish
         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -460,7 +460,7 @@ mod tests {
         let header_0 = cache.get_block_header_at(0).await?;
         assert_eq!(header_0.height(), 0);
 
-        secondary_shutdown_controller.shutdown()?;
+        secondary_shutdown_controller.shutdown();
         Ok(())
     }
 
@@ -501,7 +501,7 @@ mod tests {
         assert_eq!(cached.height(), 3);
         assert_eq!(cached.hash(), header.hash());
 
-        secondary_shutdown_controller.shutdown()?;
+        secondary_shutdown_controller.shutdown();
         Ok(())
     }
 
@@ -533,7 +533,7 @@ mod tests {
             "Expected error when background task is stopped"
         );
 
-        let _ = secondary_shutdown_controller.shutdown();
+        secondary_shutdown_controller.shutdown();
         Ok(())
     }
 

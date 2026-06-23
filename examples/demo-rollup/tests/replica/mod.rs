@@ -286,7 +286,7 @@ impl NodeDiscoveryTestSetup {
 
     async fn shutdown(self) {
         self.cluster_info_service.shutdown();
-        let _ = self.da_shutdown.shutdown();
+        self.da_shutdown.shutdown();
     }
 
     async fn wait_for_cluster_change(&mut self) -> ClusterInfo {

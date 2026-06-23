@@ -68,7 +68,7 @@ impl BlockProducingConfig {
                 tracing::debug!(interval = ?block_time, "Spawning a task for periodic producing");
                 loop {
                     match secondary_shutdown_controller
-                        .future_or_shutdown_secondary(tokio::time::sleep(block_time))
+                        .future_or_shutdown(tokio::time::sleep(block_time))
                         .await
                     {
                         FutureOrShutdownOutput::Shutdown => {
@@ -718,7 +718,7 @@ mod tests {
             StorableMockDaService::new(MockAddress::new([1; 32]), da_layer, block_producing).await;
         check_consistency(&da_service, services_count * blobs_per_service).await?;
 
-        secondary_shutdown_controller.shutdown()?;
+        secondary_shutdown_controller.shutdown();
         drop(da_service);
         producing_handle.unwrap().await?;
 

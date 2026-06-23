@@ -71,6 +71,6 @@ async fn main() -> anyhow::Result<()> {
     // Wait for shutdown signal
     tokio::signal::ctrl_c().await?;
     tracing::info!("Shutting down mock-da server...");
-    secondary_shutdown_controller.shutdown()?;
+    secondary_shutdown_controller.shutdown();
     Ok(())
 }

@@ -132,7 +132,7 @@ pub(crate) async fn metrics_publisher_task(
                                 .await;
 
             }
-            result = secondary_shutdown_controller.future_or_shutdown_secondary(metrics_receiver.recv()) => {
+            result = secondary_shutdown_controller.future_or_shutdown(metrics_receiver.recv()) => {
                 match result {
                     FutureOrShutdownOutput::Output(Some(measurement)) => {
                         #[cfg(feature = "gas-constant-estimation")]

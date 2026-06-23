@@ -71,9 +71,7 @@ where
                 .with_max_times(BACKOFF_POLICY_MAX_NUM_RETRIES),
             stf_info_receiver,
             da_sync_state,
-            secondary_shutdown_controller: SecondaryShutdownController::clone(
-                secondary_shutdown_controller,
-            ),
+            secondary_shutdown_controller: secondary_shutdown_controller.clone(),
             shutdown_sender,
             start_fresh_outer_proof_on_resync,
         }
@@ -150,7 +148,7 @@ async fn run_task_until_shutdown<T>(
     secondary_shutdown_controller: &SecondaryShutdownController,
 ) {
     match secondary_shutdown_controller
-        .future_or_shutdown_secondary(task)
+        .future_or_shutdown(task)
         .await
     {
         FutureOrShutdownOutput::Shutdown => {

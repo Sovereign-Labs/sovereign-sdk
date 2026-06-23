@@ -63,7 +63,7 @@ async fn test_replica_receives_txs_from_da() {
 
     let _ = replica_test_rollup.shutdown().await;
     let _ = test_rollup.shutdown().await;
-    let _ = da_shutdown.shutdown();
+    da_shutdown.shutdown();
 }
 
 #[tokio::test(flavor = "multi_thread")]

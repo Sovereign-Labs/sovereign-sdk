@@ -156,7 +156,7 @@ async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Res
         );
     }
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -213,7 +213,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
         );
     }
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -288,7 +288,7 @@ async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Res
         stf_info.aggregated_proofs
     );
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -412,7 +412,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
         }
     }
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -502,7 +502,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
             .await?
             .get()
     );
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -658,7 +658,7 @@ async fn test_progressing_with_shuffle(
         finalized_hashes.insert(last_finalized_header.hash());
     }
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -827,8 +827,8 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
         height = returned_block.header().height() + 1;
     }
 
-    shutdown_sender_2.shutdown()?;
-    secondary_shutdown_controller.shutdown()?;
+    shutdown_sender_2.shutdown();
+    secondary_shutdown_controller.shutdown();
     Ok(())
 }
 
@@ -946,7 +946,7 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
         height = returned_block.header().height() + 1;
     }
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -1124,7 +1124,7 @@ async fn test_change_in_finalized_header() {
         .await
         .unwrap();
 
-    shutdown_sender.shutdown().unwrap();
+    shutdown_sender.shutdown();
 }
 
 // On empty internal state, if we pass a block that is not adjacent to
@@ -1646,7 +1646,7 @@ async fn test_progressing_with_rewind_below_finalized(
         da_service.send_transaction(&blob_data).await.await??;
     }
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -1747,7 +1747,7 @@ async fn test_binary_search_handles_da_error() -> anyhow::Result<()> {
         Err(e) => panic!("Should succeed after clearing failure, got: {e}"),
     }
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -1860,7 +1860,7 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
     // Internal consistency should still hold
     check_internal_consistency(&state_manager, finality as usize);
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -1914,7 +1914,7 @@ async fn test_ledger_consistency_after_processing() -> anyhow::Result<()> {
         );
     }
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -1995,6 +1995,6 @@ async fn test_finalized_height_monotonic() -> anyhow::Result<()> {
         }
     }
 
-    shutdown_sender.shutdown()?;
+    shutdown_sender.shutdown();
     Ok(())
 }

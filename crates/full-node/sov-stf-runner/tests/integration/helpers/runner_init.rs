@@ -114,9 +114,9 @@ impl TestNode {
         // receivers left. A failed send just means everything already shut down,
         // which is the outcome we want here.
         let _ = self.shutdown_sender.send(());
-        // Similarly, `shutdown()` returns an error when no secondary receivers
-        // remain subscribed; that only means the background tasks already exited.
-        let _ = self.secondary_shutdown_controller.shutdown();
+        // The secondary controller holds its own receiver, so `shutdown()` always
+        // succeeds; it simply signals any background tasks that are still running.
+        self.secondary_shutdown_controller.shutdown();
         let _ = self.tasks.join_all().await;
     }
 }

@@ -179,7 +179,7 @@ async fn test_runner_with_background_da_service(
     }
 
     shutdown_sender.send(())?;
-    secondary_shutdown_controller.shutdown()?;
+    secondary_shutdown_controller.shutdown();
     runner_task
         .await?
         .context("Runner did not completed with success")?;

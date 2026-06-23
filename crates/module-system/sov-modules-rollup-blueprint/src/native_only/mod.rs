@@ -851,7 +851,7 @@ async fn cleanup_failed_startup<S: Spec>(
     sequencer: &mut SequencerCreationReceipt<S>,
 ) {
     let _ = main_shutdown_sender.send(());
-    let _ = secondary_shutdown_controller.shutdown();
+    secondary_shutdown_controller.shutdown();
 
     let background_handles_to_join = std::mem::take(background_handles);
     let sequencer_background_handles = std::mem::take(&mut sequencer.background_handles);
@@ -871,7 +871,7 @@ async fn cleanup_failed_startup_before_sequencer(
     background_handles: &mut Vec<JoinHandle<()>>,
 ) {
     let _ = main_shutdown_sender.send(());
-    let _ = secondary_shutdown_controller.shutdown();
+    secondary_shutdown_controller.shutdown();
 
     let background_handles_to_join = std::mem::take(background_handles);
 
@@ -993,11 +993,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
             );
         }
 
-        if self.secondary_shutdown_controller.shutdown().is_err() {
-            tracing::info!(
-                "Failed to send secondary shutdown signal because all receivers have been dropped"
-            );
-        }
+        self.secondary_shutdown_controller.shutdown();
 
         // blocks until background handles have shutdown
         monitoring_task.await??;

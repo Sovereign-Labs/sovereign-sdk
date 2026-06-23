@@ -141,7 +141,7 @@ fn bench_storable_mock_da_service(c: &mut Criterion) {
 
     group.finish();
 
-    let _ = secondary_shutdown_controller.shutdown();
+    secondary_shutdown_controller.shutdown();
     sender.send(()).unwrap();
     rt.block_on(async {
         for handle in handles {

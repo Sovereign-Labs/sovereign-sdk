@@ -223,7 +223,7 @@ async fn test_start_stop_with_crash(
         test_rollup.shutdown().await?;
     }
 
-    secondary_shutdown_controller.shutdown()?;
+    secondary_shutdown_controller.shutdown();
 
     Ok(())
 }

@@ -99,7 +99,7 @@ impl NodeTestSetup {
     pub(crate) async fn shutdown(self, leader: TestRollup<Rollup>, replica: TestRollup<Rollup>) {
         let _ = replica.shutdown().await;
         let _ = leader.shutdown().await;
-        let _ = self.da_shutdown.shutdown();
+        self.da_shutdown.shutdown();
         self.toxiproxy_setup.shutdown();
     }
 

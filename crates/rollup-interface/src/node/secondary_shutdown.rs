@@ -26,7 +26,7 @@ impl SecondaryShutdownController {
     }
 
     /// Runs a future until it completes or the secondary shutdown signal fires.
-    pub async fn future_or_shutdown_secondary<T>(
+    pub async fn future_or_shutdown<T>(
         &self,
         inner: T,
     ) -> FutureOrShutdownOutput<T::Output>
@@ -37,8 +37,12 @@ impl SecondaryShutdownController {
     }
 
     /// Sends a secondary shutdown notification.
-    pub fn shutdown(&self) -> Result<(), watch::error::SendError<()>> {
-        self.sender.send(())
+    pub fn shutdown(&self) {
+        // The controller keeps its own receiver alive for as long as it exists,
+        // so there is always at least one receiver and `send` cannot fail here.
+        self.sender
+            .send(())
+            .expect("secondary shutdown channel always has a live receiver");
     }
 }
 

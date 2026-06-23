@@ -829,7 +829,7 @@ pub fn spawn_tokio_runtime_metrics_task(
                 tracker.submit(interval);
             });
             match secondary_shutdown_controller
-                .future_or_shutdown_secondary(tokio::time::sleep(metrics_interval))
+                .future_or_shutdown(tokio::time::sleep(metrics_interval))
                 .await
             {
                 FutureOrShutdownOutput::Output(_) => {}
