@@ -158,8 +158,7 @@ impl PartialEq for BlobWithSender {
 /// drops the unread-share bloat an attacker could otherwise use to inflate the witness.
 ///
 /// Only the *deserialize* direction goes through this owned struct (via `try_from`);
-/// serialization is a hand-written, borrowed [`Serialize`] on [`BlobWithSender`] that mirrors
-/// these fields without cloning the shares.
+/// serialization uses the borrowed [`BlobWithSenderWireRef`] view to avoid cloning shares.
 #[derive(Debug, Deserialize)]
 struct BlobWithSenderWire {
     /// DA-physical verified prefix ([`BlobWithSender::compressed_verified_data`]).
@@ -175,6 +174,15 @@ struct BlobWithSenderWire {
     range_in_namespace: Range<usize>,
     sender: CelestiaAddress,
     hash: HexHash,
+}
+
+#[derive(Serialize)]
+struct BlobWithSenderWireRef<'a> {
+    accumulator: &'a [u8],
+    total_len: u64,
+    range_in_namespace: &'a Range<usize>,
+    sender: &'a CelestiaAddress,
+    hash: &'a HexHash,
 }
 
 /// Error returned when a [`BlobWithSenderWire`] cannot describe a valid blob.
@@ -212,17 +220,14 @@ impl core::fmt::Display for PrunedBlobError {
 
 impl Serialize for BlobWithSender {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        use serde::ser::SerializeStruct;
-        // Serialize the same projection as the deserialize target `BlobWithSenderWire`, but by
-        // reference — never cloning the unread shares. Field names, order, and types must mirror
-        // that struct; the bincode/risc0/json round-trip tests fail on any drift.
-        let mut wire = serializer.serialize_struct("BlobWithSenderWire", 5)?;
-        wire.serialize_field("accumulator", self.compressed_verified_data())?;
-        wire.serialize_field("total_len", &(self.compressed_total_len() as u64))?;
-        wire.serialize_field("range_in_namespace", &self.range_in_namespace)?;
-        wire.serialize_field("sender", &self.sender)?;
-        wire.serialize_field("hash", &self.hash)?;
-        wire.end()
+        BlobWithSenderWireRef {
+            accumulator: self.compressed_verified_data(),
+            total_len: self.compressed_total_len() as u64,
+            range_in_namespace: &self.range_in_namespace,
+            sender: &self.sender,
+            hash: &self.hash,
+        }
+        .serialize(serializer)
     }
 }
 

@@ -142,6 +142,11 @@ impl Iterator for BlobIterator {
             return Some(self.current.get_u8());
         }
         self.current_idx += 1;
+        assert!(
+            self.current_idx < self.blob.0.len(),
+            "BlobIterator::next called on a source-less pruned blob with {} bytes remaining; read it via the accumulator (verified_data), not Iterator",
+            self.remaining()
+        );
         self.current = Bytes::copy_from_slice(
             self.blob.0[self.current_idx]
                 .payload()
@@ -449,6 +454,14 @@ mod tests {
         // `remaining()` == 100 - 10 == 90, with no backing shares.
         let placeholder = BlobIterator::verified_placeholder(100, 10);
         let _ = Buf::chunk(&placeholder);
+    }
+
+    #[test]
+    #[should_panic(expected = "source-less pruned blob")]
+    fn placeholder_next_fails_fast_when_bytes_remain() {
+        // `remaining()` == 100 - 10 == 90, with no backing shares.
+        let mut placeholder = BlobIterator::verified_placeholder(100, 10);
+        let _ = placeholder.next();
     }
 
     prop_compose! {
