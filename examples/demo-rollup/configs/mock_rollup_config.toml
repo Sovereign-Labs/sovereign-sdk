@@ -76,12 +76,19 @@ tokio_runtime_metrics_interval_millis = 500
 # This is a number of metrics, not serialized bytes.
 # The total number of bytes to be held in memory might vary per metric + `max_datagram_size`
 # max_pending_metrics = 1000
+# In-process aggregation of JSON-RPC call statistics. Omit the section to use defaults.
+# [monitoring.rpc_aggregation]
+# flush_interval_secs = 10 # How often aggregated RPC statistics are flushed to the metrics server, in seconds
+# slow_call_threshold_ms = 500 # Calls at least this slow emit an individual metric point and a debug-level log line with the request parameters
+# max_slow_call_points_per_window = 10 # Maximum number of individual slow-call points emitted per flush window
 
 [proof_manager]
 aggregated_proof_block_jump = 1
 prover_address = "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf"
 max_number_of_transitions_in_db = 1000
 max_number_of_transitions_in_memory = 100
+# eager_proof_submission = true # When true, proofs are submitted as each block arrives; when false, submission is deferred until the batch is full, then submitted concurrently
+# prover_thread_count_override = 5 # Override for the number of prover threads. When unset, defaults to 2 * aggregated_proof_block_jump + 1
 max_number_of_aggregated_proofs_in_memory = 5
 max_concurrent_proof_blobs = 1024
 
@@ -113,6 +120,7 @@ ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintai
 # db_event_channel_size = 10000 # Event buffer size while update_state is running
 # maximum_future_nonce_delta = 100 # Max nonce gap the sequencer will accept and queue for out-of-order txs
 # future_nonce_transaction_timeout_millis = 2000 # Timeout for queued future-nonce transactions
+# use_pi_rate_limiter = false # Enable the experimental PI controller for rate limiting; smooths the tx acceptance rate over time instead of suddenly rejecting all txs when the batch is full
 
 #[sequencer.preferred.postgres_config]
 #postgres_connection_string = "postgresql://user:pass@host/db" # HIGHLY RECOMMENDED: Use Postgres instead of RocksDB for soft confirmed transactions
@@ -134,6 +142,8 @@ ideal_lag_behind_finalized_slot = 3 # Ideal buffer of finalized slots to maintai
 #     ["10.0.0.0/8", { resources_per_bucket = 10, refill_rate = 2 }],
 #     ["192.168.1.5", { resources_per_bucket = 8, refill_rate = 2 }],
 # ]
+# Rate limiting on gas is currently disabled, so this param has no impact on runtime behavior. Defaults to the maximum rollup height.
+# height_for_gas_limit_computation = 1000000
 # [sequencer.preferred.rate_limiter.default_limits]
 # resources_per_bucket = 20 # The resources allocated per user per rate-limiting bucket, defined in units of 1/1000th of a full batch. E.g. resources_per_bucket = 10 would mean each bucket allows the user to use 1% of a full batch capacity.
 # refill_rate = 5 # The refill rate of buckets. E.g. if refill_rate = 5, the user's rate limiting bucket will be refilled up to five times every batch.
