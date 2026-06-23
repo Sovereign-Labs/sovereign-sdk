@@ -90,8 +90,7 @@ impl<S: Spec> SequencerRegistry<S> {
         amount: Amount,
         state: &mut Accessor,
     ) -> anyhow::Result<()> {
-        let (sequencer, retired_sequencer) =
-            self.current_da_address_for_refund(sequencer, state)?;
+        let (sequencer, retired_sequencer) = self.da_address_for_refund(sequencer, state)?;
         if let Some(KnownSequencer {
             address,
             balance,
@@ -148,37 +147,42 @@ impl<S: Spec> SequencerRegistry<S> {
     }
 
     #[allow(clippy::type_complexity)]
-    fn current_da_address_for_refund<
+    fn da_address_for_refund<
         Accessor: StateReader<Kernel, Error = Infallible> + StateReader<User, Error = Infallible>,
     >(
         &self,
         sequencer: &<S::Da as DaSpec>::Address,
         state: &mut Accessor,
     ) -> anyhow::Result<(<S::Da as DaSpec>::Address, Option<S::Address>)> {
-        let mut current_da_address = *sequencer;
-        let mut retired_sequencer = None;
-
-        while let Some(retired) = self
-            .retired_da_addresses
-            .get(&current_da_address, state)
+        if self
+            .known_sequencers
+            .get(sequencer, state)
             .unwrap_infallible()
+            .is_some()
         {
-            match retired_sequencer {
-                Some(expected_sequencer) if retired.sequencer != expected_sequencer => {
-                    anyhow::bail!(
-                        "Retired DA address {} points through DA address {} retired by sequencer {} instead of {}",
-                        sequencer,
-                        current_da_address,
-                        retired.sequencer,
-                        expected_sequencer
-                    );
-                }
-                Some(_) => {}
-                None => retired_sequencer = Some(retired.sequencer),
-            }
-            current_da_address = retired.current_da_address;
+            return Ok((*sequencer, None));
         }
 
-        Ok((current_da_address, retired_sequencer))
+        let Some(retired) = self
+            .retired_da_addresses
+            .get(sequencer, state)
+            .unwrap_infallible()
+        else {
+            return Ok((*sequencer, None));
+        };
+
+        let Some(current) = self
+            .current_da_address_by_sequencer
+            .get(&retired.sequencer, state)
+            .unwrap_infallible()
+        else {
+            return Ok((*sequencer, Some(retired.sequencer)));
+        };
+
+        if current.registration_da_address != retired.registration_da_address {
+            return Ok((*sequencer, Some(retired.sequencer)));
+        }
+
+        Ok((current.current_da_address, Some(retired.sequencer)))
     }
 }

@@ -39,12 +39,8 @@ pub enum Event<S: Spec> {
 
     /// A sequencer rotated its DA address.
     ///
-    /// Emission timing differs by path. On the immediate path (a rotation
-    /// applied during transaction execution) this is emitted *after* the state
-    /// change. When the preferred sequencer rotates its own DA during its own
-    /// batch, the rotation is deferred to end-of-block but this event is still
-    /// emitted at scheduling time — so it precedes the queryable state change
-    /// within that block.
+    /// Preferred self-rotations emit this when the rotation is scheduled; the
+    /// state move is applied later in the end-block hook.
     DaAddressUpdated {
         /// The rollup address of the sequencer (unchanged across the rotation).
         sequencer: S::Address,

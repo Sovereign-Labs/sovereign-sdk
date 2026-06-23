@@ -90,9 +90,18 @@ struct PendingDaAddressUpdate<S: Spec> {
 #[serde(
     bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned, <S::Da as DaSpec>::Address: serde::Serialize + serde::de::DeserializeOwned"
 )]
+struct CurrentDaAddress<S: Spec> {
+    registration_da_address: <S::Da as DaSpec>::Address,
+    current_da_address: <S::Da as DaSpec>::Address,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
+#[serde(
+    bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned, <S::Da as DaSpec>::Address: serde::Serialize + serde::de::DeserializeOwned"
+)]
 struct RetiredDaAddress<S: Spec> {
     sequencer: S::Address,
-    current_da_address: <S::Da as DaSpec>::Address,
+    registration_da_address: <S::Da as DaSpec>::Address,
 }
 
 /// The status of the sequencer's balance.
@@ -162,10 +171,14 @@ pub struct SequencerRegistry<S: Spec> {
     #[state]
     pending_da_address_update: StateValue<PendingDaAddressUpdate<S>>,
 
-    /// DA addresses retired by rotation. Retired addresses cannot sequence or be reused, but
+    /// DA addresses retired by rotation. Active retired addresses cannot sequence or be reused, but
     /// escrow refunds already addressed to them are redirected to the sequencer's current DA.
     #[state]
     retired_da_addresses: KernelStateMap<<S::Da as DaSpec>::Address, RetiredDaAddress<S>>,
+
+    /// Current DA address for each active rollup sequencer address.
+    #[state]
+    current_da_address_by_sequencer: KernelStateMap<S::Address, CurrentDaAddress<S>>,
 }
 
 /// A special error type that can be raised when calling a method from the sequencer registry
