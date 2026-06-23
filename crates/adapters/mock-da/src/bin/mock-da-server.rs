@@ -4,6 +4,7 @@ use tracing_subscriber::EnvFilter;
 use sov_mock_da::storable::rpc::start_server;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockAddress, MockDaConfig};
+use sov_rollup_interface::node::SecondaryShutdownController;
 
 // Start with cargo run --features="native"
 #[derive(Parser, Debug)]
@@ -58,8 +59,9 @@ async fn main() -> anyhow::Result<()> {
     tracing::info!("  Database: {}", cli.db);
     tracing::info!("  Block producing: {:?}", config.block_producing);
 
-    let (shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
-    let da_service = StorableMockDaService::from_config(config, shutdown_receiver).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        StorableMockDaService::from_config(config, &secondary_shutdown_controller).await;
     // Start the HTTP server
     let addr = start_server(da_service, &cli.host, cli.port).await?;
 
@@ -69,6 +71,6 @@ async fn main() -> anyhow::Result<()> {
     // Wait for shutdown signal
     tokio::signal::ctrl_c().await?;
     tracing::info!("Shutting down mock-da server...");
-    shutdown_sender.send(())?;
+    secondary_shutdown_controller.shutdown()?;
     Ok(())
 }

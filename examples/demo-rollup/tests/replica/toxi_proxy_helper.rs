@@ -4,7 +4,7 @@ use sov_test_utils::sov_toxi_proxi_image::ToxiProxySetup;
 
 pub(crate) struct NodeTestSetup {
     postgres: Arc<PostgresData>,
-    da_shutdown: watch::Sender<()>,
+    da_shutdown: SecondaryShutdownController,
     da_addr: SocketAddr,
     toxiproxy_setup: ToxiProxySetup,
     direct_postgres_connection_string: String,
@@ -99,7 +99,7 @@ impl NodeTestSetup {
     pub(crate) async fn shutdown(self, leader: TestRollup<Rollup>, replica: TestRollup<Rollup>) {
         let _ = replica.shutdown().await;
         let _ = leader.shutdown().await;
-        let _ = self.da_shutdown.send(());
+        let _ = self.da_shutdown.shutdown();
         self.toxiproxy_setup.shutdown();
     }
 

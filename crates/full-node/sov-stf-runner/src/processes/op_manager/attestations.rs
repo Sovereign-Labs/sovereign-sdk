@@ -2,7 +2,7 @@ use borsh::BorshSerialize;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController};
 use sov_rollup_interface::optimistic::{Attestation, BondingProofService, SerializedAttestation};
 use sov_rollup_interface::stf::ProofSender;
 use tokio::task::JoinHandle;
@@ -14,7 +14,7 @@ pub struct AttestationsManager<StateRoot, Witness, Da: DaSpec, Bps: BondingProof
     stf_info_receiver: Receiver<StateRoot, Witness, Da>,
     bonding_proof_service: Bps,
     proof_sender: Box<dyn ProofSender>,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    secondary_shutdown_controller: SecondaryShutdownController,
 }
 
 impl<StateRoot, Witness, Da, Bps> AttestationsManager<StateRoot, Witness, Da, Bps>
@@ -29,13 +29,15 @@ where
         stf_info_receiver: Receiver<StateRoot, Witness, Da>,
         bonding_proof_service: Bps,
         proof_sender: Box<dyn ProofSender>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        secondary_shutdown_controller: &SecondaryShutdownController,
     ) -> Self {
         Self {
             stf_info_receiver,
             bonding_proof_service,
             proof_sender,
-            shutdown_receiver,
+            secondary_shutdown_controller: SecondaryShutdownController::clone(
+                secondary_shutdown_controller,
+            ),
         }
     }
 
@@ -50,7 +52,9 @@ where
 
     async fn post_attestation_to_da(mut self) -> anyhow::Result<()> {
         loop {
-            match future_or_shutdown(self.stf_info_receiver.read_next(), &self.shutdown_receiver)
+            match self
+                .secondary_shutdown_controller
+                .future_or_shutdown_secondary(self.stf_info_receiver.read_next())
                 .await
             {
                 FutureOrShutdownOutput::Shutdown => {

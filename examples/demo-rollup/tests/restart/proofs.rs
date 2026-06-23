@@ -110,5 +110,5 @@ async fn test_aggregated_proofs_after_restart_external_da() {
     wait_for_aggregated_proofs(&test_rollup, 9).await;
 
     let _ = test_rollup.shutdown().await;
-    let _ = da_shutdown.send(());
+    let _ = da_shutdown.shutdown();
 }

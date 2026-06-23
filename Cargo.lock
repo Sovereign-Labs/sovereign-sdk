@@ -11821,6 +11821,7 @@ dependencies = [
  "schemars 1.2.1",
  "serde",
  "sov-metrics",
+ "sov-rollup-interface",
  "sp1-lib",
  "tokio",
  "tokio-metrics",

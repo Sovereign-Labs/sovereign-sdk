@@ -27,7 +27,7 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::node::{SecondaryShutdownController, SyncStatus};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;
 use sov_sequencer::preferred::PreferredSequencer;
@@ -146,7 +146,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        shutdown_receiver: watch::Receiver<()>,
+        secondary_shutdown_controller: &SecondaryShutdownController,
     ) -> Self::DaService;
 
     /// Creates an instance of [`ProverService`].
@@ -380,29 +380,26 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         let (main_shutdown_sender, mut main_shutdown_receiver) = tokio::sync::watch::channel(());
         main_shutdown_receiver.mark_unchanged();
-        let (secondary_shutdown_sender, mut secondary_shutdown_receiver) =
-            tokio::sync::watch::channel(());
-        secondary_shutdown_receiver.mark_unchanged();
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let mut background_handles = vec![];
 
-        let receiver_for_metrics = secondary_shutdown_receiver.clone();
         let monitoring_config = rollup_config.monitoring.clone();
         if let Some(metrics_handle) =
-            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics.clone())
+            sov_metrics::init_metrics_tracker(&monitoring_config, &secondary_shutdown_controller)
         {
             background_handles.push(metrics_handle);
             background_handles.push(sov_metrics::spawn_tokio_runtime_metrics_task(
                 std::time::Duration::from_millis(
                     monitoring_config.tokio_runtime_metrics_interval_millis,
                 ),
-                receiver_for_metrics,
+                &secondary_shutdown_controller,
             ));
         } else {
             tracing::warn!("Metrics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
         };
 
         let da_service = self
-            .create_da_service(&rollup_config, secondary_shutdown_receiver.clone())
+            .create_da_service(&rollup_config, &secondary_shutdown_controller)
             .await;
         let da_service_handle = da_service.take_background_join_handle().await;
         if let Some(handle) = da_service_handle {
@@ -417,7 +414,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     Err(error) => {
                         cleanup_failed_startup_before_sequencer(
                             &main_shutdown_sender,
-                            &secondary_shutdown_sender,
+                            &secondary_shutdown_controller,
                             &mut background_handles,
                         )
                         .await;
@@ -432,7 +429,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let da_service_with_cache = startup_step!(
             DaServiceWithCachedFinalizedHeaders::new(
                 da_service.clone(),
-                secondary_shutdown_receiver.clone(),
+                &secondary_shutdown_controller,
                 da_polling_interval,
             )
             .await
@@ -653,7 +650,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 Err(error) => {
                     cleanup_failed_startup(
                         &main_shutdown_sender,
-                        &secondary_shutdown_sender,
+                        &secondary_shutdown_controller,
                         &mut background_handles,
                         &mut sequencer,
                     )
@@ -694,7 +691,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             Err(error) => {
                 cleanup_failed_startup(
                     &main_shutdown_sender,
-                    &secondary_shutdown_sender,
+                    &secondary_shutdown_controller,
                     &mut background_handles,
                     &mut sequencer,
                 )
@@ -713,7 +710,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         let _ = runner.shutdown_before_run().await;
                         cleanup_failed_startup(
                             &main_shutdown_sender,
-                            &secondary_shutdown_sender,
+                            &secondary_shutdown_controller,
                             &mut background_handles,
                             &mut sequencer,
                         )
@@ -738,7 +735,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     start_op_workflow_in_background::<Self::ProverService, _>(
                         bonding_proof_service,
                         proof_sender,
-                        secondary_shutdown_receiver,
+                        &secondary_shutdown_controller,
                         stf_info_receiver,
                     )
                     .await
@@ -752,14 +749,14 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         proof_sender,
                         stf_info_receiver,
                         runner.da_sync_state(),
-                        secondary_shutdown_receiver,
+                        &secondary_shutdown_controller,
                         main_shutdown_sender.clone(),
                         start_fresh_outer_proof_on_resync,
                     )
                     .await
                 }
                 OperatingMode::Operator => {
-                    Ok(start_operator_workflow_in_background(secondary_shutdown_receiver).await)
+                    Ok(start_operator_workflow_in_background(&secondary_shutdown_controller).await)
                 }
             };
             let workflow_task_handle = match workflow_task_handle_result {
@@ -768,7 +765,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     let _ = runner.shutdown_before_run().await;
                     cleanup_failed_startup(
                         &main_shutdown_sender,
-                        &secondary_shutdown_sender,
+                        &secondary_shutdown_controller,
                         &mut background_handles,
                         &mut sequencer,
                     )
@@ -797,7 +794,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 let _ = runner.shutdown_before_run().await;
                 cleanup_failed_startup(
                     &main_shutdown_sender,
-                    &secondary_shutdown_sender,
+                    &secondary_shutdown_controller,
                     &mut background_handles,
                     &mut sequencer,
                 )
@@ -819,7 +816,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             runner,
             endpoints,
             shutdown_sender: main_shutdown_sender,
-            secondary_shutdown_sender,
+            secondary_shutdown_controller,
             background_handles,
             genesis_slot_number: genesis_da_height,
             rpc_aggregation_config: monitoring_config.rpc_aggregation.clone(),
@@ -849,12 +846,12 @@ fn validate_operating_mode_config(
 
 async fn cleanup_failed_startup<S: Spec>(
     main_shutdown_sender: &watch::Sender<()>,
-    secondary_shutdown_sender: &watch::Sender<()>,
+    secondary_shutdown_controller: &SecondaryShutdownController,
     background_handles: &mut Vec<JoinHandle<()>>,
     sequencer: &mut SequencerCreationReceipt<S>,
 ) {
     let _ = main_shutdown_sender.send(());
-    let _ = secondary_shutdown_sender.send(());
+    let _ = secondary_shutdown_controller.shutdown();
 
     let background_handles_to_join = std::mem::take(background_handles);
     let sequencer_background_handles = std::mem::take(&mut sequencer.background_handles);
@@ -870,11 +867,11 @@ async fn cleanup_failed_startup<S: Spec>(
 
 async fn cleanup_failed_startup_before_sequencer(
     main_shutdown_sender: &watch::Sender<()>,
-    secondary_shutdown_sender: &watch::Sender<()>,
+    secondary_shutdown_controller: &SecondaryShutdownController,
     background_handles: &mut Vec<JoinHandle<()>>,
 ) {
     let _ = main_shutdown_sender.send(());
-    let _ = secondary_shutdown_sender.send(());
+    let _ = secondary_shutdown_controller.shutdown();
 
     let background_handles_to_join = std::mem::take(background_handles);
 
@@ -959,7 +956,7 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
     pub genesis_slot_number: u64,
 
     // Trigger after the runner has finished.
-    secondary_shutdown_sender: tokio::sync::watch::Sender<()>,
+    secondary_shutdown_controller: SecondaryShutdownController,
 
     background_handles: Vec<tokio::task::JoinHandle<()>>,
 
@@ -996,7 +993,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
             );
         }
 
-        if self.secondary_shutdown_sender.send(()).is_err() {
+        if self.secondary_shutdown_controller.shutdown().is_err() {
             tracing::info!(
                 "Failed to send secondary shutdown signal because all receivers have been dropped"
             );

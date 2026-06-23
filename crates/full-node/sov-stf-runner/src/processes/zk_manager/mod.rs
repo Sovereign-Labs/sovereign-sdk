@@ -5,7 +5,7 @@ use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput, SyncStatus};
+use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController, SyncStatus};
 use sov_rollup_interface::stf::ProofSender;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use tokio::sync::mpsc;
@@ -35,7 +35,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     backoff_policy: ExponentialBuilder,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    secondary_shutdown_controller: SecondaryShutdownController,
     shutdown_sender: tokio::sync::watch::Sender<()>,
     start_fresh_outer_proof_on_resync: bool,
 }
@@ -54,7 +54,7 @@ where
         proof_sender: Box<dyn ProofSender>,
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
         da_sync_state: Arc<DaSyncState>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        secondary_shutdown_controller: &SecondaryShutdownController,
         shutdown_sender: tokio::sync::watch::Sender<()>,
         start_fresh_outer_proof_on_resync: bool,
     ) -> Self {
@@ -71,7 +71,9 @@ where
                 .with_max_times(BACKOFF_POLICY_MAX_NUM_RETRIES),
             stf_info_receiver,
             da_sync_state,
-            shutdown_receiver,
+            secondary_shutdown_controller: SecondaryShutdownController::clone(
+                secondary_shutdown_controller,
+            ),
             shutdown_sender,
             start_fresh_outer_proof_on_resync,
         }
@@ -104,9 +106,14 @@ where
                 shutdown_sender: self.shutdown_sender,
             };
 
-            let aggregator_shutdown = self.shutdown_receiver.clone();
+            let aggregator_shutdown_controller = self.secondary_shutdown_controller.clone();
             let aggregator_handle = tokio::spawn(async move {
-                run_task_until_shutdown("aggregator", aggregator.run(), &aggregator_shutdown).await;
+                run_task_until_shutdown(
+                    "aggregator",
+                    aggregator.run(),
+                    &aggregator_shutdown_controller,
+                )
+                .await;
             });
 
             let intake = IntakeTask {
@@ -124,7 +131,7 @@ where
             run_task_until_shutdown(
                 "aggregated proof intake",
                 intake.run(),
-                &self.shutdown_receiver,
+                &self.secondary_shutdown_controller,
             )
             .await;
 
@@ -140,9 +147,12 @@ where
 async fn run_task_until_shutdown<T>(
     task_name: &str,
     task: impl std::future::Future<Output = anyhow::Result<T>>,
-    shutdown_receiver: &tokio::sync::watch::Receiver<()>,
+    secondary_shutdown_controller: &SecondaryShutdownController,
 ) {
-    match future_or_shutdown(task, shutdown_receiver).await {
+    match secondary_shutdown_controller
+        .future_or_shutdown_secondary(task)
+        .await
+    {
         FutureOrShutdownOutput::Shutdown => {
             tracing::info!(task_name, "Shutting down task...");
         }

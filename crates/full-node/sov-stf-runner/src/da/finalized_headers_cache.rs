@@ -39,7 +39,7 @@
 
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
@@ -83,7 +83,7 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
     #[allow(missing_docs)]
     pub async fn new(
         da_service: Arc<Da>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        secondary_shutdown_controller: &SecondaryShutdownController,
         polling_interval: std::time::Duration,
     ) -> anyhow::Result<Self> {
         let last_finalized_header = da_service
@@ -98,6 +98,8 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
 
         let recent_headers_for_writer = headers_cache.clone();
         let da_service_for_finalized_fetcher = da_service.clone();
+        let secondary_shutdown_controller =
+            SecondaryShutdownController::clone(secondary_shutdown_controller);
 
         let finalized_header_handler = tokio::task::spawn(async move {
             background_header_fetch_task(
@@ -105,7 +107,7 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
                 finalized_sender,
                 recent_headers_for_writer,
                 polling_interval,
-                shutdown_receiver,
+                secondary_shutdown_controller.clone(),
             )
             .await;
         });
@@ -257,7 +259,7 @@ async fn background_header_fetch_task<Da: DaService>(
     finalized_sender: tokio::sync::watch::Sender<<Da::Spec as DaSpec>::BlockHeader>,
     recent_headers: Arc<FinalizedDaHeadersCacheContainer<Da>>,
     polling_interval: std::time::Duration,
-    shutdown_rx: tokio::sync::watch::Receiver<()>,
+    secondary_shutdown_controller: SecondaryShutdownController,
 ) {
     let mut interval = tokio::time::interval(polling_interval);
     tracing::info!(?interval, "Starting background fetcher task");
@@ -265,14 +267,18 @@ async fn background_header_fetch_task<Da: DaService>(
 
     loop {
         // Wait for the next tick or shutdown
-        match future_or_shutdown(interval.tick(), &shutdown_rx).await {
+        match secondary_shutdown_controller
+            .future_or_shutdown_secondary(interval.tick())
+            .await
+        {
             FutureOrShutdownOutput::Shutdown => {
                 tracing::info!("DA header provider received shutdown signal");
                 break;
             }
             FutureOrShutdownOutput::Output(_) => {
                 // Fetch finalized header
-                match future_or_shutdown(da_service.get_last_finalized_block_header(), &shutdown_rx)
+                match secondary_shutdown_controller
+                    .future_or_shutdown_secondary(da_service.get_last_finalized_block_header())
                     .await
                 {
                     FutureOrShutdownOutput::Shutdown => {
@@ -316,11 +322,11 @@ mod tests {
             da_service.send_transaction(&[1; 32]).await.await??;
         }
 
-        let (sender, receiver) = tokio::sync::watch::channel(());
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let da_service = Arc::new(da_service);
         let cache = DaServiceWithCachedFinalizedHeaders::new(
             da_service.clone(),
-            receiver,
+            &secondary_shutdown_controller,
             Duration::from_millis(300),
         )
         .await?;
@@ -336,7 +342,7 @@ mod tests {
         assert_eq!(cached_header.height(), 6);
         da_service.send_transaction(&[3; 32]).await.await??;
 
-        sender.send(())?;
+        secondary_shutdown_controller.shutdown()?;
         Ok(())
     }
 
@@ -348,11 +354,11 @@ mod tests {
             da_service.send_transaction(&[1; 32]).await.await??;
         }
 
-        let (sender, receiver) = tokio::sync::watch::channel(());
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let da_service = Arc::new(da_service);
         let cache = DaServiceWithCachedFinalizedHeaders::new(
             da_service.clone(),
-            receiver,
+            &secondary_shutdown_controller,
             Duration::from_millis(100),
         )
         .await?;
@@ -365,7 +371,7 @@ mod tests {
         let header_9 = cache.get_block_header_at(9).await?;
         assert_eq!(header_9.height(), 9);
 
-        sender.send(())?;
+        secondary_shutdown_controller.shutdown()?;
         Ok(())
     }
 
@@ -378,11 +384,11 @@ mod tests {
             da_service.send_transaction(&[1; 32]).await.await??;
         }
 
-        let (sender, receiver) = tokio::sync::watch::channel(());
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let da_service = Arc::new(da_service);
         let cache = DaServiceWithCachedFinalizedHeaders::new(
             da_service.clone(),
-            receiver,
+            &secondary_shutdown_controller,
             Duration::from_millis(100),
         )
         .await?;
@@ -401,7 +407,7 @@ mod tests {
             "Cache size {cache_size} exceeds MAX_RECENT_HEADERS {MAX_RECENT_HEADERS}"
         );
 
-        sender.send(())?;
+        secondary_shutdown_controller.shutdown()?;
         Ok(())
     }
 
@@ -411,11 +417,11 @@ mod tests {
 
         da_service.send_transaction(&[1; 32]).await.await??;
 
-        let (sender, receiver) = tokio::sync::watch::channel(());
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let da_service = Arc::new(da_service);
         let cache = DaServiceWithCachedFinalizedHeaders::new(
             da_service.clone(),
-            receiver,
+            &secondary_shutdown_controller,
             Duration::from_millis(100),
         )
         .await?;
@@ -423,7 +429,7 @@ mod tests {
         // Task should be running
         assert!(!cache.finalized_headers_task.is_finished());
 
-        sender.send(())?;
+        secondary_shutdown_controller.shutdown()?;
 
         // Wait a bit for the task to finish
         tokio::time::sleep(Duration::from_millis(200)).await;
@@ -441,11 +447,11 @@ mod tests {
             da_service.send_transaction(&[1; 32]).await.await??;
         }
 
-        let (sender, receiver) = tokio::sync::watch::channel(());
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let da_service = Arc::new(da_service);
         let cache = DaServiceWithCachedFinalizedHeaders::new(
             da_service.clone(),
-            receiver,
+            &secondary_shutdown_controller,
             Duration::from_millis(100),
         )
         .await?;
@@ -454,7 +460,7 @@ mod tests {
         let header_0 = cache.get_block_header_at(0).await?;
         assert_eq!(header_0.height(), 0);
 
-        sender.send(())?;
+        secondary_shutdown_controller.shutdown()?;
         Ok(())
     }
 
@@ -466,11 +472,11 @@ mod tests {
             da_service.send_transaction(&[1; 32]).await.await??;
         }
 
-        let (sender, receiver) = tokio::sync::watch::channel(());
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let da_service = Arc::new(da_service);
         let cache = DaServiceWithCachedFinalizedHeaders::new(
             da_service.clone(),
-            receiver,
+            &secondary_shutdown_controller,
             Duration::from_millis(100),
         )
         .await?;
@@ -495,7 +501,7 @@ mod tests {
         assert_eq!(cached.height(), 3);
         assert_eq!(cached.hash(), header.hash());
 
-        sender.send(())?;
+        secondary_shutdown_controller.shutdown()?;
         Ok(())
     }
 
@@ -505,11 +511,11 @@ mod tests {
 
         da_service.send_transaction(&[1; 32]).await.await??;
 
-        let (sender, receiver) = tokio::sync::watch::channel(());
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let da_service = Arc::new(da_service);
         let cache = DaServiceWithCachedFinalizedHeaders::new(
             da_service.clone(),
-            receiver,
+            &secondary_shutdown_controller,
             Duration::from_millis(100),
         )
         .await?;
@@ -527,7 +533,7 @@ mod tests {
             "Expected error when background task is stopped"
         );
 
-        let _ = sender.send(());
+        let _ = secondary_shutdown_controller.shutdown();
         Ok(())
     }
 

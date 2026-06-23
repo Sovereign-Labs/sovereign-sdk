@@ -18,6 +18,7 @@ use sov_modules_api::CryptoSpec;
 use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
+use sov_rollup_interface::node::SecondaryShutdownController;
 use sov_sequencer::SeqConfigExtension;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
@@ -128,9 +129,9 @@ async fn test_start_stop_with_crash(
     mock_da_config.block_producing = BlockProducingConfig::Periodic {
         block_time_ms: 1_000,
     };
-    let (shutdown_sender, mut shutdown_receiver) = tokio::sync::watch::channel(());
-    shutdown_receiver.mark_unchanged();
-    let da_service = StorableMockDaService::from_config(mock_da_config, shutdown_receiver).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        StorableMockDaService::from_config(mock_da_config, &secondary_shutdown_controller).await;
     let da_layer = da_service.da_layer();
 
     let key_and_address = read_private_key::<MockRollupSpec<Native>>("tx_signer_private_key.json");
@@ -222,7 +223,7 @@ async fn test_start_stop_with_crash(
         test_rollup.shutdown().await?;
     }
 
-    shutdown_sender.send(())?;
+    secondary_shutdown_controller.shutdown()?;
 
     Ok(())
 }

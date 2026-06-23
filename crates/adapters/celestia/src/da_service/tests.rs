@@ -18,6 +18,7 @@ use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, RelevantBlobs};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
+use sov_rollup_interface::node::SecondaryShutdownController;
 use tokio::task::JoinSet;
 
 async fn collect_all_blobs_between(
@@ -263,8 +264,9 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-    let da_service = CelestiaService::new(config, rollup_params, shutdown_rx).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, rollup_params, &secondary_shutdown_controller).await;
     let signer = da_service
         .get_signer()
         .await
@@ -289,8 +291,9 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
 async fn test_submit_proof_correct() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
 
     let zk_proof: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
     let signer = da_service
@@ -342,7 +345,7 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
         rollup_proof_namespace: Namespace::const_v0(*b"n99proof99"),
     };
 
-    let mut shutdown_senders = Vec::new();
+    let mut secondary_shutdown_controllers = Vec::new();
     let mut active_services = Vec::new();
     let mut active_signers = Vec::new();
 
@@ -353,9 +356,9 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
         let mut config = base_config.clone();
         config.signer_private_key = Some(signer_private_key);
 
-        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-        shutdown_senders.push(shutdown_tx);
-        let service = CelestiaService::new(config, *params, shutdown_rx).await;
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
+        let service = CelestiaService::new(config, *params, &secondary_shutdown_controller).await;
+        secondary_shutdown_controllers.push(secondary_shutdown_controller);
         assert_eq!(
             service.get_signer().await,
             Some(expected_signer),
@@ -365,10 +368,14 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
         active_signers.push(expected_signer);
     }
 
-    let (unknown_shutdown_tx, unknown_shutdown_rx) = tokio::sync::watch::channel(());
-    shutdown_senders.push(unknown_shutdown_tx);
-    let unknown_service =
-        CelestiaService::new(base_config, unknown_rollup_params, unknown_shutdown_rx).await;
+    let unknown_secondary_shutdown_controller = SecondaryShutdownController::new();
+    let unknown_service = CelestiaService::new(
+        base_config,
+        unknown_rollup_params,
+        &unknown_secondary_shutdown_controller,
+    )
+    .await;
+    secondary_shutdown_controllers.push(unknown_secondary_shutdown_controller);
 
     let mut verification_services = active_services.clone();
     verification_services.push(unknown_service);
@@ -611,9 +618,17 @@ async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
     };
 
     // CelestiaService for reading/verifying (uses key 0).
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-    let _ = sov_metrics::init_metrics_tracker(&MonitoringConfig::standard(), shutdown_rx.clone());
-    let da_service = CelestiaService::new(base_config.clone(), rollup_params, shutdown_rx).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let _ = sov_metrics::init_metrics_tracker(
+        &MonitoringConfig::standard(),
+        &secondary_shutdown_controller,
+    );
+    let da_service = CelestiaService::new(
+        base_config.clone(),
+        rollup_params,
+        &secondary_shutdown_controller,
+    )
+    .await;
     let verifier = CelestiaVerifier::new(rollup_params);
 
     // Build 6 raw clients with different signers (keys 1–6).
@@ -793,9 +808,10 @@ fn bytes_for_shares_accounts_for_signer_overhead() {
 async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
     // TODO: disable retries
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
@@ -815,9 +831,10 @@ async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
 async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
     // TODO: disable retries
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
@@ -840,9 +857,10 @@ async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
 async fn test_submit_blob_response_timeout() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
     // TODO: disable retries
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 

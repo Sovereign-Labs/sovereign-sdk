@@ -13,6 +13,7 @@ use crate::{CelestiaConfig, CelestiaService, VerifyOnFetchMode};
 use anyhow::{anyhow, Context};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::SecondaryShutdownController;
 use sov_test_utils::docker::prepull_image_best_effort;
 use testcontainers::core::{ExecCommand, Host, Mount, WaitFor};
 use testcontainers::runners::AsyncRunner;
@@ -311,9 +312,13 @@ async fn test_service_starts() -> anyhow::Result<()> {
 
     let config = dev_node.get_config().await?;
     tracing::info!("CONFIG: {:?}", config);
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-    let da_service =
-        CelestiaService::new(config, crate::test_helper::ROLLUP_PARAMS_DEV, shutdown_rx).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service = CelestiaService::new(
+        config,
+        crate::test_helper::ROLLUP_PARAMS_DEV,
+        &secondary_shutdown_controller,
+    )
+    .await;
     let signer = da_service.get_signer().await;
     assert_eq!(signer, Some(dev_node.get_signer_address(0).await?));
     let header_1 = da_service.get_head_block_header().await?;
