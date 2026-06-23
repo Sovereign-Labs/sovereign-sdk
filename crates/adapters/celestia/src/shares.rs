@@ -113,6 +113,22 @@ pub struct BlobIterator {
     blob: Blob,
 }
 
+impl BlobIterator {
+    /// A source-less iterator carrying no shares, used to rebuild a blob from a pruned
+    /// witness. `remaining()` is `total_len - consumed` (arithmetic only), so the guest's
+    /// `total_len()`/`accumulator()` reads work without any shares present. Advancing it
+    /// would panic on the empty share vector by construction — but the guest never advances.
+    pub(crate) fn verified_placeholder(total_len: usize, consumed: usize) -> Self {
+        BlobIterator {
+            sequence_len: total_len,
+            consumed,
+            current: Bytes::new(),
+            current_idx: 0,
+            blob: Blob(Vec::new()),
+        }
+    }
+}
+
 impl Iterator for BlobIterator {
     type Item = u8;
 

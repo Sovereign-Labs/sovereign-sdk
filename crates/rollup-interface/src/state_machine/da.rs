@@ -98,6 +98,13 @@ impl<B: bytes::Buf> CountedBufReader<B> {
         }
     }
 
+    /// Reconstructs a reader directly from an already-verified prefix and a source buffer.
+    /// Used to rebuild a blob from a pruned witness, where `inner` is a source-less
+    /// placeholder (the guest never advances). No behavior change for [`Self::new`].
+    pub fn from_verified_parts(inner: B, accumulator: Vec<u8>) -> Self {
+        CountedBufReader { inner, accumulator }
+    }
+
     /// Advance the accumulator by `num_bytes` bytes. If `num_bytes` is greater than the length
     /// of remaining unverified data, then all remaining unverified data is added to the accumulator.
     pub fn advance(&mut self, num_bytes: usize) {
