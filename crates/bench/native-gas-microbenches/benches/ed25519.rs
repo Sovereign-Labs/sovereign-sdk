@@ -38,11 +38,9 @@ fn bench_ed25519(c: &mut Criterion) {
         group.bench_with_input(BenchmarkId::from_parameter(size), &msg, |b, msg| {
             let mut meter = UnlimitedGasMeter::<MicrobenchSpec>::default();
             b.iter(|| {
-                black_box(
-                    metered
-                        .verify(black_box(&pub_key), black_box(msg.as_slice()), &mut meter)
-                        .expect("a freshly-signed message must verify"),
-                )
+                metered
+                    .verify(black_box(&pub_key), black_box(msg.as_slice()), &mut meter)
+                    .expect("a freshly-signed message must verify");
             });
         });
     }
