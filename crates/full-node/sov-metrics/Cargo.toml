@@ -24,7 +24,7 @@ derive_more = { workspace = true, features = ["deref_mut", "deref"], optional = 
 derive-new = { workspace = true }
 tokio-metrics = { workspace = true, optional = true }
 hex = { workspace = true }
-sov-rollup-interface = { workspace = true, features = ["native"], optional = true }
+sov-rollup-interface = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
 risc0-zkvm = { workspace = true, default-features = false, features = [
