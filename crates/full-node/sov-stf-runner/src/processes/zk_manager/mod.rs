@@ -147,10 +147,7 @@ async fn run_task_until_shutdown<T>(
     task: impl std::future::Future<Output = anyhow::Result<T>>,
     secondary_shutdown_controller: &SecondaryShutdownController,
 ) {
-    match secondary_shutdown_controller
-        .future_or_shutdown(task)
-        .await
-    {
+    match secondary_shutdown_controller.future_or_shutdown(task).await {
         FutureOrShutdownOutput::Shutdown => {
             tracing::info!(task_name, "Shutting down task...");
         }

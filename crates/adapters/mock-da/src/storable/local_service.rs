@@ -60,8 +60,7 @@ impl BlockProducingConfig {
 
         let block_time = Duration::from_millis(*block_time_ms);
         let span = tracing::info_span!("periodic_batch_producer");
-        let secondary_shutdown_controller =
-            SecondaryShutdownController::clone(secondary_shutdown_controller);
+        let secondary_shutdown_controller = secondary_shutdown_controller.clone();
 
         Some(tokio::spawn(
             async move {

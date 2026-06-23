@@ -21,8 +21,7 @@ pub fn init_metrics_tracker(
 ) -> Option<tokio::task::JoinHandle<()>> {
     let (sender, receiver) = tokio::sync::mpsc::channel(config.get_max_pending_metrics() as usize);
     let config_for_task = config.clone();
-    let secondary_shutdown_controller =
-        SecondaryShutdownController::clone(secondary_shutdown_controller);
+    let secondary_shutdown_controller = secondary_shutdown_controller.clone();
     if METRICS_TRACKER.get().is_none() {
         let handle = tokio::spawn(async move {
             publisher::metrics_publisher_task(
@@ -819,8 +818,7 @@ pub fn spawn_tokio_runtime_metrics_task(
 ) -> tokio::task::JoinHandle<()> {
     let handle = tokio::runtime::Handle::current();
     let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
-    let secondary_shutdown_controller =
-        SecondaryShutdownController::clone(secondary_shutdown_controller);
+    let secondary_shutdown_controller = secondary_shutdown_controller.clone();
 
     // print runtime metrics every metrics_interval
     tokio::spawn(async move {

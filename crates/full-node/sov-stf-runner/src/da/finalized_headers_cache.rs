@@ -98,8 +98,7 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
 
         let recent_headers_for_writer = headers_cache.clone();
         let da_service_for_finalized_fetcher = da_service.clone();
-        let secondary_shutdown_controller =
-            SecondaryShutdownController::clone(secondary_shutdown_controller);
+        let secondary_shutdown_controller = secondary_shutdown_controller.clone();
 
         let finalized_header_handler = tokio::task::spawn(async move {
             background_header_fetch_task(

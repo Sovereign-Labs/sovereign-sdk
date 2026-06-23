@@ -26,10 +26,7 @@ impl SecondaryShutdownController {
     }
 
     /// Runs a future until it completes or the secondary shutdown signal fires.
-    pub async fn future_or_shutdown<T>(
-        &self,
-        inner: T,
-    ) -> FutureOrShutdownOutput<T::Output>
+    pub async fn future_or_shutdown<T>(&self, inner: T) -> FutureOrShutdownOutput<T::Output>
     where
         T: Future,
     {

@@ -227,7 +227,7 @@ impl CelestiaService {
                     bg_client,
                     signer,
                     tx_priority,
-                    SecondaryShutdownController::clone(secondary_shutdown_controller),
+                    secondary_shutdown_controller.clone(),
                     stat_polling_period,
                     stat_request_timeout,
                 ));
