@@ -34,6 +34,7 @@ use sov_rollup_interface::da::{
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
+use sov_rollup_interface::node::SecondaryShutdownController;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -191,7 +192,7 @@ impl CelestiaService {
     pub async fn new(
         config: CelestiaConfig,
         chain_params: RollupParams,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        secondary_shutdown_controller: &SecondaryShutdownController,
     ) -> Self {
         tracing::info!(?config, "Initializing Celestia Adapter");
         let request_timeout = Duration::from_secs(config.request_timeout_secs.get());
@@ -226,7 +227,7 @@ impl CelestiaService {
                     bg_client,
                     signer,
                     tx_priority,
-                    shutdown_receiver,
+                    secondary_shutdown_controller.clone(),
                     stat_polling_period,
                     stat_request_timeout,
                 ));
@@ -702,7 +703,7 @@ async fn stat_collection_task(
     client: celestia_client::Client,
     signer: CelestiaAddress,
     priority: celestia_client::tx::TxPriority,
-    mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    secondary_shutdown_controller: SecondaryShutdownController,
     period: Duration,
     request_timeout: Duration,
 ) {
@@ -713,7 +714,7 @@ async fn stat_collection_task(
 
     loop {
         tokio::select! {
-            _ = shutdown_receiver.changed() => {
+            _ = secondary_shutdown_controller.wait_for_shutdown() => {
                 tracing::info!("Shutting down celestia stat collection task");
                 return;
             }

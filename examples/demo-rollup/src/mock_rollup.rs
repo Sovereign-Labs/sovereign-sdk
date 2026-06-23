@@ -135,9 +135,10 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        secondary_shutdown_controller: &sov_rollup_interface::node::SecondaryShutdownController,
     ) -> Self::DaService {
-        StorableMockDaService::from_config(rollup_config.da.clone(), shutdown_receiver).await
+        StorableMockDaService::from_config(rollup_config.da.clone(), secondary_shutdown_controller)
+            .await
     }
 
     async fn create_prover_service(
