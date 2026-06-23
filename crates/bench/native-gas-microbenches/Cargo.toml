@@ -22,3 +22,7 @@ sov-mock-zkvm = { workspace = true, features = ["native"] }
 [[bench]]
 name = "sha256"
 harness = false
+
+[[bench]]
+name = "ed25519"
+harness = false
