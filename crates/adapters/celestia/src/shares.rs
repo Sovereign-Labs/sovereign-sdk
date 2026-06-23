@@ -116,8 +116,9 @@ pub struct BlobIterator {
 impl BlobIterator {
     /// A source-less iterator carrying no shares, used to rebuild a blob from a pruned
     /// witness. `remaining()` is `total_len - consumed` (arithmetic only), so the guest's
-    /// `total_len()`/`accumulator()` reads work without any shares present. Advancing it
-    /// would panic on the empty share vector by construction — but the guest never advances.
+    /// `total_len()`/`accumulator()` reads work without any shares present. The `Buf`/iterator
+    /// read methods (`chunk`/`advance`/`next`) fail fast on it by construction — pruned blobs
+    /// must be read via the accumulator (`verified_data`); the guest never advances.
     pub(crate) fn verified_placeholder(total_len: usize, consumed: usize) -> Self {
         BlobIterator {
             sequence_len: total_len,
@@ -177,9 +178,20 @@ impl Buf for BlobIterator {
         let chunk = if self.current.has_remaining() {
             self.current.as_ref()
         } else {
-            // If the current share is exhausted, try to take the data from the next one
-            // if there is no next chunk, we're done. Return the empty slice.
+            // If the current share is exhausted, try to take the data from the next one.
             if self.current_idx + 1 >= self.blob.0.len() {
+                // No next share. A well-formed, fully-read blob reaches here with
+                // `remaining() == 0` (genuinely done) and returns the empty slice. A
+                // source-less pruned placeholder reaches here with bytes still "remaining"
+                // and no shares — fail fast instead of returning `&[]`, which would violate
+                // `Buf`'s progress contract and hang a `chunk`/`advance` loop. Pruned blobs
+                // must be read via the accumulator (`verified_data`), never `Buf`.
+                assert_eq!(
+                    self.remaining(),
+                    0,
+                    "BlobIterator::chunk called on a source-less pruned blob with {} bytes remaining; read it via the accumulator (verified_data), not Buf",
+                    self.remaining()
+                );
                 return &[];
             }
             // Otherwise, take the next chunk
@@ -426,6 +438,17 @@ mod tests {
         let mut blob = CountedBufReader::new(blob.into_iter());
         // Try to read the entire contents of the blob
         blob.advance(blob.total_len());
+    }
+
+    /// A source-less pruned placeholder must fail fast (a clear panic) rather than return an
+    /// empty chunk while bytes remain — the latter violates `Buf`'s progress contract and would
+    /// hang a `chunk`/`advance` loop.
+    #[test]
+    #[should_panic(expected = "source-less pruned blob")]
+    fn placeholder_chunk_fails_fast_when_bytes_remain() {
+        // `remaining()` == 100 - 10 == 90, with no backing shares.
+        let placeholder = BlobIterator::verified_placeholder(100, 10);
+        let _ = Buf::chunk(&placeholder);
     }
 
     prop_compose! {

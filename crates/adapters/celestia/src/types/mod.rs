@@ -99,8 +99,8 @@ impl From<[u8; 32]> for TmHash {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
-#[serde(into = "BlobWithSenderWire", try_from = "BlobWithSenderWire")]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(try_from = "BlobWithSenderWire")]
 pub struct BlobWithSender {
     pub(crate) blob: CountedBufReader<BlobIterator>,
     // Range in the entire namespace
@@ -156,13 +156,22 @@ impl PartialEq for BlobWithSender {
 /// the authenticated DA prefix (`accumulator`) and the total length; it never touches the
 /// shares (authentication uses the separate inclusion proof). Serializing just these fields
 /// drops the unread-share bloat an attacker could otherwise use to inflate the witness.
-#[derive(Clone, Debug, Serialize, Deserialize)]
+///
+/// Only the *deserialize* direction goes through this owned struct (via `try_from`);
+/// serialization is a hand-written, borrowed [`Serialize`] on [`BlobWithSender`] that mirrors
+/// these fields without cloning the shares.
+#[derive(Debug, Deserialize)]
 struct BlobWithSenderWire {
     /// DA-physical verified prefix ([`BlobWithSender::compressed_verified_data`]).
     accumulator: Vec<u8>,
     /// DA-physical total length ([`BlobWithSender::compressed_total_len`]). `u64` so the
     /// 64-bit host and 32-bit zkVM guest agree on the encoded width.
     total_len: u64,
+    /// Share-index range within the namespace. Left as `usize` — unlike [`Self::total_len`],
+    /// which is explicitly `u64`-encoded against guest truncation — because it is bounded by
+    /// the DA block's share count (orders of magnitude below `u32::MAX`) and is consumed only
+    /// when building proofs on the host (`verifier::proofs`); the 32-bit guest verifier never
+    /// reads it, so it carries no truncation risk.
     range_in_namespace: Range<usize>,
     sender: CelestiaAddress,
     hash: HexHash,
@@ -201,19 +210,19 @@ impl core::fmt::Display for PrunedBlobError {
     }
 }
 
-impl From<BlobWithSender> for BlobWithSenderWire {
-    fn from(blob: BlobWithSender) -> Self {
-        // Capture the DA-physical projection while the reader is still in scope, before
-        // moving the metadata fields out of `blob`.
-        let accumulator = blob.compressed_verified_data().to_vec();
-        let total_len = blob.compressed_total_len() as u64;
-        BlobWithSenderWire {
-            accumulator,
-            total_len,
-            range_in_namespace: blob.range_in_namespace,
-            sender: blob.sender,
-            hash: blob.hash,
-        }
+impl Serialize for BlobWithSender {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        use serde::ser::SerializeStruct;
+        // Serialize the same projection as the deserialize target `BlobWithSenderWire`, but by
+        // reference — never cloning the unread shares. Field names, order, and types must mirror
+        // that struct; the bincode/risc0/json round-trip tests fail on any drift.
+        let mut wire = serializer.serialize_struct("BlobWithSenderWire", 5)?;
+        wire.serialize_field("accumulator", self.compressed_verified_data())?;
+        wire.serialize_field("total_len", &(self.compressed_total_len() as u64))?;
+        wire.serialize_field("range_in_namespace", &self.range_in_namespace)?;
+        wire.serialize_field("sender", &self.sender)?;
+        wire.serialize_field("hash", &self.hash)?;
+        wire.end()
     }
 }
 
