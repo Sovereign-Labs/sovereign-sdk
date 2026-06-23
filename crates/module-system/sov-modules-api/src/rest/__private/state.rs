@@ -282,8 +282,20 @@ where
     async fn get_state_map_item_route(
         State(state): State<Self>,
         mut accessor: ApiStateAccessor<M::Spec>,
-        Path(key): Path<K>,
+        Path(key): Path<String>,
     ) -> ApiResult<StateItemContents<K, V>> {
+        // Path parameters are plain strings, so we parse the key from its `Display`
+        // form via `FromStr` instead of relying on axum's serde `Path` deserializer.
+        // The latter maps captured path-param *names* onto struct fields, so it can
+        // never reconstruct a multi-field (composite) key from the single `{key}`
+        // segment, failing with `missing field ...`.
+        let key = K::from_str(&key).map_err(|_| {
+            sov_rest_utils::errors::bad_request_400(
+                "Invalid key",
+                "key must be a valid state map key",
+            )
+        })?;
+
         let state_map = NamespacedStateMap::<N, K, V, Codec>::with_codec(
             Prefix::new(
                 state.module_discriminant,
