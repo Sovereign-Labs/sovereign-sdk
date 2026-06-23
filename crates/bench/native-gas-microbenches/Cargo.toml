@@ -1,0 +1,24 @@
+[package]
+name = "native-gas-microbenches"
+description = "Native (non-zkVM) wall-clock microbenches for calibrating gas constants"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+publish = false
+
+[lints]
+workspace = true
+
+[dev-dependencies]
+criterion = "0.5.1"
+sov-gas-tools = { workspace = true }
+sov-modules-api = { workspace = true, features = ["native"] }
+sov-mock-da = { workspace = true, features = ["native"] }
+sov-mock-zkvm = { workspace = true, features = ["native"] }
+
+[[bench]]
+name = "sha256"
+harness = false

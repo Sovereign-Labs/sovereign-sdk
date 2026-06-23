@@ -6718,6 +6718,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "native-gas-microbenches"
+version = "0.3.0"
+dependencies = [
+ "criterion",
+ "sov-gas-tools",
+ "sov-mock-da",
+ "sov-mock-zkvm",
+ "sov-modules-api",
+]
+
+[[package]]
 name = "ndarray"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -11696,6 +11707,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-gas-tools"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "sov-hyperlane-integration"
 version = "0.3.0"
 dependencies = [
@@ -13200,6 +13221,7 @@ dependencies = [
  "anyhow",
  "clap",
  "serde",
+ "sov-gas-tools",
  "sov-rollup-interface",
  "sov-sp1-adapter",
  "sov-zkvm-utils",
