@@ -34,6 +34,9 @@ use tracing::{info, trace};
 use crate::rest_api::ApiAcceptedTx;
 use crate::{SequencerNotReadyDetails, SlotNumber, TxHash, TxStatus, TxStatusManager};
 
+pub(crate) const SEQUENCER_EVENTS_WS_ROUTE: &str = "/sequencer/events/ws";
+pub(crate) const SEQUENCER_TXS_WS_ROUTE: &str = "/sequencer/txs/ws";
+
 #[derive(Debug, Error, Clone, serde::Serialize, serde::Deserialize)]
 pub enum SubscriptionStreamError {
     /// The receiver fell behind and some messages were skipped.
@@ -61,6 +64,25 @@ impl SubscriptionStreamError {
             skipped,
             disconnected_at: None,
             resumed_at: None,
+        }
+    }
+
+    pub fn lagged_without_identifiers_for_route(skipped: u64, route: &'static str) -> Self {
+        crate::metrics::track_sequencer_ws_lag(route, skipped);
+        Self::lagged_without_identifiers(skipped)
+    }
+
+    pub fn lagged_with_identifiers_for_route(
+        skipped: u64,
+        disconnected_at: Option<u64>,
+        resumed_at: Option<u64>,
+        route: &'static str,
+    ) -> Self {
+        crate::metrics::track_sequencer_ws_lag(route, skipped);
+        Self::Lagged {
+            skipped,
+            disconnected_at,
+            resumed_at,
         }
     }
 }

@@ -90,6 +90,113 @@ pub fn track_sequence_number_delta(delta: i64) {
 }
 
 #[derive(Debug)]
+struct SubmitWsPressureMetrics {
+    reason: &'static str,
+    inflight_tasks: usize,
+    outbound_queue_depth: usize,
+    outbound_queue_capacity: usize,
+}
+
+impl Metric for SubmitWsPressureMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_sequencer_submit_ws_pressure"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{},reason={} inflight_tasks={},outbound_queue_depth={},outbound_queue_capacity={}",
+            self.measurement_name(),
+            self.reason,
+            self.inflight_tasks,
+            self.outbound_queue_depth,
+            self.outbound_queue_capacity,
+        )
+    }
+}
+
+pub(crate) fn track_submit_ws_pressure(
+    reason: &'static str,
+    inflight_tasks: usize,
+    outbound_queue_depth: usize,
+    outbound_queue_capacity: usize,
+) {
+    sov_metrics::track_metrics(|tracker| {
+        tracker.submit(SubmitWsPressureMetrics {
+            reason,
+            inflight_tasks,
+            outbound_queue_depth,
+            outbound_queue_capacity,
+        });
+    });
+}
+
+#[derive(Debug)]
+struct SequencerWsConnectionsMetric {
+    route: &'static str,
+    active_connections: u64,
+}
+
+impl Metric for SequencerWsConnectionsMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_sequencer_ws_connections"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{},route={} active_connections={}",
+            self.measurement_name(),
+            self.route,
+            self.active_connections,
+        )
+    }
+}
+
+pub(crate) fn track_sequencer_ws_connections(route: &'static str, active_connections: u64) {
+    sov_metrics::track_metrics(|tracker| {
+        tracker.submit(SequencerWsConnectionsMetric {
+            route,
+            active_connections,
+        });
+    });
+}
+
+#[derive(Debug)]
+struct SequencerWsLagMetric {
+    route: &'static str,
+    lagged_events: u64,
+    skipped_messages: u64,
+}
+
+impl Metric for SequencerWsLagMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_sequencer_ws_lag"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{},route={} lagged_events={},skipped_messages={}",
+            self.measurement_name(),
+            self.route,
+            self.lagged_events,
+            self.skipped_messages,
+        )
+    }
+}
+
+pub(crate) fn track_sequencer_ws_lag(route: &'static str, skipped_messages: u64) {
+    sov_metrics::track_metrics(|tracker| {
+        tracker.submit(SequencerWsLagMetric {
+            route,
+            lagged_events: 1,
+            skipped_messages,
+        });
+    });
+}
+
+#[derive(Debug)]
 pub struct PreferredSequencerUpdateStateMetrics {
     pub duration: std::time::Duration,
     pub total_message_processing_duration: std::time::Duration,

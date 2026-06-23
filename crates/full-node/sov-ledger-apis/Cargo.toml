@@ -22,6 +22,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true, features = ["base64"] }
 sov-db = { workspace = true }
+sov-metrics = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-rest-utils = { workspace = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }

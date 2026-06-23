@@ -11793,6 +11793,7 @@ dependencies = [
  "serde_with",
  "sov-api-spec",
  "sov-db",
+ "sov-metrics",
  "sov-mock-da",
  "sov-modules-api",
  "sov-rest-utils",
