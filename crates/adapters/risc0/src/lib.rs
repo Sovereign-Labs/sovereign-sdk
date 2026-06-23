@@ -117,14 +117,19 @@ impl ZkVerifier for Risc0Verifier {
         let receipt: risc0_zkvm::Receipt =
             sov_rollup_interface::common::strict_bincode_deserialize(&serialized_proof.raw_proof)?;
         receipt.verify(code_commitment.0)?;
-        Ok(sov_rollup_interface::common::strict_bincode_deserialize(&receipt.journal.bytes)?)
+        Ok(sov_rollup_interface::common::strict_bincode_deserialize(
+            &receipt.journal.bytes,
+        )?)
     }
 
     fn extract_public_data<T: DeserializeOwned>(
         serialized_proof: &SerializedZkProof,
     ) -> Result<T, Self::Error> {
-        let receipt: risc0_zkvm::Receipt = sov_rollup_interface::common::strict_bincode_deserialize(&serialized_proof.raw_proof)?;
-        Ok(sov_rollup_interface::common::strict_bincode_deserialize(&receipt.journal.bytes)?)
+        let receipt: risc0_zkvm::Receipt =
+            sov_rollup_interface::common::strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+        Ok(sov_rollup_interface::common::strict_bincode_deserialize(
+            &receipt.journal.bytes,
+        )?)
     }
 }
 
