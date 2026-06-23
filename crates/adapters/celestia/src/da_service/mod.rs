@@ -714,7 +714,7 @@ async fn stat_collection_task(
 
     loop {
         tokio::select! {
-            _ = secondary_shutdown_controller.changed() => {
+            _ = secondary_shutdown_controller.wait_for_shutdown() => {
                 tracing::info!("Shutting down celestia stat collection task");
                 return;
             }

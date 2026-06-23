@@ -20,7 +20,7 @@ impl SecondaryShutdownController {
     }
 
     /// Waits until a secondary shutdown notification is sent.
-    pub async fn changed(&self) -> Result<(), watch::error::RecvError> {
+    pub async fn wait_for_shutdown(&self) -> Result<(), watch::error::RecvError> {
         let mut shutdown_receiver = self.receiver.clone();
         shutdown_receiver.changed().await
     }

@@ -80,6 +80,6 @@ pub async fn start_operator_workflow_in_background(
 ) -> JoinHandle<()> {
     let secondary_shutdown_controller = secondary_shutdown_controller.clone();
     tokio::spawn(async move {
-        let _ = secondary_shutdown_controller.changed().await;
+        let _ = secondary_shutdown_controller.wait_for_shutdown().await;
     })
 }
