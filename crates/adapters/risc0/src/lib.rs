@@ -5,12 +5,9 @@
 //! Sovereign SDK rollups.
 use crypto::{Risc0PublicKey, Risc0Signature};
 use risc0_zkvm::sha::Digest;
-#[cfg(not(target_os = "zkvm"))]
-use risc0_zkvm::Receipt;
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
-use sov_rollup_interface::common::strict_bincode_deserialize;
 use sov_rollup_interface::zk::aggregated_proof::common::SerializedPubValues;
 use sov_rollup_interface::zk::aggregated_proof::{CodeCommitmentDecodeError, CodeCommitmentHash};
 use sov_rollup_interface::zk::SerializedZkProof;
@@ -117,7 +114,8 @@ impl ZkVerifier for Risc0Verifier {
         serialized_proof: &SerializedZkProof,
         code_commitment: &Self::CodeCommitment,
     ) -> Result<T, Self::Error> {
-        let receipt: Receipt = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+        let receipt: risc0_zkvm::Receipt =
+            sov_rollup_interface::common::strict_bincode_deserialize(&serialized_proof.raw_proof)?;
         receipt.verify(code_commitment.0)?;
         Ok(strict_bincode_deserialize(&receipt.journal.bytes)?)
     }
@@ -125,7 +123,7 @@ impl ZkVerifier for Risc0Verifier {
     fn extract_public_data<T: DeserializeOwned>(
         serialized_proof: &SerializedZkProof,
     ) -> Result<T, Self::Error> {
-        let receipt: Receipt = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
+        let receipt: risc0_zkvm::Receipt = strict_bincode_deserialize(&serialized_proof.raw_proof)?;
         Ok(strict_bincode_deserialize(&receipt.journal.bytes)?)
     }
 }
