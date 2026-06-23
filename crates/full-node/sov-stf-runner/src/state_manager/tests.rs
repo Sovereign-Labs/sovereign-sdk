@@ -329,11 +329,16 @@ async fn test_proof_manager_crash_after_staging_hides_uncommitted_slot() -> anyh
             .map(|(slot, _)| slot)
             .unwrap_or(SlotNumber::GENESIS);
         assert_eq!(ledger_head, SlotNumber::GENESIS);
-        assert!(proof_manager_db.get_stf_info(SlotNumber::ONE)?.is_some());
-        assert_eq!(proof_manager_db.get_write_height()?, None);
+        assert!(proof_manager_db.has_row_at_slot(SlotNumber::ONE)?);
 
+        let resolver_ledger = ledger_db.clone();
         sender
-            .startup_notify_about_infos_from_db(ledger_head, ledger_head, &InfiniteHeight)
+            .startup_notify_about_infos_from_db(
+                ledger_head,
+                ledger_head,
+                &InfiniteHeight,
+                move |slot| resolver_ledger.da_block_hash_for_slot(slot),
+            )
             .await?;
 
         assert!(
@@ -396,14 +401,18 @@ async fn test_proof_manager_restart_recovers_after_ledger_finalize_crash() -> an
             .map(|(slot, _)| slot)
             .unwrap_or(SlotNumber::GENESIS);
         assert_eq!(ledger_head, SlotNumber::ONE);
-        assert!(proof_manager_db.get_stf_info(SlotNumber::ONE)?.is_some());
-        assert_eq!(proof_manager_db.get_write_height()?, None);
+        assert!(proof_manager_db.has_row_at_slot(SlotNumber::ONE)?);
 
+        let resolver_ledger = ledger_db.clone();
         sender
-            .startup_notify_about_infos_from_db(ledger_head, ledger_head, &InfiniteHeight)
+            .startup_notify_about_infos_from_db(
+                ledger_head,
+                ledger_head,
+                &InfiniteHeight,
+                move |slot| resolver_ledger.da_block_hash_for_slot(slot),
+            )
             .await?;
 
-        assert_eq!(proof_manager_db.get_write_height()?, Some(SlotNumber::ONE));
         let recovered =
             tokio::time::timeout(std::time::Duration::from_secs(1), receiver.read_next()).await??;
         let recovered = recovered.expect("recovered slot should be visible after restart");

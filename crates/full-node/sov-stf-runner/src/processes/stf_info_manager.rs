@@ -3,16 +3,14 @@ use std::marker::PhantomData;
 use std::num::NonZero;
 use std::sync::{Arc, Mutex};
 
-#[cfg(test)]
-use crate::test_hooks::CrashLocation;
 use anyhow::{anyhow, bail};
 use borsh::BorshSerialize;
 use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_db::proof_manager_db::ProofManagerDb;
-use sov_db::schema::types::StoredStfInfo;
+use sov_db::schema::types::{DbHash, StoredStfInfo};
 use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::ProvableHeightTracker;
@@ -54,12 +52,11 @@ impl<StateRoot, Witness, Da: DaSpec> StateTransitionInfo<StateRoot, Witness, Da>
     }
 }
 
-/// Shared `next_height_to_receive` cursor.
+/// Shared in-memory `next_height_to_receive` cursor.
 ///
-/// A single mutex serializes all access. The persistent advance is a
-/// load-write-store sequence (an in-memory update plus a ProofManagerDb write),
-/// not a single atomic operation, so writers must be serialized; reads share the
-/// same lock.
+/// A single mutex serializes all access so concurrent advances (the intake skip-advance and the
+/// aggregator advance, running on separate tasks) cannot lose increments. The cursor is never
+/// persisted; it is recomputed on startup as `latest_proof_final_slot + 1`.
 struct Cursor {
     value: Mutex<SlotNumber>,
 }
@@ -91,23 +88,6 @@ impl Cursor {
         *self.lock() = new_value;
     }
 
-    /// Persist the new value before updating memory so a failed write leaves
-    /// memory and disk on the same cursor.
-    fn advance_and_persist(
-        &self,
-        amount: u64,
-        persist: impl FnOnce(SlotNumber) -> anyhow::Result<()>,
-    ) -> anyhow::Result<SlotNumber> {
-        let mut value = self.lock();
-        let old_value = *value;
-        let new_value = old_value
-            .checked_add(amount)
-            .ok_or_else(|| anyhow!("next_height_to_receive overflowed"))?;
-        persist(new_value)?;
-        *value = new_value;
-        Ok(old_value)
-    }
-
     fn lock(&self) -> std::sync::MutexGuard<'_, SlotNumber> {
         self.value.lock().expect("cursor lock poisoned")
     }
@@ -119,46 +99,41 @@ pub struct Sender<StateRoot, Witness, Da: DaSpec> {
     /// This value is synchronized with the receiver end of the channel.
     next_height_to_receive: Arc<Cursor>,
 
-    /// The next height to send to the [`Receiver`]. This value is not persisted in the database and
-    /// is merely used to avoid sending twice the same height notification to the [`Receiver`].
+    /// The next height to send to the [`Receiver`]. Used only to avoid sending the same height
+    /// notification twice.
     pub next_height_to_send: SlotNumber,
 
-    /// Final slot of the latest accepted aggregated proof known to LedgerDb at startup, if
-    /// any. The receive cursor resumes one slot past it so the prover feeds the restored
-    /// outer aggregation host a chain that is contiguous with the proof it continues from.
+    /// In-memory finalized-visible cutoff: the highest finalized slot the consumer may be notified
+    /// about. Replaces the previously-persisted `write_height`; recomputed on startup by
+    /// [`Self::startup_notify_about_infos_from_db`] and advanced by [`Self::commit_stf_info`].
+    /// [`SlotNumber::GENESIS`] means "nothing finalized-visible yet".
+    finalized_visible_height: SlotNumber,
+
+    /// Final slot of the latest accepted aggregated proof known to LedgerDb at startup, if any.
+    /// The receive cursor resumes one slot past it so the prover feeds the restored outer
+    /// aggregation host a chain that is contiguous with the proof it continues from.
     latest_proof_final_slot: Option<SlotNumber>,
 
     /// Whether startup may skip a missing local STF-info prefix.
     ///
-    /// This is only sound when no previous outer proof is being restored. If a
-    /// previous outer proof exists, the aggregation circuit requires the next
-    /// inner proof to start exactly at `latest_proof_final_slot + 1`.
+    /// This is only sound when no previous outer proof is being restored. If a previous outer
+    /// proof exists, the aggregation circuit requires the next inner proof to start exactly at
+    /// `latest_proof_final_slot + 1`.
     allow_missing_local_stf_prefix: bool,
 
     // Max number of entries we will keep in the Db, older data will be pruned.
     max_nb_of_infos_in_db: NonZero<u64>,
 
-    /// The notification channel does not contain the actual STF info data,
-    /// only the indexes in the Db where the data is stored.
+    /// The notification channel carries `(slot, canonical DA hash)` — the hash, resolved on the
+    /// producer side, lets the [`Receiver`] read the finalized fork directly without consulting
+    /// LedgerDb. It does not contain the STF-info data itself, only the key.
     ///
     /// ## Note
-    /// This channel is used to enforce a back-pressure mechanism to ensure that the
-    /// [`Receiver`] and the [`Sender`] are not too out-of-sync.
-    /// At the end of each slot, the [`Sender`] will send notifications
-    /// to the [`Receiver`] for each rollup height that can be proven.
-    /// If the [`Sender::notifier`] channel is full, the rollup will halt and wait for the
-    /// [`Receiver`] end to catch up.
-    ///
-    /// It is important to note that this is allowed by the fact that _every transition_ goes through the
-    /// channel, and that the receiver processes them individually and sequentially. Otherwise, the
-    /// back-pressure assumptions are broken.
-    ///
-    /// ## Safety
-    /// The size of this channel should not be greater than the [`Sender::max_nb_of_infos_in_db`].
-    /// Otherwise it would mean that we can have more transitions in the channel than what are present in the Db.
-    notifier: mpsc::Sender<SlotNumber>,
+    /// This channel enforces back-pressure: when full, the rollup halts and waits for the
+    /// [`Receiver`] to catch up. Its size must not exceed [`Sender::max_nb_of_infos_in_db`].
+    notifier: mpsc::Sender<(SlotNumber, DbHash)>,
 
-    /// The proof manager database for persisting STF info independently from ledger commits.
+    /// The proof manager database storing the STF-info queue.
     proof_manager_db: ProofManagerDb,
 
     _phantom: PhantomData<(StateRoot, Witness, Da)>,
@@ -170,57 +145,54 @@ impl<
         Da: DaSpec,
     > Sender<StateRoot, Witness, Da>
 {
-    /// This method is only called when starting up the stf info manager. It
-    /// ensures that the state is correctly set and synchronized.
+    /// This method is only called when starting up the stf info manager. It ensures the in-memory
+    /// state is correctly recomputed from the ledger view and synchronized with the receiver.
     ///
-    /// The `ledger_head` and `latest_finalized_slot_number` parameters are used to reconcile
-    /// ProofManagerDb with the ledger state on startup, ensuring the proof manager never exposes
-    /// data beyond the latest finalized slot while still preserving staged future rows.
+    /// `ledger_head` and `latest_finalized_slot_number` reconcile the proof-manager queue with the
+    /// ledger state, ensuring the proof manager never exposes data beyond the latest finalized
+    /// slot while still preserving staged future rows. `resolve_hash` maps a slot to the ledger's
+    /// canonical DA hash so the finalized fork is selected without coupling the receiver to
+    /// LedgerDb.
     pub(crate) async fn startup_notify_about_infos_from_db(
         &mut self,
         ledger_head: SlotNumber,
         latest_finalized_slot_number: SlotNumber,
         max_provable_slot_number: &dyn ProvableHeightTracker,
+        resolve_hash: impl Fn(SlotNumber) -> anyhow::Result<Option<DbHash>>,
     ) -> anyhow::Result<()> {
-        self.proof_manager_db
-            .validate_and_recover_write_height(ledger_head, latest_finalized_slot_number)?;
+        // Recompute the finalized-visible cutoff from the ledger view (no persisted metadata).
+        self.finalized_visible_height = self.proof_manager_db.recompute_visible_state(
+            ledger_head,
+            latest_finalized_slot_number,
+            &resolve_hash,
+        )?;
 
-        let (maybe_db_next_height_to_receive, db_next_height_to_receive) =
-            load_next_height_to_receive(&self.proof_manager_db, self.latest_proof_final_slot)?;
-        self.next_height_to_receive.store(db_next_height_to_receive);
-        self.next_height_to_send = db_next_height_to_receive;
+        // The receive cursor is in-memory only; recompute it from the latest accepted proof.
+        let next_height_to_receive = load_next_height_to_receive(self.latest_proof_final_slot);
+        self.next_height_to_receive.store(next_height_to_receive);
+        self.next_height_to_send = next_height_to_receive;
 
-        let maybe_write_rollup_height = self.proof_manager_db.get_write_height()?;
-        let next_rollup_height_to_receive = db_next_height_to_receive.get();
-
-        let max_provable_slot_number = max_provable_slot_number.max_provable_slot_number();
-
-        match maybe_write_rollup_height {
-            Some(write_rollup_height) => {
-                let unread_visible_infos = write_rollup_height
-                    .get()
-                    .saturating_sub(next_rollup_height_to_receive);
-                if next_rollup_height_to_receive <= write_rollup_height.get() {
-                    assert!(
-                        unread_visible_infos <= self.max_nb_of_infos_in_db.get(),
-                        "Too many STF infos in the db: {}, vs max allowed {} last_submitted={} write={}",
-                        unread_visible_infos,
-                        self.max_nb_of_infos_in_db,
-                        next_rollup_height_to_receive,
-                        write_rollup_height,
-                    );
-                }
-            }
-            // Db is empty
-            None => {
-                assert!(maybe_db_next_height_to_receive.is_none());
-                assert!(self.proof_manager_db.get_oldest_height()?.is_none());
-            }
+        // Capacity invariant: the consumer must not have fallen so far behind the finalized cutoff
+        // that more than `max_nb_of_infos_in_db` visible infos are pending.
+        if next_height_to_receive <= self.finalized_visible_height {
+            let unread_visible_infos = self
+                .finalized_visible_height
+                .get()
+                .saturating_sub(next_height_to_receive.get());
+            assert!(
+                unread_visible_infos <= self.max_nb_of_infos_in_db.get(),
+                "Too many STF infos in the db: {} vs max allowed {} (next_to_receive={} finalized_visible={})",
+                unread_visible_infos,
+                self.max_nb_of_infos_in_db,
+                next_height_to_receive,
+                self.finalized_visible_height,
+            );
         }
 
-        // Notify about visible pending STF info; the receiver drains each
-        // transition from its current cursor up to this height.
-        self.notify(max_provable_slot_number).await?;
+        // Notify about visible pending STF info; the receiver drains each transition from its
+        // current cursor up to this height.
+        let max_provable_slot_number = max_provable_slot_number.max_provable_slot_number();
+        self.notify(max_provable_slot_number, &resolve_hash).await?;
 
         Ok(())
     }
@@ -230,11 +202,7 @@ impl<
         self.next_height_to_receive.get()
     }
 
-    /// Increment next height to receive by one, returning the previous value.
-    ///
-    /// Non-persisting (in-memory only); the persisting variant is
-    /// [`CursorHandle::inc_next_height_to_receive_by_and_persist`]. Test-only to
-    /// prevent production callers from silently losing cursor advances on restart.
+    /// Increment next height to receive by one, returning the previous value. Test-only.
     #[cfg(test)]
     pub fn inc_next_height_to_receive(&self) -> SlotNumber {
         self.next_height_to_receive.fetch_add(1)
@@ -246,19 +214,18 @@ pub struct Receiver<StateRoot, Witness, Da: DaSpec> {
     /// Height of the next `StateTransitionInfo` that is expected to be processed by the `Receiver`
     next_height_to_receive: Arc<Cursor>,
     proof_manager_db: ProofManagerDb,
-    receiver: mpsc::Receiver<SlotNumber>,
+    receiver: mpsc::Receiver<(SlotNumber, DbHash)>,
     _phantom: PhantomData<(StateRoot, Witness, Da)>,
 }
 
 /// Creates a new [`Sender`] and [`Receiver`] channel.
 ///
-/// The channel's data is retained across Db restarts.
-/// - The sender will block if the channel reaches `max_channel_size` of STF infos.
-/// - If the number of entries in the Db exceeds `max_nb_of_infos_in_db`, the
-///   oldest data will be pruned.
+/// The STF-info queue is retained across Db restarts; the cursors are not (they are recomputed on
+/// startup).
+/// - The sender blocks if the channel reaches `max_channel_size` of STF infos.
+/// - If the number of entries in the Db exceeds `max_nb_of_infos_in_db`, the oldest data is pruned.
 ///
-/// The channel can only be created if `max_channel_size` is less than or equal
-/// to `max_nb_of_infos_in_db`.
+/// The channel can only be created if `max_channel_size <= max_nb_of_infos_in_db`.
 #[allow(clippy::type_complexity)]
 pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     proof_manager_db: ProofManagerDb,
@@ -289,6 +256,19 @@ pub(crate) fn new_stf_info_channel_for_runner<StateRoot, Witness, Da: DaSpec>(
     Sender<StateRoot, Witness, Da>,
     Receiver<StateRoot, Witness, Da>,
 )> {
+    // The in-memory receive cursor can re-prove an already-posted window after a crash (it resumes
+    // from the latest *accepted* proof, which may lag a just-posted one). That is only sound when
+    // a fresh outer proof replaces the previous one; otherwise the re-posted proof would form a
+    // non-contiguous chain. Require the flag whenever we resume from an existing outer proof.
+    if latest_proof_final_slot.is_some() && !start_fresh_outer_proof_on_resync {
+        bail!(
+            "The zk proving pipeline requires `--start-fresh-outer-proof-on-resync` when resuming \
+             from an existing outer proof (latest_proof_final_slot={latest_proof_final_slot:?}). \
+             The in-memory receive cursor may re-prove an already-posted window after a crash; \
+             without a fresh outer proof that would produce a non-contiguous proof chain."
+        );
+    }
+
     let allow_missing_local_stf_prefix =
         latest_proof_final_slot.is_none() || start_fresh_outer_proof_on_resync;
     new_stf_info_channel_inner(
@@ -316,22 +296,13 @@ fn new_stf_info_channel_inner<StateRoot, Witness, Da: DaSpec>(
         "Channel size should be smaller than the max number of STFInfos in the db"
     );
 
-    // Internally, the Db keeps the following entries:
-    // 1. The STF info data.
-    // 2. The latest height of the written STF info (increased on every `materialize_stf_info`` operation)
-    // 3. The next height of the retrieved STF info (increased on every `read_next`` operation).
-
-    // On startup, we need to fill the notification channel with the pending STF info from the db.
     let (notifier, receiver) =
-        tokio::sync::mpsc::channel::<SlotNumber>(max_channel_size.get().try_into()?);
+        tokio::sync::mpsc::channel::<(SlotNumber, DbHash)>(max_channel_size.get().try_into()?);
 
-    // Resume STF-info processing from the last aggregated proof that was
-    // verified on-chain and persisted in the DB: that proof's `final_slot` is
-    // the last slot we know is committed, so the prover picks up at
-    // `final_slot + 1`. If no such proof exists yet (fresh node), start from
-    // genesis.
-    let (_, next_height_to_receive) =
-        load_next_height_to_receive(&proof_manager_db, latest_proof_final_slot)?;
+    // Resume STF-info processing from the last aggregated proof verified on-chain: that proof's
+    // `final_slot` is the last slot we know is committed, so the prover picks up at `final_slot +
+    // 1`. If no such proof exists yet (fresh node), start from genesis.
+    let next_height_to_receive = load_next_height_to_receive(latest_proof_final_slot);
 
     let cursor = Arc::new(Cursor::new(next_height_to_receive));
 
@@ -339,6 +310,7 @@ fn new_stf_info_channel_inner<StateRoot, Witness, Da: DaSpec>(
         max_nb_of_infos_in_db,
         next_height_to_receive: cursor.clone(),
         next_height_to_send: next_height_to_receive,
+        finalized_visible_height: SlotNumber::GENESIS,
         latest_proof_final_slot,
         allow_missing_local_stf_prefix,
         notifier,
@@ -356,36 +328,18 @@ fn new_stf_info_channel_inner<StateRoot, Witness, Da: DaSpec>(
     Ok((sender, receiver))
 }
 
-fn load_next_height_to_receive(
-    proof_manager_db: &ProofManagerDb,
-    latest_proof_final_slot: Option<SlotNumber>,
-) -> anyhow::Result<(Option<SlotNumber>, SlotNumber)> {
-    let maybe_db_next_height_to_receive = proof_manager_db.get_next_height_to_receive()?;
-
-    let next_height_to_receive = match latest_proof_final_slot {
-        // A predecessor aggregated proof exists: the outer aggregation host is restored
-        // from it and resumes exactly one slot past its final slot, requiring a
-        // contiguous inner-proof chain. The receive cursor must resume at that same slot,
-        // never ahead. The persisted cursor is advanced at DA-post time, so it can lead
-        // the latest *accepted* proof; honoring it as a lower bound (the previous
-        // `.max()`) would make the prover skip slots the restored outer host still
-        // expects, producing a non-contiguous chain that aborts proof aggregation.
+/// Compute the in-memory receive cursor resume point.
+///
+/// If a predecessor aggregated proof exists, resume exactly one slot past its final slot: the
+/// restored outer aggregation host requires a contiguous inner-proof chain starting there. If no
+/// proof exists yet (fresh node, or optimistic mode), resume from genesis. The cursor is never
+/// persisted — on restart we re-prove from this point, which is sound because the node always runs
+/// with `--start-fresh-outer-proof-on-resync`.
+fn load_next_height_to_receive(latest_proof_final_slot: Option<SlotNumber>) -> SlotNumber {
+    match latest_proof_final_slot {
         Some(final_slot) => final_slot.saturating_add(1),
-        // No aggregated proof yet: there is no predecessor to stay contiguous with, so
-        // resume where individual proving left off. The first aggregation may legitimately
-        // start mid-flight.
-        None => maybe_db_next_height_to_receive.unwrap_or(SlotNumber::ONE),
-    };
-
-    // Keep the on-disk cursor in sync with the resume point, clamping it down when it was
-    // advanced ahead of the latest accepted proof.
-    if maybe_db_next_height_to_receive.is_some()
-        && maybe_db_next_height_to_receive != Some(next_height_to_receive)
-    {
-        proof_manager_db.set_next_height_to_receive(next_height_to_receive)?;
+        None => SlotNumber::ONE,
     }
-
-    Ok((maybe_db_next_height_to_receive, next_height_to_receive))
 }
 
 impl<StateRoot, Witness, Da: DaSpec> Sender<StateRoot, Witness, Da>
@@ -394,20 +348,27 @@ where
     Witness: Serialize + DeserializeOwned,
 {
     /// Sends the stf update notifications and updates the last submitted height.
-    pub async fn notify(&mut self, max_provable_slot_number: SlotNumber) -> anyhow::Result<()> {
-        // The `write_rollup_height` is the highest finalized STF slot visible to consumers.
-        let Some(write_rollup_height) = self.proof_manager_db.get_write_height()? else {
-            // DB is empty, so we don't have to notify anything.
+    ///
+    /// `resolve_hash` supplies the canonical DA hash for each notified (finalized) slot; it is
+    /// stamped onto the notification so the consumer reads the finalized fork directly.
+    pub async fn notify(
+        &mut self,
+        max_provable_slot_number: SlotNumber,
+        resolve_hash: impl Fn(SlotNumber) -> anyhow::Result<Option<DbHash>>,
+    ) -> anyhow::Result<()> {
+        let finalized_visible_height = self.finalized_visible_height;
+        if finalized_visible_height == SlotNumber::GENESIS {
+            // Nothing finalized-visible yet, so there is nothing to notify.
             return Ok(());
-        };
+        }
 
-        self.realign_notifier_cursor_to_available_stf_info(write_rollup_height)
+        self.realign_notifier_cursor_to_available_stf_info(finalized_visible_height)
             .await?;
         let next_height_to_send = self.next_height_to_send;
 
-        // We always have to ensure we don't notify for a height that is not finalized and visible
-        // in the proof-manager metadata, even if later STF rows have already been staged.
-        let height_to_notify = std::cmp::min(max_provable_slot_number, write_rollup_height);
+        // Never notify for a height that is not finalized and visible, even if later STF rows have
+        // already been staged.
+        let height_to_notify = std::cmp::min(max_provable_slot_number, finalized_visible_height);
         if height_to_notify < next_height_to_send {
             return Ok(());
         }
@@ -419,8 +380,13 @@ where
             "Heights that are going to be scheduling for proving/attesting."
         );
         for height in range_to_notify {
+            // Stamp the canonical DA hash so the consumer reads the finalized fork without
+            // resolving it itself (and without coupling the receiver to LedgerDb).
+            let hash = resolve_hash(height)?.ok_or_else(|| {
+                anyhow!("missing canonical DA hash for finalized slot {height}; cannot notify")
+            })?;
             tracing::trace!(%height, "Requesting for proving/attesting");
-            self.notifier.send(height).await?;
+            self.notifier.send((height, hash)).await?;
             tracing::trace!(%height, "Notified about stf info height for proving/attesting");
         }
 
@@ -438,21 +404,20 @@ where
         Ok(())
     }
 
-    /// Stage STF info data in ProofManagerDb immediately.
+    /// Stage STF info data in ProofManagerDb immediately, keyed by `(slot, DA block hash)`.
     ///
     /// # Two-phase commit pattern
     ///
-    /// Because ProofManagerDb and LedgerDb are separate databases, they cannot
-    /// be committed atomically. To maintain consistency:
+    /// Because ProofManagerDb and LedgerDb are separate databases, they cannot be committed
+    /// atomically. To maintain consistency:
     ///
-    /// 1. **Stage** (this method): writes STF info data to ProofManagerDb
-    ///    before the ledger commit.
-    /// 2. **Commit** ([`Self::commit_stf_info`]): after the ledger commit
-    ///    succeeds, advances `write_height` metadata only to the latest finalized slot.
+    /// 1. **Stage** (this method): writes STF info data to ProofManagerDb before the ledger commit.
+    /// 2. **Commit** ([`Self::commit_stf_info`]): after the ledger commit succeeds, advances the
+    ///    in-memory finalized-visible cutoff and prunes.
     ///
     /// If a crash occurs between staging and committing,
-    /// [`ProofManagerDb::validate_and_recover_write_height`] keeps the staged STF rows and
-    /// re-exposes only the contiguous portion that is finalized according to LedgerDb.
+    /// [`ProofManagerDb::recompute_visible_state`] re-exposes only the contiguous portion that is
+    /// finalized according to LedgerDb and drops any staged rows above the ledger head.
     pub async fn stage_stf_info(
         &self,
         stf_info: &StateTransitionInfo<StateRoot, Witness, Da>,
@@ -462,28 +427,33 @@ where
             data: encoded_stf_info,
         };
         let write_rollup_height = stf_info.slot_number();
+        // Key by the DA block hash so competing forks at the same slot are distinct rows. This is
+        // the same hash the ledger stores in `StoredSlot.hash` (the canonical-fork selector).
+        let da_block_hash: DbHash = stf_info.da_block_header().hash().into();
         let db = self.proof_manager_db.clone();
 
-        tokio::task::spawn_blocking(move || db.put_stf_info(write_rollup_height, &stored_stf_info))
-            .await
-            .map_err(|e| anyhow!("ProofManagerDb write task failed: {e}"))??;
+        tokio::task::spawn_blocking(move || {
+            db.put_stf_info(write_rollup_height, da_block_hash, &stored_stf_info)
+        })
+        .await
+        .map_err(|e| anyhow!("ProofManagerDb write task failed: {e}"))??;
 
-        tracing::trace!(
-            %write_rollup_height,
-            "Done staging stf_info data"
-        );
+        tracing::trace!(%write_rollup_height, "Done staging stf_info data");
         Ok(())
     }
 
-    /// Commit STF info metadata after ledger finality advances.
-    pub async fn commit_stf_info(&self, write_rollup_height: SlotNumber) -> anyhow::Result<()> {
+    /// Commit STF info after ledger finality advances: advance the in-memory finalized-visible
+    /// cutoff and prune below the retention window.
+    pub async fn commit_stf_info(&mut self, write_rollup_height: SlotNumber) -> anyhow::Result<()> {
+        self.finalized_visible_height = write_rollup_height.max(self.finalized_visible_height);
+        let finalized_visible_height = self.finalized_visible_height;
         let next_rollup_height_to_receive = self.next_height_to_receive();
         let max_nb_of_infos_in_db = self.max_nb_of_infos_in_db;
         let db = self.proof_manager_db.clone();
 
         tokio::task::spawn_blocking(move || {
-            db.commit_visible_height_and_prune(
-                write_rollup_height,
+            db.prune(
+                finalized_visible_height,
                 next_rollup_height_to_receive,
                 max_nb_of_infos_in_db,
             )
@@ -494,21 +464,23 @@ where
     }
 
     fn get_oldest_slot_number(&self) -> anyhow::Result<SlotNumber> {
-        let oldest_height = self.proof_manager_db.get_oldest_height()?;
-        Ok(oldest_height.unwrap_or(SlotNumber::ONE))
+        Ok(self
+            .proof_manager_db
+            .oldest_present_slot()?
+            .unwrap_or(SlotNumber::ONE))
     }
 
     async fn realign_notifier_cursor_to_available_stf_info(
         &mut self,
-        write_rollup_height: SlotNumber,
+        finalized_visible_height: SlotNumber,
     ) -> anyhow::Result<()> {
-        if self.next_height_to_send > write_rollup_height {
+        if self.next_height_to_send > finalized_visible_height {
             return Ok(());
         }
 
         let resume_cursor = self.next_height_to_send;
-        for height in resume_cursor.range_inclusive(write_rollup_height) {
-            if self.proof_manager_db.get_stf_info(height)?.is_some() {
+        for height in resume_cursor.range_inclusive(finalized_visible_height) {
+            if self.proof_manager_db.has_row_at_slot(height)? {
                 if height > resume_cursor {
                     if !self.allow_missing_local_stf_prefix {
                         bail!(
@@ -519,19 +491,15 @@ where
                         );
                     }
 
-                    // The consumer's resume cursor (derived from the last
-                    // durably-observed proof/attestation, so equal to
-                    // `latest_proof_final_slot + 1` in zk mode) sits before the
-                    // first STF info this node actually has locally. This is
-                    // the expected shape when a node ran without a proof
-                    // pipeline and now starts one (e.g. a former replica taking
-                    // over leadership): observed proofs advanced the resume
-                    // cursor while no local STF infos were written. The slots
+                    // The consumer's resume cursor (derived from the last durably-observed
+                    // proof/attestation) sits before the first STF info this node actually has
+                    // locally. This is the expected shape when a node ran without a proof pipeline
+                    // and now starts one (e.g. a former replica taking over leadership). The slots
                     // in the gap will never be proven by this node.
                     tracing::warn!(
                         resume_cursor = %resume_cursor,
                         first_local_slot = %height,
-                        %write_rollup_height,
+                        %finalized_visible_height,
                         "Realigning STF-info notifier cursor: resume position sits before the first locally-materialized STF info. \
                          Slots in [{resume_cursor}, {height}) are not present locally and will be skipped. \
                          This usually means the node previously ran without the proof pipeline (e.g. as a replica)."
@@ -544,7 +512,7 @@ where
         }
 
         bail!(
-            "The `stf-info-manager` metadata says STF infos exist through slot {write_rollup_height}, \
+            "The `stf-info-manager` cutoff says STF infos exist through slot {finalized_visible_height}, \
              but none were found in the notify range starting at {resume_cursor}. \
              This is a bug. Please report it"
         );
@@ -557,23 +525,23 @@ where
     Witness: Serialize + DeserializeOwned,
 {
     /// Reads the next [`StateTransitionInfo`] from the Db.
-    /// This method will block if the channel is empty. This can happen if the producer of the STF info is slower than the consumer.
+    /// This method blocks if the channel is empty (the producer is slower than the consumer).
     /// Returns `Ok(None)` if the stf info for the given height has already been read and processed.
     /// Returns `anyhow::Error` if the channel is closed.
     pub async fn read_next(
         &mut self,
     ) -> anyhow::Result<Option<StateTransitionInfo<StateRoot, Witness, Da>>> {
-        if let Some(slot_number) = self.receiver.recv().await {
+        if let Some((slot_number, da_block_hash)) = self.receiver.recv().await {
             tracing::trace!(%slot_number, "Read next stf info");
             let next_height_to_receive = self.next_height_to_receive();
             tracing::trace!(%next_height_to_receive, %slot_number, "Next height to receive");
 
-            // We need to ensure that the rollup height received is greater than the next expected height to
-            // ensure we don't see the same height multiple times.
+            // Ensure the received height is at or beyond the next expected height so we never
+            // process the same height twice.
             if slot_number >= next_height_to_receive {
-                let stf_info = self.get(slot_number)?.unwrap_or_else(|| {
-                    panic!("The `stf-info-manager` sender notified that the stf height {slot_number} is available but the transition is missing from proof manager DB.
-                    Please ensure that the `stf-info-manager` only notifies for heights up to `write_rollup_height`. This is a bug. Please report it")
+                let stf_info = self.get(slot_number, da_block_hash)?.unwrap_or_else(|| {
+                    panic!("The `stf-info-manager` sender notified that the stf height {slot_number} (canonical fork) is available but the transition is missing from the proof manager DB.
+                    Please ensure that the `stf-info-manager` only notifies for heights up to the finalized-visible cutoff. This is a bug. Please report it")
                 });
 
                 return Ok(Some(stf_info));
@@ -585,12 +553,15 @@ where
         bail!("Channel closed. Impossible to read next stf info")
     }
 
-    /// Gets [`StateTransitionInfo`] for the corresponding slot number
+    /// Gets [`StateTransitionInfo`] for the corresponding `(slot, DA block hash)`.
     fn get(
         &self,
         slot_number: SlotNumber,
+        da_block_hash: DbHash,
     ) -> anyhow::Result<Option<StateTransitionInfo<StateRoot, Witness, Da>>> {
-        let maybe_stored_stf_info = self.proof_manager_db.get_stf_info(slot_number)?;
+        let maybe_stored_stf_info = self
+            .proof_manager_db
+            .get_stf_info(slot_number, da_block_hash)?;
 
         if let Some(stored_stf_info) = maybe_stored_stf_info {
             Ok(Some(bincode::deserialize(&stored_stf_info.data[..])?))
@@ -604,83 +575,54 @@ where
         self.next_height_to_receive.get()
     }
 
-    /// Increment next height to receive by the requested amount and immediately persist it.
-    pub fn inc_next_height_to_receive_by_and_persist(
-        &self,
-        amount: u64,
-    ) -> anyhow::Result<SlotNumber> {
-        self.cursor_handle()
-            .inc_next_height_to_receive_by_and_persist(amount)
+    /// Increment next height to receive by the requested amount (in-memory only), returning the
+    /// previous value.
+    pub fn inc_next_height_to_receive_by(&self, amount: u64) -> SlotNumber {
+        self.cursor_handle().inc_next_height_to_receive_by(amount)
     }
 
-    /// Returns a cloneable handle that can advance `next_height_to_receive`
-    /// from a different task without requiring access to the full
-    /// [`Receiver`]. Used by the proof-aggregation pipeline to keep the
-    /// cursor advance co-located with the actual proof publication, while
-    /// the channel-draining `read_next` still happens on the intake task.
+    /// Returns a cloneable handle that can advance `next_height_to_receive` from a different task
+    /// without requiring access to the full [`Receiver`]. Used by the proof-aggregation pipeline
+    /// to keep the cursor advance co-located with the actual proof publication, while the
+    /// channel-draining `read_next` still happens on the intake task.
     pub fn cursor_handle(&self) -> CursorHandle {
         CursorHandle {
             next_height_to_receive: self.next_height_to_receive.clone(),
-            proof_manager_db: self.proof_manager_db.clone(),
         }
     }
 }
 
 /// A clonable handle over the [`Receiver`]'s `next_height_to_receive` cursor.
 ///
-/// The cursor doubles as the prune cutoff for materialized STF infos
-/// (see `prune_entries`), so it MUST only be advanced over slots that the
-/// consumer has finished with — either because their proof has been durably
-/// published, or because they have been intentionally abandoned (e.g. slots
-/// inside a resync window that the prover has decided to skip). Holding this
-/// handle in a non-receiver task lets the consumer do that advance without
-/// giving the task the rest of the [`Receiver`].
+/// The cursor doubles as the prune cutoff for materialized STF infos, so it MUST only be advanced
+/// over slots that the consumer has finished with — either because their proof has been durably
+/// published, or because they have been intentionally abandoned (e.g. slots inside a resync window
+/// that the prover has decided to skip). Holding this handle in a non-receiver task lets the
+/// consumer do that advance without giving the task the rest of the [`Receiver`].
 #[derive(Clone)]
 pub struct CursorHandle {
     next_height_to_receive: Arc<Cursor>,
-    proof_manager_db: ProofManagerDb,
 }
 
 impl CursorHandle {
-    /// Increment next height to receive by the requested amount, returning the previous value.
+    /// Increment next height to receive by the requested amount (in-memory only), returning the
+    /// previous value.
+    ///
+    /// The cursor is never persisted: on restart it is recomputed as `latest_proof_final_slot + 1`.
+    /// Any re-proof of an already-posted window is tolerated because the node always runs with
+    /// `--start-fresh-outer-proof-on-resync`, which replaces the previous outer proof.
     pub fn inc_next_height_to_receive_by(&self, amount: u64) -> SlotNumber {
         self.next_height_to_receive.fetch_add(amount)
     }
 
-    /// Increment next height to receive by the requested amount and persist the
-    /// new value to disk.
-    ///
-    /// This method must be called after successful aggregated proof posting to DA.
-    /// It fixes the duplicate proof submission bug by ensuring the persisted value
-    /// is updated immediately, not waiting for the next ledger commit.
-    ///
-    /// Returns the previous value.
-    pub fn inc_next_height_to_receive_by_and_persist(
-        &self,
-        amount: u64,
-    ) -> anyhow::Result<SlotNumber> {
-        // The entire read-modify-store runs under the cursor write lock, so a
-        // concurrent increment from the intake skip-advance or the sender's
-        // realign cannot be lost inside this window. Persisting happens before
-        // the in-memory advance: if the write fails, the in-memory value stays
-        // consistent with disk.
-        let old_value = self
-            .next_height_to_receive
-            .advance_and_persist(amount, |new_value| {
-                self.proof_manager_db
-                    .set_next_height_to_receive(new_value)?;
-                #[cfg(test)]
-                CrashLocation::AfterPersistingProofManagerNextHeight.crash_if_env_set();
-                Ok(())
-            })?;
-
-        Ok(old_value)
+    /// Current in-memory next height to receive.
+    pub fn next_height_to_receive(&self) -> SlotNumber {
+        self.next_height_to_receive.get()
     }
 }
 
 #[cfg(test)]
 mod tests {
-    use std::panic::AssertUnwindSafe;
     use std::path::Path;
 
     use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
@@ -691,24 +633,18 @@ mod tests {
 
     use super::*;
     use crate::processes::StateTransitionInfo;
-    use crate::test_hooks::{CrashLocation, CRASH_ENV_NAME};
 
     type StateRoot = Vec<u8>;
     type Witness = Vec<u8>;
 
-    struct CrashEnvGuard;
-
-    impl CrashEnvGuard {
-        fn set(location: CrashLocation) -> Self {
-            location.set_crash_env();
-            Self
-        }
+    /// Canonical DA hash for a slot, matching the hash `make_stf_info` stamps on its header. Used
+    /// as the producer-side resolver in tests.
+    fn canonical_hash_for(slot: SlotNumber) -> DbHash {
+        [slot.get() as u8; 32]
     }
 
-    impl Drop for CrashEnvGuard {
-        fn drop(&mut self) {
-            std::env::remove_var(CRASH_ENV_NAME);
-        }
+    fn resolver() -> impl Fn(SlotNumber) -> anyhow::Result<Option<DbHash>> {
+        |slot| Ok(Some(canonical_hash_for(slot)))
     }
 
     #[allow(clippy::type_complexity)]
@@ -783,120 +719,207 @@ mod tests {
             setup(path, max_channel_size, max_nb_of_infos_in_db)?;
 
         sender
-            .startup_notify_about_infos_from_db(ledger_head, ledger_head, &InfiniteHeight)
+            .startup_notify_about_infos_from_db(
+                ledger_head,
+                ledger_head,
+                &InfiniteHeight,
+                resolver(),
+            )
             .await?;
 
         Ok((proof_manager_db, sender, receiver))
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_stf_info_start_stop_db() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 10;
-
-        // Write some data to the Db.
-        {
-            let (_proof_manager_db, mut sender, _receiver) = setup_with_startup(
-                temp_dir.path(),
-                channel_size,
-                max_nb_of_infos_in_db,
-                SlotNumber::new(channel_size),
-            )
-            .await?;
-
-            for height in 1..=channel_size {
-                let stf_info = make_stf_info(height);
-                sender.stage_stf_info(&stf_info).await?;
-                sender.commit_stf_info(stf_info.slot_number()).await?;
-                sender.notify(stf_info.slot_number()).await?;
-            }
-        }
-
-        // Restart the Db and check that we can read the previously written data.
-        {
-            let (_proof_manager_db, sender, mut receiver) = setup_with_startup(
-                temp_dir.path(),
-                channel_size,
-                max_nb_of_infos_in_db,
-                SlotNumber::new(channel_size),
-            )
-            .await?;
-
-            for i in 1..=channel_size {
-                let stf_info = receiver.read_next().await?.unwrap();
-                assert_eq!(stf_info.slot_number().get(), i);
-            }
-
-            assert_eq!(sender.get_oldest_slot_number()?.get(), 1);
-        }
-
-        // We haven't committed the reads above so after restart we will read the same data.
-        {
-            let (_proof_manager_db, mut sender, mut receiver) = setup_with_startup(
-                temp_dir.path(),
-                channel_size,
-                max_nb_of_infos_in_db,
-                SlotNumber::new(channel_size + 2),
-            )
-            .await?;
-
-            for i in 1..=channel_size {
-                let stf_info = receiver.read_next().await?.unwrap();
-                assert_eq!(stf_info.slot_number().get(), i);
-            }
-
-            assert_eq!(sender.get_oldest_slot_number()?.get(), 1);
-
-            // Commit new data using the persist method
-            receiver.inc_next_height_to_receive_by_and_persist(2)?;
-
-            let stf_info = make_stf_info(channel_size + 1);
-            sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number()).await?;
-            sender.notify(stf_info.slot_number()).await?;
-
-            let stf_info = make_stf_info(channel_size + 2);
-            sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number()).await?;
-            sender.notify(stf_info.slot_number()).await?;
-
-            assert_eq!(sender.get_oldest_slot_number()?.get(), 2);
-        }
-
-        // Now the reads are visible because we used inc_next_height_to_receive_by_and_persist.
-        {
-            let (_proof_manager_db, sender, mut receiver) = setup_with_startup(
-                temp_dir.path(),
-                channel_size,
-                max_nb_of_infos_in_db,
-                SlotNumber::new(channel_size + 2),
-            )
-            .await?;
-
-            let stf_info = receiver.read_next().await?.unwrap();
-            assert_eq!(stf_info.slot_number().get(), 3);
-            assert_eq!(sender.get_oldest_slot_number()?.get(), 2);
-        }
-
+    /// Stage + commit + notify a single canonical slot.
+    async fn produce(
+        sender: &mut Sender<StateRoot, Witness, MockDaSpec>,
+        height: u64,
+    ) -> anyhow::Result<()> {
+        let stf_info = make_stf_info(height);
+        sender.stage_stf_info(&stf_info).await?;
+        sender.commit_stf_info(stf_info.slot_number()).await?;
+        sender.notify(stf_info.slot_number(), resolver()).await?;
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_stf_info_restart_realigns_missing_local_prefix_without_previous_proof(
-    ) -> anyhow::Result<()> {
+    async fn test_stf_info_channel_roundtrip() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let channel_size = 10;
-        let max_nb_of_infos_in_db = 10;
+        let max_nb = 100;
 
-        // Simulate a node that starts proving without a previous outer proof:
-        // the local node only has STF infos starting at 5, and the first
-        // aggregation may legitimately start at the first local slot.
+        let (_db, mut sender, mut receiver) = setup_with_startup(
+            temp_dir.path(),
+            channel_size,
+            max_nb,
+            SlotNumber::new(channel_size),
+        )
+        .await?;
+
+        for height in 1..channel_size {
+            produce(&mut sender, height).await?;
+        }
+
+        for height in 1..channel_size {
+            let stf_info = receiver.read_next().await?.unwrap();
+            receiver.inc_next_height_to_receive_by(1);
+            assert_eq!(stf_info.slot_number().get(), height);
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_read_selects_canonical_fork() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let (db, mut sender, mut receiver) =
+            setup_with_startup(temp_dir.path(), 10, 100, SlotNumber::new(3)).await?;
+
+        // Stage an orphan fork at slot 1 (different hash), then the canonical slot 1.
+        let orphan = make_stf_info_with_hash(1, [0xEE; 32]);
+        sender.stage_stf_info(&orphan).await?;
+        produce(&mut sender, 1).await?;
+
+        // Both rows exist in the DB.
+        assert!(db.get_stf_info(SlotNumber::ONE, [0xEE; 32])?.is_some());
+        assert!(db
+            .get_stf_info(SlotNumber::ONE, canonical_hash_for(SlotNumber::ONE))?
+            .is_some());
+
+        // The consumer is notified with the canonical hash and reads the canonical row.
+        let received = receiver.read_next().await?.unwrap();
+        assert_eq!(received.slot_number(), SlotNumber::ONE);
+        assert_eq!(received.da_block_header().hash, MockHash([1u8; 32]));
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_startup_recompute_and_reread_uncommitted() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb = 10;
+
         {
-            let (_proof_manager_db, sender, _receiver) =
-                setup_with_resume(temp_dir.path(), channel_size, max_nb_of_infos_in_db, None)?;
+            let (_db, mut sender, _receiver) = setup_with_startup(
+                temp_dir.path(),
+                channel_size,
+                max_nb,
+                SlotNumber::new(channel_size),
+            )
+            .await?;
+            for height in 1..=channel_size {
+                produce(&mut sender, height).await?;
+            }
+        }
 
+        // Restart: cursor is recomputed (no proof => genesis), so we re-read from slot 1.
+        {
+            let (_db, _sender, mut receiver) = setup_with_startup(
+                temp_dir.path(),
+                channel_size,
+                max_nb,
+                SlotNumber::new(channel_size),
+            )
+            .await?;
+            for i in 1..=channel_size {
+                let stf_info = receiver.read_next().await?.unwrap();
+                assert_eq!(stf_info.slot_number().get(), i);
+            }
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_reprove_resumes_from_latest_proof_after_restart() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+
+        // First run: a previous outer proof reached slot 100; stage slot 101.
+        {
+            let (_db, mut sender, _receiver) = setup_with_resume_and_missing_prefix_policy(
+                temp_dir.path(),
+                10,
+                100,
+                Some(SlotNumber::new(100)),
+                true,
+            )?;
+            assert_eq!(sender.next_height_to_receive(), SlotNumber::new(101));
+            produce(&mut sender, 101).await?;
+        }
+
+        // Restart with the latest accepted proof still at 100 (a crash lost the just-posted one):
+        // the in-memory cursor resumes at 101 and re-proves it.
+        {
+            let (_db, mut sender, mut receiver) = setup_with_resume_and_missing_prefix_policy(
+                temp_dir.path(),
+                10,
+                100,
+                Some(SlotNumber::new(100)),
+                true,
+            )?;
+            sender
+                .startup_notify_about_infos_from_db(
+                    SlotNumber::new(101),
+                    SlotNumber::new(101),
+                    &InfiniteHeight,
+                    resolver(),
+                )
+                .await?;
+            assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(101));
+            let received = receiver.read_next().await?.unwrap();
+            assert_eq!(received.slot_number(), SlotNumber::new(101));
+        }
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_empty_db_notify_is_noop() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let (_db, mut sender, _receiver) =
+            setup_with_startup(temp_dir.path(), 10, 100, SlotNumber::GENESIS).await?;
+
+        // No STF rows: finalized-visible cutoff is genesis, so notify sends nothing.
+        sender.notify(SlotNumber::new(5), resolver()).await?;
+        assert_eq!(sender.next_height_to_send, SlotNumber::ONE);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_pruning_advances_oldest() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 15;
+        let max_nb = 15;
+        let nb_infos = 30;
+
+        let (_db, mut sender, mut receiver) = setup_with_startup(
+            temp_dir.path(),
+            channel_size,
+            max_nb,
+            SlotNumber::new(nb_infos),
+        )
+        .await?;
+
+        for height in 1..nb_infos {
+            produce(&mut sender, height).await?;
+            receiver.read_next().await?.unwrap();
+            receiver.inc_next_height_to_receive_by(1);
+        }
+
+        // With finalized_visible ~= nb_infos-1 and max_nb retained, the oldest surviving slot is
+        // (nb_infos-1) - max_nb.
+        let oldest = sender.get_oldest_slot_number()?;
+        assert_eq!(oldest.get(), (nb_infos - 1) - max_nb);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_realign_missing_prefix_without_previous_proof() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb = 10;
+
+        // Fresh node (no proof); the local node only has STF infos starting at 5.
+        {
+            let (_db, mut sender, _receiver) =
+                setup_with_resume(temp_dir.path(), channel_size, max_nb, None)?;
             for height in 5..=6 {
                 let stf_info = make_stf_info(height);
                 sender.stage_stf_info(&stf_info).await?;
@@ -905,42 +928,39 @@ mod tests {
         }
 
         {
-            let (_proof_manager_db, mut sender, mut receiver) =
-                setup_with_resume(temp_dir.path(), channel_size, max_nb_of_infos_in_db, None)?;
-
+            let (_db, mut sender, mut receiver) =
+                setup_with_resume(temp_dir.path(), channel_size, max_nb, None)?;
             sender
                 .startup_notify_about_infos_from_db(
                     SlotNumber::new(6),
                     SlotNumber::new(6),
                     &InfiniteHeight,
+                    resolver(),
                 )
                 .await?;
 
-            let stf_info = receiver.read_next().await?.unwrap();
-            assert_eq!(stf_info.slot_number().get(), 5);
-
-            let stf_info = receiver.read_next().await?.unwrap();
-            assert_eq!(stf_info.slot_number().get(), 6);
+            assert_eq!(receiver.read_next().await?.unwrap().slot_number().get(), 5);
+            assert_eq!(receiver.read_next().await?.unwrap().slot_number().get(), 6);
         }
-
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_stf_info_restart_rejects_missing_local_prefix_with_previous_proof(
-    ) -> anyhow::Result<()> {
+    async fn test_realign_rejects_missing_prefix_with_previous_proof() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let channel_size = 10;
-        let max_nb_of_infos_in_db = 10;
+        let max_nb = 10;
 
+        // Previous proof at slot 2, but the local node only has STF infos starting at 5, and the
+        // missing-prefix policy is disallowed (flag off).
         {
-            let (_proof_manager_db, sender, _receiver) = setup_with_resume(
+            let (_db, mut sender, _receiver) = setup_with_resume_and_missing_prefix_policy(
                 temp_dir.path(),
                 channel_size,
-                max_nb_of_infos_in_db,
+                max_nb,
                 Some(SlotNumber::new(2)),
+                false,
             )?;
-
             for height in 5..=6 {
                 let stf_info = make_stf_info(height);
                 sender.stage_stf_info(&stf_info).await?;
@@ -949,49 +969,46 @@ mod tests {
         }
 
         {
-            let (_proof_manager_db, mut sender, _receiver) = setup_with_resume(
+            let (_db, mut sender, _receiver) = setup_with_resume_and_missing_prefix_policy(
                 temp_dir.path(),
                 channel_size,
-                max_nb_of_infos_in_db,
+                max_nb,
                 Some(SlotNumber::new(2)),
+                false,
             )?;
-
             let err = sender
                 .startup_notify_about_infos_from_db(
                     SlotNumber::new(6),
                     SlotNumber::new(6),
                     &InfiniteHeight,
+                    resolver(),
                 )
                 .await
                 .expect_err("missing local prefix must be rejected when restoring an outer proof");
-
             assert!(
                 err.to_string()
                     .contains("requires recursive proof continuity"),
                 "unexpected error: {err:?}"
             );
         }
-
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_stf_info_restart_realigns_missing_local_prefix_with_fresh_outer_proof(
-    ) -> anyhow::Result<()> {
+    async fn test_realign_missing_prefix_with_fresh_outer_proof() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let channel_size = 10;
-        let max_nb_of_infos_in_db = 10;
+        let max_nb = 10;
 
+        // Previous proof at slot 2, local infos start at 5, but fresh-outer policy allows the gap.
         {
-            let (_proof_manager_db, sender, _receiver) =
-                setup_with_resume_and_missing_prefix_policy(
-                    temp_dir.path(),
-                    channel_size,
-                    max_nb_of_infos_in_db,
-                    Some(SlotNumber::new(2)),
-                    true,
-                )?;
-
+            let (_db, mut sender, _receiver) = setup_with_resume_and_missing_prefix_policy(
+                temp_dir.path(),
+                channel_size,
+                max_nb,
+                Some(SlotNumber::new(2)),
+                true,
+            )?;
             for height in 5..=6 {
                 let stf_info = make_stf_info(height);
                 sender.stage_stf_info(&stf_info).await?;
@@ -1000,334 +1017,81 @@ mod tests {
         }
 
         {
-            let (_proof_manager_db, mut sender, mut receiver) =
-                setup_with_resume_and_missing_prefix_policy(
-                    temp_dir.path(),
-                    channel_size,
-                    max_nb_of_infos_in_db,
-                    Some(SlotNumber::new(2)),
-                    true,
-                )?;
-
+            let (_db, mut sender, mut receiver) = setup_with_resume_and_missing_prefix_policy(
+                temp_dir.path(),
+                channel_size,
+                max_nb,
+                Some(SlotNumber::new(2)),
+                true,
+            )?;
             sender
                 .startup_notify_about_infos_from_db(
                     SlotNumber::new(6),
                     SlotNumber::new(6),
                     &InfiniteHeight,
+                    resolver(),
                 )
                 .await?;
-
-            let stf_info = receiver.read_next().await?.unwrap();
-            assert_eq!(stf_info.slot_number().get(), 5);
-
-            let stf_info = receiver.read_next().await?.unwrap();
-            assert_eq!(stf_info.slot_number().get(), 6);
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_stf_info_channel() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
-
-        let (_proof_manager_db, mut sender, mut receiver) = setup_with_startup(
-            temp_dir.path(),
-            channel_size,
-            max_nb_of_infos_in_db,
-            SlotNumber::new(channel_size),
-        )
-        .await?;
-
-        // Fill the db.
-        for height in 1..channel_size {
-            let stf_info = make_stf_info(height);
-            sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number()).await?;
-            sender.notify(stf_info.slot_number()).await?;
-        }
-
-        // Read the data from the db.
-        for height in 1..channel_size {
-            let stf_info = receiver.read_next().await?.unwrap();
-            receiver.next_height_to_receive.fetch_add(1);
-
-            assert_eq!(stf_info.slot_number().get(), height);
+            assert_eq!(receiver.read_next().await?.unwrap().slot_number().get(), 5);
+            assert_eq!(receiver.read_next().await?.unwrap().slot_number().get(), 6);
         }
         Ok(())
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_stf_info_drop_sender() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
+    #[test]
+    fn test_runner_channel_requires_flag_when_resuming_from_proof() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let proof_manager_db = ProofManagerDb::open(temp_dir.path()).unwrap();
 
-        let (_proof_manager_db, mut sender, mut receiver) = setup_with_startup(
-            temp_dir.path(),
-            channel_size,
-            max_nb_of_infos_in_db,
-            SlotNumber::new(channel_size),
-        )
-        .await?;
-
-        for height in 1..3 {
-            let stf_info = make_stf_info(height);
-            sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number()).await?;
-            sender.notify(stf_info.slot_number()).await?;
-        }
-
-        drop(sender);
-
-        for height in 1..3 {
-            let stf_info = receiver.read_next().await?.unwrap();
-            receiver.next_height_to_receive.fetch_add(1);
-
-            assert_eq!(stf_info.slot_number().get(), height);
-        }
-
-        let stf_info = receiver.read_next().await;
-        receiver.next_height_to_receive.fetch_add(1);
-        assert!(stf_info.is_err());
-
-        Ok(())
+        let result = new_stf_info_channel_for_runner::<StateRoot, Witness, MockDaSpec>(
+            proof_manager_db,
+            NonZero::new(10).unwrap(),
+            NonZero::new(100).unwrap(),
+            Some(SlotNumber::new(5)),
+            false,
+        );
+        let err = match result {
+            Ok(_) => panic!("must require the resync flag when resuming from an outer proof"),
+            Err(e) => e,
+        };
+        assert!(
+            err.to_string()
+                .contains("start-fresh-outer-proof-on-resync"),
+            "unexpected error: {err:?}"
+        );
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_stf_info_channel_concurrent() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
-
-        let (_proof_manager_db, mut sender, mut receiver) = setup_with_startup(
-            temp_dir.path(),
-            channel_size,
-            max_nb_of_infos_in_db,
-            SlotNumber::new(channel_size),
-        )
-        .await?;
-
-        tokio::spawn(async move {
-            // Fill the db.
-            for height in 1..=channel_size {
-                let stf_info = make_stf_info(height);
-                sender.stage_stf_info(&stf_info).await.unwrap();
-                sender
-                    .commit_stf_info(stf_info.slot_number())
-                    .await
-                    .unwrap();
-                sender.notify(stf_info.slot_number()).await.unwrap();
-            }
-        });
-
-        // Read the data from the db.
-        for height in 1..=channel_size {
-            let stf_info = receiver.read_next().await?.unwrap();
-            receiver.next_height_to_receive.fetch_add(1);
-
-            assert_eq!(stf_info.slot_number().get(), height);
-        }
-        Ok(())
+    #[test]
+    fn test_load_next_height_to_receive() {
+        assert_eq!(load_next_height_to_receive(None), SlotNumber::ONE);
+        assert_eq!(
+            load_next_height_to_receive(Some(SlotNumber::new(100))),
+            SlotNumber::new(101)
+        );
     }
 
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_stf_info_in_db() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
-
-        let (_proof_manager_db, mut sender, mut receiver) = setup_with_startup(
-            temp_dir.path(),
-            channel_size,
-            max_nb_of_infos_in_db,
-            SlotNumber::new(channel_size),
-        )
-        .await?;
-
-        // At the beginning the db should be empty.
-        let fetched_stf_info = receiver.get(SlotNumber::ONE)?;
-        assert!(fetched_stf_info.is_none());
-
-        // Insert stf info two times.
-        assert_stf_in_db(1, &mut sender, &mut receiver).await;
-        assert_stf_in_db(2, &mut sender, &mut receiver).await;
-
-        // Check if the first stf is still in the db.
-        let fetched_stf_info = receiver.get(SlotNumber::ONE)?;
-        assert!(fetched_stf_info.is_some());
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_stf_info_db_pruning() -> anyhow::Result<()> {
-        struct TestCase {
-            channel_size: u64,
-            max_nb_of_infos_in_db: u64,
-            nb_of_stf_infos: u64,
-        }
-
-        let test_cases = vec![
-            TestCase {
-                channel_size: 15,
-                max_nb_of_infos_in_db: 20,
-                nb_of_stf_infos: 30,
-            },
-            TestCase {
-                channel_size: 15,
-                max_nb_of_infos_in_db: 15,
-                nb_of_stf_infos: 30,
-            },
-            TestCase {
-                channel_size: 1,
-                max_nb_of_infos_in_db: 1,
-                nb_of_stf_infos: 2,
-            },
-        ];
-
-        for test_case in test_cases {
-            let temp_dir = tempfile::tempdir()?;
-
-            let expected_oldest_height = std::cmp::max(
-                test_case.nb_of_stf_infos - test_case.max_nb_of_infos_in_db - 1,
-                1,
-            );
-
-            let (_proof_manager_db, mut sender, mut receiver) = setup_with_startup(
-                temp_dir.path(),
-                test_case.channel_size,
-                test_case.max_nb_of_infos_in_db,
-                SlotNumber::new(test_case.nb_of_stf_infos),
-            )
-            .await?;
-
-            // Fill the db.
-            for height in 1..test_case.nb_of_stf_infos {
-                let stf_info = make_stf_info(height);
-                sender.stage_stf_info(&stf_info).await?;
-                sender.commit_stf_info(stf_info.slot_number()).await?;
-                sender.notify(stf_info.slot_number()).await?;
-                receiver.read_next().await?.unwrap();
-                receiver.next_height_to_receive.fetch_add(1);
-            }
-
-            let oldest_height = sender.get_oldest_slot_number()?;
-            assert_eq!(oldest_height.get(), expected_oldest_height);
-
-            // Check if the old STF infos are pruned.
-            for height in 1..test_case.nb_of_stf_infos {
-                let stf_info: Option<StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec>> =
-                    receiver.get(SlotNumber::new(height))?;
-
-                if height < oldest_height.get() {
-                    // The old data was deleted from the Db.
-                    assert!(stf_info.is_none());
-                } else {
-                    assert!(stf_info.is_some());
-                }
-            }
-        }
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_inc_next_height_to_receive_by_and_persist() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
-
-        // Write some data and then use persist method
-        {
-            let (proof_manager_db, sender, receiver) = setup_with_startup(
-                temp_dir.path(),
-                channel_size,
-                max_nb_of_infos_in_db,
-                SlotNumber::new(10),
-            )
-            .await?;
-
-            // Write some STF info
-            for height in 1..=5 {
-                let stf_info = make_stf_info(height);
-                sender.stage_stf_info(&stf_info).await?;
-            }
-
-            // Use the persist method to advance next_height_to_receive
-            let old_value = receiver.inc_next_height_to_receive_by_and_persist(3)?;
-            assert_eq!(old_value.get(), 1);
-
-            // Verify it's persisted to DB
-            let persisted = proof_manager_db.get_next_height_to_receive()?.unwrap();
-            assert_eq!(persisted.get(), 4);
-        }
-
-        // After restart, the persisted value should still be there
-        {
-            let (proof_manager_db, _sender, receiver) = setup_with_startup(
-                temp_dir.path(),
-                channel_size,
-                max_nb_of_infos_in_db,
-                SlotNumber::new(10),
-            )
-            .await?;
-
-            // The next height to receive should be 4 (persisted from previous run)
-            assert_eq!(receiver.next_height_to_receive().get(), 4);
-            assert_eq!(
-                proof_manager_db
-                    .get_next_height_to_receive()?
-                    .unwrap()
-                    .get(),
-                4
-            );
-        }
-
-        Ok(())
-    }
-
-    /// Regression test for the shared-cursor race: the aggregator's
-    /// `inc_next_height_to_receive_by_and_persist` (a load-persist-store
-    /// sequence) and the intake's `inc_next_height_to_receive_by` (a fetch_add)
-    /// advance the *same* cursor from independent tasks. Before the cursor write
-    /// lock, the non-atomic store could overwrite a concurrent fetch_add, losing
-    /// increments. With every writer serialized, no increment may be lost.
     #[test]
     fn test_concurrent_cursor_advances_lose_no_increments() {
         let temp_dir = tempfile::tempdir().unwrap();
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
-
-        let (_proof_manager_db, _sender, receiver) =
-            setup(temp_dir.path(), channel_size, max_nb_of_infos_in_db).unwrap();
+        let (_db, _sender, receiver) = setup(temp_dir.path(), 10, 100).unwrap();
 
         let start = receiver.next_height_to_receive().get();
         const ITERS: u64 = 2_000;
 
-        // Two writers on one shared cursor, mirroring the intake skip-advance and
-        // the aggregator persist running as separate tasks.
-        let skip_handle = receiver.cursor_handle();
-        let persist_handle = receiver.cursor_handle();
-
-        let skip = std::thread::spawn(move || {
+        let a = receiver.cursor_handle();
+        let b = receiver.cursor_handle();
+        let ta = std::thread::spawn(move || {
             for _ in 0..ITERS {
-                skip_handle.inc_next_height_to_receive_by(1);
+                a.inc_next_height_to_receive_by(1);
             }
         });
-        let persist = std::thread::spawn(move || {
+        let tb = std::thread::spawn(move || {
             for _ in 0..ITERS {
-                persist_handle
-                    .inc_next_height_to_receive_by_and_persist(1)
-                    .unwrap();
+                b.inc_next_height_to_receive_by(1);
             }
         });
-
-        skip.join().unwrap();
-        persist.join().unwrap();
+        ta.join().unwrap();
+        tb.join().unwrap();
 
         assert_eq!(
             receiver.next_height_to_receive().get(),
@@ -1337,307 +1101,39 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_restart_recovers_after_crash_persisting_next_height() -> anyhow::Result<()> {
+    async fn test_drop_sender_closes_channel() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
+        let (_db, mut sender, mut receiver) =
+            setup_with_startup(temp_dir.path(), 10, 100, SlotNumber::new(10)).await?;
 
-        {
-            let (_proof_manager_db, sender, receiver) = setup_with_startup(
-                temp_dir.path(),
-                channel_size,
-                max_nb_of_infos_in_db,
-                SlotNumber::ONE,
-            )
-            .await?;
-
-            let stf_info = make_stf_info(1);
-            sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number()).await?;
-
-            let _crash_guard =
-                CrashEnvGuard::set(CrashLocation::AfterPersistingProofManagerNextHeight);
-            let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
-                receiver
-                    .inc_next_height_to_receive_by_and_persist(1)
-                    .unwrap();
-            }));
-            assert!(
-                result.is_err(),
-                "expected crash after persisting next height"
-            );
+        for height in 1..3 {
+            produce(&mut sender, height).await?;
         }
+        drop(sender);
 
-        {
-            let (proof_manager_db, mut sender, receiver) =
-                setup(temp_dir.path(), channel_size, max_nb_of_infos_in_db)?;
-            sender
-                .startup_notify_about_infos_from_db(
-                    SlotNumber::ONE,
-                    SlotNumber::ONE,
-                    &InfiniteHeight,
-                )
-                .await?;
-
-            assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(2));
-            assert_eq!(sender.next_height_to_send, SlotNumber::new(2));
-            assert_eq!(
-                proof_manager_db.get_next_height_to_receive()?,
-                Some(SlotNumber::new(2))
-            );
+        for height in 1..3 {
+            let stf_info = receiver.read_next().await?.unwrap();
+            receiver.inc_next_height_to_receive_by(1);
+            assert_eq!(stf_info.slot_number().get(), height);
         }
-
+        assert!(receiver.read_next().await.is_err());
         Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_startup_allows_next_height_to_receive_one_ahead_of_write_height(
-    ) -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
-
-        {
-            let (_proof_manager_db, mut sender, mut receiver) = setup_with_startup(
-                temp_dir.path(),
-                channel_size,
-                max_nb_of_infos_in_db,
-                SlotNumber::ONE,
-            )
-            .await?;
-
-            let stf_info = make_stf_info(1);
-            sender.stage_stf_info(&stf_info).await?;
-            sender.commit_stf_info(stf_info.slot_number()).await?;
-            sender.notify(stf_info.slot_number()).await?;
-
-            let received = receiver.read_next().await?.unwrap();
-            assert_eq!(received.slot_number(), SlotNumber::ONE);
-            receiver.inc_next_height_to_receive_by_and_persist(1)?;
-        }
-
-        {
-            let (_proof_manager_db, sender, receiver) = setup_with_startup(
-                temp_dir.path(),
-                channel_size,
-                max_nb_of_infos_in_db,
-                SlotNumber::ONE,
-            )
-            .await?;
-
-            assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(2));
-            assert_eq!(sender.next_height_to_send, SlotNumber::new(2));
-        }
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_startup_resyncs_in_memory_next_height_after_recovery() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
-
-        {
-            let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
-            proof_manager_db.set_write_height(SlotNumber::new(10))?;
-            proof_manager_db.set_next_height_to_receive(SlotNumber::new(12))?;
-        }
-
-        // Re-open channel so stale value is read from db before startup recovery runs.
-        let (proof_manager_db, mut sender, receiver) =
-            setup(temp_dir.path(), channel_size, max_nb_of_infos_in_db)?;
-        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(12));
-        assert_eq!(sender.next_height_to_send, SlotNumber::new(12));
-
-        // Recovery truncates write_height to 7 and next_height_to_receive to 8.
-        sender
-            .startup_notify_about_infos_from_db(
-                SlotNumber::new(7),
-                SlotNumber::new(7),
-                &InfiniteHeight,
-            )
-            .await?;
-
-        assert_eq!(
-            proof_manager_db.get_write_height()?,
-            Some(SlotNumber::new(7))
-        );
-        assert_eq!(
-            proof_manager_db.get_next_height_to_receive()?,
-            Some(SlotNumber::new(8))
-        );
-        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(8));
-        assert_eq!(sender.next_height_to_send, SlotNumber::new(8));
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_future_only_bootstrap_accepts_next_height_greater_than_write_height(
-    ) -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
-
-        {
-            let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
-            proof_manager_db.set_write_height(SlotNumber::new(5))?;
-            proof_manager_db.set_next_height_to_receive(SlotNumber::new(8))?;
-            proof_manager_db.set_oldest_height(SlotNumber::new(8))?;
-        }
-
-        let (_proof_manager_db, mut sender, mut receiver) =
-            setup(temp_dir.path(), channel_size, max_nb_of_infos_in_db)?;
-
-        sender
-            .startup_notify_about_infos_from_db(
-                SlotNumber::new(7),
-                SlotNumber::new(5),
-                &InfiniteHeight,
-            )
-            .await?;
-
-        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(8));
-        assert_eq!(sender.next_height_to_send, SlotNumber::new(8));
-
-        let stf_info = make_stf_info(8);
-        sender.stage_stf_info(&stf_info).await?;
-        sender.commit_stf_info(stf_info.slot_number()).await?;
-        sender.notify(stf_info.slot_number()).await?;
-
-        let received = receiver.read_next().await?.unwrap();
-        assert_eq!(received.slot_number(), SlotNumber::new(8));
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_startup_uses_latest_proof_cursor_as_lower_bound() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
-
-        {
-            let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
-            proof_manager_db.put_stf_info(SlotNumber::new(101), &make_stored_stf_info(101))?;
-            proof_manager_db.set_write_height(SlotNumber::new(101))?;
-            proof_manager_db.set_next_height_to_receive(SlotNumber::new(50))?;
-            proof_manager_db.set_oldest_height(SlotNumber::new(50))?;
-        }
-
-        let (proof_manager_db, mut sender, mut receiver) = setup_with_resume(
-            temp_dir.path(),
-            channel_size,
-            max_nb_of_infos_in_db,
-            Some(SlotNumber::new(100)),
-        )?;
-
-        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(101));
-        assert_eq!(sender.next_height_to_send, SlotNumber::new(101));
-        assert_eq!(
-            proof_manager_db.get_next_height_to_receive()?,
-            Some(SlotNumber::new(101))
-        );
-
-        sender
-            .startup_notify_about_infos_from_db(
-                SlotNumber::new(101),
-                SlotNumber::new(101),
-                &InfiniteHeight,
-            )
-            .await?;
-
-        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(101));
-        assert_eq!(sender.next_height_to_send, SlotNumber::new(102));
-        assert_eq!(
-            proof_manager_db.get_next_height_to_receive()?,
-            Some(SlotNumber::new(101))
-        );
-
-        let received = receiver.read_next().await?.unwrap();
-        assert_eq!(received.slot_number(), SlotNumber::new(101));
-
-        Ok(())
-    }
-
-    #[tokio::test(flavor = "multi_thread")]
-    async fn test_startup_clamps_cursor_down_to_latest_proof() -> anyhow::Result<()> {
-        let temp_dir = tempfile::tempdir()?;
-        let channel_size = 10;
-        let max_nb_of_infos_in_db = 100;
-
-        // The persisted receive cursor (110) was advanced ahead at DA-post time, but the
-        // latest *accepted* aggregated proof only reached slot 100, so the restored outer
-        // aggregation host resumes at slot 101. Startup must clamp the resume cursor down
-        // to 101 — resuming at 110 would skip slots the outer host still expects to verify,
-        // producing a non-contiguous proof chain.
-        {
-            let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
-            proof_manager_db.put_stf_info(SlotNumber::new(110), &make_stored_stf_info(110))?;
-            proof_manager_db.set_write_height(SlotNumber::new(110))?;
-            proof_manager_db.set_next_height_to_receive(SlotNumber::new(110))?;
-            proof_manager_db.set_oldest_height(SlotNumber::new(110))?;
-        }
-
-        let (proof_manager_db, sender, receiver) = setup_with_resume(
-            temp_dir.path(),
-            channel_size,
-            max_nb_of_infos_in_db,
-            Some(SlotNumber::new(100)),
-        )?;
-
-        assert_eq!(receiver.next_height_to_receive(), SlotNumber::new(101));
-        assert_eq!(sender.next_height_to_send, SlotNumber::new(101));
-        assert_eq!(
-            proof_manager_db.get_next_height_to_receive()?,
-            Some(SlotNumber::new(101))
-        );
-
-        Ok(())
-    }
-
-    async fn assert_stf_in_db(
-        rollup_height: u64,
-        sender: &mut Sender<StateRoot, Witness, MockDaSpec>,
-        receiver: &mut Receiver<StateRoot, Witness, MockDaSpec>,
-    ) {
-        let original_state_transition_info = make_stf_info(rollup_height);
-
-        sender
-            .stage_stf_info(&original_state_transition_info)
-            .await
-            .unwrap();
-        sender
-            .commit_stf_info(original_state_transition_info.slot_number())
-            .await
-            .unwrap();
-        sender.notify(SlotNumber::new(rollup_height)).await.unwrap();
-
-        let fetched_stf_info = receiver
-            .get(SlotNumber::new(rollup_height))
-            .unwrap()
-            .unwrap();
-
-        assert_eq!(
-            get_header_hash(&original_state_transition_info),
-            get_header_hash(&fetched_stf_info)
-        );
-    }
-
-    fn make_stored_stf_info(height: u64) -> StoredStfInfo {
-        StoredStfInfo {
-            data: bincode::serialize(&make_stf_info(height)).unwrap(),
-        }
     }
 
     fn make_stf_info(height: u64) -> StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec> {
+        make_stf_info_with_hash(height, [height as u8; 32])
+    }
+
+    fn make_stf_info_with_hash(
+        height: u64,
+        hash: [u8; 32],
+    ) -> StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec> {
         StateTransitionInfo::new(StateTransitionWitness {
             initial_state_root: vec![1, 2, 3],
             final_state_root: vec![3, 4, 5],
             da_block_header: MockBlockHeader {
                 prev_hash: [0; 32].into(),
-                hash: MockHash([height as u8; 32]),
+                hash: MockHash(hash),
                 height,
                 time: Time::now(),
             },
@@ -1658,9 +1154,5 @@ mod tests {
             witness: vec![],
             slot_number: SlotNumber::new(height),
         })
-    }
-
-    fn get_header_hash(stf_info: &StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec>) -> MockHash {
-        stf_info.da_block_header().hash
     }
 }

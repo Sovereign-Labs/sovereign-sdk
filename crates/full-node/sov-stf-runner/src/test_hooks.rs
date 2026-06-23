@@ -11,8 +11,6 @@ pub(crate) enum CrashLocation {
     AfterStagingProofManagerStfInfo,
     /// Crash after finalizing LedgerDb but before committing ProofManagerDb metadata.
     AfterFinalizingLedgerBeforeProofManagerCommit,
-    /// Crash after persisting the proof manager receive cursor.
-    AfterPersistingProofManagerNextHeight,
 }
 
 impl CrashLocation {
@@ -21,9 +19,6 @@ impl CrashLocation {
             Self::AfterStagingProofManagerStfInfo => "after_staging_proof_manager_stf_info",
             Self::AfterFinalizingLedgerBeforeProofManagerCommit => {
                 "after_finalizing_ledger_before_proof_manager_commit"
-            }
-            Self::AfterPersistingProofManagerNextHeight => {
-                "after_persisting_proof_manager_next_height"
             }
         }
     }

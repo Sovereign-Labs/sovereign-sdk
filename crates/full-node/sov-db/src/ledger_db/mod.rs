@@ -22,7 +22,7 @@ use crate::schema::tables::{
 };
 use crate::schema::tables::{DiscardedBlobHahsByNumber, ProofReceiptByHash};
 use crate::schema::types::{
-    split_tx_for_storage, BatchNumber, DiscardedBlobNumber, EventKeyNumber, EventNumber,
+    split_tx_for_storage, BatchNumber, DbHash, DiscardedBlobNumber, EventKeyNumber, EventNumber,
     LatestFinalizedSlotSingleton, ProofUniqueId, StoredBatch, StoredDiscardedBlob, StoredSlot,
     StoredTransaction, TxNumber,
 };
@@ -557,6 +557,18 @@ impl LedgerDb {
             .expect(DB_LOCK_POISONED)
             .clone()
             .get_largest::<SlotByNumber>()
+    }
+
+    /// Get the canonical DA block hash for a rollup slot — the finalized-fork selector used by
+    /// the proof-manager STF-info queue. Returns `None` if the ledger has no slot at that height.
+    pub fn da_block_hash_for_slot(&self, slot: SlotNumber) -> anyhow::Result<Option<DbHash>> {
+        Ok(self
+            .db
+            .read()
+            .expect(DB_LOCK_POISONED)
+            .clone()
+            .get::<SlotByNumber>(&slot)?
+            .map(|stored_slot| stored_slot.hash))
     }
 
     /// Get the state root from the most recent committed slot, if any.

@@ -102,8 +102,10 @@ where
 
         tracing::debug!(%slot_number, %attestation_height, "Submitting attestation to DA");
 
-        self.stf_info_receiver
-            .inc_next_height_to_receive_by_and_persist(1)?;
+        // In-memory advance only. Optimistic mode never posts an aggregated proof, so on restart
+        // the cursor resets toward genesis and already-attested slots are re-attested; duplicate
+        // attestations are harmless.
+        self.stf_info_receiver.inc_next_height_to_receive_by(1);
         Ok(())
     }
 }
@@ -178,17 +180,19 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_attestation_processing_persists_next_height_to_receive() -> anyhow::Result<()> {
+    async fn test_attestation_processing_advances_in_memory_cursor() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let proof_manager_db = ProofManagerDb::open(temp_dir.path())?;
 
         let (_sender, receiver) = new_stf_info_channel::<Vec<u8>, Vec<u8>, MockDaSpec>(
-            proof_manager_db.clone(),
+            proof_manager_db,
             NonZero::new(4).unwrap(),
             NonZero::new(4).unwrap(),
             None,
         )?;
 
+        // The cursor is in-memory only; processing an attestation advances it (no persistence).
+        let cursor = receiver.cursor_handle();
         let (_shutdown_sender, shutdown_receiver) = watch::channel(());
         let mut manager = AttestationsManager::new(
             receiver,
@@ -199,10 +203,7 @@ mod tests {
 
         manager.process_stf_info(make_stf_info(1)).await?;
 
-        assert_eq!(
-            proof_manager_db.get_next_height_to_receive()?,
-            Some(SlotNumber::new(2))
-        );
+        assert_eq!(cursor.next_height_to_receive(), SlotNumber::new(2));
         Ok(())
     }
 

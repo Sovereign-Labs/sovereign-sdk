@@ -202,11 +202,15 @@ where
                 .await?
                 .min(ledger_head);
 
+            // Resolver maps a slot to the ledger's canonical DA hash so the proof manager selects
+            // the finalized fork without coupling the receiver to LedgerDb.
+            let ledger_db = self.ledger_db.clone();
             sender
                 .startup_notify_about_infos_from_db(
                     ledger_head,
                     latest_finalized_slot_number,
                     &*self.max_provable_slot_number_tracker,
+                    move |slot| ledger_db.da_block_hash_for_slot(slot),
                 )
                 .await?;
         }
@@ -544,7 +548,12 @@ where
                 ?max_provable_slot_number,
                 "Going to notify stf_info_sender about max provable slot"
             );
-            stf_info_sender.notify(max_provable_slot_number).await?;
+            let ledger_db = self.ledger_db.clone();
+            stf_info_sender
+                .notify(max_provable_slot_number, move |slot| {
+                    ledger_db.da_block_hash_for_slot(slot)
+                })
+                .await?;
             tracing::trace!(
                 ?max_provable_slot_number,
                 "State transition info receiver has been notified about max provable slot number"

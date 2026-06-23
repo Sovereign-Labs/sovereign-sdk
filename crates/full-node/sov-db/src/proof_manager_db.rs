@@ -154,7 +154,7 @@ impl ProofManagerDb {
         &self,
         ledger_head: SlotNumber,
         latest_finalized_slot_number: SlotNumber,
-        canonical_hash: impl Fn(SlotNumber) -> Option<DbHash>,
+        canonical_hash: impl Fn(SlotNumber) -> anyhow::Result<Option<DbHash>>,
     ) -> anyhow::Result<SlotNumber> {
         let latest_finalized = latest_finalized_slot_number.min(ledger_head);
 
@@ -184,7 +184,7 @@ impl ProofManagerDb {
         };
 
         let canonical_present = |slot: SlotNumber| -> anyhow::Result<bool> {
-            match canonical_hash(slot) {
+            match canonical_hash(slot)? {
                 Some(hash) => Ok(self.get_stf_info(slot, hash)?.is_some()),
                 None => Ok(false),
             }
@@ -375,7 +375,7 @@ mod tests {
 
         let cutoff = db
             .recompute_visible_state(SlotNumber::new(100), SlotNumber::new(50), |slot| {
-                Some(hash_for(slot.get()))
+                Ok(Some(hash_for(slot.get())))
             })
             .unwrap();
         assert_eq!(cutoff, SlotNumber::GENESIS);
@@ -393,7 +393,7 @@ mod tests {
         // ledger_head well above, but only slots <= 2 are finalized → cutoff stops at 2.
         let cutoff = db
             .recompute_visible_state(SlotNumber::new(10), SlotNumber::new(2), |slot| {
-                Some(hash_for(slot.get()))
+                Ok(Some(hash_for(slot.get())))
             })
             .unwrap();
         assert_eq!(cutoff, SlotNumber::new(2));
@@ -411,7 +411,7 @@ mod tests {
 
         let cutoff = db
             .recompute_visible_state(SlotNumber::new(10), SlotNumber::new(5), |slot| {
-                Some(hash_for(slot.get()))
+                Ok(Some(hash_for(slot.get())))
             })
             .unwrap();
         assert_eq!(cutoff, SlotNumber::new(2));
@@ -429,7 +429,7 @@ mod tests {
         // ledger_head=7, finalized=5 → drop staged slots 8..=10, keep 6..=7 hidden, cutoff=5.
         let cutoff = db
             .recompute_visible_state(SlotNumber::new(7), SlotNumber::new(5), |slot| {
-                Some(hash_for(slot.get()))
+                Ok(Some(hash_for(slot.get())))
             })
             .unwrap();
 
