@@ -1015,12 +1015,6 @@
         "path"
       ]
     },
-    "RollupHeight": {
-      "description": "A rollup \"block number\". Rollup heights increase in order (1, 2, 3, ...),\nregardless of what happens on the underlying DA layer.",
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0
-    },
     "RpcAggregationConfig": {
       "description": "Configuration for in-process aggregation of JSON-RPC call statistics.",
       "type": "object",
@@ -1230,10 +1224,6 @@
         "default_limits": {
           "description": "Default limits.",
           "$ref": "#/$defs/Limits"
-        },
-        "height_for_gas_limit_computation": {
-          "description": "Rate limiting on gas is currently disabled, so this param has no impact on runtime behavior.\n\nThis height is used to statically compute the gas limit for the rate limiter. (If this value is less than or equal to CHANGE_GAS_LIMIT_AFTER_HEIGHT in constants.toml,\nthe gas limit will *always* be computed using the initial gas limit for rate limiting. If it is greater, the gas limit will be computed using the updated gas limit.)\nEven after rate limiting based on gas is enabled, you can safely change this param at any time since it only impacts off-chain code.",
-          "$ref": "#/$defs/RollupHeight"
         },
         "ip_custom_limits": {
           "description": "Per-network rate limits. Accepts CIDR notation (`10.0.0.0/8`) or a bare\nIP address (`192.168.1.5`); a bare address is treated as a host network\n(`/32` for IPv4, `/128` for IPv6).",
