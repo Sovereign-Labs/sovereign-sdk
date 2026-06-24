@@ -13,23 +13,28 @@ use sov_rollup_interface::da::{
 type CelestiaRelevantProofs = RelevantProofs<Vec<BlobProof>, Option<NamespaceBoundaryProof>>;
 type CelestiaGuestOutput = ([u8; 32], u64, u64, u64, u64, u64);
 
-const ROLLUP_PARAMS: RollupParams = RollupParams {
-    rollup_batch_namespace: Namespace::const_v0([0, 0, 10, 117, 61, 127, 167, 56, 47, 69]),
-    rollup_proof_namespace: Namespace::const_v0([115, 111, 118, 45, 116, 101, 115, 116, 45, 112]),
-};
-
 pub fn main() {
     println!("cycle-tracker-report-start: celestia_full_block");
 
+    // The rollup namespaces are supplied by the host (they differ per fixture), so the same
+    // guest ELF can verify any case. Read the two v0 namespace ids before the block — the read
+    // order must match the host's write order.
+    let batch_ns_id: [u8; 10] = sp1_zkvm::io::read();
+    let proof_ns_id: [u8; 10] = sp1_zkvm::io::read();
     let block_bytes = sp1_zkvm::io::read_vec();
     let relevant_blobs: RelevantBlobs<BlobWithSender> = sp1_zkvm::io::read();
     let relevant_proofs: CelestiaRelevantProofs = sp1_zkvm::io::read();
+
+    let rollup_params = RollupParams {
+        rollup_batch_namespace: Namespace::const_v0(batch_ns_id),
+        rollup_proof_namespace: Namespace::const_v0(proof_ns_id),
+    };
 
     let block: FilteredCelestiaBlock =
         bincode::deserialize(&block_bytes).expect("valid filtered Celestia block");
     let header = block.header();
     let block_hash = *header.hash().inner();
-    let verifier = CelestiaVerifier::new(ROLLUP_PARAMS);
+    let verifier = CelestiaVerifier::new(rollup_params);
     let output = guest_output(block_hash, block_bytes.len() as u64, &relevant_blobs);
 
     println!("cycle-tracker-report-start: celestia_verify");

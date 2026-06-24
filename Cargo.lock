@@ -13227,8 +13227,10 @@ name = "sp1-microbenches"
 version = "0.3.0"
 dependencies = [
  "anyhow",
+ "bincode",
  "clap",
  "serde",
+ "sov-celestia-adapter",
  "sov-gas-tools",
  "sov-rollup-interface",
  "sov-sp1-adapter",

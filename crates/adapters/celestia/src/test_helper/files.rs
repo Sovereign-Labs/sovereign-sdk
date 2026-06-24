@@ -1241,6 +1241,33 @@ async fn save_blobs(
     write_to_file(&path.join(ROLLUP_PROOF_ROWS_JSON), &rollup_proof_rows).unwrap();
 }
 
+/// Submit a single batch blob whose payload is already in final on-DA form (`da_bytes` — the
+/// rollup payload verbatim, or a compression envelope) and save the resulting block as a fixture
+/// at `path`, creating the directory if needed. Used by the compression-benchmark fixture
+/// generator.
+pub(crate) async fn save_single_batch_fixture(
+    path: &Path,
+    client: &celestia_client::Client,
+    signer: &CelestiaAddress,
+    da_bytes: Vec<u8>,
+) -> anyhow::Result<()> {
+    std::fs::create_dir_all(path)?;
+    let blob = blob_from_data(ROLLUP_BATCH_NAMESPACE, da_bytes, signer)?;
+    let signers = serde_json::json!({ "signers": vec![signer.to_string()] });
+    write_to_file(&path.join(SIGNERS_JSON), &signers)?;
+
+    let block_header = submit_blobs(client, vec![blob]).await?;
+    save_blobs(
+        client,
+        path,
+        &block_header,
+        ROLLUP_BATCH_NAMESPACE,
+        ROLLUP_PROOF_NAMESPACE,
+    )
+    .await;
+    Ok(())
+}
+
 pub(crate) async fn submit_blobs(
     client: &celestia_client::Client,
     blobs: Vec<celestia_types::Blob>,
