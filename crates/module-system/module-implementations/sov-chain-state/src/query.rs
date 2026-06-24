@@ -96,7 +96,7 @@ impl<S: Spec> ChainState<S> {
             sov_modules_api::rest::utils::serve_generic_ws_subscription(
                 socket,
                 stream,
-                state.shutdown_receiver(),
+                state.primary_shutdown(),
             )
             .await;
         })

@@ -21,7 +21,9 @@ use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
 use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::{SecondaryShutdownController, SyncStatus};
+use sov_rollup_interface::node::{
+    PrimaryShutdownController, SecondaryShutdownController, SyncStatus,
+};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::{ArrayWitness, NativeStorage, Storage, StorageRoot};
 use sov_stf_runner::StateTransitionRunner;
@@ -30,7 +32,6 @@ use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::{TestStorage, TestStorageManager, TEST_MOCK_DA_POLLING_INTERVAL};
 use tempfile::TempDir;
 use tokio::net::TcpListener;
-use tokio::sync::watch;
 
 type MockInitVariant = InitVariant<HashStf, MockDaService>;
 
@@ -46,8 +47,7 @@ async fn test_runner_with_background_da_service(
     target_height: u64,
     da_config: MockDaConfig,
 ) -> anyhow::Result<()> {
-    let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
-    shutdown_receiver.mark_unchanged();
+    let primary_shutdown = PrimaryShutdownController::new();
     let secondary_shutdown_controller = SecondaryShutdownController::new();
 
     let da_service =
@@ -117,7 +117,7 @@ async fn test_runner_with_background_da_service(
         state_channel,
         prev_state_root,
         Box::new(InfiniteHeight),
-        shutdown_receiver.clone(),
+        primary_shutdown.clone(),
         None,
         None,
         da_sync_state,
@@ -178,7 +178,7 @@ async fn test_runner_with_background_da_service(
         }
     }
 
-    shutdown_sender.send(())?;
+    primary_shutdown.shutdown();
     secondary_shutdown_controller.shutdown();
     runner_task
         .await?

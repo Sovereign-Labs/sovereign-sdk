@@ -191,7 +191,7 @@ where
         &self,
         state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
         sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        primary_shutdown: sov_rollup_interface::node::PrimaryShutdownController,
         ledger_db: &LedgerDb,
         sequencer: &SequencerCreationReceipt<Self::Spec>,
         _da_service: &Self::DaService,
@@ -201,7 +201,7 @@ where
             sov_modules_rollup_blueprint::register_endpoints::<Self, Native>(
                 state_update_receiver,
                 sync_status_receiver,
-                shutdown_receiver,
+                primary_shutdown,
                 ledger_db,
                 sequencer,
                 rollup_config,
@@ -261,7 +261,7 @@ where
         &self,
         sequencer: Seq,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        primary_shutdown: sov_rollup_interface::node::PrimaryShutdownController,
         sequencer_da_address: <<Self::Spec as Spec>::Da as sov_rollup_interface::da::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
@@ -270,7 +270,7 @@ where
         A::create(
             sequencer,
             rollup_config,
-            shutdown_receiver,
+            primary_shutdown,
             sequencer_da_address,
         )
     }
@@ -312,7 +312,7 @@ pub trait AdditionalSequencerApis<S: Spec<Da = MockDaSpec>, R: RuntimeTrait<S>>:
     fn create<Seq>(
         sequencer: Seq,
         rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        primary_shutdown: sov_rollup_interface::node::PrimaryShutdownController,
         sequencer_da_address: <MockDaSpec as sov_rollup_interface::da::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
@@ -331,7 +331,7 @@ where
     fn create<Seq>(
         _sequencer: Seq,
         _rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
-        _shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        _primary_shutdown: sov_rollup_interface::node::PrimaryShutdownController,
         _sequencer_da_address: <MockDaSpec as sov_rollup_interface::da::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where

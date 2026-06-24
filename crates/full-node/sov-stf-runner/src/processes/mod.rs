@@ -11,7 +11,7 @@ use op_manager::attestations::AttestationsManager;
 pub use prover_service::*;
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_rollup_interface::node::{PrimaryShutdownController, SecondaryShutdownController};
 use sov_rollup_interface::optimistic::BondingProofService;
 use sov_rollup_interface::stf::ProofSender;
 pub use stf_info_manager::*;
@@ -29,7 +29,7 @@ pub async fn start_zk_workflow_in_background<Ps>(
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
     secondary_shutdown_controller: &SecondaryShutdownController,
-    shutdown_sender: tokio::sync::watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
     start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<JoinHandle<()>>
 where
@@ -45,7 +45,7 @@ where
         stf_info_receiver,
         da_sync_state,
         secondary_shutdown_controller,
-        shutdown_sender,
+        primary_shutdown,
         start_fresh_outer_proof_on_resync,
     )
     .post_aggregated_proof_to_da_in_background()

@@ -16,7 +16,9 @@ use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput, SyncStatus};
+use sov_rollup_interface::node::{
+    future_or_shutdown, FutureOrShutdownOutput, PrimaryShutdownController, SyncStatus,
+};
 use sov_rollup_interface::stf::{
     ExecutionContext, PartialProofReceipt, ProofOutcome, ProofReceipt, ProofReceiptContents,
     StateTransitionFunction,
@@ -89,7 +91,7 @@ where
     stf_info_receiver: Option<Receiver<Stf::StateRoot, Stf::Witness, Da::Spec>>,
     sync_state: Arc<DaSyncState>,
     sync_fetcher: FinalizedBlocksBulkFetcher<Da>,
-    shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
     secondary_shutdown_sender: watch::Sender<()>,
     background_handles: Vec<tokio::task::JoinHandle<anyhow::Result<()>>>,
     start_at_rollup_height: Option<RollupHeight>,
@@ -169,7 +171,7 @@ where
         state_channel: StateChannel<Sm::StfState>,
         prev_state_root: Stf::StateRoot,
         state_height_tracker: Box<dyn ProvableHeightTracker>,
-        shutdown_receiver: watch::Receiver<()>,
+        primary_shutdown: PrimaryShutdownController,
         start_at_rollup_height: Option<RollupHeight>,
         stop_at_rollup_height: Option<RollupHeight>,
         sync_state: Arc<DaSyncState>,
@@ -253,7 +255,7 @@ where
             sync_state,
             stf_info_receiver,
             sync_fetcher,
-            shutdown_receiver,
+            primary_shutdown,
             secondary_shutdown_sender,
             background_handles,
             start_at_rollup_height,
@@ -431,14 +433,14 @@ where
 
         let start_at_rollup_height = self.start_at_rollup_height;
         let stop_at_rollup_height = self.stop_at_rollup_height;
-        let shutdown_receiver = self.shutdown_receiver.clone();
+        let primary_shutdown = self.primary_shutdown.clone();
         loop {
             if self.stop_at_rollup_height.is_some() {
                 // Rollup is performing an upgrade procedure. We wait until the next_da_height is finalized.
                 let is_shutting_down = Self::wait_until_next_da_height_finalized_or_shutdown(
                     self,
                     next_da_height,
-                    &shutdown_receiver,
+                    &primary_shutdown,
                 )
                 .await?;
 
@@ -446,15 +448,13 @@ where
                     break;
                 }
             }
-            match future_or_shutdown(
-                self.process_next_slot(
+            match primary_shutdown
+                .future_or_shutdown(self.process_next_slot(
                     next_da_height,
                     &start_at_rollup_height,
                     &stop_at_rollup_height,
-                ),
-                &shutdown_receiver,
-            )
-            .await
+                ))
+                .await
             {
                 FutureOrShutdownOutput::Shutdown => break,
                 FutureOrShutdownOutput::Output(slot_result) => match slot_result? {
@@ -489,7 +489,7 @@ where
     async fn wait_until_next_da_height_finalized_or_shutdown(
         &self,
         next_da_height: u64,
-        shutdown_receiver: &watch::Receiver<()>,
+        primary_shutdown: &PrimaryShutdownController,
     ) -> anyhow::Result<bool> {
         loop {
             let finalized_height = self
@@ -498,11 +498,9 @@ where
                 .height();
             if next_da_height > finalized_height {
                 info!(%finalized_height, %next_da_height, "Waiting until next DA height is finalized");
-                match future_or_shutdown(
-                    tokio::time::sleep(self.da_polling_interval),
-                    shutdown_receiver,
-                )
-                .await
+                match primary_shutdown
+                    .future_or_shutdown(tokio::time::sleep(self.da_polling_interval))
+                    .await
                 {
                     FutureOrShutdownOutput::Shutdown => return Ok(true),
                     FutureOrShutdownOutput::Output(()) => continue,

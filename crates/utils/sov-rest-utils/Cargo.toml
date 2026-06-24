@@ -24,6 +24,7 @@ proptest-derive = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = "0.7"
+sov-rollup-interface = { workspace = true, features = ["native"] }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true, features = ["util"] }
