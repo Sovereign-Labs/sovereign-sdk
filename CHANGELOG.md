@@ -12,7 +12,7 @@
   * **Breaking Change** `StateTransitionRunner::start_http_server` gains an `rpc_aggregation: RpcAggregationConfig` parameter, available from `rollup_config.monitoring.rpc_aggregation`.
 - #2973 Preferred sequencer: increases the default `leader_timeout_millis` (leader-election) from 500ms to 1000ms. A leader is now considered inactive only after 1s without a heartbeat, reducing spurious failovers at the cost of slightly slower dead-leader detection. Configurable via `[sequencer.preferred.postgres_config.leader_election]`; existing configs that set the value explicitly are unaffected.
 # 2026-06-23
-- #PR_NUMBER REST API: Fix single-item lookups (`GET .../state/{map}/items/{key}`) for StateMaps with composite (multi-field struct) keys, which previously failed with HTTP 400 `missing field ...`. The handler now parses the key path segment via the key's `FromStr`/`Display` string form instead of serde deserialization. Simple keys are unaffected.
+- #3010 REST API: Fix single-item lookups (`GET .../state/{map}/items/{key}`) for `StateMaps` with composite (multi-field struct) keys, which previously failed with HTTP 400 `missing field ...`. The handler now parses the key path segment via the key's `FromStr`/`Display` string form instead of serde deserialization. Simple keys are unaffected.
   * To keep every composite key a single path segment, `sov-bank` `BalanceKey` and `sov-paymaster` `PolicyKey` now use a `:` separator (uniform with warp's `RouterKey`): balances are `<address>:<token_id>` and policies `<payer>:<payee>`, both previously `/`-separated. This changes the REST URL and pagination-cursor string form for those two maps.
 
 # 2026-06-11
