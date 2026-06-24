@@ -73,7 +73,7 @@ where
     fn create<Seq>(
         sequencer: Seq,
         rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        primary_shutdown: sov_rollup_interface::node::PrimaryShutdownController,
         sequencer_da_address: <MockDaSpec as sov_rollup_interface::da::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
@@ -102,7 +102,7 @@ where
             sequencer_rollup_address: rollup_config.sequencer.rollup_address,
             sequencer_da_address,
             sequencer_type,
-            shutdown_receiver,
+            primary_shutdown,
         };
 
         Ok(NodeEndpoints {

@@ -531,7 +531,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         let mut slot_subscription = test_rollup.client.client.subscribe_slots().await?;
 
         let TestRollup {
-            shutdown_sender,
+            primary_shutdown,
             rollup_task,
             ..
         } = test_rollup;
@@ -551,7 +551,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         }
         drop(slot_subscription);
 
-        shutdown_sender.send(())?;
+        primary_shutdown.shutdown();
         let _ = rollup_task.await?;
     }
 
@@ -573,7 +573,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         let mut slot_subscription = test_rollup.client.client.subscribe_slots().await?;
 
         let TestRollup {
-            shutdown_sender,
+            primary_shutdown,
             rollup_task,
             ..
         } = test_rollup;
@@ -609,7 +609,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         //     "Prover hasn't posted proof"
         // );
 
-        shutdown_sender.send(())?;
+        primary_shutdown.shutdown();
         let _ = rollup_task.await?;
     }
 
@@ -680,7 +680,7 @@ async fn check_with_increasing_stf_infos(
                 .with_context(|| format!("start n={idx} of the rollup failed"))??;
 
         let TestRollup {
-            shutdown_sender,
+            primary_shutdown,
             rollup_task,
             da_service,
             client: sov_cli::NodeClient {
@@ -712,7 +712,7 @@ async fn check_with_increasing_stf_infos(
 
         drop(slot_subscription);
         drop(da_service);
-        shutdown_sender.send(())?;
+        primary_shutdown.shutdown();
         tokio::time::timeout(ROLLUP_SHUTDOWN_TIMEOUT, rollup_task)
             .await
             .context("Joining rollup task failed")???;
