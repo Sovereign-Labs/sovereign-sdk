@@ -15,7 +15,7 @@ use axum::response::Response;
 use sov_state::Prefix;
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::fmt::Display;
+use std::fmt::{Debug, Display};
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -263,6 +263,7 @@ where
     M: ModuleSendSync,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Serialize + serde::de::DeserializeOwned + FromStr + Display,
+    <K as FromStr>::Err: Debug,
     V: Serialize,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -316,6 +317,7 @@ where
     <M::Spec as Spec>::Storage: NativeStorage,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Serialize + serde::de::DeserializeOwned + FromStr + Display + Clone,
+    <K as FromStr>::Err: Debug,
     V: Serialize,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -452,6 +454,7 @@ where
     <M::Spec as Spec>::Storage: NativeStorage,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Display + FromStr + Serialize + serde::de::DeserializeOwned + Clone + Send + Sync + 'static,
+    <K as FromStr>::Err: Debug,
     V: Serialize + Clone + Send + Sync + 'static,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -515,6 +518,7 @@ where
     Codec::KeyCodec: StateItemCodec<K>,
     Codec::ValueCodec: StateItemCodec<V>,
     K: FromStr + std::fmt::Display,
+    <K as FromStr>::Err: Debug,
 {
 }
 
