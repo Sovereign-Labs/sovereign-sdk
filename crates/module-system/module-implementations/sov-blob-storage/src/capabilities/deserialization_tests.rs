@@ -12,8 +12,8 @@ use sov_mock_da::{MockBlob, MOCK_SEQUENCER_DA_ADDRESS};
 use sov_modules_api::{BlobReaderTrait, FullyBakedTx};
 
 use super::{
-    data_for_deserialization, is_borsh_truncated_input_error, PreferredBatchData,
-    PreferredProofData, BORSH_UNEXPECTED_LENGTH_OF_INPUT,
+    blob_deserialization_gate, data_for_deserialization, is_borsh_truncated_input_error,
+    BlobDeserGate, PreferredBatchData, PreferredProofData, BORSH_UNEXPECTED_LENGTH_OF_INPUT,
 };
 
 fn mock_blob(data: Vec<u8>) -> MockBlob {
@@ -275,4 +275,43 @@ fn empty_blob_is_truncation_without_panicking() {
 
     assert!(is_borsh_truncated_input_error(&error));
     assert_eq!(blob.verified_data().len(), blob.total_len());
+}
+
+#[test]
+fn multibyte_trailing_garbage_proceeds_to_the_slash_path() {
+    // A registered sequencer posts a valid value followed by *two* trailing bytes. The lazy
+    // native reader decodes the value and probes a single byte, so it stops with
+    // `verified_data().len() < total_len()` and a non-truncation `Err`. With the deserialize
+    // outcome an `Err`, the gate must return `Proceed` (the error arm then slashes the sender) —
+    // not `WithheldFailClosed`, which would panic-halt the node on a fully-present, sender-
+    // malformed blob. The single-trailing-byte case hides this: the 1-byte probe makes
+    // `verified == total`, so the gap only shows with two or more trailing bytes.
+    let mut serialized = borsh::to_vec(&FullyBakedTx::new(vec![1, 2, 3])).unwrap();
+    serialized.push(0xaa);
+    serialized.push(0xbb);
+    let mut blob = mock_blob(serialized);
+
+    let result = read_via_lazy::<FullyBakedTx>(&mut blob);
+    let error = result
+        .as_ref()
+        .expect_err("a valid value followed by trailing bytes must fail to deserialize");
+    assert_eq!(error.to_string(), "Not all bytes read");
+    assert!(!is_borsh_truncated_input_error(error));
+    assert!(
+        blob.verified_data().len() < blob.total_len(),
+        "lazy reader should stop after the 1-byte probe: {} of {} verified",
+        blob.verified_data().len(),
+        blob.total_len(),
+    );
+
+    assert_eq!(
+        blob_deserialization_gate(
+            blob.rollup_decode_failed(),
+            result.is_ok(),
+            blob.verified_data().len(),
+            blob.total_len(),
+        ),
+        BlobDeserGate::Proceed,
+        "fully-present multi-byte trailing garbage must reach the slash path, not fail closed",
+    );
 }
