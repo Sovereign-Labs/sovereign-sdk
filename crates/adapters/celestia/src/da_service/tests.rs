@@ -294,8 +294,9 @@ async fn test_submit_compressed_batch_round_trips() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let mut config = dev_node.get_config().await?;
     config.compression = crate::config::CompressOnSubmit::Lz4;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-    let da_service = CelestiaService::new(config, rollup_params, shutdown_rx).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, rollup_params, &secondary_shutdown_controller).await;
     let signer = da_service
         .get_signer()
         .await
@@ -357,10 +358,11 @@ async fn test_two_senders_different_chunk_sizes_decode_identically() -> anyhow::
         );
     }
 
-    let (_tx_a, rx_a) = tokio::sync::watch::channel(());
-    let (_tx_b, rx_b) = tokio::sync::watch::channel(());
-    let service_a = CelestiaService::new(config_a, ROLLUP_PARAMS_DEV, rx_a).await;
-    let service_b = CelestiaService::new(config_b, ROLLUP_PARAMS_DEV, rx_b).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let service_a =
+        CelestiaService::new(config_a, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
+    let service_b =
+        CelestiaService::new(config_b, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
     let signer_a = service_a
         .get_signer()
         .await
@@ -1428,8 +1430,9 @@ async fn verification_rejects_compressed_envelope_witness_without_header() -> an
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let mut config = dev_node.get_config().await?;
     config.compression = crate::config::CompressOnSubmit::Lz4;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-    let da_service = CelestiaService::new(config, rollup_params, shutdown_rx).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, rollup_params, &secondary_shutdown_controller).await;
 
     // A compressible batch whose DA envelope is shorter than the rollup payload.
     let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
