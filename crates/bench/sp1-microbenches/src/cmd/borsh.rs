@@ -2,8 +2,8 @@ use anyhow::Context;
 use clap::Args;
 use sp1_sdk::blocking::{Prover, ProverClient, SP1Stdin};
 
-use sov_gas_tools::fit::{fit_linear, LinearFit};
 use crate::{load_guest_elf, round_at_least_one, BenchResult};
+use sov_gas_tools::fit::{fit_linear, LinearFit};
 
 const GUEST_ELF_PATH: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),
