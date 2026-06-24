@@ -227,7 +227,7 @@ impl TryFrom<BlobWithSenderWire> for BlobWithSender {
         }
         let consumed = wire.accumulator.len();
         let inner = BlobIterator::verified_placeholder(total_len, consumed);
-        let blob = CountedBufReader::from_verified_parts(inner, wire.accumulator);
+        let blob = CountedBufReader::from_raw_parts(inner, wire.accumulator);
         Ok(BlobWithSender {
             blob,
             range_in_namespace: wire.range_in_namespace,

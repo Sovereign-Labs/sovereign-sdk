@@ -113,7 +113,7 @@ impl<B: bytes::Buf> CountedBufReader<B> {
     ///   advanced (the guest only ever reads the accumulator).
     ///
     /// Violating these yields a reader that mis-reports its length or panics when advanced.
-    pub fn from_verified_parts(inner: B, accumulator: Vec<u8>) -> Self {
+    pub fn from_raw_parts(inner: B, accumulator: Vec<u8>) -> Self {
         CountedBufReader { inner, accumulator }
     }
 
