@@ -221,6 +221,14 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
         handle.await.unwrap();
     }
 
+    // Simulate a process restart: rebuild the deps with a fresh shutdown controller
+    // (the old one is permanently triggered after the shutdown above), while keeping
+    // the same DA and storage so the persisted in-progress blob survives the restart.
+    let deps = Deps {
+        primary_shutdown: PrimaryShutdownController::new(),
+        ..deps
+    };
+
     // After restart, the blob sender, resubmits the previous blob on the first call to `publish_batch_blob`.
     {
         let (status_sender, mut status_receiver) = broadcast::channel(100);
