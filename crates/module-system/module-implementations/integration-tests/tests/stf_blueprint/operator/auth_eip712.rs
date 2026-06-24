@@ -300,8 +300,8 @@ fn duplicate_tx_is_rejected() {
     assert!(
         error
             .to_string()
-            .contains("148 trailing bytes after transaction deserialization"),
-        "Expected error to contain '148 trailing bytes after transaction deserialization', got: {error}"
+            .contains("149 trailing bytes after transaction deserialization"),
+        "Expected error to contain '149 trailing bytes after transaction deserialization', got: {error}"
     );
 }
 
