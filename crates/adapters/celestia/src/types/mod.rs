@@ -113,7 +113,7 @@ pub struct BlobWithSender {
     /// Derived only from the authenticated DA accumulator
     /// ([`Self::compressed_verified_data`]); never a serialized witness claim.
     /// Empty after construction and after every (de)serialization, then
-    /// recomputed deterministically. Ignored by `PartialEq`.
+    /// recomputed deterministically.
     ///
     /// Filled lazily by the `&self` accessors via `get_or_init`; native `advance`
     /// (which holds `&mut self`) extends it in place as it authenticates more chunks.
@@ -137,25 +137,14 @@ pub struct BlobWithSender {
     envelope_state: OnceLock<EnvelopeState>,
 }
 
-impl PartialEq for BlobWithSender {
-    fn eq(&self, other: &Self) -> bool {
-        // Compare the authenticated projection (DA accumulator + total length + metadata),
-        // not the raw `blob` reader: a native full-share blob and its round-tripped,
-        // share-pruned form carry the same verified bytes and must compare equal. The
-        // envelope cache is derived state, ignored here.
-        self.compressed_verified_data() == other.compressed_verified_data()
-            && self.compressed_total_len() == other.compressed_total_len()
-            && self.range_in_namespace == other.range_in_namespace
-            && self.sender == other.sender
-            && self.hash == other.hash
-    }
-}
-
 /// Pruned wire form of [`BlobWithSender`] — the only representation serialized into the
-/// witness. The in-memory blob keeps its entire `Vec<Share>`, but the zk guest reads only
-/// the authenticated DA prefix (`accumulator`) and the total length; it never touches the
-/// shares (authentication uses the separate inclusion proof). Serializing just these fields
-/// drops the unread-share bloat an attacker could otherwise use to inflate the witness.
+/// witness. Natively (on the host) the in-memory blob keeps its entire `Vec<Share>`; the
+/// blob reconstructed from this wire form in the zk guest is instead a share-less placeholder
+/// ([`BlobIterator::verified_placeholder`]) carrying only the authenticated DA prefix
+/// (`accumulator`) and the total length. The guest never touches shares — it reads through the
+/// accumulator, and authentication runs against the separate inclusion proof. Serializing just
+/// these fields drops the unread-share bloat an attacker could otherwise use to inflate the
+/// witness.
 ///
 /// Only the *deserialize* direction goes through this owned struct (via `try_from`);
 /// serialization uses the borrowed [`BlobWithSenderWireRef`] view to avoid cloning shares.
@@ -186,36 +175,22 @@ struct BlobWithSenderWireRef<'a> {
 }
 
 /// Error returned when a [`BlobWithSenderWire`] cannot describe a valid blob.
-#[derive(Debug)]
+#[derive(Debug, thiserror::Error)]
 enum PrunedBlobError {
     /// The declared total length is wider than the DA `sequence_length` (`u32`), so it cannot
     /// describe a real blob — and would truncate when cast to `usize` on the 32-bit zkVM guest.
+    #[error(
+        "pruned blob total length {total_len} exceeds the DA sequence-length limit ({})",
+        u32::MAX
+    )]
     TotalLenExceedsDaLimit { total_len: u64 },
     /// The verified prefix is longer than the declared total length, which would make
     /// `BlobIterator::remaining` underflow.
+    #[error("pruned blob accumulator length {accumulator_len} exceeds total length {total_len}")]
     AccumulatorExceedsTotalLen {
         accumulator_len: usize,
         total_len: u64,
     },
-}
-
-impl core::fmt::Display for PrunedBlobError {
-    fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-        match self {
-            PrunedBlobError::TotalLenExceedsDaLimit { total_len } => write!(
-                f,
-                "pruned blob total length {total_len} exceeds the DA sequence-length limit ({})",
-                u32::MAX
-            ),
-            PrunedBlobError::AccumulatorExceedsTotalLen {
-                accumulator_len,
-                total_len,
-            } => write!(
-                f,
-                "pruned blob accumulator length {accumulator_len} exceeds total length {total_len}"
-            ),
-        }
-    }
 }
 
 impl Serialize for BlobWithSender {
@@ -781,8 +756,8 @@ pub mod tests {
 
         // The cache is dropped on deserialize.
         assert_eq!(restored.envelope_state.get(), None);
-        // Equality ignores the cache: populated original equals empty restored.
-        assert_eq!(restored, blob);
+        // The authenticated projection survives the round-trip, independent of the dropped cache.
+        crate::test_helper::compare_equality(&restored, &blob);
         // Reconstruction from the authenticated bytes is deterministic.
         assert_eq!(
             classify_and_decode(restored.compressed_verified_data()),
