@@ -1,5 +1,5 @@
 # 2026-06-24
-- #PR_NUMBER Celestia config: aligns the `compression` and `tx_priority` config enums to lowercase/snake_case so they match `verify_on_fetch_mode` (e.g. `compression = "lz4"`, `tx_priority = "high"`). Previously these required PascalCase (`"Lz4"`, `"High"`) and a natural lowercase value was rejected, crashing the node at startup. `tx_priority` keeps PascalCase aliases (`"Low"`/`"Medium"`/`"High"`) for back-compat; `compression` (unreleased) switches from `"Off"`/`"Lz4"` to `"off"`/`"lz4"` without an alias.
+- #3014 Celestia config: aligns the `compression` and `tx_priority` config enums to lowercase/snake_case so they match `verify_on_fetch_mode` (e.g. `compression = "lz4"`, `tx_priority = "high"`). Previously these required PascalCase (`"Lz4"`, `"High"`) and a natural lowercase value was rejected, crashing the node at startup. `tx_priority` keeps PascalCase aliases (`"Low"`/`"Medium"`/`"High"`) for back-compat; `compression` (unreleased) switches from `"Off"`/`"Lz4"` to `"off"`/`"lz4"` without an alias.
   * **Breaking Change** `CelestiaConfig` and `GrpcEndpointConfig` now set `#[serde(deny_unknown_fields)]`: unknown or misspelled keys in the `[da]` config table fail at startup instead of being silently ignored. Existing field aliases (e.g. `celestia_rpc_address`) are unaffected.
 
 # 2026-04-20
