@@ -8,8 +8,8 @@ use crate::metrics::client::{
     StateEstimateGasPriceMeasurement, SubmitPayForBlob,
 };
 use crate::metrics::full::{
-    BlobSubmitMeasurement, CelestiaAdapterStateMeasurement, GetBlockMeasurement,
-    NamespaceDataMetrics,
+    BlobCompressionMeasurement, BlobSubmitMeasurement, CelestiaAdapterStateMeasurement,
+    GetBlockMeasurement, NamespaceDataMetrics,
 };
 use crate::metrics::RollupNamespace;
 use crate::types::{
@@ -55,9 +55,12 @@ pub struct CelestiaService {
     request_timeout: Duration,
     tx_priority: celestia_client::tx::TxPriority,
     tx_status_polling_millis: u64,
+    compression: crate::config::CompressOnSubmit,
+    compression_chunk_size: usize,
 }
 
 impl CelestiaService {
+    // Private all-fields constructor; the field count is inherent to the service config.
     #[allow(clippy::too_many_arguments)]
     fn with_client(
         client: celestia_client::Client,
@@ -70,6 +73,8 @@ impl CelestiaService {
         request_timeout: Duration,
         tx_priority: celestia_client::tx::TxPriority,
         tx_status_polling_millis: u64,
+        compression: crate::config::CompressOnSubmit,
+        compression_chunk_size: usize,
     ) -> Self {
         Self {
             client: Arc::new(client),
@@ -82,6 +87,8 @@ impl CelestiaService {
             request_timeout,
             tx_priority,
             tx_status_polling_millis,
+            compression,
+            compression_chunk_size,
         }
     }
 
@@ -110,16 +117,38 @@ impl CelestiaService {
         namespace: Namespace,
     ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
         let start = std::time::Instant::now();
-        let bytes = blob.len();
+        let rollup_len = blob.len();
         let ns = self.rollup_namespace(&namespace);
-        tracing::debug!(bytes, namespace = ?ns, "Sending raw data to Celestia");
 
         let Some(signer) = &self.signer_address else {
             // TODO: Follow up: Better error when switched to `thiserror`.
             anyhow::bail!("Signer must be set for submitting blobs");
         };
-        let blob = JsonBlob::new(namespace, blob.to_vec(), Some(signer.0))
-            .expect("Bug in CelestiaAdapter");
+
+        // Compress batch blobs when configured; proofs always post verbatim. This is
+        // emission only — read/verify semantics never depend on it.
+        let da_payload = if matches!(ns, RollupNamespace::Batch) {
+            let da_payload = crate::envelope::encode_for_submission(
+                blob,
+                self.compression.is_enabled(),
+                self.compression_chunk_size,
+            );
+            sov_metrics::track_metrics(|tracker| {
+                tracker.submit(BlobCompressionMeasurement::new(
+                    self.compression,
+                    rollup_len,
+                    da_payload.len(),
+                ));
+            });
+            da_payload
+        } else {
+            blob.to_vec()
+        };
+        let bytes = da_payload.len();
+        tracing::debug!(rollup_len, bytes, namespace = ?ns, "Sending data to Celestia");
+
+        let blob =
+            JsonBlob::new(namespace, da_payload, Some(signer.0)).expect("Bug in CelestiaAdapter");
         let blob_hash = HexHash::new(*blob.commitment.hash());
         tracing::debug!(
             namespace = ?ns,
@@ -245,6 +274,8 @@ impl CelestiaService {
             request_timeout,
             tx_priority,
             config.tx_status_polling_millis,
+            config.compression,
+            config.compression_chunk_size,
         )
     }
 }
@@ -434,7 +465,14 @@ impl CelestiaService {
         });
 
         let blobs = flatten_timeout(result)?
-            .map(|blobs| blobs.into_iter().map(|blob| blob.data).collect())
+            .map(|blobs| {
+                blobs
+                    .into_iter()
+                    // Proofs post verbatim, but decode defensively so any node reads
+                    // back the rollup bytes regardless of who emitted the blob.
+                    .map(|blob| crate::envelope::decode_for_read(&blob.data))
+                    .collect()
+            })
             .unwrap_or_default();
         Ok(blobs)
     }

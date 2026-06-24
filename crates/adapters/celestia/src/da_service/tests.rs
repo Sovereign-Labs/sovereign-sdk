@@ -61,7 +61,8 @@ fn assert_single_blob(
     let mut fetched_blob = blobs.pop().unwrap();
     assert_eq!(fetched_blob.sender, expected_signer);
     assert_eq!(fetched_blob.hash, expected_hash);
-    fetched_blob.blob.advance(fetched_blob.total_len());
+    let total_len = fetched_blob.total_len();
+    fetched_blob.advance(total_len);
     assert_eq!(fetched_blob.verified_data(), expected_data);
 }
 
@@ -284,6 +285,116 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
         "Proof should not appear when sending batch blobs"
     );
     assert_single_blob(collected_batch_blobs, signer, response.blob_hash, &blob);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_compressed_batch_round_trips() -> anyhow::Result<()> {
+    let rollup_params = ROLLUP_PARAMS_DEV;
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let mut config = dev_node.get_config().await?;
+    config.compression = crate::config::CompressOnSubmit::Lz4;
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let da_service = CelestiaService::new(config, rollup_params, shutdown_rx).await;
+    let signer = da_service
+        .get_signer()
+        .await
+        .expect("Should be configured with signer");
+
+    // A compressible, multi-share batch (8-byte period) so the DA envelope is
+    // strictly smaller than raw and spans several chunks.
+    let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
+    let blob: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
+    let height_before = da_service.get_head_block_header().await?.height();
+    let response = da_service.send_transaction(&blob).await.await??;
+
+    let (collected_batch_blobs, collected_proof_blobs) =
+        collect_all_blobs_between(&da_service, height_before).await?;
+    assert!(
+        collected_proof_blobs.is_empty(),
+        "Proof should not appear when sending batch blobs"
+    );
+    // The blob read back from Celestia decodes to the original rollup payload, even
+    // though a smaller compressed envelope was the bytes actually posted on-DA.
+    assert_single_blob(collected_batch_blobs, signer, response.blob_hash, &blob);
+    Ok(())
+}
+
+/// A single, config-free reader decodes blobs from two senders that compressed with
+/// *different* `compression_chunk_size` values back to the identical rollup payload.
+/// This guards the failover-safety invariant: chunk size is emission-only, so a replica
+/// leader configured differently from the master still produces universally-decodable
+/// blobs. Each chunk carries its own framing, so decode never consults the encoder's size.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_two_senders_different_chunk_sizes_decode_identically() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let base = dev_node.get_config().await?;
+
+    // Sender A: default share-aligned chunk size.
+    let mut config_a = base.clone();
+    config_a.compression = crate::config::CompressOnSubmit::Lz4;
+    config_a.compression_chunk_size = 482;
+
+    // Sender B: a deliberately different chunk size (the per-chunk cap), signer key 1.
+    let mut config_b = base;
+    config_b.signer_private_key = Some(dev_node.export_signer_key(1).await?);
+    config_b.compression = crate::config::CompressOnSubmit::Lz4;
+    config_b.compression_chunk_size = 1446;
+
+    // Compressible, multi-chunk payload at both sizes (8-byte period): ~9 chunks at 482,
+    // ~3 chunks at 1446.
+    let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
+    let payload: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
+
+    // Guard: both configs really emit a chunked envelope (not a raw fallback), otherwise
+    // the round-trip below would not exercise the chunked decode path at all.
+    for cs in [482usize, 1446] {
+        let da_payload = crate::envelope::encode_for_submission(&payload, true, cs);
+        assert!(
+            da_payload.starts_with(&crate::envelope::ENVELOPE_MAGIC)
+                && da_payload.len() < payload.len(),
+            "payload must compress to a chunked envelope at chunk size {cs}"
+        );
+    }
+
+    let (_tx_a, rx_a) = tokio::sync::watch::channel(());
+    let (_tx_b, rx_b) = tokio::sync::watch::channel(());
+    let service_a = CelestiaService::new(config_a, ROLLUP_PARAMS_DEV, rx_a).await;
+    let service_b = CelestiaService::new(config_b, ROLLUP_PARAMS_DEV, rx_b).await;
+    let signer_a = service_a
+        .get_signer()
+        .await
+        .expect("signer A should be configured");
+    let signer_b = service_b
+        .get_signer()
+        .await
+        .expect("signer B should be configured");
+
+    let height_before = service_a.get_head_block_header().await?.height();
+    let resp_a = service_a.send_transaction(&payload).await.await??;
+    let resp_b = service_b.send_transaction(&payload).await.await??;
+
+    // The read path is config-free, so either service reads both senders' blobs.
+    let (mut batch_blobs, proof_blobs) =
+        collect_all_blobs_between(&service_a, height_before).await?;
+    assert!(
+        proof_blobs.is_empty(),
+        "no proofs expected for batch submissions"
+    );
+    assert_eq!(batch_blobs.len(), 2, "exactly two batch blobs expected");
+
+    // Each sender's blob — encoded with a different chunk size — decodes to the same
+    // original payload under the single, config-free reader.
+    for (signer, expected_hash) in [(signer_a, resp_a.blob_hash), (signer_b, resp_b.blob_hash)] {
+        let blob = batch_blobs
+            .iter_mut()
+            .find(|b| b.sender == signer)
+            .unwrap_or_else(|| panic!("no blob found from sender {signer}"));
+        assert_eq!(blob.hash, expected_hash);
+        let total_len = blob.total_len();
+        blob.advance(total_len);
+        assert_eq!(blob.verified_data(), payload.as_slice());
+    }
     Ok(())
 }
 
@@ -941,29 +1052,29 @@ where
 #[tokio::test(flavor = "multi_thread")]
 async fn verification_succeeds_for_correct_blocks() {
     let read_full = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
-        blob_with_sender.blob.advance(total_len);
-        let data = blob_with_sender.blob.accumulator();
+        let total_len = blob_with_sender.total_len();
+        blob_with_sender.advance(total_len);
+        let data = blob_with_sender.verified_data();
         assert_eq!(data.len(), total_len);
     };
     let no_read = |blob_with_sender: &mut BlobWithSender| {
-        let data = blob_with_sender.blob.accumulator();
+        let data = blob_with_sender.verified_data();
         assert_eq!(data.len(), 0);
     };
     let single_byte = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
+        let total_len = blob_with_sender.total_len();
         if total_len > 0 {
-            blob_with_sender.blob.advance(1);
+            blob_with_sender.advance(1);
         }
-        let data = blob_with_sender.blob.accumulator();
+        let data = blob_with_sender.verified_data();
         let expected_len = std::cmp::min(total_len, 1);
         assert_eq!(data.len(), expected_len);
     };
     let read_half = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
+        let total_len = blob_with_sender.total_len();
         let half_len = total_len / 2;
-        blob_with_sender.blob.advance(half_len);
-        let data = blob_with_sender.blob.accumulator();
+        blob_with_sender.advance(half_len);
+        let data = blob_with_sender.verified_data();
         assert_eq!(data.len(), half_len);
     };
 
@@ -1047,15 +1158,17 @@ async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
         );
 
         for blob in relevant_blobs.batch_blobs.iter_mut() {
-            let total_len = blob.blob.total_len();
+            let total_len = blob.total_len();
             match read_mode {
                 "no_read" => {}
                 "single_byte" => {
                     if total_len > 0 {
-                        blob.blob.advance(1);
+                        blob.advance(1);
                     }
                 }
-                "full" => blob.blob.advance(total_len),
+                "full" => {
+                    blob.advance(total_len);
+                }
                 _ => unreachable!("unexpected read mode"),
             }
         }
@@ -1185,6 +1298,46 @@ async fn verification_fails_if_tx_missing() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn verification_fails_if_witness_total_len_inflated() {
+    verification_fails_for_forged_total_len(1_000_000).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verification_fails_if_witness_total_len_deflated() {
+    verification_fails_for_forged_total_len(1).await;
+}
+
+/// `BlobWithSender`'s record of its total payload length backs
+/// `BlobReaderTrait::total_len()`, which feeds gas accounting and size gates in the
+/// STF. It is a prover-supplied witness field, so the verifier must reject any value
+/// that does not match the `sequence_length` of the authenticated first share.
+async fn verification_fails_for_forged_total_len(forged_sequence_len: u64) {
+    let block = with_rollup_batch_data::filtered_block();
+    let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
+
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    // Proofs are built for the honest, unread witness: one share per blob.
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+
+    // Forge the witness through its serialized form, as a malicious prover would.
+    let blob = relevant_blobs.batch_blobs.remove(0);
+    let mut serialized = serde_json::to_value(&blob).unwrap();
+    serialized["blob"]["inner"]["sequence_len"] = serde_json::Value::from(forged_sequence_len);
+    let forged_blob: BlobWithSender = serde_json::from_value(serialized).unwrap();
+    relevant_blobs.batch_blobs.insert(0, forged_blob);
+
+    let verifier = CelestiaVerifier::new(rollup_params);
+    let error = verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .unwrap_err();
+
+    assert!(
+        error.to_string().contains("MismatchedBlobLength"),
+        "Actual error: {error}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 #[should_panic(expected = "supported shares exist in namespace")]
 async fn extraction_proof_fails_for_empty_blob_list_when_supported_shares_exist() {
     let block = with_mixed_v0_and_v1_blobs::filtered_block();
@@ -1264,6 +1417,93 @@ async fn verification_fails_if_blob_total_len_is_forged() {
         error.to_string().contains("MismatchedBlobLength"),
         "Expected the verifier to reject a forged total_len, got: {error}"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verification_rejects_compressed_envelope_witness_without_header() -> anyhow::Result<()> {
+    use crate::shares::BlobIterator;
+    use sov_rollup_interface::da::CountedBufReader;
+
+    let rollup_params = ROLLUP_PARAMS_DEV;
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let mut config = dev_node.get_config().await?;
+    config.compression = crate::config::CompressOnSubmit::Lz4;
+    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let da_service = CelestiaService::new(config, rollup_params, shutdown_rx).await;
+
+    // A compressible batch whose DA envelope is shorter than the rollup payload.
+    let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
+    let rollup_blob: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
+    let height_before = da_service.get_head_block_header().await?.height();
+    let response = da_service.send_transaction(&rollup_blob).await.await??;
+    let height_after = da_service
+        .get_head_block_header()
+        .await?
+        .height()
+        .saturating_add(1);
+
+    let mut matching_block = None;
+    for height in height_before..=height_after {
+        let block = da_service.get_block_at(height).await?;
+        let relevant_blobs = extract_relevant_blobs(&block);
+        if relevant_blobs
+            .batch_blobs
+            .iter()
+            .any(|blob| blob.hash == response.blob_hash)
+        {
+            matching_block = Some(block);
+            break;
+        }
+    }
+    let block = matching_block.context("submitted compressed blob was not found")?;
+
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    let blob_idx = relevant_blobs
+        .batch_blobs
+        .iter()
+        .position(|blob| blob.hash == response.blob_hash)
+        .context("submitted compressed blob was not extracted")?;
+
+    let da_len = relevant_blobs.batch_blobs[blob_idx].compressed_total_len();
+    assert!(
+        relevant_blobs.batch_blobs[blob_idx]
+            .compressed_verified_data()
+            .starts_with(&crate::envelope::ENVELOPE_MAGIC),
+        "native extraction should eagerly authenticate the envelope header",
+    );
+    assert_ne!(
+        da_len,
+        rollup_blob.len(),
+        "fixture must distinguish DA and rollup lengths",
+    );
+    assert_eq!(
+        relevant_blobs.batch_blobs[blob_idx].clone().total_len(),
+        rollup_blob.len(),
+        "honest native witness should expose the envelope rollup length",
+    );
+
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    relevant_blobs.batch_blobs[blob_idx].blob =
+        CountedBufReader::new(BlobIterator::with_forged_len(da_len));
+    assert_eq!(
+        relevant_blobs.batch_blobs[blob_idx]
+            .compressed_verified_data()
+            .len(),
+        0,
+        "forged witness omits the authenticated envelope header",
+    );
+    assert_eq!(
+        relevant_blobs.batch_blobs[blob_idx].total_len(),
+        da_len,
+        "without the header, the witness is classified as legacy and exposes DA length",
+    );
+
+    let verifier = CelestiaVerifier::new(rollup_params);
+    verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .expect_err("verifier accepted an envelope witness that omitted the header");
+
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1371,10 +1611,10 @@ async fn test_payload_can_be_read_back() -> anyhow::Result<()> {
     let assert_payload = |blobs: &mut Vec<BlobWithSender>, expected_blobs: Vec<Vec<u8>>| {
         assert_eq!(blobs.len(), expected_blobs.len());
         for (actual_batch, expected_batch) in blobs.iter_mut().zip(expected_blobs.iter()) {
-            let total_len = actual_batch.blob.total_len();
+            let total_len = actual_batch.total_len();
             assert_eq!(total_len, expected_batch.len());
-            actual_batch.blob.advance(total_len);
-            let full_data = actual_batch.blob.accumulator();
+            actual_batch.advance(total_len);
+            let full_data = actual_batch.verified_data();
 
             assert_eq!(full_data, expected_batch);
         }
@@ -1509,6 +1749,19 @@ async fn generate_mocha_multi_candidate_rows_fixture() -> anyhow::Result<()> {
         .await?;
 
     from_mocha_multi_candidate_rows_10261831::update_test_data(&client).await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "should be run manually if need to regenerate data"]
+async fn generate_mainnet_real_rollup_data() -> anyhow::Result<()> {
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://celestia-mainnet-da.itrocket.net:26658")
+        .build()
+        .await?;
+
+    from_mainnet_real_rollup_average::update_test_data(&client).await;
+    from_mainnet_real_rollup_p99::update_test_data(&client).await;
     Ok(())
 }
 

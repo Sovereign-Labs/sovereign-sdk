@@ -34,6 +34,13 @@ backon = { workspace = true, optional = true }
 derive_more = { workspace = true, default-features = false, features = ["std"] }
 futures = { workspace = true, default-features = false, optional = true }
 hex = { workspace = true, features = ["serde"] }
+# Bare `default-features = false` selects lz4_flex's *unsafe* codec; the guest decodes
+# adversarial bytes, so keep the bounds-checked safe encode/decode paths. Dropping the
+# default `frame` feature also keeps the dependency `std`-free for the guest build.
+lz4_flex = { workspace = true, default-features = false, features = [
+    "safe-encode",
+    "safe-decode",
+] }
 proptest = { workspace = true, features = ["alloc", "std"], optional = true }
 schemars = { workspace = true, features = ["derive"] }
 serde = { workspace = true, default-features = false, features = [
@@ -49,7 +56,7 @@ tracing = { workspace = true }
 rand = { workspace = true, optional = true }
 
 sov-metrics = { workspace = true, optional = true }
-sov-modules-macros = { workspace = true, optional = true }
+sov-modules-macros = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 
@@ -85,7 +92,7 @@ native = [
     "sov-rollup-interface/native",
     "dep:sov-metrics",
     "sov-metrics/native",
-    "sov-modules-macros?/native",
+    "sov-modules-macros/native",
     "dep:rand",
 ]
 bench = [
@@ -99,6 +106,6 @@ arbitrary = [
     "sov-celestia-adapter/arbitrary",
     "sov-rollup-interface/arbitrary",
     "sov-test-utils/arbitrary",
-    "sov-modules-macros?/arbitrary",
+    "sov-modules-macros/arbitrary",
     "uuid/arbitrary"
 ]

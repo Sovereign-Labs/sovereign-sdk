@@ -3203,6 +3203,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lz4_flex"
+version = "0.11.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
+
+[[package]]
 name = "mach2"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6134,6 +6140,7 @@ dependencies = [
  "celestia-types",
  "derive_more 2.1.1",
  "hex",
+ "lz4_flex",
  "nmt-rs",
  "prost",
  "schemars 1.2.0",
