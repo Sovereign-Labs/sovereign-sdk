@@ -17,7 +17,8 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::{
-    future_or_shutdown, FutureOrShutdownOutput, PrimaryShutdownController, SyncStatus,
+    future_or_shutdown, FutureOrShutdownOutput, PrimaryShutdownController, RunnerShutdownController,
+    SyncStatus,
 };
 use sov_rollup_interface::stf::{
     ExecutionContext, PartialProofReceipt, ProofOutcome, ProofReceipt, ProofReceiptContents,
@@ -92,7 +93,7 @@ where
     sync_state: Arc<DaSyncState>,
     sync_fetcher: FinalizedBlocksBulkFetcher<Da>,
     primary_shutdown: PrimaryShutdownController,
-    secondary_shutdown_sender: watch::Sender<()>,
+    runner_shutdown: RunnerShutdownController,
     background_handles: Vec<tokio::task::JoinHandle<anyhow::Result<()>>>,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
@@ -183,10 +184,11 @@ where
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
         let mut background_handles = Vec::new();
 
-        // This sender is not used immediately,
-        // But when REST and RPC handlers start, sender is used to get another subscription.
-        let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
-        secondary_shutdown_receiver.mark_unchanged();
+        // Controls shutdown of the runner's own background tasks. It is not
+        // signalled immediately; background tasks subscribe to it as they are
+        // spawned (fetcher here, REST/RPC handlers and the sync-status updater
+        // later) and stop once `shutdown` is sent.
+        let runner_shutdown = RunnerShutdownController::new();
 
         let first_unprocessed_height_at_startup = sync_state
             .synced_da_height
@@ -241,7 +243,7 @@ where
             first_unprocessed_height_at_startup,
             runner_config.concurrent_sync_tasks,
             runner_config.pre_fetched_blocks_capacity.get(),
-            secondary_shutdown_receiver.clone(),
+            runner_shutdown.subscribe(),
         )
         .await?;
         background_handles.push(fetcher_background_handle);
@@ -256,7 +258,7 @@ where
             stf_info_receiver,
             sync_fetcher,
             primary_shutdown,
-            secondary_shutdown_sender,
+            runner_shutdown,
             background_handles,
             start_at_rollup_height,
             stop_at_rollup_height,
@@ -311,7 +313,7 @@ where
                 .ok_or_else(|| anyhow::anyhow!("HTTP server already started."))?,
             router,
             methods,
-            self.secondary_shutdown_sender.subscribe(),
+            self.runner_shutdown.subscribe(),
             cors_configuration,
             rpc_aggregation,
         )
@@ -326,12 +328,7 @@ where
     /// Shuts down any background work spawned during initialization before the
     /// runner enters its main loop.
     pub async fn shutdown_before_run(mut self) -> anyhow::Result<()> {
-        if let Err(e) = self.secondary_shutdown_sender.send(()) {
-            tracing::warn!(
-                error = ?e,
-                "Failed to send secondary shutdown signal while aborting runner startup"
-            );
-        }
+        self.runner_shutdown.shutdown();
 
         // Drain concurrently.
         let background_handles = std::mem::take(&mut self.background_handles);
@@ -428,7 +425,7 @@ where
 
         let status_updater_handle = self.spawn_sync_status_updater(
             self.da_polling_interval,
-            self.secondary_shutdown_sender.subscribe(),
+            self.runner_shutdown.subscribe(),
         );
 
         let start_at_rollup_height = self.start_at_rollup_height;
@@ -467,13 +464,8 @@ where
         }
 
         info!("Runner main loop is completed, keep shutting down...");
-        if let Err(e) = self.secondary_shutdown_sender.send(()) {
-            tracing::warn!(
-                error = ?e,
-                "Failed to send secondary shutdown signal. Happens if no HTTP handlers are running"
-            );
-        }
-        info!("Secondary shutdown sent, waiting for status updater to stop...");
+        self.runner_shutdown.shutdown();
+        info!("Runner shutdown sent, waiting for status updater to stop...");
         status_updater_handle
             .await
             .context("Status update handler")?;

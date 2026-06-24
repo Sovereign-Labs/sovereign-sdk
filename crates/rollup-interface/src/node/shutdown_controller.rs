@@ -121,3 +121,58 @@ impl Default for SecondaryShutdownController {
         Self::new()
     }
 }
+
+/// Controls the shutdown channel for the runner's own background tasks
+/// (HTTP server, sync-status updater, finalized-block fetcher).
+#[derive(Clone)]
+pub struct RunnerShutdownController {
+    inner: InnerShutdownController,
+}
+
+impl RunnerShutdownController {
+    /// Creates a new runner shutdown controller.
+    pub fn new() -> Self {
+        Self {
+            inner: InnerShutdownController::new(),
+        }
+    }
+
+    /// Returns a new receiver that fires when the runner shutdown signal is sent.
+    ///
+    /// Handed to background tasks spawned by the runner so they can stop
+    /// cooperatively via [`future_or_shutdown`]. The returned receiver starts
+    /// out marked as having seen the current value, so it only resolves once
+    /// [`RunnerShutdownController::shutdown`] is called.
+    pub fn subscribe(&self) -> watch::Receiver<()> {
+        self.inner.sender.subscribe()
+    }
+
+    /// Waits until a runner shutdown notification is sent.
+    pub async fn wait_for_shutdown(&self) -> Result<(), watch::error::RecvError> {
+        self.inner.wait_for_shutdown().await
+    }
+
+    /// Runs a future until it completes or the runner shutdown signal fires.
+    pub async fn future_or_shutdown<T>(&self, inner: T) -> FutureOrShutdownOutput<T::Output>
+    where
+        T: Future,
+    {
+        future_or_shutdown(inner, &self.inner.receiver).await
+    }
+
+    /// Sends a runner shutdown notification.
+    pub fn shutdown(&self) {
+        self.inner.shutdown();
+    }
+
+    /// Returns `true` if a runner shutdown notification has already been sent.
+    pub fn is_triggered(&self) -> bool {
+        self.inner.is_triggered()
+    }
+}
+
+impl Default for RunnerShutdownController {
+    fn default() -> Self {
+        Self::new()
+    }
+}
