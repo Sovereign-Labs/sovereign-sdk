@@ -177,46 +177,15 @@ lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's no
 # publish-manifest name matching.
 HACK_EXCLUDE := \
 	--exclude demo-simple-stf \
-	--exclude demo-stf \
-	--exclude demo-stf-declaration \
-	--exclude demo-stf-json-client \
 	--exclude integration-tests \
 	--exclude module-template \
 	--exclude native-gas-microbenches \
 	--exclude py_sovereign_web3 \
-	--exclude rest-api-load-testing \
-	--exclude risc0 \
-	--exclude sb-blacklist \
-	--exclude sb-session-registry \
-	--exclude sov-aggregated-proof \
 	--exclude sov-benchmarks \
-	--exclude sov-cli \
-	--exclude sov-db-types \
-	--exclude sov-demo-rollup \
 	--exclude sov-demo-rollup-rest-api-load-testing \
-	--exclude sov-eth-client \
-	--exclude sov-eth-dev-generator \
-	--exclude sov-eth-dev-signer \
 	--exclude sov-evm-soak-testing \
-	--exclude sov-evm-test-utils \
-	--exclude sov-gas-tools \
-	--exclude sov-hyperlane-integration \
-	--exclude sov-module-schemas \
-	--exclude sov-node-client \
-	--exclude sov-proxy-utils \
 	--exclude sov-soak-testing \
 	--exclude sov-soak-testing-lib \
-	--exclude sov-synthetic-load \
-	--exclude sov-test-modules \
-	--exclude sov-test-state-consistency \
-	--exclude sov-test-utils \
-	--exclude sov-transaction-generator \
-	--exclude sov-value-setter \
-	--exclude sovereign-sdk-fuzz \
-	--exclude sp1 \
-	--exclude sp1-microbenches \
-	--exclude switcheroo \
-	--exclude universal-wallet-fuzz \
 	--exclude workspace-hack
 
 check-features: ## Checks that project compiles with all combinations of features.
