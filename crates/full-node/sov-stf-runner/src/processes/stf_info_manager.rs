@@ -330,11 +330,10 @@ fn new_stf_info_channel_inner<StateRoot, Witness, Da: DaSpec>(
 
 /// Compute the in-memory receive cursor resume point.
 ///
-/// If a predecessor aggregated proof exists, resume exactly one slot past its final slot: the
-/// restored outer aggregation host requires a contiguous inner-proof chain starting there. If no
-/// proof exists yet (fresh node, or optimistic mode), resume from genesis. The cursor is never
-/// persisted — on restart we re-prove from this point, which is sound because the node always runs
-/// with `--start-fresh-outer-proof-on-resync`.
+/// If a predecessor aggregated proof exists, resume one slot past its final slot (the restored
+/// outer aggregation host requires a contiguous inner-proof chain from there); otherwise resume
+/// from genesis. The cursor is never persisted — see
+/// [`CursorHandle::inc_next_height_to_receive_by`].
 fn load_next_height_to_receive(latest_proof_final_slot: Option<SlotNumber>) -> SlotNumber {
     match latest_proof_final_slot {
         Some(final_slot) => final_slot.saturating_add(1),
@@ -444,6 +443,10 @@ where
 
     /// Commit STF info after ledger finality advances: advance the in-memory finalized-visible
     /// cutoff and prune below the retention window.
+    ///
+    /// `write_rollup_height` must be a ledger-finalized slot whose STF info was previously staged:
+    /// the cutoff advances to it without re-reading the DB, and `notify` then assumes the canonical
+    /// row is present.
     pub async fn commit_stf_info(&mut self, write_rollup_height: SlotNumber) -> anyhow::Result<()> {
         self.finalized_visible_height = write_rollup_height.max(self.finalized_visible_height);
         let finalized_visible_height = self.finalized_visible_height;
@@ -461,13 +464,6 @@ where
         .await
         .map_err(|e| anyhow!("ProofManagerDb write task failed: {e}"))??;
         Ok(())
-    }
-
-    fn get_oldest_slot_number(&self) -> anyhow::Result<SlotNumber> {
-        Ok(self
-            .proof_manager_db
-            .oldest_present_slot()?
-            .unwrap_or(SlotNumber::ONE))
     }
 
     async fn realign_notifier_cursor_to_available_stf_info(
@@ -608,14 +604,16 @@ impl CursorHandle {
     /// Increment next height to receive by the requested amount (in-memory only), returning the
     /// previous value.
     ///
-    /// The cursor is never persisted: on restart it is recomputed as `latest_proof_final_slot + 1`.
-    /// Any re-proof of an already-posted window is tolerated because the node always runs with
-    /// `--start-fresh-outer-proof-on-resync`, which replaces the previous outer proof.
+    /// The cursor is never persisted; on restart it is recomputed as `latest_proof_final_slot + 1`.
+    /// Re-proving an already-posted window after a crash is therefore possible, but sound: the zk
+    /// pipeline requires `--start-fresh-outer-proof-on-resync` when resuming from a proof (enforced
+    /// in [`new_stf_info_channel_for_runner`]), so a fresh outer proof replaces the previous one.
     pub fn inc_next_height_to_receive_by(&self, amount: u64) -> SlotNumber {
         self.next_height_to_receive.fetch_add(amount)
     }
 
-    /// Current in-memory next height to receive.
+    /// Current in-memory next height to receive. Test-only observation hook.
+    #[cfg(test)]
     pub fn next_height_to_receive(&self) -> SlotNumber {
         self.next_height_to_receive.get()
     }
@@ -889,7 +887,7 @@ mod tests {
         let max_nb = 15;
         let nb_infos = 30;
 
-        let (_db, mut sender, mut receiver) = setup_with_startup(
+        let (db, mut sender, mut receiver) = setup_with_startup(
             temp_dir.path(),
             channel_size,
             max_nb,
@@ -905,7 +903,7 @@ mod tests {
 
         // With finalized_visible ~= nb_infos-1 and max_nb retained, the oldest surviving slot is
         // (nb_infos-1) - max_nb.
-        let oldest = sender.get_oldest_slot_number()?;
+        let oldest = db.oldest_present_slot()?.unwrap();
         assert_eq!(oldest.get(), (nb_infos - 1) - max_nb);
         Ok(())
     }

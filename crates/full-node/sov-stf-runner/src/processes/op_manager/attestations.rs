@@ -102,9 +102,8 @@ where
 
         tracing::debug!(%slot_number, %attestation_height, "Submitting attestation to DA");
 
-        // In-memory advance only. Optimistic mode never posts an aggregated proof, so on restart
-        // the cursor resets toward genesis and already-attested slots are re-attested; duplicate
-        // attestations are harmless.
+        // In-memory advance only. Optimistic mode posts no aggregated proof, so on restart the
+        // cursor resets toward genesis and already-attested slots are re-attested (harmless).
         self.stf_info_receiver.inc_next_height_to_receive_by(1);
         Ok(())
     }

@@ -409,10 +409,8 @@ where
                 .publish_proof_blob_with_metadata(agg_proof)
                 .await?;
 
-            // Advance the in-memory receive cursor only. Persistence is intentionally omitted:
-            // on restart the cursor is recomputed as `latest_proof_final_slot + 1`, and any
-            // re-proof of an already-posted window is tolerated because the node always runs with
-            // `--start-fresh-outer-proof-on-resync`, which replaces the previous outer proof.
+            // Advance the in-memory cursor only (never persisted; re-proof on restart is sound —
+            // see `CursorHandle::inc_next_height_to_receive_by`).
             self.cursor.inc_next_height_to_receive_by(window_size);
         }
         tracing::debug!("Aggregator task has been completed");

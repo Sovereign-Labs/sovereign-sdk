@@ -1,10 +1,8 @@
-//! Implements a wrapper around RocksDB for storing the proof-manager STF-info queue.
+//! RocksDB wrapper for the proof-manager STF-info queue.
 //!
-//! This database persists only the re-provable `StateTransitionInfo` rows, keyed by
-//! `(slot, DA block hash)` so competing forks at the same slot are distinct rows. It holds **no**
-//! cursor metadata: `next_height_to_receive`, the finalized-visible cutoff, and the prune lower
-//! bound are all in-memory and recomputed on startup from the ledger view plus the stored key
-//! range. Fewer persisted values means fewer cross-DB invariants to reconcile after a crash.
+//! Persists only the re-provable `StateTransitionInfo` rows, keyed by `(slot, DA block hash)` so
+//! forks at the same slot stay distinct. No cursor metadata is persisted — the cursors are
+//! in-memory and recomputed on startup from the ledger view plus the stored key range.
 
 use std::num::NonZero;
 use std::sync::Arc;
@@ -89,7 +87,7 @@ impl ProofManagerDb {
     }
 
     /// Highest slot with any stored STF row (seek-last), if the queue is non-empty.
-    pub fn highest_present_slot(&self) -> anyhow::Result<Option<SlotNumber>> {
+    fn highest_present_slot(&self) -> anyhow::Result<Option<SlotNumber>> {
         Ok(self
             .reader()
             .get_largest::<StfInfoByNumber>()?
@@ -375,6 +373,24 @@ mod tests {
 
         let cutoff = db
             .recompute_visible_state(SlotNumber::new(100), SlotNumber::new(50), |slot| {
+                Ok(Some(hash_for(slot.get())))
+            })
+            .unwrap();
+        assert_eq!(cutoff, SlotNumber::GENESIS);
+    }
+
+    #[test]
+    fn test_recompute_returns_genesis_when_oldest_is_orphan_only() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db = create_test_db(temp_dir.path());
+
+        // The only row at slot 1 is an orphan fork — a hash the resolver never returns.
+        db.put_stf_info(SlotNumber::ONE, [0xEE; 32], &make_stf_info(1))
+            .unwrap();
+
+        // The canonical row for slot 1 is absent, so slot 1 must never be exposed.
+        let cutoff = db
+            .recompute_visible_state(SlotNumber::new(10), SlotNumber::new(5), |slot| {
                 Ok(Some(hash_for(slot.get())))
             })
             .unwrap();
