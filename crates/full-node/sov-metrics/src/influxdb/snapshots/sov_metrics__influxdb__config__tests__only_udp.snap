@@ -1,11 +1,15 @@
 ---
 source: crates/full-node/sov-metrics/src/influxdb/config.rs
-assertion_line: 177
 expression: config
 ---
 {
   "telegraf_address": "udp://127.0.0.1:8094",
   "max_datagram_size": null,
   "max_pending_metrics": null,
-  "tokio_runtime_metrics_interval_millis": 500
+  "tokio_runtime_metrics_interval_millis": 500,
+  "rpc_aggregation": {
+    "flush_interval_secs": 10,
+    "slow_call_threshold_ms": 500,
+    "max_slow_call_points_per_window": 10
+  }
 }

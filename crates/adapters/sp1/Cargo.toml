@@ -32,6 +32,7 @@ sp1-lib = { workspace = true, default-features = true }
 sov-rollup-interface = { workspace = true }
 sov-universal-wallet = { workspace = true }
 sov-metrics = { workspace = true, features = ["sp1"], optional = true }
+tokio = { workspace = true, features = ["rt"], optional = true }
 
 [target.'cfg(not(target_os = "zkvm"))'.dependencies]
 sp1-sdk = { workspace = true, features = ["blocking"] }
@@ -58,6 +59,7 @@ sov-zkvm-utils = { workspace = true }
 default = []
 native = [
     "rand",
+    "dep:tokio",
     "sp1-sdk/network",
     "sov-rollup-interface/native",
     "sov-metrics/native",

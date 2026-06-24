@@ -244,7 +244,7 @@ async fn test_replica_start_stop() {
 
     let _ = replica_test_rollup.shutdown().await;
     let _ = test_rollup.shutdown().await;
-    let _ = da_shutdown.send(());
+    da_shutdown.shutdown();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -329,5 +329,5 @@ async fn test_replica_start_stop_many_times() {
 
     let _ = replica_test_rollup.shutdown().await;
     let _ = test_rollup.shutdown().await;
-    let _ = da_shutdown.send(());
+    da_shutdown.shutdown();
 }

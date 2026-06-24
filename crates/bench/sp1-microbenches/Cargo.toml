@@ -16,6 +16,7 @@ path = "src/main.rs"
 anyhow = { workspace = true }
 bincode = { workspace = true }
 clap = { workspace = true }
+sov-gas-tools = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 sov-celestia-adapter = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }

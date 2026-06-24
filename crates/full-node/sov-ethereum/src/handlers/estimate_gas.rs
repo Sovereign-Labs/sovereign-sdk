@@ -37,8 +37,8 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    pub async fn eth_estimate_gas(
-        parameters: JRpcParams<'static>,
+    pub fn eth_estimate_gas(
+        parameters: JRpcParams<'_>,
         ethereum: Arc<Ethereum<S, Seq>>,
         _: Extensions,
     ) -> RpcResult<U64> {

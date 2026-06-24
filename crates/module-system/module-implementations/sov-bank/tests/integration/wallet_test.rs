@@ -44,3 +44,25 @@ fn test_transfer() {
 
     assert_eq!(schema.display(0, &borsh::to_vec(&msg).unwrap()).unwrap(), "Transfer to address sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv 0.1 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6.");
 }
+
+#[test]
+fn test_transfer_gas_token_uses_decimals_constant() {
+    let schema = Schema::of_single_type::<CallMessage<S>>().unwrap();
+    let gas_token_id = sov_bank::config_gas_token_id();
+    let msg: CallMessage<S> = CallMessage::Transfer {
+        to: <S as Spec>::Address::from_str(
+            "sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv",
+        )
+        .unwrap(),
+        coins: Coins {
+            amount: Amount::new(123_456_789),
+            token_id: gas_token_id,
+        },
+    };
+
+    // should be shown with the current default of 6 decimal places
+    assert_eq!(
+        schema.display(0, &borsh::to_vec(&msg).unwrap()).unwrap(),
+        format!("Transfer to address sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv 123.456789 coins of token ID {gas_token_id}."),
+    );
+}

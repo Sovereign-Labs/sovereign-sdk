@@ -123,6 +123,10 @@ pub struct MonitoringConfig {
     /// How often to collect tokio runtime metrics. Defaults to 500ms.
     #[serde(default = "default_tokio_runtime_metrics_interval_millis")]
     pub tokio_runtime_metrics_interval_millis: u64,
+    /// In-process aggregation of JSON-RPC call statistics. When the section is
+    /// omitted, defaults are used.
+    #[serde(default)]
+    pub rpc_aggregation: crate::influxdb::RpcAggregationConfig,
 }
 
 const fn default_tokio_runtime_metrics_interval_millis() -> u64 {
@@ -144,6 +148,7 @@ impl MonitoringConfig {
             max_datagram_size: None,
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: default_tokio_runtime_metrics_interval_millis(),
+            rpc_aggregation: crate::influxdb::RpcAggregationConfig::standard(),
         }
     }
 

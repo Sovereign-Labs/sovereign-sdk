@@ -35,6 +35,7 @@ use sov_proxy_utils::ClusterInfo;
 use sov_proxy_utils::ClusterInfoService;
 use sov_proxy_utils::RootHashCheck;
 use sov_proxy_utils::RootHashConsistency;
+use sov_rollup_interface::node::SecondaryShutdownController;
 use sov_sequencer::preferred::ConfiguredNodeRole;
 use sov_sequencer::preferred::RecoveryStrategy;
 use sov_sequencer::SequencerRole;
@@ -48,7 +49,6 @@ use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::watch;
 use tokio::time::Duration;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
@@ -222,7 +222,7 @@ struct NodeDiscoveryTestSetup {
     postgres: Arc<PostgresData>,
     da_service: StorableMockDaService,
     da_addr: SocketAddr,
-    da_shutdown: watch::Sender<()>,
+    da_shutdown: SecondaryShutdownController,
     cluster_info_service: ClusterInfoService,
 }
 
@@ -286,7 +286,7 @@ impl NodeDiscoveryTestSetup {
 
     async fn shutdown(self) {
         self.cluster_info_service.shutdown();
-        let _ = self.da_shutdown.send(());
+        self.da_shutdown.shutdown();
     }
 
     async fn wait_for_cluster_change(&mut self) -> ClusterInfo {

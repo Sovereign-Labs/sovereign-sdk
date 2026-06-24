@@ -16,7 +16,7 @@ use sov_rollup_interface::da::RelevantBlobIters;
 use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_rollup_interface::stf::DiscardedBlob;
 use sov_sequencer_registry::AllowedSequencerError;
-use tracing::{debug, info, trace, warn};
+use tracing::{debug, info, warn};
 
 use crate::max_size_checker::{BlobsAccumulatorWithSizeLimit, PushOrIgnore};
 use crate::{
@@ -27,6 +27,39 @@ use crate::{
 /// A loose upper bound on the size of an emergency registration blob, in bytes. Blobs larger than this are statically known to be invalid
 /// so we don't bother trying to deserialize them.
 const MAX_EMERGENCY_REGISTRATION_BLOB_SIZE: usize = 1000;
+// Borsh reports truncated input as `InvalidData` carrying this exact message (its private,
+// non-re-exported constant `ERROR_UNEXPECTED_LENGTH_OF_INPUT`; validated against borsh 1.6.1,
+// `src/de/mod.rs`), so we have to match the literal. `truncated_vec_u8_is_classified_as_truncation`
+// fails if a borsh upgrade changes the wording — update this string when it does.
+const BORSH_UNEXPECTED_LENGTH_OF_INPUT: &str = "Unexpected length of input";
+
+fn is_borsh_truncated_input_error(error: &std::io::Error) -> bool {
+    error.kind() == std::io::ErrorKind::UnexpectedEof
+        || (error.kind() == std::io::ErrorKind::InvalidData
+            && error.to_string() == BORSH_UNEXPECTED_LENGTH_OF_INPUT)
+}
+
+/// Payload types that `deserialize_or_try_slash_sender` is permitted to decode from a DA blob.
+///
+/// `deserialize_or_try_slash_sender` asserts the *entire* blob was verified whenever borsh reports
+/// a truncation-classified error (`UnexpectedEof` / "Unexpected length of input"). That assertion
+/// is sound only for types whose `BorshDeserialize` impl reads the whole blob *before* emitting such
+/// an error. A type that bails out early with a truncation-classified error (see the
+/// `classifier_false_positive_before_reader_is_exhausted` test) would trip the assertion and frame
+/// an honest sequencer as malicious.
+///
+/// This trait is private, so only this crate can add implementors — and the `B: BlobPayload` bound
+/// makes decoding an un-vetted type a compile error rather than a silent risk. Before adding an
+/// `impl`:
+/// 1. add the type to `truncated_blob_is_fully_verified_before_reporting_truncation`, and
+/// 2. confirm that test passes (borsh consumes the full blob before reporting truncation).
+trait BlobPayload: BorshDeserialize {}
+
+impl BlobPayload for FullyBakedTx {}
+impl BlobPayload for PreferredProofData {}
+impl BlobPayload for PreferredBatchData {}
+impl BlobPayload for Vec<u8> {}
+impl BlobPayload for Vec<FullyBakedTx> {}
 
 #[derive(Debug)]
 enum SequencerStatus<S: Spec> {
@@ -356,7 +389,7 @@ impl<S: Spec> BlobStorage<S> {
             // Otherwise, we need to process two slots from storage  - which means that we need to save the new blobs
             _ => {
                 let new_batches: Vec<_> = self
-                    .select_blobs_da_ordering(current_blobs,discarded_blobs, true, 2, state)
+                    .select_blobs_da_ordering(current_blobs, discarded_blobs, true, 2, state)
                     .into_iter()
                     .collect();
                 self.store_batches(&new_batches, state);
@@ -499,7 +532,7 @@ impl<S: Spec> BlobStorage<S> {
             // If we have preferred blobs to process, the height increase is specified in the batch - which is the last item in the list of preferred blobs
             let visible_height_increase = {
                 let requested_slots_to_advance = last_selected_blob.inner.visible_slot_number_increase()
-                .expect("Decided to create a rollup block but the last item in the list of preferred blobs is not a batch. This is a bug.");
+                    .expect("Decided to create a rollup block but the last item in the list of preferred blobs is not a batch. This is a bug.");
 
                 let max_slots_to_advance = config_value!("MAX_VISIBLE_HEIGHT_INCREASE_PER_SLOT");
                 let max_slots_to_advance = state
@@ -757,7 +790,6 @@ impl<S: Spec> BlobStorage<S> {
                     }
                     Escrow::Direct(_) => unreachable!("Deferred blobs must store their gas in a derived account until it's ready to be used."),
                     Escrow::None => {}
-
                 }
                 if let PushOrIgnore::IgnoredBlob(id, sender) =
                     blobs_with_total_size_limit.push_or_ignore(SequencerType::NonPreferred, batch)
@@ -1033,7 +1065,7 @@ impl<S: Spec> BlobStorage<S> {
     /// Deserialize a blob into a `Batch` or slash the sender if it's malformed.
     /// The sequencer might not exist if we're processing a blob submitted by an unregistered
     /// sequencer - in the case of direct sequencer registration via DA.
-    fn deserialize_or_try_slash_sender<B: BorshDeserialize>(
+    fn deserialize_or_try_slash_sender<B: BlobPayload>(
         &mut self,
         blob: &mut <S::Da as DaSpec>::BlobTransaction,
         charge_for_deserialization: Option<(&AllowedSequencer<S>, <S::Gas as Gas>::Price)>,
@@ -1056,22 +1088,77 @@ impl<S: Spec> BlobStorage<S> {
                 state,
             ).expect("Failed to remove funds for deserialization even though the sender has enough balance. This should never happen.");
         }
-        match B::try_from_slice(data_for_deserialization(blob)) {
-            Ok(batch) => Some(batch),
-            // if the blob is malformed, slash the sequencer
-            Err(e) => {
-                assert_eq!(blob.verified_data().len(), blob.total_len(), "Batch deserialization failed and some data was not provided. The prover might be malicious");
-                let leading_bytes =
-                    &blob.verified_data()[..std::cmp::min(100, blob.verified_data().len())];
-                trace!(
-                    deserializing_as = std::any::type_name::<B>(),
-                    leading_bytes = %hex::encode(leading_bytes),
-                    "Deserializing blob"
-                );
+        let deserialized = {
+            let mut reader = data_for_deserialization(blob);
+            B::try_from_reader(&mut reader)
+        };
+
+        // Decide what to do with the blob *before* trusting the deserialization outcome. The
+        // branch order is security-critical (and unit-tested via `blob_deserialization_gate`): a
+        // sender that posted authenticated-but-undecodable content is slashed, and a prover that
+        // exposed a valid prefix while withholding the tail fails closed — the completeness check
+        // must gate the `Ok`, because a short prefix can itself be a complete valid `B`.
+        match blob_deserialization_gate(
+            blob.rollup_decode_failed(),
+            deserialized.is_ok(),
+            blob.verified_data().len(),
+            blob.total_len(),
+        ) {
+            // Authenticated DA bytes are fully present but do not decode (sender's fault).
+            BlobDeserGate::SlashUndecodable => {
                 debug!(
                     blob_hash = %blob.hash(),
                     slashed_sender = %blob.sender(),
-                    error = ?e,
+                    "Authenticated DA content failed to decode; slashing sender if registered"
+                );
+                if slash_on_failure {
+                    self.sequencer_registry
+                        .slash_sequencer(&blob.sender(), state);
+                } else {
+                    info!(sender = %blob.sender(), "Unable to slash sequencer, they were not registered");
+                }
+                return None;
+            }
+            // Borsh accepted a prefix but authenticated bytes remain: the prover withheld the
+            // tail behind a valid prefix. Fail the proof closed.
+            BlobDeserGate::WithheldFailClosed => panic!(
+                "Blob deserialized from a prefix but authenticated bytes remain (used {} of {} rollup bytes). The prover might be malicious",
+                blob.verified_data().len(),
+                blob.total_len(),
+            ),
+            // No pre-emptive verdict: handle the deserialization result below.
+            BlobDeserGate::Proceed => {}
+        }
+
+        match deserialized {
+            Ok(batch) => Some(batch),
+            // if the blob is malformed, slash the sequencer
+            Err(error) => {
+                // Distinguish a genuinely malformed blob from a withheld/truncated one (censorship).
+                // Borsh signals truncated input either as `UnexpectedEof` or as
+                // `InvalidData("Unexpected length of input")`, depending on the type being decoded.
+                // That failure is legitimate ONLY if the whole blob was actually verified. Otherwise
+                // a malicious prover may have truncated the witness to frame an honest sequencer.
+                if is_borsh_truncated_input_error(&error) {
+                    assert_eq!(
+                        blob.verified_data().len(),
+                        blob.total_len(),
+                        "Deserialization ran out of data but the blob was not fully verified. The prover might be malicious");
+                }
+                #[cfg(feature = "native")]
+                {
+                    let leading_bytes =
+                        &blob.verified_data()[..std::cmp::min(100, blob.verified_data().len())];
+                    tracing::trace!(
+                        deserializing_as = std::any::type_name::<B>(),
+                        leading_bytes = %hex::encode(leading_bytes),
+                        "Blob failed to be deserialized"
+                    );
+                }
+                debug!(
+                    blob_hash = %blob.hash(),
+                    slashed_sender = %blob.sender(),
+                    ?error,
                     "Unable to deserialize blob. slashing sender if they are registered"
                 );
 
@@ -1079,7 +1166,10 @@ impl<S: Spec> BlobStorage<S> {
                     self.sequencer_registry
                         .slash_sequencer(&blob.sender(), state);
                 } else {
-                    info!(sender = %blob.sender(), "Unable to slash sequencer, they were not registered");
+                    info!(
+                        sender = %blob.sender(),
+                        blob_hash = %blob.hash(),
+                        "Unable to slash sequencer, they were not registered");
                 }
 
                 None
@@ -1244,15 +1334,94 @@ impl<S: Spec> BlobStorage<S> {
     }
 }
 
+/// Decision taken from the already-computed deserialization outcome, before the result is
+/// trusted (PR-A). A pure function so the security-critical branch *order* stays unit-testable:
+/// `rollup_decode_failed` (authenticated bytes present but undecodable — the sender's fault)
+/// slashes and takes precedence; a successful decode that consumed fewer than `total_len` bytes
+/// means the prover withheld a tail behind a valid prefix and fails closed. The completeness
+/// check gates only the `Ok` path — a short prefix can be a complete valid value, and the `Err`
+/// arm cannot see it — so a deserialize `Err` is left to that arm (slash / truncation guard).
+#[derive(Debug, PartialEq, Eq)]
+enum BlobDeserGate {
+    /// Authenticated bytes are fully present but do not decode into the claimed rollup
+    /// payload — slash the sender.
+    SlashUndecodable,
+    /// Borsh decoded an `Ok` from a prefix while authenticated bytes remain (`verified_len <
+    /// total_len`) — the prover withheld the trailing data; fail closed.
+    WithheldFailClosed,
+    /// No pre-emptive verdict — handle the deserialization result (accept it, or let the error
+    /// arm slash a malformed blob / fail closed on a truncated one).
+    Proceed,
+}
+
+fn blob_deserialization_gate(
+    rollup_decode_failed: bool,
+    deserialize_ok: bool,
+    verified_len: usize,
+    total_len: usize,
+) -> BlobDeserGate {
+    if rollup_decode_failed {
+        // Takes precedence over the length check: a non-canonical envelope can decode to
+        // exactly `rollup_len` yet still be undecodable (e.g. trailing/extra bytes).
+        BlobDeserGate::SlashUndecodable
+    } else if deserialize_ok && verified_len != total_len {
+        // Only a prefix `Ok` is dangerous here: borsh accepted a value but the authenticated
+        // blob has more bytes, so the prover withheld the tail. A deserialize `Err` with
+        // `verified_len < total_len` is left to the error arm (early-exit malformed input or a
+        // fully present blob with trailing garbage), so this never fires on a fully-read native
+        // blob — there an `Ok` implies `verified_len == total_len`.
+        BlobDeserGate::WithheldFailClosed
+    } else {
+        BlobDeserGate::Proceed
+    }
+}
+
+/// A [`std::io::Read`] adapter that verifies (`advance`s) only the bytes actually consumed by
+/// the reader, letting deserialization bail out early without verifying the whole blob.
+///
+/// Current borsh only requires `Read` here. Its `Vec<u8>` fast path caps
+/// the initial read/allocation at 1 MiB instead of allocating the claimed length, so `BufRead` is
+/// not needed for OOM protection. A lazy `BufRead::fill_buf` would either expose the whole blob and
+/// lose early-exit behavior, or expose only a chunk that does not represent the full remaining
+/// length.
 #[cfg(feature = "native")]
-fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
-    blob.full_data()
+struct LazyBlobReader<'a, B: BlobReaderTrait> {
+    blob: &'a mut B,
+    /// Number of bytes already handed to the consumer (our cursor from the start of the blob).
+    pos: usize,
+}
+
+#[cfg(feature = "native")]
+impl<B: BlobReaderTrait> std::io::Read for LazyBlobReader<'_, B> {
+    fn read(&mut self, buf: &mut [u8]) -> std::io::Result<usize> {
+        // Ensure the verified accumulator covers `[pos, pos + buf.len())`, verifying only the
+        // bytes this read needs. `advance` caps the request at the remaining data.
+        let needed = self.pos.saturating_add(buf.len());
+        let verified_len = self.blob.verified_data().len();
+        if needed > verified_len {
+            self.blob.advance(needed - verified_len);
+        }
+        let data = self.blob.verified_data();
+        let n = (data.len() - self.pos).min(buf.len());
+        buf[..n].copy_from_slice(&data[self.pos..self.pos + n]);
+        self.pos += n;
+        // `n == 0` signals EOF once the blob is exhausted.
+        Ok(n)
+    }
+}
+
+#[cfg(feature = "native")]
+fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> impl std::io::Read + '_ {
+    LazyBlobReader { blob, pos: 0 }
 }
 
 #[cfg(not(feature = "native"))]
-fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> &[u8] {
-    blob.verified_data()
+fn data_for_deserialization(blob: &mut impl BlobReaderTrait) -> impl std::io::Read + '_ {
+    std::io::Cursor::new(blob.verified_data())
 }
+
+#[cfg(test)]
+mod deserialization_tests;
 
 #[cfg(test)]
 mod tests {
@@ -1261,10 +1430,72 @@ mod tests {
     use sov_mock_da::MOCK_SEQUENCER_DA_ADDRESS;
     use sov_test_utils::TestSpec;
 
+    use super::{blob_deserialization_gate, BlobDeserGate};
     use super::{
         BlobStorage, BlobType, PreferredBatchData, PreferredBlobData, PreferredBlobDataWithId,
         PreferredProofData, SequencerNumberTracker,
     };
+
+    // PR-A: the gate's branch order is security-critical. `rollup_decode_failed` slashes and
+    // takes precedence; a successful decode that left authenticated bytes unread fails closed
+    // (prover withheld a tail behind a valid prefix); everything else proceeds to the result.
+    #[test]
+    fn deser_gate_decode_failure_slashes_first() {
+        // Decode failure takes precedence over both the length check and the deserialize
+        // outcome: a non-canonical envelope can decode to exactly `rollup_len` yet still be
+        // undecodable.
+        assert_eq!(
+            blob_deserialization_gate(true, true, 10, 10),
+            BlobDeserGate::SlashUndecodable
+        );
+        assert_eq!(
+            blob_deserialization_gate(true, false, 5, 10),
+            BlobDeserGate::SlashUndecodable
+        );
+    }
+
+    #[test]
+    fn deser_gate_ok_prefix_with_bytes_remaining_fails_closed() {
+        // A successful decode (`Ok`) that consumed fewer than `total_len` bytes means the prover
+        // withheld the tail behind a valid prefix; fail closed before the `Ok` is trusted.
+        assert_eq!(
+            blob_deserialization_gate(false, true, 5, 10),
+            BlobDeserGate::WithheldFailClosed
+        );
+        assert_eq!(
+            blob_deserialization_gate(false, true, 0, 10),
+            BlobDeserGate::WithheldFailClosed
+        );
+    }
+
+    #[test]
+    fn deser_gate_deserialize_error_proceeds_to_error_arm() {
+        // A deserialize `Err` with `verified < total` (early-exit malformed input, or a fully
+        // present blob with trailing garbage) must NOT fail closed here — it is routed to the
+        // error arm, which slashes a malformed sender instead of panicking the node.
+        assert_eq!(
+            blob_deserialization_gate(false, false, 5, 10),
+            BlobDeserGate::Proceed
+        );
+        assert_eq!(
+            blob_deserialization_gate(false, false, 6, 10),
+            BlobDeserGate::Proceed
+        );
+    }
+
+    #[test]
+    fn deser_gate_complete_payload_proceeds() {
+        // `Ok` that consumed the whole blob proceeds to be accepted.
+        assert_eq!(
+            blob_deserialization_gate(false, true, 10, 10),
+            BlobDeserGate::Proceed
+        );
+        // Empty blob: nothing withheld, nothing to decode-fail.
+        assert_eq!(
+            blob_deserialization_gate(false, true, 0, 0),
+            BlobDeserGate::Proceed
+        );
+    }
 
     #[test]
     fn test_find_next_run() {

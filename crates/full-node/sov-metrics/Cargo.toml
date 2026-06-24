@@ -24,6 +24,7 @@ derive_more = { workspace = true, features = ["deref_mut", "deref"], optional = 
 derive-new = { workspace = true }
 tokio-metrics = { workspace = true, optional = true }
 hex = { workspace = true }
+sov-rollup-interface = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
 risc0-zkvm = { workspace = true, default-features = false, features = [
@@ -52,14 +53,16 @@ risc0 = [
 ]
 sp1 = ["dep:sp1-lib", "dep:bincode"]
 native = [
-    "dep:tokio",
-    "dep:schemars",
-    "dep:tracing",
-    "dep:bincode",
-    "dep:http",
-    "dep:derivative",
-    "dep:schemars",
-    "dep:derive_more",
-    "dep:tokio-metrics",
-    "sov-metrics/native"
+	"dep:tokio",
+	"dep:schemars",
+	"dep:tracing",
+	"dep:bincode",
+	"dep:http",
+	"dep:derivative",
+	"dep:schemars",
+	"dep:derive_more",
+	"dep:tokio-metrics",
+	"dep:sov-rollup-interface",
+	"sov-metrics/native",
+	"sov-rollup-interface?/native"
 ]

@@ -123,6 +123,10 @@ pub enum SimulateError {
     /// Failed to decode the call bytes into a runtime call.
     #[error("Failed to decode call message into a runtime call")]
     CallDecoding(#[from] std::io::Error),
+
+    /// Failed to compute the next uniqueness generation for the sender.
+    #[error("Failed to compute uniqueness generation")]
+    UniquenessRetrieval(#[source] anyhow::Error),
 }
 
 impl From<SimulateError> for ErrorObject {
@@ -130,7 +134,9 @@ impl From<SimulateError> for ErrorObject {
         let (status, error) = match &value {
             SimulateError::InvalidInput(message) => (StatusCode::BAD_REQUEST, message.clone()),
             SimulateError::GasPriceRetrieval => (StatusCode::INTERNAL_SERVER_ERROR, "".to_string()),
-            SimulateError::ContextResolution(error) | SimulateError::SchemaConstruction(error) => {
+            SimulateError::ContextResolution(error)
+            | SimulateError::SchemaConstruction(error)
+            | SimulateError::UniquenessRetrieval(error) => {
                 (StatusCode::INTERNAL_SERVER_ERROR, error.to_string())
             }
             SimulateError::CallSerialization(error) => (StatusCode::BAD_REQUEST, error.to_string()),
@@ -304,22 +310,27 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
         &self,
         params: &SimulateParameters,
         state: &mut StateCheckpoint<S>,
-    ) -> AuthorizationData<S> {
-        let credential_id = CredentialId::from_str(&params.sender).unwrap();
-        let uniqueness = params.uniqueness.unwrap_or_else(|| {
-            let generation = Uniqueness::<S>::default()
-                .next_generation(&credential_id, state)
-                .unwrap();
-            UniquenessData::Generation(generation)
-        });
+    ) -> Result<AuthorizationData<S>, SimulateError> {
+        let credential_id = CredentialId::from_str(&params.sender).map_err(|e| {
+            SimulateError::InvalidInput(format!("failed to parse sender credential id: {e}"))
+        })?;
+        let uniqueness = match params.uniqueness {
+            Some(uniqueness) => uniqueness,
+            None => {
+                let generation = Uniqueness::<S>::default()
+                    .next_generation(&credential_id, state)
+                    .map_err(SimulateError::UniquenessRetrieval)?;
+                UniquenessData::Generation(generation)
+            }
+        };
 
-        AuthorizationData {
+        Ok(AuthorizationData {
             tx_hash: NULL_TX_HASH,
             uniqueness,
             credential_id,
             default_address: credential_id.into(),
             credentials: Credentials::new(credential_id),
-        }
+        })
     }
 
     fn outcome(&self, result: ApplyTxResult<S>) -> SimulateOutcome<R::RuntimeEvent> {
@@ -425,7 +436,7 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
             .chain_state()
             .base_fee_per_gas(&mut accessor)
             .ok_or(SimulateError::GasPriceRetrieval)?;
-        let auth_data = state.authorization_data(&params, &mut accessor);
+        let auth_data = state.authorization_data(&params, &mut accessor)?;
         let sequencer = state.sequencer(params.sequencer.unwrap_or_default())?;
         let auth_tx_data =
             AuthenticatedTransactionData(state.tx_details(params.tx_details.unwrap_or_default())?);

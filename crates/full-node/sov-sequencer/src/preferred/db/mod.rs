@@ -649,7 +649,7 @@ impl PreferredSequencerDb {
             }
         } else {
             Ok((
-                0, // TODO this will be revisited when we enable the replica sync task.
+                0, // Replicas start without sequencer DB snapshot; state sync/replica sync catches this up.
                 BlobsCache::new(
                     Default::default(),
                     Option::None,

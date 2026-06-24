@@ -1016,6 +1016,94 @@ pub mod from_mocha_multi_candidate_rows_10261831 {
     }
 }
 
+#[allow(dead_code)]
+pub mod from_mainnet_real_rollup_average {
+    use super::*;
+    pub const DATA_PATH: &str = "test_data/block_mainnet_real_rollup_average";
+    const HEIGHT: u64 = 11_384_661;
+    pub const ROLLUP_PARAMS: RollupParams = RollupParams {
+        rollup_batch_namespace: Namespace::const_v0(*b"bltbatch-t"),
+        // Does not matter here
+        rollup_proof_namespace: Namespace::const_v0(*b"bltbatch-z"),
+    };
+
+    pub fn filtered_block() -> FilteredCelestiaBlock {
+        let path = make_test_path(DATA_PATH);
+        filtered_block_from_path(
+            ROLLUP_PARAMS.rollup_batch_namespace,
+            ROLLUP_PARAMS.rollup_proof_namespace,
+            &path,
+        )
+        .unwrap()
+    }
+
+    pub fn test_case() -> (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>) {
+        (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
+    }
+
+    pub async fn update_test_data(client: &celestia_client::Client) {
+        let path = make_test_path(DATA_PATH);
+
+        let signers =
+            serde_json::json!({"signers": vec!["celestia1zwpvejau8kzhttlc39wmfggyf8n3eaxlpvd86u"]});
+        write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
+
+        let block_header = client.header().get_by_height(HEIGHT).await.unwrap();
+        save_blobs(
+            client,
+            &path,
+            &block_header,
+            ROLLUP_PARAMS.rollup_batch_namespace,
+            ROLLUP_PARAMS.rollup_proof_namespace,
+        )
+        .await;
+    }
+}
+
+#[allow(dead_code)]
+pub mod from_mainnet_real_rollup_p99 {
+    use super::*;
+    pub const DATA_PATH: &str = "test_data/block_mainnet_real_rollup_p99";
+    const HEIGHT: u64 = 11_385_636;
+    pub const ROLLUP_PARAMS: RollupParams = RollupParams {
+        rollup_batch_namespace: Namespace::const_v0(*b"bltbatch-t"),
+        // Does not matter here
+        rollup_proof_namespace: Namespace::const_v0(*b"bltbatch-z"),
+    };
+
+    pub fn filtered_block() -> FilteredCelestiaBlock {
+        let path = make_test_path(DATA_PATH);
+        filtered_block_from_path(
+            ROLLUP_PARAMS.rollup_batch_namespace,
+            ROLLUP_PARAMS.rollup_proof_namespace,
+            &path,
+        )
+        .unwrap()
+    }
+
+    pub fn test_case() -> (FilteredCelestiaBlock, RollupParams, Vec<CelestiaAddress>) {
+        (filtered_block(), ROLLUP_PARAMS, read_signers(DATA_PATH))
+    }
+
+    pub async fn update_test_data(client: &celestia_client::Client) {
+        let path = make_test_path(DATA_PATH);
+
+        let signers =
+            serde_json::json!({"signers": vec!["celestia1zwpvejau8kzhttlc39wmfggyf8n3eaxlpvd86u"]});
+        write_to_file(&path.join(SIGNERS_JSON), &signers).unwrap();
+
+        let block_header = client.header().get_by_height(HEIGHT).await.unwrap();
+        save_blobs(
+            client,
+            &path,
+            &block_header,
+            ROLLUP_PARAMS.rollup_batch_namespace,
+            ROLLUP_PARAMS.rollup_proof_namespace,
+        )
+        .await;
+    }
+}
+
 fn generate_payload_with_batches(batches: usize, batch_size: usize) -> PayloadData {
     // Not random, but not the same bytes
     let mut rng = rand::rngs::SmallRng::from_seed([1; 32]);

@@ -21,7 +21,7 @@ use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
 use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::node::{SecondaryShutdownController, SyncStatus};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::{ArrayWitness, NativeStorage, Storage, StorageRoot};
 use sov_stf_runner::StateTransitionRunner;
@@ -48,9 +48,10 @@ async fn test_runner_with_background_da_service(
 ) -> anyhow::Result<()> {
     let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
     shutdown_receiver.mark_unchanged();
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
 
     let da_service =
-        StorableMockDaService::from_config(da_config.clone(), shutdown_receiver.clone()).await;
+        StorableMockDaService::from_config(da_config.clone(), &secondary_shutdown_controller).await;
     let da_service = Arc::new(da_service);
     let tempdir = tempfile::tempdir()?;
     let rollup_config = crate::helpers::runner_init::rollup_config_with_da::<StorableMockDaService>(
@@ -61,7 +62,7 @@ async fn test_runner_with_background_da_service(
 
     let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
         da_service.clone(),
-        shutdown_receiver.clone(),
+        &secondary_shutdown_controller,
         TEST_MOCK_DA_POLLING_INTERVAL,
     )
     .await?;
@@ -97,8 +98,10 @@ async fn test_runner_with_background_da_service(
     let (prev_state_root, _genesis_state_root) =
         init_variant.initialize(&stf, &mut storage_manager).await?;
 
-    let _ =
-        sov_metrics::init_metrics_tracker(&MonitoringConfig::standard(), shutdown_receiver.clone());
+    let _ = sov_metrics::init_metrics_tracker(
+        &MonitoringConfig::standard(),
+        &secondary_shutdown_controller,
+    );
 
     let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
     let axum_tcp = TcpListener::bind(axum_socket_addr).await.unwrap();
@@ -176,6 +179,7 @@ async fn test_runner_with_background_da_service(
     }
 
     shutdown_sender.send(())?;
+    secondary_shutdown_controller.shutdown();
     runner_task
         .await?
         .context("Runner did not completed with success")?;

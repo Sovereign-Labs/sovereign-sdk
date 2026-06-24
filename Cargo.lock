@@ -2302,9 +2302,9 @@ checksum = "dc0b364ead1874514c8c2855ab558056ebfeb775653e7ae45ff72f28f8f3166c"
 
 [[package]]
 name = "borsh"
-version = "1.5.7"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ad8646f98db542e39fc66e68a20b2144f6a732636df7c2354e74645faaa433ce"
+checksum = "cfd1e3f8955a5d7de9fab72fc8373fade9fb8a703968cb200ae3dc6cf08e185a"
 dependencies = [
  "borsh-derive",
  "bytes",
@@ -2313,9 +2313,9 @@ dependencies = [
 
 [[package]]
 name = "borsh-derive"
-version = "1.5.7"
+version = "1.6.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fdd1d3c0c2f5833f22386f252fe8ed005c7f59fdcddeef025c01b4c3b9fd9ac3"
+checksum = "bfcfdc083699101d5a7965e49925975f2f55060f94f9a05e7187be95d530ca59"
 dependencies = [
  "once_cell",
  "proc-macro-crate 3.3.0",
@@ -3525,7 +3525,7 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "8d162beedaa69905488a8da94f5ac3edb4dd4788b732fadb7bd120b2625c1976"
 dependencies = [
  "data-encoding",
- "syn 1.0.109",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -6373,6 +6373,12 @@ dependencies = [
 ]
 
 [[package]]
+name = "lz4_flex"
+version = "0.11.6"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "373f5eceeeab7925e0c1098212f2fbc4d416adec9d35051a6ab251e824c1854a"
+
+[[package]]
 name = "mach2"
 version = "0.4.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -6718,6 +6724,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "native-gas-microbenches"
+version = "0.3.0"
+dependencies = [
+ "criterion",
+ "sov-gas-tools",
+ "sov-mock-da",
+ "sov-mock-zkvm",
+ "sov-modules-api",
+]
+
+[[package]]
 name = "ndarray"
 version = "0.16.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -7012,7 +7029,7 @@ version = "0.7.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "77e878c846a8abae00dd069496dbe8751b16ac1c3d6bd2a7283a938e8228f90d"
 dependencies = [
- "proc-macro-crate 3.3.0",
+ "proc-macro-crate 1.3.1",
  "proc-macro2",
  "quote",
  "syn 2.0.117",
@@ -11227,6 +11244,7 @@ dependencies = [
  "derive_more 2.0.1",
  "futures",
  "hex",
+ "lz4_flex",
  "nmt-rs",
  "postcard",
  "proptest",
@@ -11419,6 +11437,7 @@ dependencies = [
  "sov-modules-macros",
  "sov-modules-rollup-blueprint",
  "sov-modules-stf-blueprint",
+ "sov-node-client",
  "sov-paymaster",
  "sov-proxy-utils",
  "sov-risc0-adapter",
@@ -11695,6 +11714,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-gas-tools"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "serde",
+ "serde_json",
+ "thiserror 2.0.18",
+]
+
+[[package]]
 name = "sov-hyperlane-integration"
 version = "0.3.0"
 dependencies = [
@@ -11820,6 +11849,7 @@ dependencies = [
  "schemars 1.2.1",
  "serde",
  "sov-metrics",
+ "sov-rollup-interface",
  "sp1-lib",
  "tokio",
  "tokio-metrics",
@@ -12545,6 +12575,7 @@ dependencies = [
  "sp1-sdk",
  "sp1-verifier",
  "sp1-zkvm",
+ "tokio",
 ]
 
 [[package]]
@@ -12597,6 +12628,7 @@ dependencies = [
  "rayon",
  "rockbound",
  "serde",
+ "serde_json",
  "sha2 0.10.9",
  "sov-db",
  "sov-full-node-configs",
@@ -12826,7 +12858,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "alloy-dyn-abi",
  "alloy-primitives",
@@ -12850,7 +12882,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macro-helpers"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "bech32",
  "borsh",
@@ -12864,7 +12896,7 @@ dependencies = [
 
 [[package]]
 name = "sov-universal-wallet-macros"
-version = "0.4.0"
+version = "0.4.1"
 dependencies = [
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.117",
@@ -13195,10 +13227,9 @@ name = "sp1-microbenches"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "bincode",
  "clap",
  "serde",
- "sov-celestia-adapter",
+ "sov-gas-tools",
  "sov-rollup-interface",
  "sov-sp1-adapter",
  "sov-zkvm-utils",

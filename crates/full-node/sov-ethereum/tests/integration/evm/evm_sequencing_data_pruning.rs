@@ -122,7 +122,9 @@ impl<S: Spec> EvmPrecompile<S> for OraclePrecompile<S> {
                 PrecompileError::InvalidInput(format!("missing oracle key {key}"))
             })?;
 
-            #[cfg(feature = "native")]
+            // This crate doesn't have a `"native"` feature, but in a real precompile
+            // implementation, key recording is native-only.
+            // #[cfg(feature = "native")]
             record_used_oracle_key(env, key)?;
 
             output.extend_from_slice(&U256::from(value).to_be_bytes::<32>());
@@ -135,7 +137,6 @@ impl<S: Spec> EvmPrecompile<S> for OraclePrecompile<S> {
     }
 }
 
-#[cfg(feature = "native")]
 fn record_used_oracle_key<S: Spec, ST: TxState<S>>(
     env: &EvmPrecompileEnv<'_, S, ST>,
     key: u64,
@@ -601,6 +602,7 @@ fn pruning_genesis() -> (
         genesis_timestamp: 0,
         chain_spec: evm_chain_spec,
         contract_creation_policy: ContractCreationPolicy::Everyone,
+        enabled_custom_precompiles: BTreeSet::from([ORACLE_PRECOMPILE_ADDRESS]),
         admin,
     };
 

@@ -35,7 +35,6 @@ async fn trailing_slashes_handled() -> anyhow::Result<()> {
         TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
         0,
     )
-    .enable_prover()
     .with_standard_sequencer()
     .start()
     .await?;

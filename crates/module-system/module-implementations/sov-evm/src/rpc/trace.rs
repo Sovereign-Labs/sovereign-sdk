@@ -21,6 +21,7 @@ use crate::db::EvmDb;
 use crate::error::into_rpc_error;
 use crate::evm::primitive_types::{MaybeSealedBlock, TxSignedAndRecovered};
 use crate::executor::{get_cfg_env, inspect, transact_commit};
+use crate::precompiles::PrecompileDb;
 use crate::Evm;
 
 impl<S: Spec, P> Evm<S, P>
@@ -96,6 +97,9 @@ where
         let (mut state, txs_to_trace, block_env, cfg_env) =
             self.setup_trace_execution(block_number, state)?;
         let mut evm_db = self.db(state.deref_mut());
+        let precompiles = self
+            .precompile_provider(None, evm_db.precompile_state_mut())
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
 
         // Trace all transactions in the block
         let mut traces = vec![];
@@ -107,6 +111,7 @@ where
                 cfg_env.clone(),
                 &mut evm_db,
                 &opts,
+                precompiles.clone(),
             )?;
             traces.push(TraceResult::new_success(result, Some(*tx.hash())));
         }
@@ -132,6 +137,9 @@ where
         let (mut state, txs_to_replay, block_env, cfg_env) =
             self.setup_trace_execution(traced_tx.block_number, state)?;
         let mut evm_db = self.db(state.deref_mut());
+        let precompiles = self
+            .precompile_provider(None, evm_db.precompile_state_mut())
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
 
         // Replay previous transactions in the block
         for tx in txs_to_replay {
@@ -140,15 +148,12 @@ where
                 break;
             }
 
-            let precompiles = self
-                .precompile_provider(None)
-                .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
             transact_commit(
                 &mut evm_db,
                 &block_env,
                 replay_tx_env(&tx),
                 cfg_env.clone(),
-                precompiles,
+                precompiles.clone(),
             )
             .map_err(EthApiError::from)?;
         }
@@ -160,6 +165,7 @@ where
             cfg_env,
             &mut evm_db,
             &opts,
+            precompiles,
         )
     }
 
@@ -170,6 +176,7 @@ where
         cfg: CfgEnv,
         db: &mut EvmDb<ApiStateAccessor<S>, S>,
         opts: &GethDebugTracingOptions,
+        precompiles: crate::precompiles::SovPrecompileProvider<'_, S, P>,
     ) -> Result<GethTrace, EthApiError> {
         let GethDebugTracingOptions {
             tracer,
@@ -189,9 +196,6 @@ where
                     let mut inspector = TracingInspector::new(inspector_config);
 
                     let gas_limit = tx_env.gas_limit;
-                    let precompiles = self
-                        .precompile_provider(None)
-                        .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
                     let ExecResultAndState { result, state } = inspect(
                         &mut *db,
                         block_env,

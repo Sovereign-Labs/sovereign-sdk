@@ -5,7 +5,7 @@ use futures::StreamExt;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait};
 use sov_rollup_interface::node::da::{DaService, SlotData, SubmitBlobReceipt};
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
@@ -51,7 +51,7 @@ impl BlockProducingConfig {
     /// Spawns periodic block producing. Useful for testing or custom setup.
     fn spawn_block_producing_if_needed(
         &self,
-        shutdown_receiver: watch::Receiver<()>,
+        secondary_shutdown_controller: &SecondaryShutdownController,
         da_layer: Arc<RwLock<StorableMockDaLayer>>,
     ) -> Option<JoinHandle<()>> {
         let BlockProducingConfig::Periodic { block_time_ms } = self else {
@@ -60,12 +60,14 @@ impl BlockProducingConfig {
 
         let block_time = Duration::from_millis(*block_time_ms);
         let span = tracing::info_span!("periodic_batch_producer");
+        let secondary_shutdown_controller = secondary_shutdown_controller.clone();
 
         Some(tokio::spawn(
             async move {
                 tracing::debug!(interval = ?block_time, "Spawning a task for periodic producing");
                 loop {
-                    match future_or_shutdown(tokio::time::sleep(block_time), &shutdown_receiver)
+                    match secondary_shutdown_controller
+                        .future_or_shutdown(tokio::time::sleep(block_time))
                         .await
                     {
                         FutureOrShutdownOutput::Shutdown => {
@@ -288,7 +290,10 @@ impl StorableMockDaService {
     }
 
     /// Creates new in memory [`StorableMockDaService`] from [`MockDaConfig`].
-    pub async fn from_config(config: MockDaConfig, shutdown_receiver: watch::Receiver<()>) -> Self {
+    pub async fn from_config(
+        config: MockDaConfig,
+        secondary_shutdown_controller: &SecondaryShutdownController,
+    ) -> Self {
         let da_layer = match config.da_layer.as_ref() {
             None => {
                 let mut da_layer = StorableMockDaLayer::new_from_connection(
@@ -310,7 +315,7 @@ impl StorableMockDaService {
         };
         let handle = config
             .block_producing
-            .spawn_block_producing_if_needed(shutdown_receiver, da_layer.clone());
+            .spawn_block_producing_if_needed(secondary_shutdown_controller, da_layer.clone());
         Self::construct(
             config.sender_address,
             da_layer,
@@ -661,11 +666,10 @@ mod tests {
             block_time_ms: block_time.as_millis() as u64,
         };
 
-        let (shutdown_sender, mut shutdown_receiver) = tokio::sync::watch::channel(());
-        shutdown_receiver.mark_unchanged();
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
 
-        let producing_handle =
-            block_producing.spawn_block_producing_if_needed(shutdown_receiver, da_layer.clone());
+        let producing_handle = block_producing
+            .spawn_block_producing_if_needed(&secondary_shutdown_controller, da_layer.clone());
 
         let services_count = 20;
         let blobs_per_service = 50;
@@ -713,7 +717,7 @@ mod tests {
             StorableMockDaService::new(MockAddress::new([1; 32]), da_layer, block_producing).await;
         check_consistency(&da_service, services_count * blobs_per_service).await?;
 
-        shutdown_sender.send(())?;
+        secondary_shutdown_controller.shutdown();
         drop(da_service);
         producing_handle.unwrap().await?;
 
