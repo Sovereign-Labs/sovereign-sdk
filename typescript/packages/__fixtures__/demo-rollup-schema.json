@@ -17,7 +17,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 173
+              "ByIndex": 177
             }
           }
         ],
@@ -83,7 +83,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 168
+              "ByIndex": 171
             },
             "doc": ""
           },
@@ -91,7 +91,7 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 171
+              "ByIndex": 175
             },
             "doc": ""
           },
@@ -243,7 +243,7 @@
             "discriminant": 16,
             "template": null,
             "value": {
-              "ByIndex": 149
+              "ByIndex": 152
             }
           },
           {
@@ -251,7 +251,7 @@
             "discriminant": 17,
             "template": null,
             "value": {
-              "ByIndex": 163
+              "ByIndex": 166
             }
           }
         ],
@@ -3273,6 +3273,14 @@
             "value": {
               "ByIndex": 139
             }
+          },
+          {
+            "name": "UpdateEnabledCustomPrecompiles",
+            "discriminant": 2,
+            "template": null,
+            "value": {
+              "ByIndex": 149
+            }
           }
         ],
         "hide_tag": false
@@ -3531,6 +3539,53 @@
       }
     },
     {
+      "Struct": {
+        "type_name": "EnabledCustomPrecompilesUpdate",
+        "template": null,
+        "peekable": false,
+        "fields": [
+          {
+            "display_name": "add",
+            "silent": false,
+            "value": {
+              "ByIndex": 151
+            },
+            "doc": ""
+          },
+          {
+            "display_name": "remove",
+            "silent": false,
+            "value": {
+              "ByIndex": 151
+            },
+            "doc": ""
+          }
+        ]
+      }
+    },
+    {
+      "Vec": {
+        "value": {
+          "ByIndex": 13
+        }
+      }
+    },
+    {
+      "Tuple": {
+        "template": null,
+        "peekable": false,
+        "fields": [
+          {
+            "value": {
+              "ByIndex": 153
+            },
+            "silent": false,
+            "doc": ""
+          }
+        ]
+      }
+    },
+    {
       "Enum": {
         "type_name": "AccessPatternMessages",
         "variants": [
@@ -3539,7 +3594,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 151
+              "ByIndex": 154
             }
           },
           {
@@ -3547,7 +3602,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 152
+              "ByIndex": 155
             }
           },
           {
@@ -3555,7 +3610,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 154
+              "ByIndex": 157
             }
           },
           {
@@ -3563,7 +3618,7 @@
             "discriminant": 3,
             "template": null,
             "value": {
-              "ByIndex": 155
+              "ByIndex": 158
             }
           },
           {
@@ -3571,7 +3626,7 @@
             "discriminant": 4,
             "template": null,
             "value": {
-              "ByIndex": 156
+              "ByIndex": 159
             }
           },
           {
@@ -3579,7 +3634,7 @@
             "discriminant": 5,
             "template": null,
             "value": {
-              "ByIndex": 157
+              "ByIndex": 160
             }
           },
           {
@@ -3593,7 +3648,7 @@
             "discriminant": 7,
             "template": null,
             "value": {
-              "ByIndex": 158
+              "ByIndex": 161
             }
           },
           {
@@ -3601,7 +3656,7 @@
             "discriminant": 8,
             "template": null,
             "value": {
-              "ByIndex": 159
+              "ByIndex": 162
             }
           },
           {
@@ -3615,7 +3670,7 @@
             "discriminant": 10,
             "template": null,
             "value": {
-              "ByIndex": 160
+              "ByIndex": 163
             }
           },
           {
@@ -3623,7 +3678,7 @@
             "discriminant": 11,
             "template": null,
             "value": {
-              "ByIndex": 161
+              "ByIndex": 164
             }
           },
           {
@@ -3631,7 +3686,7 @@
             "discriminant": 12,
             "template": null,
             "value": {
-              "ByIndex": 162
+              "ByIndex": 165
             }
           }
         ],
@@ -3709,7 +3764,7 @@
             "display_name": "content",
             "silent": false,
             "value": {
-              "ByIndex": 153
+              "ByIndex": 156
             },
             "doc": ""
           }
@@ -4001,7 +4056,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 164
+              "ByIndex": 167
             },
             "silent": false,
             "doc": ""
@@ -4018,7 +4073,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 165
+              "ByIndex": 168
             }
           },
           {
@@ -4026,7 +4081,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 166
+              "ByIndex": 169
             }
           },
           {
@@ -4034,7 +4089,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 167
+              "ByIndex": 170
             }
           }
         ],
@@ -4155,7 +4210,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 169
+              "ByIndex": 172
             }
           },
           {
@@ -4163,11 +4218,39 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 170
+              "ByIndex": 173
+            }
+          },
+          {
+            "name": "Window",
+            "discriminant": 2,
+            "template": null,
+            "value": {
+              "ByIndex": 174
             }
           }
         ],
         "hide_tag": false
+      }
+    },
+    {
+      "Tuple": {
+        "template": null,
+        "peekable": false,
+        "fields": [
+          {
+            "value": {
+              "Immediate": {
+                "Integer": [
+                  "u64",
+                  "Decimal"
+                ]
+              }
+            },
+            "silent": false,
+            "doc": ""
+          }
+        ]
       }
     },
     {
@@ -4220,7 +4303,7 @@
             "display_name": "max_priority_fee_bips",
             "silent": false,
             "value": {
-              "ByIndex": 172
+              "ByIndex": 176
             },
             "doc": ""
           },
@@ -4283,7 +4366,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 174
+              "ByIndex": 178
             },
             "silent": false,
             "doc": ""
@@ -4301,7 +4384,7 @@
             "display_name": "signatures",
             "silent": false,
             "value": {
-              "ByIndex": 175
+              "ByIndex": 179
             },
             "doc": ""
           },
@@ -4309,7 +4392,7 @@
             "display_name": "unused_pub_keys",
             "silent": false,
             "value": {
-              "ByIndex": 177
+              "ByIndex": 181
             },
             "doc": ""
           },
@@ -4338,7 +4421,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 168
+              "ByIndex": 171
             },
             "doc": ""
           },
@@ -4346,7 +4429,7 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 171
+              "ByIndex": 175
             },
             "doc": ""
           },
@@ -4364,7 +4447,7 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 176
+          "ByIndex": 180
         }
       }
     },
@@ -4424,7 +4507,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 179
+              "ByIndex": 183
             }
           },
           {
@@ -4432,7 +4515,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 181
+              "ByIndex": 185
             }
           }
         ],
@@ -4446,7 +4529,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 180
+              "ByIndex": 184
             },
             "silent": false,
             "doc": ""
@@ -4472,7 +4555,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 168
+              "ByIndex": 171
             },
             "doc": ""
           },
@@ -4480,7 +4563,7 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 171
+              "ByIndex": 175
             },
             "doc": ""
           },
@@ -4515,7 +4598,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 182
+              "ByIndex": 186
             },
             "silent": false,
             "doc": ""
@@ -4541,7 +4624,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 168
+              "ByIndex": 171
             },
             "doc": ""
           },
@@ -4549,7 +4632,7 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 171
+              "ByIndex": 175
             },
             "doc": ""
           },
@@ -4588,7 +4671,7 @@
   ],
   "root_type_indices": [
     0,
-    178,
+    182,
     3,
     9
   ],
@@ -5925,6 +6008,9 @@
         },
         {
           "name": "UpdateRuntimeConfig"
+        },
+        {
+          "name": "UpdateEnabledCustomPrecompiles"
         }
       ]
     },
@@ -6010,6 +6096,25 @@
         },
         {
           "name": "new_tx_gas_limit"
+        }
+      ]
+    },
+    {
+      "name": "",
+      "fields_or_variants": []
+    },
+    {
+      "name": "",
+      "fields_or_variants": []
+    },
+    {
+      "name": "EnabledCustomPrecompilesUpdate",
+      "fields_or_variants": [
+        {
+          "name": "add"
+        },
+        {
+          "name": "remove"
         }
       ]
     },
@@ -6246,8 +6351,15 @@
         },
         {
           "name": "generation"
+        },
+        {
+          "name": "window"
         }
       ]
+    },
+    {
+      "name": "",
+      "fields_or_variants": []
     },
     {
       "name": "",
