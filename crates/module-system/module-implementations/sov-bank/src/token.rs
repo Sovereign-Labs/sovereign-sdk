@@ -72,7 +72,7 @@ impl_hash32_type!(TokenId, TokenIdBech32, "token_");
     serde::Deserialize,
     derive_more::Display,
 )]
-#[display(r#"{}/{}"#, self.0, self.1)]
+#[display(r#"{}:{}"#, self.0, self.1)]
 pub struct BalanceKey<Addr: Display>(pub Addr, pub TokenId);
 
 impl<Addr: Display + BorshSerialize, AddrLike> EncodeLike<(AddrLike, &TokenId), BalanceKey<Addr>>
@@ -93,10 +93,10 @@ where
 {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        // The address serialization is unknown to us, so it might contain `/` - but we know that TokenID is
-        // bech32 which disallows `/`
-        let Some(pos) = s.rfind('/') else {
-            bail!("Invalid balance prefix. String does not contain '/'");
+        // The address serialization is unknown to us, so it might contain `:` - but we know that TokenID is
+        // bech32 which disallows `:`, so the last `:` always separates the address from the token ID.
+        let Some(pos) = s.rfind(':') else {
+            bail!("Invalid balance prefix. String does not contain ':'");
         };
         if (pos + 1) == s.len() {
             bail!("Invalid balance prefix. String does not contain token ID");
@@ -372,10 +372,12 @@ mod tests {
 
     #[test]
     fn test_balance_key_str_roundtrip() {
-        let key: BalanceKey<String> = BalanceKey("Address/".to_string(), TokenId::from([1u8; 32]));
+        // The address deliberately contains the `:` separator to exercise that `from_str`
+        // splits on the *last* `:` (the bech32 token ID can never contain one).
+        let key: BalanceKey<String> = BalanceKey("Address:".to_string(), TokenId::from([1u8; 32]));
         assert_eq!(
             key.to_string(),
-            "Address//token_1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqskmlvce"
+            "Address::token_1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqskmlvce"
         );
 
         assert_eq!(
@@ -386,7 +388,7 @@ mod tests {
 
     #[test]
     fn test_balance_key_encode_like() {
-        let key: BalanceKey<String> = BalanceKey("Address/".to_string(), TokenId::from([1u8; 32]));
+        let key: BalanceKey<String> = BalanceKey("Address:".to_string(), TokenId::from([1u8; 32]));
         assert_eq!(
             BorshCodec.encode_to_vec_like(&(key.0.clone(), &key.1)),
             BorshCodec.encode_to_vec(&key)
