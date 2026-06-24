@@ -74,10 +74,24 @@ where
         self.admin.set(&config.admin, state)?;
         let spec = init_spec(config)?;
         let chain_cfg = evm_chain_config(config, spec);
+        for address in &config.enabled_custom_precompiles {
+            anyhow::ensure!(
+                P::ADDRESSES.contains(address),
+                "custom EVM precompile address {address} is not available in this runtime"
+            );
+        }
 
         let block = init_block(config);
 
         self.cfg.set(&chain_cfg, state)?;
+        // Only write the value when non-empty to avoid state root breakage on older rollups that
+        // did not have precompiles set in genesis.
+        // A missing value is treated as an empty set on read so this is semantically identical to
+        // writing an empty set.
+        if !config.enabled_custom_precompiles.is_empty() {
+            self.enabled_custom_precompiles
+                .set(&config.enabled_custom_precompiles, state)?;
+        }
         self.head.set(&block, state)?;
 
         let block_env = create_block_env(

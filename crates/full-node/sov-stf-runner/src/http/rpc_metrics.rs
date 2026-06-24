@@ -419,9 +419,9 @@ mod tests {
             tokio_runtime_metrics_interval_millis: 500,
             rpc_aggregation: RpcAggregationConfig::standard(),
         };
-        let (_shutdown_sender, mut shutdown_receiver) = tokio::sync::watch::channel(());
-        shutdown_receiver.mark_unchanged();
-        sov_metrics::init_metrics_tracker(&monitoring_config, shutdown_receiver);
+        let secondary_shutdown_controller =
+            sov_rollup_interface::node::SecondaryShutdownController::new();
+        sov_metrics::init_metrics_tracker(&monitoring_config, &secondary_shutdown_controller);
 
         let aggregator = Arc::new(RpcStatsAggregator::new(
             RpcAggregationConfig::standard(),

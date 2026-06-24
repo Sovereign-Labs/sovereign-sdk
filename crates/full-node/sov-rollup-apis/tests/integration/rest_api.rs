@@ -209,6 +209,43 @@ async fn test_simulation_fail() {
     assert_eq!(actual, expected);
 }
 
+/// Regression test: a malformed `sender` (odd number of hex digits) must be
+/// rejected with `400 Bad Request` instead of panicking the simulate handler.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_simulation_invalid_sender() {
+    let data = TestData::setup().await;
+
+    let receiver = TestUser::<S>::generate_with_default_balance().address();
+    let call = sov_bank::CallMessage::<S>::Transfer {
+        to: receiver,
+        coins: sov_bank::Coins {
+            amount: Amount::new(1000),
+            token_id: config_gas_token_id(),
+        },
+    };
+    // Odd number of hex digits: cannot be decoded into a `CredentialId`.
+    let params = json_obj!({
+        "sender": "518145ba4bc1cee9e32e614523ddec8cc2e3f90d2ca74b277d07ef1c7997985",
+        "call": {
+            "bank": call,
+        },
+    });
+    let client = reqwest::Client::new();
+
+    let response = client
+        .post(format!("http://{}/rollup/simulate", data.axum_addr))
+        .json(&params)
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.status(),
+        reqwest::StatusCode::BAD_REQUEST,
+        "An invalid sender should be rejected as a client error, not crash the node"
+    );
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_sync_status_fully_synced() {
     let data = TestData::setup().await;

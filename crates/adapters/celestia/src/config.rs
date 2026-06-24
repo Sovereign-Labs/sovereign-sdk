@@ -114,6 +114,21 @@ pub struct CelestiaConfig {
     /// See [`backon::ExponentialBuilder`] for more details
     #[serde(default = "default_factor")]
     pub backoff_factor: f32,
+
+    /// Whether to compress batch blobs before submission. Emission only — never
+    /// affects how blobs are read or verified. Default: `Off`.
+    #[serde(default)]
+    pub compression: CompressOnSubmit,
+    /// Target chunk size (uncompressed bytes) for the chunked compression envelope.
+    /// Must be in `1..=MAX_ROLLUP_CHUNK_LEN` (16384 by default — the verifier's per-chunk
+    /// rollup cap); an out-of-range value is rejected at startup rather than silently clamped.
+    /// Default: 430 (the per-chunk compressed cap — one signed-v1 first share minus the envelope
+    /// and chunk headers), so a default-config chunk stays within a single Celestia share. Advanced
+    /// knob — larger chunks trade coarser partial-read granularity for a better ratio, but a chunk
+    /// that does not compress below the per-chunk compressed cap (`MAX_COMPRESSED_CHUNK_LEN`) makes
+    /// the envelope non-canonical, so that batch is posted verbatim (uncompressed), not rejected.
+    #[serde(default = "default_compression_chunk_size")]
+    pub compression_chunk_size: usize,
 }
 
 impl fmt::Debug for CelestiaConfig {
@@ -148,6 +163,8 @@ impl fmt::Debug for CelestiaConfig {
             .field("backoff_max_delay_ms", &self.backoff_max_delay_ms)
             .field("backoff_max_times", &self.backoff_max_times)
             .field("backoff_factor", &self.backoff_factor)
+            .field("compression", &self.compression)
+            .field("compression_chunk_size", &self.compression_chunk_size)
             .finish()
     }
 }
@@ -190,6 +207,40 @@ pub enum VerifyOnFetchMode {
     ReturnError,
 }
 
+/// Whether the adapter compresses batch blobs before posting them to Celestia.
+///
+/// Controls **emission only** — read and verification semantics never depend on it.
+/// Operators must keep it `Off` until every node/prover on the network can read
+/// compression envelopes.
+#[derive(
+    Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize, JsonSchema,
+)]
+pub enum CompressOnSubmit {
+    /// Post batch blobs verbatim (today's behavior).
+    #[default]
+    Off,
+    /// Wrap batch blobs in a chunked LZ4 envelope when it is strictly smaller than raw.
+    Lz4,
+}
+
+impl CompressOnSubmit {
+    pub(crate) fn is_enabled(&self) -> bool {
+        match self {
+            CompressOnSubmit::Off => false,
+            CompressOnSubmit::Lz4 => true,
+        }
+    }
+}
+
+impl fmt::Display for CompressOnSubmit {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        match self {
+            CompressOnSubmit::Off => f.write_str("off"),
+            CompressOnSubmit::Lz4 => f.write_str("lz4"),
+        }
+    }
+}
+
 impl CelestiaConfig {
     /// Absolutely minimal config for client that is capable of reading
     pub fn minimal(rpc_url: String) -> Self {
@@ -211,6 +262,8 @@ impl CelestiaConfig {
             backoff_max_delay_ms: default_max_delay_ms(),
             backoff_max_times: default_max_times(),
             backoff_factor: default_factor(),
+            compression: CompressOnSubmit::default(),
+            compression_chunk_size: default_compression_chunk_size(),
         }
     }
 
@@ -234,6 +287,7 @@ impl CelestiaConfig {
 
     pub(crate) async fn build_client(&self) -> anyhow::Result<celestia_client::Client> {
         validate_rpc_url(&self.rpc_url)?;
+        validate_compression_chunk_size(self.compression_chunk_size)?;
 
         let api_request_timeout =
             std::time::Duration::from_secs(self.api_request_timeout_secs.get());
@@ -276,9 +330,32 @@ pub(crate) const fn default_safe_lead_time_ms() -> u64 {
     500
 }
 
+/// Default chunk size: the per-chunk compressed cap [`crate::envelope::MAX_COMPRESSED_CHUNK_LEN`]
+/// (one signed-v1 first share minus the envelope and chunk headers). Tying the default to that cap
+/// keeps a default-config chunk within a single authenticated Celestia share and guarantees the
+/// uncompressed chunk size can never exceed the cap. A raw (incompressible) chunk then exactly
+/// fills the first share; a compressible one is smaller.
+pub(crate) const fn default_compression_chunk_size() -> usize {
+    crate::envelope::MAX_COMPRESSED_CHUNK_LEN as usize
+}
+
 fn validate_rpc_url(rpc_url: &str) -> anyhow::Result<()> {
     if rpc_url.trim().is_empty() {
         anyhow::bail!("`rpc_url` must be set in the config or via `SOV_CELESTIA_RPC_URL`");
+    }
+
+    Ok(())
+}
+
+/// Validate `compression_chunk_size` against the verifier's per-chunk rollup cap.
+/// An out-of-range value would otherwise be silently clamped at encode time, so a
+/// misconfigured node would quietly emit different chunks than the operator requested.
+fn validate_compression_chunk_size(chunk_size: usize) -> anyhow::Result<()> {
+    let max = crate::envelope::MAX_ROLLUP_CHUNK_LEN as usize;
+    if !(1..=max).contains(&chunk_size) {
+        anyhow::bail!(
+            "`compression_chunk_size` must be between 1 and {max} (the verifier's per-chunk cap), got {chunk_size}"
+        );
     }
 
     Ok(())
@@ -361,7 +438,10 @@ pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
 
 #[cfg(test)]
 mod tests {
-    use super::{validate_rpc_url, CelestiaConfig, GrpcEndpointConfig, VerifyOnFetchMode};
+    use super::{
+        default_compression_chunk_size, validate_compression_chunk_size, validate_rpc_url,
+        CelestiaConfig, GrpcEndpointConfig, VerifyOnFetchMode,
+    };
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
     const GRPC_ENV_VAR: &str = "SOV_CELESTIA_GRPC_URL";
@@ -580,5 +660,29 @@ mod tests {
             let config = deserialize_config(json).expect(json);
             assert_eq!(config.verify_on_fetch_mode, expected);
         }
+    }
+
+    #[test]
+    fn compression_chunk_size_in_range_is_accepted() {
+        let max = crate::envelope::MAX_ROLLUP_CHUNK_LEN as usize;
+        assert!(validate_compression_chunk_size(1).is_ok());
+        assert!(validate_compression_chunk_size(default_compression_chunk_size()).is_ok());
+        assert!(validate_compression_chunk_size(max).is_ok());
+    }
+
+    #[test]
+    fn compression_chunk_size_out_of_range_is_rejected() {
+        let max = crate::envelope::MAX_ROLLUP_CHUNK_LEN as usize;
+        assert!(validate_compression_chunk_size(0).is_err());
+        assert!(validate_compression_chunk_size(max + 1).is_err());
+    }
+
+    #[test]
+    fn default_compression_chunk_size_matches_compressed_cap() {
+        // The default is tied to the compressed cap so a default-config chunk can never exceed it.
+        assert_eq!(
+            default_compression_chunk_size(),
+            crate::envelope::MAX_COMPRESSED_CHUNK_LEN as usize
+        );
     }
 }

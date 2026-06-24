@@ -602,6 +602,7 @@ fn pruning_genesis() -> (
         genesis_timestamp: 0,
         chain_spec: evm_chain_spec,
         contract_creation_policy: ContractCreationPolicy::Everyone,
+        enabled_custom_precompiles: BTreeSet::from([ORACLE_PRECOMPILE_ADDRESS]),
         admin,
     };
 

@@ -95,6 +95,7 @@ pub(crate) fn setup() -> (TestRunner<RT, S>, EvmAccount, EvmAccount, TestUser<S>
             hardforks: vec![(0, SpecId::CANCUN)],
         },
         contract_creation_policy: ContractCreationPolicy::Everyone,
+        enabled_custom_precompiles: Default::default(),
         initial_base_fee: 0,
         genesis_timestamp: 0,
         admin: admin.address(),

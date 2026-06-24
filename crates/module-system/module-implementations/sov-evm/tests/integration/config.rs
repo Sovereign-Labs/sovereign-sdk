@@ -97,8 +97,7 @@ fn test_update_hardfork() {
         input: admin.create_plain_message::<RT, Evm<S>>(CallMessage::UpdateRuntimeConfig (
             EvmRuntimeConfigUpdate {
                 new_hardfork: Some((105, BorshSpecId(SpecId::PRAGUE))),
-                new_contract_creation_policy: None,
-                chain_spec_update: None,
+                new_contract_creation_policy: None,                chain_spec_update: None,
                 new_admin: None,
             },
         )),
@@ -115,8 +114,7 @@ fn test_update_hardfork() {
         input: admin.create_plain_message::<RT, Evm<S>>(CallMessage::UpdateRuntimeConfig (
             EvmRuntimeConfigUpdate {
                 new_hardfork: Some((100, BorshSpecId(SpecId::OSAKA))),
-                new_contract_creation_policy: None,
-                chain_spec_update: None,
+                new_contract_creation_policy: None,                chain_spec_update: None,
                 new_admin: None,
             },
         )),
@@ -281,8 +279,7 @@ fn test_update_admin() {
         input: admin.create_plain_message::<RT, Evm<S>>(CallMessage::UpdateRuntimeConfig (
             EvmRuntimeConfigUpdate {
                 new_hardfork: None,
-                new_contract_creation_policy: Some(ContractCreationPolicyUpdate::Everyone),
-                chain_spec_update: None,
+                new_contract_creation_policy: Some(ContractCreationPolicyUpdate::Everyone),                chain_spec_update: None,
                 new_admin: None,
             },
         )),

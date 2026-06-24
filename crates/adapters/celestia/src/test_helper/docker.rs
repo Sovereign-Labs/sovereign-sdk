@@ -4,15 +4,16 @@ use std::time::Duration;
 
 use crate::config::{
     default_api_request_timeout_secs, default_background_stat_polling_interval_secs,
-    default_factor, default_max_delay_ms, default_max_times, default_min_delay_ms,
-    default_request_timeout_seconds, default_safe_lead_time_ms, default_tx_priority,
-    default_tx_status_polling_millis,
+    default_compression_chunk_size, default_factor, default_max_delay_ms, default_max_times,
+    default_min_delay_ms, default_request_timeout_seconds, default_safe_lead_time_ms,
+    default_tx_priority, default_tx_status_polling_millis, CompressOnSubmit,
 };
 use crate::verifier::address::CelestiaAddress;
 use crate::{CelestiaConfig, CelestiaService, VerifyOnFetchMode};
 use anyhow::{anyhow, Context};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::SecondaryShutdownController;
 use sov_test_utils::docker::prepull_image_best_effort;
 use testcontainers::core::{ExecCommand, Host, Mount, WaitFor};
 use testcontainers::runners::AsyncRunner;
@@ -298,6 +299,8 @@ impl CelestiaDevNode {
             backoff_max_delay_ms: default_max_delay_ms(),
             backoff_max_times: default_max_times(),
             backoff_factor: default_factor(),
+            compression: CompressOnSubmit::Off,
+            compression_chunk_size: default_compression_chunk_size(),
         })
     }
 }
@@ -311,9 +314,13 @@ async fn test_service_starts() -> anyhow::Result<()> {
 
     let config = dev_node.get_config().await?;
     tracing::info!("CONFIG: {:?}", config);
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-    let da_service =
-        CelestiaService::new(config, crate::test_helper::ROLLUP_PARAMS_DEV, shutdown_rx).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service = CelestiaService::new(
+        config,
+        crate::test_helper::ROLLUP_PARAMS_DEV,
+        &secondary_shutdown_controller,
+    )
+    .await;
     let signer = da_service.get_signer().await;
     assert_eq!(signer, Some(dev_node.get_signer_address(0).await?));
     let header_1 = da_service.get_head_block_header().await?;

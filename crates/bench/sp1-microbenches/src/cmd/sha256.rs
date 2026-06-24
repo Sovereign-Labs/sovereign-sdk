@@ -2,7 +2,7 @@ use anyhow::Context;
 use clap::Args;
 use sp1_sdk::blocking::{Prover, ProverClient, SP1Stdin};
 
-use crate::fit::fit_prover_gas_per_byte;
+use crate::fit_prover_gas_per_byte;
 use crate::{load_guest_elf, BenchResult};
 
 const GUEST_ELF_PATH: &str = concat!(

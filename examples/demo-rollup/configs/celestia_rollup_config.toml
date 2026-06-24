@@ -71,6 +71,18 @@ signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e
 # Default: High for better blob inclusion.
 #tx_priority = "High"
 
+# Whether to compress batch blobs before submission. Emission only — it never affects
+# how blobs are read or verified. Keep "Off" until every node/prover on the network can
+# read compression envelopes. Options: "Off", "Lz4". Default: "Off".
+#compression = "Off"
+# Target chunk size (uncompressed bytes) for the chunked compression envelope. Must be in
+# 1..=16384 (MAX_ROLLUP_CHUNK_LEN, the verifier's per-chunk rollup cap); an out-of-range value
+# is rejected at startup rather than silently clamped.
+# Advanced knob — larger chunks trade coarser partial-read granularity for a better ratio.
+# Default: 430 (the per-chunk compressed cap — one signed-v1 first share minus the envelope and
+# chunk headers), so a default-config chunk stays within a single Celestia share.
+#compression_chunk_size = 430
+
 # Exponential backoff configuration for retrying failed requests to Celestia node
 # Minimal time to wait before reattempting to request to celestia node.
 # Default: 100 milliseconds

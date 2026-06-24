@@ -5,7 +5,9 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaConfig;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_rollup_interface::node::{
+    future_or_shutdown, FutureOrShutdownOutput, SecondaryShutdownController,
+};
 
 const BLOCK_TIME_MS: u64 = 50;
 const READERS_COUNT: usize = 10;
@@ -25,6 +27,7 @@ fn bench_storable_mock_da_service(c: &mut Criterion) {
 
     let (sender, mut receiver) = tokio::sync::watch::channel(());
     receiver.mark_unchanged();
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
 
     let path = temp.path().join("mock-da.sqlite");
 
@@ -43,7 +46,7 @@ fn bench_storable_mock_da_service(c: &mut Criterion) {
                 randomization: None,
                 failure_behavior: Default::default(),
             },
-            receiver.clone(),
+            &secondary_shutdown_controller,
         )
         .await;
 
@@ -138,6 +141,7 @@ fn bench_storable_mock_da_service(c: &mut Criterion) {
 
     group.finish();
 
+    secondary_shutdown_controller.shutdown();
     sender.send(()).unwrap();
     rt.block_on(async {
         for handle in handles {

@@ -134,7 +134,7 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        _shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        _secondary_shutdown_controller: &sov_rollup_interface::node::SecondaryShutdownController,
     ) -> Self::DaService {
         StorableMockDaClient::from_config(rollup_config.da.clone())
             .expect("Failed to create da service")

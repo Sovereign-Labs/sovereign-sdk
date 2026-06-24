@@ -437,12 +437,11 @@ where
             crate::helpers::prepare_call_env(&block_env, request, cfg.chain_spec.tx_gas_limit)?;
         let cfg_env =
             crate::executor::get_cfg_env(&block_env, &cfg, Some(super::get_cfg_env_template()));
-        let evm_db = self.db(maybe_archival_state.deref_mut());
-
         let mut inspector = AccessListInspector::new(initial_access_list);
         let precompiles = self
-            .precompile_provider(None)
+            .precompile_provider(None, maybe_archival_state.deref_mut())
             .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+        let evm_db = self.db(maybe_archival_state.deref_mut());
         let execution = crate::executor::inspect(
             evm_db,
             &block_env,

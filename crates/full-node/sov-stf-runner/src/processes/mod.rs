@@ -11,10 +11,10 @@ use op_manager::attestations::AttestationsManager;
 pub use prover_service::*;
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::SecondaryShutdownController;
 use sov_rollup_interface::optimistic::BondingProofService;
 use sov_rollup_interface::stf::ProofSender;
 pub use stf_info_manager::*;
-use tokio::sync::watch;
 use tokio::task::JoinHandle;
 pub use zk_manager::*;
 
@@ -28,7 +28,7 @@ pub async fn start_zk_workflow_in_background<Ps>(
     proof_sender: Box<dyn ProofSender>,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    secondary_shutdown_controller: &SecondaryShutdownController,
     shutdown_sender: tokio::sync::watch::Sender<()>,
     start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<JoinHandle<()>>
@@ -44,7 +44,7 @@ where
         proof_sender,
         stf_info_receiver,
         da_sync_state,
-        shutdown_receiver,
+        secondary_shutdown_controller,
         shutdown_sender,
         start_fresh_outer_proof_on_resync,
     )
@@ -56,7 +56,7 @@ where
 pub async fn start_op_workflow_in_background<Ps, Bps>(
     bonding_proof_service: Bps,
     proof_sender: Box<dyn ProofSender>,
-    shutdown_receiver: watch::Receiver<()>,
+    secondary_shutdown_controller: &SecondaryShutdownController,
     st_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
 ) -> anyhow::Result<JoinHandle<()>>
 where
@@ -68,7 +68,7 @@ where
         st_info_receiver,
         bonding_proof_service,
         proof_sender,
-        shutdown_receiver,
+        secondary_shutdown_controller,
     )
     .post_attestation_to_da_in_background()
     .await)
@@ -76,9 +76,10 @@ where
 
 /// Starts the operator workflow in the background.
 pub async fn start_operator_workflow_in_background(
-    mut shutdown_receiver: watch::Receiver<()>,
+    secondary_shutdown_controller: &SecondaryShutdownController,
 ) -> JoinHandle<()> {
+    let secondary_shutdown_controller = secondary_shutdown_controller.clone();
     tokio::spawn(async move {
-        let _ = shutdown_receiver.changed().await;
+        let _ = secondary_shutdown_controller.wait_for_shutdown().await;
     })
 }

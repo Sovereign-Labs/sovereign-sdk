@@ -7,6 +7,7 @@ use revm::database::State as RevmState;
 use revm::handler::{EthPrecompiles, PrecompileProvider};
 use revm::interpreter::{CallInputs, Gas, InstructionResult, InterpreterResult};
 use sov_modules_api::{Context as SovContext, Spec, TxState};
+use std::collections::BTreeSet;
 
 mod bank_balance;
 mod sequencing_timestamp;
@@ -85,10 +86,15 @@ pub(crate) struct SovPrecompileProvider<'a, S: Spec, P: EvmPrecompileSet<S>> {
     eth: EthPrecompiles,
     custom: P,
     sov_context: Option<&'a SovContext<S>>,
+    enabled_custom_precompiles: BTreeSet<Address>,
 }
 
 impl<'a, S: Spec, P: EvmPrecompileSet<S>> SovPrecompileProvider<'a, S, P> {
-    pub(crate) fn new(custom: P, sov_context: Option<&'a SovContext<S>>) -> Self {
+    pub(crate) fn new(
+        custom: P,
+        sov_context: Option<&'a SovContext<S>>,
+        enabled_custom_precompiles: BTreeSet<Address>,
+    ) -> Self {
         let () = P::CHECK_ADDRESSES;
         let eth = EthPrecompiles::default();
 
@@ -96,7 +102,12 @@ impl<'a, S: Spec, P: EvmPrecompileSet<S>> SovPrecompileProvider<'a, S, P> {
             eth,
             custom,
             sov_context,
+            enabled_custom_precompiles,
         }
+    }
+
+    fn custom_precompile_enabled(&self, address: &Address) -> bool {
+        self.enabled_custom_precompiles.contains(address) && P::ADDRESSES.contains(address)
     }
 }
 
@@ -123,7 +134,7 @@ where
             return self.eth.run(ctx, inputs);
         }
 
-        if !P::ADDRESSES.contains(&address) {
+        if !self.custom_precompile_enabled(&address) {
             return Ok(None);
         }
 
@@ -154,14 +165,17 @@ where
 
     fn warm_addresses(&self) -> Box<impl Iterator<Item = Address>> {
         Box::new(
-            self.eth
-                .warm_addresses()
-                .chain(P::ADDRESSES.iter().copied()),
+            self.eth.warm_addresses().chain(
+                self.enabled_custom_precompiles
+                    .iter()
+                    .copied()
+                    .filter(|address| P::ADDRESSES.contains(address)),
+            ),
         )
     }
 
     fn contains(&self, address: &Address) -> bool {
-        self.eth.contains(address) || P::ADDRESSES.contains(address)
+        self.eth.contains(address) || self.custom_precompile_enabled(address)
     }
 }
 

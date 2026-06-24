@@ -189,13 +189,17 @@ where
         self.resolve_simulation_nonce(&mut request, &mut maybe_archival_state)?;
 
         if !has_overrides {
-            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
+            // The precompile constructor clones the active precompiles state item and then drops the reference
             let precompiles = self
-                .precompile_provider(None)
+                .precompile_provider(None, maybe_archival_state.deref_mut())
                 .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
+            let mut evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
             return simulate_call(&mut evm_db, &block_env, cfg, request, precompiles);
         }
 
+        let precompiles = self
+            .precompile_provider(None, maybe_archival_state.deref_mut())
+            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         let evm_db: EvmDb<_, S> = self.db(maybe_archival_state.deref_mut());
         let mut evm_state = RevmState::builder().with_database(evm_db).build();
         apply_call_overrides(
@@ -204,9 +208,6 @@ where
             state_overrides,
             block_overrides,
         )?;
-        let precompiles = self
-            .precompile_provider(None)
-            .map_err(|e| EthApiError::other(into_rpc_error(e)))?;
         simulate_call(&mut evm_state, &block_env, cfg, request, precompiles)
     }
 }

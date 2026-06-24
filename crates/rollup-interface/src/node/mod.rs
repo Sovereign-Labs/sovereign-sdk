@@ -7,10 +7,12 @@
 pub mod da;
 mod da_sync_state;
 pub mod ledger_api;
+mod secondary_shutdown;
 
 use std::future::Future;
 
 pub use da_sync_state::SyncStatus;
+pub use secondary_shutdown::SecondaryShutdownController;
 use tokio::select;
 use tokio::sync::watch;
 
