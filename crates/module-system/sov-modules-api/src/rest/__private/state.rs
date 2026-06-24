@@ -282,17 +282,14 @@ where
     async fn get_state_map_item_route(
         State(state): State<Self>,
         mut accessor: ApiStateAccessor<M::Spec>,
-        Path(key): Path<String>,
+        Path(input_key): Path<String>,
     ) -> ApiResult<StateItemContents<K, V>> {
-        // Path parameters are plain strings, so we parse the key from its `Display`
-        // form via `FromStr` instead of relying on axum's serde `Path` deserializer.
-        // The latter maps captured path-param *names* onto struct fields, so it can
-        // never reconstruct a multi-field (composite) key from the single `{key}`
-        // segment, failing with `missing field ...`.
-        let key = K::from_str(&key).map_err(|_| {
+        let key = K::from_str(&input_key).map_err(|err| {
             sov_rest_utils::errors::bad_request_400(
                 "Invalid key",
-                "key must be a valid state map key",
+                format!(
+                    "Key '{input_key}' cannot be deserialized to a valid state map key: {err:?}"
+                ),
             )
         })?;
 
@@ -306,9 +303,7 @@ where
 
         let value = state_map.get(&key, &mut accessor).unwrap_infallible();
         match value {
-            // Known issue, will be solved later
-            // https://github.com/Sovereign-Labs/sovereign-sdk-wip/blob/f3b934e33833ec3621f46a3b31824a344de7b433/crates/full-node/sov-ledger-apis/src/lib.rs#L387
-            None => Err(not_found_404(&state.state_item_info.name, "unknown")),
+            None => Err(not_found_404(&state.state_item_info.name, input_key)),
             Some(value) => Ok(StateItemContents::MapElement { key, value }.into()),
         }
     }
