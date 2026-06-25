@@ -915,7 +915,7 @@ impl LedgerStateProvider for LedgerDb {
             MAX_SLOTS_PER_REQUEST
         );
         let ids: Vec<_> = (start.get()..=end.get())
-            .map(|x| SlotIdentifier::Number(SlotNumber::new_dangerous(x)))
+            .map(|x| SlotIdentifier::Number(SlotNumber::new(x)))
             .collect();
         self.get_slots(&ids, query_mode).await
     }

@@ -367,7 +367,7 @@
           "description": "Maximum time in milliseconds without a heartbeat before a leader is considered inactive.",
           "type": "integer",
           "format": "uint64",
-          "default": 500,
+          "default": 1000,
           "minimum": 0
         }
       }
@@ -471,6 +471,15 @@
           "format": "uint32",
           "minimum": 0
         },
+        "rpc_aggregation": {
+          "description": "In-process aggregation of JSON-RPC call statistics. When the section is\nomitted, defaults are used.",
+          "$ref": "#/$defs/RpcAggregationConfig",
+          "default": {
+            "flush_interval_secs": 10,
+            "max_slow_call_points_per_window": 10,
+            "slow_call_threshold_ms": 500
+          }
+        },
         "telegraf_address": {
           "description": "A UDP or TCP socket where Telegraf has `inputs.socket_listener`, something like `udp://127.0.0.1:8094`.\nLocalhost is preferred for latency and reliability reasons.",
           "$ref": "#/$defs/TelegrafSocketConfig"
@@ -497,7 +506,7 @@
           "default": {
             "grace_period_millis": 10000,
             "heartbeat_interval_millis": 100,
-            "leader_timeout_millis": 500
+            "leader_timeout_millis": 1000
           }
         },
         "node_id": {
@@ -608,6 +617,11 @@
         "recovery_strategy": {
           "description": "Strategy for handling recovery scenarios in the preferred sequencer.",
           "$ref": "#/$defs/RecoveryStrategy"
+        },
+        "use_pi_rate_limiter": {
+          "description": "Whether to enable the experimental PI controller for rate limiting.\nThis smooths out the tx acceptance rate over time, rather than suddenly rejecting all txs when the batch is full.",
+          "type": "boolean",
+          "default": false
         }
       },
       "additionalProperties": false,
@@ -1074,6 +1088,33 @@
       "type": "integer",
       "format": "uint64",
       "minimum": 0
+    },
+    "RpcAggregationConfig": {
+      "description": "Configuration for in-process aggregation of JSON-RPC call statistics.",
+      "type": "object",
+      "properties": {
+        "flush_interval_secs": {
+          "description": "How often aggregated RPC statistics are flushed to the metrics server,\nin seconds. One point per `(method, transport)` pair is emitted per\nwindow, and only for pairs that saw traffic.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 10,
+          "minimum": 0
+        },
+        "max_slow_call_points_per_window": {
+          "description": "Maximum number of individual slow-call points emitted per flush window,\nso that a flood of slow queries degrades to \"the aggregate shows many\nslow calls\" instead of crowding out other metrics.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 10,
+          "minimum": 0
+        },
+        "slow_call_threshold_ms": {
+          "description": "Calls at least this slow emit an individual metric point (subject to\n`max_slow_call_points_per_window`) and a debug-level log line with the\nrequest parameters.",
+          "type": "integer",
+          "format": "uint64",
+          "default": 500,
+          "minimum": 0
+        }
+      }
     },
     "RunnerConfig": {
       "description": "Configuration for StateTransitionRunner.",

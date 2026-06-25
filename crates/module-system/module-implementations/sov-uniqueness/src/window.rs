@@ -1,8 +1,8 @@
-use std::collections::VecDeque;
-
 use borsh::{BorshDeserialize, BorshSerialize};
+use serde::Serialize;
 use sov_modules_api::{macros::config_value, CredentialId, Spec, StateAccessor, StateReader};
 use sov_state::User;
+use std::collections::VecDeque;
 
 const PAST_TRANSACTIONS_WINDOW: u64 = {
     let window = config_value!("PAST_TRANSACTIONS_WINDOW");
@@ -18,7 +18,7 @@ const PAST_TRANSACTIONS_WINDOW: u64 = {
 };
 
 /// A window of seen nonces.
-#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Default, Serialize)]
 pub struct Window {
     /// The nonce at which the window starts. Always a multiple of 8 so that entries in the bits array stay aligned.
     /// (Otherwise, we would have to iterate the array and shift each entry when we adjust the window)
@@ -96,7 +96,7 @@ impl Window {
     }
 }
 
-#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Default)]
+#[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Default, Serialize)]
 pub struct BitMap(VecDeque<u8>);
 
 impl BitMap {

@@ -194,7 +194,7 @@ impl LeaderElectionConfig {
 }
 
 const fn default_leader_timeout_millis() -> u64 {
-    500
+    1000
 }
 
 const fn default_leader_grace_period_millis() -> u64 {
@@ -270,6 +270,11 @@ pub struct PreferredSequencerConfig<Address: Copy> {
     /// lock contention.
     #[serde(default = "default_future_nonce_transaction_timeout_millis")]
     pub future_nonce_transaction_timeout_millis: u64,
+
+    /// Whether to enable the experimental PI controller for rate limiting.
+    /// This smooths out the tx acceptance rate over time, rather than suddenly rejecting all txs when the batch is full.
+    #[serde(default)]
+    pub use_pi_rate_limiter: bool,
 }
 
 impl<Address: Copy> Default for PreferredSequencerConfig<Address> {
@@ -288,6 +293,7 @@ impl<Address: Copy> Default for PreferredSequencerConfig<Address> {
             future_nonce_transaction_timeout_millis:
                 default_future_nonce_transaction_timeout_millis(),
             rate_limiter: None,
+            use_pi_rate_limiter: false,
         }
     }
 }

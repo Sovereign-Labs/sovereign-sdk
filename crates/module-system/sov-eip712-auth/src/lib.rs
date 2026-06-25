@@ -203,8 +203,9 @@ pub fn authenticate<
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
+    let mut raw_tx_slice: &[u8] = raw_tx;
     let tx = match <Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec> as MeteredBorshDeserialize<S>>::deserialize(
-        &mut &raw_tx[..],
+        &mut raw_tx_slice,
         state,
     ) {
         Ok(ok) => ok,
@@ -221,6 +222,16 @@ pub fn authenticate<
             ));
         }
     };
+    if !raw_tx_slice.is_empty() {
+        return Err(AuthenticationError::FatalError(
+            FatalError::DeserializationFailed(format!(
+                "{} trailing bytes after transaction deserialization",
+                raw_tx.len()
+            )),
+            raw_tx_hash,
+        ));
+    }
+
     verify_and_decode_tx::<S, D, SP>(raw_tx_hash, tx, state)
 }
 

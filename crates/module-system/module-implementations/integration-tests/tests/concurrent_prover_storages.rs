@@ -504,14 +504,14 @@ fn assert_values_maybe_with_proof<S: NativeStorage>(
 
     let next_version = expected_values.len() as u64;
     for (idx, expected_value) in expected_values.into_iter().enumerate() {
-        let version = SlotNumber::new_dangerous(idx as u64);
+        let version = SlotNumber::new(idx as u64);
         assert_eq!(expected_value, get_value(Some(version)));
     }
 
     // Future versions are not available
     // Checking 3 more next versions for extra confidence
     for version in next_version..(next_version + 3) {
-        let version = SlotNumber::new_dangerous(version);
+        let version = SlotNumber::new(version);
 
         assert_eq!(
             None,
@@ -546,11 +546,11 @@ fn assert_root_hashes<S: NativeStorage>(storage: &S, expected_root_hashes: Vec<S
         assert_eq!(
             expected_root_hash,
             storage
-                .get_root_hash(SlotNumber::new_dangerous(version as u64))
+                .get_root_hash(SlotNumber::new(version as u64))
                 .unwrap()
         );
     }
-    let future_root = storage.get_root_hash(SlotNumber::new_dangerous(next_version));
+    let future_root = storage.get_root_hash(SlotNumber::new(next_version));
     assert_eq!(
         future_root, None,
         "future and uncommitted versions must return None (mirrors get_historical's Option semantics)"

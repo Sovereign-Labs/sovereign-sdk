@@ -33,6 +33,7 @@ use axum::routing::get;
 use serde::{Deserialize, Serialize};
 use sov_rest_utils::{json_obj, ErrorObject, Query};
 use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use tokio::sync::watch;
 use utoipa::openapi::OpenApi;
 
@@ -176,6 +177,9 @@ pub struct ApiState<S: Spec, T = ()> {
     kernel: Arc<dyn KernelWithSlotMapping<S>>,
     /// The `height` query parameter extracted from the request, when applicable.
     requested_height: Option<HeightParam>,
+    /// Signals node shutdown so long-lived handlers (e.g. WebSocket subscriptions)
+    /// can terminate gracefully.
+    primary_shutdown: PrimaryShutdownController,
 }
 
 impl<S: Spec, T> ApiState<S, T> {
@@ -186,12 +190,14 @@ impl<S: Spec, T> ApiState<S, T> {
         checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         requested_height: Option<HeightParam>,
+        primary_shutdown: PrimaryShutdownController,
     ) -> Self {
         Self {
             inner,
             checkpoint_receiver,
             kernel,
             requested_height,
+            primary_shutdown,
         }
     }
 
@@ -202,6 +208,7 @@ impl<S: Spec, T> ApiState<S, T> {
             checkpoint_receiver: self.checkpoint_receiver,
             kernel: self.kernel,
             requested_height: self.requested_height,
+            primary_shutdown: self.primary_shutdown,
         }
     }
 
@@ -284,6 +291,12 @@ impl<S: Spec, T> ApiState<S, T> {
     /// Returns the checkpoint receiver.
     pub fn checkpoint_receiver(&self) -> watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>> {
         self.checkpoint_receiver.clone()
+    }
+
+    /// Returns the primary shutdown controller. Long-lived handlers (e.g. WebSocket
+    /// subscriptions) should select on it to terminate gracefully on node shutdown.
+    pub fn primary_shutdown(&self) -> PrimaryShutdownController {
+        self.primary_shutdown.clone()
     }
 }
 

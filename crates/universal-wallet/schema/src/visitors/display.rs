@@ -575,6 +575,31 @@ macro_rules! display_int {
                                 .expect("Fixed point display attempted to get byte that was not provided in context - this is a bug in the schema display implementation")
                         }
                     }
+                    FixedPointDisplay::FromSiblingFieldWithOverride {
+                        field_index,
+                        byte_offset,
+                        override_match,
+                        override_decimals,
+                    } => {
+                        if $ctx.is_peek_pass {
+                            0
+                        } else {
+                            let field_bytes = $ctx
+                                .peek_bytes
+                                .get(&field_index)
+                                .expect("Fixed point display attempted to get field that was not provided in context - this is a bug in the schema display implementation");
+                            let matches_override = (0..32).all(|i| {
+                                field_bytes.get(&i).copied() == Some(override_match[i])
+                            });
+                            if matches_override {
+                                override_decimals
+                            } else {
+                                *field_bytes
+                                    .get(&byte_offset)
+                                    .expect("Fixed point display attempted to get byte that was not provided in context - this is a bug in the schema display implementation")
+                            }
+                        }
+                    }
                 };
                 // 39 = log_10(128::MAX)
                 if decimals > 39 {

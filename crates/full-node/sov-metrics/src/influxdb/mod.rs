@@ -9,11 +9,16 @@ mod csv_helper;
 #[cfg(feature = "gas-constant-estimation")]
 mod gas_constant_estimation;
 mod publisher;
+mod rpc_aggregator;
 mod tracker;
 
 pub use config::{MonitoringConfig, TelegrafSocketConfig};
 #[cfg(feature = "gas-constant-estimation")]
 pub use gas_constant_estimation::{GasConstantTracker, GAS_CONSTANTS};
+pub use rpc_aggregator::{
+    AggregatedRpcMetrics, RecordedCall, RpcAggregationConfig, RpcStatsAggregator,
+    SlowRpcCallMetrics, BATCH_PSEUDO_METHOD, UNKNOWN_METHOD,
+};
 pub use tracker::{
     init_metrics_tracker, spawn_tokio_runtime_metrics_task, timestamp, BatchMetrics, BatchOutcome,
     HttpMetrics, RateLimiterMetrics, RpcMetrics, RunnerMetrics, RunnerProcessStfChangesMetrics,
@@ -206,9 +211,9 @@ mod tests {
         metrics_publisher_task, receive_with_timeout, spawn_metrics_udp_receiver,
     };
     use crate::influxdb::tracker::timestamp;
+    use sov_rollup_interface::node::SecondaryShutdownController;
     use std::io::Write;
     use std::str::FromStr;
-    use tokio::sync::watch;
 
     #[test]
     fn escaped_field_value_preserves_plain_input() {
@@ -253,16 +258,17 @@ mod tests {
             max_datagram_size: Some(1),
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: RpcAggregationConfig::standard(),
         };
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
-        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
-        shutdown_receiver.mark_unchanged();
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         spawn_metrics_udp_receiver(socket, metrics_back_sender.clone());
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
         let _task_handle = tokio::spawn(async move {
-            metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
+            metrics_publisher_task(receiver, &monitoring_config, secondary_shutdown_controller)
+                .await;
         });
 
         let tracker = MetricsTracker { sender };
@@ -352,16 +358,17 @@ mod tests {
             max_datagram_size: Some(1),
             max_pending_metrics: None,
             tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: RpcAggregationConfig::standard(),
         };
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
         spawn_metrics_udp_receiver(socket, metrics_back_sender.clone());
-        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
-        shutdown_receiver.mark_unchanged();
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
         let _task_handle = tokio::spawn(async move {
-            metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
+            metrics_publisher_task(receiver, &monitoring_config, secondary_shutdown_controller)
+                .await;
         });
 
         let tracker = MetricsTracker { sender };

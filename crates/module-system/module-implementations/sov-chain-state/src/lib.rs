@@ -113,7 +113,7 @@ impl<S: Spec> SlotInformation<S> {
         self.gas_info.gas_limit()
     }
 
-    /// Returns the hash of the DA block assocaited with this slot.
+    /// Returns the hash of the DA block associated with this slot.
     pub const fn slot_hash(&self) -> &<<S as Spec>::Da as DaSpec>::SlotHash {
         &self.hash
     }
@@ -204,7 +204,7 @@ pub struct ChainState<S: Spec> {
     /// The state root hashes from genesis to the current slot.
     /// ## Note
     /// There is a one slot-delay for the update of this state map because we cannot predict what will be the next
-    /// most up to date state root inside the current slot. We have to wait for the next slot to start getting processed and return
+    /// most up-to-date state root inside the current slot. We have to wait for the next slot to start getting processed and return
     /// the pre-state root.
     #[state]
     past_user_state_roots: KernelStateMap<RollupHeight, [u8; 32]>,
@@ -221,7 +221,6 @@ pub struct ChainState<S: Spec> {
     /// we can use this value with the `true_slot_number` to get the current height of the DA layer,
     /// using the following formula:
     /// `current_da_height = true_slot_number + genesis_da_height`.
-    /// Should be the same as the `genesis_height` field in the `RunnerConfig` (`sov-stf-runner` crate)
     #[state]
     genesis_da_height: StateValue<u64>,
 
@@ -315,7 +314,7 @@ impl<S: Spec> ChainState<S> {
         Ok(visible_slot_number)
     }
 
-    /// Returns transition height in the current slot
+    /// Sets the visible slot number to use for the next block.
     pub fn set_next_visible_slot_number(
         &mut self,
         next_visible_slot_number: VisibleSlotNumber,
@@ -458,7 +457,7 @@ impl<S: Spec> ChainState<S> {
     }
 
     /// Return the initial height of the DA layer.
-    pub fn genesis_da_height<Accessor: StateAccessor>(
+    pub fn genesis_da_height<Accessor: StateReader<User>>(
         &self,
         state: &mut Accessor,
     ) -> Result<Option<u64>, <Accessor as StateReader<User>>::Error> {
@@ -706,7 +705,7 @@ impl<S: Spec> Module for ChainState<S> {
         &mut self,
         message: Self::CallMessage,
         context: &sov_modules_api::Context<Self::Spec>,
-        state: &mut impl sov_modules_api::TxState<Self::Spec>,
+        state: &mut impl TxState<Self::Spec>,
     ) -> Result<(), Self::Error> {
         use sov_modules_api::EventEmitter;
         match message {

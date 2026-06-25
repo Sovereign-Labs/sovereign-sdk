@@ -32,8 +32,8 @@ use sov_rollup_interface::node::ledger_api::{
     FinalityStatus, IncludeChildren, ItemOrHash, LedgerStateProvider, QueryMode, SlotIdAndOffset,
     SlotIdentifier, SlotResponse, TxIdAndOffset, TxIdentifier, TxResponse,
 };
+use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_rollup_interface::stf::TxReceiptContents;
-use tokio::sync::watch;
 
 type PathMap = Path<HashMap<String, NumberOrHash>>;
 
@@ -88,7 +88,7 @@ pub struct LedgerRoutes<T, B, Tx, E> {
 #[derive(Clone)]
 pub struct LedgerState<T: LedgerStateProvider + Clone + Send + Sync + 'static> {
     pub ledger: T,
-    pub shutdown_receiver: watch::Receiver<()>,
+    pub primary_shutdown: PrimaryShutdownController,
 }
 
 impl<T, B, TxReceipt, E> LedgerRoutes<T, B, TxReceipt, E>
@@ -109,11 +109,11 @@ where
     /// Returns an [`axum::Router`] that exposes ledger data.
     pub fn axum_router(
         ledger: T,
-        shutdown_receiver: watch::Receiver<()>,
+        primary_shutdown: PrimaryShutdownController,
     ) -> axum::Router<LedgerState<T>> {
         let state = LedgerState {
             ledger,
-            shutdown_receiver,
+            primary_shutdown,
         };
         let routes = axum::Router::<LedgerState<T>>::new()
             .route(
@@ -516,13 +516,11 @@ where
         next: Next,
     ) -> Result<Response, Response> {
         let identifier = match get_path_item(&path_values, "slotId")? {
-            NumberOrHash::Number(number) => {
-                SlotIdentifier::Number(SlotNumber::new_dangerous(number))
-            }
+            NumberOrHash::Number(number) => SlotIdentifier::Number(SlotNumber::new(number)),
             NumberOrHash::Hash(hash) => SlotIdentifier::Hash(hash.0),
         };
 
-        let rollup_height = state
+        let slot_number = state
             .ledger
             .resolve_slot_identifier(&identifier)
             .await
@@ -536,7 +534,7 @@ where
             // can remove this workaround and do the right thing.
             .ok_or_else(|| not_found_404("Slot", "unknown"))?;
 
-        request.extensions_mut().insert(rollup_height);
+        request.extensions_mut().insert(slot_number);
         Ok(next.run(request).await)
     }
 
@@ -727,14 +725,15 @@ where
                         };
 
                         Ok(SlotEvents {
-                            rollup_height: slot_num.get(),
+                            slot_number: slot_num.get(),
                             events,
                         })
                     }
                 })
                 .boxed();
 
-            serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
+            serve_generic_ws_subscription(socket, subscription, state.primary_shutdown.clone())
+                .await;
         })
     }
 
@@ -752,7 +751,8 @@ where
                     WsLedgerError::AggregatedProofConvertFailed
                 })
             });
-            serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
+            serve_generic_ws_subscription(socket, subscription, state.primary_shutdown.clone())
+                .await;
         })
     }
 
@@ -789,7 +789,8 @@ where
                 })
                 .boxed();
 
-            serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
+            serve_generic_ws_subscription(socket, subscription, state.primary_shutdown.clone())
+                .await;
         })
     }
 
@@ -885,7 +886,7 @@ where
                 .flatten()
                 .boxed();
 
-            serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
+            serve_generic_ws_subscription(socket, subscription, state.primary_shutdown.clone()).await;
         })
     }
 }
@@ -933,7 +934,7 @@ struct EventFilter {
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 struct SlotEvents<E> {
-    rollup_height: u64,
+    slot_number: u64,
     events: Vec<RuntimeEventResponse<E>>,
 }
 

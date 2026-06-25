@@ -179,3 +179,6 @@ dist
 # Rust
 target/
 .turbo
+
+# tsup writes a transient bundled config to the package root while building
+tsup.config.bundled_*

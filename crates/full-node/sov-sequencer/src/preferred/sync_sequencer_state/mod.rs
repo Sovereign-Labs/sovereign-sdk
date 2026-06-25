@@ -31,6 +31,7 @@ use sov_modules_api::GasSpec;
 use sov_modules_api::VersionReader;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::Storage;
 use std::collections::BTreeMap;
@@ -39,7 +40,7 @@ use std::sync::Arc;
 use std::time::Duration;
 pub(crate) use sync_state::*;
 use tokio::sync::broadcast;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot};
 pub(crate) use updator::*;
 
 mod conditions_table;
@@ -172,8 +173,7 @@ pub(crate) fn create<S, Rt>(
     batch_execution_time_limit_micros: u64,
     seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     max_concurrent_proof_blobs: usize,
-    shutdown_receiver: watch::Receiver<()>,
-    shutdown_sender: watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
     executor_events_sender: ExecutorEventsSender<S, Rt>,
     sequence_number_of_next_blob: SequenceNumber,
     in_flight_batch_blobs: Arc<AtomicUsize>,
@@ -183,6 +183,7 @@ pub(crate) fn create<S, Rt>(
     tx_cache_writer: TxResultWriter<S, Rt>,
     cache_warm_up_executor: CacheWarmUpExecutor<S>,
     start_replica_task_notifier: EventReceiverStartNotifier,
+    approximate_block_time: Duration,
 ) -> (
     SynchronizedSequencerState<S, Rt>,
     SequencerStateUpdator<S, Rt>,
@@ -222,8 +223,7 @@ where
         batch_size_tracker: BatchSizeTracker::new(seq_config.max_batch_size_bytes),
         seq_config: seq_config.clone(),
         max_concurrent_proof_blobs,
-        shutdown_receiver: shutdown_receiver.clone(),
-        shutdown_sender,
+        primary_shutdown: primary_shutdown.clone(),
         executor_events_sender,
         sequence_number_of_open_batch: None,
         next_unassigned_sequence_number: sequence_number_of_next_blob,
@@ -238,6 +238,12 @@ where
         cache_warm_up_executor,
         start_replica_task_notifier,
         rate_limiter,
+
+        pi_controller: PIController::new(
+            approximate_block_time,
+            seq_config.max_batch_size_bytes,
+            batch_execution_time_limit_micros,
+        ),
     };
 
     let channel_size = Arc::new(AtomicU32::new(0));
@@ -248,11 +254,12 @@ where
         heap: BTreeMap::new(),
         runtime: Default::default(),
         test_only_state_update_notification_sender: broadcast::channel(100).0,
+        use_pi_rate_limiter: seq_config.sequencer_kind_config.use_pi_rate_limiter,
     };
     let updator = SequencerStateUpdator {
         message_sender,
         channel_size,
-        shutdown_receiver,
+        primary_shutdown,
     };
     (state, updator)
 }

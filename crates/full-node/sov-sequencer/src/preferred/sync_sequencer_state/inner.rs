@@ -36,13 +36,14 @@ use sov_modules_api::{
     VisibleSlotNumber,
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::{NativeStorage, Storage};
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::{oneshot, watch};
+use tokio::sync::oneshot;
 use tracing::{debug, info, warn};
 
 /// These two constants are used to calculate the comfortable batch size limit.
@@ -54,6 +55,11 @@ const COMFORTABLE_SIZE_LIMIT_DIVISOR: u64 = 100;
 const COMFORTABLE_IN_FLIGHT_BLOBS: usize = 5;
 
 const METRICS_BATCH_SIZE: usize = 32;
+/// The constant for the I part of the PID controller for the batch size limit.
+/// The larger this constant, the faster the bias will evolve, but the more likely we are to oscillate.
+const BATCH_SIZE_LIMIT_BIAS_K_I: f64 = 0.1;
+const EXECUTION_TIME_LIMIT_BIAS_POSITIVE_ERROR_K_I: f64 = 0.02; // Positive errors are slow to accumulate, because over-accepting txs early is not easily fixable
+const EXECUTION_TIME_LIMIT_BIAS_NEGATIVE_ERROR_K_I: f64 = 0.2; // Negative errors accumulate faster, because rejecting txs too aggressively is easy to fix by accepting more later.
 
 #[derive(Debug)]
 pub(crate) enum DoNewTxError<S: Spec> {
@@ -77,8 +83,7 @@ where
     pub(crate) seq_role: SequencerRole,
     pub(crate) seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     pub(crate) max_concurrent_proof_blobs: usize,
-    pub(crate) shutdown_receiver: watch::Receiver<()>,
-    pub(crate) shutdown_sender: watch::Sender<()>,
+    pub(crate) primary_shutdown: PrimaryShutdownController,
 
     pub(crate) executor: RollupBlockExecutor<S, Rt>,
     /// The rollup height of the latest node checkpoint applied to this executor's storage.
@@ -113,6 +118,80 @@ where
     pub(crate) cache_warm_up_executor: CacheWarmUpExecutor<S>,
     pub(crate) start_replica_task_notifier: EventReceiverStartNotifier,
     pub(crate) rate_limiter: SovRateLimiter<S>,
+    pub(crate) pi_controller: PIController,
+}
+
+/// A PI controller for adjusting the batch size and execution time limit based on the current load.
+/// The PI controller allows us to smoothly vary our tx rejection rate as the batch fills up, rather than
+/// switching suddenly from "accept all" to "accept none".
+///
+/// At most every 10 millis we "tick" the PI controller, updating the state with the latest data about...
+///  - The rate at which new transactions are being offered
+///  - The average time/bytes to accept a tx
+///  - The remaining available size/time limits.
+///  - How much longer we expect the current batch to be open (based on estimated block times)
+///
+/// Based on that data, we set probabilities for accepting or rejecting new transactions. For example,
+/// suppose that we 3 seconds in to a 6 second block time, and we've accepted 4 MB of our 6MB limit. Then the probability of accepting a new
+/// tx will drop to keep the batch size under control. Note that we compute probabilities for both execution time and batch size,
+/// and then we take the max rejection probability across those two dimensions.
+pub struct PIController {
+    pub(crate) batch_start_time: std::time::Instant, // The time when the current batch was opened
+    pub(crate) approximate_block_time: std::time::Duration,
+    // The bias term for the batch size limiter (this lets us correct if we're repeatedly over or undershooting the target batch size)
+    // Expressed in bytes per second. (I.e. if the `P` term of our controller says to accept 1000 bytes per second, and this bias is 40, then we will try to accept 1040 bytes per second.)
+    // Can be negative
+    pub(crate) size_limit_bias: f64,
+    // The bias term for the execution time limiter (this lets us correct if we're repeatedly over or undershooting the target execution time)
+    pub(crate) execution_time_limit_bias: f64,
+    // The average time to execute a tx in microseconds. Computed as a EWMA over all txs since startup.
+    pub(crate) estimated_tx_execution_time_micros: f64,
+    // The last time we ticked the PI controller.
+    pub(crate) last_tick_time: std::time::Instant,
+    pub(crate) bytes_offered_since_last_tick: u64, // How many bytes worth of tx data we would have accepted given 100% acceptance rate
+    pub(crate) bytes_offered_per_second_ewma: f64, // The weighted average of bytes offered per second. EWMA = Exponentially Weighted Moving Average
+    pub(crate) current_tx_accept_rate_bytes_per_second: f64,
+    pub(crate) execution_time_offered_since_last_tick: f64,
+    pub(crate) execution_time_offered_per_second_ewma: f64,
+    // The current rate at which to accept txs based on execution time, given in micros per second.
+    // For example, if we're consuming our execution time budget just a little too fast, this will drop to something like 950000 micros per second.
+    pub(crate) current_tx_accept_rate_execution_time_micros_per_second: f64,
+    // An error correction term which rises when we accept a tx that had some non-zero chance of rejection.
+    // For example, as we accept txs with a 20% chance of rejection, this will rise to .2, .4, .6, etc. Once it hits 1.0,
+    // we deterministically reject the next tx and reset the debt to 0.
+    pub(crate) load_shed_rejection_debt: f64,
+}
+
+#[allow(clippy::float_arithmetic)]
+impl PIController {
+    pub(crate) fn new(
+        approximate_block_time: std::time::Duration,
+        max_batch_size: usize,
+        batch_execution_time_limit_micros: u64,
+    ) -> Self {
+        assert_ne!(
+            approximate_block_time,
+            std::time::Duration::ZERO,
+            "Approximate block time must be non-zero"
+        );
+        Self {
+            approximate_block_time,
+            batch_start_time: std::time::Instant::now(),
+            size_limit_bias: 0.0,
+            execution_time_limit_bias: 0.0,
+            estimated_tx_execution_time_micros: 0.0,
+            last_tick_time: std::time::Instant::now(),
+            bytes_offered_since_last_tick: 0,
+            bytes_offered_per_second_ewma: 0.0,
+            current_tx_accept_rate_bytes_per_second: max_batch_size as f64
+                / approximate_block_time.as_secs_f64(),
+            execution_time_offered_since_last_tick: 0.0,
+            execution_time_offered_per_second_ewma: 0.0,
+            current_tx_accept_rate_execution_time_micros_per_second:
+                batch_execution_time_limit_micros as f64 / approximate_block_time.as_secs_f64(),
+            load_shed_rejection_debt: 0.0,
+        }
+    }
 }
 
 // We submit metrics when this guard is dropped.
@@ -430,7 +509,7 @@ where
         }
 
         // If the node is shutting down, we may not be able to terminate the batch. In that case, just return early.
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.primary_shutdown.is_triggered() {
             info!("The sequencer is shutting down. Exiting trigger_batch_production.");
             return;
         }
@@ -651,6 +730,8 @@ where
             sequence_number,
         };
 
+        self.pi_controller.batch_start_time = std::time::Instant::now();
+
         self.cache_warm_up_executor
             .send_batch_start_notification(notification);
 
@@ -685,7 +766,7 @@ where
         // Even if this method return early it uses 1 request slot.
         let request_used = ResourceUsed::new(1, 0, 0, <S as Spec>::Gas::zero());
 
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.primary_shutdown.is_triggered() {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return (Err(DoNewTxError::Shutdown), request_used);
         }
@@ -751,14 +832,180 @@ where
         };
 
         let gas_used = accepted_tx.confirmation.gas_used();
+        let finalized_tx_len = accepted_tx.tx.len();
         let resource_used = ResourceUsed::new(1, tx_len, execution_time_micros, gas_used);
 
-        batch_size_tracker.add_tx(tx_len, execution_time_micros);
+        batch_size_tracker.add_tx(finalized_tx_len, execution_time_micros);
         let rx = executor_events_sender
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;
 
         (Ok((rx, remaining_slot_gas)), resource_used)
+    }
+
+    // Implements the I part of a PID controller for the batch size limit; we track our error rate over each batch and tune the bias
+    // (does our controller over or under shoot the ideal rate?)
+    #[allow(clippy::float_arithmetic)]
+    fn update_size_limit_bias_on_batch_close(&mut self) {
+        let (target_size, target_rate_bytes_per_sec) = self.get_target_batch_size_and_growth_rate();
+        let target_size = target_size as f64;
+
+        // How far we undershot our target batch size, expressed as a fraction of the target size.
+        let error_fraction =
+            (target_size - self.batch_size_tracker.current_batch_size as f64) / target_size;
+        // The next bias is old bias + (error fraction * target rate) * the "learning rate" constant "K"
+        let next_bias = self.pi_controller.size_limit_bias
+            + BATCH_SIZE_LIMIT_BIAS_K_I * error_fraction * target_rate_bytes_per_sec;
+
+        // Finally, we clamp the bias to be between -0.5 * target rate and 0.5 * target rate to prevent it from growing too large.
+        let bias_min = -0.5 * target_rate_bytes_per_sec;
+        let bias_max = 0.5 * target_rate_bytes_per_sec;
+        self.pi_controller.size_limit_bias = next_bias.clamp(bias_min, bias_max);
+    }
+
+    // Implements the I part of a PID controller for the batch execution time limit. The I term is used to correct for systematic errors in our execution time limit.
+    // It grows when we accept too few transactions over the batch lifetime, and shrinks when we accept too many.
+    // Float arithmetic is allowed because of the offchain nature of rate limiting.
+    #[allow(clippy::float_arithmetic)]
+    fn update_execution_time_limit_bias_on_batch_close(&mut self) {
+        // How many microseconds of execution time we'd like to spend on this batch.
+        let (target_execution_time_micros, target_rate_micros_per_second) =
+            self.get_target_execution_time_and_growth_rate();
+        if target_execution_time_micros == 0 {
+            return;
+        }
+        let target_execution_time_micros = target_execution_time_micros as f64;
+
+        // How much time has elapsed since the batch was opened.
+        let elapsed_secs = self
+            .pi_controller
+            .batch_start_time
+            .elapsed()
+            .min(self.pi_controller.approximate_block_time)
+            .as_secs_f64();
+
+        // How many microseconds of execution time we expect to have spent on this batch by now, if we were accepting txs at the target rate.
+        let expected_execution_time_micros =
+            (target_rate_micros_per_second * elapsed_secs).min(target_execution_time_micros);
+        // How many microseconds of execution time we've actually spent on this batch.
+        let actual_execution_time_micros =
+            self.batch_size_tracker.batch_execution_time_micros as f64;
+        // How far we are from our target execution time, expressed as a fraction of the target execution time.
+        let error_fraction = (expected_execution_time_micros - actual_execution_time_micros)
+            / target_execution_time_micros;
+
+        // We use different learning rates for positive and negative errors.
+        // Positive errors (we've been accepting too few transactions) should accumulate slowly because we don't want to
+        // over-update and run out of space in the *next* batch. Running out of space is very bad - it causes complete downtime until the batch closes.
+        // Negative errors (we've been accepting too many transactions) can react faster to an
+        // over-full batch, because rejecting a bit too aggressively only causes the loss of low value txs.
+        let k_i = if error_fraction.is_sign_negative() {
+            EXECUTION_TIME_LIMIT_BIAS_NEGATIVE_ERROR_K_I
+        } else {
+            EXECUTION_TIME_LIMIT_BIAS_POSITIVE_ERROR_K_I
+        };
+        // The next bias is old bias + (error fraction * target rate) * the "learning rate" constant "K"
+        let next_bias = self.pi_controller.execution_time_limit_bias
+            + k_i * error_fraction * target_rate_micros_per_second;
+        // We clamp the bias to be between -0.5 * target rate and 0.1 * target rate.
+        // As before, we're fine with large negative biases (rejecting too aggressively), but we want to be careful about positive biases (accepting too many transactions).
+        let bias_min = -0.5 * target_rate_micros_per_second;
+        let bias_max = 0.1 * target_rate_micros_per_second;
+        self.pi_controller.execution_time_limit_bias = next_bias.clamp(bias_min, bias_max);
+    }
+
+    // Returns the target batch size in bytes and the growth rate for the batch size (in bytes per second).
+    // Returns a tuple (target, rate)
+    #[allow(clippy::float_arithmetic)]
+    pub(crate) fn get_target_batch_size_and_growth_rate(&self) -> (u64, f64) {
+        let target_size = (self.batch_size_tracker.max_batch_size as u64)
+            .checked_div(20)
+            .and_then(|x| x.checked_mul(19))
+            .unwrap_or(0);
+        let target_rate =
+            target_size as f64 / self.pi_controller.approximate_block_time.as_secs_f64();
+        (target_size, target_rate)
+    }
+
+    // Returns the target execution time in microseconds and the growth rate for the execution time (in micros per second).
+    // Returns a tuple (target, rate)
+    #[allow(clippy::float_arithmetic)]
+    pub(crate) fn get_target_execution_time_and_growth_rate(&self) -> (u64, f64) {
+        let target_execution_time_micros = self
+            .batch_execution_time_limit_micros
+            .checked_div(20)
+            .and_then(|x| x.checked_mul(19))
+            .unwrap_or(0);
+        let target_rate = target_execution_time_micros as f64
+            / self.pi_controller.approximate_block_time.as_secs_f64();
+        (target_execution_time_micros, target_rate)
+    }
+
+    #[allow(clippy::float_arithmetic)]
+    fn reset_current_accept_rates_on_batch_close(&mut self) {
+        // Update the bytes per second target rate with the latest bias from the PI controller.
+        let (_, target_rate) = self.get_target_batch_size_and_growth_rate();
+        self.pi_controller.current_tx_accept_rate_bytes_per_second =
+            (target_rate + self.pi_controller.size_limit_bias).max(0.0);
+
+        // Update the micros per second target rate with the latest bias from the PI controller.
+        let (_, target_rate_micros_per_second) = self.get_target_execution_time_and_growth_rate();
+        self.pi_controller
+            .current_tx_accept_rate_execution_time_micros_per_second =
+            (target_rate_micros_per_second + self.pi_controller.execution_time_limit_bias).max(0.0);
+    }
+
+    #[allow(clippy::float_arithmetic)]
+    pub(crate) fn update_estimated_tx_execution_time_micros(&mut self, execution_time_micros: u64) {
+        if execution_time_micros == 0 {
+            return;
+        }
+
+        let execution_time_micros = execution_time_micros as f64;
+        // If we haven't estimated the tx execution time yet, set it to the first measurement.
+        if self.pi_controller.estimated_tx_execution_time_micros == 0.0 {
+            self.pi_controller.estimated_tx_execution_time_micros = execution_time_micros;
+            return;
+        }
+        // Otherwise, use an EWMA to estimate the tx execution time.
+        self.pi_controller.estimated_tx_execution_time_micros =
+            self.pi_controller.estimated_tx_execution_time_micros * 0.75
+                + execution_time_micros * 0.25;
+    }
+
+    #[allow(clippy::float_arithmetic)]
+    pub(crate) fn should_accept_load_shed_tx(&mut self, accept_probability: f64) -> bool {
+        // If the accept probability is 1.0, we accept the tx but it has no impact on our rejection debt.
+        // This means that we will reject txs slightly more aggressively when the probability drops again,
+        // but it prevents bad behavior in case there are mixed probabilities of acceptance
+        // (i.e. high prio txs get a guaranteed 1 while lower prio txs only have a 0.5 chance).
+        if accept_probability >= 1.0 {
+            return true;
+        }
+        // If the accept probability is 0.0 or less, we reject the tx
+        if accept_probability <= 0.0 {
+            return false;
+        }
+
+        // Otherwise, we add to our rejection debt based on the rejection probability. I.e. if we had a 20% chance of acceptance, we'd add 0.8 to our debt -
+        // this tx on its own makes us almost due to reject another tx.
+        self.pi_controller.load_shed_rejection_debt += 1.0 - accept_probability;
+
+        // If the debt became greater than 1 (meaning we're due to reject a transaction) reject and decrease our debt
+        // otherwise accept.
+        if self.pi_controller.load_shed_rejection_debt >= 1.0 {
+            self.pi_controller.load_shed_rejection_debt -= 1.0;
+            false
+        } else {
+            true
+        }
+    }
+
+    // Updates the PI controller based on the current batch size and execution time.
+    fn update_pi_controller_on_batch_close(&mut self) {
+        self.update_size_limit_bias_on_batch_close();
+        self.update_execution_time_limit_bias_on_batch_close();
+        self.reset_current_accept_rates_on_batch_close();
     }
 
     /// Closes the current batch.
@@ -772,6 +1019,7 @@ where
     pub(crate) async fn close_current_batch(&mut self) {
         // Terminate the batch.
         let forced_txs = self.executor.end_rollup_block().await;
+        self.update_pi_controller_on_batch_close();
         self.batch_size_tracker = BatchSizeTracker::new(self.seq_config.max_batch_size_bytes);
         let checkpoint = self
             .executor

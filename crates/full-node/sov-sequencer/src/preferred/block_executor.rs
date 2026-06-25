@@ -9,7 +9,7 @@ use borsh::BorshDeserialize;
 use sov_blob_storage::PreferredProofData;
 use sov_modules_api::capabilities::{
     get_maybe_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState,
-    FatalError, RollupHeight, TransactionAuthenticator,
+    FatalError, HasCapabilities, RollupHeight, SequencingDataHandler, TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
@@ -22,12 +22,13 @@ use sov_modules_api::{CryptoSpec, HDTimestamp};
 use sov_modules_stf_blueprint::{BatchReceipt, StfBlueprint};
 use sov_rest_utils::{json_obj, ErrorObject};
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_state::sequencer_state::SequencerStateChanges;
 use sov_state::{StateRoot, Storage};
 use tokio::sync::broadcast;
 use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::mpsc::{self, Sender};
-use tokio::sync::{oneshot, watch};
+use tokio::sync::oneshot;
 use tokio::task::JoinHandle;
 use tracing::trace;
 use uuid::Uuid;
@@ -134,8 +135,7 @@ pub struct StartBlockData<S: Spec> {
 pub struct RollupBlockExecutorConfig<S: Spec> {
     pub da_address: <S::Da as DaSpec>::Address,
     pub shutdown_notifier: Sender<()>,
-    pub shutdown_receiver: watch::Receiver<()>,
-    pub shutdown_sender: watch::Sender<()>,
+    pub primary_shutdown: PrimaryShutdownController,
     pub state_root_request_sender: Sender<StateRootComputeRequest<S>>,
     pub forced_tx_batch_notifier: broadcast::Sender<ForcedTxBatchNotification>,
 }
@@ -149,8 +149,7 @@ where
 {
     pub checkpoint: StateCheckpoint<S>,
     seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
-    shutdown_receiver: watch::Receiver<()>,
-    shutdown_sender: watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
 
     rollup_block_task_state: Option<BackgroundTaskState<S>>,
     next_event_number: u64,
@@ -232,8 +231,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             da_address,
             shutdown_notifier,
             state_root_request_sender,
-            shutdown_receiver,
-            shutdown_sender,
+            primary_shutdown,
             forced_tx_batch_notifier,
         } = rollup_exec_config;
 
@@ -249,8 +247,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             state_roots: Default::default(),
             state_root_responses: Default::default(),
             id: Uuid::now_v7(),
-            shutdown_receiver,
-            shutdown_sender,
+            primary_shutdown,
             startup_transaction_cache_writer: tx_cache_writer,
             uncommitted_changes,
             forced_tx_batch_notifier,
@@ -264,7 +261,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     #[tracing::instrument(skip_all, level = "trace")]
     pub async fn replace_state(&mut self, other: Self) {
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.primary_shutdown.is_triggered() {
             tracing::info!("The sequencer is shutting down. Exiting replace_state");
             return;
         }
@@ -303,8 +300,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
 
         match result {
-            Ok((receipt, remaining_slot_gas, execution_time_micros, tx_changes)) => {
-                let accepted_tx = self.process_tx_receipt(&receipt, timestamp);
+            Ok((receipt, tx, remaining_slot_gas, execution_time_micros, tx_changes)) => {
+                let accepted_tx = self.process_tx_receipt(receipt, tx, timestamp);
                 if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
                     writer.insert(accepted_tx.clone()).await;
                 }
@@ -325,7 +322,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         &mut self,
         baked_tx: FullyBakedTxWithMaybeChangeSet,
     ) -> Result<
-        (TransactionReceipt<S>, <S as Spec>::Gas, u64, TxChangeSet),
+        (
+            TransactionReceipt<S>,
+            FullyBakedTx,
+            <S as Spec>::Gas,
+            u64,
+            TxChangeSet,
+        ),
         RollupBlockExecutorErrorWithBudget<S>,
     > {
         let Some(task_state) = self.rollup_block_task_state.as_mut() else {
@@ -351,7 +354,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         let Some(result) = task_state.result_receiver.recv().await else {
             tracing::error!("The rollup block executor task failed unexpectedly. Gracefully shutting down the sequencer.");
-            let _ = self.shutdown_sender.send(()); // We don't care if this fails, because that would mean the sequencer is already shutting down - which is exactly what we want.
+            self.primary_shutdown.shutdown(); // We don't care if this was already triggered, because that would mean the sequencer is already shutting down - which is exactly what we want.
             return Err(RollupBlockExecutorErrorWithBudget {
                 execution_time_micros: 0,
                 gas_used: <S as Spec>::Gas::zero(),
@@ -366,9 +369,10 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         } = result;
 
         let ExecutedTxResponse {
-            receipt,
+            mut receipt,
             tx_changes,
             remaining_slot_gas,
+            sequencing_scratchpad,
         } = inner_result.map_err(|reason| RollupBlockExecutorErrorWithBudget {
             execution_time_micros,
             gas_used,
@@ -386,10 +390,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             });
         }
 
+        let mut tx = receipt
+            .body_to_save
+            .take()
+            .expect("Transaction receipts contain bodies when using sov-modules-stf-blueprint");
+        Self::finalize_tx_sequencing_data(&mut tx, sequencing_scratchpad);
+
         self.checkpoint.apply_tx_changes(tx_changes.clone());
 
         Ok((
             receipt,
+            tx,
             remaining_slot_gas,
             execution_time_micros,
             tx_changes,
@@ -413,7 +424,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         )
         .await;
 
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.primary_shutdown.is_triggered() {
             tracing::info!("The sequencer is shutting down. Exiting replay_batch");
             return Ok(());
         }
@@ -503,7 +514,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                         executor_output_hash = %output.accepted_tx.tx_hash,
                         "The executor returned a different tx hash than expected"
                     );
-                    exit_rollup(&self.shutdown_sender).await;
+                    exit_rollup(&self.primary_shutdown).await;
                     unreachable!()
                 }
                 output.execution_time_micros
@@ -515,7 +526,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                     "Transaction was soft-confirmed but failed to be re-applied; this is a bug, please report it",
                 );
 
-                exit_rollup(&self.shutdown_sender).await;
+                exit_rollup(&self.primary_shutdown).await;
                 unreachable!()
             }
         }
@@ -639,12 +650,18 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     fn process_tx_receipt(
         &mut self,
-        tx_receipt: &TransactionReceipt<S>,
+        tx_receipt: TransactionReceipt<S>,
+        tx: FullyBakedTx,
         timestamp: Option<HDTimestamp>,
     ) -> AcceptedTx<Confirmation<S, Rt>> {
+        let TransactionReceipt {
+            tx_hash,
+            body_to_save: _,
+            events,
+            receipt,
+        } = tx_receipt;
         let tx_number = self.next_tx_number;
-        let events = tx_receipt
-            .events
+        let events = events
             .iter()
             .zip(self.next_event_number..)
             .map(|(event, number)| {
@@ -658,18 +675,33 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.next_event_number += events.len() as u64;
         self.next_tx_number += 1;
         AcceptedTx {
-            tx: tx_receipt
-                .body_to_save
-                .clone()
-                .expect("Transaction receipts contain bodies when using sov-modules-stf-blueprint"),
-            tx_hash: tx_receipt.tx_hash,
+            tx,
+            tx_hash,
             confirmation: Confirmation {
                 events,
-                receipt: tx_receipt.receipt.clone().into(),
+                receipt: receipt.into(),
                 tx_number,
                 timestamp_nanos: timestamp,
             },
         }
+    }
+
+    fn finalize_tx_sequencing_data(
+        tx: &mut FullyBakedTx,
+        scratchpad: Option<sov_rollup_interface::Bytes>,
+    ) {
+        let Some(data) = tx.sequencing_data.as_ref() else {
+            return;
+        };
+        let Ok(decoded) = <Rt as HasCapabilities<S>>::SequencingData::try_from_slice(data) else {
+            tracing::warn!("Failed to deserialize sequencing data while finalizing transaction");
+            return;
+        };
+
+        let mut runtime = Rt::default();
+        let mut handler = runtime.sequencing_data_handler();
+        let finalized = handler.finalize_sequencing_data(decoded, scratchpad);
+        tx.set_sequencing_metadata(&finalized);
     }
 
     fn update_kernel_with_user_state_root(&mut self) {
@@ -786,8 +818,11 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             if batch_receipt.inner.da_address == self.da_address {
                 continue;
             }
-            for tx_receipt in batch_receipt.tx_receipts {
-                let accepted_tx = self.process_tx_receipt(&tx_receipt, None);
+            for mut tx_receipt in batch_receipt.tx_receipts {
+                let tx = tx_receipt.body_to_save.take().expect(
+                    "Transaction receipts contain bodies when using sov-modules-stf-blueprint",
+                );
+                let accepted_tx = self.process_tx_receipt(tx_receipt, tx, None);
                 forced_txs.push(accepted_tx);
             }
         }

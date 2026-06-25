@@ -283,7 +283,6 @@ pub async fn start_test_rollup(
         TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
         test_case.finalization_blocks,
     )
-    .enable_prover()
     .set_config(|c| {
         c.max_concurrent_batch_blobs = 16777216;
         c.rollup_prover_config = prover_config;

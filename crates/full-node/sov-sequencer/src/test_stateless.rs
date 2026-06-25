@@ -14,6 +14,7 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_rollup_interface::TxHash;
 use std::marker::PhantomData;
 use std::net::IpAddr;
@@ -49,6 +50,7 @@ pub struct TestStatelessSequencer<R, S: Spec, Da: DaService> {
     tx_status_manager: TxStatusManager<S::Da>,
     _r: PhantomData<R>,
     state_sender: watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
+    primary_shutdown: PrimaryShutdownController,
     api_ledger_db: LedgerDb,
 }
 
@@ -66,9 +68,8 @@ where
         storage_path: &Path,
         config: &SequencerConfig<<S as Spec>::Address, ()>,
         ledger_db: LedgerDb,
-        shutdown_sender: watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = shutdown_sender.subscribe();
         let mut runtime = R::default();
         let storage = state_update_receiver.borrow().storage.clone();
         let inner = Mutex::new(Inner {
@@ -91,7 +92,7 @@ where
                     ledger_db.clone(),
                     storage_path,
                     TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-                    shutdown_sender,
+                    primary_shutdown.clone(),
                     Duration::from_secs(config.blob_processing_timeout_secs),
                     None,
                     Default::default(),
@@ -104,6 +105,7 @@ where
             tx_status_manager,
             _r: Default::default(),
             state_sender,
+            primary_shutdown: primary_shutdown.clone(),
             api_ledger_db: ledger_db.clone(),
         };
 
@@ -112,7 +114,7 @@ where
             loop_call_update_state(
                 seq.clone(),
                 state_update_receiver.clone(),
-                shutdown_receiver.clone(),
+                primary_shutdown.clone(),
             )
         }));
         handles.push(tokio::spawn({
@@ -121,7 +123,7 @@ where
             async move {
                 loop_send_tx_notifications::<S, R>(
                     state_update_receiver,
-                    shutdown_receiver,
+                    primary_shutdown,
                     &ledger_db,
                     seq.tx_status_manager(),
                 )
@@ -199,6 +201,7 @@ where
             self.state_sender.subscribe(),
             runtime.kernel_with_slot_mapping(),
             None,
+            self.primary_shutdown.clone(),
         )
     }
 

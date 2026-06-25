@@ -69,7 +69,7 @@ expression: config
         "node_id": "node_1",
         "node_role": "Leader",
         "leader_election": {
-          "leader_timeout_millis": 500,
+          "leader_timeout_millis": 1000,
           "grace_period_millis": 10000,
           "heartbeat_interval_millis": 100
         }
@@ -114,7 +114,8 @@ expression: config
         ]
       },
       "maximum_future_nonce_delta": 100,
-      "future_nonce_transaction_timeout_millis": 2000
+      "future_nonce_transaction_timeout_millis": 2000,
+      "use_pi_rate_limiter": false
     },
     "max_batch_size_bytes": 1048576,
     "max_concurrent_batch_blobs": 16,
@@ -125,6 +126,11 @@ expression: config
     "telegraf_address": "udp://192.168.4.5:8543",
     "max_datagram_size": 1024,
     "max_pending_metrics": 2560,
-    "tokio_runtime_metrics_interval_millis": 500
+    "tokio_runtime_metrics_interval_millis": 500,
+    "rpc_aggregation": {
+      "flush_interval_secs": 10,
+      "slow_call_threshold_ms": 500,
+      "max_slow_call_points_per_window": 10
+    }
   }
 }

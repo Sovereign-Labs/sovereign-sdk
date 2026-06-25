@@ -126,7 +126,7 @@ install-risc0-toolchain:  ## install risc0 toolchain
 
 install-sp1-toolchain:  ## install SP1 toolchain
 	curl -L https://sp1up.succinct.xyz | bash
-	~/.sp1/bin/sp1up --version 6.0.2 $${GITHUB_TOKEN:+--token "$$GITHUB_TOKEN"}
+	~/.sp1/bin/sp1up $${GITHUB_TOKEN:+--token "$$GITHUB_TOKEN"} --version 6.2.2
 	~/.sp1/bin/cargo-prove prove --version
 	~/.sp1/bin/cargo-prove prove install-toolchain
 	@echo "SP1 toolchain version:"
@@ -168,11 +168,31 @@ lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's no
 	cargo fix --allow-dirty
 	SKIP_GUEST_BUILD=1 cargo clippy --fix --allow-dirty -- -A clippy::too_many_arguments
 
+# Crates excluded from the feature-powerset check: examples, binaries, benchmarks,
+# fuzz/test harnesses, and other non-published leaf crates (absent from
+# packages_to_publish.yml). They are already compiled by `check`
+# (cargo check --all-targets --all-features) and by the test jobs; no downstream user
+# enables partial feature combinations on them, so powerset coverage adds nothing here
+# while dominating the run time. Listed explicitly (not derived) to avoid coupling to
+# publish-manifest name matching.
+HACK_EXCLUDE := \
+	--exclude demo-simple-stf \
+	--exclude integration-tests \
+	--exclude module-template \
+	--exclude native-gas-microbenches \
+	--exclude py_sovereign_web3 \
+	--exclude sov-benchmarks \
+	--exclude sov-demo-rollup-rest-api-load-testing \
+	--exclude sov-evm-soak-testing \
+	--exclude sov-soak-testing \
+	--exclude sov-soak-testing-lib \
+	--exclude workspace-hack
+
 check-features: ## Checks that project compiles with all combinations of features.
-	cargo hack check --feature-powerset --exclude-features default --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M) --all-targets
+	cargo hack check --feature-powerset --exclude-features default,gas-constant-estimation $(HACK_EXCLUDE) --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M) --all-targets
 
 check-features-default-targets:
-	cargo hack check --feature-powerset --exclude-features default --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M)
+	cargo hack check --feature-powerset --exclude-features default,gas-constant-estimation $(HACK_EXCLUDE) --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M)
 
 check-constant-overriding-is-disabled-in-release-mode:
 	# Passes in release mode...

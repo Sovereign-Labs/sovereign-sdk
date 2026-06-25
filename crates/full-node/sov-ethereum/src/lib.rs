@@ -8,6 +8,7 @@ pub use sov_eth_dev_signer::Signers;
 pub use sov_evm::EthereumAuthenticator;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{ApiStateAccessor, DaSpec, SequencerType, Spec};
+use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_rpc_eth_types::{internal_rpc_err, invalid_params_rpc_err, rpc_error_with_code};
 use sov_sequencer::{SeqConfigExtension, Sequencer};
 use std::future::ready;
@@ -25,7 +26,7 @@ pub struct EthRpcConfig<S: Spec> {
     pub sequencer_da_address: <S::Da as DaSpec>::Address,
     pub sequencer_type: SequencerType,
     /// Shutdown signal receiver for graceful termination
-    pub shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    pub primary_shutdown: PrimaryShutdownController,
 }
 
 const LIMIT_EXCEEDED_CODE: i32 = -32005;
@@ -48,7 +49,7 @@ where
         sequencer_rollup_address,
         sequencer_da_address,
         sequencer_type,
-        shutdown_receiver,
+        primary_shutdown,
     } = eth_rpc_config;
 
     let mut rpc = RpcModule::new(Ethereum {
@@ -59,7 +60,7 @@ where
         sequencer_rollup_address,
         sequencer_da_address,
         sequencer_type,
-        shutdown_receiver,
+        primary_shutdown,
     });
 
     register_rpc_methods::<S, Seq>(&mut rpc).expect("Failed to register sequencer RPC methods");
@@ -133,10 +134,10 @@ where
         Handlers::realtime_send_raw_transaction,
     )?;
 
-    rpc.register_async_method("eth_estimateGas", Handlers::eth_estimate_gas)?;
+    rpc.register_blocking_method("eth_estimateGas", Handlers::eth_estimate_gas)?;
 
-    rpc.register_async_method("eth_getLogs", handlers::LogHandlers::<S, Seq>::eth_get_logs)?;
-    rpc.register_async_method(
+    rpc.register_blocking_method("eth_getLogs", handlers::LogHandlers::<S, Seq>::eth_get_logs)?;
+    rpc.register_blocking_method(
         "eth_getLogsWithCursor",
         handlers::LogHandlers::<S, Seq>::eth_get_logs_with_cursor,
     )?;
@@ -164,7 +165,7 @@ struct Ethereum<S: Spec, Seq: Sequencer<Spec = S>> {
     sequencer_rollup_address: S::Address,
     sequencer_da_address: <S::Da as DaSpec>::Address,
     sequencer_type: SequencerType,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
 }
 
 impl<S, Seq> Ethereum<S, Seq>

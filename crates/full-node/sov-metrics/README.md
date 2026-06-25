@@ -164,8 +164,10 @@ are rules of thumb, not hard limits.
 
 | Name | Kind | Defined in | What to look for |
 |---|---|---|---|
-| `sov_rollup_rpc_handlers` | timer + status | `sov-metrics/src/influxdb/tracker.rs` | Slow RPC methods (tag `request_name`) and error rates (tag `status`). Sudden error bursts with low latency = validation failures; slow + errors = downstream dependency. |
+| `sov_rollup_rpc_handlers` | timer + status | `sov-metrics/src/influxdb/tracker.rs` | Slow RPC methods (tag `request_name`) and error rates (tag `status`). Sudden error bursts with low latency = validation failures; slow + errors = downstream dependency. Emitted per-request, so only used by low-volume handlers (tx submission). |
 | `sov_rollup_http_handlers` | timer + status | `sov-metrics/src/influxdb/tracker.rs` | Same pattern for REST. ⚠️ The `path` tag currently uses raw `request_uri.path()`; paths containing IDs explode cardinality. Normalization is tracked in PR #2753. |
+| `sov_rollup_rpc_aggregated` | counters + cumulative latency buckets | `sov-metrics/src/influxdb/rpc_aggregator.rs` | Covers **every** JSON-RPC call on both HTTP and WebSocket (tag `is_ws`), one point per `(method, transport)` per flush window. `errors`/`calls` ratio per method; `le_*ms` fields estimate percentiles. Unregistered methods fold into `method=unknown`; whole batches are timed under `method=batch` with per-method `batched_entries` counters and a `failed_entries` count of error entries inside batch responses. `cancelled` counts calls whose future was dropped before completing (client disconnect/timeout) — excluded from `calls` and latency stats; rising `cancelled` with falling `calls` means clients are giving up, not that load dropped. `notifications` counts untimed client-to-server notifications. A registered method literally named `batch`/`unknown` would merge with these tags; a startup warning is logged if that happens. Recording is channel-based; on overflow events are dropped and a `lost_events` warning is logged each window. |
+| `sov_rollup_rpc_slow_calls` | timer + status | `sov-metrics/src/influxdb/rpc_aggregator.rs` | One point per call slower than `rpc_aggregation.slow_call_threshold_ms` (default 500ms), capped per window. Tags: `status` (JSON-RPC error code, `0` on success — same convention as `sov_rollup_rpc_handlers`) and `cancelled` (the call's future was dropped at `duration_us` without completing). Request params are *not* included; enable debug logging on `sov_stf_runner::http::rpc_metrics` to capture them in logs. |
 
 ### ZK VM
 
@@ -265,7 +267,7 @@ Known cases today:
   IDs (`/blocks/12345`, `/tx/0xabc…`) create one series per ID. Normalization is tracked
   in PR #2753.
 - `sov_hyperlane_rate_limiter_capacity` — series count is `monitored_routes × enrolled_domains × 2`.
-  Cardinality is operator-controlled via `WarpExecutionConfig.monitored_route_ids`; a large
+  Cardinality is operator-controlled via `WarpExecutionConfig.monitored_routes`; a large
   monitored list × many enrolled destinations can still pressure InfluxDB. Prefer enumerating
   only the routes you actively care about.
 

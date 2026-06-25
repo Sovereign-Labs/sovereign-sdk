@@ -144,6 +144,7 @@ async fn rest_api_routes() {
         receiver,
         Arc::new(MockKernel::default()),
         None,
+        sov_rollup_interface::node::PrimaryShutdownController::new(),
     );
 
     let router = runtime.rest_api(state);

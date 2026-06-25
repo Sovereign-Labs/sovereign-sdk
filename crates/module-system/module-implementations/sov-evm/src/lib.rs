@@ -18,6 +18,7 @@ mod sov_fee_and_gas_utils;
 mod state_access;
 use sov_rollup_interface::da::Time;
 use sov_state::{Kernel, User};
+use std::collections::BTreeSet;
 use std::marker::PhantomData;
 use std::ops::RangeInclusive;
 
@@ -200,6 +201,10 @@ pub struct Evm<S: Spec, P: precompiles::EvmPrecompileSet<S> = precompiles::NoCus
     /// Used only by the RPC: actual gas-token fee paid per tx index.
     #[state]
     pub receipt_fees: AccessoryStateMap<u64, Amount, BcsCodec>,
+
+    /// Custom precompile addresses enabled for EVM execution.
+    #[state]
+    pub(crate) enabled_custom_precompiles: StateValue<BTreeSet<Address>, BcsCodec>,
 }
 
 /// The top-level error type for all EVM module operations.
@@ -260,6 +265,9 @@ where
             CallMessage::UpdateRuntimeConfig(update) => {
                 Ok(self.update_runtime_config(update, context, state)?)
             }
+            CallMessage::UpdateEnabledCustomPrecompiles(update) => {
+                Ok(self.update_enabled_custom_precompiles(update, context, state)?)
+            }
         }
     }
 }
@@ -290,14 +298,42 @@ where
         Ok(admin.expect("Admin must be set at genesis and cannot be removed"))
     }
 
-    pub(crate) fn precompile_provider<'a>(
+    pub(crate) fn precompile_provider<'a, Reader, E>(
         &self,
         context: Option<&'a Context<S>>,
-    ) -> anyhow::Result<precompiles::SovPrecompileProvider<'a, S, P>> {
+        state: &mut Reader,
+    ) -> Result<precompiles::SovPrecompileProvider<'a, S, P>, E>
+    where
+        Reader: StateReader<User, Error = E>,
+    {
+        let enabled_custom_precompiles = self.enabled_custom_precompile_addresses(state)?;
         Ok(precompiles::SovPrecompileProvider::new(
             P::default(),
             context,
+            enabled_custom_precompiles,
         ))
+    }
+
+    pub(crate) fn enabled_custom_precompile_addresses<Reader, E>(
+        &self,
+        state: &mut Reader,
+    ) -> Result<BTreeSet<Address>, E>
+    where
+        Reader: StateReader<User, Error = E>,
+    {
+        // When the runtime has no compiled-in custom precompiles, the enabled set can never have
+        // any effect: a custom precompile is only ever activated if it is also present in
+        // `P::ADDRESSES` (see `SovPrecompileProvider::custom_precompile_enabled`). Skip the state
+        // read entirely in that case.
+        // This both avoids a tiny bit of extra gas usage for rollups not using custom precompiles,
+        // and provides backwards compatibility for existing pre-precompile rollups.
+        if P::ADDRESSES.is_empty() {
+            return Ok(BTreeSet::new());
+        }
+        Ok(self
+            .enabled_custom_precompiles
+            .get(state)?
+            .unwrap_or_default())
     }
 }
 

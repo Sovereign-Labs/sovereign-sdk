@@ -30,10 +30,21 @@ where
     }
 }
 
+/// Guard that must be held for the entire lifetime of the process for logging to keep working: it
+/// owns the non-blocking stdout writer's worker thread and, when enabled, the OpenTelemetry
+/// providers. Dropping it flushes buffered logs and stops non-blocking logging (and OTEL export).
+#[must_use = "logging stops when this guard is dropped; hold it for the lifetime of the program"]
+pub struct LoggingGuard {
+    // Fields drop in declaration order, so `_worker` (declared last) flushes the stdout writer
+    // after everything else, including OTEL shutdown.
+    _otel: Option<OtelGuard>,
+    _worker: tracing_appender::non_blocking::WorkerGuard,
+}
+
 /// Default [`tracing`] initialization for the rollup node.
-/// Returns optional [`OtelGuard`] which should be held through the lifetime of the caller,
-/// so traces and logs are exported in that time.
-pub fn initialize_logging() -> Option<OtelGuard> {
+/// Returns a [`LoggingGuard`] which must be held through the lifetime of the caller, so logs keep
+/// being written and traces/logs exported during that time. Dropping it stops logging.
+pub fn initialize_logging() -> LoggingGuard {
     let env_filter = env::var("RUST_LOG").unwrap_or_else(|_| default_rust_log_value().to_string());
 
     let otel: Option<OtelGuard> = if should_init_open_telemetry_exporter() {
@@ -44,7 +55,19 @@ pub fn initialize_logging() -> Option<OtelGuard> {
 
     let get_env_filter = || EnvFilter::from_str(&env_filter).unwrap();
 
+    // Route stdout through a non-blocking, lossy, bounded writer so a slow or backpressuring stdout
+    // consumer can never block tokio worker threads. With the default blocking `std::io::stdout()`
+    // writer, a log-storm. `lossy(true)` (also the default,
+    // but set explicitly because it is load-bearing: `lossy(false)` would re-introduce the blocking)
+    // drops lines when the buffer is full instead of blocking. `worker_guard` is returned in the
+    // `LoggingGuard` so the writer thread lives for the process and flushes on graceful shutdown.
+    let (non_blocking, worker_guard) =
+        tracing_appender::non_blocking::NonBlockingBuilder::default()
+            .lossy(true)
+            .finish(std::io::stdout());
+
     let mut layers = fmt::layer()
+        .with_writer(non_blocking)
         .with_filter(get_env_filter())
         .with_filter(IgnoreSpan(ExecutionContext::SEQUENCER_WARM_UP))
         .boxed();
@@ -74,7 +97,11 @@ pub fn initialize_logging() -> Option<OtelGuard> {
 
     log_info_about_logging(&env_filter);
     set_tracing_panic_hook();
-    otel
+
+    LoggingGuard {
+        _otel: otel,
+        _worker: worker_guard,
+    }
 }
 
 /// A good default for [`EnvFilter`] when `RUST_LOG` is not set.

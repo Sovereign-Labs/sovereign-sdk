@@ -19,12 +19,13 @@ use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::Storage;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
-use tokio::sync::{mpsc, oneshot, watch};
+use tokio::sync::{mpsc, oneshot};
 use tracing::{error, info};
 
 pub(crate) struct SequencerStateUpdator<S, Rt>
@@ -34,7 +35,7 @@ where
 {
     pub(crate) channel_size: Arc<AtomicU32>,
     pub(crate) message_sender: mpsc::Sender<Message<S, Rt>>,
-    pub(crate) shutdown_receiver: watch::Receiver<()>,
+    pub(crate) primary_shutdown: PrimaryShutdownController,
 }
 
 #[derive(Debug)]
@@ -240,7 +241,7 @@ where
         match recv.await {
             Ok(result) => Ok(result),
             Err(_) => {
-                if self.shutdown_receiver.has_changed().unwrap_or(true) {
+                if self.primary_shutdown.is_triggered() {
                     info!("SequencerStateUpdator(force_close_current_batch) task exited, this is ok since the sequencer is shutting down.");
                     return Err(SequencerStateUpdatorError::Shutdown);
                 }
@@ -281,7 +282,7 @@ where
     async fn send(&self, message: Message<S, Rt>) -> Result<(), SequencerStateUpdatorError> {
         self.channel_size.fetch_add(1, Ordering::Relaxed);
         if self.message_sender.send(message).await.is_err() {
-            if self.shutdown_receiver.has_changed().unwrap_or(true) {
+            if self.primary_shutdown.is_triggered() {
                 info!("SynchronizedSequencerState(send) task exited, this is ok since the sequencer is shutting down.");
                 return Err(SequencerStateUpdatorError::Shutdown);
             }
@@ -294,7 +295,7 @@ where
         if let Ok(ret) = recv.await {
             Ok(ret)
         } else {
-            if self.shutdown_receiver.has_changed().unwrap_or(true) {
+            if self.primary_shutdown.is_triggered() {
                 info!("SynchronizedSequencerState(recv) task exited, this is ok since the sequencer is shutting down.");
                 return Err(SequencerStateUpdatorError::Shutdown);
             }

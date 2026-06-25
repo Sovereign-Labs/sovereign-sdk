@@ -144,6 +144,7 @@ pub(crate) fn setup() -> (TestUser<S>, TestRunner<TestNonceRuntime<S>, S>, EvmAc
             ..Default::default()
         },
         contract_creation_policy: Default::default(),
+        enabled_custom_precompiles: Default::default(),
         initial_base_fee: 0,
         genesis_timestamp: 0,
         admin: MultiAddress::from_vm_address(

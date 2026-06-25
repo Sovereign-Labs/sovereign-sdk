@@ -16,6 +16,9 @@ use tokio::task::JoinHandle;
 /// `poll_interval * LIVENESS_POLL_MULTIPLIER` even if the cluster is unchanged,
 /// so the absence of samples can be alerted on if the polling task dies silently.
 const LIVENESS_POLL_MULTIPLIER: u32 = 5;
+const READY_ENDPOINT_PATH: &str = "/sequencer/ready";
+const READY_REQUEST_TIMEOUT: Duration = Duration::from_secs(3);
+const READY_CONNECTION_TIMEOUT: Duration = Duration::from_secs(2);
 
 /// Information about a registered node.
 #[derive(Debug, Clone, FromRow, PartialEq, Eq)]
@@ -53,14 +56,126 @@ impl ClusterInfo {
     }
 }
 
+#[derive(Debug, Clone, Default, PartialEq, Eq)]
+pub(crate) struct ClusterMembership {
+    pub(crate) followers: BTreeSet<String>,
+    pub(crate) leader_id: Option<String>,
+}
+
+impl ClusterMembership {
+    fn from_cluster_info(info: &ClusterInfo) -> Self {
+        Self {
+            followers: info.followers.keys().cloned().collect(),
+            leader_id: info.leader_id(),
+        }
+    }
+
+    fn change_from(&self, previous: &Self) -> ClusterMembershipChange {
+        let followers_changed = previous.followers != self.followers;
+        let leader_changed = previous.leader_id != self.leader_id;
+
+        ClusterMembershipChange {
+            followers_changed,
+            leader_changed,
+        }
+    }
+}
+
+struct ClusterMembershipChange {
+    followers_changed: bool,
+    leader_changed: bool,
+}
+
+impl ClusterMembershipChange {
+    fn has_changed(&self) -> bool {
+        self.followers_changed || self.leader_changed
+    }
+
+    fn followers_changed(&self) -> bool {
+        self.followers_changed
+    }
+
+    fn leader_changed(&self) -> bool {
+        self.leader_changed
+    }
+}
+
+#[derive(Debug, Default)]
+struct AdvertisedClusterInfo {
+    cluster_info: ClusterInfo,
+    /// Followers that responded but reported they are not ready, keyed by node
+    /// id with the HTTP status they returned. Disjoint from `errors`: a
+    /// follower we could not reach at all is recorded there instead.
+    not_ready_followers: BTreeMap<String, reqwest::StatusCode>,
+    errors: Vec<FollowerReadinessProbeError>,
+}
+
+impl AdvertisedClusterInfo {
+    fn log(&self) {
+        let errors: Vec<_> = self
+            .errors
+            .iter()
+            .map(FollowerReadinessProbeError::as_log_fields)
+            .collect();
+
+        let not_ready_followers: Vec<_> = self
+            .not_ready_followers
+            .iter()
+            .map(|(node_id, status)| (node_id.as_str(), status.as_u16()))
+            .collect();
+
+        tracing::debug!(
+            advertised_leader = ?self.cluster_info.leader.as_ref().map(|leader| &leader.node_id),
+            advertised_followers = ?self.cluster_info.followers.keys().collect::<Vec<_>>(),
+            not_ready_followers = ?not_ready_followers,
+            errors = ?errors,
+            "Advertised cluster info updated"
+        );
+    }
+
+    fn not_ready_followers_count(&self) -> usize {
+        self.not_ready_followers.len()
+    }
+
+    fn errors_count(&self) -> usize {
+        self.errors.len()
+    }
+}
+
+/// Whether a follower reported itself ready, and if not, the status it returned.
+#[derive(Debug)]
+enum FollowerReadiness {
+    Ready,
+    NotReady(reqwest::StatusCode),
+}
+
+#[derive(Debug)]
+struct FollowerReadinessProbeError {
+    /// The probed node, or `None` when the probe task itself failed to join
+    /// (panicked or was cancelled) and no node identity is available.
+    node: Option<(String, SocketAddr)>,
+    error: String,
+}
+
+impl FollowerReadinessProbeError {
+    fn as_log_fields(&self) -> (Option<&str>, Option<SocketAddr>, &str) {
+        (
+            self.node
+                .as_ref()
+                .map(|(node_id, _address)| node_id.as_str()),
+            self.node.as_ref().map(|(_node_id, address)| *address),
+            self.error.as_str(),
+        )
+    }
+}
+
 /// Trait for receiving notifications when cluster state changes.
 ///
-/// Implement this trait to define custom behavior when the cluster membership
-/// or leader changes. The notification is triggered after the cluster info file
-/// has been updated.
+/// Implement this trait to define custom behavior when the advertised cluster
+/// membership or leader changes.
 #[async_trait]
 pub trait ClusterUpdateNotifier: Send + Sync + 'static {
-    /// Called when cluster membership or leadership changes.
+    /// Called when advertised cluster membership or leadership changes.
     async fn on_cluster_update(&mut self, cluster_info: &ClusterInfo) -> anyhow::Result<()>;
 }
 
@@ -125,8 +240,14 @@ pub struct NodeDiscovery {
     liveness_interval: Duration,
     pool: PgPool,
     listener: PgListener,
-    prev_followers: BTreeSet<String>,
-    prev_leader_id: Option<String>,
+    http_client: reqwest::Client,
+    prev_membership: ClusterMembership,
+    /// Last advertised membership emitted to the notifier, or `None` if nothing
+    /// has been emitted yet. `None` forces the first poll to materialize the
+    /// current view — even when it is empty — so stale contents left behind by a
+    /// previous process are overwritten instead of lingering until the next
+    /// real change.
+    prev_advertised_membership: Option<ClusterMembership>,
     notifier: Option<Box<dyn ClusterUpdateNotifier>>,
     sender: watch::Sender<ClusterInfo>,
     pub(crate) receiver: watch::Receiver<ClusterInfo>,
@@ -175,6 +296,10 @@ impl NodeDiscovery {
         tracing::info!("Subscribed to nodes_changes and leader_changes channels");
 
         let (sender, receiver) = watch::channel(ClusterInfo::default());
+        let http_client = reqwest::Client::builder()
+            .connect_timeout(READY_CONNECTION_TIMEOUT)
+            .timeout(READY_REQUEST_TIMEOUT)
+            .build()?;
 
         Ok(Self {
             max_age,
@@ -182,8 +307,9 @@ impl NodeDiscovery {
             liveness_interval: poll_interval * LIVENESS_POLL_MULTIPLIER,
             pool,
             listener,
-            prev_followers: BTreeSet::new(),
-            prev_leader_id: None,
+            http_client,
+            prev_membership: ClusterMembership::default(),
+            prev_advertised_membership: None,
             notifier,
             sender,
             receiver,
@@ -300,13 +426,19 @@ impl NodeDiscovery {
             .get_cluster_info()
             .await
             .map_err(HandleClusterUpdateError::GetClusterInfo)?;
-        let leader_id = info.leader_id();
+        let membership = ClusterMembership::from_cluster_info(&info);
+        let membership_change = membership.change_from(&self.prev_membership);
 
-        let followers: BTreeSet<_> = info.followers.keys().cloned().collect();
-
-        let membership_changed = self.prev_followers != followers;
-        let leader_changed = self.prev_leader_id != leader_id;
-        let cluster_changed = membership_changed || leader_changed;
+        // Probe readiness on every poll cycle.
+        let advertised_info = self.advertised_cluster_info(&info).await;
+        let advertised_membership =
+            ClusterMembership::from_cluster_info(&advertised_info.cluster_info);
+        // Treat the very first poll (`None`) as a change so the advertised view
+        // is always materialized once, even if it is empty.
+        let advertised_changed = self
+            .prev_advertised_membership
+            .as_ref()
+            .is_none_or(|prev| advertised_membership.change_from(prev).has_changed());
 
         // Liveness is keyed off wall-clock time, not the wake-up source, so a
         // chatty cluster (frequent NOTIFY traffic) still emits periodic samples
@@ -316,55 +448,116 @@ impl NodeDiscovery {
             .last_metric_at
             .is_none_or(|t| t.elapsed() >= self.liveness_interval);
 
-        if !(cluster_changed || liveness_due) {
+        if !(membership_change.has_changed() || advertised_changed || liveness_due) {
             return Ok(());
         }
 
-        tracing::debug!(info = ?info, membership_changed, leader_changed, "Last cluster info");
+        tracing::debug!(
+            info = ?info,
+            followers_changed = membership_change.followers_changed(),
+            leader_changed = membership_change.leader_changed(),
+            "Last cluster info"
+        );
+
+        advertised_info.log();
 
         let update_metric = ClusterUpdateMetric {
-            current_leader: leader_id.clone(),
-            followers: followers.iter().cloned().collect(),
-            cluster_changed,
+            membership: membership.clone(),
+            cluster_changed: membership_change.has_changed(),
+            advertised_membership: advertised_membership.clone(),
+            advertised_cluster_changed: advertised_changed,
+            not_ready_followers_count: advertised_info.not_ready_followers_count(),
+            errored_followers_count: advertised_info.errors_count(),
         };
 
-        if cluster_changed {
-            // Log membership changes
-            for node_id in followers.difference(&self.prev_followers) {
-                tracing::info!(node_id, "Node joined the followers");
-            }
-            for node_id in self.prev_followers.difference(&followers) {
-                tracing::info!(node_id, "Node left the followers");
-            }
-
-            // Log leader change
-            if leader_changed {
-                tracing::info!(
-                    old_leader = ?self.prev_leader_id,
-                    new_leader = ?leader_id,
-                    "Leader changed"
-                );
-            }
-
-            // Notify watchers that the cluster was updated.
+        if advertised_changed {
             if let Some(notifier) = &mut self.notifier {
                 notifier
-                    .on_cluster_update(&info)
+                    .on_cluster_update(&advertised_info.cluster_info)
                     .await
                     .map_err(HandleClusterUpdateError::Notify)?;
             }
 
-            self.prev_followers = followers;
-            self.prev_leader_id = leader_id;
+            self.prev_advertised_membership = Some(advertised_membership);
+        }
+
+        if membership_change.has_changed() {
+            self.prev_membership = membership;
             let _ = self.sender.send(info);
         }
+
+        self.last_metric_at = Some(Instant::now());
 
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(update_metric);
         });
-        self.last_metric_at = Some(Instant::now());
 
         Ok(())
+    }
+
+    async fn advertised_cluster_info(&self, info: &ClusterInfo) -> AdvertisedClusterInfo {
+        let mut probes = tokio::task::JoinSet::new();
+
+        for (node_id, node) in &info.followers {
+            let http_client = self.http_client.clone();
+            let node_id = node_id.clone();
+            let node = node.clone();
+
+            probes.spawn(async move {
+                let ready = Self::follower_is_ready(&http_client, &node).await;
+                (node_id, node, ready)
+            });
+        }
+
+        let mut followers = BTreeMap::new();
+        let mut not_ready_followers = BTreeMap::new();
+        let mut errors = Vec::new();
+
+        while let Some(result) = probes.join_next().await {
+            match result {
+                Ok((node_id, node, Ok(FollowerReadiness::Ready))) => {
+                    followers.insert(node_id, node);
+                }
+                Ok((node_id, _node, Ok(FollowerReadiness::NotReady(status)))) => {
+                    not_ready_followers.insert(node_id, status);
+                }
+                Ok((node_id, node, Err(error))) => {
+                    errors.push(FollowerReadinessProbeError {
+                        node: Some((node_id, node.address)),
+                        error: error.to_string(),
+                    });
+                }
+                Err(error) => {
+                    errors.push(FollowerReadinessProbeError {
+                        node: None,
+                        error: error.to_string(),
+                    });
+                }
+            }
+        }
+
+        AdvertisedClusterInfo {
+            cluster_info: ClusterInfo {
+                leader: info.leader.clone(),
+                followers,
+            },
+            not_ready_followers,
+            errors,
+        }
+    }
+
+    async fn follower_is_ready(
+        http_client: &reqwest::Client,
+        node: &NodeInfo,
+    ) -> Result<FollowerReadiness, reqwest::Error> {
+        let url = format!("http://{}{}", node.address, READY_ENDPOINT_PATH);
+
+        let response = http_client.get(url).send().await?;
+        if response.status().is_success() {
+            Ok(FollowerReadiness::Ready)
+        } else {
+            Ok(FollowerReadiness::NotReady(response.status()))
+        }
     }
 
     async fn get_cluster_info_from_db(

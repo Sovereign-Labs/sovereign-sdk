@@ -1,15 +1,15 @@
 #[cfg(test)]
 mod tests;
 
-pub use crate::config::CelestiaConfig;
+pub use crate::config::{CelestiaConfig, VerifyOnFetchMode};
 use crate::metrics::client::{
     BlobGetAllMeasurement, GetBlockHeaderMeasurement, GetChainHeadMeasurement,
     GetNamespaceDataMeasurement, HeaderSyncStateMeasurement, StateBalanceForAddressMeasurement,
     StateEstimateGasPriceMeasurement, SubmitPayForBlob,
 };
 use crate::metrics::full::{
-    BlobSubmitMeasurement, CelestiaAdapterStateMeasurement, GetBlockMeasurement,
-    NamespaceDataMetrics,
+    BlobCompressionMeasurement, BlobSubmitMeasurement, CelestiaAdapterStateMeasurement,
+    GetBlockMeasurement, NamespaceDataMetrics,
 };
 use crate::metrics::RollupNamespace;
 use crate::types::{
@@ -28,10 +28,13 @@ use celestia_types::nmt::Namespace;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_rollup_interface::common::HexHash;
-use sov_rollup_interface::da::{DaProof, DaSpec, RelevantBlobs, RelevantProofs};
+use sov_rollup_interface::da::{
+    BlobReaderTrait, DaProof, DaSpec, DaVerifier, RelevantBlobs, RelevantProofs,
+};
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
+use sov_rollup_interface::node::SecondaryShutdownController;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -45,36 +48,47 @@ pub struct CelestiaService {
     client: Arc<celestia_client::Client>,
     rollup_batch_namespace: Namespace,
     rollup_proof_namespace: Namespace,
+    verify_on_fetch_mode: VerifyOnFetchMode,
     signer_address: Option<CelestiaAddress>,
     safe_lead_time: Duration,
     backoff_policy: ExponentialBuilder,
     request_timeout: Duration,
     tx_priority: celestia_client::tx::TxPriority,
     tx_status_polling_millis: u64,
+    compression: crate::config::CompressOnSubmit,
+    compression_chunk_size: usize,
 }
 
 impl CelestiaService {
+    // Private all-fields constructor; the field count is inherent to the service config.
+    #[allow(clippy::too_many_arguments)]
     fn with_client(
         client: celestia_client::Client,
         rollup_batch_namespace: Namespace,
         rollup_proof_namespace: Namespace,
+        verify_on_fetch_mode: VerifyOnFetchMode,
         signer_address: Option<CelestiaAddress>,
         safe_lead_time: Duration,
         backoff_policy: ExponentialBuilder,
         request_timeout: Duration,
         tx_priority: celestia_client::tx::TxPriority,
         tx_status_polling_millis: u64,
+        compression: crate::config::CompressOnSubmit,
+        compression_chunk_size: usize,
     ) -> Self {
         Self {
             client: Arc::new(client),
             rollup_batch_namespace,
             rollup_proof_namespace,
+            verify_on_fetch_mode,
             signer_address,
             safe_lead_time,
             backoff_policy,
             request_timeout,
             tx_priority,
             tx_status_polling_millis,
+            compression,
+            compression_chunk_size,
         }
     }
 
@@ -103,16 +117,38 @@ impl CelestiaService {
         namespace: Namespace,
     ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
         let start = std::time::Instant::now();
-        let bytes = blob.len();
+        let rollup_len = blob.len();
         let ns = self.rollup_namespace(&namespace);
-        tracing::debug!(bytes, namespace = ?ns, "Sending raw data to Celestia");
 
         let Some(signer) = &self.signer_address else {
             // TODO: Follow up: Better error when switched to `thiserror`.
             anyhow::bail!("Signer must be set for submitting blobs");
         };
-        let blob = JsonBlob::new(namespace, blob.to_vec(), Some(signer.0))
-            .expect("Bug in CelestiaAdapter");
+
+        // Compress batch blobs when configured; proofs always post verbatim. This is
+        // emission only — read/verify semantics never depend on it.
+        let da_payload = if matches!(ns, RollupNamespace::Batch) {
+            let da_payload = crate::envelope::encode_for_submission(
+                blob,
+                self.compression.is_enabled(),
+                self.compression_chunk_size,
+            );
+            sov_metrics::track_metrics(|tracker| {
+                tracker.submit(BlobCompressionMeasurement::new(
+                    self.compression,
+                    rollup_len,
+                    da_payload.len(),
+                ));
+            });
+            da_payload
+        } else {
+            blob.to_vec()
+        };
+        let bytes = da_payload.len();
+        tracing::debug!(rollup_len, bytes, namespace = ?ns, "Sending data to Celestia");
+
+        let blob =
+            JsonBlob::new(namespace, da_payload, Some(signer.0)).expect("Bug in CelestiaAdapter");
         let blob_hash = HexHash::new(*blob.commitment.hash());
         tracing::debug!(
             namespace = ?ns,
@@ -185,7 +221,7 @@ impl CelestiaService {
     pub async fn new(
         config: CelestiaConfig,
         chain_params: RollupParams,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        secondary_shutdown_controller: &SecondaryShutdownController,
     ) -> Self {
         tracing::info!(?config, "Initializing Celestia Adapter");
         let request_timeout = Duration::from_secs(config.request_timeout_secs.get());
@@ -220,7 +256,7 @@ impl CelestiaService {
                     bg_client,
                     signer,
                     tx_priority,
-                    shutdown_receiver,
+                    secondary_shutdown_controller.clone(),
                     stat_polling_period,
                     stat_request_timeout,
                 ));
@@ -231,12 +267,15 @@ impl CelestiaService {
             client,
             chain_params.rollup_batch_namespace,
             chain_params.rollup_proof_namespace,
+            config.verify_on_fetch_mode,
             fetched_signer,
             Duration::from_millis(config.safe_lead_time_ms),
             backoff_policy,
             request_timeout,
             tx_priority,
             config.tx_status_polling_millis,
+            config.compression,
+            config.compression_chunk_size,
         )
     }
 }
@@ -356,7 +395,26 @@ impl CelestiaService {
             tracker.submit(get_block_measurement);
         });
         tracing::trace!(height, "get_block_at metrics send, returning");
-        FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)
+        let block = FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)?;
+        match self.verify_on_fetch_mode {
+            VerifyOnFetchMode::Off => {}
+            VerifyOnFetchMode::LogError => {
+                if let Err(error) = self.verify_block_integrity(&block) {
+                    tracing::error!(
+                        height,
+                        ?error,
+                        "Celestia block integrity verification failed; continuing because \
+                         verify_on_fetch_mode is `log_error`"
+                    );
+                }
+            }
+            VerifyOnFetchMode::ReturnError => {
+                self.verify_block_integrity(&block).with_context(|| {
+                    format!("Celestia block integrity verification failed at height {height}")
+                })?;
+            }
+        }
+        Ok(block)
     }
 
     async fn get_head_block_header_inner(
@@ -407,7 +465,14 @@ impl CelestiaService {
         });
 
         let blobs = flatten_timeout(result)?
-            .map(|blobs| blobs.into_iter().map(|blob| blob.data).collect())
+            .map(|blobs| {
+                blobs
+                    .into_iter()
+                    // Proofs post verbatim, but decode defensively so any node reads
+                    // back the rollup bytes regardless of who emitted the blob.
+                    .map(|blob| crate::envelope::decode_for_read(&blob.data))
+                    .collect()
+            })
             .unwrap_or_default();
         Ok(blobs)
     }
@@ -422,6 +487,63 @@ impl CelestiaService {
             .subscribe()
             .map(|res| res.map(CelestiaHeader::from).map_err(|e| e.into()))
             .boxed())
+    }
+
+    fn verify_block_integrity(&self, block: &FilteredCelestiaBlock) -> anyhow::Result<()> {
+        verify_block_integrity_for_params(
+            block,
+            RollupParams {
+                rollup_batch_namespace: self.rollup_batch_namespace,
+                rollup_proof_namespace: self.rollup_proof_namespace,
+            },
+        )
+    }
+}
+
+fn verify_block_integrity_for_params(
+    block: &FilteredCelestiaBlock,
+    rollup_params: RollupParams,
+) -> anyhow::Result<()> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+        verify_block_integrity_inner(block, rollup_params)
+    }))
+    .map_err(|panic| {
+        anyhow::anyhow!(
+            "Celestia block integrity verification panicked: {}",
+            panic_payload_to_string(panic.as_ref())
+        )
+    })?
+}
+
+fn verify_block_integrity_inner(
+    block: &FilteredCelestiaBlock,
+    rollup_params: RollupParams,
+) -> anyhow::Result<()> {
+    let verifier = CelestiaVerifier::new(rollup_params);
+
+    let mut relevant_blobs = extract_relevant_blobs(block);
+    // Advance full blob data first, then derive proofs for the consumed ranges.
+    for blob in relevant_blobs
+        .batch_blobs
+        .iter_mut()
+        .chain(relevant_blobs.proof_blobs.iter_mut())
+    {
+        blob.advance(blob.total_len());
+    }
+    let relevant_proofs = get_extraction_proof(block, &relevant_blobs);
+
+    verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)?;
+
+    Ok(())
+}
+
+fn panic_payload_to_string(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_owned()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "non-string panic payload".to_owned()
     }
 }
 
@@ -619,7 +741,7 @@ async fn stat_collection_task(
     client: celestia_client::Client,
     signer: CelestiaAddress,
     priority: celestia_client::tx::TxPriority,
-    mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    secondary_shutdown_controller: SecondaryShutdownController,
     period: Duration,
     request_timeout: Duration,
 ) {
@@ -630,7 +752,7 @@ async fn stat_collection_task(
 
     loop {
         tokio::select! {
-            _ = shutdown_receiver.changed() => {
+            _ = secondary_shutdown_controller.wait_for_shutdown() => {
                 tracing::info!("Shutting down celestia stat collection task");
                 return;
             }

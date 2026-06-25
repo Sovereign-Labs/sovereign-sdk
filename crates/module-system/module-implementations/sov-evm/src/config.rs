@@ -2,6 +2,7 @@ use alloy_primitives::Address;
 use borsh::{BorshDeserialize, BorshSerialize};
 use revm::primitives::hardfork::SpecId;
 use schemars::JsonSchema;
+use sov_address::EthereumAddress;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{HexString, SafeVec, Spec, ETHEREUM_BLOCK_GAS_LIMIT, ETHEREUM_TX_GAS_LIMIT};
 use sov_universal_wallet::UniversalWallet;
@@ -40,6 +41,10 @@ pub struct EvmGenesisConfig<S: Spec> {
     pub chain_spec: EvmChainSpec,
     /// Policy - who can create contracts. Everyone or allowlist
     pub contract_creation_policy: ContractCreationPolicy,
+    /// Custom precompile addresses enabled at genesis. Addresses must be available in the
+    /// concrete EVM precompile set configured for the runtime.
+    #[serde(default)]
+    pub enabled_custom_precompiles: BTreeSet<Address>,
     /// The address which is allowed to modify the config.
     pub admin: S::Address,
 }
@@ -53,6 +58,7 @@ impl<S: Spec> EvmGenesisConfig<S> {
             genesis_timestamp: 0,
             chain_spec: EvmChainSpec::default(),
             contract_creation_policy: ContractCreationPolicy::Everyone,
+            enabled_custom_precompiles: Default::default(),
             admin,
         }
     }
@@ -192,6 +198,28 @@ impl<S: Spec> EvmRuntimeConfigUpdate<S> {
     }
 }
 
+/// An update to the enabled custom EVM precompile set.
+#[derive(
+    Debug,
+    Clone,
+    PartialEq,
+    Eq,
+    serde::Deserialize,
+    serde::Serialize,
+    Default,
+    BorshSerialize,
+    BorshDeserialize,
+    UniversalWallet,
+    JsonSchema,
+)]
+#[serde(rename = "enabled_custom_precompiles_update")]
+pub struct EnabledCustomPrecompilesUpdate {
+    /// Custom precompile addresses to enable.
+    pub add: SafeVec<EthereumAddress, 32>,
+    /// Custom precompile addresses to disable.
+    pub remove: SafeVec<EthereumAddress, 32>,
+}
+
 #[derive(
     Debug,
     Clone,
@@ -301,6 +329,7 @@ mod tests {
             },
             genesis_timestamp: 0,
             contract_creation_policy: Default::default(),
+            enabled_custom_precompiles: Default::default(),
             initial_base_fee: 7,
             admin: sov_modules_api::Address::from_str(
                 "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",

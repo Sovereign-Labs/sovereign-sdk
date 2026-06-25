@@ -12,7 +12,7 @@ use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_apis::endpoints::simulate::SovereignSimulate;
 use sov_rollup_apis::rollup_tx_router;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
-use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::node::{PrimaryShutdownController, SyncStatus};
 use sov_stf_runner::{RollupConfig, RunnerConfig};
 
 use super::SequencerCreationReceipt;
@@ -23,7 +23,7 @@ use crate::FullNodeBlueprint;
 pub async fn register_endpoints<B, M>(
     state_update_receiver: StateUpdateReceiver<<B::Spec as Spec>::Storage>,
     sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
     ledger_db: &LedgerDb,
     sequencer: &SequencerCreationReceipt<B::Spec>,
     config: &RollupConfig<<B::Spec as Spec>::Address, B::DaService>,
@@ -46,20 +46,19 @@ where
 
     // Ledger endpoint.
     {
-        let ledger_axum_router =
-            LedgerRoutes::<
-                LedgerDb,
-                // Can keep hard-coding:
-                // BatchSequencerReceipt<B::DaSpec>,
-                // or use some associated type.
-                // TODO: But ideally it needs to be addressed properly: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1268
-                BatchSequencerReceipt<B::Spec>,
-                TxReceiptContents<B::Spec>,
-                <B::Runtime as RuntimeEventProcessor>::RuntimeEvent,
-            >::axum_router(ledger_db.clone(), shutdown_receiver.clone());
+        let ledger_axum_router = LedgerRoutes::<
+            LedgerDb,
+            // Can keep hard-coding:
+            // BatchSequencerReceipt<B::DaSpec>,
+            // or use some associated type.
+            // TODO: But ideally it needs to be addressed properly: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/1268
+            BatchSequencerReceipt<B::Spec>,
+            TxReceiptContents<B::Spec>,
+            <B::Runtime as RuntimeEventProcessor>::RuntimeEvent,
+        >::axum_router(ledger_db.clone(), primary_shutdown.clone());
         let ledger_state = LedgerState {
             ledger: ledger_db.clone(),
-            shutdown_receiver,
+            primary_shutdown,
         };
         endpoints.axum_router = endpoints
             .axum_router

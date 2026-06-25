@@ -4,15 +4,18 @@ use sov_blob_storage::{PreferredBatchData, PreferredProofData};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::TxHash;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use std::{
     path::Path,
     sync::{atomic::AtomicUsize, Arc},
 };
 use tokio::sync::broadcast;
-use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tracing::debug;
+
+use anyhow::Context;
+use borsh::BorshDeserialize;
 
 use super::db::{ReadBatch, ReadBlob};
 use crate::preferred::db::SequencerRole;
@@ -33,7 +36,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         all_completed_blobs: Vec<ReadBlob>,
         storage_path: Box<Path>,
         tx_status_manager: TxStatusManager<Da::Spec>,
-        shutdown_sender: watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         blob_processing_timeout: Duration,
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
         seq_role: SequencerRole,
@@ -62,7 +65,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
                     ledger_db,
                     storage_path.as_ref(),
                     TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-                    shutdown_sender,
+                    primary_shutdown,
                     blob_processing_timeout,
                     Some(blobs_sender_channel),
                     blobs_to_send,
@@ -145,6 +148,25 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         self.nb_of_concurrent_proof_blob_submissions.clone()
     }
 
+    pub(crate) fn highest_sequence_number_to_send_after_restart(
+        &self,
+    ) -> anyhow::Result<Option<u64>> {
+        let Some(ref inner) = self.inner else {
+            return Ok(None);
+        };
+
+        inner
+            .blobs_to_send_after_restart()
+            .map(preferred_blob_sequence_number)
+            .try_fold(None, |highest, sequence_number| {
+                sequence_number.map(|sequence_number| {
+                    Some(highest.map_or(sequence_number, |highest| {
+                        std::cmp::max(highest, sequence_number)
+                    }))
+                })
+            })
+    }
+
     pub(crate) async fn add_txs(&self, blob_id: BlobInternalId, tx_hashes: Arc<Vec<TxHash>>) {
         let Some(ref inner) = self.inner else {
             return;
@@ -203,4 +225,15 @@ fn batch_bytes(batch: ReadBatch) -> anyhow::Result<Arc<[u8]>> {
         data: batch.txs,
     })?
     .into())
+}
+
+fn preferred_blob_sequence_number(blob: &BlobToSend) -> anyhow::Result<u64> {
+    match blob {
+        BlobToSend::Batch { data } => Ok(PreferredBatchData::try_from_slice(data.as_ref())
+            .context("Failed to deserialize preferred batch from BlobSender DB")?
+            .sequence_number),
+        BlobToSend::Proof { data } => Ok(PreferredProofData::try_from_slice(data.as_ref())
+            .context("Failed to deserialize preferred proof from BlobSender DB")?
+            .sequence_number),
+    }
 }

@@ -178,7 +178,7 @@ where
         let mut block = self.get_block(pending_block.block_number() - 1, &mut state)?;
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
-        let mut shutdown_receiver = self.ethereum.shutdown_receiver.clone();
+        let primary_shutdown = self.ethereum.primary_shutdown.clone();
 
         loop {
             tokio::select! {
@@ -201,7 +201,7 @@ where
                         self.send_matching_logs(&receipt, &block, &filter, time).await?;
                     }
                 }
-                _ = shutdown_receiver.changed() => {
+                _ = primary_shutdown.wait_for_shutdown() => {
                     tracing::info!("Shutdown signal received, terminating logs subscription gracefully");
                     break;
                 }
@@ -237,7 +237,7 @@ where
         );
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
-        let mut shutdown_receiver = self.ethereum.shutdown_receiver.clone();
+        let primary_shutdown = self.ethereum.primary_shutdown.clone();
         let mut last_send_time = std::time::Instant::now();
         let has_waker_task = Arc::new(AtomicBool::new(false));
         let (wakeup_sender, mut wakeup_receiver) = tokio::sync::watch::channel(());
@@ -307,7 +307,7 @@ where
                         }
                     }
                 }
-                _ = shutdown_receiver.changed() => {
+                _ = primary_shutdown.wait_for_shutdown() => {
                     tracing::info!("Shutdown signal received, terminating blocks subscription gracefully");
                     break;
                 }

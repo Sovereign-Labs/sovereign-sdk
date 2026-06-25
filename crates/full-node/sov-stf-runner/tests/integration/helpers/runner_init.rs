@@ -25,7 +25,9 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{AggregatedProofResponse, LedgerStateProvider};
-use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::node::{
+    PrimaryShutdownController, SecondaryShutdownController, SyncStatus,
+};
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
@@ -62,7 +64,8 @@ pub struct TestNode {
     tasks: JoinSet<()>,
     // Just to remove warnings from logs
     _sync_status_receiver: watch::Receiver<SyncStatus>,
-    shutdown_sender: watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
+    secondary_shutdown_controller: SecondaryShutdownController,
 }
 
 impl TestNode {
@@ -108,7 +111,14 @@ impl TestNode {
     }
 
     pub async fn stop(self) {
-        self.shutdown_sender.send(()).unwrap();
+        // With a `stop_at_rollup_height`, the runner stops and is dropped before
+        // `stop()` is called, so the primary shutdown channel may already have no
+        // receivers left. A failed send just means everything already shut down,
+        // which is the outcome we want here.
+        self.primary_shutdown.shutdown();
+        // The secondary controller holds its own receiver, so `shutdown()` always
+        // succeeds; it simply signals any background tasks that are still running.
+        self.secondary_shutdown_controller.shutdown();
         let _ = self.tasks.join_all().await;
     }
 }
@@ -203,22 +213,22 @@ pub async fn initialize_runner_with_stop_at(
     let rollup_config = rollup_config(&da_service, path, aggregated_proof_block_jump);
 
     let mut tasks = JoinSet::new();
-    let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
-    shutdown_receiver.mark_unchanged();
+    let primary_shutdown = PrimaryShutdownController::new();
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
 
     let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
         da_service.clone(),
-        shutdown_receiver.clone(),
+        &secondary_shutdown_controller,
         TEST_MOCK_DA_POLLING_INTERVAL,
     )
     .await
     .unwrap();
 
-    let receiver_for_metrics = shutdown_receiver.clone();
     let monitoring_config = rollup_config.monitoring.clone();
+    let metrics_shutdown_controller = secondary_shutdown_controller.clone();
     tasks.spawn(async move {
         if let Some(handle) =
-            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics)
+            sov_metrics::init_metrics_tracker(&monitoring_config, &metrics_shutdown_controller)
         {
             handle.await.expect("Metrics task errored");
         } else {
@@ -257,7 +267,7 @@ pub async fn initialize_runner_with_stop_at(
         let ledger_updates = ledger_db.clone();
         react_to_state_updates::<TestSpec, _>(
             state_update_recv,
-            shutdown_receiver.clone(),
+            primary_shutdown.clone(),
             "ledger_updates",
             move |info| {
                 let ledger_updates = ledger_updates.clone();
@@ -290,7 +300,7 @@ pub async fn initialize_runner_with_stop_at(
         state_channel,
         prev_state_root,
         Box::new(InfiniteHeight),
-        shutdown_receiver.clone(),
+        primary_shutdown.clone(),
         None,
         stop_at_rollup_height,
         da_sync_state,
@@ -323,8 +333,8 @@ pub async fn initialize_runner_with_stop_at(
             }),
             stf_info_receiver,
             runner.da_sync_state(),
-            shutdown_receiver.clone(),
-            shutdown_sender.clone(),
+            &secondary_shutdown_controller,
+            primary_shutdown.clone(),
             false,
         )
         .await
@@ -349,7 +359,8 @@ pub async fn initialize_runner_with_stop_at(
             inner_vm,
             _outer_vm: outer_vm,
             tasks,
-            shutdown_sender,
+            primary_shutdown,
+            secondary_shutdown_controller,
             _sync_status_receiver,
         },
     )

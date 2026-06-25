@@ -55,6 +55,20 @@ pub fn config_gas_token_id() -> TokenId {
     config_value!("GAS_TOKEN_ID")
 }
 
+/// The number of decimal places of the rollup's gas token.
+pub fn config_gas_token_decimals() -> u8 {
+    config_value!("GAS_TOKEN_DECIMALS")
+}
+
+/// Returns the number of decimal places for `token_id`.
+pub fn token_decimals(token_id: &TokenId) -> u8 {
+    if *token_id == config_gas_token_id() {
+        config_gas_token_decimals()
+    } else {
+        token_id.as_bytes()[31]
+    }
+}
+
 pub(crate) type C = BorshCodec;
 
 /// The sov-bank module manages user balances. It provides functionality for:
@@ -171,5 +185,30 @@ mod tests {
             config_gas_token_id().to_string(),
             "token_1qqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqqnfxkwm"
         );
+    }
+
+    #[test]
+    fn token_decimals_uses_byte_31_for_normal_tokens() {
+        // A non-gas id whose last byte encodes its decimals. Use an asymmetric pattern so a
+        // byte-order mistake would be visible.
+        let mut bytes = [0x12u8; 32];
+        bytes[31] = 0x2A;
+        let token_id = TokenId::from(bytes);
+        assert_eq!(token_decimals(&token_id), 0x2A);
+    }
+
+    #[test]
+    fn token_decimals_overrides_for_gas_token() {
+        let expected: u8 = 12;
+        env::set_var(
+            "SOV_TEST_CONST_OVERRIDE_GAS_TOKEN_DECIMALS",
+            expected.to_string(),
+        );
+        let gas_token_id = config_gas_token_id();
+
+        // ensure they dont happen to be eq
+        assert_ne!(gas_token_id.as_bytes()[31], expected);
+        // ensure the constant is used since its gas token
+        assert_eq!(token_decimals(&gas_token_id), expected);
     }
 }

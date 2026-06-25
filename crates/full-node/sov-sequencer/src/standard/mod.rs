@@ -31,6 +31,7 @@ use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use std::boxed::Box;
 use std::marker::PhantomData;
@@ -134,9 +135,8 @@ where
         max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
-        shutdown_sender: watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
     ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = shutdown_sender.subscribe();
         let mut runtime = Rt::default();
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
 
@@ -154,6 +154,7 @@ where
             checkpoint_receiver,
             kernel_with_slot_mapping,
             None,
+            primary_shutdown.clone(),
         );
 
         let txsm = TxStatusManager::default();
@@ -171,7 +172,7 @@ where
             ledger_db.clone(),
             storage_path,
             TxStatusBlobSenderHooks::new(txsm.clone()),
-            shutdown_sender,
+            primary_shutdown.clone(),
             Duration::from_secs(config.blob_processing_timeout_secs),
             None,
             Default::default(),
@@ -213,7 +214,7 @@ where
             loop_call_update_state(
                 seq.clone(),
                 state_update_receiver.clone(),
-                shutdown_receiver.clone(),
+                primary_shutdown.clone(),
             )
         }));
         handles.push(tokio::spawn({
@@ -222,7 +223,7 @@ where
             async move {
                 loop_send_tx_notifications::<S, Rt>(
                     state_update_receiver,
-                    shutdown_receiver,
+                    primary_shutdown,
                     &ledger_db,
                     seq.tx_status_manager(),
                 )
@@ -321,6 +322,7 @@ where
             Ok(ApplyTxResult {
                 receipt,
                 transaction_consumption,
+                ..
             }) => {
                 let sequencer_reward = transaction_consumption.priority_fee();
                 // ...and immediately store the new `StateCheckpoint`.

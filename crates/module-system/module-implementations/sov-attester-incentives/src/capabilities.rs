@@ -297,7 +297,7 @@ where
         &mut self,
         sender: &S::Address,
         serialized_challenge: &SerializedChallenge,
-        rollup_height: SlotNumber,
+        slot_number: SlotNumber,
         state: &mut State,
     ) -> anyhow::Result<SovStateTransitionPublicData<S>, ProcessChallengeErrors> {
         if !self.should_reward_fees(state) {
@@ -335,7 +335,7 @@ where
         // Find the faulty attestation pool and get the associated reward
         let attestation_reward = match self
             .bad_transition_pool
-            .get_or_err(&rollup_height, state)
+            .get_or_err(&slot_number, state)
             .map_err(Into::<anyhow::Error>::into)?
         {
             Ok(reward) => reward,
@@ -360,11 +360,7 @@ where
                 // We have to perform the checks to ensure that the challenge is valid while the attestation isn't.
 
                 let check = self
-                    .check_challenge_outputs_against_transition(
-                        &public_output,
-                        rollup_height,
-                        state,
-                    )
+                    .check_challenge_outputs_against_transition(&public_output, slot_number, state)
                     .map_err(Into::<anyhow::Error>::into)?;
 
                 if let Some(slashing_reason) = check {
@@ -390,7 +386,7 @@ where
 
                 // Now remove the bad transition from the pool
                 self.bad_transition_pool
-                    .remove(&rollup_height, state)
+                    .remove(&slot_number, state)
                     .map_err(Into::<anyhow::Error>::into)?;
                 Ok(public_output)
             }

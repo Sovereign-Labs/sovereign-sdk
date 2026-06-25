@@ -553,9 +553,13 @@ pub fn build_struct_type_scaffold(
         .iter()
         .filter(|field| !field.skip)
         .map(|field| {
-            if let Some(FixedPointDisplay::FromField { field_index, .. }) = field.fixed_point {
+            if let Some(field_index) = field
+                .fixed_point
+                .as_ref()
+                .and_then(FixedPointDisplay::field_index)
+            {
                 peekable = true;
-                if *field_index >= fields.len() {
+                if **field_index >= fields.len() {
                     return Err(syn::Error::new(
                         field_index.span(),
                         "The field index referenced is out of bounds for this struct",
@@ -635,9 +639,13 @@ pub fn build_tuple_type_scaffold(
         .iter()
         .filter(|field| !field.skip)
         .map(|field| {
-            if let Some(FixedPointDisplay::FromField { field_index, .. }) = field.fixed_point {
+            if let Some(field_index) = field
+                .fixed_point
+                .as_ref()
+                .and_then(FixedPointDisplay::field_index)
+            {
                 peekable = true;
-                if *field_index >= fields.len() {
+                if **field_index >= fields.len() {
                     return Err(syn::Error::new(
                         field_index.span(),
                         "The field index referenced is out of bounds for this struct",

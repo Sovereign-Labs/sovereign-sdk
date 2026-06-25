@@ -171,7 +171,8 @@ pub(crate) fn new_inclusion_proof(
     // still prove any trailing skipped shares (e.g. namespace tail padding) safely.
     for blob in blobs.iter() {
         let range = blob.range_in_namespace.clone();
-        let relevant_len = blob.blob.accumulator().len();
+        // Share ranges are defined over DA bytes, hence the compressed accessors.
+        let relevant_len = blob.compressed_verified_data().len();
         let start_share = flat_shares[range.start];
         let has_signer = start_share.signer().is_some();
         let relevant_end = range
@@ -184,7 +185,7 @@ pub(crate) fn new_inclusion_proof(
             .start
             .checked_add(
                 crate::shares::shares_needed_for_bytes_with_signer(
-                    blob.blob.total_len(),
+                    blob.compressed_total_len(),
                     has_signer,
                 )
                 .max(1),

@@ -112,7 +112,7 @@ importers:
         specifier: ^9.30.1
         version: 9.39.4
       '@playwright/test':
-        specifier: ^1.40.0
+        specifier: 1.58.2
         version: 1.58.2
       '@types/node':
         specifier: ^22.13.4

@@ -4,12 +4,27 @@
     "build": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "target/**"],
-      "inputs": ["src/**", "package.json", "Cargo.toml"]
+      // The WASM is compiled from the Rust schema crate, which lives outside this package; list its
+      // source via a relative path so changes to it bust the build cache.
+      "inputs": [
+        "src/**",
+        "package.json",
+        "Cargo.toml",
+        "Cargo.lock",
+        "../../../crates/universal-wallet/schema/src/**",
+        "../../../crates/universal-wallet/schema/Cargo.toml"
+      ]
     },
     "test": {
       "dependsOn": ["^build", "build"],
       "outputs": [],
-      "inputs": ["src/**", "tests/**", "package.json", "Cargo.toml"]
+      // Re-runs when the build hash changes (schema crate) or when the schema fixture changes.
+      "inputs": [
+        "src/**",
+        "tests/**",
+        "package.json",
+        "../__fixtures__/demo-rollup-schema.json"
+      ]
     }
   }
 }

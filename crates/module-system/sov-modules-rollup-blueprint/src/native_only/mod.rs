@@ -9,7 +9,9 @@ pub use endpoints::*;
 use futures::future;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
-use sov_modules_api::capabilities::{HasCapabilities, HasKernel, ProofProcessor, RollupHeight};
+use sov_modules_api::capabilities::{
+    ChainState, HasCapabilities, HasKernel, ProofProcessor, RollupHeight,
+};
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::ApiState;
@@ -25,7 +27,9 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::node::{
+    PrimaryShutdownController, SecondaryShutdownController, SyncStatus,
+};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;
 use sov_sequencer::preferred::PreferredSequencer;
@@ -54,6 +58,34 @@ pub use wallet::*;
 /// Commit hash of this rollup
 pub const GIT_COMMIT_HASH: &str = env!("GIT_COMMIT_HASH");
 use crate::RollupBlueprint;
+
+/// Specifies how to source the genesis data for a rollup.
+///
+/// The source is only consulted when the rollup state is empty. On a restart
+/// with populated state, genesis data is intentionally never read: the values
+/// needed at startup are recovered from chain state instead, so genesis files
+/// are not required to match the current binary's `GenesisConfig` after a
+/// hard fork.
+pub enum GenesisSource<S: Spec, R: RuntimeTrait<S>> {
+    /// Genesis data will be parsed from files found at the given paths.
+    ///
+    /// See [`FullNodeBlueprint::create_genesis_config`].
+    Paths(R::GenesisInput),
+    /// Genesis data provided explicitly using [`GenesisParams`].
+    ///
+    /// This is most useful when you're automatically generating genesis data
+    /// rather than parsing it.
+    CustomParams(GenesisParams<R::GenesisConfig>),
+}
+
+impl<S: Spec, R: RuntimeTrait<S>> Clone for GenesisSource<S, R> {
+    fn clone(&self) -> Self {
+        match self {
+            Self::Paths(paths) => Self::Paths(paths.clone()),
+            Self::CustomParams(params) => Self::CustomParams(params.clone()),
+        }
+    }
+}
 
 /// This trait defines how to create all the necessary dependencies required by a rollup.
 #[allow(clippy::too_many_arguments, clippy::type_complexity)]
@@ -86,7 +118,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
         sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        primary_shutdown: PrimaryShutdownController,
         ledger_db: &LedgerDb,
         sequencer: &SequencerCreationReceipt<Self::Spec>,
         da_service: &Self::DaService,
@@ -116,7 +148,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        shutdown_receiver: watch::Receiver<()>,
+        secondary_shutdown_controller: &SecondaryShutdownController,
     ) -> Self::DaService;
 
     /// Creates an instance of [`ProverService`].
@@ -186,10 +218,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     where
         <Self::Spec as Spec>::Storage: NativeStorage,
     {
-        let genesis_params = self.create_genesis_config(runtime_genesis_paths, &rollup_config)?;
-
-        self.create_new_rollup_with_genesis_params(
-            genesis_params,
+        self.create_new_rollup_with_genesis_source(
+            GenesisSource::Paths(runtime_genesis_paths.clone()),
             rollup_config,
             prover_config,
             start_at_rollup_height,
@@ -205,7 +235,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         &self,
         _sequencer: Seq,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        _shutdown_receiver: watch::Receiver<()>,
+        _primary_shutdown: PrimaryShutdownController,
         _sequencer_da_address: <<Self::Spec as Spec>::Da as DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
@@ -226,8 +256,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         ledger_db: &LedgerDb,
         api_ledger_db: &LedgerDb,
         da_service: &Self::DaService,
-        shutdown_receiver: watch::Receiver<()>,
-        shutdown_sender: tokio::sync::watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
     ) -> anyhow::Result<SequencerCreationReceipt<Self::Spec>> {
@@ -249,7 +278,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         max_concurrent_proof_blobs,
                         ledger_db.clone(),
                         api_ledger_db.clone(),
-                        shutdown_sender,
+                        primary_shutdown.clone(),
                     )
                     .await?;
 
@@ -260,12 +289,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .sequencer_additional_apis(
                         sequencer.clone(),
                         rollup_config,
-                        shutdown_receiver.clone(),
+                        primary_shutdown.clone(),
                         da_address,
                     )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
-                    SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
+                    SequencerApis::rest_api_server(sequencer.clone(), primary_shutdown),
                 );
 
                 Ok(SequencerCreationReceipt {
@@ -291,7 +320,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         max_concurrent_proof_blobs,
                         ledger_db.clone(),
                         api_ledger_db.clone(),
-                        shutdown_sender.clone(),
+                        primary_shutdown.clone(),
                         stop_at_rollup_height,
                         bind_addr,
                     )
@@ -305,12 +334,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     .sequencer_additional_apis(
                         sequencer.clone(),
                         rollup_config,
-                        shutdown_receiver.clone(),
+                        primary_shutdown.clone(),
                         da_address,
                     )
                     .await?;
                 endpoints.axum_router = endpoints.axum_router.merge(
-                    SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver),
+                    SequencerApis::rest_api_server(sequencer.clone(), primary_shutdown),
                 );
 
                 Ok(SequencerCreationReceipt {
@@ -327,11 +356,14 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
     }
 
     /// Identical to [`FullNodeBlueprint::create_new_rollup`], but with
-    /// a custom [`GenesisParams`].
+    /// a custom [`GenesisSource`].
+    ///
+    /// The genesis source is only consulted when the rollup state is empty;
+    /// on a restart with populated state it is never read.
     #[tracing::instrument(name = "init_blueprint", skip_all)]
-    async fn create_new_rollup_with_genesis_params(
+    async fn create_new_rollup_with_genesis_source(
         &self,
-        genesis_params: GenesisParams<<Self::Runtime as RuntimeTrait<Self::Spec>>::GenesisConfig>,
+        genesis_source: GenesisSource<Self::Spec, Self::Runtime>,
         rollup_config: RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         prover_config: RollupProverConfig,
         start_at_rollup_height: Option<RollupHeight>,
@@ -347,71 +379,76 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             <<Self::Runtime as RuntimeTrait<Self::Spec>>::ModuleExecutionConfig as ModuleExecutionConfig>::configure(exec_config).map_err(|e|anyhow::anyhow!(e))?;
         }
 
-        let (main_shutdown_sender, mut main_shutdown_receiver) = tokio::sync::watch::channel(());
-        main_shutdown_receiver.mark_unchanged();
-        let (secondary_shutdown_sender, mut secondary_shutdown_receiver) =
-            tokio::sync::watch::channel(());
-        secondary_shutdown_receiver.mark_unchanged();
+        let primary_shutdown = PrimaryShutdownController::new();
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let mut background_handles = vec![];
 
-        let receiver_for_metrics = secondary_shutdown_receiver.clone();
         let monitoring_config = rollup_config.monitoring.clone();
         if let Some(metrics_handle) =
-            sov_metrics::init_metrics_tracker(&monitoring_config, receiver_for_metrics.clone())
+            sov_metrics::init_metrics_tracker(&monitoring_config, &secondary_shutdown_controller)
         {
             background_handles.push(metrics_handle);
             background_handles.push(sov_metrics::spawn_tokio_runtime_metrics_task(
                 std::time::Duration::from_millis(
                     monitoring_config.tokio_runtime_metrics_interval_millis,
                 ),
-                receiver_for_metrics,
+                &secondary_shutdown_controller,
             ));
         } else {
             tracing::warn!("Metrics have been initialized outside of the rollup blueprint, some measurements can be lost on shutdown");
         };
 
-        let operating_mode =
-            <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(&genesis_params.runtime);
-        info!(?operating_mode, "Instantiating a new rollup");
-
-        if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
-            panic!("The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported");
-        }
-
-        if operating_mode != OperatingMode::Operator && rollup_config.proof_manager.is_none() {
-            anyhow::bail!(
-                "Missing `[proof_manager]` section in rollup config: it is required for `{operating_mode:?}` rollups.",
-            );
-        }
-
         let da_service = self
-            .create_da_service(&rollup_config, secondary_shutdown_receiver.clone())
+            .create_da_service(&rollup_config, &secondary_shutdown_controller)
             .await;
         let da_service_handle = da_service.take_background_join_handle().await;
+        if let Some(handle) = da_service_handle {
+            background_handles.push(handle);
+        }
         let da_service = Arc::new(da_service);
+
+        macro_rules! startup_step {
+            ($expr:expr) => {
+                match $expr {
+                    Ok(value) => value,
+                    Err(error) => {
+                        cleanup_failed_startup_before_sequencer(
+                            &primary_shutdown,
+                            &secondary_shutdown_controller,
+                            &mut background_handles,
+                        )
+                        .await;
+                        return Err(error.into());
+                    }
+                }
+            };
+        }
 
         let da_polling_interval =
             std::time::Duration::from_millis(rollup_config.runner.da_polling_interval_ms);
-        let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
-            da_service.clone(),
-            secondary_shutdown_receiver.clone(),
-            da_polling_interval,
-        )
-        .await?;
-        let current_finalized_header = da_service.get_last_finalized_block_header().await?;
+        let da_service_with_cache = startup_step!(
+            DaServiceWithCachedFinalizedHeaders::new(
+                da_service.clone(),
+                &secondary_shutdown_controller,
+                da_polling_interval,
+            )
+            .await
+        );
+        let current_finalized_header =
+            startup_step!(da_service.get_last_finalized_block_header().await);
 
         let witness_generation = prover_config.is_enabled();
         let mut storage_manager =
-            self.create_storage_manager(&rollup_config, witness_generation)?;
+            startup_step!(self.create_storage_manager(&rollup_config, witness_generation));
 
         // Run a one-time pruning pass before any state access, if the storage manager is
         // configured for it (`PrunerConfig::OnceAtStartup`). No-op otherwise.
         storage_manager.prune_once_at_startup()?;
 
         let (prover_storage, ledger_state) =
-            storage_manager.create_state_after(&current_finalized_header)?;
+            startup_step!(storage_manager.create_state_after(&current_finalized_header));
 
-        let ledger_db = self.create_ledger_db(ledger_state.clone())?;
+        let ledger_db = startup_step!(self.create_ledger_db(ledger_state.clone()));
         // Create separate API LedgerDb that will be used to provide strong consistency for REST
         // API. The updating of the underlying ledger reader will be delayed until other components
         // have completed their processing.
@@ -421,12 +458,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         // REST APIs view of the ledger.
         let api_ledger_db = LedgerDb::with_shared_notifications(&ledger_db);
 
-        let prev_root = match ledger_db.get_head_slot()? {
-            Some((number, _)) => {
-                Some(prover_storage.get_root_hash(number).with_context(|| {
+        let prev_root = match startup_step!(ledger_db.get_head_slot()) {
+            Some((number, _)) => Some(startup_step!(prover_storage
+                .get_root_hash(number)
+                .with_context(|| {
                     format!("missing root hash for committed head slot {number}")
-                })?)
-            }
+                }))),
             None => None,
         };
 
@@ -436,33 +473,55 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             "Recovering the state root"
         );
         let native_stf = StfBlueprint::new();
-        let genesis_da_height = genesis_params.genesis_slot_number();
-        let (prover_storage, prev_state_root, genesis_state_root) = match prev_root {
-            // Missing prev_root means need for initialization
+        let mut rt = Self::Runtime::default();
+        let (
+            prover_storage,
+            prev_state_root,
+            genesis_state_root,
+            operating_mode,
+            genesis_da_height,
+        ) = match prev_root {
+            // Missing prev_root means need for initialization: obtain genesis
+            // params now, deserializing them from files if needed.
             None => {
+                let genesis_params = match genesis_source {
+                    GenesisSource::Paths(paths) => {
+                        startup_step!(self.create_genesis_config(&paths, &rollup_config))
+                    }
+                    GenesisSource::CustomParams(params) => params,
+                };
+                let operating_mode = <Self::Runtime as RuntimeTrait<Self::Spec>>::operating_mode(
+                    &genesis_params.runtime,
+                );
+                startup_step!(validate_operating_mode_config(
+                    operating_mode,
+                    prover_config,
+                    rollup_config.proof_manager.is_some(),
+                ));
+                let genesis_da_height = genesis_params.genesis_slot_number();
                 info!(
-                    rollup_genesis_height = genesis_params.genesis_slot_number(),
+                    rollup_genesis_height = genesis_da_height,
                     "Rollup state is empty, performing genesis initialization. Requesting genesis DA block"
                 );
-                let rollup_genesis_block = da_service
-                    .get_block_at(genesis_params.genesis_slot_number())
-                    .await?;
+                let rollup_genesis_block =
+                    startup_step!(da_service.get_block_at(genesis_da_height).await);
 
                 let genesis_header = rollup_genesis_block.header().clone();
-                let genesis_state_root: <<Self::Spec as Spec>::Storage as Storage>::Root =
+                let genesis_state_root: <<Self::Spec as Spec>::Storage as Storage>::Root = startup_step!(
                     initialize_state::<_, Self::DaService, _>(
                         &native_stf,
                         &mut storage_manager,
                         rollup_genesis_block,
                         genesis_params,
                     )
-                    .await?;
+                    .await
+                );
 
                 // Re-create bootstrap storage, so it fetches the latest version after initialization.
                 // And can see the latest changes. Otherwise Sequencer won't be able to process any batches,
                 // because genesis data won't be visible to it.
                 let (prover_storage, ledger_state) =
-                    storage_manager.create_state_after(&genesis_header)?;
+                    startup_step!(storage_manager.create_state_after(&genesis_header));
 
                 ledger_db.replace_reader(ledger_state.clone());
                 api_ledger_db.replace_reader(ledger_state);
@@ -473,41 +532,71 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     prover_storage,
                     genesis_state_root.clone(),
                     genesis_state_root,
+                    operating_mode,
+                    genesis_da_height,
                 )
             }
             // LedgerDb contains previous state root, initialization already has been done.
+            // The genesis source is intentionally not read: after a hard fork the on-disk
+            // genesis files may not deserialize into the current `GenesisConfig`, and they
+            // are not needed. The values genesis persisted to chain state are used instead.
             Some(prev_state_root) => {
-                let genesis_state_root = prover_storage
+                let genesis_state_root = startup_step!(prover_storage
                     .get_root_hash(SlotNumber::GENESIS)
-                    .context("genesis root must exist when storage has prior state")?;
-                // (prev_state_root, genesis_state_root)
-                (prover_storage, prev_state_root, genesis_state_root)
+                    .context("genesis root must exist when storage has prior state"));
+                let mut checkpoint = StateCheckpoint::new(prover_storage.clone(), &rt.kernel());
+                let operating_mode = rt.chain_state().operating_mode(&mut checkpoint);
+                let genesis_da_height_result = {
+                    let chain_state = rt.chain_state();
+                    chain_state.genesis_da_height(&mut checkpoint).context(
+                        "rollup state is initialized but `genesis_da_height` is missing from \
+                         chain state; the database may be corrupted or produced by an \
+                         incompatible binary",
+                    )
+                };
+                let genesis_da_height = startup_step!(genesis_da_height_result);
+                startup_step!(validate_operating_mode_config(
+                    operating_mode,
+                    prover_config,
+                    rollup_config.proof_manager.is_some(),
+                ));
+                (
+                    prover_storage,
+                    prev_state_root,
+                    genesis_state_root,
+                    operating_mode,
+                    genesis_da_height,
+                )
             }
         };
 
-        let da_sync_state = make_da_sync_state(
-            genesis_da_height,
-            stop_at_rollup_height,
-            &ledger_db,
-            &da_service_with_cache,
-        )
-        .await?;
+        info!(?operating_mode, "Instantiating a new rollup");
+
+        let da_sync_state = startup_step!(
+            make_da_sync_state(
+                genesis_da_height,
+                stop_at_rollup_height,
+                &ledger_db,
+                &da_service_with_cache,
+            )
+            .await
+        );
 
         let sync_status_receiver = da_sync_state.sync_status_sender.subscribe();
 
-        let state_update_info =
+        let state_update_info = startup_step!(
             query_state_update_info(&ledger_db, prover_storage.clone(), da_sync_state.as_ref())
-                .await?;
+                .await
+        );
 
-        let mut rt = Self::Runtime::default();
         let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
         let current_height = checkpoint.rollup_height_to_access();
 
-        validate_heights(
+        startup_step!(validate_heights(
             current_height,
             start_at_rollup_height,
             stop_at_rollup_height,
-        )?;
+        ));
 
         tracing::debug!(
             prev_root_hash = hex::encode(prev_state_root.as_ref()),
@@ -520,31 +609,27 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let state_update_receiver = state_channel.subscribe_state_update();
         let storage_receiver = state_channel.subscribe_storage();
 
-        if let Some(handle) = da_service_handle {
-            background_handles.push(handle);
-        }
-
         let visible_state_height_tracker: Box<dyn ProvableHeightTracker> = Box::new(
             MaximumProvableHeight::new(state_channel.subscribe_storage(), Self::Runtime::default()),
         );
 
-        let axum_socket_addr = rollup_config.runner.http_config.socket_address()?;
-        let axum_tcp = TcpListener::bind(axum_socket_addr).await?;
-        let axum_socket_addr = axum_tcp.local_addr()?;
-        let mut sequencer = self
-            .create_sequencer(
+        let axum_socket_addr = startup_step!(rollup_config.runner.http_config.socket_address());
+        let axum_tcp = startup_step!(TcpListener::bind(axum_socket_addr).await);
+        let axum_socket_addr = startup_step!(axum_tcp.local_addr());
+        let mut sequencer = startup_step!(
+            self.create_sequencer(
                 state_update_receiver.clone(),
                 da_sync_state.clone(),
                 &rollup_config,
                 &ledger_db,
                 &api_ledger_db,
                 &da_service,
-                main_shutdown_receiver.clone(),
-                main_shutdown_sender.clone(),
+                primary_shutdown.clone(),
                 stop_at_rollup_height,
                 axum_socket_addr,
             )
-            .await?;
+            .await
+        );
 
         let proof_pipeline_enabled =
             should_enable_proof_pipeline(prover_config, sequencer.is_replica);
@@ -567,8 +652,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 Ok((svc, slot)) => (Some(svc), slot),
                 Err(error) => {
                     cleanup_failed_startup(
-                        &main_shutdown_sender,
-                        &secondary_shutdown_sender,
+                        &primary_shutdown,
+                        &secondary_shutdown_controller,
                         &mut background_handles,
                         &mut sequencer,
                     )
@@ -595,7 +680,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             state_channel,
             prev_state_root,
             visible_state_height_tracker,
-            main_shutdown_receiver.clone(),
+            primary_shutdown.clone(),
             start_at_rollup_height,
             stop_at_rollup_height,
             da_sync_state.clone(),
@@ -608,8 +693,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             Ok(runner) => runner,
             Err(error) => {
                 cleanup_failed_startup(
-                    &main_shutdown_sender,
-                    &secondary_shutdown_sender,
+                    &primary_shutdown,
+                    &secondary_shutdown_controller,
                     &mut background_handles,
                     &mut sequencer,
                 )
@@ -627,8 +712,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     Err(error) => {
                         let _ = runner.shutdown_before_run().await;
                         cleanup_failed_startup(
-                            &main_shutdown_sender,
-                            &secondary_shutdown_sender,
+                            &primary_shutdown,
+                            &secondary_shutdown_controller,
                             &mut background_handles,
                             &mut sequencer,
                         )
@@ -653,7 +738,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     start_op_workflow_in_background::<Self::ProverService, _>(
                         bonding_proof_service,
                         proof_sender,
-                        secondary_shutdown_receiver,
+                        &secondary_shutdown_controller,
                         stf_info_receiver,
                     )
                     .await
@@ -667,14 +752,14 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                         proof_sender,
                         stf_info_receiver,
                         runner.da_sync_state(),
-                        secondary_shutdown_receiver,
-                        main_shutdown_sender.clone(),
+                        &secondary_shutdown_controller,
+                        primary_shutdown.clone(),
                         start_fresh_outer_proof_on_resync,
                     )
                     .await
                 }
                 OperatingMode::Operator => {
-                    Ok(start_operator_workflow_in_background(secondary_shutdown_receiver).await)
+                    Ok(start_operator_workflow_in_background(&secondary_shutdown_controller).await)
                 }
             };
             let workflow_task_handle = match workflow_task_handle_result {
@@ -682,8 +767,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 Err(error) => {
                     let _ = runner.shutdown_before_run().await;
                     cleanup_failed_startup(
-                        &main_shutdown_sender,
-                        &secondary_shutdown_sender,
+                        &primary_shutdown,
+                        &secondary_shutdown_controller,
                         &mut background_handles,
                         &mut sequencer,
                     )
@@ -699,7 +784,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             .create_endpoints(
                 state_update_receiver,
                 sync_status_receiver,
-                main_shutdown_receiver.clone(),
+                primary_shutdown.clone(),
                 &api_ledger_db,
                 &sequencer,
                 &da_service,
@@ -711,8 +796,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             Err(error) => {
                 let _ = runner.shutdown_before_run().await;
                 cleanup_failed_startup(
-                    &main_shutdown_sender,
-                    &secondary_shutdown_sender,
+                    &primary_shutdown,
+                    &secondary_shutdown_controller,
                     &mut background_handles,
                     &mut sequencer,
                 )
@@ -728,33 +813,80 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         background_handles.extend(sequencer.background_handles);
 
-        spawn_os_signal_handler(main_shutdown_sender.clone());
+        spawn_os_signal_handler(primary_shutdown.clone());
 
         Ok(Rollup {
             runner,
             endpoints,
-            shutdown_sender: main_shutdown_sender,
-            secondary_shutdown_sender,
+            primary_shutdown,
+            secondary_shutdown_controller,
             background_handles,
             genesis_slot_number: genesis_da_height,
+            rpc_aggregation_config: monitoring_config.rpc_aggregation.clone(),
         })
     }
 }
 
+fn validate_operating_mode_config(
+    operating_mode: OperatingMode,
+    prover_config: RollupProverConfig,
+    proof_manager_configured: bool,
+) -> anyhow::Result<()> {
+    if operating_mode == OperatingMode::Operator && prover_config.is_enabled() {
+        anyhow::bail!(
+            "The operating mode is set to `{operating_mode:?}` and prover config is set to `{prover_config:?}`. This is not supported",
+        );
+    }
+
+    if operating_mode != OperatingMode::Operator && !proof_manager_configured {
+        anyhow::bail!(
+            "Missing `[proof_manager]` section in rollup config: it is required for `{operating_mode:?}` rollups.",
+        );
+    }
+
+    Ok(())
+}
+
 async fn cleanup_failed_startup<S: Spec>(
-    main_shutdown_sender: &watch::Sender<()>,
-    secondary_shutdown_sender: &watch::Sender<()>,
+    primary_shutdown: &PrimaryShutdownController,
+    secondary_shutdown_controller: &SecondaryShutdownController,
     background_handles: &mut Vec<JoinHandle<()>>,
     sequencer: &mut SequencerCreationReceipt<S>,
 ) {
-    let _ = main_shutdown_sender.send(());
-    let _ = secondary_shutdown_sender.send(());
+    primary_shutdown.shutdown();
+    secondary_shutdown_controller.shutdown();
 
-    // Drain handles concurrently rather than serially.
     let background_handles_to_join = std::mem::take(background_handles);
     let sequencer_background_handles = std::mem::take(&mut sequencer.background_handles);
     let endpoint_background_handles = std::mem::take(&mut sequencer.endpoints.background_handles);
 
+    wait_for_failed_startup_tasks(
+        background_handles_to_join,
+        sequencer_background_handles,
+        endpoint_background_handles,
+    )
+    .await;
+}
+
+async fn cleanup_failed_startup_before_sequencer(
+    primary_shutdown: &PrimaryShutdownController,
+    secondary_shutdown_controller: &SecondaryShutdownController,
+    background_handles: &mut Vec<JoinHandle<()>>,
+) {
+    primary_shutdown.shutdown();
+    secondary_shutdown_controller.shutdown();
+
+    let background_handles_to_join = std::mem::take(background_handles);
+
+    wait_for_failed_startup_tasks(background_handles_to_join, Vec::new(), Vec::new()).await;
+}
+
+async fn wait_for_failed_startup_tasks(
+    background_handles_to_join: Vec<JoinHandle<()>>,
+    sequencer_background_handles: Vec<JoinHandle<()>>,
+    endpoint_background_handles: Vec<JoinHandle<anyhow::Result<()>>>,
+) {
+    // Drain handles concurrently rather than serially.
     let drain = async move {
         let _ = tokio::join!(
             future::join_all(background_handles_to_join),
@@ -821,15 +953,20 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
     pub endpoints: NodeEndpointsContainer,
 
     /// A way to gracefully shut down background tasks.
-    pub shutdown_sender: tokio::sync::watch::Sender<()>,
+    pub primary_shutdown: PrimaryShutdownController,
 
     /// The genesis slot number.
     pub genesis_slot_number: u64,
 
     // Trigger after the runner has finished.
-    secondary_shutdown_sender: tokio::sync::watch::Sender<()>,
+    secondary_shutdown_controller: SecondaryShutdownController,
 
     background_handles: Vec<tokio::task::JoinHandle<()>>,
+
+    /// RPC metrics aggregation settings, captured from
+    /// `rollup_config.monitoring` at creation time and handed to the HTTP
+    /// server in [`Rollup::run`].
+    rpc_aggregation_config: sov_metrics::RpcAggregationConfig,
 }
 
 impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
@@ -842,27 +979,20 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
                 self.endpoints.inner.axum_router,
                 self.endpoints.inner.jsonrpsee_module,
                 self.endpoints.cors_configuration,
+                self.rpc_aggregation_config,
             )
             .await
             .context("Failed to start Axum Server")?;
 
         let monitoring_task =
-            spawn_task_monitor(self.shutdown_sender.clone(), self.background_handles);
+            spawn_task_monitor(self.primary_shutdown.clone(), self.background_handles);
 
         runner.run_in_process().await?;
         tracing::info!("STF Runner has completed execution");
 
-        if self.shutdown_sender.send(()).is_err() {
-            tracing::info!(
-                "Failed to send primary shutdown signal because all receivers have been dropped"
-            );
-        }
+        self.primary_shutdown.shutdown();
 
-        if self.secondary_shutdown_sender.send(()).is_err() {
-            tracing::info!(
-                "Failed to send secondary shutdown signal because all receivers have been dropped"
-            );
-        }
+        self.secondary_shutdown_controller.shutdown();
 
         // blocks until background handles have shutdown
         monitoring_task.await??;
@@ -885,28 +1015,27 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
 }
 
 fn spawn_task_monitor(
-    shutdown_sender: tokio::sync::watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
     handles: Vec<tokio::task::JoinHandle<()>>,
 ) -> tokio::task::JoinHandle<Result<(), anyhow::Error>> {
     tokio::spawn(async move {
-        let shutdown_recv = shutdown_sender.subscribe();
         tracing::trace!("blocking until a background task joins or rollup shutdown");
         let (result, _, handles) = futures::future::select_all(handles).await;
 
         let mut was_graceful = if let Err(error) = result {
             tracing::error!(error = %error, "background task joined with error");
-            _ = shutdown_sender.send(());
+            primary_shutdown.shutdown();
             false
         } else {
-            // If shutdown receiver hasn't changed then it's implied that one of the handles
+            // If no shutdown has been triggered then it's implied that one of the handles
             // joined early before a shutdown signal was sent. This likely indicates
             // incorrect behaviour and so we send the signal ourselves to begin the shutdown process.
-            if let Ok(true) = shutdown_recv.has_changed() {
+            if primary_shutdown.is_triggered() {
                 true
             } else {
                 tracing::error!("background task joined with success status but no shutdown signal had been sent at the time. This is a bug! Please report it.");
                 // Start graceful shutdown
-                _ = shutdown_sender.send(());
+                primary_shutdown.shutdown();
                 false
             }
         };
@@ -916,7 +1045,7 @@ fn spawn_task_monitor(
         for handle in handles {
             if let Err(error) = handle.await {
                 tracing::error!(error = %error, "Additional background task joined with error");
-                _ = shutdown_sender.send(());
+                primary_shutdown.shutdown();
                 was_graceful = false;
             }
         }
@@ -930,9 +1059,8 @@ fn spawn_task_monitor(
     })
 }
 
-fn spawn_os_signal_handler(shutdown_sender: tokio::sync::watch::Sender<()>) {
+fn spawn_os_signal_handler(primary_shutdown: PrimaryShutdownController) {
     tokio::spawn(async move {
-        let mut api_shutdown = shutdown_sender.subscribe();
         let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
             .expect("Failed to set up SIGTERM handler");
         let mut quit = tokio::signal::unix::signal(SignalKind::quit())
@@ -942,14 +1070,12 @@ fn spawn_os_signal_handler(shutdown_sender: tokio::sync::watch::Sender<()>) {
             _ = tokio::signal::ctrl_c() => tracing::info!("Received Ctrl+C"),
             _ = terminate.recv() => tracing::info!("Received SIGTERM"),
             _ = quit.recv() => tracing::info!("Received SIGQUIT"),
-            _ = api_shutdown.changed() => {
+            _ = primary_shutdown.wait_for_shutdown() => {
                 tracing::debug!("Stopping OS signal handling task, as rollup has been stopped programmatically");
                 return;
             }
         }
-        shutdown_sender
-            .send(())
-            .expect("Failed to send shutdown signal");
+        primary_shutdown.shutdown();
     });
 }
 
