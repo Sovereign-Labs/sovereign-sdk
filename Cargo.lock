@@ -6732,6 +6732,9 @@ dependencies = [
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
+ "sov-state",
+ "sov-test-utils",
+ "unwrap-infallible",
 ]
 
 [[package]]

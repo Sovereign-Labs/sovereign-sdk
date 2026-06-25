@@ -132,3 +132,47 @@ pub fn report_size_sweep(
     println!("  {per_byte_const} = [{}, 0]", ns_to_gas(fit.per_byte));
     Ok(())
 }
+
+/// Read a finished sweep whose x-axis is an operation *count* (not bytes), fit
+/// `ns = fixed + per_op * count`, and suggest the per-op constant from the
+/// **slope**. Use this when a fixed per-batch overhead (e.g. one block commit's
+/// fsync) must be excluded from the per-op charge: it is the fit intercept and
+/// drops out of the slope. The intercept is printed for information only.
+pub fn report_marginal_sweep(
+    group: &str,
+    counts: &[u64],
+    per_op_const: &str,
+) -> anyhow::Result<()> {
+    println!("\n[fit] {group} — reading criterion estimates (marginal per-op)");
+    let mut counts_f = Vec::with_capacity(counts.len());
+    let mut ns_per_batch = Vec::with_capacity(counts.len());
+    for &count in counts {
+        let ns = read_mean_ns(group, count)?;
+        println!("  count={count:<7} mean ns/batch = {ns:.2}");
+        counts_f.push(count as f64);
+        ns_per_batch.push(ns);
+    }
+    let fit = fit_linear(&counts_f, &ns_per_batch)?;
+
+    if fit.per_byte < 0.0 {
+        eprintln!(
+            "warn: negative slope ({:.4} ns/op) — no marginal signal; the suggested \
+             constant floors to 1 gas and is NOT meaningful. Widen the count sweep / \
+             add samples.",
+            fit.per_byte
+        );
+    }
+
+    println!("\n=== fit: ns/batch = fixed + per_op * count   (1 gas = 0.01 ns) ===");
+    println!("  per_op (slope)    = {:.4} ns/op    (used for the constant)", fit.per_byte);
+    println!(
+        "  fixed (intercept) = {:.2} ns/batch  (per-commit overhead; NOT charged)",
+        fit.bias
+    );
+    println!("  R²                = {:.6}", fit.r_squared);
+    println!("  max residual      = {:.2} ns", fit.max_residual);
+
+    println!("\n=== suggested constants.toml value ===");
+    println!("  {per_op_const} = [{}, 0]", ns_to_gas(fit.per_byte));
+    Ok(())
+}
