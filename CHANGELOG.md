@@ -1,5 +1,8 @@
 # 2026-06-25
 - #3018 demo-rollup: split the example into two DA-layer Cargo features — `mock_da` (default; mock + SP1 zkVMs) and `celestia_da` (Risc0) — to cut compile time. The DA layer is selected at compile time while the zkVM stays a runtime `--zk-vm` choice within `mock_da`, so a build only compiles the selected DA's zkVM guests: a default `mock_da` build no longer pulls the Celestia/Risc0 adapters, and a `celestia_da` build skips the SP1 guests. When both DA features are enabled (`--all-features`), mock DA is selected by default. Also drops the unused SP1 Celestia guest build. Example crate only (`publish = false`) — no SDK API, state, or protocol change.
+# 2026-06-24
+- #3014 Celestia config: aligns the `compression` and `tx_priority` config enums to lowercase/snake_case so they match `verify_on_fetch_mode` (e.g. `compression = "lz4"`, `tx_priority = "high"`). Previously these required PascalCase (`"Lz4"`, `"High"`) and a natural lowercase value was rejected, crashing the node at startup. `tx_priority` keeps PascalCase aliases (`"Low"`/`"Medium"`/`"High"`) for back-compat; `compression` (unreleased) switches from `"Off"`/`"Lz4"` to `"off"`/`"lz4"` without an alias.
+  * **Breaking Change** `CelestiaConfig` and `GrpcEndpointConfig` now set `#[serde(deny_unknown_fields)]`: unknown or misspelled keys in the `[da]` config table fail at startup instead of being silently ignored. Existing field aliases (e.g. `celestia_rpc_address`) are unaffected.
 
 # 2026-04-20
 - #2764 Celestia adapter: re-adds block integrity verification on fetch. Replaces the previously-reverted boolean toggle (PR #2489 / reverted in PR #2520) with a

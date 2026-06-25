@@ -139,13 +139,12 @@ async fn rest_api_routes() {
             StateCheckpoint::new(storage, &MockKernel::<TestSpec>::default()),
         )));
     let runtime = MyRuntime::<TestSpec>::default();
-    let (_shutdown_sender, shutdown_receiver) = tokio::sync::watch::channel(());
     let state = ApiState::build(
         Arc::new(()),
         receiver,
         Arc::new(MockKernel::default()),
         None,
-        shutdown_receiver,
+        sov_rollup_interface::node::PrimaryShutdownController::new(),
     );
 
     let router = runtime.rest_api(state);

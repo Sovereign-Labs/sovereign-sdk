@@ -36,6 +36,7 @@ pub use sov_paymaster::Paymaster;
 pub use sov_prover_incentives::{ProverIncentives, ProverIncentivesConfig};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobs;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_rollup_interface::stf::DiscardedBlob;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 pub use sov_sequencer_registry::{self, SequencerRegistry, SequencerRegistryConfig};
@@ -179,8 +180,8 @@ pub struct TestRunner<
     /// The corresponding receiving end of the channel.
     checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
     /// Held for the runner's lifetime so REST API handlers only observe shutdown
-    /// when the runner is dropped.
-    shutdown_sender: watch::Sender<()>,
+    /// when the runner is dropped, at which point `Drop` triggers it explicitly.
+    primary_shutdown: PrimaryShutdownController,
     axum_server: axum_server::Handle<std::net::SocketAddr>,
     /// Test runner configuration.
     pub config: RunnerConfig<S::Da>,
@@ -188,6 +189,7 @@ pub struct TestRunner<
 
 impl<RT: Runtime<S>, S: Spec, Sm: ForklessStorageManager> Drop for TestRunner<RT, S, Sm> {
     fn drop(&mut self) {
+        self.primary_shutdown.shutdown();
         self.axum_server.shutdown();
     }
 }
@@ -515,7 +517,7 @@ where
             axum_server: Default::default(),
             checkpoint_sender: sender,
             checkpoint_receiver: receiver,
-            shutdown_sender: watch::channel(()).0,
+            primary_shutdown: PrimaryShutdownController::new(),
             config,
         };
 
@@ -903,7 +905,7 @@ where
             self.checkpoint_receiver.clone(),
             self.runtime().kernel_with_slot_mapping(),
             None,
-            self.shutdown_sender.subscribe(),
+            self.primary_shutdown.clone(),
         );
 
         let router = self.runtime().rest_api(state);

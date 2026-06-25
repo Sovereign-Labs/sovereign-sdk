@@ -74,7 +74,7 @@ where
     R::Spec: sov_modules_api::Spec<Da = sov_mock_da::MockDaSpec>,
 {
     let rollup = builder.start().await.expect("Impossible to start rollup");
-    let mut shutdown_recv = rollup.shutdown_sender.subscribe();
+    let primary_shutdown = rollup.primary_shutdown.clone();
 
     let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
         .expect("Failed to set up SIGTERM handler");
@@ -84,7 +84,7 @@ where
         _ = tokio::signal::ctrl_c() => tracing::info!("Received Ctrl+C"),
         _ = terminate.recv() => tracing::info!("Received SIGTERM"),
         _ = quit.recv() => tracing::info!("Received SIGQUIT"),
-        _ = shutdown_recv.changed() => tracing::warn!("Rollup execution finished, this might not be desired!!"),
+        _ = primary_shutdown.wait_for_shutdown() => tracing::warn!("Rollup execution finished, this might not be desired!!"),
     }
 
     rollup.shutdown().await?;

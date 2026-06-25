@@ -6,6 +6,7 @@ use std::fmt;
 
 /// Configuration for a single gRPC fallback endpoint.
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct GrpcEndpointConfig {
     /// The URL of the gRPC endpoint, for example `http://fallback1:9090`.
     pub url: String,
@@ -24,6 +25,7 @@ impl fmt::Debug for GrpcEndpointConfig {
 
 /// Runtime configuration for the [`sov_rollup_interface::node::da::DaService`] implementation.
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct CelestiaConfig {
     /// The address of the Celestia RPC server
     /// For example: ws://localhost:26658
@@ -171,9 +173,13 @@ impl fmt::Debug for CelestiaConfig {
 
 /// Custom type matching [`celestia_rpc::TxPriority`] but with `JsonSchema` support.
 #[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
+#[serde(rename_all = "snake_case")]
 pub enum TxPriority {
+    #[serde(alias = "Low")]
     Low,
+    #[serde(alias = "Medium")]
     Medium,
+    #[serde(alias = "High")]
     High,
 }
 
@@ -215,6 +221,7 @@ pub enum VerifyOnFetchMode {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Default, serde::Deserialize, serde::Serialize, JsonSchema,
 )]
+#[serde(rename_all = "snake_case")]
 pub enum CompressOnSubmit {
     /// Post batch blobs verbatim (today's behavior).
     #[default]
@@ -440,7 +447,7 @@ pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
 mod tests {
     use super::{
         default_compression_chunk_size, validate_compression_chunk_size, validate_rpc_url,
-        CelestiaConfig, GrpcEndpointConfig, VerifyOnFetchMode,
+        CelestiaConfig, CompressOnSubmit, GrpcEndpointConfig, TxPriority, VerifyOnFetchMode,
     };
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
@@ -660,6 +667,70 @@ mod tests {
             let config = deserialize_config(json).expect(json);
             assert_eq!(config.verify_on_fetch_mode, expected);
         }
+    }
+
+    #[test]
+    fn compression_accepts_lowercase_variants() {
+        let cases = [
+            (r#"{"compression":"off"}"#, CompressOnSubmit::Off),
+            (r#"{"compression":"lz4"}"#, CompressOnSubmit::Lz4),
+        ];
+        for (json, expected) in cases {
+            let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+            let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+            let config = deserialize_config(json).expect(json);
+            assert_eq!(config.compression, expected);
+        }
+    }
+
+    #[test]
+    fn tx_priority_accepts_snake_case() {
+        let cases = [
+            (r#"{"tx_priority":"low"}"#, TxPriority::Low),
+            (r#"{"tx_priority":"medium"}"#, TxPriority::Medium),
+            (r#"{"tx_priority":"high"}"#, TxPriority::High),
+        ];
+        for (json, expected) in cases {
+            let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+            let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+            let config = deserialize_config(json).expect(json);
+            assert_eq!(config.tx_priority, expected);
+        }
+    }
+
+    #[test]
+    fn tx_priority_accepts_pascal_case_alias() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let config = deserialize_config(r#"{"tx_priority":"High"}"#).unwrap();
+        assert_eq!(config.tx_priority, TxPriority::High);
+    }
+
+    #[test]
+    fn unknown_field_is_rejected() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let error = deserialize_config(r#"{"unknown_field": true}"#).unwrap_err();
+        assert!(
+            error.to_string().contains("unknown field"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn legacy_field_alias_survives_deny_unknown_fields() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, None);
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        // `celestia_rpc_address` is a back-compat alias for `rpc_url`; `deny_unknown_fields`
+        // must still recognize it rather than reject it as unknown.
+        let config =
+            deserialize_config(r#"{"celestia_rpc_address":"ws://config-rpc:26658"}"#).unwrap();
+        assert_eq!(config.rpc_url, "ws://config-rpc:26658");
     }
 
     #[test]
