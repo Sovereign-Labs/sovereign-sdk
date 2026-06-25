@@ -7,12 +7,14 @@
 pub mod da;
 mod da_sync_state;
 pub mod ledger_api;
-mod secondary_shutdown;
+mod shutdown_controller;
 
 use std::future::Future;
 
 pub use da_sync_state::SyncStatus;
-pub use secondary_shutdown::SecondaryShutdownController;
+pub use shutdown_controller::{
+    PrimaryShutdownController, RunnerShutdownController, SecondaryShutdownController,
+};
 use tokio::select;
 use tokio::sync::watch;
 
@@ -47,7 +49,7 @@ pub enum FutureOrShutdownOutput<O> {
 /// # Args
 /// * `$name` – task name (for structured logs, e.g. `"writer"` or `format!("task-{id}")`)
 /// * `$recv` – async expression like `rx.recv()` or `stream.next()`
-/// * `$shutdown` – `watch::Receiver<()>` for graceful stop
+/// * `$shutdown` – `&PrimaryShutdownController` for graceful stop
 /// * `$var => $body` – code run for each received item
 ///
 /// Logs:
@@ -60,7 +62,7 @@ pub enum FutureOrShutdownOutput<O> {
 /// sov_rollup_interface::consume_until_shutdown!(
 ///     "WebSocket reader",
 ///     ws_reader.next(),
-///     shutdown_rx,
+///     primary_shutdown,
 ///     msg => {
 ///         handle(m).await,
 ///     }
@@ -77,7 +79,7 @@ macro_rules! consume_until_shutdown {
         let name = $name;
         loop {
             tokio::select! {
-                _ = $shutdown.changed() => {
+                _ = $shutdown.wait_for_shutdown() => {
                     tracing::debug!(%name, "Shutdown signal received, stopping task");
                     break;
                 }

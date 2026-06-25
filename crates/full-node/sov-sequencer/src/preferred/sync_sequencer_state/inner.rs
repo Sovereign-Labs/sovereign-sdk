@@ -36,13 +36,14 @@ use sov_modules_api::{
     VisibleSlotNumber,
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::{NativeStorage, Storage};
 use std::num::NonZero;
 use std::ops::Deref;
 use std::sync::atomic::{AtomicU64, AtomicUsize, Ordering};
 use std::sync::Arc;
-use tokio::sync::{oneshot, watch};
+use tokio::sync::oneshot;
 use tracing::{debug, info, warn};
 
 /// These two constants are used to calculate the comfortable batch size limit.
@@ -82,8 +83,7 @@ where
     pub(crate) seq_role: SequencerRole,
     pub(crate) seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     pub(crate) max_concurrent_proof_blobs: usize,
-    pub(crate) shutdown_receiver: watch::Receiver<()>,
-    pub(crate) shutdown_sender: watch::Sender<()>,
+    pub(crate) primary_shutdown: PrimaryShutdownController,
 
     pub(crate) executor: RollupBlockExecutor<S, Rt>,
     /// The rollup height of the latest node checkpoint applied to this executor's storage.
@@ -509,7 +509,7 @@ where
         }
 
         // If the node is shutting down, we may not be able to terminate the batch. In that case, just return early.
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.primary_shutdown.is_triggered() {
             info!("The sequencer is shutting down. Exiting trigger_batch_production.");
             return;
         }
@@ -766,7 +766,7 @@ where
         // Even if this method return early it uses 1 request slot.
         let request_used = ResourceUsed::new(1, 0, 0, <S as Spec>::Gas::zero());
 
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.primary_shutdown.is_triggered() {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return (Err(DoNewTxError::Shutdown), request_used);
         }

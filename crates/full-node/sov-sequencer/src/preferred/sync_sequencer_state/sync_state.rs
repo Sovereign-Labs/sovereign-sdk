@@ -155,7 +155,7 @@ where
                                 return;
                             }
                             SequencerStateUpdatorError::Unexpected => {
-                                self.inner.shutdown_sender.send(()).unwrap();
+                                self.inner.primary_shutdown.shutdown();
                                 panic!("The sequencer experienced an unexpected error and cannot accept transactions! See logs for more details.");
                             }
                         }
@@ -729,7 +729,7 @@ where
             node_user_root = %HexString(node_user_root),
             "Sequencer user state root does not match the node user state root. This indicates a sequencer/node state divergence."
         );
-        crate::preferred::exit_rollup(&inner.shutdown_sender).await;
+        crate::preferred::exit_rollup(&inner.primary_shutdown).await;
     }
 
     async fn process_final_catchup(
@@ -751,7 +751,7 @@ where
         // Some events might come in while we're waiting to grab the lock.
         // Replay them.
         while let Ok(event) = db_event_subscription.try_recv() {
-            if inner.shutdown_receiver.has_changed().unwrap_or(true) {
+            if inner.primary_shutdown.is_triggered() {
                 tracing::info!("The sequencer is shutting down. Exiting replay_batch");
                 return Ok(data);
             }

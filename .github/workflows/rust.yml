@@ -197,13 +197,13 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=hack-all-targets-1-93-p${{ matrix.partition }}
     strategy:
       matrix:
-        partition: [1, 2, 3, 4, 5, 6]
+        partition: [1, 2, 3]
     timeout-minutes: 120
     env:
       RUSTFLAGS: "-D warnings"
       SKIP_GUEST_BUILD: "1"
       CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
-      CARGO_HACK_PARTITION_M: 6
+      CARGO_HACK_PARTITION_M: 3
     steps:
       - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1
@@ -227,13 +227,13 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;overrides.cache-tag=hack-default-targets-1-93-p${{ matrix.partition }}
     strategy:
       matrix:
-        partition: [1, 2, 3, 4, 5, 6]
+        partition: [1, 2, 3]
     timeout-minutes: 120
     env:
       RUSTFLAGS: "-D warnings"
       SKIP_GUEST_BUILD: "1"
       CARGO_HACK_PARTITION_N: ${{ matrix.partition }}
-      CARGO_HACK_PARTITION_M: 6
+      CARGO_HACK_PARTITION_M: 3
     steps:
       - uses: actions/checkout@v6
       - uses: namespacelabs/nscloud-cache-action@v1

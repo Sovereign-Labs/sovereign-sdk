@@ -4,12 +4,12 @@ use sov_blob_storage::{PreferredBatchData, PreferredProofData};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::TxHash;
 use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::PrimaryShutdownController;
 use std::{
     path::Path,
     sync::{atomic::AtomicUsize, Arc},
 };
 use tokio::sync::broadcast;
-use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tracing::debug;
@@ -36,7 +36,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         all_completed_blobs: Vec<ReadBlob>,
         storage_path: Box<Path>,
         tx_status_manager: TxStatusManager<Da::Spec>,
-        shutdown_sender: watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         blob_processing_timeout: Duration,
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
         seq_role: SequencerRole,
@@ -65,7 +65,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
                     ledger_db,
                     storage_path.as_ref(),
                     TxStatusBlobSenderHooks::new(tx_status_manager.clone()),
-                    shutdown_sender,
+                    primary_shutdown,
                     blob_processing_timeout,
                     Some(blobs_sender_channel),
                     blobs_to_send,
