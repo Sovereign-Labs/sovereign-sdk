@@ -125,7 +125,7 @@ native = [
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"
 	"revm/blst", # Use faster C implementation of bls in native code
-	"revm/secp256k1", # Use faster C implementation of secp256k1 (ecrecover) in native code
+#	"revm/secp256k1", # Use faster C implementation of secp256k1 (ecrecover) in native code
 	"sov-evm/native",
 	"sov-metrics/native",
 	"sov-address/native",
