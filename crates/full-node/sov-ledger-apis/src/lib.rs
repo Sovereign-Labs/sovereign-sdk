@@ -32,8 +32,8 @@ use sov_rollup_interface::node::ledger_api::{
     FinalityStatus, IncludeChildren, ItemOrHash, LedgerStateProvider, QueryMode, SlotIdAndOffset,
     SlotIdentifier, SlotResponse, TxIdAndOffset, TxIdentifier, TxResponse,
 };
-use sov_shutdown::PrimaryShutdownController;
 use sov_rollup_interface::stf::TxReceiptContents;
+use sov_shutdown::PrimaryShutdownController;
 
 type PathMap = Path<HashMap<String, NumberOrHash>>;
 

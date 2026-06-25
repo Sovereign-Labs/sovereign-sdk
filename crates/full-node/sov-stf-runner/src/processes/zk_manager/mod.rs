@@ -6,11 +6,11 @@ use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::SyncStatus;
+use sov_rollup_interface::stf::ProofSender;
+use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_shutdown::{
     FutureOrShutdownOutput, PrimaryShutdownController, SecondaryShutdownController,
 };
-use sov_rollup_interface::stf::ProofSender;
-use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use tokio::sync::mpsc;
 use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};

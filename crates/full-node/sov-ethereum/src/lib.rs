@@ -8,9 +8,9 @@ pub use sov_eth_dev_signer::Signers;
 pub use sov_evm::EthereumAuthenticator;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{ApiStateAccessor, DaSpec, SequencerType, Spec};
-use sov_shutdown::PrimaryShutdownController;
 use sov_rpc_eth_types::{internal_rpc_err, invalid_params_rpc_err, rpc_error_with_code};
 use sov_sequencer::{SeqConfigExtension, Sequencer};
+use sov_shutdown::PrimaryShutdownController;
 use std::future::ready;
 
 pub use handlers::Cursor;

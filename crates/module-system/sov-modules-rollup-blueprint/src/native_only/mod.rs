@@ -28,12 +28,12 @@ use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
-use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;
 use sov_sequencer::preferred::PreferredSequencer;
 use sov_sequencer::standard::StdSequencer;
 use sov_sequencer::{ProofBlobSender, Sequencer, SequencerApis, SequencerKindConfig};
+use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
 use sov_state::storage::NativeStorage;
 use sov_state::Storage;
 use sov_stf_runner::processes::{

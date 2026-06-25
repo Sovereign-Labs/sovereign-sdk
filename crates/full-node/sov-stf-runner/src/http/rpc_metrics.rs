@@ -419,8 +419,7 @@ mod tests {
             tokio_runtime_metrics_interval_millis: 500,
             rpc_aggregation: RpcAggregationConfig::standard(),
         };
-        let secondary_shutdown_controller =
-            sov_shutdown::SecondaryShutdownController::new();
+        let secondary_shutdown_controller = sov_shutdown::SecondaryShutdownController::new();
         sov_metrics::init_metrics_tracker(&monitoring_config, &secondary_shutdown_controller);
 
         let aggregator = Arc::new(RpcStatsAggregator::new(
