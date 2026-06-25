@@ -387,7 +387,8 @@ async fn test_archival_state_is_immediately_available() {
 /// consistently return `HeightNotAccessible` (HTTP 404) — never panic, never return stale/wrong
 /// data, and never return `Ok(None)` for a key that was set at that height. We pin a single
 /// `target_height`, then hammer it from a background task while a writer advances the chain past
-/// `versions_to_keep`, asserting the read transitions monotonically from the correct value to
+/// `versions_to_keep`, asserting that every readable result is exactly the value we set (never
+/// stale, wrong, or `null`) and that the height eventually becomes — and then stays —
 /// `HeightNotAccessible`. Modeled on `test_archival_state_is_immediately_available`.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
@@ -440,8 +441,8 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
     let target_height = test_rollup.height().await.get();
 
     // Background hammer: query the FIXED target height in a loop. The only acceptable outcomes are
-    // (a) the exact value we set, or (b) HeightNotAccessible once pruned — and the transition must
-    // be monotonic (once pruned, never readable again).
+    // (a) the exact value we set, or (b) HeightNotAccessible once pruned. (See the NOTE below for
+    // why we do not assert a strictly monotonic readable -> pruned transition.)
     let stop = Arc::new(AtomicBool::new(false));
     let reader_client = test_rollup.client.clone();
     let reader_stop = stop.clone();

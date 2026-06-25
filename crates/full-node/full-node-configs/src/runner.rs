@@ -479,4 +479,72 @@ mod tests {
             }
         );
     }
+
+    /// A config still carrying the deprecated flat `pruner_*` keys must be rejected by
+    /// `validate()` (loud failure) rather than silently parsed with pruning disabled.
+    #[test]
+    fn pruner_validate_rejects_legacy_flat_keys() {
+        use sov_db::config::RollupDbConfig;
+
+        // The legacy keys still deserialize (so the error is actionable), but `validate` rejects them.
+        let legacy: RollupDbConfig = toml::from_str(
+            r#"
+            path = "/tmp"
+            pruner_block_interval = 100
+            pruner_versions_to_keep = 20
+            "#,
+        )
+        .unwrap();
+        let err = legacy
+            .validate()
+            .expect_err("legacy flat pruner keys must be rejected")
+            .to_string();
+        assert!(
+            err.contains("[storage.pruner]"),
+            "error should direct the operator to the new config form, got: {err}",
+        );
+    }
+
+    /// `validate()` rejects a zero `max_batch_size`, which would stop the pruner from ever making
+    /// progress.
+    #[test]
+    fn pruner_validate_rejects_zero_max_batch_size() {
+        use sov_db::config::RollupDbConfig;
+
+        let config: RollupDbConfig = toml::from_str(
+            r#"
+            path = "/tmp"
+            [pruner.periodic]
+            block_interval = 100
+            versions_to_keep = 20
+            max_batch_size = 0
+            "#,
+        )
+        .unwrap();
+        let err = config
+            .validate()
+            .expect_err("zero max_batch_size must be rejected")
+            .to_string();
+        assert!(
+            err.contains("max_batch_size"),
+            "error should name the offending knob, got: {err}",
+        );
+    }
+
+    /// Well-formed pruner configs (including an explicit `off`) pass `validate()`.
+    #[test]
+    fn pruner_validate_accepts_well_formed_configs() {
+        use sov_db::config::RollupDbConfig;
+
+        for cfg in [
+            r#"path = "/tmp""#,
+            "path = \"/tmp\"\npruner = \"off\"",
+            "path = \"/tmp\"\n[pruner.once_at_startup]\nversions_to_keep = 20\ncompact_after = true",
+        ] {
+            let config: RollupDbConfig = toml::from_str(cfg).unwrap();
+            config
+                .validate()
+                .unwrap_or_else(|e| panic!("expected valid config to pass, got {e} for:\n{cfg}"));
+        }
+    }
 }

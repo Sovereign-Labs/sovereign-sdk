@@ -176,6 +176,30 @@ impl TestableStorage for TestNomtStorage {
 
 type Sm = NomtStorageManager<MockDaSpec, H, TestNomtStorage>;
 
+/// Awaits (up to 5s) any in-flight background pruner, yielding to the runtime between polls.
+/// Returns immediately if no pruner is running or it has already finished.
+async fn wait_for_background_pruner(storage_manager: &Sm) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            match storage_manager.pruner.as_ref() {
+                None => break,
+                Some(pruner) if pruner.is_finished() => break,
+                Some(_) => tokio::task::yield_now().await,
+            }
+        }
+    })
+    .await
+    .expect("pruner did not finish before timeout");
+}
+
+/// Oldest historical version still queryable after the "drain the pruner, then finalize one more
+/// block" bookkeeping shared by the periodic-pruning tests. The committing pruner was spawned at
+/// height `blocks - 1` and saw `last_committed = blocks - 2`, so the pruned floor sits at
+/// `(blocks - 2) - versions_to_keep`.
+fn oldest_available_after_drain(blocks: u64, versions_to_keep: u64) -> u64 {
+    blocks - versions_to_keep - 2
+}
+
 impl TestableStorageManager for Sm {
     fn new(path: impl AsRef<Path>) -> Self {
         let config = RollupDbConfig::default_in_path(path.as_ref().to_path_buf());
@@ -357,17 +381,7 @@ async fn test_historical_state_with_pruning() {
         storage_manager.finalize(&da_header).unwrap();
     }
 
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        loop {
-            match storage_manager.pruner.as_ref() {
-                None => break,
-                Some(pruner) if pruner.is_finished() => break,
-                Some(_) => tokio::task::yield_now().await,
-            }
-        }
-    })
-    .await
-    .expect("pruner did not finish before timeout");
+    wait_for_background_pruner(&storage_manager).await;
 
     // A completed pruning batch is committed only during finalization, so finalize
     // one more block in case the background pruner completed after block 14.
@@ -398,7 +412,8 @@ async fn test_historical_state_with_pruning() {
 
         // The committed pruning batch was collected by the pruner spawned at height 13,
         // which saw `last_committed = blocks - 2`.
-        let oldest_available_version = blocks - versions_to_keep as u64 - 2;
+        let oldest_available_version =
+            oldest_available_after_drain(blocks, versions_to_keep as u64);
 
         // Now, check that the value is pruned at the correct versions.
         for version in 0..keys_to_write.len() as u64 {
@@ -693,17 +708,7 @@ async fn test_hot_key_pruning_keeps_only_recent_versions() {
     }
 
     // Wait for the background pruner to finish.
-    tokio::time::timeout(std::time::Duration::from_secs(5), async {
-        loop {
-            match storage_manager.pruner.as_ref() {
-                None => break,
-                Some(pruner) if pruner.is_finished() => break,
-                Some(_) => tokio::task::yield_now().await,
-            }
-        }
-    })
-    .await
-    .expect("pruner did not finish before timeout");
+    wait_for_background_pruner(&storage_manager).await;
 
     // A completed pruning batch is committed only during finalization; finalize one more block
     // (writing the hot key again) so the batch lands and the live value is at version `blocks`.
@@ -739,7 +744,7 @@ async fn test_hot_key_pruning_keeps_only_recent_versions() {
 
     // Same bookkeeping as `test_historical_state_with_pruning`: the committing pruner saw
     // `last_committed = blocks - 2`, so the oldest retained version is `last_committed - keep`.
-    let oldest_available_version = blocks - versions_to_keep as u64 - 2;
+    let oldest_available_version = oldest_available_after_drain(blocks, versions_to_keep as u64);
 
     let mut retained = 0u64;
     for version in 0..blocks {

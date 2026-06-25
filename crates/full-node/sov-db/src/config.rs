@@ -184,6 +184,20 @@ pub struct RollupDbConfig {
     /// retained) when omitted from config.
     #[serde(default)]
     pub pruner: PrunerConfig,
+
+    // Deprecated flat pruning keys. Retained ONLY so that a config still carrying the old form
+    // is rejected loudly by [`RollupDbConfig::validate`] instead of being silently ignored
+    // (which would leave pruning disabled). Superseded by `pruner`; never serialized or exposed
+    // in the JSON schema.
+    #[serde(rename = "pruner_block_interval", default, skip_serializing)]
+    #[schemars(skip)]
+    legacy_pruner_block_interval: Option<u64>,
+    #[serde(rename = "pruner_versions_to_keep", default, skip_serializing)]
+    #[schemars(skip)]
+    legacy_pruner_versions_to_keep: Option<u64>,
+    #[serde(rename = "pruner_max_batch_size", default, skip_serializing)]
+    #[schemars(skip)]
+    legacy_pruner_max_batch_size: Option<usize>,
 }
 
 impl RollupDbConfig {
@@ -211,6 +225,9 @@ impl RollupDbConfig {
             kernel_leaf_cache_size: Some(16),
             kernel_page_cache_upper_levels: None,
             pruner: PrunerConfig::Off,
+            legacy_pruner_block_interval: None,
+            legacy_pruner_versions_to_keep: None,
+            legacy_pruner_max_batch_size: None,
         }
     }
 
@@ -286,6 +303,56 @@ impl RollupDbConfig {
 
     pub(crate) fn pruner(&self) -> PrunerConfig {
         self.pruner
+    }
+
+    /// Validates config invariants that serde alone cannot express. Should be called once after
+    /// the config is loaded and before it is used to open the database
+    /// ([`crate::storage_manager::NomtStorageManager::new`] does this).
+    ///
+    /// Rejects:
+    /// - the deprecated flat `pruner_block_interval` / `pruner_versions_to_keep` /
+    ///   `pruner_max_batch_size` keys — these were replaced by the `[storage.pruner]` enum and
+    ///   are no longer applied, so an upgraded node fails loudly here instead of silently running
+    ///   with pruning disabled;
+    /// - `versions_to_keep == 0` or `max_batch_size == Some(0)`, either of which would stop the
+    ///   pruner from ever making progress.
+    pub fn validate(&self) -> anyhow::Result<()> {
+        if self.legacy_pruner_block_interval.is_some()
+            || self.legacy_pruner_versions_to_keep.is_some()
+            || self.legacy_pruner_max_batch_size.is_some()
+        {
+            anyhow::bail!(
+                "The flat `storage.pruner_block_interval` / `pruner_versions_to_keep` / \
+                 `pruner_max_batch_size` config keys have been replaced by the `[storage.pruner]` \
+                 enum and are no longer applied. Migrate your config: omit the section (or set \
+                 `pruner = \"off\"`) to disable pruning, or use `[storage.pruner.periodic]` / \
+                 `[storage.pruner.once_at_startup]`."
+            );
+        }
+
+        let (versions_to_keep, max_batch_size) = match self.pruner {
+            PrunerConfig::Off => return Ok(()),
+            PrunerConfig::OnceAtStartup {
+                versions_to_keep,
+                max_batch_size,
+                ..
+            }
+            | PrunerConfig::Periodic {
+                versions_to_keep,
+                max_batch_size,
+                ..
+            } => (versions_to_keep, max_batch_size),
+        };
+        anyhow::ensure!(
+            versions_to_keep >= 1,
+            "`storage.pruner` `versions_to_keep` must be >= 1, got {versions_to_keep}",
+        );
+        anyhow::ensure!(
+            max_batch_size != Some(0),
+            "`storage.pruner` `max_batch_size` must be >= 1 (got 0): a zero batch size would stop \
+             the pruner from ever making progress. Omit it to use the default.",
+        );
+        Ok(())
     }
 
     /// Resolves an optional per-batch key cap to a concrete value, falling back to

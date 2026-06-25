@@ -17,7 +17,6 @@ use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::tables::{BatchByNumber, SlotByNumber};
 use sov_db::schema::types::{BatchNumber, DbBytes, StoredBatch};
 use sov_db::storage_manager::NomtStorageManager;
-use sov_full_node_configs::runner::from_toml_path;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockAddress, MockDaSpec};
 use sov_modules_api::capabilities::HasKernel;
@@ -519,8 +518,8 @@ fn prepare_migration_session(
     args: &Args,
     notes: &mut Vec<String>,
 ) -> anyhow::Result<MigrationSession> {
-    let mut storage_config = load_storage_config(args)?;
-    apply_storage_defaults_and_overrides(&mut storage_config, notes);
+    let (mut storage_config, pruner_present) = load_storage_config(args)?;
+    apply_storage_defaults_and_overrides(&mut storage_config, pruner_present, notes);
     let db_path = storage_config.path.clone();
 
     let runtime = Runtime::<OldSpec>::default();
@@ -943,9 +942,31 @@ fn migrate_slot_information(old_slot_info: &OldSlotInformation) -> NewSlotInform
     )
 }
 
-fn load_storage_config(args: &Args) -> anyhow::Result<RollupDbConfig> {
+/// Loads the storage config and reports whether the operator expressed *any* `[storage.pruner]`
+/// policy. The presence flag lets [`apply_storage_defaults_and_overrides`] respect an explicit
+/// `pruner = "off"` (archival node) and only default-enable pruning when the section is truly
+/// absent — `PrunerConfig::Off` alone cannot distinguish "absent" from "explicitly disabled".
+fn load_storage_config(args: &Args) -> anyhow::Result<(RollupDbConfig, bool)> {
+    let contents = std::fs::read_to_string(&args.rollup_config_path).with_context(|| {
+        format!(
+            "failed to read rollup config from {}",
+            args.rollup_config_path.display()
+        )
+    })?;
+
+    let raw: toml::Value = toml::from_str(&contents).with_context(|| {
+        format!(
+            "failed to parse rollup config from {}",
+            args.rollup_config_path.display()
+        )
+    })?;
+    let pruner_present = raw
+        .get("storage")
+        .and_then(|storage| storage.get("pruner"))
+        .is_some();
+
     let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaService> =
-        from_toml_path(&args.rollup_config_path).with_context(|| {
+        toml::from_str(&contents).with_context(|| {
             format!(
                 "failed to read rollup config from {}",
                 args.rollup_config_path.display()
@@ -957,10 +978,14 @@ fn load_storage_config(args: &Args) -> anyhow::Result<RollupDbConfig> {
         storage.path = db_path_override.clone();
     }
 
-    Ok(storage)
+    Ok((storage, pruner_present))
 }
 
-fn apply_storage_defaults_and_overrides(config: &mut RollupDbConfig, notes: &mut Vec<String>) {
+fn apply_storage_defaults_and_overrides(
+    config: &mut RollupDbConfig,
+    pruner_present: bool,
+    notes: &mut Vec<String>,
+) {
     if config.user_commit_concurrency.is_none() {
         config.user_commit_concurrency = Some(4);
         notes.push("storage.user_commit_concurrency missing; defaulted to 4".to_string());
@@ -981,16 +1006,20 @@ fn apply_storage_defaults_and_overrides(config: &mut RollupDbConfig, notes: &mut
         config.kernel_preallocate_ht = Some(false);
         notes.push("storage.kernel_preallocate_ht missing; defaulted to false".to_string());
     }
-    if config.pruner == PrunerConfig::Off {
+    // Only default-enable pruning when the operator left the section out entirely. An explicit
+    // `[storage.pruner]` (including `pruner = "off"`, e.g. an archival node) is respected so the
+    // migration never silently starts deleting history the operator chose to retain.
+    if !pruner_present {
+        debug_assert_eq!(config.pruner, PrunerConfig::Off);
         // Match the periodic pruning used by the fresh example configs so migrated prod nodes
-        // actually prune (a missing/off policy would otherwise leave pruning disabled).
+        // that didn't configure pruning still prune (an absent policy leaves pruning disabled).
         config.pruner = PrunerConfig::Periodic {
             block_interval: 100,
             versions_to_keep: 20,
             max_batch_size: None,
         };
         notes.push(
-            "storage.pruner missing/off; defaulted to periodic pruning (every 100 DA blocks, keep 20 versions)"
+            "storage.pruner absent; defaulted to periodic pruning (every 100 DA blocks, keep 20 versions)"
                 .to_string(),
         );
     }
