@@ -15,7 +15,7 @@ use axum::response::Response;
 use sov_state::Prefix;
 use std::collections::HashMap;
 use std::convert::Infallible;
-use std::fmt::{Debug, Display};
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -263,7 +263,7 @@ where
     M: ModuleSendSync,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Serialize + serde::de::DeserializeOwned + FromStr + Display,
-    <K as FromStr>::Err: Debug,
+    <K as FromStr>::Err: Display,
     V: Serialize,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -289,7 +289,7 @@ where
             sov_rest_utils::errors::bad_request_400(
                 "Invalid key",
                 format!(
-                    "Key '{input_key}' cannot be deserialized to a valid state map key: {err:?}"
+                    "Key '{input_key}' cannot be deserialized to a valid state map key: {err:#}"
                 ),
             )
         })?;
@@ -317,7 +317,7 @@ where
     <M::Spec as Spec>::Storage: NativeStorage,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Serialize + serde::de::DeserializeOwned + FromStr + Display + Clone,
-    <K as FromStr>::Err: Debug,
+    <K as FromStr>::Err: Display,
     V: Serialize,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -354,10 +354,10 @@ where
         let cursor_key = match &pagination.selection {
             sov_rest_utils::PageSelection::First => None,
             sov_rest_utils::PageSelection::Next { cursor } => {
-                let key = K::from_str(cursor).map_err(|_| {
+                let key = K::from_str(cursor).map_err(|err| {
                     sov_rest_utils::errors::bad_request_400(
                         "Invalid cursor",
-                        "cursor must be a valid key",
+                        format!("cursor '{cursor}' is not a valid key: {err:#}"),
                     )
                 })?;
                 Some(state_map.slot_key(&key))
@@ -454,7 +454,7 @@ where
     <M::Spec as Spec>::Storage: NativeStorage,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Display + FromStr + Serialize + serde::de::DeserializeOwned + Clone + Send + Sync + 'static,
-    <K as FromStr>::Err: Debug,
+    <K as FromStr>::Err: Display,
     V: Serialize + Clone + Send + Sync + 'static,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -518,7 +518,7 @@ where
     Codec::KeyCodec: StateItemCodec<K>,
     Codec::ValueCodec: StateItemCodec<V>,
     K: FromStr + std::fmt::Display,
-    <K as FromStr>::Err: Debug,
+    <K as FromStr>::Err: Display,
 {
 }
 

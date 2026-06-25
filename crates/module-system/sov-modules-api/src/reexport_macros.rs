@@ -272,7 +272,7 @@ pub use sov_modules_macros::ModuleInfo;
 /// strings for map keys. The key type must implement
 /// [`std::fmt::Display`] and [`std::str::FromStr`], and its
 /// [`FromStr`](std::str::FromStr) error type must implement
-/// [`std::fmt::Debug`] so invalid-key responses can include parse details.
+/// [`std::fmt::Display`] so invalid-key responses can include parse details.
 /// Map listing pagination cursors are produced from the key's
 /// [`Display`](std::fmt::Display) output and parsed back with
 /// [`FromStr`](std::str::FromStr).

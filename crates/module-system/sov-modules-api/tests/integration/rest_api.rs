@@ -49,7 +49,7 @@ where
         + std::str::FromStr
         + std::fmt::Display
         + 'static,
-    <D as std::str::FromStr>::Err: std::fmt::Debug,
+    <D as std::str::FromStr>::Err: std::fmt::Display,
 {
     #[id]
     pub id: ModuleId,
@@ -97,7 +97,7 @@ where
         + Send
         + Sync
         + 'static,
-    <D as std::str::FromStr>::Err: std::fmt::Debug,
+    <D as std::str::FromStr>::Err: std::fmt::Display,
 {
     type Spec = S;
     type Config = ();
@@ -180,7 +180,7 @@ async fn rest_api_routes() {
         .and_then(serde_json::Value::as_str)
         .expect("StateMap key parameter description is missing");
     assert!(key_description.contains("FromStr"));
-    assert!(key_description.contains("Debug"));
+    assert!(key_description.contains("Display"));
 
     let cursor_description = spec_json
         .pointer(
@@ -280,5 +280,5 @@ async fn rest_api_routes() {
         .and_then(serde_json::Value::as_str)
         .expect("Invalid key response does not include parse error details");
     assert!(error_details.contains("not-a-u32"));
-    assert!(error_details.contains("InvalidDigit"));
+    assert!(error_details.contains("invalid digit found in string"));
 }

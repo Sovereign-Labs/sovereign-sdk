@@ -1,5 +1,5 @@
 use std::collections::HashMap;
-use std::fmt::{Debug, Display};
+use std::fmt::Display;
 use std::marker::PhantomData;
 use std::str::FromStr;
 
@@ -219,7 +219,7 @@ impl<N, K, V, Codec> CustomStateItemPath
 where
     N: CompileTimeNamespace,
     K: Serialize + DeserializeOwned + FromStr + Display + Clone + Send + Sync + 'static,
-    <K as FromStr>::Err: Debug,
+    <K as FromStr>::Err: Display,
     V: ToSchema + Serialize + Clone + Send + Sync + 'static,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -311,7 +311,7 @@ impl<N, K, V, Codec> StateItemPaths for StateItemOpenApiSpecImpl<NamespacedState
 where
     N: CompileTimeNamespace,
     K: Serialize + DeserializeOwned + FromStr + Display + Clone + Send + Sync + 'static,
-    <K as FromStr>::Err: Debug,
+    <K as FromStr>::Err: Display,
     V: Serialize + Clone + Send + Sync + 'static,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -464,7 +464,7 @@ pub fn state_map_paths_with_response(
                             "name": "key",
                             "in": "path",
                             "required": true,
-                            "description": "StateMap key parsed with the key type's FromStr implementation. Generated StateMap REST APIs require the parse error type to implement Debug; invalid keys return the debug-formatted parse error.",
+                            "description": "StateMap key parsed with the key type's FromStr implementation. Generated StateMap REST APIs require the parse error type to implement Display; invalid keys return the Display-formatted parse error.",
                             "schema": {
                                 "type": "string",
                             }
