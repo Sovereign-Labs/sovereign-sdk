@@ -1095,6 +1095,57 @@ async fn verification_succeeds_for_correct_blocks() {
     verification_for_correct_blocks(no_read, read_half).await;
 }
 
+/// A partially-read blob keeps exactly the bytes the STF saw across a witness round-trip,
+/// even though the serialized form no longer carries the blob's shares.
+#[tokio::test(flavor = "multi_thread")]
+async fn pruned_witness_round_trips_read_prefix() {
+    let block = with_rollup_batch_data::filtered_block();
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+
+    // Largest blob → the most unread shares dropped by pruning.
+    let blob = relevant_blobs
+        .batch_blobs
+        .iter_mut()
+        .max_by_key(|blob| blob.compressed_total_len())
+        .expect("fixture must contain a batch blob");
+
+    // The STF reads only a one-byte prefix; the rest of the blob stays untouched.
+    blob.advance(1);
+    let expected_verified = blob.verified_data().to_vec();
+    let expected_total_len = blob.total_len();
+
+    let restored: BlobWithSender =
+        bincode::deserialize(&bincode::serialize(&*blob).unwrap()).unwrap();
+
+    assert_eq!(restored.verified_data(), expected_verified.as_slice());
+    assert_eq!(restored.total_len(), expected_total_len);
+}
+
+/// The pruned witness blob serializes to less than its DA payload — impossible if the
+/// (mostly unread) shares were still carried, which is the witness-bloat DoS this fixes.
+#[tokio::test(flavor = "multi_thread")]
+async fn pruned_witness_blob_is_smaller_than_its_payload() {
+    let block = with_rollup_batch_data::filtered_block();
+    let relevant_blobs = extract_relevant_blobs(&block);
+
+    let blob = relevant_blobs
+        .batch_blobs
+        .iter()
+        .max_by_key(|blob| blob.compressed_total_len())
+        .expect("fixture must contain a batch blob");
+    let da_len = blob.compressed_total_len();
+    assert!(
+        da_len > 256,
+        "fixture blob must span multiple shares to make pruning observable (got {da_len} B)"
+    );
+
+    let encoded_len = bincode::serialize(blob).unwrap().len();
+    assert!(
+        encoded_len < da_len,
+        "pruned witness blob ({encoded_len} B) should be smaller than its {da_len} B DA payload"
+    );
+}
+
 #[test]
 fn parity_boundary_fixture_contains_target_shape() {
     let block = with_parity_boundary_followed_by_namespace::filtered_block();
@@ -1301,19 +1352,25 @@ async fn verification_fails_if_tx_missing() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn verification_fails_if_witness_total_len_inflated() {
-    verification_fails_for_forged_total_len(1_000_000).await;
+    verification_fails_for_forged_total_len(ForgedLen::Inflated).await;
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn verification_fails_if_witness_total_len_deflated() {
-    verification_fails_for_forged_total_len(1).await;
+    verification_fails_for_forged_total_len(ForgedLen::Deflated).await;
+}
+
+/// Direction of a forged `total_len` relative to the blob's authenticated length.
+enum ForgedLen {
+    Inflated,
+    Deflated,
 }
 
 /// `BlobWithSender`'s record of its total payload length backs
 /// `BlobReaderTrait::total_len()`, which feeds gas accounting and size gates in the
 /// STF. It is a prover-supplied witness field, so the verifier must reject any value
 /// that does not match the `sequence_length` of the authenticated first share.
-async fn verification_fails_for_forged_total_len(forged_sequence_len: u64) {
+async fn verification_fails_for_forged_total_len(direction: ForgedLen) {
     let block = with_rollup_batch_data::filtered_block();
     let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
 
@@ -1321,10 +1378,28 @@ async fn verification_fails_for_forged_total_len(forged_sequence_len: u64) {
     // Proofs are built for the honest, unread witness: one share per blob.
     let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
 
-    // Forge the witness through its serialized form, as a malicious prover would.
     let blob = relevant_blobs.batch_blobs.remove(0);
+    // Forge relative to the blob's authenticated length so the value always clears the
+    // `AccumulatorExceedsTotalLen` deserialization guard (`forged >= verified prefix`) and is
+    // rejected by the verifier's sequence-length pin — regardless of whether the fixture blob
+    // is legacy (empty prefix) or an envelope (eager header prefix).
+    let real_total_len = blob.compressed_total_len() as u64;
+    let verified_prefix_len = blob.compressed_verified_data().len() as u64;
+    assert!(
+        verified_prefix_len < real_total_len,
+        "fixture blob must span more than its verified prefix to forge a deflated length \
+         (prefix {verified_prefix_len} B, total {real_total_len} B)"
+    );
+    let forged_total_len = match direction {
+        ForgedLen::Inflated => real_total_len + 1,
+        ForgedLen::Deflated => real_total_len - 1,
+    };
+
+    // Forge the witness through its serialized form, as a malicious prover would.
     let mut serialized = serde_json::to_value(&blob).unwrap();
-    serialized["blob"]["inner"]["sequence_len"] = serde_json::Value::from(forged_sequence_len);
+    // The witness now serializes through the pruned wire form, which exposes the
+    // prover-supplied total length as a top-level `total_len` field.
+    serialized["total_len"] = serde_json::Value::from(forged_total_len);
     let forged_blob: BlobWithSender = serde_json::from_value(serialized).unwrap();
     relevant_blobs.batch_blobs.insert(0, forged_blob);
 
