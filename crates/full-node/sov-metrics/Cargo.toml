@@ -24,7 +24,6 @@ derive_more = { workspace = true, features = ["deref_mut", "deref"], optional = 
 derive-new = { workspace = true }
 tokio-metrics = { workspace = true, optional = true }
 hex = { workspace = true }
-sov-rollup-interface = { workspace = true, optional = true }
 sov-shutdown = { workspace = true, optional = true }
 
 anyhow = { workspace = true }
@@ -63,8 +62,6 @@ native = [
 	"dep:schemars",
 	"dep:derive_more",
 	"dep:tokio-metrics",
-	"dep:sov-rollup-interface",
 	"dep:sov-shutdown",
 	"sov-metrics/native",
-	"sov-rollup-interface?/native"
 ]
