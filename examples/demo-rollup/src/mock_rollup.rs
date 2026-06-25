@@ -15,7 +15,9 @@ use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_modules_api::{NodeEndpoints, Spec};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
-use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
+use sov_modules_rollup_blueprint::{
+    FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt, WalletBlueprint,
+};
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::SyncStatus;
@@ -173,3 +175,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         Ok(read_mock_code_commitments_from_env())
     }
 }
+
+// Enables the `sov-cli` wallet binary to build against the mock-DA rollup (the wallet
+// is DA-agnostic; it only signs/encodes transactions offline).
+impl WalletBlueprint<Native> for MockDemoRollup<Native> {}

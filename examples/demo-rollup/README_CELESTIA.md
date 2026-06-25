@@ -71,8 +71,12 @@ $ echo $MY_PERSONAL_GITHUB_TOKEN | docker login ghcr.io -u $MY_GITHUB_USERNAME -
 
 ```shell,test-ci
 $ cd examples/demo-rollup/
-$ make build
+$ make build-celestia
 ```
+
+> `make build-celestia` builds with `--no-default-features --features celestia_da`. The
+> default `make build` targets mock DA (mock + SP1 zkVMs) and would not include the
+> Celestia DA layer, so `--da-layer celestia` would refuse to start.
 
 4. Spin up a local Celestia instance as your DA layer. We've built a small Makefile to simplify that process:
 
@@ -87,7 +91,7 @@ $ make start
 Now run the demo-rollup full node, as shown below. You will see it consuming blocks from the Celestia node running inside Docker:
 
 ```sh,test-ci,bashtestmd:long-running,bashtestmd:wait-until=rest_address
-# Make sure you're still in the examples/demo-rollup directory and `make build` has been executed before
+# Make sure you're still in the examples/demo-rollup directory and `make build-celestia` has been executed before
 $ ./../../target/debug/sov-demo-rollup --da-layer celestia --rollup-config-path demo_rollup_config.toml --genesis-config-dir ../test-data/genesis/demo/celestia
 2025-03-07T13:13:20.453543Z  INFO sov_modules_rollup_blueprint::native_only::logging: Open Telemetry exporter is not enabled
 2025-03-07T13:13:20.466922Z  INFO sov_demo_rollup: Running demo rollup with prover config prover_config_disc=None
@@ -139,7 +143,7 @@ The `make test-create-token` command above was useful to test if everything is r
 You'll need the `sov-cli` binary in order to create transactions. Build it with these commands:
 
 ```bash,test-ci,bashtestmd:compare-output
-# Make sure you're still in `examples/demo-rollup` and `make build` has been executed previously
+# Make sure you're still in `examples/demo-rollup` and `make build-celestia` has been executed previously
 $ make check-sov-cli
 $ ./../../target/debug/sov-cli --help
 Usage: sov-cli <COMMAND>
@@ -369,7 +373,7 @@ It is possible to run several nodes and sequencers on the same host. But this re
 6. Run second node:
 
 ```
-cargo run -- --da-layer celestia --rollup-config-path demo_rollup_config_1.toml --genesis-config-dir ../test-data/genesis/demo/celestia
+cargo run --no-default-features --features celestia_da -- --da-layer celestia --rollup-config-path demo_rollup_config_1.toml --genesis-config-dir ../test-data/genesis/demo/celestia
 ```
 
 Note that it uses newly generated config and also passes a different option for prometheus exporter.
