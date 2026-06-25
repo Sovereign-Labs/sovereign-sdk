@@ -2,7 +2,7 @@
 
 use std::net::SocketAddr;
 
-use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController};
+use sov_shutdown::{FutureOrShutdownOutput, SecondaryShutdownController};
 use tokio::io::AsyncWriteExt;
 
 use crate::influxdb::config::{MonitoringConfig, Transport};
@@ -252,7 +252,7 @@ mod tests {
     use crate::influxdb::config::TelegrafSocketConfig;
     use crate::influxdb::RpcAggregationConfig;
     use crate::influxdb::{Metric, SubmittableMetricKind};
-    use sov_rollup_interface::node::SecondaryShutdownController;
+    use sov_shutdown::SecondaryShutdownController;
     use tokio::io::AsyncReadExt;
 
     #[derive(Clone, Debug)]

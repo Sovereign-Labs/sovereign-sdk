@@ -58,6 +58,7 @@ rand = { workspace = true, optional = true }
 sov-metrics = { workspace = true, optional = true }
 sov-modules-macros = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-shutdown = { workspace = true, optional = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 
 [dev-dependencies]
@@ -90,6 +91,7 @@ native = [
     "dep:tokio",
     "sov-celestia-adapter/native",
     "sov-rollup-interface/native",
+    "dep:sov-shutdown",
     "dep:sov-metrics",
     "sov-metrics/native",
     "sov-modules-macros/native",

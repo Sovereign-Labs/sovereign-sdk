@@ -36,6 +36,7 @@ tokio = { workspace = true, optional = true, features = [
 futures = { workspace = true, optional = true, features = ["std"] }
 tracing = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-shutdown = { workspace = true, optional = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 
 # For storable service
@@ -96,6 +97,7 @@ native = [
     "dep:tokio",
     "sov-mock-da/native",
     "sov-rollup-interface/native",
+    "dep:sov-shutdown",
     "dep:rand",
     "dep:rand_chacha",
     "dep:axum",

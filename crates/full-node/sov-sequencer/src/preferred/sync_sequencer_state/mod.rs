@@ -31,7 +31,7 @@ use sov_modules_api::GasSpec;
 use sov_modules_api::VersionReader;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
 use sov_rollup_full_node_interface::StateUpdateInfo;
-use sov_rollup_interface::node::PrimaryShutdownController;
+use sov_shutdown::PrimaryShutdownController;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::Storage;
 use std::collections::BTreeMap;

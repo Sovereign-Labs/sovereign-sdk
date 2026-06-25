@@ -48,7 +48,7 @@ pub use get_ip::*;
 pub use pagination::{PageSelection, PaginatedResponse, Pagination};
 use serde::Serialize;
 pub use sorting::{Sorting, SortingOrder};
-use sov_rollup_interface::node::PrimaryShutdownController;
+use sov_shutdown::PrimaryShutdownController;
 use std::fmt::Debug;
 use tower_http::cors::CorsLayer;
 use tower_http::propagate_header::PropagateHeaderLayer;

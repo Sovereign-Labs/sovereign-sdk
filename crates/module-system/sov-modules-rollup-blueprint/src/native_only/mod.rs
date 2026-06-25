@@ -27,9 +27,8 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::{
-    PrimaryShutdownController, SecondaryShutdownController, SyncStatus,
-};
+use sov_rollup_interface::node::SyncStatus;
+use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;
 use sov_sequencer::preferred::PreferredSequencer;

@@ -36,7 +36,7 @@ pub use sov_paymaster::Paymaster;
 pub use sov_prover_incentives::{ProverIncentives, ProverIncentivesConfig};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobs;
-use sov_rollup_interface::node::PrimaryShutdownController;
+use sov_shutdown::PrimaryShutdownController;
 use sov_rollup_interface::stf::DiscardedBlob;
 use sov_rollup_interface::stf::{ExecutionContext, StateTransitionFunction};
 pub use sov_sequencer_registry::{self, SequencerRegistry, SequencerRegistryConfig};

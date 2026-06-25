@@ -13,7 +13,7 @@ use crate::{CelestiaConfig, CelestiaService, VerifyOnFetchMode};
 use anyhow::{anyhow, Context};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_shutdown::SecondaryShutdownController;
 use sov_test_utils::docker::prepull_image_best_effort;
 use testcontainers::core::{ExecCommand, Host, Mount, WaitFor};
 use testcontainers::runners::AsyncRunner;

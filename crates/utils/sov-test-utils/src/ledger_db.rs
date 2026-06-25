@@ -12,7 +12,7 @@ use sov_ledger_apis::{LedgerRoutes, LedgerState};
 use sov_mock_da::{MockBlock, MockBlockHeader, MockHash};
 use sov_modules_api::da::Time;
 use sov_modules_api::{ModuleId, StoredEvent};
-use sov_rollup_interface::node::PrimaryShutdownController;
+use sov_shutdown::PrimaryShutdownController;
 use sov_rollup_interface::stf::{BatchReceipt, FullyBakedTx, TransactionReceipt, TxEffect};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::TxHash;

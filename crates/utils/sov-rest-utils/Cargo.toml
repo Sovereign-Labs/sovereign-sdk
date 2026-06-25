@@ -25,6 +25,7 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = "0.7"
 sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-shutdown = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true, features = ["util"] }

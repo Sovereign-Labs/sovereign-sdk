@@ -16,8 +16,9 @@ use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
-use sov_rollup_interface::node::{
-    FutureOrShutdownOutput, PrimaryShutdownController, RunnerShutdownController, SyncStatus,
+use sov_rollup_interface::node::SyncStatus;
+use sov_shutdown::{
+    FutureOrShutdownOutput, PrimaryShutdownController, RunnerShutdownController,
 };
 use sov_rollup_interface::stf::{
     ExecutionContext, PartialProofReceipt, ProofOutcome, ProofReceipt, ProofReceiptContents,

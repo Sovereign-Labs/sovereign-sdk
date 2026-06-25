@@ -5,7 +5,7 @@ use sov_celestia_adapter::verifier::RollupParams;
 use sov_celestia_adapter::CelestiaService;
 use sov_demo_rollup::{ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
 use sov_modules_rollup_blueprint::logging::initialize_logging;
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_shutdown::SecondaryShutdownController;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 
 /// Simple program description

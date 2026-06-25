@@ -40,6 +40,7 @@ sov-metrics = { workspace = true }
 sov-rest-utils = { workspace = true }
 sov-rollup-full-node-interface = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-shutdown = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-state = { workspace = true }

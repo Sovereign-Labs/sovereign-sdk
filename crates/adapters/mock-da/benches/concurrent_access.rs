@@ -5,7 +5,7 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaConfig;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{
+use sov_shutdown::{
     future_or_shutdown, FutureOrShutdownOutput, SecondaryShutdownController,
 };
 

@@ -21,9 +21,8 @@ use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
 use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::common::RollupHeight;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::{
-    PrimaryShutdownController, SecondaryShutdownController, SyncStatus,
-};
+use sov_rollup_interface::node::SyncStatus;
+use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::{ArrayWitness, NativeStorage, Storage, StorageRoot};
 use sov_stf_runner::StateTransitionRunner;

@@ -35,7 +35,7 @@ use sov_proxy_utils::ClusterInfo;
 use sov_proxy_utils::ClusterInfoService;
 use sov_proxy_utils::RootHashCheck;
 use sov_proxy_utils::RootHashConsistency;
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_shutdown::SecondaryShutdownController;
 use sov_sequencer::preferred::ConfiguredNodeRole;
 use sov_sequencer::preferred::RecoveryStrategy;
 use sov_sequencer::SequencerRole;

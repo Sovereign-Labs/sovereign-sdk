@@ -18,7 +18,7 @@ use sov_modules_api::CryptoSpec;
 use sov_modules_api::PrivateKey;
 use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_shutdown::SecondaryShutdownController;
 use sov_sequencer::SeqConfigExtension;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};

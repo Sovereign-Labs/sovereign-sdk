@@ -420,7 +420,7 @@ mod tests {
             rpc_aggregation: RpcAggregationConfig::standard(),
         };
         let secondary_shutdown_controller =
-            sov_rollup_interface::node::SecondaryShutdownController::new();
+            sov_shutdown::SecondaryShutdownController::new();
         sov_metrics::init_metrics_tracker(&monitoring_config, &secondary_shutdown_controller);
 
         let aggregator = Arc::new(RpcStatsAggregator::new(

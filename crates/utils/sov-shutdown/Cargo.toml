@@ -1,0 +1,20 @@
+[package]
+name = "sov-shutdown"
+description = "Shutdown controllers and graceful-shutdown utilities for Sovereign SDK full nodes"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+publish = false
+repository.workspace = true
+
+[lints]
+workspace = true
+
+[dependencies]
+tokio = { workspace = true, features = ["macros", "sync", "rt"] }
+tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "sync", "rt-multi-thread"] }

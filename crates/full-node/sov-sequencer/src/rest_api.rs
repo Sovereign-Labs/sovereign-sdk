@@ -28,7 +28,7 @@ use sov_rest_utils::{
 use sov_rest_utils::{get_client_ip, WsMessage};
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::PrimaryShutdownController;
+use sov_shutdown::PrimaryShutdownController;
 use sov_rollup_interface::TxHash;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;

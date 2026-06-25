@@ -11,7 +11,7 @@ use op_manager::attestations::AttestationsManager;
 pub use prover_service::*;
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{PrimaryShutdownController, SecondaryShutdownController};
+use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
 use sov_rollup_interface::optimistic::BondingProofService;
 use sov_rollup_interface::stf::ProofSender;
 pub use stf_info_manager::*;

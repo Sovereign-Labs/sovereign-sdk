@@ -5,7 +5,7 @@ use futures::StreamExt;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait};
 use sov_rollup_interface::node::da::{DaService, SlotData, SubmitBlobReceipt};
-use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController};
+use sov_shutdown::{FutureOrShutdownOutput, SecondaryShutdownController};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;

@@ -19,7 +19,7 @@ use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{FullyBakedTx, Runtime, Spec};
 use sov_rollup_full_node_interface::StateUpdateInfo;
-use sov_rollup_interface::node::PrimaryShutdownController;
+use sov_shutdown::PrimaryShutdownController;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_state::Storage;
 use std::sync::atomic::{AtomicU32, Ordering};

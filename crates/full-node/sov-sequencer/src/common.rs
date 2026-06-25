@@ -25,7 +25,7 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{ItemOrHash, LedgerStateProvider, QueryMode};
-use sov_rollup_interface::node::{FutureOrShutdownOutput, PrimaryShutdownController};
+use sov_shutdown::{FutureOrShutdownOutput, PrimaryShutdownController};
 use thiserror::Error;
 use tokio::sync::{broadcast, Mutex, RwLock};
 use tokio::time::timeout;

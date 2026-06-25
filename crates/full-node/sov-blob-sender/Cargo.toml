@@ -22,6 +22,7 @@ rockbound = { workspace = true }
 serde = { workspace = true, features = ["derive"] }
 serde_json = { workspace = true }
 sov-rollup-interface = { workspace = true, features = ["native"]  }
+sov-shutdown = { workspace = true }
 sov-metrics = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-db = { workspace = true }

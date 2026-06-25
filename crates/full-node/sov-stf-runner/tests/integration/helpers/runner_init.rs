@@ -25,9 +25,8 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{AggregatedProofResponse, LedgerStateProvider};
-use sov_rollup_interface::node::{
-    PrimaryShutdownController, SecondaryShutdownController, SyncStatus,
-};
+use sov_rollup_interface::node::SyncStatus;
+use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;

@@ -5,8 +5,9 @@ use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{
-    FutureOrShutdownOutput, PrimaryShutdownController, SecondaryShutdownController, SyncStatus,
+use sov_rollup_interface::node::SyncStatus;
+use sov_shutdown::{
+    FutureOrShutdownOutput, PrimaryShutdownController, SecondaryShutdownController,
 };
 use sov_rollup_interface::stf::ProofSender;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;

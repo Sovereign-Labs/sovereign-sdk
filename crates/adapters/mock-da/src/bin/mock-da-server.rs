@@ -4,7 +4,7 @@ use tracing_subscriber::EnvFilter;
 use sov_mock_da::storable::rpc::start_server;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{MockAddress, MockDaConfig};
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_shutdown::SecondaryShutdownController;
 
 // Start with cargo run --features="native"
 #[derive(Parser, Debug)]

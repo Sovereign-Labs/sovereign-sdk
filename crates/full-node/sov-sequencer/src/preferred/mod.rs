@@ -59,7 +59,7 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::PrimaryShutdownController;
+use sov_shutdown::PrimaryShutdownController;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::TxHash;
 use state_root_compute::StateRootTask;
