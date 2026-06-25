@@ -1,5 +1,6 @@
 mod error;
 
+use std::borrow::Cow;
 use std::ops::Range;
 use std::sync::OnceLock;
 
@@ -100,7 +101,7 @@ impl From<[u8; 32]> for TmHash {
 }
 
 #[derive(Clone, Debug, Deserialize)]
-#[serde(try_from = "BlobWithSenderWire")]
+#[serde(try_from = "BlobWithSenderWire<'static>")]
 pub struct BlobWithSender {
     pub(crate) blob: CountedBufReader<BlobIterator>,
     // Range in the entire namespace
@@ -146,12 +147,15 @@ pub struct BlobWithSender {
 /// these fields drops the unread-share bloat an attacker could otherwise use to inflate the
 /// witness.
 ///
-/// Only the *deserialize* direction goes through this owned struct (via `try_from`);
-/// serialization uses the borrowed [`BlobWithSenderWireRef`] view to avoid cloning shares.
-#[derive(Debug, Deserialize)]
-struct BlobWithSenderWire {
+/// A single struct serves both directions. Serialization borrows from the live
+/// [`BlobWithSender`] through `Cow::Borrowed` (so the potentially large `accumulator` is never
+/// cloned), while deserialization owns its data — the fields are never `#[serde(borrow)]`, so
+/// they always decode to `Cow::Owned`, and [`BlobWithSender`]'s `try_from` takes them via
+/// [`Cow::into_owned`]. Keeping one struct means a field change happens in exactly one place.
+#[derive(Debug, Serialize, Deserialize)]
+struct BlobWithSenderWire<'a> {
     /// DA-physical verified prefix ([`BlobWithSender::compressed_verified_data`]).
-    accumulator: Vec<u8>,
+    accumulator: Cow<'a, [u8]>,
     /// DA-physical total length ([`BlobWithSender::compressed_total_len`]). `u64` so the
     /// 64-bit host and 32-bit zkVM guest agree on the encoded width.
     total_len: u64,
@@ -160,18 +164,9 @@ struct BlobWithSenderWire {
     /// the DA block's share count (orders of magnitude below `u32::MAX`) and is consumed only
     /// when building proofs on the host (`verifier::proofs`); the 32-bit guest verifier never
     /// reads it, so it carries no truncation risk.
-    range_in_namespace: Range<usize>,
-    sender: CelestiaAddress,
-    hash: HexHash,
-}
-
-#[derive(Serialize)]
-struct BlobWithSenderWireRef<'a> {
-    accumulator: &'a [u8],
-    total_len: u64,
-    range_in_namespace: &'a Range<usize>,
-    sender: &'a CelestiaAddress,
-    hash: &'a HexHash,
+    range_in_namespace: Cow<'a, Range<usize>>,
+    sender: Cow<'a, CelestiaAddress>,
+    hash: Cow<'a, HexHash>,
 }
 
 /// Error returned when a [`BlobWithSenderWire`] cannot describe a valid blob.
@@ -195,21 +190,21 @@ enum PrunedBlobError {
 
 impl Serialize for BlobWithSender {
     fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
-        BlobWithSenderWireRef {
-            accumulator: self.compressed_verified_data(),
+        BlobWithSenderWire {
+            accumulator: Cow::Borrowed(self.compressed_verified_data()),
             total_len: self.compressed_total_len() as u64,
-            range_in_namespace: &self.range_in_namespace,
-            sender: &self.sender,
-            hash: &self.hash,
+            range_in_namespace: Cow::Borrowed(&self.range_in_namespace),
+            sender: Cow::Borrowed(&self.sender),
+            hash: Cow::Borrowed(&self.hash),
         }
         .serialize(serializer)
     }
 }
 
-impl TryFrom<BlobWithSenderWire> for BlobWithSender {
+impl<'a> TryFrom<BlobWithSenderWire<'a>> for BlobWithSender {
     type Error = PrunedBlobError;
 
-    fn try_from(wire: BlobWithSenderWire) -> Result<Self, Self::Error> {
+    fn try_from(wire: BlobWithSenderWire<'a>) -> Result<Self, Self::Error> {
         // `total_len` mirrors the authenticated first share's `sequence_length`, a `u32` on the
         // DA layer. Reject anything wider so the `as usize` cast cannot truncate on the 32-bit
         // zkVM guest (host and guest stay consistent) — a truncation would slip past the
@@ -218,21 +213,27 @@ impl TryFrom<BlobWithSenderWire> for BlobWithSender {
             u32::try_from(wire.total_len).map_err(|_| PrunedBlobError::TotalLenExceedsDaLimit {
                 total_len: wire.total_len,
             })? as usize;
+        let accumulator = wire.accumulator.into_owned();
         // Reject a malformed witness up front so `remaining()` cannot underflow later.
-        if wire.accumulator.len() > total_len {
+        if accumulator.len() > total_len {
             return Err(PrunedBlobError::AccumulatorExceedsTotalLen {
-                accumulator_len: wire.accumulator.len(),
+                accumulator_len: accumulator.len(),
                 total_len: wire.total_len,
             });
         }
-        let consumed = wire.accumulator.len();
+        let consumed = accumulator.len();
         let inner = BlobIterator::verified_placeholder(total_len, consumed);
-        let blob = CountedBufReader::from_raw_parts(inner, wire.accumulator);
+        let blob = CountedBufReader::from_raw_parts(inner, accumulator);
+        debug_assert_eq!(
+            blob.total_len(),
+            total_len,
+            "reconstructed blob length must equal the authenticated total_len"
+        );
         Ok(BlobWithSender {
             blob,
-            range_in_namespace: wire.range_in_namespace,
-            sender: wire.sender,
-            hash: wire.hash,
+            range_in_namespace: wire.range_in_namespace.into_owned(),
+            sender: wire.sender.into_owned(),
+            hash: wire.hash.into_owned(),
             envelope_state: OnceLock::new(),
         })
     }
