@@ -52,7 +52,7 @@ use futures_util::stream::FuturesOrdered;
 use futures_util::StreamExt;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::{FutureOrShutdownOutput, RunnerShutdownController};
+use sov_shutdown::{FutureOrShutdownOutput, RunnerShutdownController};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;

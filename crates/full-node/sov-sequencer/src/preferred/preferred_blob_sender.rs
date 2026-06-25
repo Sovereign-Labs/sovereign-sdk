@@ -4,7 +4,7 @@ use sov_blob_storage::{PreferredBatchData, PreferredProofData};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::TxHash;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::PrimaryShutdownController;
+use sov_shutdown::PrimaryShutdownController;
 use std::{
     path::Path,
     sync::{atomic::AtomicUsize, Arc},

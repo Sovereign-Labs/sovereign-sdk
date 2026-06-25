@@ -34,7 +34,7 @@ use sov_rollup_interface::da::{
 use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_shutdown::SecondaryShutdownController;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;

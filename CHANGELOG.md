@@ -1,3 +1,7 @@
+# 2026-06-25
+- #3017 Shutdown utilities: extracts the shutdown controllers and graceful-shutdown helpers into a new published `sov-shutdown` crate.
+  * **Breaking Change** `PrimaryShutdownController`, `SecondaryShutdownController`, `FutureOrShutdownOutput`, `future_or_shutdown`, and the `consume_until_shutdown!` macro move from `sov_rollup_interface::node` to the `sov_shutdown` crate. Update imports from `sov_rollup_interface::node::…` (or `sov_rollup_interface::consume_until_shutdown!`) to `sov_shutdown::…`.
+
 # 2026-06-24
 - #3014 Celestia config: aligns the `compression` and `tx_priority` config enums to lowercase/snake_case so they match `verify_on_fetch_mode` (e.g. `compression = "lz4"`, `tx_priority = "high"`). Previously these required PascalCase (`"Lz4"`, `"High"`) and a natural lowercase value was rejected, crashing the node at startup. `tx_priority` keeps PascalCase aliases (`"Low"`/`"Medium"`/`"High"`) for back-compat; `compression` (unreleased) switches from `"Off"`/`"Lz4"` to `"off"`/`"lz4"` without an alias.
   * **Breaking Change** `CelestiaConfig` and `GrpcEndpointConfig` now set `#[serde(deny_unknown_fields)]`: unknown or misspelled keys in the `[da]` config table fail at startup instead of being silently ignored. Existing field aliases (e.g. `celestia_rpc_address`) are unaffected.

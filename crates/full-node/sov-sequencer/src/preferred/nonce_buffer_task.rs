@@ -4,11 +4,8 @@ use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
     FullyBakedTx, Gas, Runtime, SkippedTxContents, Spec, TransactionReceipt, TxProcessingError,
 };
-use sov_rollup_interface::{
-    crypto::CredentialId,
-    node::{FutureOrShutdownOutput, PrimaryShutdownController},
-    TxHash,
-};
+use sov_rollup_interface::{crypto::CredentialId, TxHash};
+use sov_shutdown::{FutureOrShutdownOutput, PrimaryShutdownController};
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::btree_map;
 use std::collections::hash_map;

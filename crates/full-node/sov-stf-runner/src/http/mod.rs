@@ -15,7 +15,7 @@ use jsonrpsee::server::{
 use jsonrpsee::types::{ErrorCode, ErrorObject};
 use jsonrpsee::RpcModule;
 use sov_metrics::{track_metrics, HttpMetrics, RpcAggregationConfig, RpcStatsAggregator};
-use sov_rollup_interface::node::RunnerShutdownController;
+use sov_shutdown::RunnerShutdownController;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;

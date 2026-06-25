@@ -18,7 +18,7 @@ use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, RelevantBlobs};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_shutdown::SecondaryShutdownController;
 use tokio::task::JoinSet;
 
 async fn collect_all_blobs_between(

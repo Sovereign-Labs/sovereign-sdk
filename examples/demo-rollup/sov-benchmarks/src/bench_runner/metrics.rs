@@ -7,7 +7,7 @@ use std::time::Duration;
 use futures::{pin_mut, StreamExt};
 use reqwest::Client;
 use sov_metrics::timestamp;
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_shutdown::{future_or_shutdown, FutureOrShutdownOutput};
 use tokio::time::interval;
 use tracing::{info, trace};
 
