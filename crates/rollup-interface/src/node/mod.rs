@@ -12,7 +12,9 @@ mod shutdown_controller;
 use std::future::Future;
 
 pub use da_sync_state::SyncStatus;
-pub use shutdown_controller::{PrimaryShutdownController, SecondaryShutdownController};
+pub use shutdown_controller::{
+    PrimaryShutdownController, RunnerShutdownController, SecondaryShutdownController,
+};
 use tokio::select;
 use tokio::sync::watch;
 

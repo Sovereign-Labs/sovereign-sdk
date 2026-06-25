@@ -17,7 +17,7 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::node::{
-    future_or_shutdown, FutureOrShutdownOutput, PrimaryShutdownController, SyncStatus,
+    FutureOrShutdownOutput, PrimaryShutdownController, RunnerShutdownController, SyncStatus,
 };
 use sov_rollup_interface::stf::{
     ExecutionContext, PartialProofReceipt, ProofOutcome, ProofReceipt, ProofReceiptContents,
@@ -26,7 +26,6 @@ use sov_rollup_interface::stf::{
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::ProvableHeightTracker;
-use tokio::sync::watch;
 use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
@@ -92,13 +91,26 @@ where
     sync_state: Arc<DaSyncState>,
     sync_fetcher: FinalizedBlocksBulkFetcher<Da>,
     primary_shutdown: PrimaryShutdownController,
-    secondary_shutdown_sender: watch::Sender<()>,
+    runner_shutdown: RunnerShutdownController,
     background_handles: Vec<tokio::task::JoinHandle<anyhow::Result<()>>>,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
     save_tx_bodies: bool,
     finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
     axum_tcp: Option<TcpListener>,
+}
+
+// Guarantees the runner's background tasks are signalled to stop whenever the runner is dropped.
+impl<Stf, Sm, Da> Drop for StateTransitionRunner<Stf, Sm, Da>
+where
+    Da: DaService,
+    Sm: HierarchicalStorageManager<Da::Spec>,
+    Sm::StfState: Clone,
+    Stf: StateTransitionFunction<Da::Spec>,
+{
+    fn drop(&mut self) {
+        self.runner_shutdown.shutdown();
+    }
 }
 
 /// Initializes rollup genesis.
@@ -183,10 +195,11 @@ where
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
         let mut background_handles = Vec::new();
 
-        // This sender is not used immediately,
-        // But when REST and RPC handlers start, sender is used to get another subscription.
-        let (secondary_shutdown_sender, mut secondary_shutdown_receiver) = watch::channel(());
-        secondary_shutdown_receiver.mark_unchanged();
+        // Controls shutdown of the runner's own background tasks. It is not
+        // signalled immediately; background tasks subscribe to it as they are
+        // spawned (fetcher here, REST/RPC handlers and the sync-status updater
+        // later) and stop once `shutdown` is sent.
+        let runner_shutdown = RunnerShutdownController::new();
 
         let first_unprocessed_height_at_startup = sync_state
             .synced_da_height
@@ -241,7 +254,7 @@ where
             first_unprocessed_height_at_startup,
             runner_config.concurrent_sync_tasks,
             runner_config.pre_fetched_blocks_capacity.get(),
-            secondary_shutdown_receiver.clone(),
+            runner_shutdown.clone(),
         )
         .await?;
         background_handles.push(fetcher_background_handle);
@@ -256,7 +269,7 @@ where
             stf_info_receiver,
             sync_fetcher,
             primary_shutdown,
-            secondary_shutdown_sender,
+            runner_shutdown,
             background_handles,
             start_at_rollup_height,
             stop_at_rollup_height,
@@ -311,7 +324,7 @@ where
                 .ok_or_else(|| anyhow::anyhow!("HTTP server already started."))?,
             router,
             methods,
-            self.secondary_shutdown_sender.subscribe(),
+            self.runner_shutdown.clone(),
             cors_configuration,
             rpc_aggregation,
         )
@@ -326,12 +339,7 @@ where
     /// Shuts down any background work spawned during initialization before the
     /// runner enters its main loop.
     pub async fn shutdown_before_run(mut self) -> anyhow::Result<()> {
-        if let Err(e) = self.secondary_shutdown_sender.send(()) {
-            tracing::warn!(
-                error = ?e,
-                "Failed to send secondary shutdown signal while aborting runner startup"
-            );
-        }
+        self.runner_shutdown.shutdown();
 
         // Drain concurrently.
         let background_handles = std::mem::take(&mut self.background_handles);
@@ -344,7 +352,7 @@ where
     fn spawn_sync_status_updater(
         &self,
         polling_interval: Duration,
-        shutdown_receiver: watch::Receiver<()>,
+        shutdown: RunnerShutdownController,
     ) -> tokio::task::JoinHandle<()> {
         let sync_state = self.sync_state.clone();
         let da_service_with_cache = self.finalized_headers_provider.clone();
@@ -360,11 +368,12 @@ where
             interval.tick().await; // Tick the interval once because it starts at 0ms.
 
             loop {
-                match future_or_shutdown(
-                    get_target_block(&da_service_with_cache, &stop_at_rollup_height),
-                    &shutdown_receiver,
-                )
-                .await
+                match shutdown
+                    .future_or_shutdown(get_target_block(
+                        &da_service_with_cache,
+                        &stop_at_rollup_height,
+                    ))
+                    .await
                 {
                     FutureOrShutdownOutput::Shutdown => break,
                     FutureOrShutdownOutput::Output(Err(error)) => {
@@ -413,7 +422,7 @@ where
                                 }
                             };
                         }
-                        future_or_shutdown(interval.tick(), &shutdown_receiver).await;
+                        shutdown.future_or_shutdown(interval.tick()).await;
                     }
                 }
             }
@@ -426,10 +435,8 @@ where
 
         let mut next_da_height = self.first_unprocessed_height_at_startup;
 
-        let status_updater_handle = self.spawn_sync_status_updater(
-            self.da_polling_interval,
-            self.secondary_shutdown_sender.subscribe(),
-        );
+        let status_updater_handle =
+            self.spawn_sync_status_updater(self.da_polling_interval, self.runner_shutdown.clone());
 
         let start_at_rollup_height = self.start_at_rollup_height;
         let stop_at_rollup_height = self.stop_at_rollup_height;
@@ -467,13 +474,8 @@ where
         }
 
         info!("Runner main loop is completed, keep shutting down...");
-        if let Err(e) = self.secondary_shutdown_sender.send(()) {
-            tracing::warn!(
-                error = ?e,
-                "Failed to send secondary shutdown signal. Happens if no HTTP handlers are running"
-            );
-        }
-        info!("Secondary shutdown sent, waiting for status updater to stop...");
+        self.runner_shutdown.shutdown();
+        info!("Runner shutdown sent, waiting for status updater to stop...");
         status_updater_handle
             .await
             .context("Status update handler")?;
