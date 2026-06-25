@@ -78,7 +78,7 @@ where
         &self,
         state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
         sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        primary_shutdown: sov_rollup_interface::node::PrimaryShutdownController,
         ledger_db: &LedgerDb,
         sequencer: &SequencerCreationReceipt<Self::Spec>,
         da_service: &Self::DaService,
@@ -88,7 +88,7 @@ where
             .create_endpoints(
                 state_update_receiver,
                 sync_status_receiver,
-                shutdown_receiver,
+                primary_shutdown,
                 ledger_db,
                 sequencer,
                 da_service,
@@ -101,7 +101,7 @@ where
         &self,
         sequencer: Seq,
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        _shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        _primary_shutdown: sov_rollup_interface::node::PrimaryShutdownController,
         _sequencer_da_address: <<Self::Spec as Spec>::Da as DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
