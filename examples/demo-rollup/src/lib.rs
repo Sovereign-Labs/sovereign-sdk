@@ -3,7 +3,15 @@
 //! See the README for more information.
 // TODO: #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
+// With no DA feature the crate is only the `compile_error!` below; allow the dead-code /
+// unused-import warnings that result so that error is the single, clear diagnostic.
+#![cfg_attr(
+    not(any(feature = "mock_da", feature = "celestia_da")),
+    allow(dead_code, unused_imports)
+)]
 
+// A DA layer must be selected at compile time. `mock_da` (mock + SP1 zkVMs) and
+// `celestia_da` (Risc0) are the two profiles; at least one must be enabled.
 #[cfg(not(any(feature = "mock_da", feature = "celestia_da")))]
 compile_error!("enable at least one DA feature: `mock_da` or `celestia_da`");
 
