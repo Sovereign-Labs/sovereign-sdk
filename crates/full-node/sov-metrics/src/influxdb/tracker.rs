@@ -10,7 +10,7 @@ use crate::influxdb::{
     SubmittableMetricKind, DROPPED_METRICS_COUNT,
 };
 use crate::{MetricsTracker, MonitoringConfig};
-use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController};
+use sov_shutdown::{FutureOrShutdownOutput, SecondaryShutdownController};
 
 pub(crate) static METRICS_TRACKER: OnceLock<MetricsTracker> = OnceLock::new();
 

@@ -6,7 +6,7 @@ use std::sync::Arc;
 use reqwest::Client;
 use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::hooks::TxHooks;
-use sov_modules_api::rest::{ApiState, HasRestApi};
+use sov_modules_api::rest::{utils::ErrorObject, ApiState, HasRestApi};
 use sov_modules_api::{
     ConcurrentStateCheckpoint, Context, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
     StateCheckpoint, StateValue, TxState,
@@ -49,6 +49,7 @@ where
         + std::str::FromStr
         + std::fmt::Display
         + 'static,
+    <D as std::str::FromStr>::Err: std::fmt::Display,
 {
     #[id]
     pub id: ModuleId,
@@ -96,6 +97,7 @@ where
         + Send
         + Sync
         + 'static,
+    <D as std::str::FromStr>::Err: std::fmt::Display,
 {
     type Spec = S;
     type Config = ();
@@ -144,7 +146,7 @@ async fn rest_api_routes() {
         receiver,
         Arc::new(MockKernel::default()),
         None,
-        sov_rollup_interface::node::PrimaryShutdownController::new(),
+        sov_shutdown::PrimaryShutdownController::new(),
     );
 
     let router = runtime.rest_api(state);
@@ -170,6 +172,29 @@ async fn rest_api_routes() {
         .replace("localhost:12346", rest_address.to_string().as_str());
 
     let serialized_spec = spec.to_json().unwrap();
+    let spec_json: serde_json::Value =
+        serde_json::from_str(&serialized_spec).expect("Runtime schema JSON is bad");
+    let key_description = spec_json
+        .pointer("/paths/~1modules~1my-foo-module~1state~1mapping~1items~1{key}/get/parameters/0/description")
+        .and_then(serde_json::Value::as_str)
+        .expect("StateMap key parameter description is missing");
+    assert!(key_description.contains("FromStr"));
+    assert!(key_description.contains("Display"));
+
+    let cursor_description = spec_json
+        .pointer(
+            "/paths/~1modules~1my-foo-module~1state~1mapping~1items/get/parameters/2/description",
+        )
+        .and_then(serde_json::Value::as_str)
+        .expect("StateMap cursor parameter description is missing");
+    assert!(cursor_description.contains("Display"));
+
+    let next_cursor_description = spec_json
+        .pointer("/paths/~1modules~1my-foo-module~1state~1mapping~1items/get/responses/200/content/application~1json/schema/properties/next_cursor/description")
+        .and_then(serde_json::Value::as_str)
+        .expect("StateMap next_cursor description is missing");
+    assert!(next_cursor_description.contains("Display"));
+
     let deserialized: openapiv3::OpenAPI =
         serde_json::from_str(&serialized_spec).expect("Runtime schema is bad");
 
@@ -233,4 +258,26 @@ async fn rest_api_routes() {
         };
         assert!(success_condition, "Failed querying URL {url} | {status}");
     }
+
+    let invalid_key_url =
+        format!("{base_path}/modules/{_module_name}/state/mapping/items/not-a-u32");
+    let response = client
+        .get(&invalid_key_url)
+        .send()
+        .await
+        .expect("Failed querying router");
+    assert_eq!(reqwest::StatusCode::BAD_REQUEST, response.status());
+
+    let error: ErrorObject = response
+        .json()
+        .await
+        .expect("Invalid key response is not an ErrorObject");
+    assert_eq!("Invalid key", error.message);
+    let error_details = error
+        .details
+        .get("error")
+        .and_then(serde_json::Value::as_str)
+        .expect("Invalid key response does not include parse error details");
+    assert!(error_details.contains("not-a-u32"));
+    assert!(error_details.contains("invalid digit found in string"));
 }

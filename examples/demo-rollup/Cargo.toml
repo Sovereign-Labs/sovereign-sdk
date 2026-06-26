@@ -19,6 +19,7 @@ workspace = true
 # non-optional dependencies
 sov-address = { workspace = true, features = ["evm"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-shutdown = { workspace = true }
 sov-rollup-full-node-interface = { workspace = true }
 sov-stf-runner = { workspace = true }
 

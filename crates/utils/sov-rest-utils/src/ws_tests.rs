@@ -20,7 +20,7 @@ mod tests {
     use axum::routing::get;
     use axum::Router;
     use futures::StreamExt;
-    use sov_rollup_interface::node::PrimaryShutdownController;
+    use sov_shutdown::PrimaryShutdownController;
     use tokio::net::TcpListener;
     use tokio::sync::broadcast;
     use tokio::time::timeout;

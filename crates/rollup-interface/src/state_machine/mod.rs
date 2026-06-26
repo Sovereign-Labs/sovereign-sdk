@@ -117,7 +117,9 @@ pub trait BasicAddress:
     + AsRef<[u8]>
     + for<'a> TryFrom<&'a [u8], Error = anyhow::Error>
     + core::str::FromStr<
-        Err: core::fmt::Debug + Into<Box<dyn std::error::Error + Send + Sync + 'static>>,
+        Err: core::fmt::Debug
+                 + core::fmt::Display
+                 + Into<Box<dyn std::error::Error + Send + Sync + 'static>>,
     > + Serialize
     + DeserializeOwned
     + BorshDeserialize

@@ -73,7 +73,7 @@ where
     fn create<Seq>(
         sequencer: Seq,
         rollup_config: &RollupConfig<S::Address, StorableMockDaService>,
-        primary_shutdown: sov_rollup_interface::node::PrimaryShutdownController,
+        primary_shutdown: sov_shutdown::PrimaryShutdownController,
         sequencer_da_address: <MockDaSpec as sov_rollup_interface::da::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where

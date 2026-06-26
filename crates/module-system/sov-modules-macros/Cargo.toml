@@ -54,6 +54,7 @@ tokio = { workspace = true }
 sov-address = { workspace = true }
 
 sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-shutdown = { workspace = true }
 sov-state = { workspace = true, features = ["native", "test-utils"] }
 sov-bank = { workspace = true, features = ["native"] }
 

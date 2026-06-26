@@ -44,7 +44,7 @@ sov-universal-wallet = { workspace = true, features = ["macros"] }
 sha2 = { workspace = true, optional = true }
 thiserror = { workspace = true }
 tracing = { workspace = true, optional = true }
-tokio = { workspace = true, features = ["macros", "sync", "rt"], optional = true }
+tokio = { workspace = true, features = ["sync", "rt"], optional = true }
 
 [dev-dependencies]
 proptest = { workspace = true }

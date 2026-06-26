@@ -25,7 +25,7 @@ async fn test_db_elected_resolution_returns_replica_when_leader_exists() {
 
     let storage_dir = tempfile::tempdir().unwrap();
     let bind_addr = SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
-    let primary_shutdown = sov_rollup_interface::node::PrimaryShutdownController::new();
+    let primary_shutdown = sov_shutdown::PrimaryShutdownController::new();
     let (_db, role) = crate::preferred::db::PreferredSequencerDb::new(
         primary_shutdown,
         storage_dir.path(),

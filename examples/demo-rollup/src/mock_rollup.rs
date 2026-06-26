@@ -88,7 +88,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         &self,
         state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
         sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
-        primary_shutdown: sov_rollup_interface::node::PrimaryShutdownController,
+        primary_shutdown: sov_shutdown::PrimaryShutdownController,
         ledger_db: &LedgerDb,
         sequencer: &SequencerCreationReceipt<Self::Spec>,
         _da_service: &Self::DaService,
@@ -109,7 +109,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         &self,
         sequencer: Seq,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        primary_shutdown: sov_rollup_interface::node::PrimaryShutdownController,
+        primary_shutdown: sov_shutdown::PrimaryShutdownController,
         sequencer_da_address: <MockDaSpec as sov_modules_api::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
@@ -130,14 +130,13 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
             axum_router,
             jsonrpsee_module: sov_ethereum::get_ethereum_rpc(eth_rpc_config, sequencer)
                 .remove_context(),
-            ..Default::default()
         })
     }
 
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        secondary_shutdown_controller: &sov_rollup_interface::node::SecondaryShutdownController,
+        secondary_shutdown_controller: &sov_shutdown::SecondaryShutdownController,
     ) -> Self::DaService {
         StorableMockDaService::from_config(rollup_config.da.clone(), secondary_shutdown_controller)
             .await

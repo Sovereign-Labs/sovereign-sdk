@@ -16,9 +16,7 @@ use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
-use sov_rollup_interface::node::{
-    FutureOrShutdownOutput, PrimaryShutdownController, RunnerShutdownController, SyncStatus,
-};
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::stf::{
     ExecutionContext, PartialProofReceipt, ProofOutcome, ProofReceipt, ProofReceiptContents,
     StateTransitionFunction,
@@ -26,6 +24,7 @@ use sov_rollup_interface::stf::{
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::ProvableHeightTracker;
+use sov_shutdown::{FutureOrShutdownOutput, PrimaryShutdownController, RunnerShutdownController};
 use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
@@ -473,6 +472,19 @@ where
             }
         }
 
+        self.stop_runner(status_updater_handle).await
+    }
+
+    /// Signals the runner's background tasks to stop and waits for them to
+    /// finish.
+    ///
+    /// Sends the runner shutdown notification, then joins the sync-status
+    /// updater followed by all other tracked background handles (HTTP server,
+    /// finalized-block fetcher, etc.).
+    async fn stop_runner(
+        &mut self,
+        status_updater_handle: tokio::task::JoinHandle<()>,
+    ) -> anyhow::Result<()> {
         info!("Runner main loop is completed, keep shutting down...");
         self.runner_shutdown.shutdown();
         info!("Runner shutdown sent, waiting for status updater to stop...");

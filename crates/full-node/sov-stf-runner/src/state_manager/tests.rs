@@ -21,11 +21,12 @@ use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_rollup_interface::common::{HexHash, RollupHeight, SlotNumber};
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec, RelevantBlobIters};
 use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
-use sov_rollup_interface::node::{SecondaryShutdownController, SyncStatus};
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::stf::GenesisParams;
 use sov_rollup_interface::stf::{
     ApplySlotOutput, BatchReceipt, ExecutionContext, StateTransitionFunction,
 };
+use sov_shutdown::SecondaryShutdownController;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{ArrayWitness, NativeStorage, SlotKey, SlotValue, StateAccesses, Storage};
 
