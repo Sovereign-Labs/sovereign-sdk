@@ -117,7 +117,6 @@ where
         Ok(NodeEndpoints {
             axum_router: router,
             jsonrpsee_module: jsonrpsee::RpcModule::new(()),
-            background_handles: Vec::new(),
         })
     }
 
