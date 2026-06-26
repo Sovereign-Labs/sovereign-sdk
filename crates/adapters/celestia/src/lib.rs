@@ -25,7 +25,8 @@ pub use sov_rollup_interface::node::da::*;
 
 #[cfg(feature = "native")]
 pub use config::{
-    CelestiaConfig, CompressOnSubmit, GrpcEndpointConfig, TxPriority, VerifyOnFetchMode,
+    CelestiaConfig, CompressOnSubmit, GrpcEndpointConfig, RpcEndpointConfig, TxPriority,
+    VerifyOnFetchMode,
 };
 #[cfg(feature = "native")]
 pub use da_service::CelestiaService;

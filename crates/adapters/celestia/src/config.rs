@@ -23,6 +23,25 @@ impl fmt::Debug for GrpcEndpointConfig {
     }
 }
 
+/// Configuration for a single fallback (secondary) RPC endpoint.
+#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct RpcEndpointConfig {
+    /// The URL of the RPC endpoint, for example `ws://fallback1:26658`.
+    pub url: String,
+    /// Optional JWT authentication token for this endpoint.
+    pub token: Option<String>,
+}
+
+impl fmt::Debug for RpcEndpointConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("RpcEndpointConfig")
+            .field("url", &self.url)
+            .field("token", &self.token.as_ref().map(|_| "REDACTED"))
+            .finish()
+    }
+}
+
 /// Runtime configuration for the [`sov_rollup_interface::node::da::DaService`] implementation.
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -39,6 +58,26 @@ pub struct CelestiaConfig {
     /// Optional.
     #[serde(default = "default_rpc_auth_token", alias = "celestia_rpc_auth_token")]
     pub rpc_auth_token: Option<String>,
+
+    /// Optional list of fallback (secondary) RPC endpoints used for failover.
+    /// The primary endpoint is `rpc_url`; these are tried, in order, when the
+    /// primary is unreachable. The client automatically switches back to the
+    /// primary once it recovers. Each entry has a mandatory `url` and an optional
+    /// JWT `token`. Default: empty (no fallback endpoints).
+    #[serde(default)]
+    pub rpc_fallback_endpoints: Vec<RpcEndpointConfig>,
+
+    /// How often the background task probes the preferred RPC endpoint to decide
+    /// whether to switch back to it, in seconds. Only relevant when
+    /// `rpc_fallback_endpoints` is non-empty. Default: the celestia-client built-in value.
+    #[serde(default)]
+    pub rpc_health_check_interval_secs: Option<NonZero<u64>>,
+
+    /// Maximum age of the preferred RPC endpoint's head, in seconds, for it to be
+    /// considered healthy enough to switch back to. Only relevant when
+    /// `rpc_fallback_endpoints` is non-empty. Default: the celestia-client built-in value.
+    #[serde(default)]
+    pub rpc_max_head_age_secs: Option<NonZero<u64>>,
 
     /// The address of the Celestia gRPC server, for example, http://localhost:9090
     /// If not specified in the config, will be pulled from `SOV_CELESTIA_GRPC_URL`.
@@ -141,6 +180,12 @@ impl fmt::Debug for CelestiaConfig {
                 "rpc_auth_token",
                 &self.rpc_auth_token.as_ref().map(|_| "REDACTED"),
             )
+            .field("rpc_fallback_endpoints", &self.rpc_fallback_endpoints)
+            .field(
+                "rpc_health_check_interval_secs",
+                &self.rpc_health_check_interval_secs,
+            )
+            .field("rpc_max_head_age_secs", &self.rpc_max_head_age_secs)
             .field("grpc_url", &self.grpc_url)
             .field(
                 "grpc_auth_token",
@@ -254,6 +299,9 @@ impl CelestiaConfig {
         Self {
             rpc_url,
             rpc_auth_token: None,
+            rpc_fallback_endpoints: Vec::new(),
+            rpc_health_check_interval_secs: None,
+            rpc_max_head_age_secs: None,
             grpc_url: None,
             grpc_auth_token: None,
             grpc_fallback_endpoints: Vec::new(),
@@ -304,6 +352,27 @@ impl CelestiaConfig {
 
         if let Some(rpc_auth_token) = &self.rpc_auth_token {
             builder = builder.rpc_auth_token(rpc_auth_token);
+        }
+        // Secondary (fallback) RPC endpoints. The primary `rpc_url` above stays the
+        // most-preferred endpoint; these are appended after it, in order. The client
+        // fails over on transport errors and automatically switches back to the
+        // primary once it recovers.
+        if !self.rpc_fallback_endpoints.is_empty() {
+            let rpc_endpoints = self.rpc_fallback_endpoints.iter().map(|ep| {
+                let mut endpoint = celestia_client::RpcEndpoint::new(ep.url.clone());
+                if let Some(token) = &ep.token {
+                    endpoint = endpoint.auth_token(token);
+                }
+                endpoint
+            });
+            builder = builder.rpc_endpoints(rpc_endpoints);
+        }
+        if let Some(interval) = self.rpc_health_check_interval_secs {
+            builder =
+                builder.rpc_health_check_interval(std::time::Duration::from_secs(interval.get()));
+        }
+        if let Some(max_head_age) = self.rpc_max_head_age_secs {
+            builder = builder.rpc_max_head_age(std::time::Duration::from_secs(max_head_age.get()));
         }
         // Submission section.
         if self.grpc_url.is_none() && !self.grpc_fallback_endpoints.is_empty() {
@@ -447,7 +516,8 @@ pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
 mod tests {
     use super::{
         default_compression_chunk_size, validate_compression_chunk_size, validate_rpc_url,
-        CelestiaConfig, CompressOnSubmit, GrpcEndpointConfig, TxPriority, VerifyOnFetchMode,
+        CelestiaConfig, CompressOnSubmit, GrpcEndpointConfig, RpcEndpointConfig, TxPriority,
+        VerifyOnFetchMode,
     };
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
@@ -636,6 +706,97 @@ mod tests {
         let json = serde_json::to_string(&config).unwrap();
         let deserialized: CelestiaConfig = serde_json::from_str(&json).unwrap();
         assert_eq!(config, deserialized);
+    }
+
+    #[test]
+    fn rpc_fallback_endpoints_default_to_empty() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let config = deserialize_config("{}").unwrap();
+        assert!(config.rpc_fallback_endpoints.is_empty());
+    }
+
+    #[test]
+    fn rpc_fallback_endpoints_with_token_deserialize() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let config = deserialize_config(
+            r#"{
+                "rpc_fallback_endpoints": [
+                    {"url": "ws://fallback1:26658", "token": "secret-token"},
+                    {"url": "ws://fallback2:26658"}
+                ]
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(config.rpc_fallback_endpoints.len(), 2);
+        assert_eq!(config.rpc_fallback_endpoints[0].url, "ws://fallback1:26658");
+        assert_eq!(
+            config.rpc_fallback_endpoints[0].token.as_deref(),
+            Some("secret-token"),
+        );
+        assert_eq!(config.rpc_fallback_endpoints[1].url, "ws://fallback2:26658");
+        assert_eq!(config.rpc_fallback_endpoints[1].token, None);
+    }
+
+    #[test]
+    fn debug_redacts_rpc_fallback_endpoint_tokens() {
+        let mut config = CelestiaConfig::minimal("ws://rpc:26658".to_string());
+        config.rpc_fallback_endpoints = vec![
+            RpcEndpointConfig {
+                url: "ws://fallback1:26658".to_string(),
+                token: Some("super-secret".to_string()),
+            },
+            RpcEndpointConfig {
+                url: "ws://fallback2:26658".to_string(),
+                token: None,
+            },
+        ];
+        let debug_output = format!("{:?}", config);
+        assert!(
+            !debug_output.contains("super-secret"),
+            "token should be redacted in debug output: {debug_output}"
+        );
+        assert!(debug_output.contains("REDACTED"));
+        assert!(debug_output.contains("ws://fallback1:26658"));
+        assert!(debug_output.contains("ws://fallback2:26658"));
+    }
+
+    #[test]
+    fn rpc_fallback_endpoints_roundtrip() {
+        let mut config = CelestiaConfig::minimal("ws://rpc:26658".to_string());
+        config.rpc_fallback_endpoints = vec![RpcEndpointConfig {
+            url: "ws://fallback1:26658".to_string(),
+            token: Some("token1".to_string()),
+        }];
+        let json = serde_json::to_string(&config).unwrap();
+        let deserialized: CelestiaConfig = serde_json::from_str(&json).unwrap();
+        assert_eq!(config, deserialized);
+    }
+
+    #[test]
+    fn rpc_failover_knobs_default_to_none_and_parse() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+
+        let defaulted = deserialize_config("{}").unwrap();
+        assert_eq!(defaulted.rpc_health_check_interval_secs, None);
+        assert_eq!(defaulted.rpc_max_head_age_secs, None);
+
+        let configured = deserialize_config(
+            r#"{"rpc_health_check_interval_secs": 1, "rpc_max_head_age_secs": 600}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            configured.rpc_health_check_interval_secs,
+            std::num::NonZero::new(1)
+        );
+        assert_eq!(
+            configured.rpc_max_head_age_secs,
+            std::num::NonZero::new(600)
+        );
     }
 
     #[test]

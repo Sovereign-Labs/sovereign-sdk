@@ -284,6 +284,9 @@ impl CelestiaDevNode {
         Ok(CelestiaConfig {
             rpc_url,
             rpc_auth_token: None,
+            rpc_fallback_endpoints: Vec::new(),
+            rpc_health_check_interval_secs: None,
+            rpc_max_head_age_secs: None,
             grpc_url: Some(grpc_url),
             grpc_auth_token: None,
             grpc_fallback_endpoints: Vec::new(),
