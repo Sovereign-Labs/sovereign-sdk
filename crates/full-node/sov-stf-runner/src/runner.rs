@@ -472,6 +472,19 @@ where
             }
         }
 
+        self.stop_runner(status_updater_handle).await
+    }
+
+    /// Signals the runner's background tasks to stop and waits for them to
+    /// finish.
+    ///
+    /// Sends the runner shutdown notification, then joins the sync-status
+    /// updater followed by all other tracked background handles (HTTP server,
+    /// finalized-block fetcher, etc.).
+    async fn stop_runner(
+        &mut self,
+        status_updater_handle: tokio::task::JoinHandle<()>,
+    ) -> anyhow::Result<()> {
         info!("Runner main loop is completed, keep shutting down...");
         self.runner_shutdown.shutdown();
         info!("Runner shutdown sent, waiting for status updater to stop...");

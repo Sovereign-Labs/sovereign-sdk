@@ -121,7 +121,6 @@ impl FullNodeBlueprint<Native> for MockSp1DemoRollup<Native> {
             axum_router,
             jsonrpsee_module: sov_ethereum::get_ethereum_rpc(eth_rpc_config, sequencer)
                 .remove_context(),
-            ..Default::default()
         })
     }
 
