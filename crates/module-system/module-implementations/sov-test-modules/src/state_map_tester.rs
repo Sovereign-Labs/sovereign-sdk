@@ -88,14 +88,14 @@ pub struct StateKey {
 
 impl std::fmt::Display for StateKey {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{}/{}", self.address, self.index)
+        write!(f, "{}:{}", self.address, self.index)
     }
 }
 impl std::str::FromStr for StateKey {
     type Err = anyhow::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         let (address, index) = s
-            .split_once("/")
+            .split_once(":")
             .ok_or(anyhow::anyhow!("Invalid state key"))?;
         Ok(StateKey {
             address: HexHash::from_str(address)?,

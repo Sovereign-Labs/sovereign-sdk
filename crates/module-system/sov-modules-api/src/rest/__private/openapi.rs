@@ -91,7 +91,7 @@ fn page_cursor_param() -> utoipa::openapi::path::Parameter {
     serde_json::from_value(json!({
         "name": "page[cursor]",
         "in": "query",
-        "description": "Cursor for the next page. Required when page=next.",
+        "description": "Cursor for the next page. Required when page=next. This value is returned as next_cursor and is the StateMap key formatted with Display; pass it back unchanged.",
         "required": false,
         "schema": {
             "type": "string",
@@ -219,6 +219,7 @@ impl<N, K, V, Codec> CustomStateItemPath
 where
     N: CompileTimeNamespace,
     K: Serialize + DeserializeOwned + FromStr + Display + Clone + Send + Sync + 'static,
+    <K as FromStr>::Err: Display,
     V: ToSchema + Serialize + Clone + Send + Sync + 'static,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -310,6 +311,7 @@ impl<N, K, V, Codec> StateItemPaths for StateItemOpenApiSpecImpl<NamespacedState
 where
     N: CompileTimeNamespace,
     K: Serialize + DeserializeOwned + FromStr + Display + Clone + Send + Sync + 'static,
+    <K as FromStr>::Err: Display,
     V: Serialize + Clone + Send + Sync + 'static,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -428,7 +430,8 @@ pub fn state_map_paths_with_response(
                                         "type": "object",
                                         "properties": {
                                             "next_cursor": {
-                                                "type": "string"
+                                                "type": "string",
+                                                "description": "Cursor for the next page. This is the StateMap key formatted with Display; pass it back unchanged as page[cursor]."
                                             },
                                             "items": {
                                                 "type": "array",
@@ -461,6 +464,7 @@ pub fn state_map_paths_with_response(
                             "name": "key",
                             "in": "path",
                             "required": true,
+                            "description": "StateMap key parsed with the key type's FromStr implementation. Generated StateMap REST APIs require the parse error type to implement Display; invalid keys return the Display-formatted parse error.",
                             "schema": {
                                 "type": "string",
                             }
