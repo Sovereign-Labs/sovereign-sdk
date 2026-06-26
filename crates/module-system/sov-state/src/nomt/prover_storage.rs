@@ -186,15 +186,15 @@ where
     ) -> Option<SlotValue> {
         match result {
             Ok(value) => value,
-            Err(err) => {
+            Err(error) => {
                 debug_assert!(
                     !matches!(
-                        err.downcast_ref::<HistoricalValueError>(),
+                        error.downcast_ref::<HistoricalValueError>(),
                         Some(HistoricalValueError::PrunedVersion { .. })
                     ),
                     "unbound reads should never observe PrunedVersion (source={source})"
                 );
-                tracing::error!(error = ?err, source = %source, "unbound read failed; returning None");
+                tracing::error!(?error, %source, "unbound read failed; returning None");
                 None
             }
         }
@@ -639,7 +639,7 @@ where
         match self.do_get_leaf::<N>(key, None, witness_ref) {
             Ok(val) => val,
             Err(e) => {
-                tracing::warn!(slot = ?self.latest_version(), key = %key, "reader observed pruned-version race");
+                tracing::warn!(slot = ?self.latest_version(), %key, "reader observed pruned-version race");
                 // Historical errors are not expected when fetching without a version
                 panic!("Database error while getting leaf: for key {key}. error: {e:?}");
             }
@@ -659,7 +659,7 @@ where
                 val
             }
             Err(e) => {
-                tracing::warn!(slot = ?self.latest_version(), key = %key, "reader observed pruned-version race");
+                tracing::warn!(slot = ?self.latest_version(), %key, "reader observed pruned-version race");
                 // Historical errors are not allowed when fetching without a version
                 panic!("Database error while getting value for key {key}. error: {e:?}");
             }
@@ -670,7 +670,7 @@ where
         match self.read_value::<Accessory>(key, None) {
             Ok(val) => val,
             Err(e) => {
-                tracing::warn!(slot = ?self.latest_version(), key = %key, "reader observed pruned-version race");
+                tracing::warn!(slot = ?self.latest_version(), %key, "reader observed pruned-version race");
                 // Historical errors are not allowed when fetching without a version
                 panic!("Database error while getting value for accessory key {key}. error: {e:?}");
             }

@@ -714,7 +714,7 @@
                   "default": false
                 },
                 "max_batch_size": {
-                  "description": "Maximum number of keys deleted per internal batch. `None` falls back to\n[`DEFAULT_MAX_PRUNING_BATCH_SIZE`]; the non-zero type rejects `0` at parse time (a\nzero batch would stop the pruner from making progress).",
+                  "description": "Maximum number of keys deleted per internal batch. `None` falls back to\n[`DEFAULT_MAX_PRUNING_BATCH_SIZE`].",
                   "type": [
                     "integer",
                     "null"
@@ -724,7 +724,7 @@
                   "minimum": 1
                 },
                 "versions_to_keep": {
-                  "description": "Number of recent versions to retain for historical querying. The non-zero type\nrejects `0` at config-parse time (keeping zero versions is meaningless).",
+                  "description": "Number of recent versions to retain for historical querying.",
                   "type": "integer",
                   "format": "uint64",
                   "minimum": 1
@@ -755,7 +755,7 @@
                   "minimum": 0
                 },
                 "max_batch_size": {
-                  "description": "Maximum number of keys deleted per batch. `None` falls back to\n[`DEFAULT_MAX_PRUNING_BATCH_SIZE`]; the non-zero type rejects `0` at parse time (a\nzero batch would stop the pruner from making progress).",
+                  "description": "Maximum number of keys deleted per batch. `None` falls back to\n[`DEFAULT_MAX_PRUNING_BATCH_SIZE`].",
                   "type": [
                     "integer",
                     "null"
@@ -765,7 +765,7 @@
                   "minimum": 1
                 },
                 "versions_to_keep": {
-                  "description": "Number of recent versions to retain for historical querying. The non-zero type\nrejects `0` at config-parse time (keeping zero versions is meaningless).",
+                  "description": "Number of recent versions to retain for historical querying.",
                   "type": "integer",
                   "format": "uint64",
                   "minimum": 1

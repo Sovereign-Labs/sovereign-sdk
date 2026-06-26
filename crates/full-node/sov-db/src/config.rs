@@ -99,12 +99,10 @@ pub enum PrunerConfig {
     /// is no live read/write traffic to compete with, instead of interfering on every
     /// finalized block as [`PrunerConfig::Periodic`] does.
     OnceAtStartup {
-        /// Number of recent versions to retain for historical querying. The non-zero type
-        /// rejects `0` at config-parse time (keeping zero versions is meaningless).
+        /// Number of recent versions to retain for historical querying.
         versions_to_keep: NonZeroU64,
         /// Maximum number of keys deleted per internal batch. `None` falls back to
-        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`]; the non-zero type rejects `0` at parse time (a
-        /// zero batch would stop the pruner from making progress).
+        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
         #[serde(default)]
         max_batch_size: Option<NonZeroUsize>,
         /// If `true`, run a full RocksDB compaction on the pruned column families after the
@@ -120,12 +118,10 @@ pub enum PrunerConfig {
     Periodic {
         /// Run the pruner roughly every `block_interval` finalized DA blocks.
         block_interval: u64,
-        /// Number of recent versions to retain for historical querying. The non-zero type
-        /// rejects `0` at config-parse time (keeping zero versions is meaningless).
+        /// Number of recent versions to retain for historical querying.
         versions_to_keep: NonZeroU64,
         /// Maximum number of keys deleted per batch. `None` falls back to
-        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`]; the non-zero type rejects `0` at parse time (a
-        /// zero batch would stop the pruner from making progress).
+        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
         #[serde(default)]
         max_batch_size: Option<NonZeroUsize>,
     },
