@@ -18,6 +18,7 @@
 use std::time::Instant;
 
 use sov_gas_tools::fit::fit_linear;
+use sov_gas_tools::report::ns_to_gas;
 use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::{StateCheckpoint, StateMap};
 use sov_state::{BorshCodec, Prefix, Storage};
@@ -95,12 +96,13 @@ fn main() {
             write_block(&mut manager, &mut kernel, next, remaining);
             next += remaining;
         }
-        let depth = f64::from(next).log2();
+        let keys = next;
+        let depth = f64::from(keys).log2();
         let pw = measure_per_write(&mut manager, &mut kernel, &mut next);
         println!(
-            "  keys={next:>9}  depth~{depth:>4.1}   per_write = {:>7.2} us   (BIAS gas = {})",
+            "  keys={keys:>9}  depth~{depth:>4.1}   per_write = {:>7.2} us   (BIAS gas = {})",
             pw / 1000.0,
-            (pw / 0.01).ceil() as u64
+            ns_to_gas(pw)
         );
         depths.push(depth);
         per_write.push(pw);
@@ -119,7 +121,7 @@ fn main() {
     );
     println!(
         "=> BIAS_STORAGE_UPDATE at depth ~{deepest_depth:.0} (production scale) = [{}, 0]  ({:.1} us/write)",
-        (deepest_pw / 0.01).ceil() as u64,
+        ns_to_gas(deepest_pw),
         deepest_pw / 1000.0,
     );
 }

@@ -55,7 +55,7 @@ pub const NS_PER_GAS: f64 = 0.01;
 
 /// Convert a native-ns cost to gas at the fixed scale, rounded up (never
 /// under-charge), floored at 1.
-fn ns_to_gas(ns: f64) -> u64 {
+pub fn ns_to_gas(ns: f64) -> u64 {
     ((ns / NS_PER_GAS).ceil() as i64).max(1) as u64
 }
 
