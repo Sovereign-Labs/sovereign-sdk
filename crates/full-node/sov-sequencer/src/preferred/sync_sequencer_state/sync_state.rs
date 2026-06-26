@@ -1255,6 +1255,11 @@ where
         let batch_from_master =
             Self::ensure_replica_batch_start_visible_slot_matches(&mut inner, batch_from_master)?;
 
+        Self::ensure_replica_batch_start_visible_slot_has_node_state(
+            &mut inner,
+            batch_from_master,
+        )?;
+
         Self::ensure_replica_batch_start_within_rebase_window(&mut inner, batch_from_master)?;
 
         inner
@@ -1390,6 +1395,38 @@ where
             %replica_expected,
             master_expected = %batch_from_master.visible_slot_number_after_increase,
             "Replica VSN diverged from master. Entering sync mode and retrying."
+        );
+
+        let sync_details = SequencerNotReadyDetails::Syncing {
+            target_da_height: inner.latest_info.sync_status.target_da_height(),
+            synced_da_height: inner.latest_info.sync_status.synced_da_height(),
+        };
+
+        inner.is_ready = Err(sync_details.clone());
+
+        Err(ReplicaError::NotReady(
+            sync_details,
+            Box::new(DbData::BatchStart(batch_from_master)),
+        ))
+    }
+
+    fn ensure_replica_batch_start_visible_slot_has_node_state(
+        inner: &mut InnerGuard<'_, S, Rt>,
+        batch_from_master: BatchToStore,
+    ) -> Result<(), ReplicaError<S>> {
+        let node_latest_slot = inner.latest_info.slot_number;
+        let batch_visible_slot = batch_from_master
+            .visible_slot_number_after_increase
+            .as_true();
+
+        if batch_visible_slot <= node_latest_slot {
+            return Ok(());
+        }
+
+        tracing::warn!(
+            %batch_visible_slot,
+            %node_latest_slot,
+            "Replica batch start would advance the visible slot past the latest node slot. Rejecting batch start until node replay catches up."
         );
 
         let sync_details = SequencerNotReadyDetails::Syncing {

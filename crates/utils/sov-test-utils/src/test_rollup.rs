@@ -931,6 +931,27 @@ where
         .await
     }
 
+    /// Checks if the sequencer is not ready specifically because it is syncing, i.e. its node has
+    /// fallen behind the DA head (see `SequencerNotReadyDetails::Syncing`).
+    pub async fn is_sequencer_syncing(&self) -> bool {
+        match self.client.client.is_ready().await {
+            Err(err) => err.to_string().contains("fell out of sync"),
+            Ok(_) => false,
+        }
+    }
+
+    /// Polls the sequencer until it reports the syncing (node-behind) not-ready reason.
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds. Fails fast if the rollup crashes (see
+    /// [`TestRollup::wait_for_condition`]).
+    pub async fn wait_for_sequencer_syncing(&self) -> anyhow::Result<()> {
+        self.wait_for_condition(
+            || async { Ok(self.is_sequencer_syncing().await) },
+            "sequencer to enter syncing",
+        )
+        .await
+    }
+
     /// Generic helper for waiting on a condition with timeout and polling.
     ///  * condition_string: inserted into "Timeout waiting for {condition_string}", format accordingly
     async fn wait_for_condition<F, Fut>(
@@ -944,6 +965,13 @@ where
     {
         let wait_loop = async {
             loop {
+                // Fail fast if the rollup crashed instead of reaching the awaited condition, so a
+                // regression surfaces as a clear crash error rather than waiting out the timeout.
+                anyhow::ensure!(
+                    !self.is_rollup_crashed(),
+                    "rollup crashed while waiting for {}",
+                    condition_string
+                );
                 match condition_check().await {
                     Ok(true) => return Ok(()),
                     Ok(false) => tokio::time::sleep(Duration::from_millis(100)).await,
