@@ -13,7 +13,6 @@ use sov_modules_api::capabilities::{
     ChainState, HasCapabilities, HasKernel, ProofProcessor, RollupHeight,
 };
 use sov_modules_api::execution_mode::ExecutionMode;
-use sov_modules_api::prelude::jsonrpsee::RpcModule;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
 use sov_modules_api::rest::ApiState;
 use sov_modules_api::{
@@ -959,29 +958,46 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
 
 impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
     /// Runs the rollup.
-    pub async fn run(mut self) -> anyhow::Result<()> {
-        self.runner
+    pub async fn run(self) -> anyhow::Result<()> {
+        let Self {
+            mut runner,
+            endpoints,
+            primary_shutdown,
+            genesis_slot_number: _,
+            secondary_shutdown_controller,
+            background_handles,
+            rpc_aggregation_config,
+        } = self;
+        let NodeEndpointsContainer {
+            inner,
+            cors_configuration,
+        } = endpoints;
+        let NodeEndpoints {
+            axum_router,
+            jsonrpsee_module,
+        } = inner;
+
+        runner
             .start_http_server(
-                std::mem::take(&mut self.endpoints.inner.axum_router),
-                std::mem::replace(
-                    &mut self.endpoints.inner.jsonrpsee_module,
-                    RpcModule::new(()),
-                ),
-                self.endpoints.cors_configuration,
-                self.rpc_aggregation_config.clone(),
+                axum_router,
+                jsonrpsee_module,
+                cors_configuration,
+                rpc_aggregation_config,
             )
             .await
             .context("Failed to start Axum Server")?;
 
-        let monitoring_task = spawn_task_monitor(
-            self.primary_shutdown.clone(),
-            std::mem::take(&mut self.background_handles),
-        );
+        let monitoring_task = spawn_task_monitor(primary_shutdown.clone(), background_handles);
 
-        self.runner.run_in_process().await?;
+        runner.run_in_process().await?;
         tracing::info!("STF Runner has completed execution");
 
-        self.stop_rollup(monitoring_task).await
+        Self::stop_rollup(
+            primary_shutdown,
+            secondary_shutdown_controller,
+            monitoring_task,
+        )
+        .await
     }
 
     /// Triggers a graceful shutdown of all rollup background tasks and waits for
@@ -992,12 +1008,13 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
     /// infrastructure), then blocks until the monitored background tasks have
     /// joined.
     async fn stop_rollup(
-        &self,
+        primary_shutdown: PrimaryShutdownController,
+        secondary_shutdown_controller: SecondaryShutdownController,
         monitoring_task: JoinHandle<anyhow::Result<()>>,
     ) -> anyhow::Result<()> {
-        self.primary_shutdown.shutdown();
+        primary_shutdown.shutdown();
 
-        self.secondary_shutdown_controller.shutdown();
+        secondary_shutdown_controller.shutdown();
 
         // blocks until background handles have shutdown
         monitoring_task.await??;
