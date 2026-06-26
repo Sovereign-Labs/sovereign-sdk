@@ -6,13 +6,16 @@ use rockbound::SchemaBatch;
 use sha2::Digest;
 use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
 use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 
 use super::{NomtChangeSet, NomtStorageManager, StateFinishedSession};
 use crate::accessory_db::AccessoryDb;
 use crate::config::{PrunerConfig, RollupDbConfig};
 use crate::historical_state::HistoricalStateReader;
+use crate::ledger_db::LedgerDb;
 use crate::schema::types::slot_key::{SlotKey, SlotValue};
+use crate::schema::types::{BatchNumber, DiscardedBlobNumber, StoredSlot};
 use crate::storage_manager::tests::arbitrary::ForkDescription;
 use crate::storage_manager::tests::data_helpers::verify_accessory_db;
 use crate::storage_manager::tests::generic_tests::{
@@ -182,10 +185,10 @@ type Sm = NomtStorageManager<MockDaSpec, H, TestNomtStorage>;
 async fn wait_for_background_pruner(storage_manager: &Sm) {
     tokio::time::timeout(std::time::Duration::from_secs(5), async {
         loop {
-            match storage_manager.pruner.as_ref() {
-                None => break,
-                Some(pruner) if pruner.is_finished() => break,
-                Some(_) => tokio::task::yield_now().await,
+            match storage_manager.pruner_in_flight_finished() {
+                // No job in flight, or the in-flight job has finished.
+                None | Some(true) => break,
+                Some(false) => tokio::task::yield_now().await,
             }
         }
     })
@@ -446,11 +449,64 @@ async fn test_historical_state_with_pruning() {
     }
 }
 
-/// `PrunerConfig::OnceAtStartup` must, when its one-time startup pass runs, synchronously prune to
-/// completion (looping its internal batches until the backlog is drained) and then never spawn a
-/// periodic pruner for the rest of the run. We build a prunable backlog with `OnceAtStartup`
-/// configured — finalization does not prune because the periodic interval is disabled — then
-/// invoke the startup prune with a tiny `max_batch_size` to force multiple internal passes.
+/// Builds a multi-version state backlog at `db_path` with pruning OFF and a CONSISTENT ledger: each
+/// block is finalized immediately and its state root is recorded in the ledger (via
+/// [`LedgerDb::put_slot`] + `materialize_latest_finalize_slot`), so the database can be reopened
+/// without tripping the storage manager's startup root-consistency check (`get_head_root_hash` must
+/// equal the live-DB root). The manager is dropped before returning, flushing everything to disk for
+/// the reopen. `keys_to_write[h]` lists the user keys written in block `h` (value == block height).
+fn build_finalized_backlog_off(db_path: &Path, keys_to_write: &[Vec<u64>]) {
+    let config = RollupDbConfig::default_in_path(db_path.to_path_buf());
+    let mut storage_manager =
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
+    for (height, keys) in keys_to_write.iter().enumerate() {
+        let height = height as u64;
+        let da_header = MockBlockHeader::from_height(height + 1);
+        let (stf_storage, ledger_reader) = storage_manager.create_state_for(&da_header).unwrap();
+
+        let values: Vec<_> = keys
+            .iter()
+            // Keys must be at least 2 bytes long.
+            .map(|key| (vec![*key as u8, 0, 0], Some(height.to_be_bytes().to_vec())))
+            .collect();
+        let (stf_changes, state_root) = stf_storage.materialize_from_key_values(&values, height);
+
+        // Record this slot (with its state root) and mark it finalized so the reopen consistency
+        // check passes.
+        let ledger_db = LedgerDb::with_reader(ledger_reader).unwrap();
+        let slot_num = SlotNumber::new(da_header.height());
+        let mut ledger_change_set = SchemaBatch::new();
+        let slot_to_store = StoredSlot {
+            hash: da_header.hash().into(),
+            state_root: state_root.to_vec().into(),
+            extra_data: vec![].into(),
+            batches: BatchNumber(0)..BatchNumber(0),
+            discarded_blobs: DiscardedBlobNumber(0)..DiscardedBlobNumber(0),
+            timestamp: da_header.time(),
+        };
+        ledger_db
+            .put_slot(&slot_to_store, &slot_num, &mut ledger_change_set)
+            .unwrap();
+        ledger_change_set.merge(
+            ledger_db
+                .materialize_latest_finalize_slot(slot_num, slot_num)
+                .unwrap(),
+        );
+
+        storage_manager
+            .save_change_set(&da_header, stf_changes, ledger_change_set)
+            .unwrap();
+        storage_manager.finalize(&da_header).unwrap();
+    }
+    // Pruning was off, so nothing was pruned and the full backlog is intact on disk.
+    assert_eq!(storage_manager.pruning_commits_count(), 0);
+}
+
+/// `PrunerConfig::OnceAtStartup` must, when the storage manager is constructed, synchronously prune
+/// the on-disk backlog to completion (looping its internal batches until drained) and then never
+/// spawn a periodic pruner for the rest of the run. We build a backlog with pruning OFF and drop the
+/// manager, then reopen the same database with `OnceAtStartup` and a tiny `max_batch_size` to force
+/// multiple internal passes — mirroring a production restart into a prune-at-startup node.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_prune_once_at_startup_runs_to_completion() {
     let temp_dir = tempfile::TempDir::new().unwrap();
@@ -476,6 +532,12 @@ async fn test_prune_once_at_startup_runs_to_completion() {
         vec![u64::MAX],
     ];
 
+    // --- Phase 1: build a multi-version backlog (pruning OFF) with a consistent ledger, then drop
+    // the manager so the backlog is flushed to disk for the reopen below. ---
+    build_finalized_backlog_off(&db_path, &keys_to_write);
+
+    // --- Phase 2: reopen with `OnceAtStartup` and a tiny batch. The constructor runs the one-time
+    // startup prune to completion (looping internal batches) before returning. ---
     let versions_to_keep = 5u64;
     let mut config = RollupDbConfig::default_in_path(db_path);
     config.pruner = PrunerConfig::OnceAtStartup {
@@ -486,34 +548,6 @@ async fn test_prune_once_at_startup_runs_to_completion() {
     };
     let mut storage_manager =
         NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
-
-    // Build a prunable backlog. `OnceAtStartup` leaves periodic pruning disabled (the finalize
-    // interval is `None`), so finalization never prunes — the backlog accumulates until the
-    // explicit startup prune below.
-    for height in 0u64..blocks {
-        let da_header = MockBlockHeader::from_height(height + 1);
-        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
-        let mut values = vec![];
-        for key in keys_to_write[height as usize].iter() {
-            let user_key = vec![*key as u8, 0, 0]; // Keys must be at least 2 bytes long.
-            values.push((user_key, Some(height.to_be_bytes().to_vec())));
-        }
-        let (stf_changes, _) = stf_storage.materialize_from_key_values(&values, height);
-        storage_manager
-            .save_change_set(&da_header, stf_changes, SchemaBatch::default())
-            .unwrap();
-        storage_manager.finalize(&da_header).unwrap();
-    }
-
-    // Finalization did not prune (periodic interval disabled), and no pruner is in flight.
-    assert_eq!(storage_manager.pruning_commits_count(), 0);
-    assert!(
-        !storage_manager.is_pruner_running(),
-        "no pruner should be in flight before the startup prune"
-    );
-
-    // Run the one-time startup prune.
-    storage_manager.prune_once_at_startup().unwrap();
 
     // The tiny batch forces multiple commit passes (proving prune-to-completion), the run is
     // synchronous (nothing left in flight), and the final pass drained the backlog.
@@ -583,12 +617,13 @@ async fn test_prune_once_at_startup_runs_to_completion() {
     );
 }
 
-/// `OnceAtStartup` with `compact_after: true` must run the post-prune compaction of every pruned
-/// column family — accessory plus the user/kernel archival historical + pruning CFs (via
-/// `DbGroup::compact_pruned_cfs` → `VersionedDB::trigger_compaction`) — without error, and reads
-/// must stay correct afterward. This guards the user/kernel compaction wiring added with the
-/// rockbound rev bump; `test_prune_once_at_startup_runs_to_completion` covers the same path with
-/// compaction off.
+/// `OnceAtStartup` with `compact_after: true` must, on construction, run the post-prune compaction
+/// of every pruned column family — accessory plus the user/kernel archival historical + pruning CFs
+/// (via `DbGroup::compact_pruned_cfs` → `VersionedDB::trigger_compaction`) — without error, and
+/// reads must stay correct afterward. We build a backlog with pruning OFF, drop the manager, then
+/// reopen with `compact_after: true` so the constructor prunes and compacts. This guards the
+/// user/kernel compaction wiring added with the rockbound rev bump;
+/// `test_prune_once_at_startup_runs_to_completion` covers the same path with compaction off.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_prune_once_at_startup_compacts_pruned_cfs() {
     let temp_dir = tempfile::TempDir::new().unwrap();
@@ -607,6 +642,13 @@ async fn test_prune_once_at_startup_compacts_pruned_cfs() {
         vec![6],
     ];
 
+    // --- Phase 1: build the backlog (pruning OFF) with a consistent ledger, then drop so it is
+    // flushed to disk for the reopen below. ---
+    build_finalized_backlog_off(&db_path, &keys_to_write);
+
+    // --- Phase 2: reopen with `compact_after: true`. The constructor prunes to completion AND
+    // compacts the pruned column families (accessory + user/kernel `trigger_compaction`); this must
+    // not panic or error. ---
     let versions_to_keep = 2u64;
     let mut config = RollupDbConfig::default_in_path(db_path);
     config.pruner = PrunerConfig::OnceAtStartup {
@@ -616,25 +658,6 @@ async fn test_prune_once_at_startup_compacts_pruned_cfs() {
     };
     let mut storage_manager =
         NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
-
-    for height in 0u64..blocks {
-        let da_header = MockBlockHeader::from_height(height + 1);
-        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
-        let mut values = vec![];
-        for key in keys_to_write[height as usize].iter() {
-            let user_key = vec![*key as u8, 0, 0]; // Keys must be at least 2 bytes long.
-            values.push((user_key, Some(height.to_be_bytes().to_vec())));
-        }
-        let (stf_changes, _) = stf_storage.materialize_from_key_values(&values, height);
-        storage_manager
-            .save_change_set(&da_header, stf_changes, SchemaBatch::default())
-            .unwrap();
-        storage_manager.finalize(&da_header).unwrap();
-    }
-
-    // Prune to completion AND compact the pruned column families. The compaction step (accessory +
-    // user/kernel `trigger_compaction`) must not panic or error.
-    storage_manager.prune_once_at_startup().unwrap();
 
     // Reads remain correct after compaction: live values survive, and the oldest version is pruned.
     let (stf_storage, _ledger_storage) = storage_manager

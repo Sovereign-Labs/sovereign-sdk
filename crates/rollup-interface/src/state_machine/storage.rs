@@ -44,15 +44,4 @@ pub trait HierarchicalStorageManager<Da: DaSpec>: Send + Sync {
     /// Finalizes state on given block header.
     /// Usually means that this state won't be altered anymore and can be persisted.
     fn finalize(&mut self, block_header: &Da::BlockHeader) -> anyhow::Result<()>;
-
-    /// Optionally runs a one-time pruning pass at startup, before block processing begins.
-    ///
-    /// The default implementation is a no-op. Storage managers that support a
-    /// "prune once at startup" policy override this to synchronously delete old state
-    /// versions while there is no live read/write traffic to compete with. Callers should
-    /// invoke it exactly once, right after constructing the storage manager and before the
-    /// first state access.
-    fn prune_once_at_startup(&mut self) -> anyhow::Result<()> {
-        Ok(())
-    }
 }

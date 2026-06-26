@@ -393,7 +393,12 @@ where
             std::thread::spawn(move || -> anyhow::Result<PrunerJobOutput> {
                 let keep = versions_to_keep as u64;
                 let user_output = user_db.collect_pruning_batch(keep, Some(max_batch_size))?;
-                let remaining = max_batch_size.saturating_sub(user_output.keys_to_prune);
+                // rockbound caps the batch at `max_batch_size`, so `keys_to_prune <= max_batch_size`
+                // always holds. `checked_sub` makes that invariant explicit and fails loudly if it
+                // is ever violated, instead of silently clamping to 0 and skipping kernel pruning.
+                let remaining = max_batch_size
+                    .checked_sub(user_output.keys_to_prune)
+                    .expect("pruner returned more keys than the batch-size limit");
 
                 let mut pruning_batch = user_output.batch;
                 let mut hit_size_limit = user_output.hit_size_limit;
