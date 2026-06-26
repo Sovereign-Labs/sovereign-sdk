@@ -985,13 +985,35 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
         runner.run_in_process().await?;
         tracing::info!("STF Runner has completed execution");
 
-        self.primary_shutdown.shutdown();
+        Self::stop_rollup(
+            self.primary_shutdown,
+            self.secondary_shutdown_controller,
+            monitoring_task,
+            self.endpoints.inner.background_handles,
+        )
+        .await
+    }
 
-        self.secondary_shutdown_controller.shutdown();
+    /// Triggers a graceful shutdown of all rollup background tasks and waits for
+    /// them to finish.
+    ///
+    /// Signals the primary tier (main loop and node-level background tasks) and
+    /// then the secondary tier (DA service, metrics, and other shared
+    /// infrastructure), then blocks until the monitored background tasks and the
+    /// HTTP/RPC endpoint tasks have joined.
+    async fn stop_rollup(
+        primary_shutdown: PrimaryShutdownController,
+        secondary_shutdown_controller: SecondaryShutdownController,
+        monitoring_task: JoinHandle<anyhow::Result<()>>,
+        endpoint_background_handles: Vec<JoinHandle<anyhow::Result<()>>>,
+    ) -> anyhow::Result<()> {
+        primary_shutdown.shutdown();
+
+        secondary_shutdown_controller.shutdown();
 
         // blocks until background handles have shutdown
         monitoring_task.await??;
-        for handle in self.endpoints.inner.background_handles {
+        for handle in endpoint_background_handles {
             match handle.await {
                 Err(e) => {
                     tracing::error!(error = %e, "Endpoint background task panicked.");
