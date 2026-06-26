@@ -133,46 +133,81 @@ pub fn report_size_sweep(
     Ok(())
 }
 
-/// Read a finished sweep whose x-axis is an operation *count* (not bytes), fit
-/// `ns = fixed + per_op * count`, and suggest the per-op constant from the
-/// **slope**. Use this when a fixed per-batch overhead (e.g. one block commit's
-/// fsync) must be excluded from the per-op charge: it is the fit intercept and
-/// drops out of the slope. The intercept is printed for information only.
-pub fn report_marginal_sweep(
-    group: &str,
-    counts: &[u64],
-    per_op_const: &str,
-) -> anyhow::Result<()> {
-    println!("\n[fit] {group} — reading criterion estimates (marginal per-op)");
-    let mut counts_f = Vec::with_capacity(counts.len());
-    let mut ns_per_batch = Vec::with_capacity(counts.len());
-    for &count in counts {
-        let ns = read_mean_ns(group, count)?;
-        println!("  count={count:<7} mean ns/batch = {ns:.2}");
-        counts_f.push(count as f64);
-        ns_per_batch.push(ns);
+/// Read a finished single-parameter sweep, fit `ns = fixed + slope * x`, and
+/// suggest the constant from the **slope**. The fixed intercept (e.g. a
+/// once-per-commit fsync) is discarded — use this when only the marginal,
+/// per-unit cost should be charged. Benchmark ids must be the bare `x` values.
+pub fn report_slope_sweep(group: &str, xs: &[u64], slope_const: &str) -> anyhow::Result<()> {
+    println!("\n[fit] {group} — slope over the swept parameter");
+    let xs_f: Vec<f64> = xs.iter().map(|&x| x as f64).collect();
+    let mut ys = Vec::with_capacity(xs.len());
+    for &x in xs {
+        let ns = read_mean_ns(group, x)?;
+        println!("  x={x:<7} mean ns = {ns:.2}");
+        ys.push(ns);
     }
-    let fit = fit_linear(&counts_f, &ns_per_batch)?;
-
+    let fit = fit_linear(&xs_f, &ys)?;
     if fit.per_byte < 0.0 {
         eprintln!(
-            "warn: negative slope ({:.4} ns/op) — no marginal signal; the suggested \
-             constant floors to 1 gas and is NOT meaningful. Widen the count sweep / \
-             add samples.",
+            "warn: negative slope ({:.4} ns) — no marginal signal; the suggested constant \
+             floors to 1 gas and is NOT meaningful.",
             fit.per_byte
         );
     }
 
-    println!("\n=== fit: ns/batch = fixed + per_op * count   (1 gas = 0.01 ns) ===");
-    println!("  per_op (slope)    = {:.4} ns/op    (used for the constant)", fit.per_byte);
+    println!("\n=== fit: ns = fixed + slope * x   (1 gas = 0.01 ns) ===");
     println!(
-        "  fixed (intercept) = {:.2} ns/batch  (per-commit overhead; NOT charged)",
-        fit.bias
+        "  slope             = {:.4} ns   (used for the constant)",
+        fit.per_byte
     );
+    println!("  fixed (intercept) = {:.3e} ns  (discarded)", fit.bias);
     println!("  R²                = {:.6}", fit.r_squared);
-    println!("  max residual      = {:.2} ns", fit.max_residual);
 
     println!("\n=== suggested constants.toml value ===");
-    println!("  {per_op_const} = [{}, 0]", ns_to_gas(fit.per_byte));
+    println!("  {slope_const} = [{}, 0]", ns_to_gas(fit.per_byte));
+    Ok(())
+}
+
+/// Read a finished value-size sweep done at a FIXED write count `count_n`, fit
+/// `commit_ns = fixed + (count_n * per_byte) * size`, and suggest the per-byte
+/// constant. The fitted slope is `count_n * per_byte`, so we divide by `count_n`;
+/// the once-per-commit fixed cost is the discarded intercept.
+///
+/// `already_priced_ns_per_byte` (the value hashing charged separately via the
+/// hash constants — the write hashes the value to build its trie leaf) is netted
+/// out, so only the residual storage I/O belongs in the per-byte constant.
+pub fn report_perbyte_sweep(
+    group: &str,
+    sizes: &[u64],
+    count_n: u64,
+    already_priced_ns_per_byte: f64,
+    per_byte_const: &str,
+) -> anyhow::Result<()> {
+    println!("\n[fit] {group} — per-byte write cost at {count_n} writes/commit");
+    let sizes_f: Vec<f64> = sizes.iter().map(|&s| s as f64).collect();
+    let mut commit_ns = Vec::with_capacity(sizes.len());
+    for &size in sizes {
+        let ns = read_mean_ns(group, size)?;
+        println!("  size={size:<7} commit ns = {ns:.0}");
+        commit_ns.push(ns);
+    }
+    let fit = fit_linear(&sizes_f, &commit_ns)?;
+    let raw_per_byte = fit.per_byte / count_n as f64;
+    let net_per_byte = raw_per_byte - already_priced_ns_per_byte;
+
+    println!("\n=== fit: commit ns = fixed + (count * per_byte) * size   (1 gas = 0.01 ns) ===");
+    println!("  raw per_byte       = {:.4} ns/byte", raw_per_byte);
+    println!(
+        "  - hash per_byte    = {:.4} ns/byte  (charged via PER_BYTE_HASH_UPDATE)",
+        already_priced_ns_per_byte
+    );
+    println!(
+        "  = storage per_byte = {:.4} ns/byte  (used for the constant)",
+        net_per_byte
+    );
+    println!("  R²                 = {:.6}", fit.r_squared);
+
+    println!("\n=== suggested constants.toml value ===");
+    println!("  {per_byte_const} = [{}, 0]", ns_to_gas(net_per_byte));
     Ok(())
 }

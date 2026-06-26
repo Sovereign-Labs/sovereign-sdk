@@ -33,3 +33,7 @@ harness = false
 [[bench]]
 name = "storage"
 harness = false
+
+[[bench]]
+name = "storage_depth"
+harness = false
