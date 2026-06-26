@@ -1,3 +1,4 @@
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::Path;
 
 use nomt::trie::KeyPath;
@@ -326,7 +327,7 @@ async fn test_historical_state_with_pruning() {
     let pruning_frequency = 1;
     config.pruner = PrunerConfig::Periodic {
         block_interval: pruning_frequency,
-        versions_to_keep: versions_to_keep as u64,
+        versions_to_keep: NonZeroU64::new(versions_to_keep as u64).unwrap(),
         max_batch_size: None,
     };
     let mut storage_manager =
@@ -478,9 +479,9 @@ async fn test_prune_once_at_startup_runs_to_completion() {
     let versions_to_keep = 5u64;
     let mut config = RollupDbConfig::default_in_path(db_path);
     config.pruner = PrunerConfig::OnceAtStartup {
-        versions_to_keep,
+        versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
         // Tiny batch: the backlog far exceeds it, forcing several internal commit passes.
-        max_batch_size: Some(8),
+        max_batch_size: Some(NonZeroUsize::new(8).unwrap()),
         compact_after: false,
     };
     let mut storage_manager =
@@ -609,7 +610,7 @@ async fn test_prune_once_at_startup_compacts_pruned_cfs() {
     let versions_to_keep = 2u64;
     let mut config = RollupDbConfig::default_in_path(db_path);
     config.pruner = PrunerConfig::OnceAtStartup {
-        versions_to_keep,
+        versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
         max_batch_size: None,
         compact_after: true,
     };
@@ -678,7 +679,7 @@ async fn test_hot_key_pruning_keeps_only_recent_versions() {
     let versions_to_keep = 5usize;
     config.pruner = PrunerConfig::Periodic {
         block_interval: 1,
-        versions_to_keep: versions_to_keep as u64,
+        versions_to_keep: NonZeroU64::new(versions_to_keep as u64).unwrap(),
         max_batch_size: None,
     };
     let mut storage_manager =
@@ -792,8 +793,8 @@ async fn test_pruner_backpressure_respawns_until_drained() {
     // Tiny batch: a single block of overwrites already exceeds this, forcing multiple passes.
     config.pruner = PrunerConfig::Periodic {
         block_interval: 1,
-        versions_to_keep: versions_to_keep as u64,
-        max_batch_size: Some(8),
+        versions_to_keep: NonZeroU64::new(versions_to_keep as u64).unwrap(),
+        max_batch_size: Some(NonZeroUsize::new(8).unwrap()),
     };
     let mut storage_manager =
         NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();

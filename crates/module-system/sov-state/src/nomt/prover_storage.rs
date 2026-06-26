@@ -994,6 +994,7 @@ impl sov_metrics::Metric for NomtProverComputeStateResult {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
     use std::time::Duration;
 
     use sha2::Sha256;
@@ -1626,7 +1627,7 @@ mod tests {
         let mut config = RollupDbConfig::default_in_path(tmpdir.path().to_path_buf());
         config.pruner = PrunerConfig::Periodic {
             block_interval: 1,
-            versions_to_keep: 2,
+            versions_to_keep: NonZeroU64::new(2).unwrap(),
             max_batch_size: None,
         };
         let mut storage_manager = TestStorageManager::new(config, false).unwrap();

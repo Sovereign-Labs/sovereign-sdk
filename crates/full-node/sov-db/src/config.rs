@@ -2,6 +2,7 @@ use nomt::Options;
 pub use rockbound::VersionedColumnFamilyKind;
 use rockbound::{rocksdb, CfDescriptorBuilder};
 use schemars::JsonSchema;
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::sync::Arc;
 
 use crate::rocks_db_config;
@@ -88,7 +89,7 @@ impl std::fmt::Debug for RocksdbCfCustomization {
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Default, serde::Serialize, serde::Deserialize, JsonSchema,
 )]
-#[serde(rename_all = "snake_case")]
+#[serde(rename_all = "snake_case", deny_unknown_fields)]
 pub enum PrunerConfig {
     /// Never prune; the node retains full history.
     #[default]
@@ -98,12 +99,14 @@ pub enum PrunerConfig {
     /// is no live read/write traffic to compete with, instead of interfering on every
     /// finalized block as [`PrunerConfig::Periodic`] does.
     OnceAtStartup {
-        /// Number of recent versions to retain for historical querying (must be >= 1).
-        versions_to_keep: u64,
+        /// Number of recent versions to retain for historical querying. The non-zero type
+        /// rejects `0` at config-parse time (keeping zero versions is meaningless).
+        versions_to_keep: NonZeroU64,
         /// Maximum number of keys deleted per internal batch. `None` falls back to
-        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
+        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`]; the non-zero type rejects `0` at parse time (a
+        /// zero batch would stop the pruner from making progress).
         #[serde(default)]
-        max_batch_size: Option<usize>,
+        max_batch_size: Option<NonZeroUsize>,
         /// If `true`, run a full RocksDB compaction on the pruned column families after the
         /// startup prune completes, dropping the resulting tombstones and reclaiming disk
         /// space. This is heavy (it rewrites the affected column families) and only sensible
@@ -117,17 +120,20 @@ pub enum PrunerConfig {
     Periodic {
         /// Run the pruner roughly every `block_interval` finalized DA blocks.
         block_interval: u64,
-        /// Number of recent versions to retain for historical querying (must be >= 1).
-        versions_to_keep: u64,
+        /// Number of recent versions to retain for historical querying. The non-zero type
+        /// rejects `0` at config-parse time (keeping zero versions is meaningless).
+        versions_to_keep: NonZeroU64,
         /// Maximum number of keys deleted per batch. `None` falls back to
-        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
+        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`]; the non-zero type rejects `0` at parse time (a
+        /// zero batch would stop the pruner from making progress).
         #[serde(default)]
-        max_batch_size: Option<usize>,
+        max_batch_size: Option<NonZeroUsize>,
     },
 }
 
 /// Configuration for Sovereign Rollup node database.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
+#[serde(deny_unknown_fields)]
 pub struct RollupDbConfig {
     /// Path where all databases are stored
     pub path: std::path::PathBuf,
@@ -182,22 +188,12 @@ pub struct RollupDbConfig {
 
     /// State-version pruning policy. Defaults to [`PrunerConfig::Off`] (full history
     /// retained) when omitted from config.
+    ///
+    /// The struct uses `#[serde(deny_unknown_fields)]`, so the deprecated flat
+    /// `pruner_block_interval` / `pruner_versions_to_keep` / `pruner_max_batch_size` keys (and any
+    /// other unknown key) are rejected at parse time rather than silently ignored.
     #[serde(default)]
     pub pruner: PrunerConfig,
-
-    // Deprecated flat pruning keys. Retained ONLY so that a config still carrying the old form
-    // is rejected loudly by [`RollupDbConfig::validate`] instead of being silently ignored
-    // (which would leave pruning disabled). Superseded by `pruner`; never serialized or exposed
-    // in the JSON schema.
-    #[serde(rename = "pruner_block_interval", default, skip_serializing)]
-    #[schemars(skip)]
-    legacy_pruner_block_interval: Option<u64>,
-    #[serde(rename = "pruner_versions_to_keep", default, skip_serializing)]
-    #[schemars(skip)]
-    legacy_pruner_versions_to_keep: Option<u64>,
-    #[serde(rename = "pruner_max_batch_size", default, skip_serializing)]
-    #[schemars(skip)]
-    legacy_pruner_max_batch_size: Option<usize>,
 }
 
 impl RollupDbConfig {
@@ -225,9 +221,6 @@ impl RollupDbConfig {
             kernel_leaf_cache_size: Some(16),
             kernel_page_cache_upper_levels: None,
             pruner: PrunerConfig::Off,
-            legacy_pruner_block_interval: None,
-            legacy_pruner_versions_to_keep: None,
-            legacy_pruner_max_batch_size: None,
         }
     }
 
@@ -305,60 +298,10 @@ impl RollupDbConfig {
         self.pruner
     }
 
-    /// Validates config invariants that serde alone cannot express. Should be called once after
-    /// the config is loaded and before it is used to open the database
-    /// ([`crate::storage_manager::NomtStorageManager::new`] does this).
-    ///
-    /// Rejects:
-    /// - the deprecated flat `pruner_block_interval` / `pruner_versions_to_keep` /
-    ///   `pruner_max_batch_size` keys — these were replaced by the `[storage.pruner]` enum and
-    ///   are no longer applied, so an upgraded node fails loudly here instead of silently running
-    ///   with pruning disabled;
-    /// - `versions_to_keep == 0` or `max_batch_size == Some(0)`, either of which would stop the
-    ///   pruner from ever making progress.
-    pub fn validate(&self) -> anyhow::Result<()> {
-        if self.legacy_pruner_block_interval.is_some()
-            || self.legacy_pruner_versions_to_keep.is_some()
-            || self.legacy_pruner_max_batch_size.is_some()
-        {
-            anyhow::bail!(
-                "The flat `storage.pruner_block_interval` / `pruner_versions_to_keep` / \
-                 `pruner_max_batch_size` config keys have been replaced by the `[storage.pruner]` \
-                 enum and are no longer applied. Migrate your config: omit the section (or set \
-                 `pruner = \"off\"`) to disable pruning, or use `[storage.pruner.periodic]` / \
-                 `[storage.pruner.once_at_startup]`."
-            );
-        }
-
-        let (versions_to_keep, max_batch_size) = match self.pruner {
-            PrunerConfig::Off => return Ok(()),
-            PrunerConfig::OnceAtStartup {
-                versions_to_keep,
-                max_batch_size,
-                ..
-            }
-            | PrunerConfig::Periodic {
-                versions_to_keep,
-                max_batch_size,
-                ..
-            } => (versions_to_keep, max_batch_size),
-        };
-        anyhow::ensure!(
-            versions_to_keep >= 1,
-            "`storage.pruner` `versions_to_keep` must be >= 1, got {versions_to_keep}",
-        );
-        anyhow::ensure!(
-            max_batch_size != Some(0),
-            "`storage.pruner` `max_batch_size` must be >= 1 (got 0): a zero batch size would stop \
-             the pruner from ever making progress. Omit it to use the default.",
-        );
-        Ok(())
-    }
-
     /// Resolves an optional per-batch key cap to a concrete value, falling back to
-    /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
-    pub(crate) fn resolve_max_batch_size(max_batch_size: Option<usize>) -> usize {
-        max_batch_size.unwrap_or(DEFAULT_MAX_PRUNING_BATCH_SIZE)
+    /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`]. The cap is guaranteed non-zero by the type.
+    pub(crate) fn resolve_max_batch_size(max_batch_size: Option<NonZeroUsize>) -> usize {
+        max_batch_size.map_or(DEFAULT_MAX_PRUNING_BATCH_SIZE, NonZeroUsize::get)
     }
 }
 

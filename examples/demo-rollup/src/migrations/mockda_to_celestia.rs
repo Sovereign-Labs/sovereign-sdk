@@ -1,5 +1,6 @@
 use std::cmp::min;
 use std::collections::BTreeMap;
+use std::num::NonZeroU64;
 use std::path::PathBuf;
 use std::str::FromStr;
 
@@ -1015,7 +1016,7 @@ fn apply_storage_defaults_and_overrides(
         // that didn't configure pruning still prune (an absent policy leaves pruning disabled).
         config.pruner = PrunerConfig::Periodic {
             block_interval: 100,
-            versions_to_keep: 20,
+            versions_to_keep: NonZeroU64::new(20).expect("20 is non-zero"),
             max_batch_size: None,
         };
         notes.push(

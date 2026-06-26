@@ -187,14 +187,10 @@ where
         witness_generation: bool,
     ) -> anyhow::Result<Self> {
         let config = custom_config.config();
-        // Reject legacy/invalid pruning config up front (e.g. the old flat `pruner_*` keys, or a
-        // zero `max_batch_size` / `versions_to_keep`).
-        config.validate()?;
         // Derive the periodic-pruning fields (used by `finalize`) and the optional startup-prune
         // marker from the pruning policy. `Off` and `OnceAtStartup` both leave
         // `pruner_block_interval = None`, so `finalize` never spawns a periodic pruner for them;
         // `OnceAtStartup` instead carries `startup_prune`, consumed once by `prune_once_at_startup`.
-        // `versions_to_keep >= 1` is guaranteed by `validate` above.
         let (pruner_block_interval, pruner_versions_to_keep, pruner_max_batch_size, startup_prune) =
             match config.pruner() {
                 PrunerConfig::Off => (None, 1usize, DEFAULT_MAX_PRUNING_BATCH_SIZE, None),
@@ -204,7 +200,7 @@ where
                     max_batch_size,
                 } => (
                     Some(block_interval),
-                    versions_to_keep as usize,
+                    versions_to_keep.get() as usize,
                     RollupDbConfig::resolve_max_batch_size(max_batch_size),
                     None,
                 ),
@@ -214,7 +210,7 @@ where
                     compact_after,
                 } => (
                     None,
-                    versions_to_keep as usize,
+                    versions_to_keep.get() as usize,
                     RollupDbConfig::resolve_max_batch_size(max_batch_size),
                     Some(StartupPrune { compact_after }),
                 ),

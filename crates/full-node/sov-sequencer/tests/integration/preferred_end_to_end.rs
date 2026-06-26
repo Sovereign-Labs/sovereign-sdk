@@ -48,6 +48,7 @@ use sov_test_utils::{
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::collections::HashMap;
 use std::future::Future;
+use std::num::NonZeroU64;
 use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -417,7 +418,7 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
         // Prune every finalized block, retaining only the most recent few versions.
         PrunerConfig::Periodic {
             block_interval: 1,
-            versions_to_keep,
+            versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
             max_batch_size: None,
         },
     )

@@ -425,6 +425,7 @@ mod tests {
     #[test]
     fn pruner_config_round_trips_through_toml() {
         use sov_db::config::{PrunerConfig, RollupDbConfig};
+        use std::num::{NonZeroU64, NonZeroUsize};
 
         // Omitted `pruner` defaults to `Off`.
         let omitted: RollupDbConfig = toml::from_str(r#"path = "/tmp""#).unwrap();
@@ -454,7 +455,7 @@ mod tests {
             periodic.pruner,
             PrunerConfig::Periodic {
                 block_interval: 100,
-                versions_to_keep: 20,
+                versions_to_keep: NonZeroU64::new(20).unwrap(),
                 max_batch_size: None,
             }
         );
@@ -473,45 +474,75 @@ mod tests {
         assert_eq!(
             once.pruner,
             PrunerConfig::OnceAtStartup {
-                versions_to_keep: 500,
-                max_batch_size: Some(4096),
+                versions_to_keep: NonZeroU64::new(500).unwrap(),
+                max_batch_size: Some(NonZeroUsize::new(4096).unwrap()),
                 compact_after: true,
             }
         );
     }
 
-    /// A config still carrying the deprecated flat `pruner_*` keys must be rejected by
-    /// `validate()` (loud failure) rather than silently parsed with pruning disabled.
+    /// A config still carrying the deprecated flat `pruner_*` keys must fail to deserialize
+    /// (`RollupDbConfig` uses `deny_unknown_fields`) rather than being silently parsed with
+    /// pruning disabled.
     #[test]
-    fn pruner_validate_rejects_legacy_flat_keys() {
+    fn legacy_flat_pruner_keys_are_rejected() {
         use sov_db::config::RollupDbConfig;
 
-        // The legacy keys still deserialize (so the error is actionable), but `validate` rejects them.
-        let legacy: RollupDbConfig = toml::from_str(
+        let result: Result<RollupDbConfig, _> = toml::from_str(
             r#"
             path = "/tmp"
             pruner_block_interval = 100
             pruner_versions_to_keep = 20
             "#,
-        )
-        .unwrap();
-        let err = legacy
-            .validate()
-            .expect_err("legacy flat pruner keys must be rejected")
-            .to_string();
+        );
         assert!(
-            err.contains("[storage.pruner]"),
-            "error should direct the operator to the new config form, got: {err}",
+            result.is_err(),
+            "legacy flat pruner_* keys must be rejected by deny_unknown_fields, got {result:?}",
         );
     }
 
-    /// `validate()` rejects a zero `max_batch_size`, which would stop the pruner from ever making
-    /// progress.
+    /// An unknown key inside a `[pruner.*]` subtable must also be rejected (`PrunerConfig` uses
+    /// `deny_unknown_fields`), catching typos like `block_intervl`.
     #[test]
-    fn pruner_validate_rejects_zero_max_batch_size() {
+    fn unknown_pruner_subkey_is_rejected() {
         use sov_db::config::RollupDbConfig;
 
-        let config: RollupDbConfig = toml::from_str(
+        let result: Result<RollupDbConfig, _> = toml::from_str(
+            r#"
+            path = "/tmp"
+            [pruner.periodic]
+            block_interval = 100
+            versions_to_keep = 20
+            bogus_key = 1
+            "#,
+        );
+        assert!(
+            result.is_err(),
+            "unknown pruner subkey must be rejected by deny_unknown_fields, got {result:?}",
+        );
+    }
+
+    /// `versions_to_keep = 0` and `max_batch_size = 0` are rejected at parse time by the `NonZero`
+    /// field types (zero versions is meaningless; a zero batch would stop the pruner from making
+    /// progress).
+    #[test]
+    fn zero_pruner_values_are_rejected() {
+        use sov_db::config::RollupDbConfig;
+
+        let zero_versions: Result<RollupDbConfig, _> = toml::from_str(
+            r#"
+            path = "/tmp"
+            [pruner.periodic]
+            block_interval = 100
+            versions_to_keep = 0
+            "#,
+        );
+        assert!(
+            zero_versions.is_err(),
+            "versions_to_keep = 0 must be rejected by NonZeroU64, got {zero_versions:?}",
+        );
+
+        let zero_batch: Result<RollupDbConfig, _> = toml::from_str(
             r#"
             path = "/tmp"
             [pruner.periodic]
@@ -519,32 +550,10 @@ mod tests {
             versions_to_keep = 20
             max_batch_size = 0
             "#,
-        )
-        .unwrap();
-        let err = config
-            .validate()
-            .expect_err("zero max_batch_size must be rejected")
-            .to_string();
-        assert!(
-            err.contains("max_batch_size"),
-            "error should name the offending knob, got: {err}",
         );
-    }
-
-    /// Well-formed pruner configs (including an explicit `off`) pass `validate()`.
-    #[test]
-    fn pruner_validate_accepts_well_formed_configs() {
-        use sov_db::config::RollupDbConfig;
-
-        for cfg in [
-            r#"path = "/tmp""#,
-            "path = \"/tmp\"\npruner = \"off\"",
-            "path = \"/tmp\"\n[pruner.once_at_startup]\nversions_to_keep = 20\ncompact_after = true",
-        ] {
-            let config: RollupDbConfig = toml::from_str(cfg).unwrap();
-            config
-                .validate()
-                .unwrap_or_else(|e| panic!("expected valid config to pass, got {e} for:\n{cfg}"));
-        }
+        assert!(
+            zero_batch.is_err(),
+            "max_batch_size = 0 must be rejected by NonZeroUsize, got {zero_batch:?}",
+        );
     }
 }
