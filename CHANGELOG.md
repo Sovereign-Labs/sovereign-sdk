@@ -1,3 +1,7 @@
+# 2026-06-26
+- #3020 Rollup shutdown: moves HTTP/RPC server task ownership into `StateTransitionRunner`, so runner-owned background tasks are stopped and joined as part of runner shutdown.
+  * **Breaking Change** `sov_modules_api::NodeEndpoints` no longer has a `background_handles` field. Endpoint constructors should return only `axum_router` and `jsonrpsee_module`; long-lived background tasks need to be owned by the rollup, runner, sequencer, or service lifecycle instead.
+
 # 2026-06-25
 - #3017 Shutdown utilities: extracts the shutdown controllers and graceful-shutdown helpers into a new published `sov-shutdown` crate.
   * **Breaking Change** `PrimaryShutdownController`, `SecondaryShutdownController`, `FutureOrShutdownOutput`, `future_or_shutdown`, and the `consume_until_shutdown!` macro move from `sov_rollup_interface::node` to the `sov_shutdown` crate. Update imports from `sov_rollup_interface::node::…` (or `sov_rollup_interface::consume_until_shutdown!`) to `sov_shutdown::…`.
