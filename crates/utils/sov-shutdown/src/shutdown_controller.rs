@@ -84,8 +84,9 @@ impl PrimaryShutdownController {
             .shutdown_with_location(std::panic::Location::caller());
     }
 
-    /// Sends a primary shutdown notification, logging the call site that
-    /// triggered it.
+    /// Sends a primary shutdown notification, logging the supplied `location`.
+    /// Use this when the triggering call site was captured earlier (e.g. across
+    /// an async boundary); otherwise prefer [`Self::shutdown`].
     pub fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
         self.inner.shutdown_with_location(location);
     }
@@ -137,8 +138,9 @@ impl SecondaryShutdownController {
             .shutdown_with_location(std::panic::Location::caller());
     }
 
-    /// Sends a secondary shutdown notification, logging the call site that
-    /// triggered it.
+    /// Sends a secondary shutdown notification, logging the supplied `location`.
+    /// Use this when the triggering call site was captured earlier (e.g. across
+    /// an async boundary); otherwise prefer [`Self::shutdown`].
     pub fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
         self.inner.shutdown_with_location(location);
     }
@@ -186,8 +188,9 @@ impl RunnerShutdownController {
             .shutdown_with_location(std::panic::Location::caller());
     }
 
-    /// Sends a runner shutdown notification, logging the call site that
-    /// triggered it.
+    /// Sends a runner shutdown notification, logging the supplied `location`.
+    /// Use this when the triggering call site was captured earlier (e.g. across
+    /// an async boundary); otherwise prefer [`Self::shutdown`].
     pub fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
         self.inner.shutdown_with_location(location);
     }
