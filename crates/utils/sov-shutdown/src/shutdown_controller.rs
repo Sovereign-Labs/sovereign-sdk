@@ -76,9 +76,12 @@ impl PrimaryShutdownController {
         future_or_shutdown(inner, &self.inner.receiver).await
     }
 
-    /// Sends a primary shutdown notification.
+    /// Sends a primary shutdown notification, logging the call site that
+    /// triggered it.
+    #[track_caller]
     pub fn shutdown(&self) {
-        self.inner.shutdown();
+        self.inner
+            .shutdown_with_location(std::panic::Location::caller());
     }
 
     /// Sends a primary shutdown notification, logging the call site that
@@ -126,9 +129,12 @@ impl SecondaryShutdownController {
         future_or_shutdown(inner, &self.inner.receiver).await
     }
 
-    /// Sends a secondary shutdown notification.
+    /// Sends a secondary shutdown notification, logging the call site that
+    /// triggered it.
+    #[track_caller]
     pub fn shutdown(&self) {
-        self.inner.shutdown();
+        self.inner
+            .shutdown_with_location(std::panic::Location::caller());
     }
 
     /// Sends a secondary shutdown notification, logging the call site that
@@ -172,9 +178,12 @@ impl RunnerShutdownController {
         future_or_shutdown(inner, &self.inner.receiver).await
     }
 
-    /// Sends a runner shutdown notification.
+    /// Sends a runner shutdown notification, logging the call site that
+    /// triggered it.
+    #[track_caller]
     pub fn shutdown(&self) {
-        self.inner.shutdown();
+        self.inner
+            .shutdown_with_location(std::panic::Location::caller());
     }
 
     /// Sends a runner shutdown notification, logging the call site that
@@ -187,5 +196,32 @@ impl RunnerShutdownController {
 impl Default for RunnerShutdownController {
     fn default() -> Self {
         Self::new()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use tracing_test::traced_test;
+
+    use super::*;
+
+    #[traced_test]
+    #[test]
+    fn shutdown_logs_the_caller_location() {
+        let (file, line) = test_shutdown();
+
+        assert!(
+            logs_contain(&format!("Shutdown triggered file=\"{file}\" line={line}")),
+            "shutdown should log the triggered message with the caller's location",
+        );
+    }
+
+    /// Triggers a shutdown and returns the file and line of the `shutdown()`
+    /// call site that the log should be attributed to.
+    fn test_shutdown() -> (&'static str, u32) {
+        // `shutdown` is `#[track_caller]`, so the logged location should point
+        // at this call site (i.e. this source file and line).
+        PrimaryShutdownController::new().shutdown();
+        (file!(), line!() - 1)
     }
 }
