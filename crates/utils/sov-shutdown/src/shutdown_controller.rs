@@ -30,8 +30,13 @@ impl InnerShutdownController {
             .expect("shutdown channel always has a live receiver");
     }
 
-    fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
+    fn shutdown_with_location(
+        &self,
+        name: &'static str,
+        location: &'static std::panic::Location<'static>,
+    ) {
         tracing::info!(
+            controller = name,
             file = location.file(),
             line = location.line(),
             column = location.column(),
@@ -56,6 +61,8 @@ pub struct PrimaryShutdownController {
 }
 
 impl PrimaryShutdownController {
+    const NAME: &'static str = "primary";
+
     /// Creates a new primary shutdown controller.
     pub fn new() -> Self {
         Self {
@@ -81,14 +88,14 @@ impl PrimaryShutdownController {
     #[track_caller]
     pub fn shutdown(&self) {
         self.inner
-            .shutdown_with_location(std::panic::Location::caller());
+            .shutdown_with_location(Self::NAME, std::panic::Location::caller());
     }
 
     /// Sends a primary shutdown notification, logging the supplied `location`.
     /// Use this when the triggering call site was captured earlier (e.g. across
     /// an async boundary); otherwise prefer [`Self::shutdown`].
     pub fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
-        self.inner.shutdown_with_location(location);
+        self.inner.shutdown_with_location(Self::NAME, location);
     }
 
     /// Returns `true` if a primary shutdown notification has already been sent.
@@ -110,6 +117,8 @@ pub struct SecondaryShutdownController {
 }
 
 impl SecondaryShutdownController {
+    const NAME: &'static str = "secondary";
+
     /// Creates a new secondary shutdown controller.
     pub fn new() -> Self {
         Self {
@@ -135,14 +144,14 @@ impl SecondaryShutdownController {
     #[track_caller]
     pub fn shutdown(&self) {
         self.inner
-            .shutdown_with_location(std::panic::Location::caller());
+            .shutdown_with_location(Self::NAME, std::panic::Location::caller());
     }
 
     /// Sends a secondary shutdown notification, logging the supplied `location`.
     /// Use this when the triggering call site was captured earlier (e.g. across
     /// an async boundary); otherwise prefer [`Self::shutdown`].
     pub fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
-        self.inner.shutdown_with_location(location);
+        self.inner.shutdown_with_location(Self::NAME, location);
     }
 }
 
@@ -160,6 +169,8 @@ pub struct RunnerShutdownController {
 }
 
 impl RunnerShutdownController {
+    const NAME: &'static str = "runner";
+
     /// Creates a new runner shutdown controller.
     pub fn new() -> Self {
         Self {
@@ -185,14 +196,14 @@ impl RunnerShutdownController {
     #[track_caller]
     pub fn shutdown(&self) {
         self.inner
-            .shutdown_with_location(std::panic::Location::caller());
+            .shutdown_with_location(Self::NAME, std::panic::Location::caller());
     }
 
     /// Sends a runner shutdown notification, logging the supplied `location`.
     /// Use this when the triggering call site was captured earlier (e.g. across
     /// an async boundary); otherwise prefer [`Self::shutdown`].
     pub fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
-        self.inner.shutdown_with_location(location);
+        self.inner.shutdown_with_location(Self::NAME, location);
     }
 }
 
@@ -214,8 +225,11 @@ mod tests {
         let (file, line) = test_shutdown();
 
         assert!(
-            logs_contain(&format!("Shutdown triggered file=\"{file}\" line={line}")),
-            "shutdown should log the triggered message with the caller's location",
+            logs_contain(&format!(
+                "Shutdown triggered controller=\"{name}\" file=\"{file}\" line={line}",
+                name = PrimaryShutdownController::NAME,
+            )),
+            "shutdown should log the triggered message with the controller name and caller's location",
         );
     }
 
