@@ -30,6 +30,16 @@ impl InnerShutdownController {
             .expect("shutdown channel always has a live receiver");
     }
 
+    fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
+        tracing::info!(
+            file = location.file(),
+            line = location.line(),
+            column = location.column(),
+            "Shutdown triggered",
+        );
+        self.shutdown();
+    }
+
     fn is_triggered(&self) -> bool {
         // The controller keeps its own sender alive for as long as it exists,
         // so `has_changed` cannot fail here.
@@ -69,6 +79,12 @@ impl PrimaryShutdownController {
     /// Sends a primary shutdown notification.
     pub fn shutdown(&self) {
         self.inner.shutdown();
+    }
+
+    /// Sends a primary shutdown notification, logging the call site that
+    /// triggered it.
+    pub fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
+        self.inner.shutdown_with_location(location);
     }
 
     /// Returns `true` if a primary shutdown notification has already been sent.
@@ -114,6 +130,12 @@ impl SecondaryShutdownController {
     pub fn shutdown(&self) {
         self.inner.shutdown();
     }
+
+    /// Sends a secondary shutdown notification, logging the call site that
+    /// triggered it.
+    pub fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
+        self.inner.shutdown_with_location(location);
+    }
 }
 
 impl Default for SecondaryShutdownController {
@@ -153,6 +175,12 @@ impl RunnerShutdownController {
     /// Sends a runner shutdown notification.
     pub fn shutdown(&self) {
         self.inner.shutdown();
+    }
+
+    /// Sends a runner shutdown notification, logging the call site that
+    /// triggered it.
+    pub fn shutdown_with_location(&self, location: &'static std::panic::Location<'static>) {
+        self.inner.shutdown_with_location(location);
     }
 }
 
