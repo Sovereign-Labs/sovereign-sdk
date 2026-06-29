@@ -108,11 +108,20 @@ impl PruningController {
         {
             tracing::info!(
                 versions_to_keep,
+                max_batch_size,
                 compact_after,
-                "Running one-time startup pruning to completion"
+                "Running one-time startup pruning synchronously to completion; node startup is blocked and this can take a long time on large databases"
             );
+            let startup_prune_start = std::time::Instant::now();
             self.prune_to_completion(db, versions_to_keep, max_batch_size)?;
+            tracing::info!(
+                elapsed = ?startup_prune_start.elapsed(),
+                "One-time startup pruning completed"
+            );
             if compact_after {
+                tracing::info!(
+                    "Post-prune compaction is enabled; startup will remain blocked while compaction runs and this can take a long time on large databases"
+                );
                 db.compact_pruned_cfs()?;
             }
         }
@@ -131,25 +140,35 @@ impl PruningController {
         H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
         K: Eq + std::hash::Hash + Clone + std::fmt::Debug,
     {
-        let is_pruner_ready = self
-            .in_flight
-            .as_ref()
-            .map(|p| p.is_finished())
-            .unwrap_or(false);
         let mut pruning_commit_time = None;
 
-        if is_pruner_ready {
-            // UNWRAP: Checked above.
-            let job = self.in_flight.take().unwrap();
-            // The pruner thread has already finished (`is_pruner_ready`), so the join is
-            // effectively free and this measures the commit.
-            let start = std::time::Instant::now();
-            let hit_size_limit = self.join_and_commit(db, job)?;
-            pruning_commit_time = Some(start.elapsed());
-            // If the pruner didn't hit the size limit, we're done. Mark that the pruner finished at
-            // the current height. Otherwise, leave the run unmarked so it spawns another iteration.
-            if !hit_size_limit {
-                self.last_finish_at_height = Some(height);
+        if let Some(job) = self.in_flight.take() {
+            if !job.is_finished() {
+                // Put it back
+                self.in_flight = Some(job);
+            } else {
+                // The pruner thread has already finished (`is_pruner_ready`), so the join is
+                // effectively free and this measures the commit.
+                let start = std::time::Instant::now();
+                let hit_size_limit = self.join_and_commit(db, job)?;
+                let commit_time = start.elapsed();
+                pruning_commit_time = Some(commit_time);
+                // If the pruner didn't hit the size limit, we're done. Mark that the pruner finished at
+                // the current height. Otherwise, leave the run unmarked so it spawns another iteration.
+                if !hit_size_limit {
+                    self.last_finish_at_height = Some(height);
+                    tracing::info!(
+                        height,
+                        ?commit_time,
+                        "Periodic pruning completed and drained the current backlog"
+                    );
+                } else {
+                    tracing::info!(
+                    height,
+                    ?commit_time,
+                    "Periodic pruning hit the batch size limit; another pruning iteration will be scheduled"
+                );
+                }
             }
         }
 
@@ -167,6 +186,13 @@ impl PruningController {
                     })
                     .unwrap_or(true);
             if should_run_pruner {
+                tracing::info!(
+                    height,
+                    block_interval,
+                    versions_to_keep,
+                    max_batch_size,
+                    "Scheduling periodic pruning iteration"
+                );
                 self.in_flight = Some(db.start_pruner(versions_to_keep, max_batch_size));
             }
         }
@@ -211,7 +237,14 @@ impl PruningController {
     {
         let prune_group = job.join()?;
         let hit_size_limit = prune_group.hit_size_limit();
+        tracing::info!(hit_size_limit, "Committing pruning batch");
+        let commit_start = std::time::Instant::now();
         db.commit_pruning(prune_group)?;
+        tracing::info!(
+            hit_size_limit,
+            elapsed = ?commit_start.elapsed(),
+            "Committed pruning batch"
+        );
         #[cfg(any(test, feature = "test-utils"))]
         {
             self.commits_count += 1;

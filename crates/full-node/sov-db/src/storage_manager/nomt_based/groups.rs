@@ -293,11 +293,18 @@ where
     /// for the version-prefixed pruning CF). `VersionedDB::trigger_compaction` compacts the
     /// user/kernel pair.
     pub(crate) fn compact_pruned_cfs(&self) -> anyhow::Result<()> {
-        tracing::info!("Compacting pruned column families to reclaim disk space");
+        tracing::info!(
+            "Compacting pruned column families to reclaim disk space; this can take a long time on large databases"
+        );
+        let compaction_start = std::time::Instant::now();
         self.accessory
             .trigger_compaction::<ModuleAccessoryState>()?;
         self.flat_state.user.trigger_compaction()?;
         self.flat_state.kernel.trigger_compaction()?;
+        tracing::info!(
+            elapsed = ?compaction_start.elapsed(),
+            "Compacted pruned column families"
+        );
         Ok(())
     }
 
@@ -380,7 +387,11 @@ where
     }
 
     pub(crate) fn start_pruner(&self, versions_to_keep: usize, max_batch_size: usize) -> PrunerJob {
-        tracing::info!(versions_to_keep, "Starting pruner task iteration");
+        tracing::info!(
+            versions_to_keep,
+            max_batch_size,
+            "Starting pruner task iteration"
+        );
         // User and kernel state are versioned by rockbound's `VersionedDB`, which owns
         // the historical / pruning / metadata column families. We ask it for a multi-CF
         // delete batch and write it into the archival DB at commit time.

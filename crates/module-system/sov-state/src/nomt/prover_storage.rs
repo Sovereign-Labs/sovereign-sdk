@@ -178,8 +178,8 @@ where
     /// Unbound reads bypass the snapshot pin (`get_latest_borrowed_unbound`), so they always
     /// observe the latest committed version and can therefore *never* surface
     /// [`HistoricalValueError::PrunedVersion`] — only genuine I/O faults. We encode that invariant
-    /// with a `debug_assert!`, and in production we log-and-return `None` rather than panicking, so
-    /// a transient I/O hiccup cannot crash block processing.
+    /// with a `debug_assert!`. Any backing DB error remains fatal because `None` means "key absent"
+    /// to callers such as chain-state height lookups.
     fn resolve_unbound_read(
         result: anyhow::Result<Option<SlotValue>>,
         source: &'static str,
@@ -194,8 +194,7 @@ where
                     ),
                     "unbound reads should never observe PrunedVersion (source={source})"
                 );
-                tracing::error!(?error, %source, "unbound read failed; returning None");
-                None
+                panic!("Unable to read from {source}: {error:?}");
             }
         }
     }
@@ -1023,6 +1022,20 @@ mod tests {
         ),
         GetWithProofError,
     >;
+
+    #[test]
+    fn unbound_read_resolver_preserves_missing_value() {
+        assert_eq!(TestStorage::resolve_unbound_read(Ok(None), "UserDb"), None);
+    }
+
+    #[test]
+    #[should_panic(expected = "Unable to read from UserDb")]
+    fn unbound_read_resolver_panics_on_db_error() {
+        let _ = TestStorage::resolve_unbound_read(
+            Err(anyhow::anyhow!("injected read failure")),
+            "UserDb",
+        );
+    }
 
     // Writes a block to the storage manager and finalizes it if requested.
     fn write_block(
