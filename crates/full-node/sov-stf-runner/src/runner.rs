@@ -24,7 +24,9 @@ use sov_rollup_interface::stf::{
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::ProvableHeightTracker;
-use sov_shutdown::{FutureOrShutdownOutput, PrimaryShutdownController, RunnerShutdownController};
+use sov_shutdown::{
+    BackgroundTask, FutureOrShutdownOutput, PrimaryShutdownController, RunnerShutdownController,
+};
 use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
@@ -91,7 +93,7 @@ where
     sync_fetcher: FinalizedBlocksBulkFetcher<Da>,
     primary_shutdown: PrimaryShutdownController,
     runner_shutdown: RunnerShutdownController,
-    background_handles: Vec<tokio::task::JoinHandle<anyhow::Result<()>>>,
+    background_handles: Vec<BackgroundTask<anyhow::Result<()>>>,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
     save_tx_bodies: bool,
@@ -256,7 +258,7 @@ where
             runner_shutdown.clone(),
         )
         .await?;
-        background_handles.push(fetcher_background_handle);
+        background_handles.push(BackgroundTask::new(fetcher_background_handle));
 
         Ok(Self {
             first_unprocessed_height_at_startup,
@@ -329,8 +331,10 @@ where
         )
         .await?;
 
-        self.background_handles.push(http_server_handle);
-        self.background_handles.push(rpc_metrics_flush_handle);
+        self.background_handles
+            .push(BackgroundTask::new(http_server_handle));
+        self.background_handles
+            .push(BackgroundTask::new(rpc_metrics_flush_handle));
 
         Ok(())
     }

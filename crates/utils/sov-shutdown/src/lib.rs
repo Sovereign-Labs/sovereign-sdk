@@ -6,10 +6,12 @@
 
 #![deny(missing_docs)]
 
+mod background_task;
 mod shutdown_controller;
 
 use std::future::Future;
 
+pub use background_task::BackgroundTask;
 pub use shutdown_controller::{
     PrimaryShutdownController, RunnerShutdownController, SecondaryShutdownController,
 };
