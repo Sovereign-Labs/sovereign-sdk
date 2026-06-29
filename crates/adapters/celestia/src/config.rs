@@ -113,7 +113,7 @@ pub struct CelestiaConfig {
     #[serde(default = "default_signer_private_key")]
     pub signer_private_key: Option<String>,
     /// High-level timeout for Celestia RPC operations that may include multiple requests (in seconds).
-    /// Default: 38 (6 blocks × 6 seconds + 2 seconds polling buffer).
+    /// Default: 20 (6 blocks × 3 seconds + 2 seconds polling buffer).
     #[serde(
         default = "default_request_timeout_seconds",
         alias = "celestia_rpc_timeout_seconds"
@@ -121,7 +121,7 @@ pub struct CelestiaConfig {
     pub request_timeout_secs: NonZero<u64>,
     /// Timeout for individual API requests to the Celestia node (in seconds).
     /// This is passed to the underlying celestia-client for each API call.
-    /// Default: 8 (one block time plus 2 seconds of wiggle room).
+    /// Default: 5 (one block time (3s) plus 2 seconds of wiggle room).
     #[serde(default = "default_api_request_timeout_secs")]
     pub api_request_timeout_secs: NonZero<u64>,
     /// Interval for polling transaction status confirmation (in milliseconds).
@@ -527,12 +527,13 @@ pub(crate) fn default_factor() -> f32 {
 }
 
 pub(crate) fn default_request_timeout_seconds() -> NonZero<u64> {
-    // 6 blocks × 6 seconds + 2 seconds polling buffer
-    NonZero::new(38).unwrap()
+    // 6 blocks × 3 seconds + 2 seconds polling buffer
+    NonZero::new(20).unwrap()
 }
 
 pub(crate) fn default_api_request_timeout_secs() -> NonZero<u64> {
-    NonZero::new(8).unwrap()
+    // one block time (3s) plus 2 seconds of wiggle room
+    NonZero::new(5).unwrap()
 }
 
 pub(crate) fn default_tx_status_polling_millis() -> u64 {
@@ -546,7 +547,8 @@ pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
 #[cfg(test)]
 mod tests {
     use super::{
-        default_compression_chunk_size, validate_compression_chunk_size, validate_rpc_url,
+        default_api_request_timeout_secs, default_compression_chunk_size,
+        default_request_timeout_seconds, validate_compression_chunk_size, validate_rpc_url,
         CelestiaConfig, CompressOnSubmit, GrpcEndpointConfig, RpcEndpointConfig, TxPriority,
         VerifyOnFetchMode,
     };
@@ -1042,6 +1044,15 @@ mod tests {
         let max = crate::envelope::MAX_ROLLUP_CHUNK_LEN as usize;
         assert!(validate_compression_chunk_size(0).is_err());
         assert!(validate_compression_chunk_size(max + 1).is_err());
+    }
+
+    #[test]
+    fn rpc_timeout_defaults_match_3s_block_time() {
+        // These defaults are derived from Celestia's 3s block time (see the doc comments on
+        // the corresponding fields). If the block time changes, revisit both the value and the
+        // comment together.
+        assert_eq!(default_request_timeout_seconds().get(), 20);
+        assert_eq!(default_api_request_timeout_secs().get(), 5);
     }
 
     #[test]

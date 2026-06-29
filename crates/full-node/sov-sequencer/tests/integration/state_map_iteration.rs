@@ -241,6 +241,55 @@ async fn test_state_map_iteration() {
     test_rollup.shutdown().await.unwrap();
 }
 
+/// Test that a single StateMap element with a composite (multi-field) key can be fetched
+/// via `GET .../items/{key}`, using the key's `Display`/`FromStr` string form. This is a
+/// regression test for composite keys, which previously failed with HTTP 400
+/// `missing field ...` because the handler deserialized the path via serde instead of
+/// `FromStr`.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_state_map_single_item_lookup() {
+    let (test_rollup, user) = create_test_nomt_rollup_with_long_finalization().await;
+
+    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
+    da_layer.produce_and_wait_for_n_slots(15).await;
+
+    // Insert a single known entry under a composite key. Use multi-byte asymmetric
+    // values so any encoding/endianness bug in the round-trip would surface.
+    let address = STATE_MAP_ADDRESS;
+    let index = 0x1234u32;
+    let value = 0x5678u32;
+
+    let tx = tx_modify_state_map(&user.private_key, 0, address, index, Some(value));
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(&tx),
+        })
+        .await
+        .unwrap();
+    da_layer.produce_and_wait_for_slot().await;
+
+    // Look up that single element by its `Display` form, `<address>:<index>`.
+    let key = StateKey { address, index };
+    let url = format!("/modules/state-map-tester/state/values/items/{key}");
+    let response = test_rollup
+        .client
+        .query_rest_endpoint::<StateItemContents<StateKey, u32>>(&url)
+        .await
+        .unwrap();
+
+    assert_eq!(
+        response.value, value,
+        "single-item lookup should return the value stored under the composite key"
+    );
+    assert_eq!(
+        response.key, key,
+        "single-item lookup should echo back the queried composite key"
+    );
+
+    test_rollup.shutdown().await.unwrap();
+}
+
 async fn fetch_and_assert_state_map_values(
     test_rollup: &TestRollup<TestNomtBlueprint>,
     values: &BTreeMap<StateKey, u32>,
