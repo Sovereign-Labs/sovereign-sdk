@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use sov_full_node_configs::sequencer::{ConfiguredNodeRole, PostgresConfig};
-use sov_rollup_interface::node::{FutureOrShutdownOutput, PrimaryShutdownController};
+use sov_shutdown::{FutureOrShutdownOutput, PrimaryShutdownController};
 use tokio::task::JoinHandle;
 use tracing::{error, info, warn, Instrument};
 

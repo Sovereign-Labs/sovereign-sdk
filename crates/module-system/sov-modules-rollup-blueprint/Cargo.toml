@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 console-subscriber = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-shutdown = { workspace = true, optional = true }
 sov-stf-runner = { workspace = true, optional = true }
 sov-state = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
@@ -66,6 +67,7 @@ native = [
 	"sov-rollup-apis",
 	"sov-rollup-full-node-interface",
 	"sov-rollup-interface/native",
+	"sov-shutdown",
 	"sov-sequencer",
 	"sov-state/native",
 	"sov-stf-runner",

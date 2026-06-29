@@ -25,14 +25,13 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::ledger_api::{AggregatedProofResponse, LedgerStateProvider};
-use sov_rollup_interface::node::{
-    PrimaryShutdownController, SecondaryShutdownController, SyncStatus,
-};
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_sequencer::standard::StdSequencerConfig;
 use sov_sequencer::{react_to_state_updates, SequencerConfig, SequencerKindConfig};
+use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
 use sov_state::NativeStorage;
 use sov_stf_runner::processes::{start_zk_workflow_in_background, ParallelProverService};
 use sov_stf_runner::{

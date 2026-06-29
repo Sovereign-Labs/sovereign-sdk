@@ -33,7 +33,7 @@ use axum::routing::get;
 use serde::{Deserialize, Serialize};
 use sov_rest_utils::{json_obj, ErrorObject, Query};
 use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::node::PrimaryShutdownController;
+use sov_shutdown::PrimaryShutdownController;
 use tokio::sync::watch;
 use utoipa::openapi::OpenApi;
 

@@ -1,5 +1,6 @@
 mod error;
 
+use std::borrow::Cow;
 use std::ops::Range;
 use std::sync::OnceLock;
 
@@ -99,7 +100,8 @@ impl From<[u8; 32]> for TmHash {
     }
 }
 
-#[derive(Clone, Debug, Serialize, Deserialize)]
+#[derive(Clone, Debug, Deserialize)]
+#[serde(try_from = "BlobWithSenderWire<'static>")]
 pub struct BlobWithSender {
     pub(crate) blob: CountedBufReader<BlobIterator>,
     // Range in the entire namespace
@@ -112,7 +114,7 @@ pub struct BlobWithSender {
     /// Derived only from the authenticated DA accumulator
     /// ([`Self::compressed_verified_data`]); never a serialized witness claim.
     /// Empty after construction and after every (de)serialization, then
-    /// recomputed deterministically. Ignored by `PartialEq`.
+    /// recomputed deterministically.
     ///
     /// Filled lazily by the `&self` accessors via `get_or_init`; native `advance`
     /// (which holds `&mut self`) extends it in place as it authenticates more chunks.
@@ -129,19 +131,111 @@ pub struct BlobWithSender {
     ///   is exactly "compute once under `&self`, hand out a reference."
     /// * Decoding stays lazy (first access), so a blob that is only size-gated decodes
     ///   nothing — preserving the partial-read / DoS bound.
-    #[serde(skip)]
+    ///
+    /// Not serialized: [`BlobWithSender`] serializes through [`BlobWithSenderWire`], which
+    /// carries only the authenticated projection, so this cache is dropped and recomputed
+    /// after every round-trip.
     envelope_state: OnceLock<EnvelopeState>,
 }
 
-impl PartialEq for BlobWithSender {
-    fn eq(&self, other: &Self) -> bool {
-        // The envelope cache is derived state, not identity: two blobs with the
-        // same authenticated bytes are equal regardless of whether either has
-        // lazily computed its classification yet.
-        self.blob == other.blob
-            && self.range_in_namespace == other.range_in_namespace
-            && self.sender == other.sender
-            && self.hash == other.hash
+/// Pruned wire form of [`BlobWithSender`] — the only representation serialized into the
+/// witness. Natively (on the host) the in-memory blob keeps its entire `Vec<Share>`; the
+/// blob reconstructed from this wire form in the zk guest is instead a share-less placeholder
+/// ([`BlobIterator::verified_placeholder`]) carrying only the authenticated DA prefix
+/// (`accumulator`) and the total length. The guest never touches shares — it reads through the
+/// accumulator, and authentication runs against the separate inclusion proof. Serializing just
+/// these fields drops the unread-share bloat an attacker could otherwise use to inflate the
+/// witness.
+///
+/// A single struct serves both directions. Serialization borrows from the live
+/// [`BlobWithSender`] through `Cow::Borrowed` (so the potentially large `accumulator` is never
+/// cloned), while deserialization owns its data — the fields are never `#[serde(borrow)]`, so
+/// they always decode to `Cow::Owned`, and [`BlobWithSender`]'s `try_from` takes them via
+/// [`Cow::into_owned`]. Keeping one struct means a field change happens in exactly one place.
+#[derive(Debug, Serialize, Deserialize)]
+struct BlobWithSenderWire<'a> {
+    /// DA-physical verified prefix ([`BlobWithSender::compressed_verified_data`]).
+    accumulator: Cow<'a, [u8]>,
+    /// DA-physical total length ([`BlobWithSender::compressed_total_len`]). `u64` so the
+    /// 64-bit host and 32-bit zkVM guest agree on the encoded width.
+    total_len: u64,
+    /// Share-index range within the namespace. Left as `usize` — unlike [`Self::total_len`],
+    /// which is explicitly `u64`-encoded against guest truncation — because it is bounded by
+    /// the DA block's share count (orders of magnitude below `u32::MAX`) and is consumed only
+    /// when building proofs on the host (`verifier::proofs`); the 32-bit guest verifier never
+    /// reads it, so it carries no truncation risk.
+    range_in_namespace: Cow<'a, Range<usize>>,
+    sender: Cow<'a, CelestiaAddress>,
+    hash: Cow<'a, HexHash>,
+}
+
+/// Error returned when a [`BlobWithSenderWire`] cannot describe a valid blob.
+#[derive(Debug, thiserror::Error)]
+enum PrunedBlobError {
+    /// The declared total length is wider than the DA `sequence_length` (`u32`), so it cannot
+    /// describe a real blob — and would truncate when cast to `usize` on the 32-bit zkVM guest.
+    #[error(
+        "pruned blob total length {total_len} exceeds the DA sequence-length limit ({})",
+        u32::MAX
+    )]
+    TotalLenExceedsDaLimit { total_len: u64 },
+    /// The verified prefix is longer than the declared total length, which would make
+    /// `BlobIterator::remaining` underflow.
+    #[error("pruned blob accumulator length {accumulator_len} exceeds total length {total_len}")]
+    AccumulatorExceedsTotalLen {
+        accumulator_len: usize,
+        total_len: u64,
+    },
+}
+
+impl Serialize for BlobWithSender {
+    fn serialize<S: serde::Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        BlobWithSenderWire {
+            accumulator: Cow::Borrowed(self.compressed_verified_data()),
+            total_len: self.compressed_total_len() as u64,
+            range_in_namespace: Cow::Borrowed(&self.range_in_namespace),
+            sender: Cow::Borrowed(&self.sender),
+            hash: Cow::Borrowed(&self.hash),
+        }
+        .serialize(serializer)
+    }
+}
+
+impl<'a> TryFrom<BlobWithSenderWire<'a>> for BlobWithSender {
+    type Error = PrunedBlobError;
+
+    fn try_from(wire: BlobWithSenderWire<'a>) -> Result<Self, Self::Error> {
+        // `total_len` mirrors the authenticated first share's `sequence_length`, a `u32` on the
+        // DA layer. Reject anything wider so the `as usize` cast cannot truncate on the 32-bit
+        // zkVM guest (host and guest stay consistent) — a truncation would slip past the
+        // accumulator check below and underflow `remaining()`.
+        let total_len =
+            u32::try_from(wire.total_len).map_err(|_| PrunedBlobError::TotalLenExceedsDaLimit {
+                total_len: wire.total_len,
+            })? as usize;
+        let accumulator = wire.accumulator.into_owned();
+        // Reject a malformed witness up front so `remaining()` cannot underflow later.
+        if accumulator.len() > total_len {
+            return Err(PrunedBlobError::AccumulatorExceedsTotalLen {
+                accumulator_len: accumulator.len(),
+                total_len: wire.total_len,
+            });
+        }
+        let consumed = accumulator.len();
+        let inner = BlobIterator::verified_placeholder(total_len, consumed);
+        let blob = CountedBufReader::from_raw_parts(inner, accumulator);
+        debug_assert_eq!(
+            blob.total_len(),
+            total_len,
+            "reconstructed blob length must equal the authenticated total_len"
+        );
+        Ok(BlobWithSender {
+            blob,
+            range_in_namespace: wire.range_in_namespace.into_owned(),
+            sender: wire.sender.into_owned(),
+            hash: wire.hash.into_owned(),
+            envelope_state: OnceLock::new(),
+        })
     }
 }
 
@@ -663,8 +757,8 @@ pub mod tests {
 
         // The cache is dropped on deserialize.
         assert_eq!(restored.envelope_state.get(), None);
-        // Equality ignores the cache: populated original equals empty restored.
-        assert_eq!(restored, blob);
+        // The authenticated projection survives the round-trip, independent of the dropped cache.
+        crate::test_helper::compare_equality(&restored, &blob);
         // Reconstruction from the authenticated bytes is deterministic.
         assert_eq!(
             classify_and_decode(restored.compressed_verified_data()),
@@ -672,6 +766,46 @@ pub mod tests {
         );
         // This fixture is a raw (non-envelope) blob.
         assert_eq!(expected_state, EnvelopeState::Legacy);
+    }
+
+    #[test]
+    fn serde_rejects_total_len_exceeding_da_limit() {
+        let path = make_test_path(with_rollup_batch_data::DATA_PATH);
+        let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
+        let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
+        let blob = ns_data.get_blobs_with_sender().remove(0);
+
+        // A `total_len` wider than the DA `sequence_length` (`u32`) is rejected at
+        // deserialization on every target, not silently truncated on the 32-bit guest.
+        let mut serialized = serde_json::to_value(&blob).unwrap();
+        serialized["total_len"] = serde_json::Value::from(u64::from(u32::MAX) + 1);
+
+        let err = serde_json::from_value::<BlobWithSender>(serialized).unwrap_err();
+        assert!(
+            err.to_string()
+                .contains("exceeds the DA sequence-length limit"),
+            "Actual error: {err}"
+        );
+    }
+
+    #[test]
+    fn serde_rejects_accumulator_longer_than_total_len() {
+        let path = make_test_path(with_rollup_batch_data::DATA_PATH);
+        let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
+        let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
+        let mut blob = ns_data.get_blobs_with_sender().remove(0);
+
+        // Read a real prefix so the accumulator is non-empty, then forge a `total_len` smaller
+        // than it: the verified prefix can never exceed the declared total length.
+        blob.advance(10);
+        let mut serialized = serde_json::to_value(&blob).unwrap();
+        serialized["total_len"] = serde_json::Value::from(4u64);
+
+        let err = serde_json::from_value::<BlobWithSender>(serialized).unwrap_err();
+        assert!(
+            err.to_string().contains("exceeds total length"),
+            "Actual error: {err}"
+        );
     }
 
     /// Build a [`BlobWithSender`] carrying `da_payload` as its on-DA payload, the same

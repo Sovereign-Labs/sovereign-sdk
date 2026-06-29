@@ -2,9 +2,9 @@ use borsh::BorshSerialize;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
-use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController};
 use sov_rollup_interface::optimistic::{Attestation, BondingProofService, SerializedAttestation};
 use sov_rollup_interface::stf::ProofSender;
+use sov_shutdown::{FutureOrShutdownOutput, SecondaryShutdownController};
 use tokio::task::JoinHandle;
 
 use crate::processes::{Receiver, StateTransitionInfo};

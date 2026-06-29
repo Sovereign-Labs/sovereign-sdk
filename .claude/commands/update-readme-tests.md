@@ -6,6 +6,8 @@ Use this when CI fails in `check-demo-rollup-bash-commands-mock-da` (runs `READM
 
 CI runs `bashtestmd` against both READMEs from `.github/workflows/rust.yml`. Any embedded expected output that drifts from current behavior will fail those jobs.
 
+> **Faster alternative:** if CI has already run and those jobs are failing, [`update-readme-tests-from-ci`](update-readme-tests-from-ci.md) reads the new `chain_hash` / `tx_hash` straight from the failing CI logs — no local build or running rollup. This command (the local rebuild) is for when CI logs aren't available or you want to verify locally before pushing.
+
 ## Usual drift points
 
 - `chain_hash` in both READMEs. Locate it by content, not line number:

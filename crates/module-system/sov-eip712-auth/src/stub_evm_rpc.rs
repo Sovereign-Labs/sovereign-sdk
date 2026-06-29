@@ -7,7 +7,7 @@ use sov_modules_api::macros::config_value;
 /// ```ignore
 /// #[cfg(feature = "native")]
 /// fn endpoints(api_state: sov_modules_api::rest::ApiState<S>) -> sov_modules_api::NodeEndpoints {
-///     // Existing code to set up `axum_router` and `background_handles`...
+///     // Existing code to set up `axum_router`...
 ///
 ///     let mut jsonrpsee_module = stf_declaration_crate::get_rpc_methods::<S>(api_state);
 ///     let stub_rpc = sov_eip712::stub_evm_rpc();
@@ -17,7 +17,6 @@ use sov_modules_api::macros::config_value;
 ///     sov_modules_api::NodeEndpoints {
 ///         axum_router,
 ///         jsonrpsee_module,
-///         background_handles
 ///     }
 /// }
 /// ```

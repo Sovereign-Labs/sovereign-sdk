@@ -12,7 +12,8 @@ use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_apis::endpoints::simulate::SovereignSimulate;
 use sov_rollup_apis::rollup_tx_router;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
-use sov_rollup_interface::node::{PrimaryShutdownController, SyncStatus};
+use sov_rollup_interface::node::SyncStatus;
+use sov_shutdown::PrimaryShutdownController;
 use sov_stf_runner::{RollupConfig, RunnerConfig};
 
 use super::SequencerCreationReceipt;

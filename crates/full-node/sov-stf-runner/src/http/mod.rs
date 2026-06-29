@@ -15,10 +15,10 @@ use jsonrpsee::server::{
 use jsonrpsee::types::{ErrorCode, ErrorObject};
 use jsonrpsee::RpcModule;
 use sov_metrics::{track_metrics, HttpMetrics, RpcAggregationConfig, RpcStatsAggregator};
+use sov_shutdown::RunnerShutdownController;
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::sync::watch;
 use tokio::task::JoinHandle;
 use tower::BoxError;
 use tower_http::cors::CorsLayer;
@@ -89,7 +89,7 @@ pub(crate) async fn start_http_server(
     axum_listener: TcpListener,
     router: axum::Router<()>,
     methods: RpcModule<()>,
-    mut shutdown_receiver: watch::Receiver<()>,
+    shutdown: RunnerShutdownController,
     cors_configuration: CorsConfiguration,
     rpc_aggregation: RpcAggregationConfig,
 ) -> anyhow::Result<HttpServerStart> {
@@ -127,7 +127,7 @@ pub(crate) async fn start_http_server(
             ),
         )
         .with_graceful_shutdown(async move {
-            shutdown_receiver.changed().await.ok();
+            shutdown.wait_for_shutdown().await.ok();
         })
         .await
         .map_err(|e| anyhow::anyhow!(e));
@@ -355,31 +355,30 @@ mod tests {
         axum::Router::new().route("/", axum::routing::get(|| async { "hi" }))
     }
 
-    // Returns shutdown sender
-    async fn build_and_start_test_server() -> (SocketAddr, watch::Sender<()>) {
+    // Returns the shutdown controller used to stop the server.
+    async fn build_and_start_test_server() -> (SocketAddr, RunnerShutdownController) {
         let methods = build_test_json_rpc();
         let axum_router = build_test_axum_router();
-        let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
-        shutdown_receiver.mark_unchanged();
+        let shutdown = RunnerShutdownController::new();
         let listener = TcpListener::bind("127.0.0.1:0").await.unwrap();
         let addr = listener.local_addr().unwrap();
         let _ = start_http_server(
             listener,
             axum_router,
             methods,
-            shutdown_receiver,
+            shutdown.clone(),
             CorsConfiguration::Restrictive,
             RpcAggregationConfig::standard(),
         )
         .await
         .unwrap();
 
-        (addr, shutdown_sender)
+        (addr, shutdown)
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_request_response() -> anyhow::Result<()> {
-        let (addr, shutdown_sender) = build_and_start_test_server().await;
+        let (addr, shutdown) = build_and_start_test_server().await;
 
         let ws_client = WsClientBuilder::default()
             .build(&format!("ws://{addr}/rpc"))
@@ -392,13 +391,13 @@ mod tests {
 
             assert_eq!(response, "hi");
         }
-        shutdown_sender.send(())?;
+        shutdown.shutdown();
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_subscription() -> anyhow::Result<()> {
-        let (addr, shutdown_sender) = build_and_start_test_server().await;
+        let (addr, shutdown) = build_and_start_test_server().await;
 
         let ws_client = WsClientBuilder::default()
             .build(&format!("ws://{addr}/rpc"))
@@ -420,13 +419,13 @@ mod tests {
         subscription.unsubscribe().await?;
         assert_eq!(numbers, (0..10).collect::<Vec<u64>>());
 
-        shutdown_sender.send(())?;
+        shutdown.shutdown();
         Ok(())
     }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn test_binary_frames() -> anyhow::Result<()> {
-        let (addr, shutdown_sender) = build_and_start_test_server().await;
+        let (addr, shutdown) = build_and_start_test_server().await;
 
         // Connect using raw tungstenite client to send binary frames
         let (ws_stream, _) = connect_async(format!("ws://{addr}/rpc"))
@@ -449,7 +448,7 @@ mod tests {
         };
         assert!(response.contains("\"result\":\"hi\""));
 
-        shutdown_sender.send(())?;
+        shutdown.shutdown();
         Ok(())
     }
 
@@ -459,7 +458,7 @@ mod tests {
     }
 
     async fn test_ws_duplex_inner() -> anyhow::Result<()> {
-        let (addr, shutdown_sender) = build_and_start_test_server().await;
+        let (addr, shutdown) = build_and_start_test_server().await;
 
         let ws_client = WsClientBuilder::default()
             .build(&format!("ws://{addr}/rpc"))
@@ -485,7 +484,7 @@ mod tests {
             .await?;
         assert_eq!(response, "hi");
 
-        shutdown_sender.send(())?;
+        shutdown.shutdown();
 
         Ok(())
     }

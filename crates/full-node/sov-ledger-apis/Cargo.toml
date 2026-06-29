@@ -25,6 +25,7 @@ sov-db = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-rest-utils = { workspace = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-shutdown = { workspace = true }
 tokio = { workspace = true, features = ["macros"] }
 tracing = { workspace = true }
 

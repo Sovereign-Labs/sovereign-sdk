@@ -22,7 +22,7 @@ mod tests {
     use proptest::prelude::*;
     use sov_rollup_interface::da::{BlobReaderTrait, Time};
     use sov_rollup_interface::node::da::DaService;
-    use sov_rollup_interface::node::SecondaryShutdownController;
+    use sov_shutdown::SecondaryShutdownController;
     use tokio::sync::RwLock;
 
     use crate::storable::layer::StorableMockDaLayer;

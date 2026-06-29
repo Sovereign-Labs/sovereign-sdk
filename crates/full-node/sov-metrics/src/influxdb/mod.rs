@@ -211,7 +211,7 @@ mod tests {
         metrics_publisher_task, receive_with_timeout, spawn_metrics_udp_receiver,
     };
     use crate::influxdb::tracker::timestamp;
-    use sov_rollup_interface::node::SecondaryShutdownController;
+    use sov_shutdown::SecondaryShutdownController;
     use std::io::Write;
     use std::str::FromStr;
 

@@ -36,6 +36,7 @@ async-trait = { workspace = true }
 rayon = { workspace = true }
 sov-db = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-shutdown = { workspace = true }
 sov-rollup-full-node-interface = { workspace = true }
 sov-metrics = { workspace = true }
 tower-http = { workspace = true, features = ["normalize-path", "cors"] }

@@ -27,14 +27,13 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::{
-    PrimaryShutdownController, SecondaryShutdownController, SyncStatus,
-};
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;
 use sov_sequencer::preferred::PreferredSequencer;
 use sov_sequencer::standard::StdSequencer;
 use sov_sequencer::{ProofBlobSender, Sequencer, SequencerApis, SequencerKindConfig};
+use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
 use sov_state::storage::NativeStorage;
 use sov_state::Storage;
 use sov_stf_runner::processes::{
@@ -854,14 +853,8 @@ async fn cleanup_failed_startup<S: Spec>(
 
     let background_handles_to_join = std::mem::take(background_handles);
     let sequencer_background_handles = std::mem::take(&mut sequencer.background_handles);
-    let endpoint_background_handles = std::mem::take(&mut sequencer.endpoints.background_handles);
 
-    wait_for_failed_startup_tasks(
-        background_handles_to_join,
-        sequencer_background_handles,
-        endpoint_background_handles,
-    )
-    .await;
+    wait_for_failed_startup_tasks(background_handles_to_join, sequencer_background_handles).await;
 }
 
 async fn cleanup_failed_startup_before_sequencer(
@@ -874,20 +867,18 @@ async fn cleanup_failed_startup_before_sequencer(
 
     let background_handles_to_join = std::mem::take(background_handles);
 
-    wait_for_failed_startup_tasks(background_handles_to_join, Vec::new(), Vec::new()).await;
+    wait_for_failed_startup_tasks(background_handles_to_join, Vec::new()).await;
 }
 
 async fn wait_for_failed_startup_tasks(
     background_handles_to_join: Vec<JoinHandle<()>>,
     sequencer_background_handles: Vec<JoinHandle<()>>,
-    endpoint_background_handles: Vec<JoinHandle<anyhow::Result<()>>>,
 ) {
     // Drain handles concurrently rather than serially.
     let drain = async move {
         let _ = tokio::join!(
             future::join_all(background_handles_to_join),
             future::join_all(sequencer_background_handles),
-            future::join_all(endpoint_background_handles),
         );
     };
 
@@ -968,43 +959,65 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
 impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
     /// Runs the rollup.
     pub async fn run(self) -> anyhow::Result<()> {
-        let mut runner = self.runner;
+        let Self {
+            mut runner,
+            endpoints,
+            primary_shutdown,
+            genesis_slot_number: _,
+            secondary_shutdown_controller,
+            background_handles,
+            rpc_aggregation_config,
+        } = self;
+        let NodeEndpointsContainer {
+            inner,
+            cors_configuration,
+        } = endpoints;
+        let NodeEndpoints {
+            axum_router,
+            jsonrpsee_module,
+        } = inner;
 
         runner
             .start_http_server(
-                self.endpoints.inner.axum_router,
-                self.endpoints.inner.jsonrpsee_module,
-                self.endpoints.cors_configuration,
-                self.rpc_aggregation_config,
+                axum_router,
+                jsonrpsee_module,
+                cors_configuration,
+                rpc_aggregation_config,
             )
             .await
             .context("Failed to start Axum Server")?;
 
-        let monitoring_task =
-            spawn_task_monitor(self.primary_shutdown.clone(), self.background_handles);
+        let monitoring_task = spawn_task_monitor(primary_shutdown.clone(), background_handles);
 
         runner.run_in_process().await?;
         tracing::info!("STF Runner has completed execution");
 
-        self.primary_shutdown.shutdown();
+        Self::stop_rollup(
+            primary_shutdown,
+            secondary_shutdown_controller,
+            monitoring_task,
+        )
+        .await
+    }
 
-        self.secondary_shutdown_controller.shutdown();
+    /// Triggers a graceful shutdown of all rollup background tasks and waits for
+    /// them to finish.
+    ///
+    /// Signals the primary tier (main loop and node-level background tasks) and
+    /// then the secondary tier (DA service, metrics, and other shared
+    /// infrastructure), then blocks until the monitored background tasks have
+    /// joined.
+    async fn stop_rollup(
+        primary_shutdown: PrimaryShutdownController,
+        secondary_shutdown_controller: SecondaryShutdownController,
+        monitoring_task: JoinHandle<anyhow::Result<()>>,
+    ) -> anyhow::Result<()> {
+        primary_shutdown.shutdown();
+
+        secondary_shutdown_controller.shutdown();
 
         // blocks until background handles have shutdown
         monitoring_task.await??;
-        for handle in self.endpoints.inner.background_handles {
-            match handle.await {
-                Err(e) => {
-                    tracing::error!(error = %e, "Endpoint background task panicked.");
-                    return Err(e.into());
-                }
-                Ok(Err(e)) => {
-                    tracing::error!(error = %e, "Endpoint background task joined with error");
-                    return Err(e);
-                }
-                _ => {}
-            }
-        }
         tracing::debug!("Rollup completed run");
         Ok(())
     }

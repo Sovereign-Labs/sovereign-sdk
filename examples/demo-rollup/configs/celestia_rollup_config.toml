@@ -42,13 +42,13 @@ grpc_url = "http://127.0.0.1:9090"
 signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e15e167"
 
 # High-level timeout for Celestia RPC operations that may include multiple requests (in seconds).
-# Default: 38 (6 blocks × 6 seconds + 2 seconds polling buffer)
-#request_timeout_secs = 38
+# Default: 20 (6 blocks × 3 seconds + 2 seconds polling buffer)
+#request_timeout_secs = 20
 
 # Timeout for individual API requests to the Celestia node (in seconds).
 # This is passed to the underlying celestia-client for each API call.
-# Default: 8 (one block time plus 2 seconds of wiggle room)
-#api_request_timeout_secs = 8
+# Default: 5 (one block time (3s) plus 2 seconds of wiggle room)
+#api_request_timeout_secs = 5
 
 # Interval for polling transaction status confirmation (in milliseconds).
 # Default: 2000
@@ -128,7 +128,7 @@ versions_to_keep = 20 # Number of versions available for historical querying
 
 [runner]
 # 3 times per regular celestia block
-da_polling_interval_ms = 2_000
+da_polling_interval_ms = 1_000
 
 [runner.http_config]
 bind_host = "127.0.0.1"
@@ -166,7 +166,9 @@ max_concurrent_proof_blobs = 1024
 
 [sequencer]
 # This value is counted between sequencer receiving receipt from DA about inclusion till node has processed this blob.
-blob_processing_timeout_secs = 600
+# Kept at/below the deferred-slots recovery window (~295s at a 3s block time) so recovery is
+# attempted before this hard timeout shuts the rollup down.
+blob_processing_timeout_secs = 300
 max_batch_size_bytes = 1048576
 max_concurrent_batch_blobs = 128
 max_allowed_node_distance_behind = 10
@@ -178,7 +180,7 @@ disable_state_root_consistency_checks = true
 # "None" - Shutdown the sequencer instead of attempting recovery (default)
 # "TryToSave" - Attempt to recover by flushing batches and catching up with the chain
 recovery_strategy = "TryToSave"
-batch_execution_time_limit_millis = 12000 # Do no more than 12 seconds worth of work per batch, even if the DA layer isn't producing blocks regularly
+batch_execution_time_limit_millis = 6000 # Do no more than 6 seconds worth of work per batch, even if the DA layer isn't producing blocks regularly
 # The sequencer optimistically pre-executes transactions across multiple worker threads.
 # This warms up caches so the main transaction executor can run with ready-to-use data.
 # This variable determines the number of worker threads.

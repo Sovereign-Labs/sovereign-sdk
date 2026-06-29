@@ -112,7 +112,6 @@ where
         ::sov_modules_api::NodeEndpoints {
             axum_router,
             jsonrpsee_module: demo_stf_declaration::get_rpc_methods::<S>(api_state),
-            background_handles: Vec::new(),
         }
     }
 

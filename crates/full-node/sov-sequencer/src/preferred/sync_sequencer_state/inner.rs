@@ -36,8 +36,8 @@ use sov_modules_api::{
     VisibleSlotNumber,
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
-use sov_rollup_interface::node::PrimaryShutdownController;
 use sov_rollup_interface::stf::BlobSenderStatus;
+use sov_shutdown::PrimaryShutdownController;
 use sov_state::{NativeStorage, Storage};
 use std::num::NonZero;
 use std::ops::Deref;
@@ -132,7 +132,7 @@ where
 ///  - How much longer we expect the current batch to be open (based on estimated block times)
 ///
 /// Based on that data, we set probabilities for accepting or rejecting new transactions. For example,
-/// suppose that we 3 seconds in to a 6 second block time, and we've accepted 4 MB of our 6MB limit. Then the probability of accepting a new
+/// suppose that we're 1.5 seconds in to a 3 second block time, and we've accepted 4 MB of our 6MB limit. Then the probability of accepting a new
 /// tx will drop to keep the batch size under control. Note that we compute probabilities for both execution time and batch size,
 /// and then we take the max rejection probability across those two dimensions.
 pub struct PIController {

@@ -121,3 +121,43 @@ impl Default for SecondaryShutdownController {
         Self::new()
     }
 }
+
+/// Controls the shutdown channel for the runner's own background tasks
+/// (HTTP server, sync-status updater, finalized-block fetcher).
+#[derive(Clone)]
+pub struct RunnerShutdownController {
+    inner: InnerShutdownController,
+}
+
+impl RunnerShutdownController {
+    /// Creates a new runner shutdown controller.
+    pub fn new() -> Self {
+        Self {
+            inner: InnerShutdownController::new(),
+        }
+    }
+
+    /// Waits until a runner shutdown notification is sent.
+    pub async fn wait_for_shutdown(&self) -> Result<(), watch::error::RecvError> {
+        self.inner.wait_for_shutdown().await
+    }
+
+    /// Runs a future until it completes or the runner shutdown signal fires.
+    pub async fn future_or_shutdown<T>(&self, inner: T) -> FutureOrShutdownOutput<T::Output>
+    where
+        T: Future,
+    {
+        future_or_shutdown(inner, &self.inner.receiver).await
+    }
+
+    /// Sends a runner shutdown notification.
+    pub fn shutdown(&self) {
+        self.inner.shutdown();
+    }
+}
+
+impl Default for RunnerShutdownController {
+    fn default() -> Self {
+        Self::new()
+    }
+}

@@ -21,7 +21,7 @@ use sov_modules_api::{
 };
 use sov_state::{BorshCodec, EncodeLike};
 
-/// The key to a policy, consisting of the payer and payee addresses with a separator.
+/// The key to a policy, consisting of the payer and payee addresses joined by `:`.
 #[derive(
     Debug,
     Clone,
@@ -32,12 +32,11 @@ use sov_state::{BorshCodec, EncodeLike};
     serde::Deserialize,
     derive_more::Display,
 )]
-#[display(r#"payers/{}{POLICY_SEPARATOR}{}"#, self.payer, self.payee)]
+#[display(r#"{}:{}"#, self.payer, self.payee)]
 pub struct PolicyKey<Address: Display> {
     payer: Address,
     payee: Address,
 }
-const POLICY_SEPARATOR: &str = "/policy/";
 
 impl<Address: Display + FromStr<Err: Into<Box<dyn std::error::Error + Send + Sync + 'static>>>>
     FromStr for PolicyKey<Address>
@@ -45,24 +44,16 @@ impl<Address: Display + FromStr<Err: Into<Box<dyn std::error::Error + Send + Syn
     type Err = anyhow::Error;
 
     fn from_str(s: &str) -> Result<Self, Self::Err> {
-        let Some(s) = s.strip_prefix("payers/") else {
-            anyhow::bail!("{} is not a policykey - missing 'payers/' prefix", s);
-        };
-        // There's an extremely nasty edge case here where the string `/policy/` is allowed as part of an address.
-        // (This is the case, for example, for base64 addresses). In this case, an adversary could pretty easily grind
-        // an address which contains the /policy/ string. To handle this edge case, we have to iteratively try every split
-        // until we find one that works. This assumes that the address type is constrained by length
-        for (idx, _) in s.match_indices("/policy/") {
-            let payer = &s[..idx];
-            let payee = &s[idx + POLICY_SEPARATOR.len()..];
-            let payer = Address::from_str(payer);
-            if let Ok(payer) = payer {
-                let payee =
-                    Address::from_str(payee).map_err(|e| anyhow::Error::from_boxed(e.into()))?;
-                return Ok(PolicyKey::with(Payer(payer), payee));
-            }
-        }
-        anyhow::bail!("{} could not be parsed as a policy key", s);
+        // Uniform with the other composite keys (e.g. warp's `RouterKey`): a single `:`
+        // separates the payer from the payee. No address encoding (bech32/hex/base64) can
+        // contain a `:`, so a plain split is unambiguous - unlike a `/` separator, which
+        // base64 addresses can contain.
+        let (payer, payee) = s
+            .split_once(':')
+            .ok_or_else(|| anyhow::anyhow!("Invalid policy key: missing separator token `:`"))?;
+        let payer = Address::from_str(payer).map_err(|e| anyhow::Error::from_boxed(e.into()))?;
+        let payee = Address::from_str(payee).map_err(|e| anyhow::Error::from_boxed(e.into()))?;
+        Ok(PolicyKey::with(Payer(payer), payee))
     }
 }
 
@@ -307,16 +298,19 @@ fn test_policy_key_encode_like() {
 
 #[test]
 fn test_policy_key_from_str() {
+    // A fixed-length test address. With a `:` separator there is no adversarial case to
+    // defend against (unlike the old `/policy/` separator, which base64 addresses could
+    // contain), so a plain split is sufficient.
     #[derive(PartialEq, Eq, Debug, Clone)]
-    struct MaliciousAddress([u8; 12]);
+    struct TestAddress([u8; 12]);
 
-    impl From<&[u8; 12]> for MaliciousAddress {
+    impl From<&[u8; 12]> for TestAddress {
         fn from(value: &[u8; 12]) -> Self {
             Self(*value)
         }
     }
 
-    impl FromStr for MaliciousAddress {
+    impl FromStr for TestAddress {
         type Err = anyhow::Error;
         fn from_str(s: &str) -> Result<Self, Self::Err> {
             if s.len() == 12 {
@@ -326,26 +320,21 @@ fn test_policy_key_from_str() {
         }
     }
 
-    impl Display for MaliciousAddress {
+    impl Display for TestAddress {
         fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
             f.write_str(&String::from_utf8_lossy(&self.0))
         }
     }
 
-    // Test roundtrip for a *valid* address that contains the separator at an irrelelvant location
-    let key =
-        PolicyKey::<MaliciousAddress>::with(Payer(b"evil/policy/".into()), b"innocuouskey".into());
+    // Valid roundtrip: `<payer>:<payee>`.
+    let key = PolicyKey::<TestAddress>::with(Payer(b"payer_addr01".into()), b"payee_addr02".into());
     let key_str = format!("{key}");
-    assert_eq!(
-        &format!("payers/evil/policy/{POLICY_SEPARATOR}innocuouskey"),
-        &key_str
-    );
+    assert_eq!(&key_str, "payer_addr01:payee_addr02");
     let recovered_key = PolicyKey::from_str(&key_str).expect("Valid key must deserialize!");
     assert_eq!(recovered_key, key);
 
-    // Test an invalid address that contains lots of the separator
-    assert!(PolicyKey::<MaliciousAddress>::from_str(&format!(
-        "{POLICY_SEPARATOR}{POLICY_SEPARATOR}{POLICY_SEPARATOR}{POLICY_SEPARATOR}"
-    ))
-    .is_err());
+    // Missing separator is rejected.
+    assert!(PolicyKey::<TestAddress>::from_str("payer_addr01").is_err());
+    // Parts that are not valid addresses (here, the wrong length) are rejected.
+    assert!(PolicyKey::<TestAddress>::from_str("a:b").is_err());
 }
