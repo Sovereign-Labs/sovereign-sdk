@@ -103,6 +103,13 @@ pub enum PrunerConfig {
         versions_to_keep: NonZeroU64,
         /// Maximum number of keys deleted per internal batch. `None` falls back to
         /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
+        ///
+        /// Within each pass the user-state pruner is served first and the kernel-state pruner
+        /// only gets the leftover budget, so while user state has more than `max_batch_size`
+        /// prunable keys the kernel pruner waits for user pruning to catch up. This only adds
+        /// passes here, since the startup prune runs to completion before block processing; the
+        /// disk-growth effect of this ordering is a steady-state [`PrunerConfig::Periodic`]
+        /// concern.
         #[serde(default)]
         max_batch_size: Option<NonZeroUsize>,
         /// If `true`, run a full RocksDB compaction on the pruned column families after the
@@ -122,6 +129,12 @@ pub enum PrunerConfig {
         versions_to_keep: NonZeroU64,
         /// Maximum number of keys deleted per batch. `None` falls back to
         /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
+        ///
+        /// Within each pass the user-state pruner is served first and the kernel-state pruner
+        /// only gets the leftover budget, so while user state has more than `max_batch_size`
+        /// prunable keys the kernel pruner makes no progress and kernel historical state can
+        /// grow on disk until user pruning catches up; raising `max_batch_size` shortens that
+        /// window.
         #[serde(default)]
         max_batch_size: Option<NonZeroUsize>,
     },

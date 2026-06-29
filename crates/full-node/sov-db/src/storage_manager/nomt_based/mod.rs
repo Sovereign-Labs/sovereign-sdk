@@ -10,6 +10,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
 pub use crate::flat_db::FlatStateDb;
+use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::SchemaBatch;
 #[cfg(feature = "migration-script")]
@@ -591,7 +592,14 @@ where
 
         let pruning_commit_time = self
             .pruning
-            .on_finalize(&mut self.db_group, block_header.height())?;
+            .on_finalize(&mut self.db_group, block_header.height())
+            .with_context(|| {
+                format!(
+                    "periodic pruning failed while finalizing block height={} hash={}",
+                    block_header.height(),
+                    block_header.hash()
+                )
+            })?;
 
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(StorageManagerFinalizationMetric {

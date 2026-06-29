@@ -1,6 +1,8 @@
 use crate::flat_db::DbCache;
 use std::collections::HashMap;
 use std::marker::PhantomData;
+#[cfg(test)]
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
 use std::time::Duration;
@@ -32,6 +34,14 @@ const GIGABYTE: usize = 1024 * 1024 * 1024;
 // 300 thousand keys * 32 bytes is about 10 MB. This should be a large enough batch size to keep up with state growth,
 // without consuming excessive memory.
 pub(crate) const DEFAULT_MAX_PRUNING_BATCH_SIZE: usize = 300_000;
+
+#[cfg(test)]
+static FAIL_NEXT_PRUNING_COMMIT: AtomicBool = AtomicBool::new(false);
+
+#[cfg(test)]
+pub(crate) fn fail_next_pruning_commit_for_test() {
+    FAIL_NEXT_PRUNING_COMMIT.store(true, Ordering::SeqCst);
+}
 
 pub(crate) struct DbGroup<H, K> {
     merklized_state: Arc<NomtStateDb<H>>,
@@ -273,11 +283,18 @@ where
 
     // Flush pruning schema batches to disk.
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
+        #[cfg(test)]
+        if FAIL_NEXT_PRUNING_COMMIT.swap(false, Ordering::SeqCst) {
+            anyhow::bail!("injected pruning commit failure");
+        }
+
         self.flat_state
             .archival_db
-            .write_schemas(&group.historical_state.pruning_batch)?;
+            .write_schemas(&group.historical_state.pruning_batch)
+            .context("failed to write historical state pruning batch")?;
         self.accessory
-            .write_schemas(&group.accessory.pruning_batch)?;
+            .write_schemas(&group.accessory.pruning_batch)
+            .context("failed to write accessory state pruning batch")?;
         Ok(())
     }
 
@@ -484,12 +501,12 @@ impl PrunerJob {
             .historical_state
             .join()
             .map_err(|e| anyhow::anyhow!("Historical state pruner panicked: {:?}", e))?
-            .context("historical state")?;
+            .context("historical state pruning batch collection failed")?;
         let accessory_state = self
             .accessory_state
             .join()
             .map_err(|e| anyhow::anyhow!("Accessory state pruner panicked: {:?}", e))?
-            .context("accessory state")?;
+            .context("accessory state pruning batch collection failed")?;
         tracing::info!(%historical_state.hit_size_limit, %accessory_state.hit_size_limit, "Pruner task has completed");
         Ok(PruneGroup {
             historical_state,

@@ -48,6 +48,7 @@ kernel_commit_concurrency = 2 # Number of concurrent commit workers for kernel s
 block_interval = 100 # How often to run the pruner, measured in DA blocks
 versions_to_keep = 20 # Number of versions available for historical querying
 # max_batch_size = 300000 # Max key/value pairs pruned per batch. Each key is about 70 bytes, so the default uses about 21MB.
+# Note: within each pass user state is pruned before kernel state, so a small value can leave kernel historical state on disk until user pruning catches up.
 #
 # Alternatively, prune once synchronously at startup and never during steady-state operation:
 # [storage.pruner.once_at_startup]

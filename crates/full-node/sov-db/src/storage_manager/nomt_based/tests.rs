@@ -9,6 +9,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 
+use super::groups::fail_next_pruning_commit_for_test;
 use super::{NomtChangeSet, NomtStorageManager, StateFinishedSession};
 use crate::accessory_db::AccessoryDb;
 use crate::config::{PrunerConfig, RollupDbConfig};
@@ -202,6 +203,57 @@ async fn wait_for_background_pruner(storage_manager: &Sm) {
 /// `(blocks - 2) - versions_to_keep`.
 fn oldest_available_after_drain(blocks: u64, versions_to_keep: u64) -> u64 {
     blocks - versions_to_keep - 2
+}
+
+#[test]
+fn periodic_pruning_failure_error_names_pruning() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().to_path_buf();
+
+    let mut config = RollupDbConfig::default_in_path(db_path);
+    config.pruner = PrunerConfig::Periodic {
+        block_interval: 1,
+        versions_to_keep: NonZeroU64::new(1).unwrap(),
+        max_batch_size: None,
+    };
+    let mut storage_manager =
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
+
+    let first_header = MockBlockHeader::from_height(1);
+    let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&first_header).unwrap();
+    let (stf_changes, _) =
+        stf_storage.materialize_from_key_values(&[(vec![1, 0, 0], Some(vec![1]))], 0);
+    storage_manager
+        .save_change_set(&first_header, stf_changes, SchemaBatch::default())
+        .unwrap();
+    storage_manager.finalize(&first_header).unwrap();
+    storage_manager.wait_for_pruner_to_finish();
+
+    fail_next_pruning_commit_for_test();
+
+    let second_header = MockBlockHeader::from_height(2);
+    let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&second_header).unwrap();
+    let (stf_changes, _) =
+        stf_storage.materialize_from_key_values(&[(vec![2, 0, 0], Some(vec![2]))], 1);
+    storage_manager
+        .save_change_set(&second_header, stf_changes, SchemaBatch::default())
+        .unwrap();
+
+    let error = storage_manager.finalize(&second_header).unwrap_err();
+    let error = format!("{error:#}");
+
+    assert!(
+        error.contains("periodic pruning failed while finalizing block height=2 hash="),
+        "missing top-level pruning/finalization context: {error}"
+    );
+    assert!(
+        error.contains("failed to commit pruning batch to RocksDB"),
+        "missing pruning commit context: {error}"
+    );
+    assert!(
+        error.contains("injected pruning commit failure"),
+        "missing inner pruning failure cause: {error}"
+    );
 }
 
 impl TestableStorageManager for Sm {

@@ -7,6 +7,7 @@
 
 use std::time::Duration;
 
+use anyhow::Context;
 use sov_rollup_interface::reexports::digest;
 
 use super::groups::{DbGroup, PrunerJob};
@@ -113,7 +114,8 @@ impl PruningController {
                 "Running one-time startup pruning synchronously to completion; node startup is blocked and this can take a long time on large databases"
             );
             let startup_prune_start = std::time::Instant::now();
-            self.prune_to_completion(db, versions_to_keep, max_batch_size)?;
+            self.prune_to_completion(db, versions_to_keep, max_batch_size)
+                .context("one-time startup pruning failed")?;
             tracing::info!(
                 elapsed = ?startup_prune_start.elapsed(),
                 "One-time startup pruning completed"
@@ -122,7 +124,8 @@ impl PruningController {
                 tracing::info!(
                     "Post-prune compaction is enabled; startup will remain blocked while compaction runs and this can take a long time on large databases"
                 );
-                db.compact_pruned_cfs()?;
+                db.compact_pruned_cfs()
+                    .context("post-prune compaction failed")?;
             }
         }
         Ok(())
@@ -150,7 +153,11 @@ impl PruningController {
                 // The pruner thread has already finished (`is_pruner_ready`), so the join is
                 // effectively free and this measures the commit.
                 let start = std::time::Instant::now();
-                let hit_size_limit = self.join_and_commit(db, job)?;
+                let hit_size_limit = self.join_and_commit(db, job).with_context(|| {
+                    format!(
+                        "failed to join and commit periodic pruning batch at finalized height {height}"
+                    )
+                })?;
                 let commit_time = start.elapsed();
                 pruning_commit_time = Some(commit_time);
                 // If the pruner didn't hit the size limit, we're done. Mark that the pruner finished at
@@ -235,11 +242,14 @@ impl PruningController {
         H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
         K: Eq + std::hash::Hash + Clone + std::fmt::Debug,
     {
-        let prune_group = job.join()?;
+        let prune_group = job
+            .join()
+            .context("failed to collect pruning batch from background pruner")?;
         let hit_size_limit = prune_group.hit_size_limit();
         tracing::info!(hit_size_limit, "Committing pruning batch");
         let commit_start = std::time::Instant::now();
-        db.commit_pruning(prune_group)?;
+        db.commit_pruning(prune_group)
+            .context("failed to commit pruning batch to RocksDB")?;
         tracing::info!(
             hit_size_limit,
             elapsed = ?commit_start.elapsed(),

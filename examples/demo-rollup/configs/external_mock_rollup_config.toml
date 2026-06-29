@@ -22,6 +22,7 @@ state_cache_size = 4294967296 # 4 GiB. Default is 1 GiB.
 # block_interval = 100 # How often to run the pruner, measured in DA blocks
 # versions_to_keep = 20 # Number of versions available for historical querying
 # max_batch_size = 300000 # Max key/value pairs pruned per batch. Each key is about 70 bytes, so the default uses about 21MB.
+# Note: within each pass user state is pruned before kernel state, so a small value can leave kernel historical state on disk until user pruning catches up.
 
 # We define the rollup's genesis to occur at block number `genesis_height`. The rollup will ignore
 # any blocks before this height, and any blobs at this height will not be processed
