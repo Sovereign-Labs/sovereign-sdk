@@ -1,9 +1,9 @@
 //! Pruning policy and runtime for the NOMT storage manager.
 //!
-//! [`PruningController`] owns everything pruning-related: the schedule resolved from
-//! [`PrunerConfig`], the in-flight background pruner job, and the bookkeeping needed to decide
-//! when to spawn the next one. The storage manager holds a single [`PruningController`] and
-//! delegates to it, rather than spreading pruning state across its own fields.
+//! [`PruningController`] owns everything pruning-related: the [`PrunerConfig`] it was built from,
+//! the in-flight background pruner job, and the bookkeeping needed to decide when to spawn the
+//! next one. The storage manager holds a single [`PruningController`] and delegates to it, rather
+//! than spreading pruning state across its own fields.
 
 use std::time::Duration;
 
@@ -11,60 +11,13 @@ use anyhow::Context;
 use sov_rollup_interface::reexports::digest;
 
 use super::groups::{DbGroup, PrunerJob};
-use crate::config::{PrunerConfig, RollupDbConfig};
+use crate::config::PrunerConfig;
 
-/// Pruning schedule resolved from [`PrunerConfig`] at construction time: `NonZero` values are
-/// unwrapped to plain `usize` and `max_batch_size` is resolved to its concrete default. Each
-/// variant carries exactly the parameters that mode needs, so there are no unused/dummy fields.
-#[derive(Debug, Clone, Copy)]
-enum PrunerSchedule {
-    /// Never prune.
-    Off,
-    /// Prune in the background during finalization, roughly every `block_interval` finalized
-    /// blocks.
-    Periodic {
-        block_interval: u64,
-        versions_to_keep: usize,
-        max_batch_size: usize,
-    },
-    /// Prune once, synchronously, at startup, then never again during this run.
-    OnceAtStartup {
-        versions_to_keep: usize,
-        max_batch_size: usize,
-        compact_after: bool,
-    },
-}
-
-impl PrunerSchedule {
-    fn from_config(config: PrunerConfig) -> Self {
-        match config {
-            PrunerConfig::Off => Self::Off,
-            PrunerConfig::Periodic {
-                block_interval,
-                versions_to_keep,
-                max_batch_size,
-            } => Self::Periodic {
-                block_interval,
-                versions_to_keep: versions_to_keep.get() as usize,
-                max_batch_size: RollupDbConfig::resolve_max_batch_size(max_batch_size),
-            },
-            PrunerConfig::OnceAtStartup {
-                versions_to_keep,
-                max_batch_size,
-                compact_after,
-            } => Self::OnceAtStartup {
-                versions_to_keep: versions_to_keep.get() as usize,
-                max_batch_size: RollupDbConfig::resolve_max_batch_size(max_batch_size),
-                compact_after,
-            },
-        }
-    }
-}
-
-/// Owns the pruning schedule and the runtime state needed to drive it (the in-flight background
-/// pruner job and the height at which it last finished). Created once per storage manager.
+/// Owns the pruning configuration and the runtime state needed to drive it (the in-flight
+/// background pruner job and the height at which it last finished). Created once per storage
+/// manager.
 pub(crate) struct PruningController {
-    schedule: PrunerSchedule,
+    config: PrunerConfig,
     /// The background pruner job spawned by the periodic path, if one is currently running. Its
     /// delete batch is committed on a subsequent [`Self::on_finalize`].
     in_flight: Option<PrunerJob>,
@@ -80,10 +33,10 @@ pub(crate) struct PruningController {
 }
 
 impl PruningController {
-    /// Resolves the pruning schedule from `config`. Does not perform any pruning.
+    /// Stores the pruning `config`. Does not perform any pruning.
     pub(crate) fn new(config: PrunerConfig) -> Self {
         Self {
-            schedule: PrunerSchedule::from_config(config),
+            config,
             in_flight: None,
             last_finish_at_height: None,
             #[cfg(any(test, feature = "test-utils"))]
@@ -93,7 +46,7 @@ impl PruningController {
         }
     }
 
-    /// Runs the one-time startup prune synchronously to completion, if the schedule is
+    /// Runs the one-time startup prune synchronously to completion, if configured as
     /// [`PrunerConfig::OnceAtStartup`]; a no-op otherwise. Called from the storage manager
     /// constructor, before any state access, while there is no live read/write traffic.
     pub(crate) fn run_startup_prune<H, K>(&mut self, db: &mut DbGroup<H, K>) -> anyhow::Result<()>
@@ -101,12 +54,14 @@ impl PruningController {
         H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
         K: Eq + std::hash::Hash + Clone + std::fmt::Debug,
     {
-        if let PrunerSchedule::OnceAtStartup {
+        if let PrunerConfig::OnceAtStartup {
             versions_to_keep,
             max_batch_size,
             compact_after,
-        } = self.schedule
+        } = self.config
         {
+            let versions_to_keep = versions_to_keep.get() as usize;
+            let max_batch_size = max_batch_size.get();
             tracing::info!(
                 versions_to_keep,
                 max_batch_size,
@@ -179,12 +134,14 @@ impl PruningController {
             }
         }
 
-        if let PrunerSchedule::Periodic {
+        if let PrunerConfig::Periodic {
             block_interval,
             versions_to_keep,
             max_batch_size,
-        } = self.schedule
+        } = self.config
         {
+            let versions_to_keep = versions_to_keep.get() as usize;
+            let max_batch_size = max_batch_size.get();
             let should_run_pruner = self.in_flight.is_none()
                 && self
                     .last_finish_at_height

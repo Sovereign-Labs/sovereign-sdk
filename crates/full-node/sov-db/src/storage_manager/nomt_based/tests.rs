@@ -12,7 +12,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use super::groups::fail_next_pruning_commit_for_test;
 use super::{NomtChangeSet, NomtStorageManager, StateFinishedSession};
 use crate::accessory_db::AccessoryDb;
-use crate::config::{PrunerConfig, RollupDbConfig};
+use crate::config::{default_max_pruning_batch_size, PrunerConfig, RollupDbConfig};
 use crate::historical_state::HistoricalStateReader;
 use crate::ledger_db::LedgerDb;
 use crate::schema::types::slot_key::{SlotKey, SlotValue};
@@ -214,7 +214,7 @@ fn periodic_pruning_failure_error_names_pruning() {
     config.pruner = PrunerConfig::Periodic {
         block_interval: 1,
         versions_to_keep: NonZeroU64::new(1).unwrap(),
-        max_batch_size: None,
+        max_batch_size: default_max_pruning_batch_size(),
     };
     let mut storage_manager =
         NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
@@ -383,7 +383,7 @@ async fn test_historical_state_with_pruning() {
     config.pruner = PrunerConfig::Periodic {
         block_interval: pruning_frequency,
         versions_to_keep: NonZeroU64::new(versions_to_keep as u64).unwrap(),
-        max_batch_size: None,
+        max_batch_size: default_max_pruning_batch_size(),
     };
     let mut storage_manager =
         NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config.clone(), false).unwrap();
@@ -595,7 +595,7 @@ async fn test_prune_once_at_startup_runs_to_completion() {
     config.pruner = PrunerConfig::OnceAtStartup {
         versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
         // Tiny batch: the backlog far exceeds it, forcing several internal commit passes.
-        max_batch_size: Some(NonZeroUsize::new(8).unwrap()),
+        max_batch_size: NonZeroUsize::new(8).unwrap(),
         compact_after: false,
     };
     let mut storage_manager =
@@ -705,7 +705,7 @@ async fn test_prune_once_at_startup_compacts_pruned_cfs() {
     let mut config = RollupDbConfig::default_in_path(db_path);
     config.pruner = PrunerConfig::OnceAtStartup {
         versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
-        max_batch_size: None,
+        max_batch_size: default_max_pruning_batch_size(),
         compact_after: true,
     };
     let mut storage_manager =
@@ -755,7 +755,7 @@ async fn test_hot_key_pruning_keeps_only_recent_versions() {
     config.pruner = PrunerConfig::Periodic {
         block_interval: 1,
         versions_to_keep: NonZeroU64::new(versions_to_keep as u64).unwrap(),
-        max_batch_size: None,
+        max_batch_size: default_max_pruning_batch_size(),
     };
     let mut storage_manager =
         NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
@@ -869,7 +869,7 @@ async fn test_pruner_backpressure_respawns_until_drained() {
     config.pruner = PrunerConfig::Periodic {
         block_interval: 1,
         versions_to_keep: NonZeroU64::new(versions_to_keep as u64).unwrap(),
-        max_batch_size: Some(NonZeroUsize::new(8).unwrap()),
+        max_batch_size: NonZeroUsize::new(8).unwrap(),
     };
     let mut storage_manager =
         NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();

@@ -18,7 +18,7 @@ use sov_api_spec::types::{
     TxInfoWithConfirmation, TxReceiptResult,
 };
 use sov_api_spec::{types, ClientInfo, Error, ResponseValue, WsSubscription};
-use sov_db::config::PrunerConfig;
+use sov_db::config::{default_max_pruning_batch_size, PrunerConfig};
 use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
@@ -419,7 +419,7 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
         PrunerConfig::Periodic {
             block_interval: 1,
             versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
-            max_batch_size: None,
+            max_batch_size: default_max_pruning_batch_size(),
         },
     )
     .await;

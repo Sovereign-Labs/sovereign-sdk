@@ -43,6 +43,14 @@ pub(crate) fn fail_next_pruning_commit_for_test() {
     FAIL_NEXT_PRUNING_COMMIT.store(true, Ordering::SeqCst);
 }
 
+#[cfg(test)]
+fn fail_pruning_commit_if_requested() -> anyhow::Result<()> {
+    if FAIL_NEXT_PRUNING_COMMIT.swap(false, Ordering::SeqCst) {
+        anyhow::bail!("injected pruning commit failure");
+    }
+    Ok(())
+}
+
 pub(crate) struct DbGroup<H, K> {
     merklized_state: Arc<NomtStateDb<H>>,
     flat_state: FlatStateDb,
@@ -284,9 +292,7 @@ where
     // Flush pruning schema batches to disk.
     pub(crate) fn commit_pruning(&mut self, group: PruneGroup) -> anyhow::Result<()> {
         #[cfg(test)]
-        if FAIL_NEXT_PRUNING_COMMIT.swap(false, Ordering::SeqCst) {
-            anyhow::bail!("injected pruning commit failure");
-        }
+        fail_pruning_commit_if_requested()?;
 
         self.flat_state
             .archival_db

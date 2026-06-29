@@ -101,8 +101,8 @@ pub enum PrunerConfig {
     OnceAtStartup {
         /// Number of recent versions to retain for historical querying.
         versions_to_keep: NonZeroU64,
-        /// Maximum number of keys deleted per internal batch. `None` falls back to
-        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
+        /// Maximum number of keys deleted per internal batch. Omitting it in config falls back
+        /// to [`default_max_pruning_batch_size`].
         ///
         /// Within each pass the user-state pruner is served first and the kernel-state pruner
         /// only gets the leftover budget, so while user state has more than `max_batch_size`
@@ -110,8 +110,8 @@ pub enum PrunerConfig {
         /// passes here, since the startup prune runs to completion before block processing; the
         /// disk-growth effect of this ordering is a steady-state [`PrunerConfig::Periodic`]
         /// concern.
-        #[serde(default)]
-        max_batch_size: Option<NonZeroUsize>,
+        #[serde(default = "default_max_pruning_batch_size")]
+        max_batch_size: NonZeroUsize,
         /// If `true`, run a full RocksDB compaction on the pruned column families after the
         /// startup prune completes, dropping the resulting tombstones and reclaiming disk
         /// space. This is heavy (it rewrites the affected column families) and only sensible
@@ -127,17 +127,26 @@ pub enum PrunerConfig {
         block_interval: u64,
         /// Number of recent versions to retain for historical querying.
         versions_to_keep: NonZeroU64,
-        /// Maximum number of keys deleted per batch. `None` falls back to
-        /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`].
+        /// Maximum number of keys deleted per batch. Omitting it in config falls back to
+        /// [`default_max_pruning_batch_size`].
         ///
         /// Within each pass the user-state pruner is served first and the kernel-state pruner
         /// only gets the leftover budget, so while user state has more than `max_batch_size`
         /// prunable keys the kernel pruner makes no progress and kernel historical state can
         /// grow on disk until user pruning catches up; raising `max_batch_size` shortens that
         /// window.
-        #[serde(default)]
-        max_batch_size: Option<NonZeroUsize>,
+        #[serde(default = "default_max_pruning_batch_size")]
+        max_batch_size: NonZeroUsize,
     },
+}
+
+/// Default per-batch key cap used when `max_batch_size` is omitted from config.
+///
+/// Serde calls this to fill in the `max_batch_size` field of [`PrunerConfig::Periodic`] /
+/// [`PrunerConfig::OnceAtStartup`] when the key is absent.
+pub fn default_max_pruning_batch_size() -> NonZeroUsize {
+    NonZeroUsize::new(DEFAULT_MAX_PRUNING_BATCH_SIZE)
+        .expect("DEFAULT_MAX_PRUNING_BATCH_SIZE is non-zero")
 }
 
 /// Configuration for Sovereign Rollup node database.
@@ -305,12 +314,6 @@ impl RollupDbConfig {
 
     pub(crate) fn pruner(&self) -> PrunerConfig {
         self.pruner
-    }
-
-    /// Resolves an optional per-batch key cap to a concrete value, falling back to
-    /// [`DEFAULT_MAX_PRUNING_BATCH_SIZE`]. The cap is guaranteed non-zero by the type.
-    pub(crate) fn resolve_max_batch_size(max_batch_size: Option<NonZeroUsize>) -> usize {
-        max_batch_size.map_or(DEFAULT_MAX_PRUNING_BATCH_SIZE, NonZeroUsize::get)
     }
 }
 

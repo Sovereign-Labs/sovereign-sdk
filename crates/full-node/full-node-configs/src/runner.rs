@@ -424,7 +424,7 @@ mod tests {
     /// the matching variants.
     #[test]
     fn pruner_config_round_trips_through_toml() {
-        use sov_db::config::{PrunerConfig, RollupDbConfig};
+        use sov_db::config::{default_max_pruning_batch_size, PrunerConfig, RollupDbConfig};
         use std::num::{NonZeroU64, NonZeroUsize};
 
         // Omitted `pruner` defaults to `Off`.
@@ -441,7 +441,7 @@ mod tests {
         .unwrap();
         assert_eq!(off.pruner, PrunerConfig::Off);
 
-        // Periodic (max_batch_size omitted -> None).
+        // Periodic (max_batch_size omitted -> default).
         let periodic: RollupDbConfig = toml::from_str(
             r#"
             path = "/tmp"
@@ -456,7 +456,7 @@ mod tests {
             PrunerConfig::Periodic {
                 block_interval: 100,
                 versions_to_keep: NonZeroU64::new(20).unwrap(),
-                max_batch_size: None,
+                max_batch_size: default_max_pruning_batch_size(),
             }
         );
 
@@ -475,7 +475,7 @@ mod tests {
             once.pruner,
             PrunerConfig::OnceAtStartup {
                 versions_to_keep: NonZeroU64::new(500).unwrap(),
-                max_batch_size: Some(NonZeroUsize::new(4096).unwrap()),
+                max_batch_size: NonZeroUsize::new(4096).unwrap(),
                 compact_after: true,
             }
         );

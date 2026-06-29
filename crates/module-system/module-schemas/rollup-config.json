@@ -714,13 +714,10 @@
                   "default": false
                 },
                 "max_batch_size": {
-                  "description": "Maximum number of keys deleted per internal batch. `None` falls back to\n[`DEFAULT_MAX_PRUNING_BATCH_SIZE`].\n\nWithin each pass the user-state pruner is served first and the kernel-state pruner\nonly gets the leftover budget, so while user state has more than `max_batch_size`\nprunable keys the kernel pruner waits for user pruning to catch up. This only adds\npasses here, since the startup prune runs to completion before block processing; the\ndisk-growth effect of this ordering is a steady-state [`PrunerConfig::Periodic`]\nconcern.",
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
+                  "description": "Maximum number of keys deleted per internal batch. Omitting it in config falls back\nto [`default_max_pruning_batch_size`].\n\nWithin each pass the user-state pruner is served first and the kernel-state pruner\nonly gets the leftover budget, so while user state has more than `max_batch_size`\nprunable keys the kernel pruner waits for user pruning to catch up. This only adds\npasses here, since the startup prune runs to completion before block processing; the\ndisk-growth effect of this ordering is a steady-state [`PrunerConfig::Periodic`]\nconcern.",
+                  "type": "integer",
                   "format": "uint",
-                  "default": null,
+                  "default": 300000,
                   "minimum": 1
                 },
                 "versions_to_keep": {
@@ -755,13 +752,10 @@
                   "minimum": 0
                 },
                 "max_batch_size": {
-                  "description": "Maximum number of keys deleted per batch. `None` falls back to\n[`DEFAULT_MAX_PRUNING_BATCH_SIZE`].\n\nWithin each pass the user-state pruner is served first and the kernel-state pruner\nonly gets the leftover budget, so while user state has more than `max_batch_size`\nprunable keys the kernel pruner makes no progress and kernel historical state can\ngrow on disk until user pruning catches up; raising `max_batch_size` shortens that\nwindow.",
-                  "type": [
-                    "integer",
-                    "null"
-                  ],
+                  "description": "Maximum number of keys deleted per batch. Omitting it in config falls back to\n[`default_max_pruning_batch_size`].\n\nWithin each pass the user-state pruner is served first and the kernel-state pruner\nonly gets the leftover budget, so while user state has more than `max_batch_size`\nprunable keys the kernel pruner makes no progress and kernel historical state can\ngrow on disk until user pruning catches up; raising `max_batch_size` shortens that\nwindow.",
+                  "type": "integer",
                   "format": "uint",
-                  "default": null,
+                  "default": 300000,
                   "minimum": 1
                 },
                 "versions_to_keep": {

@@ -1002,7 +1002,7 @@ mod tests {
     use std::time::Duration;
 
     use sha2::Sha256;
-    use sov_db::config::{PrunerConfig, RollupDbConfig};
+    use sov_db::config::{default_max_pruning_batch_size, PrunerConfig, RollupDbConfig};
     use sov_db::storage_manager::NomtStorageManager;
     use sov_db::test_utils::CommitFaultInjectionLocation;
     use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
@@ -1649,7 +1649,7 @@ mod tests {
         config.pruner = PrunerConfig::Periodic {
             block_interval: 1,
             versions_to_keep: NonZeroU64::new(2).unwrap(),
-            max_batch_size: None,
+            max_batch_size: default_max_pruning_batch_size(),
         };
         let mut storage_manager = TestStorageManager::new(config, false).unwrap();
 
