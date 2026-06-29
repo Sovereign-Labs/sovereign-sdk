@@ -1,3 +1,6 @@
+# 2026-06-27
+- #3024 Shutdown diagnostics: shutdown controllers now log the source location that triggered the shutdown. `PrimaryShutdownController`, `SecondaryShutdownController`, and `RunnerShutdownController` `shutdown()` are now `#[track_caller]` and emit a `"Shutdown triggered"` info log with the triggered `controller` name (`primary`/`secondary`/`runner`) and the caller's `file`/`line`/`column`. Adds a `shutdown_with_location` method for cases where the triggering call site was captured earlier (e.g. across an async boundary), used by the preferred sequencer's `exit_rollup`. Not state- or API-breaking.
+
 # 2026-06-26
 - #3020 Rollup shutdown: moves HTTP/RPC server task ownership into `StateTransitionRunner`, so runner-owned background tasks are stopped and joined as part of runner shutdown.
   * **Breaking Change** `sov_modules_api::NodeEndpoints` no longer has a `background_handles` field. Endpoint constructors should return only `axum_router` and `jsonrpsee_module`; long-lived background tasks need to be owned by the rollup, runner, sequencer, or service lifecycle instead.
