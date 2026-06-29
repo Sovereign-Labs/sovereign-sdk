@@ -1132,7 +1132,7 @@ async fn exit_rollup_inner(
     // In the Kubernetes environment, logs are sometimes lost during shutdown.
     // This delay ensures logs have time to be flushed before the application exits.
     tracing::info!("Shutting down the rollup");
-    primary_shutdown.shutdown();
+    primary_shutdown.shutdown_with_location(location);
     let sleep_time = Duration::from_secs(5);
     tracing::error!(%location, after = ?sleep_time, "Calling std::process::exit(1)");
     println!("Calling std::process::exit(1): {location}");
