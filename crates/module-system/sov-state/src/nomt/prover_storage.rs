@@ -173,17 +173,19 @@ where
             && version_to_use == self.latest_version()
     }
 
-    /// Resolves the result of an *unbound* (live-tip) read.
+    /// Resolves the result of a read that, by construction, can never observe
+    /// [`HistoricalValueError::PrunedVersion`].
     ///
-    /// Unbound reads bypass the snapshot pin (`get_latest_borrowed_unbound`), so they always
-    /// observe the latest committed version and can therefore *never* surface
-    /// [`HistoricalValueError::PrunedVersion`] — only genuine I/O faults. We encode that invariant
-    /// with a `debug_assert!`. Any backing DB error remains fatal because `None` means "key absent"
-    /// to callers such as chain-state height lookups.
-    fn resolve_unbound_read(
-        result: anyhow::Result<Option<SlotValue>>,
+    /// This covers every *unbound* read: the live-tip user/kernel value reads (which bypass the
+    /// snapshot pin via `get_latest_borrowed_unbound` and always observe the latest committed
+    /// version), the accessory reads, and the root-hash reads. None of these are backed by the
+    /// versioned value DB that emits `PrunedVersion`, so they can only fail on a genuine I/O
+    /// fault. We encode that invariant with a `debug_assert!`. Any backing DB error remains fatal
+    /// because `None` means "key absent" to callers such as chain-state height lookups.
+    fn resolve_unbound_read<T>(
+        result: anyhow::Result<Option<T>>,
         source: &'static str,
-    ) -> Option<SlotValue> {
+    ) -> Option<T> {
         match result {
             Ok(value) => value,
             Err(error) => {
@@ -392,15 +394,16 @@ where
 
     /// Get the latest root hash available in the live db. This could be the newest root hash from the underlying db, or the root hash from the latest delta in memory - whichever is newer.
     fn latest_root_and_version_unbound(&self) -> Option<(SlotNumber, StorageRoot<S>)> {
-        self.historical_state
-            .latest_root_and_version_unbound()
-            .expect("Error reading from database")
-            .map(|(version, root)| {
-                (
-                    version,
-                    borsh::from_slice(&root).expect("Error deserializing root hash"),
-                )
-            })
+        Self::resolve_unbound_read(
+            self.historical_state.latest_root_and_version_unbound(),
+            "state-root DB",
+        )
+        .map(|(version, root)| {
+            (
+                version,
+                borsh::from_slice(&root).expect("Error deserializing root hash"),
+            )
+        })
     }
 
     // Fetch the requested key with proof. Atomically retrieve the values of any provided accessory keys at the same storage version.
@@ -905,10 +908,10 @@ where
     }
 
     fn get_root_hash_unbound(&self, version: SlotNumber) -> Option<Self::Root> {
-        let raw_root = self
-            .historical_state
-            .get_serialized_root_hash(version)
-            .expect("Failed to read root hash from historical state")?;
+        let raw_root = Self::resolve_unbound_read(
+            self.historical_state.get_serialized_root_hash(version),
+            "state-root DB",
+        )?;
         let storage_root_historical: Self::Root =
             borsh::from_slice(&raw_root).expect("Failed to deserialize root hash");
         tracing::trace!(%version, root_hash = %storage_root_historical, "Got unbound root hash");
@@ -924,10 +927,12 @@ where
         key: SlotKey,
         max_version: Option<SlotNumber>,
     ) -> Option<SlotValue> {
-        self.accessory
-            .get_value_option(&key, max_version.unwrap_or(SlotNumber::MAX))
-            .expect("Unable to read from AccessoryDb")
-            .map(Into::into)
+        Self::resolve_unbound_read(
+            self.accessory
+                .get_value_option(&key, max_version.unwrap_or(SlotNumber::MAX))
+                .map(|v| v.map(Into::into)),
+            "AccessoryDb",
+        )
     }
 
     fn maybe_iter_user_values_with_prefix(
@@ -1025,13 +1030,16 @@ mod tests {
 
     #[test]
     fn unbound_read_resolver_preserves_missing_value() {
-        assert_eq!(TestStorage::resolve_unbound_read(Ok(None), "UserDb"), None);
+        assert_eq!(
+            TestStorage::resolve_unbound_read::<SlotValue>(Ok(None), "UserDb"),
+            None
+        );
     }
 
     #[test]
     #[should_panic(expected = "Unable to read from UserDb")]
     fn unbound_read_resolver_panics_on_db_error() {
-        let _ = TestStorage::resolve_unbound_read(
+        let _ = TestStorage::resolve_unbound_read::<SlotValue>(
             Err(anyhow::anyhow!("injected read failure")),
             "UserDb",
         );
