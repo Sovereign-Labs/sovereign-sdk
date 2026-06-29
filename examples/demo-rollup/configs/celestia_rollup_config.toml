@@ -14,6 +14,9 @@ rpc_url = "ws://127.0.0.1:26658"
 # The primary endpoint is `rpc_url`; these are tried, in order, when the primary
 # is unreachable, and the client automatically switches back to the primary once
 # it recovers. Each entry has a mandatory url and an optional JWT token.
+# Alternatively, when this list is omitted from the config, a single secondary
+# endpoint is read from the SOV_CELESTIA_RPC_SECONDARY_URL and
+# SOV_CELESTIA_RPC_SECONDARY_AUTH_TOKEN environment variables.
 #[[da.rpc_fallback_endpoints]]
 #url = "ws://fallback1:26658"
 #token = "MY.SECRET.TOKEN"
@@ -46,6 +49,9 @@ grpc_url = "http://127.0.0.1:9090"
 # Optional fallback gRPC endpoints for blob submission.
 # Used alongside grpc_url for failover. Each entry has a mandatory url
 # and an optional token (sent as x-token metadata).
+# Alternatively, when this list is omitted from the config, a single secondary
+# endpoint is read from the SOV_CELESTIA_GRPC_SECONDARY_URL and
+# SOV_CELESTIA_GRPC_SECONDARY_AUTH_TOKEN environment variables.
 #[[da.grpc_fallback_endpoints]]
 #url = "http://fallback1:9090"
 #token = "secret-token"

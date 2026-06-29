@@ -63,8 +63,11 @@ pub struct CelestiaConfig {
     /// The primary endpoint is `rpc_url`; these are tried, in order, when the
     /// primary is unreachable. The client automatically switches back to the
     /// primary once it recovers. Each entry has a mandatory `url` and an optional
-    /// JWT `token`. Default: empty (no fallback endpoints).
-    #[serde(default)]
+    /// JWT `token`.
+    /// If omitted from the config, a single secondary endpoint is read from the
+    /// `SOV_CELESTIA_RPC_SECONDARY_URL` and `SOV_CELESTIA_RPC_SECONDARY_AUTH_TOKEN`
+    /// environment variables. Default: empty (no fallback endpoints).
+    #[serde(default = "default_rpc_fallback_endpoints_from_env")]
     pub rpc_fallback_endpoints: Vec<RpcEndpointConfig>,
 
     /// How often the background task probes the preferred RPC endpoint to decide
@@ -95,8 +98,10 @@ pub struct CelestiaConfig {
     /// Optional list of fallback gRPC endpoints for blob submission.
     /// Used alongside `grpc_url` for failover. Each entry has a mandatory `url`
     /// and an optional `token` (sent as `x-token` metadata).
-    /// Default: empty (no fallback endpoints).
-    #[serde(default)]
+    /// If omitted from the config, a single secondary endpoint is read from the
+    /// `SOV_CELESTIA_GRPC_SECONDARY_URL` and `SOV_CELESTIA_GRPC_SECONDARY_AUTH_TOKEN`
+    /// environment variables. Default: empty (no fallback endpoints).
+    #[serde(default = "default_grpc_fallback_endpoints_from_env")]
     pub grpc_fallback_endpoints: Vec<GrpcEndpointConfig>,
 
     /// The private key in hex format of Celestia wallet that has enough TIA to publish blobs.
@@ -457,6 +462,32 @@ fn default_signer_private_key() -> Option<String> {
     std::env::var("SOV_CELESTIA_SIGNER_KEY").ok()
 }
 
+/// Reads a single secondary RPC endpoint from the environment, used as the fallback
+/// list when `rpc_fallback_endpoints` is omitted from the config. Both the URL and the
+/// (optional) token come from the environment, since for managed providers the URL itself
+/// is often a secret.
+fn default_rpc_fallback_endpoints_from_env() -> Vec<RpcEndpointConfig> {
+    match std::env::var("SOV_CELESTIA_RPC_SECONDARY_URL") {
+        Ok(url) if !url.trim().is_empty() => vec![RpcEndpointConfig {
+            url,
+            token: std::env::var("SOV_CELESTIA_RPC_SECONDARY_AUTH_TOKEN").ok(),
+        }],
+        _ => Vec::new(),
+    }
+}
+
+/// Reads a single secondary gRPC endpoint from the environment, used as the fallback
+/// list when `grpc_fallback_endpoints` is omitted from the config.
+fn default_grpc_fallback_endpoints_from_env() -> Vec<GrpcEndpointConfig> {
+    match std::env::var("SOV_CELESTIA_GRPC_SECONDARY_URL") {
+        Ok(url) if !url.trim().is_empty() => vec![GrpcEndpointConfig {
+            url,
+            token: std::env::var("SOV_CELESTIA_GRPC_SECONDARY_AUTH_TOKEN").ok(),
+        }],
+        _ => Vec::new(),
+    }
+}
+
 pub(crate) const fn default_tx_priority() -> TxPriority {
     TxPriority::High
 }
@@ -522,6 +553,10 @@ mod tests {
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
     const GRPC_ENV_VAR: &str = "SOV_CELESTIA_GRPC_URL";
+    const RPC_SECONDARY_URL_ENV_VAR: &str = "SOV_CELESTIA_RPC_SECONDARY_URL";
+    const RPC_SECONDARY_TOKEN_ENV_VAR: &str = "SOV_CELESTIA_RPC_SECONDARY_AUTH_TOKEN";
+    const GRPC_SECONDARY_URL_ENV_VAR: &str = "SOV_CELESTIA_GRPC_SECONDARY_URL";
+    const GRPC_SECONDARY_TOKEN_ENV_VAR: &str = "SOV_CELESTIA_GRPC_SECONDARY_AUTH_TOKEN";
 
     struct EnvVarGuard {
         key: &'static str,
@@ -622,6 +657,7 @@ mod tests {
     fn grpc_fallback_endpoints_default_to_empty() {
         let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
         let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+        let _secondary_guard = EnvVarGuard::set(GRPC_SECONDARY_URL_ENV_VAR, None);
 
         let config = deserialize_config("{}").unwrap();
         assert!(config.grpc_fallback_endpoints.is_empty());
@@ -712,6 +748,7 @@ mod tests {
     fn rpc_fallback_endpoints_default_to_empty() {
         let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
         let _grpc_guard = EnvVarGuard::set(GRPC_ENV_VAR, None);
+        let _secondary_guard = EnvVarGuard::set(RPC_SECONDARY_URL_ENV_VAR, None);
 
         let config = deserialize_config("{}").unwrap();
         assert!(config.rpc_fallback_endpoints.is_empty());
@@ -796,6 +833,104 @@ mod tests {
         assert_eq!(
             configured.rpc_max_head_age_secs,
             std::num::NonZero::new(600)
+        );
+    }
+
+    #[test]
+    fn rpc_secondary_endpoint_is_read_from_env_when_list_omitted() {
+        let _rpc = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc = EnvVarGuard::set(GRPC_ENV_VAR, None);
+        let _url = EnvVarGuard::set(RPC_SECONDARY_URL_ENV_VAR, Some("ws://secondary:26658"));
+        let _token = EnvVarGuard::set(RPC_SECONDARY_TOKEN_ENV_VAR, Some("secondary-token"));
+
+        let config = deserialize_config("{}").unwrap();
+        assert_eq!(config.rpc_fallback_endpoints.len(), 1);
+        assert_eq!(config.rpc_fallback_endpoints[0].url, "ws://secondary:26658");
+        assert_eq!(
+            config.rpc_fallback_endpoints[0].token.as_deref(),
+            Some("secondary-token")
+        );
+    }
+
+    #[test]
+    fn rpc_secondary_endpoint_from_env_without_token() {
+        let _rpc = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc = EnvVarGuard::set(GRPC_ENV_VAR, None);
+        let _url = EnvVarGuard::set(RPC_SECONDARY_URL_ENV_VAR, Some("ws://secondary:26658"));
+        let _token = EnvVarGuard::set(RPC_SECONDARY_TOKEN_ENV_VAR, None);
+
+        let config = deserialize_config("{}").unwrap();
+        assert_eq!(config.rpc_fallback_endpoints.len(), 1);
+        assert_eq!(config.rpc_fallback_endpoints[0].token, None);
+    }
+
+    #[test]
+    fn rpc_secondary_endpoint_blank_env_url_yields_no_fallback() {
+        let _rpc = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc = EnvVarGuard::set(GRPC_ENV_VAR, None);
+        let _url = EnvVarGuard::set(RPC_SECONDARY_URL_ENV_VAR, Some("   "));
+        let _token = EnvVarGuard::set(RPC_SECONDARY_TOKEN_ENV_VAR, None);
+
+        let config = deserialize_config("{}").unwrap();
+        assert!(config.rpc_fallback_endpoints.is_empty());
+    }
+
+    #[test]
+    fn explicit_rpc_fallback_endpoints_override_env_secondary() {
+        let _rpc = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc = EnvVarGuard::set(GRPC_ENV_VAR, None);
+        let _url = EnvVarGuard::set(RPC_SECONDARY_URL_ENV_VAR, Some("ws://env-secondary:26658"));
+        let _token = EnvVarGuard::set(RPC_SECONDARY_TOKEN_ENV_VAR, Some("env-token"));
+
+        let config = deserialize_config(
+            r#"{"rpc_fallback_endpoints": [{"url": "ws://config-secondary:26658"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(config.rpc_fallback_endpoints.len(), 1);
+        assert_eq!(
+            config.rpc_fallback_endpoints[0].url,
+            "ws://config-secondary:26658"
+        );
+        assert_eq!(config.rpc_fallback_endpoints[0].token, None);
+    }
+
+    #[test]
+    fn grpc_secondary_endpoint_is_read_from_env_when_list_omitted() {
+        let _rpc = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc = EnvVarGuard::set(GRPC_ENV_VAR, None);
+        let _url = EnvVarGuard::set(GRPC_SECONDARY_URL_ENV_VAR, Some("http://secondary:9090"));
+        let _token = EnvVarGuard::set(GRPC_SECONDARY_TOKEN_ENV_VAR, Some("secondary-token"));
+
+        let config = deserialize_config("{}").unwrap();
+        assert_eq!(config.grpc_fallback_endpoints.len(), 1);
+        assert_eq!(
+            config.grpc_fallback_endpoints[0].url,
+            "http://secondary:9090"
+        );
+        assert_eq!(
+            config.grpc_fallback_endpoints[0].token.as_deref(),
+            Some("secondary-token")
+        );
+    }
+
+    #[test]
+    fn explicit_grpc_fallback_endpoints_override_env_secondary() {
+        let _rpc = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let _grpc = EnvVarGuard::set(GRPC_ENV_VAR, None);
+        let _url = EnvVarGuard::set(
+            GRPC_SECONDARY_URL_ENV_VAR,
+            Some("http://env-secondary:9090"),
+        );
+        let _token = EnvVarGuard::set(GRPC_SECONDARY_TOKEN_ENV_VAR, Some("env-token"));
+
+        let config = deserialize_config(
+            r#"{"grpc_fallback_endpoints": [{"url": "http://config-secondary:9090"}]}"#,
+        )
+        .unwrap();
+        assert_eq!(config.grpc_fallback_endpoints.len(), 1);
+        assert_eq!(
+            config.grpc_fallback_endpoints[0].url,
+            "http://config-secondary:9090"
         );
     }
 
