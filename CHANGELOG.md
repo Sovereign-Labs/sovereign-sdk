@@ -5,6 +5,8 @@
   * `rpc_max_head_age_secs` — maximum age (seconds) of the primary's head for it to be considered healthy enough to switch back to. Only used when `rpc_fallback_endpoints` is non-empty. Default: the celestia-client built-in value (30s).
   * Environment-variable fallback: when `rpc_fallback_endpoints` is omitted from the config, a single secondary endpoint is read from `SOV_CELESTIA_RPC_SECONDARY_URL` / `SOV_CELESTIA_RPC_SECONDARY_AUTH_TOKEN`; likewise `grpc_fallback_endpoints` now reads `SOV_CELESTIA_GRPC_SECONDARY_URL` / `SOV_CELESTIA_GRPC_SECONDARY_AUTH_TOKEN`. The URL is taken from the environment because managed providers often treat the endpoint URL itself as a secret. An explicit config list always overrides the env value, and a blank/whitespace-only env URL yields no fallback.
   * Not state- or API-breaking: with no config entries and no env vars set, behavior is unchanged (no fallback endpoints).
+# 2026-06-27
+- #3024 Shutdown diagnostics: shutdown controllers now log the source location that triggered the shutdown. `PrimaryShutdownController`, `SecondaryShutdownController`, and `RunnerShutdownController` `shutdown()` are now `#[track_caller]` and emit a `"Shutdown triggered"` info log with the triggered `controller` name (`primary`/`secondary`/`runner`) and the caller's `file`/`line`/`column`. Adds a `shutdown_with_location` method for cases where the triggering call site was captured earlier (e.g. across an async boundary), used by the preferred sequencer's `exit_rollup`. Not state- or API-breaking.
 
 # 2026-06-26
 - #3020 Rollup shutdown: moves HTTP/RPC server task ownership into `StateTransitionRunner`, so runner-owned background tasks are stopped and joined as part of runner shutdown.

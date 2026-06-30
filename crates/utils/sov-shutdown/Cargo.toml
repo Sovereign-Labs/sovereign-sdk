@@ -18,3 +18,4 @@ tracing = { workspace = true }
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "sync", "rt-multi-thread"] }
+tracing-test = { workspace = true }
