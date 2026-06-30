@@ -347,6 +347,16 @@ impl CelestiaConfig {
 
     pub(crate) async fn build_client(&self) -> anyhow::Result<celestia_client::Client> {
         validate_rpc_url(&self.rpc_url)?;
+        validate_fallback_endpoint_urls(
+            "rpc_fallback_endpoints",
+            self.rpc_fallback_endpoints.iter().map(|ep| ep.url.as_str()),
+        )?;
+        validate_fallback_endpoint_urls(
+            "grpc_fallback_endpoints",
+            self.grpc_fallback_endpoints
+                .iter()
+                .map(|ep| ep.url.as_str()),
+        )?;
         validate_compression_chunk_size(self.compression_chunk_size)?;
 
         let api_request_timeout =
@@ -371,13 +381,17 @@ impl CelestiaConfig {
                 endpoint
             });
             builder = builder.rpc_endpoints(rpc_endpoints);
-        }
-        if let Some(interval) = self.rpc_health_check_interval_secs {
-            builder =
-                builder.rpc_health_check_interval(std::time::Duration::from_secs(interval.get()));
-        }
-        if let Some(max_head_age) = self.rpc_max_head_age_secs {
-            builder = builder.rpc_max_head_age(std::time::Duration::from_secs(max_head_age.get()));
+
+            // These switch-back knobs are only meaningful when there are fallback
+            // endpoints to switch away from and back to.
+            if let Some(interval) = self.rpc_health_check_interval_secs {
+                builder = builder
+                    .rpc_health_check_interval(std::time::Duration::from_secs(interval.get()));
+            }
+            if let Some(max_head_age) = self.rpc_max_head_age_secs {
+                builder =
+                    builder.rpc_max_head_age(std::time::Duration::from_secs(max_head_age.get()));
+            }
         }
         // Submission section.
         if self.grpc_url.is_none() && !self.grpc_fallback_endpoints.is_empty() {
@@ -423,6 +437,22 @@ pub(crate) const fn default_compression_chunk_size() -> usize {
 fn validate_rpc_url(rpc_url: &str) -> anyhow::Result<()> {
     if rpc_url.trim().is_empty() {
         anyhow::bail!("`rpc_url` must be set in the config or via `SOV_CELESTIA_RPC_URL`");
+    }
+
+    Ok(())
+}
+
+/// Rejects fallback endpoints with an empty/blank `url` at startup, so a misconfigured
+/// `[[da.<field>]]` entry fails fast with a clear, indexed message instead of surfacing
+/// later as an opaque connection error.
+fn validate_fallback_endpoint_urls<'a>(
+    field: &str,
+    urls: impl Iterator<Item = &'a str>,
+) -> anyhow::Result<()> {
+    for (index, url) in urls.enumerate() {
+        if url.trim().is_empty() {
+            anyhow::bail!("`{field}[{index}].url` must not be empty");
+        }
     }
 
     Ok(())
@@ -730,6 +760,37 @@ mod tests {
             error
                 .to_string()
                 .contains("`grpc_fallback_endpoints` requires `grpc_url` to be set"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn build_client_rejects_empty_fallback_rpc_url() {
+        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
+        config.rpc_fallback_endpoints = vec![RpcEndpointConfig {
+            url: "   ".to_string(),
+            token: None,
+        }];
+        let error = config.build_client().await.unwrap_err();
+        assert!(
+            error.to_string().contains("rpc_fallback_endpoints"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn build_client_rejects_empty_fallback_grpc_url() {
+        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
+        // Set `grpc_url` so the only error source is the empty fallback URL, not the
+        // separate "requires grpc_url" check.
+        config.grpc_url = Some("http://localhost:9090".to_string());
+        config.grpc_fallback_endpoints = vec![GrpcEndpointConfig {
+            url: "   ".to_string(),
+            token: None,
+        }];
+        let error = config.build_client().await.unwrap_err();
+        assert!(
+            error.to_string().contains("grpc_fallback_endpoints"),
             "unexpected error: {error}"
         );
     }

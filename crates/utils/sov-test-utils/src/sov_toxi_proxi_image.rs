@@ -23,13 +23,11 @@ const TOXIPROXY_SLOW_DA_LATENCY_MS: u64 = 1_000_000;
 const TOXIPROXY_HTTP_REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
 const TOXIPROXY_READY_TIMEOUT: Duration = Duration::from_secs(5);
 
-// Two independently controllable proxies that both front the SAME Celestia bridge
-// RPC upstream, used to test RPC endpoint failover/switch-back (primary vs secondary).
-const TOXIPROXY_CELESTIA_RPC_PRIMARY_PORT: u16 = 8668;
-const TOXIPROXY_CELESTIA_RPC_SECONDARY_PORT: u16 = 8669;
-const TOXIPROXY_CELESTIA_RPC_PRIMARY_PROXY_NAME: &str = "celestia_rpc_primary";
-const TOXIPROXY_CELESTIA_RPC_SECONDARY_PROXY_NAME: &str = "celestia_rpc_secondary";
-const TOXIPROXY_CELESTIA_RPC_SECONDARY_LATENCY_TOXIC_NAME: &str = "celestia_rpc_secondary_latency";
+// Container-internal ports for the Celestia RPC proxy fleet. Each fleet proxy fronts the
+// SAME Celestia bridge RPC upstream; a test configures the adapter with proxy 0 as the
+// primary `rpc_url` and the rest as ordered fallback endpoints, then breaks individual
+// proxies to drive and observe failover. The length of this pool is the max fleet size.
+const TOXIPROXY_CELESTIA_RPC_PORTS: [u16; 3] = [8668, 8669, 8670];
 
 #[derive(Clone)]
 struct SovToxiProxiImage;
@@ -52,12 +50,13 @@ impl Image for SovToxiProxiImage {
     }
 
     fn expose_ports(&self) -> &[ContainerPort] {
-        const EXPOSED_PORTS: [ContainerPort; 5] = [
+        const EXPOSED_PORTS: [ContainerPort; 6] = [
             ContainerPort::Tcp(TOXIPROXY_API_PORT),
             ContainerPort::Tcp(TOXIPROXY_POSTGRES_PORT),
             ContainerPort::Tcp(TOXIPROXY_DA_PORT),
-            ContainerPort::Tcp(TOXIPROXY_CELESTIA_RPC_PRIMARY_PORT),
-            ContainerPort::Tcp(TOXIPROXY_CELESTIA_RPC_SECONDARY_PORT),
+            ContainerPort::Tcp(TOXIPROXY_CELESTIA_RPC_PORTS[0]),
+            ContainerPort::Tcp(TOXIPROXY_CELESTIA_RPC_PORTS[1]),
+            ContainerPort::Tcp(TOXIPROXY_CELESTIA_RPC_PORTS[2]),
         ];
         &EXPOSED_PORTS
     }
@@ -363,26 +362,35 @@ impl ToxiProxySetup {
     }
 }
 
-/// Toxiproxy fronting a single Celestia bridge RPC upstream with two independently
-/// controllable proxies — a primary and a secondary — both pointing at the same node.
+/// Toxiproxy fronting a single Celestia bridge RPC upstream with a fleet of `N`
+/// independently controllable proxies, all pointing at the same node. Index `0` is the
+/// primary; indices `1..N` are ordered fallback endpoints.
 ///
-/// This is the topology for testing RPC endpoint failover and switch-back: the
-/// adapter is configured with the primary proxy as `rpc_url` and the secondary proxy
-/// as a fallback endpoint, then the test enables/disables each proxy (and tags the
-/// secondary with latency) to drive and observe failover.
-pub struct CelestiaDualRpcProxy {
+/// This is the topology for testing RPC endpoint failover and switch-back: the adapter is
+/// configured with proxy `0` as `rpc_url` and proxies `1..N` as fallback endpoints, then a
+/// test breaks individual proxies (disable / reset / timeout) and tags them with latency to
+/// drive and observe failover.
+pub struct CelestiaRpcProxyFleet {
     container: ContainerAsync<SovToxiProxiImage>,
     client: reqwest::Client,
     api_base_url: String,
     host: String,
-    primary_port: u16,
-    secondary_port: u16,
+    /// Mapped host ports, indexed by endpoint (index 0 is the primary).
+    host_ports: Vec<u16>,
+    /// Toxiproxy proxy names, indexed by endpoint.
+    proxy_names: Vec<String>,
 }
 
-impl CelestiaDualRpcProxy {
-    /// Starts toxiproxy and creates two proxies that both forward to the Celestia
-    /// bridge RPC published on the host at `bridge_rpc_host_port`.
-    pub async fn start(bridge_rpc_host_port: u16) -> Self {
+impl CelestiaRpcProxyFleet {
+    /// Starts toxiproxy and creates `num_endpoints` proxies that all forward to the
+    /// Celestia bridge RPC published on the host at `bridge_rpc_host_port`.
+    pub async fn start(bridge_rpc_host_port: u16, num_endpoints: usize) -> Self {
+        assert!(
+            (1..=TOXIPROXY_CELESTIA_RPC_PORTS.len()).contains(&num_endpoints),
+            "num_endpoints must be in 1..={}",
+            TOXIPROXY_CELESTIA_RPC_PORTS.len()
+        );
+
         prepull_image_best_effort(SovToxiProxiImage).await;
 
         let toxiproxy = SovToxiProxiImage
@@ -410,70 +418,62 @@ impl CelestiaDualRpcProxy {
 
         let api_base_url = format!("http://{host}:{api_port}");
 
-        // Both proxies forward to the same bridge RPC upstream on the host.
-        Self::create_proxy(
-            &client,
-            &api_base_url,
-            TOXIPROXY_CELESTIA_RPC_PRIMARY_PROXY_NAME,
-            TOXIPROXY_CELESTIA_RPC_PRIMARY_PORT,
-            bridge_rpc_host_port,
-        )
-        .await;
-        Self::create_proxy(
-            &client,
-            &api_base_url,
-            TOXIPROXY_CELESTIA_RPC_SECONDARY_PROXY_NAME,
-            TOXIPROXY_CELESTIA_RPC_SECONDARY_PORT,
-            bridge_rpc_host_port,
-        )
-        .await;
-
-        let primary_port = toxiproxy
-            .get_host_port_ipv4(TOXIPROXY_CELESTIA_RPC_PRIMARY_PORT.tcp())
-            .await
-            .expect("Failed to map celestia primary RPC port");
-        let secondary_port = toxiproxy
-            .get_host_port_ipv4(TOXIPROXY_CELESTIA_RPC_SECONDARY_PORT.tcp())
-            .await
-            .expect("Failed to map celestia secondary RPC port");
+        // Every proxy forwards to the same bridge RPC upstream on the host.
+        let mut host_ports = Vec::with_capacity(num_endpoints);
+        let mut proxy_names = Vec::with_capacity(num_endpoints);
+        for (index, &container_port) in TOXIPROXY_CELESTIA_RPC_PORTS
+            .iter()
+            .take(num_endpoints)
+            .enumerate()
+        {
+            let name = format!("celestia_rpc_{index}");
+            Self::create_proxy(
+                &client,
+                &api_base_url,
+                &name,
+                container_port,
+                bridge_rpc_host_port,
+            )
+            .await;
+            let host_port = toxiproxy
+                .get_host_port_ipv4(container_port.tcp())
+                .await
+                .expect("Failed to map celestia RPC proxy port");
+            host_ports.push(host_port);
+            proxy_names.push(name);
+        }
 
         Self {
             container: toxiproxy,
             client,
             api_base_url,
             host,
-            primary_port,
-            secondary_port,
+            host_ports,
+            proxy_names,
         }
     }
 
-    /// The WebSocket URL the rollup should use as its primary (`rpc_url`) endpoint.
-    pub fn primary_rpc_ws_url(&self) -> String {
-        format!("ws://{}:{}", self.host, self.primary_port)
+    /// The WebSocket URL for endpoint `index` (0 = primary, 1.. = fallbacks).
+    pub fn rpc_ws_url(&self, index: usize) -> String {
+        format!("ws://{}:{}", self.host, self.host_ports[index])
     }
 
-    /// The WebSocket URL the rollup should use as its secondary (fallback) endpoint.
-    pub fn secondary_rpc_ws_url(&self) -> String {
-        format!("ws://{}:{}", self.host, self.secondary_port)
+    /// Enables or disables the proxy for endpoint `index`. Disabling force-closes live
+    /// connections and refuses new ones, exactly like the node going away.
+    pub async fn set_enabled(&self, index: usize, enabled: bool) {
+        ToxiProxySetup::post_json(
+            &self.client,
+            format!("{}/proxies/{}", self.api_base_url, self.proxy_names[index]),
+            &json!({ "enabled": enabled }),
+            "Failed to update celestia rpc proxy state",
+        )
+        .await;
     }
 
-    /// Enables or disables the primary RPC proxy. Disabling force-closes live
-    /// connections and refuses new ones, exactly like the primary node going away.
-    pub async fn set_primary_enabled(&self, enabled: bool) {
-        self.set_proxy_enabled(TOXIPROXY_CELESTIA_RPC_PRIMARY_PROXY_NAME, enabled)
-            .await;
-    }
-
-    /// Enables or disables the secondary RPC proxy.
-    pub async fn set_secondary_enabled(&self, enabled: bool) {
-        self.set_proxy_enabled(TOXIPROXY_CELESTIA_RPC_SECONDARY_PROXY_NAME, enabled)
-            .await;
-    }
-
-    /// Adds (or, with `None`, removes) a downstream latency toxic on the secondary
-    /// proxy. A persistent latency on the secondary lets a test tell which endpoint
-    /// is currently serving traffic by measuring request round-trip time.
-    pub async fn set_secondary_latency(&self, latency: Option<Duration>) {
+    /// Adds (or, with `None`, removes) a downstream latency toxic on endpoint `index`. A
+    /// persistent latency lets a test tell which endpoint is currently serving traffic by
+    /// measuring request round-trip time.
+    pub async fn set_latency(&self, index: usize, latency: Option<Duration>) {
         let (latency_ms, enabled) = match latency {
             Some(latency) => (latency.as_millis() as u64, true),
             None => (0, false),
@@ -481,13 +481,29 @@ impl CelestiaDualRpcProxy {
         ToxiProxySetup::set_proxy_latency(
             &self.client,
             &self.api_base_url,
-            TOXIPROXY_CELESTIA_RPC_SECONDARY_PROXY_NAME,
-            TOXIPROXY_CELESTIA_RPC_SECONDARY_LATENCY_TOXIC_NAME,
+            &self.proxy_names[index],
+            &format!("{}_latency", self.proxy_names[index]),
             latency_ms,
             enabled,
-            "Failed to configure celestia secondary RPC latency toxic",
+            "Failed to configure celestia rpc latency toxic",
         )
         .await;
+    }
+
+    /// Enables or disables an immediate TCP RST (`reset_peer`) on endpoint `index`. The
+    /// proxy stays enabled — this models a connection reset, not a refused connection.
+    pub async fn set_reset_peer(&self, index: usize, enabled: bool) {
+        self.set_break_toxic(index, "reset_peer", json!({ "timeout": 0 }), enabled)
+            .await;
+    }
+
+    /// Makes endpoint `index` hang indefinitely: a `timeout` toxic with `timeout: 0` drops all
+    /// data and never closes the connection, so requests exceed the client's per-call timeout
+    /// while the socket stays open. Unlike [`Self::set_reset_peer`], there is no connection-level
+    /// error — this exercises the client's *timeout-based* failover. Pass `false` to heal.
+    pub async fn set_timeout(&self, index: usize, enabled: bool) {
+        self.set_break_toxic(index, "timeout", json!({ "timeout": 0 }), enabled)
+            .await;
     }
 
     /// Drops the managed toxiproxy container.
@@ -495,14 +511,42 @@ impl CelestiaDualRpcProxy {
         drop(self.container);
     }
 
-    async fn set_proxy_enabled(&self, proxy_name: &str, enabled: bool) {
-        ToxiProxySetup::post_json(
-            &self.client,
-            format!("{}/proxies/{}", self.api_base_url, proxy_name),
-            &json!({ "enabled": enabled }),
-            "Failed to update celestia rpc proxy state",
-        )
-        .await;
+    /// Idempotently (re)creates or removes a connection-breaking toxic on endpoint
+    /// `index`, applied on both the upstream and downstream streams so it trips on a new
+    /// connection's handshake bytes as well as on an already-established idle connection.
+    async fn set_break_toxic(
+        &self,
+        index: usize,
+        toxic_type: &str,
+        attributes: serde_json::Value,
+        enabled: bool,
+    ) {
+        let toxic_base_url = format!(
+            "{}/proxies/{}/toxics",
+            self.api_base_url, self.proxy_names[index]
+        );
+        for stream in ["upstream", "downstream"] {
+            let toxic_name = format!("{toxic_type}_{stream}");
+            let toxic_url = format!("{toxic_base_url}/{toxic_name}");
+            // Reset to a clean state first so this method is idempotent.
+            ToxiProxySetup::delete_toxic_if_exists(&self.client, &toxic_url).await;
+            if !enabled {
+                continue;
+            }
+            ToxiProxySetup::post_json(
+                &self.client,
+                toxic_base_url.clone(),
+                &json!({
+                    "name": toxic_name,
+                    "type": toxic_type,
+                    "stream": stream,
+                    "toxicity": 1,
+                    "attributes": attributes,
+                }),
+                "Failed to configure celestia rpc break toxic",
+            )
+            .await;
+        }
     }
 
     /// Creates a toxiproxy listener that forwards to the host's Celestia bridge RPC.
