@@ -1,6 +1,7 @@
 //! Implementation of [`HierarchicalStorageManager`] based on NOMT
 
 mod groups;
+mod pruning;
 #[cfg(test)]
 mod tests;
 
@@ -9,6 +10,7 @@ use std::marker::PhantomData;
 use std::sync::{Arc, RwLock};
 
 pub use crate::flat_db::FlatStateDb;
+use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::SchemaBatch;
 #[cfg(feature = "migration-script")]
@@ -22,7 +24,8 @@ use crate::config::{RollupDbConfig, RollupDbConfigWithCustomizations};
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::metrics::nomt::StorageManagerFinalizationMetric;
 use crate::state_db_nomt::{NomtSessionBuilder, StateOverlay};
-use crate::storage_manager::nomt_based::groups::{CommitGroup, DbGroup, PrunerJob, SnapshotGroup};
+use crate::storage_manager::nomt_based::groups::{CommitGroup, DbGroup, SnapshotGroup};
+use crate::storage_manager::nomt_based::pruning::PruningController;
 pub use groups::PrunerJobOutput;
 pub(crate) use groups::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 
@@ -136,12 +139,9 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
     nomt_snapshots: Arc<RwLock<HashMap<Da::SlotHash, StateOverlay>>>,
     db_group: DbGroup<H, Da::SlotHash>,
 
-    // If pruner is running.
-    pruner: Option<PrunerJob>,
-    last_pruner_finish_at_height: Option<u64>,
-    pruner_block_interval: Option<u64>,
-    pruner_versions_to_keep: usize,
-    pruner_max_batch_size: usize,
+    /// Owns the pruning schedule and runtime: the resolved policy, the in-flight background
+    /// pruner job, and test-only observability counters.
+    pruning: PruningController,
 
     /// When true, `create_state_for` will generate witness hints for ZK proving.
     witness_generation_enabled: bool,
@@ -168,16 +168,12 @@ where
         custom_config: RollupDbConfigWithCustomizations,
         witness_generation: bool,
     ) -> anyhow::Result<Self> {
-        let config = custom_config.config();
-        let pruner_block_interval = config.get_pruner_interval();
-        let pruner_versions_to_keep = config.get_pruner_versions_to_keep();
-        let pruner_max_batch_size = config.get_pruner_max_batch_size();
-        assert!(
-            pruner_versions_to_keep >= 1,
-            "Pruner versions to keep should be at least 1, got {pruner_versions_to_keep}",
-        );
-        let db_group = DbGroup::new(custom_config)?;
+        let mut pruning = PruningController::new(custom_config.config().pruner());
+        let mut db_group = DbGroup::new(custom_config)?;
         db_group.update_ledger_finalized_height()?;
+        // Run the one-time startup prune now (a no-op unless `PrunerConfig::OnceAtStartup`), before
+        // any state access, while there is no live read/write traffic to compete with.
+        pruning.run_startup_prune(&mut db_group)?;
 
         Ok(Self {
             chain_forks: Default::default(),
@@ -185,11 +181,7 @@ where
             rockbound_snapshots: Default::default(),
             nomt_snapshots: Arc::new(Default::default()),
             db_group,
-            pruner: None,
-            last_pruner_finish_at_height: None,
-            pruner_block_interval,
-            pruner_versions_to_keep,
-            pruner_max_batch_size,
+            pruning,
             witness_generation_enabled: witness_generation,
             _phantom_s: Default::default(),
         })
@@ -326,6 +318,37 @@ where
     #[cfg(test)]
     pub(crate) fn blocks_to_parent_count(&self) -> usize {
         self.blocks_to_parent.len()
+    }
+
+    /// Number of pruning batches committed so far. Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn pruning_commits_count(&self) -> u64 {
+        self.pruning.commits_count()
+    }
+
+    /// Whether the most recently committed pruning batch hit the size limit. Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn last_pruning_hit_size_limit(&self) -> bool {
+        self.pruning.last_hit_size_limit()
+    }
+
+    /// Whether a pruner thread is currently in flight. Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn is_pruner_running(&self) -> bool {
+        self.pruning.is_running()
+    }
+
+    /// `None` if no pruner job is in flight, otherwise `Some(finished)`. Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn pruner_in_flight_finished(&self) -> Option<bool> {
+        self.pruning.in_flight_finished()
+    }
+
+    /// Blocks the current thread until any in-flight pruner thread has finished. Does NOT commit
+    /// the resulting batch (that happens on the next `finalize`). Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn wait_for_pruner_to_finish(&self) {
+        self.pruning.wait_for_finish();
     }
 }
 
@@ -567,44 +590,16 @@ where
             ?apply_time,
             "Finalization complete");
 
-        let is_pruner_ready = self
-            .pruner
-            .as_ref()
-            .map(|p| p.is_finished())
-            .unwrap_or(false);
-        let mut pruning_commit_time = None;
-
-        if is_pruner_ready {
-            // UNWRAP: Checked above.
-            let pruner = std::mem::take(&mut self.pruner).unwrap();
-            let prune_group = pruner.join()?;
-            let start = std::time::Instant::now();
-            let hit_size_limit = prune_group.hit_size_limit();
-            self.db_group.commit_pruning(prune_group)?;
-            pruning_commit_time = Some(start.elapsed());
-            // If the pruner didn't hit the size limit, we're done. Mark that the pruner finished at the current height.
-            // Otherwise, we don't mark the run as finished, so the pruner will spawn another iteration.
-            if !hit_size_limit {
-                self.last_pruner_finish_at_height = Some(block_header.height());
-            }
-        }
-
-        if let Some(pruner_block_interval) = self.pruner_block_interval {
-            let should_run_pruner = self.pruner.is_none()
-                && self
-                    .last_pruner_finish_at_height
-                    .map(|last_run_at_height| {
-                        block_header.height().saturating_sub(last_run_at_height)
-                            > pruner_block_interval
-                    })
-                    .unwrap_or(true);
-            if should_run_pruner {
-                let pruner = self
-                    .db_group
-                    .start_pruner(self.pruner_versions_to_keep, self.pruner_max_batch_size);
-                self.pruner = Some(pruner);
-            }
-        }
+        let pruning_commit_time = self
+            .pruning
+            .on_finalize(&mut self.db_group, block_header.height())
+            .with_context(|| {
+                format!(
+                    "periodic pruning failed while finalizing block height={} hash={}",
+                    block_header.height(),
+                    block_header.hash()
+                )
+            })?;
 
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(StorageManagerFinalizationMetric {

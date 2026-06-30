@@ -51,6 +51,9 @@
 - #2953 Preferred sequencer: replica nodes now deregister from the `nodes` table on graceful shutdown, so node discovery reroutes reads off a departing replica within milliseconds instead of waiting for staleness. Best-effort and bounded; leader removal is unchanged (still timeout-based).
 
 # 2026-06-02
+- #2886 Re-enables NOMT state-version pruning (disabled since the rockbound type-aware refactor). **Breaking config change**: the flat `storage.pruner_block_interval` / `pruner_versions_to_keep` / `pruner_max_batch_size` fields are replaced by a single `[storage.pruner]` enum with three modes — omit it or `pruner = "off"` to disable pruning (default), `[storage.pruner.periodic]` for the previous interval-driven background pruning, and `[storage.pruner.once_at_startup]` to prune once synchronously at node startup (optionally compacting to reclaim disk). Existing configs must migrate: the deprecated flat `pruner_*` keys, and `0` for the now-non-zero `versions_to_keep` / `max_batch_size`, are rejected at config-parse time instead of being silently ignored. Bumps `rockbound` to `0aa43d4`.
+
+# 2026-05-27
 - #2936 Request rate limiting uses milli-requests instead of always rounding down.
   * Per-request budget (`milli_req_counter`) is now more fine-grained and will work even with single digit requests per second.
 # 2026-05-26

@@ -23,7 +23,7 @@ use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
-use sov_db::config::RollupDbConfig;
+use sov_db::config::{PrunerConfig, RollupDbConfig};
 use sov_db::ledger_db::LedgerDb;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::storable::rpc::StorableMockDaClient;
@@ -106,6 +106,9 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub stop_at_rollup_height: Option<RollupHeight>,
     pub extension: Option<SeqConfigExtension>,
     pub start_fresh_outer_proof_on_resync: bool,
+    /// State-version pruning policy applied to the node's DB config. Defaults to
+    /// `PrunerConfig::Off`, matching production defaults for fresh test nodes.
+    pub pruner: PrunerConfig,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -325,8 +328,10 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 
     pub fn rollup_config(&self) -> RollupConfig<<R::Spec as Spec>::Address, R::DaService> {
-        let rollup_db_config =
+        let mut rollup_db_config =
             RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf());
+        // Apply the configured pruning policy (default test config leaves pruning disabled).
+        rollup_db_config.pruner = self.config.pruner;
 
         RollupConfig {
             storage: rollup_db_config,
@@ -412,6 +417,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
             }),
             start_fresh_outer_proof_on_resync: false,
+            pruner: PrunerConfig::Off,
         }
     }
 }
