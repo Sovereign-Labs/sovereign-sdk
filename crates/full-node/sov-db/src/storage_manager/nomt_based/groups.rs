@@ -19,7 +19,7 @@ use crate::config::{RocksDbKind, RollupDbConfigWithCustomizations};
 use crate::flat_db::FlatStateDb;
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::ledger_db::LedgerDb;
-use crate::metrics::nomt::CommitDetailedMetric;
+use crate::metrics::nomt::{CommitDetailedMetric, CompactionMetric, PrunerMetric};
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
 use crate::schema::namespace::NomtStateValues;
@@ -320,10 +320,28 @@ where
             "Compacting pruned column families to reclaim disk space; this can take a long time on large databases"
         );
         let compaction_start = std::time::Instant::now();
+
+        let accessory_start = std::time::Instant::now();
         self.accessory
             .trigger_compaction::<ModuleAccessoryState>()?;
+        let accessory_time = accessory_start.elapsed();
+
+        let user_start = std::time::Instant::now();
         self.flat_state.user.trigger_compaction()?;
+        let user_time = user_start.elapsed();
+
+        let kernel_start = std::time::Instant::now();
         self.flat_state.kernel.trigger_compaction()?;
+        let kernel_time = kernel_start.elapsed();
+
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(CompactionMetric {
+                accessory_time,
+                user_time,
+                kernel_time,
+            });
+        });
+
         tracing::info!(
             elapsed = ?compaction_start.elapsed(),
             "Compacted pruned column families"
@@ -426,7 +444,19 @@ where
         let historical_state: JoinHandle<Result<PrunerJobOutput, anyhow::Error>> =
             std::thread::spawn(move || -> anyhow::Result<PrunerJobOutput> {
                 let keep = versions_to_keep as u64;
+
+                let user_start = std::time::Instant::now();
                 let user_output = user_db.collect_pruning_batch(keep, Some(max_batch_size))?;
+                let user_time = user_start.elapsed();
+                sov_metrics::track_metrics(|tracker| {
+                    tracker.submit(PrunerMetric {
+                        db: "user",
+                        keys_inspected: user_output.keys_inspected,
+                        keys_to_prune: user_output.keys_to_prune,
+                        time: user_time,
+                    });
+                });
+
                 // rockbound caps the batch at `max_batch_size`, so `keys_to_prune <= max_batch_size`
                 // always holds. `checked_sub` makes that invariant explicit and fails loudly if it
                 // is ever violated, instead of silently clamping to 0 and skipping kernel pruning.
@@ -437,7 +467,17 @@ where
                 let mut pruning_batch = user_output.batch;
                 let mut hit_size_limit = user_output.hit_size_limit;
                 if remaining > 0 {
+                    let kernel_start = std::time::Instant::now();
                     let kernel_output = kernel_db.collect_pruning_batch(keep, Some(remaining))?;
+                    let kernel_time = kernel_start.elapsed();
+                    sov_metrics::track_metrics(|tracker| {
+                        tracker.submit(PrunerMetric {
+                            db: "kernel",
+                            keys_inspected: kernel_output.keys_inspected,
+                            keys_to_prune: kernel_output.keys_to_prune,
+                            time: kernel_time,
+                        });
+                    });
                     pruning_batch.merge(kernel_output.batch);
                     hit_size_limit |= kernel_output.hit_size_limit;
                 }
