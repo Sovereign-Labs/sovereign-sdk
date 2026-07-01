@@ -4,13 +4,12 @@ use sov_blob_storage::{PreferredBatchData, PreferredProofData};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::TxHash;
 use sov_rollup_interface::node::da::DaService;
-use sov_shutdown::PrimaryShutdownController;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use std::{
     path::Path,
     sync::{atomic::AtomicUsize, Arc},
 };
 use tokio::sync::broadcast;
-use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tracing::debug;
 
@@ -40,7 +39,7 @@ impl<Da: DaService> PreferredBlobSender<Da> {
         blob_processing_timeout: Duration,
         blobs_sender_channel: broadcast::Sender<BlobExecutionStatus<Da::Spec>>,
         seq_role: SequencerRole,
-    ) -> anyhow::Result<(Self, Option<JoinHandle<()>>)> {
+    ) -> anyhow::Result<(Self, Option<BackgroundHandle<()>>)> {
         let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
         let nb_of_concurrent_proof_blob_submissions = Arc::new(AtomicUsize::new(0));
         match seq_role {

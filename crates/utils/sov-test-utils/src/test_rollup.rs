@@ -52,7 +52,7 @@ use sov_sequencer::{
     ForcedTxBatchNotification, SequencerApis, SequencerConfig, SequencerKindConfig, SequencerRole,
     SovRateLimiterConfig, StateUpdateNotification,
 };
-use sov_shutdown::PrimaryShutdownController;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
     HttpServerConfig, MonitoringConfig, ProofManagerConfig, RollupConfig, RunnerConfig,
@@ -701,7 +701,7 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>> {
     /// Used for cleanup/shutdown logic.
     pub rollup_task: JoinHandle<anyhow::Result<()>>,
     /// For optional handles to background tasks.
-    pub other_handles: Vec<JoinHandle<()>>,
+    pub other_handles: Vec<BackgroundHandle<()>>,
     /// In case the rollup was started with a secondary sequencer, this is the
     /// client that can be used to submit transactions.
     pub secondary_test_sequencer_client: Option<sov_api_spec::client::Client>,

@@ -5,7 +5,7 @@ use sov_modules_api::{
     FullyBakedTx, Gas, Runtime, SkippedTxContents, Spec, TransactionReceipt, TxProcessingError,
 };
 use sov_rollup_interface::{crypto::CredentialId, TxHash};
-use sov_shutdown::{FutureOrShutdownOutput, PrimaryShutdownController};
+use sov_shutdown::{BackgroundHandle, FutureOrShutdownOutput, PrimaryShutdownController};
 use std::cmp::Ordering as CmpOrdering;
 use std::collections::btree_map;
 use std::collections::hash_map;
@@ -16,7 +16,6 @@ use std::sync::atomic::{AtomicU64, Ordering as AtomicOrdering};
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 use tokio::sync::{broadcast, mpsc, oneshot};
-use tokio::task::JoinHandle;
 
 use crate::common::{AcceptedTx, ForcedTxBatchNotification};
 use crate::metrics::{
@@ -832,7 +831,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
         future_nonce_transaction_timeout_millis: u64,
         forced_tx_batch_receiver: broadcast::Receiver<ForcedTxBatchNotification>,
         primary_shutdown: PrimaryShutdownController,
-    ) -> (JoinHandle<()>, NonceBufferInputSender<E, S, Rt>) {
+    ) -> (BackgroundHandle<()>, NonceBufferInputSender<E, S, Rt>) {
         let (buffer_sender_channel, buffer_input) = mpsc::channel(MAX_BUFFER_INPUT_QUEUE);
         let (timeout_sender, timeout_receiver) = mpsc::channel(MAX_BUFFERED_TXS);
 
@@ -861,7 +860,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
             main_queue_depth_batcher: MetricBatcher::new(METRICS_BATCH_SIZE),
         };
 
-        let handle = tokio::spawn(async move {
+        let handle = BackgroundHandle::spawn("nonce-buffer", async move {
             tokio::select! {
                 _ = main_task.run(&primary_shutdown) => {}
                 _ = timeout_task.run() => {}
@@ -1057,6 +1056,7 @@ mod tests {
     use std::sync::Mutex;
     use std::time::Duration;
     use tokio::sync::oneshot;
+    use tokio::task::JoinHandle;
 
     type TestRuntime = TestOptimisticRuntime<TestSpec>;
 

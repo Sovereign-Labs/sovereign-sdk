@@ -15,13 +15,13 @@ use sov_modules_api::Storage;
 use sov_modules_api::TxChangeSet;
 use sov_modules_api::{FullyBakedTx, Runtime};
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_shutdown::BackgroundHandle;
 use std::collections::BTreeMap;
 use std::io::Write;
 use std::sync::atomic::AtomicU64;
 use std::sync::atomic::Ordering;
 use std::sync::Arc;
 use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
 
 // We have several work-stealing executor workers for a single main worker, so we don't expect the channel to become full.
 // Even if it does, the sender uses a non-blocking method, meaning a few updates may simply be skipped.
@@ -153,7 +153,7 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         exec_config: RollupBlockExecutorConfig<S>,
         seq_config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
         seq_role: SequencerRole,
-    ) -> (Self, Vec<JoinHandle<()>>) {
+    ) -> (Self, Vec<BackgroundHandle<()>>) {
         if seq_role != SequencerRole::BatchProducer {
             return (Self { inner: None }, vec![]);
         }
@@ -204,8 +204,8 @@ impl<S: Spec> CacheWarmUpExecutor<S> {
         mut start_block_notification_receiver: tokio::sync::watch::Receiver<
             Option<StartBlockNotification<S>>,
         >,
-    ) -> JoinHandle<()> {
-        tokio::spawn(async move {
+    ) -> BackgroundHandle<()> {
+        BackgroundHandle::spawn("cache-warmup-worker", async move {
             let shutdown_receiver = exec_config.primary_shutdown.clone();
             let mut executor = RollupBlockExecutor::<_, Rt>::new(
                 &info,

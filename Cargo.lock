@@ -12078,7 +12078,6 @@ dependencies = [
  "tracing",
  "tracing-appender",
  "tracing-opentelemetry",
- "tracing-panic",
  "tracing-subscriber 0.3.20",
 ]
 
@@ -12344,6 +12343,7 @@ dependencies = [
  "serde_with",
  "sha2 0.10.9",
  "sov-rollup-interface",
+ "sov-shutdown",
  "sov-universal-wallet",
  "test-strategy",
  "thiserror 2.0.18",
@@ -12463,8 +12463,11 @@ dependencies = [
 name = "sov-shutdown"
 version = "0.3.0"
 dependencies = [
+ "sov-test-utils",
  "tokio",
  "tracing",
+ "tracing-panic",
+ "tracing-subscriber 0.3.20",
  "tracing-test",
 ]
 

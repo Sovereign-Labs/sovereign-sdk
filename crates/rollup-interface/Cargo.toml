@@ -40,6 +40,7 @@ schemars = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
+sov-shutdown = { workspace = true, optional = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 sha2 = { workspace = true, optional = true }
 thiserror = { workspace = true }
@@ -61,6 +62,7 @@ native = [
     "backon",
     "futures",
     "sov-rollup-interface/native",
+    "sov-shutdown",
     "tracing",
     "tokio",
 ]

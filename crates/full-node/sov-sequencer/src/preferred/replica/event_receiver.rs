@@ -6,13 +6,13 @@ use crate::preferred::replica::db_data::EventType;
 use crate::preferred::replica::db_data::EventsNotificationPayload;
 use crate::preferred::replica::db_data::ParsingError;
 use crate::SequencerNotReadyDetails;
+use sov_shutdown::BackgroundHandle;
 use sov_shutdown::FutureOrShutdownOutput;
 use sov_shutdown::PrimaryShutdownController;
 use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
 use sqlx::Row;
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
 use tracing::{debug, error, trace};
 
 const MAX_DB_ERRORS_ALLOWED: u32 = 20;
@@ -137,12 +137,12 @@ impl EventReceiver {
         )
     }
 
-    pub(crate) async fn spawn_db_data_fetcher(mut self) -> JoinHandle<()> {
+    pub(crate) async fn spawn_db_data_fetcher(mut self) -> BackgroundHandle<()> {
         let mut nb_of_consecutive_db_errors = 0;
         let shutdown_receiver = self.primary_shutdown.clone();
         let mut start_replica_task_receiver = self.ready_to_process_db_events_recv.clone();
 
-        tokio::spawn(async move {
+        BackgroundHandle::spawn("replica-db-fetcher", async move {
             let mut start_event_id = None;
             let mut prev_event_type = None;
 

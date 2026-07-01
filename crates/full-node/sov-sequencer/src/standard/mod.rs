@@ -32,7 +32,7 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::BlobSenderStatus;
-use sov_shutdown::PrimaryShutdownController;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use std::boxed::Box;
 use std::marker::PhantomData;
 use std::net::IpAddr;
@@ -42,7 +42,6 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{watch, Mutex};
-use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tracing::{debug, trace, warn};
 
@@ -136,7 +135,7 @@ where
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
         primary_shutdown: PrimaryShutdownController,
-    ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
+    ) -> anyhow::Result<(Self, Vec<BackgroundHandle<()>>)> {
         let mut runtime = Rt::default();
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
 
@@ -181,7 +180,7 @@ where
         )
         .await?;
 
-        let mut handles: Vec<JoinHandle<()>> = vec![];
+        let mut handles: Vec<BackgroundHandle<()>> = vec![];
         handles.push(blob_sender_handle);
 
         let inner = Inner {
@@ -210,14 +209,14 @@ where
             da_address,
         }));
 
-        handles.push(tokio::spawn({
+        handles.push(BackgroundHandle::spawn("std-update-state", {
             loop_call_update_state(
                 seq.clone(),
                 state_update_receiver.clone(),
                 primary_shutdown.clone(),
             )
         }));
-        handles.push(tokio::spawn({
+        handles.push(BackgroundHandle::spawn("std-tx-notifications", {
             let ledger_db = ledger_db.clone();
             let seq = seq.clone();
             async move {
