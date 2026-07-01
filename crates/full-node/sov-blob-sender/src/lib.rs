@@ -19,9 +19,8 @@ use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::{DaService, SubmitBlobReceipt};
 use sov_rollup_interface::node::ledger_api::{LedgerStateProvider, QueryMode};
 use sov_rollup_interface::stf::BlobDiscardReason;
-use sov_shutdown::{FutureOrShutdownOutput, PrimaryShutdownController};
+use sov_shutdown::{BackgroundHandle, FutureOrShutdownOutput, PrimaryShutdownController};
 use tokio::sync::{broadcast, oneshot, Mutex};
-use tokio::task::JoinHandle;
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, trace};
 
@@ -108,7 +107,7 @@ where
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
         nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
-    ) -> anyhow::Result<(Self, JoinHandle<()>)> {
+    ) -> anyhow::Result<(Self, BackgroundHandle<()>)> {
         Self::new_with_task_intervals(
             da,
             finalization_manager,
@@ -137,7 +136,7 @@ where
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
         nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
-    ) -> anyhow::Result<(Self, JoinHandle<()>)> {
+    ) -> anyhow::Result<(Self, BackgroundHandle<()>)> {
         let db = Arc::new(BlobSenderDb::new(storage_path).await?);
 
         let mut all_blobs = db.get_all::<Da::Spec>().await?;
@@ -375,8 +374,8 @@ where
     async fn main_task(
         in_flight_blobs: Arc<Mutex<HashMap<BlobInternalId, InFlightBlob<Da::Spec>>>>,
         primary_shutdown: PrimaryShutdownController,
-    ) -> JoinHandle<()> {
-        tokio::spawn(async move {
+    ) -> BackgroundHandle<()> {
+        BackgroundHandle::spawn("blob-sender", async move {
             let mut metrics_interval = interval(Duration::from_secs(10));
             loop {
                 let fut = primary_shutdown.future_or_shutdown(metrics_interval.tick());

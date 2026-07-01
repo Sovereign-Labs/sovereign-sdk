@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
@@ -19,6 +20,7 @@ use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, Re
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::da::SlotData;
 use sov_shutdown::SecondaryShutdownController;
+use sov_test_utils::sov_toxi_proxi_image::CelestiaRpcProxyFleet;
 use tokio::task::JoinSet;
 
 async fn collect_all_blobs_between(
@@ -1860,5 +1862,407 @@ async fn mocha_shares_panic() -> anyhow::Result<()> {
     // 10207148
     from_mocha_invalid_row_proof::update_test_data(&client).await;
 
+    Ok(())
+}
+
+/// Median round-trip of a few `get_head_block_header` calls through whichever RPC
+/// endpoint the failover client is currently using. When the secondary carries a
+/// persistent latency toxic, this fingerprints the active endpoint by response time
+/// (toxiproxy exposes no connection counter and the failover client has no public
+/// "active endpoint" accessor, so latency is the available signal).
+async fn measure_active_rpc_latency(da_service: &CelestiaService) -> Duration {
+    let mut samples = Vec::new();
+    for _ in 0..3 {
+        let start = std::time::Instant::now();
+        if da_service.get_head_block_header().await.is_ok() {
+            samples.push(start.elapsed());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        !samples.is_empty(),
+        "expected at least one successful head request to measure latency"
+    );
+    samples.sort();
+    samples[samples.len() / 2]
+}
+
+/// Polls [`measure_active_rpc_latency`] until the median crosses `threshold` in the
+/// requested direction (`below` = faster than `threshold`), panicking after `timeout`.
+async fn wait_until_rpc_latency(
+    da_service: &CelestiaService,
+    below: bool,
+    threshold: Duration,
+    timeout: Duration,
+    context: &str,
+) {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let latency = measure_active_rpc_latency(da_service).await;
+        let satisfied = if below {
+            latency < threshold
+        } else {
+            latency > threshold
+        };
+        if satisfied {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{context}: median latency {latency:?} did not get {} {threshold:?} within {timeout:?}",
+            if below { "below" } else { "above" }
+        );
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+}
+
+/// End-to-end RPC endpoint failover and proactive switch-back, driven through toxiproxy.
+///
+/// Toxiproxy fronts a single Celestia bridge RPC with two proxies (primary + secondary),
+/// both forwarding to the same node. The adapter uses the primary as `rpc_url` and the
+/// secondary as a fallback endpoint. A persistent latency toxic on the secondary lets us
+/// tell which endpoint is serving by measuring request round-trip time.
+///
+/// The service polls in a background task while the main task toggles the proxies:
+///   1. both up                          -> fast (primary)
+///   2. primary down                     -> slow (secondary), head still advances
+///   3. primary back, secondary still up -> fast again on its own (proactive switch-back)
+///   4. primary down again               -> slow (secondary), confirming it goes back and forth
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rpc_secondary_endpoint_failover_and_switchback() -> anyhow::Result<()> {
+    // Persistent fingerprint latency on the secondary and the classification thresholds
+    // derived from it (a wide gap keeps the fast/slow decision robust).
+    const SECONDARY_LATENCY: Duration = Duration::from_millis(1500);
+    const PRIMARY_MAX_LATENCY: Duration = Duration::from_millis(700);
+    const SECONDARY_MIN_LATENCY: Duration = Duration::from_millis(1000);
+    const PHASE_TIMEOUT: Duration = Duration::from_secs(30);
+
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let bridge_rpc_port = dev_node.bridge_port_ipv4().await?;
+
+    let toxi = CelestiaRpcProxyFleet::start(bridge_rpc_port, 2).await;
+    toxi.set_latency(1, Some(SECONDARY_LATENCY)).await;
+
+    // Primary = proxy 0; secondary fallback = proxy 1.
+    let mut config = dev_node.get_config().await?;
+    config.rpc_url = toxi.rpc_ws_url(0);
+    config.rpc_fallback_endpoints = vec![crate::RpcEndpointConfig {
+        url: toxi.rpc_ws_url(1),
+        token: None,
+    }];
+    // Fast health-check so switch-back is quick; huge max_head_age so a momentarily stale
+    // devnet head can't block switch-back (the celestia-client failover test does the same).
+    config.rpc_health_check_interval_secs = std::num::NonZero::new(1);
+    config.rpc_max_head_age_secs = std::num::NonZero::new(60 * 60 * 24 * 365);
+    // Keep retries minimal so a measured request reflects the active endpoint's latency
+    // rather than adapter-level backoff.
+    config.backoff_max_times = 2;
+    config.backoff_min_delay_ms = 50;
+    config.backoff_max_delay_ms = 200;
+    // The failover behavior under test is read-only; drop submission + background tasks.
+    config.grpc_url = None;
+    config.signer_private_key = None;
+    config.background_stat_polling_interval_secs = 0;
+
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service = Arc::new(
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await,
+    );
+
+    // Continuous traffic in a background task so the persistent WS connection stays active
+    // and the failover client always has work to route.
+    let poller_service = da_service.clone();
+    let poller = tokio::spawn(async move {
+        loop {
+            let _ = poller_service.get_head_block_header().await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    });
+
+    // Phase 1: both endpoints up -> served by the primary (fast).
+    wait_until_rpc_latency(
+        &da_service,
+        true,
+        PRIMARY_MAX_LATENCY,
+        PHASE_TIMEOUT,
+        "phase 1: expected the primary endpoint (fast) initially",
+    )
+    .await;
+    let head_on_primary = da_service.get_head_block_header().await?.height();
+
+    // Phase 2: kill the primary -> fail over to the secondary (slow but working).
+    toxi.set_enabled(0, false).await;
+    wait_until_rpc_latency(
+        &da_service,
+        false,
+        SECONDARY_MIN_LATENCY,
+        PHASE_TIMEOUT,
+        "phase 2: expected failover to the secondary endpoint (slow)",
+    )
+    .await;
+    // Liveness: the secondary is genuinely serving, so the chain head keeps advancing.
+    let head_on_secondary = da_service.get_head_block_header().await?.height();
+    assert!(
+        head_on_secondary >= head_on_primary,
+        "secondary should keep serving fresh headers during the primary outage: \
+         head_on_secondary={head_on_secondary} head_on_primary={head_on_primary}"
+    );
+
+    // Phase 3 (the key scenario): restore the primary while the secondary is STILL enabled
+    // and serving. The background health-check must switch back to the primary on its own,
+    // so latency drops back to fast without us touching the secondary.
+    toxi.set_enabled(0, true).await;
+    wait_until_rpc_latency(
+        &da_service,
+        true,
+        PRIMARY_MAX_LATENCY,
+        PHASE_TIMEOUT,
+        "phase 3: expected automatic switch-back to the primary while the secondary still works",
+    )
+    .await;
+
+    // Phase 4: kill the primary again -> back to the secondary (slow), proving the client
+    // moves back and forth between endpoints.
+    toxi.set_enabled(0, false).await;
+    wait_until_rpc_latency(
+        &da_service,
+        false,
+        SECONDARY_MIN_LATENCY,
+        PHASE_TIMEOUT,
+        "phase 4: expected failover back to the secondary endpoint (slow)",
+    )
+    .await;
+
+    poller.abort();
+    secondary_shutdown_controller.shutdown();
+    toxi.shutdown();
+    drop(dev_node);
+    Ok(())
+}
+
+/// Per-call timeout (seconds) for the RPC-failover tests. Kept at the 1-second minimum so a
+/// broken endpoint surfaces as a timeout quickly and failover is fast.
+const FAILOVER_API_REQUEST_TIMEOUT_SECS: u64 = 1;
+/// High-level per-request timeout (seconds) for the RPC-failover tests. Must comfortably exceed
+/// a full failover sweep across all endpoints (each unreachable endpoint costs up to one
+/// `api_request_timeout`), or the `tokio::time::timeout` wrap in `get_head_block_header_inner`
+/// cancels the sweep mid-flight. With 3 endpoints at a 1s per-call timeout that is ~3s; 15s
+/// leaves ample headroom.
+const FAILOVER_REQUEST_TIMEOUT_SECS: u64 = 15;
+/// Upper bound for each failover phase to reach a healthy endpoint and a fresh head.
+const FAILOVER_PHASE_DEADLINE: Duration = Duration::from_secs(60);
+/// How often the failover tests re-poll for a head while the client is switching endpoints.
+const FAILOVER_POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Applies the knobs shared by the RPC-failover integration tests: a fast per-call timeout (so
+/// failover is quick) under a high-level timeout comfortably larger than a full failover sweep,
+/// tight backoff, and no submission or background tasks (these tests are read-only).
+fn apply_failover_test_knobs(config: &mut crate::CelestiaConfig) {
+    config.api_request_timeout_secs =
+        std::num::NonZero::new(FAILOVER_API_REQUEST_TIMEOUT_SECS).unwrap();
+    config.request_timeout_secs = std::num::NonZero::new(FAILOVER_REQUEST_TIMEOUT_SECS).unwrap();
+    config.rpc_health_check_interval_secs = std::num::NonZero::new(1);
+    config.rpc_max_head_age_secs = std::num::NonZero::new(60 * 60 * 24 * 365);
+    config.backoff_max_times = 2;
+    config.backoff_min_delay_ms = 50;
+    config.backoff_max_delay_ms = 200;
+    config.grpc_url = None;
+    config.signer_private_key = None;
+    config.background_stat_polling_interval_secs = 0;
+}
+
+/// Polls `get_head_block_header` until it succeeds, returning the head height; panics after
+/// `deadline`. Lets a failover test wait for the client to land on a working endpoint without
+/// assuming how quickly it switches.
+async fn poll_until_head_ok(
+    da_service: &CelestiaService,
+    deadline: Duration,
+    context: &str,
+) -> u64 {
+    let start = std::time::Instant::now();
+    loop {
+        // A failing head request is expected while the client is switching endpoints; keep
+        // polling until one succeeds or the deadline elapses.
+        if let Ok(header) = da_service.get_head_block_header().await {
+            return header.height();
+        }
+        assert!(
+            start.elapsed() < deadline,
+            "{context}: no successful head request within {deadline:?}"
+        );
+        tokio::time::sleep(FAILOVER_POLL_INTERVAL).await;
+    }
+}
+
+/// Polls until `get_head_block_header` returns a height strictly greater than `baseline`,
+/// returning it; panics after `deadline`. The strict advance proves the serving endpoint is
+/// live (not a stale cached head), which is what makes the cascade proof valid.
+async fn poll_until_head_advances(
+    da_service: &CelestiaService,
+    baseline: u64,
+    deadline: Duration,
+    context: &str,
+) -> u64 {
+    let start = std::time::Instant::now();
+    loop {
+        // Failures and momentarily stale heads are both expected while the client switches
+        // endpoints; keep polling until the head is strictly fresher than `baseline`.
+        if let Ok(header) = da_service.get_head_block_header().await {
+            let height = header.height();
+            if height > baseline {
+                return height;
+            }
+        }
+        assert!(
+            start.elapsed() < deadline,
+            "{context}: head did not advance past {baseline} within {deadline:?}"
+        );
+        tokio::time::sleep(FAILOVER_POLL_INTERVAL).await;
+    }
+}
+
+/// Transport failure modes exercised by the cascade failover test.
+#[derive(Clone, Copy)]
+enum RpcFailure {
+    /// Immediate TCP RST (toxiproxy `reset_peer`).
+    ConnectionReset,
+    /// A hung endpoint that exceeds the client's per-call timeout (toxiproxy `timeout`).
+    Timeout,
+}
+
+/// Breaks endpoint `index` with the chosen failure mode. The proxy stays enabled — these are
+/// connection-level faults (reset / hang), distinct from a refused connection.
+async fn inject_rpc_failure(fleet: &CelestiaRpcProxyFleet, index: usize, failure: RpcFailure) {
+    match failure {
+        RpcFailure::ConnectionReset => fleet.set_reset_peer(index, true).await,
+        RpcFailure::Timeout => fleet.set_timeout(index, true).await,
+    }
+}
+
+/// Three-endpoint cascade failover: a primary plus two secondaries, all fronting the same
+/// devnet bridge. Breaking the primary must move traffic to secondary-1; breaking secondary-1
+/// as well must move it to secondary-2. Because the first two endpoints stay broken, a fresh
+/// head can only come from the third — proving the cascade. Run for both transport failure
+/// modes via the two `#[tokio::test]` wrappers below.
+async fn run_three_endpoint_cascade(failure: RpcFailure) -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let bridge_rpc_port = dev_node.bridge_port_ipv4().await?;
+    let fleet = CelestiaRpcProxyFleet::start(bridge_rpc_port, 3).await;
+
+    let mut config = dev_node.get_config().await?;
+    config.rpc_url = fleet.rpc_ws_url(0);
+    config.rpc_fallback_endpoints = vec![
+        crate::RpcEndpointConfig {
+            url: fleet.rpc_ws_url(1),
+            token: None,
+        },
+        crate::RpcEndpointConfig {
+            url: fleet.rpc_ws_url(2),
+            token: None,
+        },
+    ];
+    apply_failover_test_knobs(&mut config);
+
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
+
+    // Phase A: all endpoints up -> the client prefers the primary (index 0).
+    let head_initial = poll_until_head_ok(
+        &da_service,
+        FAILOVER_PHASE_DEADLINE,
+        "phase A: initial head",
+    )
+    .await;
+
+    // Phase B: break the primary -> the client must fail over to a live fallback (index 1).
+    inject_rpc_failure(&fleet, 0, failure).await;
+    let head_after_primary_break = poll_until_head_advances(
+        &da_service,
+        head_initial,
+        FAILOVER_PHASE_DEADLINE,
+        "phase B: failover off the broken primary",
+    )
+    .await;
+
+    // Phase C (cascade proof): break secondary-1 too. With indices 0 and 1 both broken, a
+    // strictly fresher head can only be served by secondary-2 (index 2).
+    inject_rpc_failure(&fleet, 1, failure).await;
+    poll_until_head_advances(
+        &da_service,
+        head_after_primary_break,
+        FAILOVER_PHASE_DEADLINE,
+        "phase C: cascade to the third endpoint",
+    )
+    .await;
+
+    secondary_shutdown_controller.shutdown();
+    fleet.shutdown();
+    drop(dev_node);
+    Ok(())
+}
+
+/// Cascade failover when each endpoint dies by connection reset (TCP RST).
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rpc_three_endpoint_cascade_connection_reset() -> anyhow::Result<()> {
+    run_three_endpoint_cascade(RpcFailure::ConnectionReset).await
+}
+
+/// Cascade failover when each endpoint dies by hanging longer than the client's timeout.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rpc_three_endpoint_cascade_timeout() -> anyhow::Result<()> {
+    run_three_endpoint_cascade(RpcFailure::Timeout).await
+}
+
+/// Startup sanity: the node must come up and serve when its configured primary RPC endpoint is
+/// unreachable, as long as a fallback is healthy. Models restarting the node while the preferred
+/// provider is down; the primary is connection-reset before the service is built.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rpc_startup_with_primary_down_uses_secondary() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let bridge_rpc_port = dev_node.bridge_port_ipv4().await?;
+    let fleet = CelestiaRpcProxyFleet::start(bridge_rpc_port, 2).await;
+
+    // Break the primary before the node starts.
+    fleet.set_reset_peer(0, true).await;
+
+    let mut config = dev_node.get_config().await?;
+    config.rpc_url = fleet.rpc_ws_url(0); // unreachable primary
+    config.rpc_fallback_endpoints = vec![crate::RpcEndpointConfig {
+        url: fleet.rpc_ws_url(1), // healthy secondary
+        token: None,
+    }];
+    apply_failover_test_knobs(&mut config);
+
+    // Building the client must succeed by falling back to the healthy secondary. Asserted on the
+    // `Result` directly (rather than via `CelestiaService::new`, which panics on failure) so a
+    // regression surfaces with a clear message instead of an opaque panic.
+    config
+        .build_client()
+        .await
+        .expect("client should build via the healthy secondary while the primary is down");
+
+    // End-to-end restart sanity: the full service constructs and serves fresh headers through
+    // the secondary.
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
+    let head_initial = poll_until_head_ok(
+        &da_service,
+        FAILOVER_PHASE_DEADLINE,
+        "startup-with-primary-down: first head via secondary",
+    )
+    .await;
+    poll_until_head_advances(
+        &da_service,
+        head_initial,
+        FAILOVER_PHASE_DEADLINE,
+        "startup-with-primary-down: secondary keeps serving fresh headers",
+    )
+    .await;
+
+    secondary_shutdown_controller.shutdown();
+    fleet.shutdown();
+    drop(dev_node);
     Ok(())
 }

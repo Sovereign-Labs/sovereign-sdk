@@ -1,3 +1,4 @@
+use std::num::{NonZeroU64, NonZeroUsize};
 use std::path::Path;
 
 use nomt::trie::KeyPath;
@@ -5,13 +6,17 @@ use rockbound::SchemaBatch;
 use sha2::Digest;
 use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
 use sov_rollup_interface::common::SlotNumber;
+use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 
+use super::groups::fail_next_pruning_commit_for_test;
 use super::{NomtChangeSet, NomtStorageManager, StateFinishedSession};
 use crate::accessory_db::AccessoryDb;
-use crate::config::RollupDbConfig;
+use crate::config::{default_max_pruning_batch_size, PrunerConfig, RollupDbConfig};
 use crate::historical_state::HistoricalStateReader;
+use crate::ledger_db::LedgerDb;
 use crate::schema::types::slot_key::{SlotKey, SlotValue};
+use crate::schema::types::{BatchNumber, DiscardedBlobNumber, StoredSlot};
 use crate::storage_manager::tests::arbitrary::ForkDescription;
 use crate::storage_manager::tests::data_helpers::verify_accessory_db;
 use crate::storage_manager::tests::generic_tests::{
@@ -176,6 +181,81 @@ impl TestableStorage for TestNomtStorage {
 
 type Sm = NomtStorageManager<MockDaSpec, H, TestNomtStorage>;
 
+/// Awaits (up to 5s) any in-flight background pruner, yielding to the runtime between polls.
+/// Returns immediately if no pruner is running or it has already finished.
+async fn wait_for_background_pruner(storage_manager: &Sm) {
+    tokio::time::timeout(std::time::Duration::from_secs(5), async {
+        loop {
+            match storage_manager.pruner_in_flight_finished() {
+                // No job in flight, or the in-flight job has finished.
+                None | Some(true) => break,
+                Some(false) => tokio::task::yield_now().await,
+            }
+        }
+    })
+    .await
+    .expect("pruner did not finish before timeout");
+}
+
+/// Oldest historical version still queryable after the "drain the pruner, then finalize one more
+/// block" bookkeeping shared by the periodic-pruning tests. The committing pruner was spawned at
+/// height `blocks - 1` and saw `last_committed = blocks - 2`, so the pruned floor sits at
+/// `(blocks - 2) - versions_to_keep`.
+fn oldest_available_after_drain(blocks: u64, versions_to_keep: u64) -> u64 {
+    blocks - versions_to_keep - 2
+}
+
+#[test]
+fn periodic_pruning_failure_error_names_pruning() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().to_path_buf();
+
+    let mut config = RollupDbConfig::default_in_path(db_path);
+    config.pruner = PrunerConfig::Periodic {
+        block_interval: 1,
+        versions_to_keep: NonZeroU64::new(1).unwrap(),
+        max_batch_size: default_max_pruning_batch_size(),
+    };
+    let mut storage_manager =
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
+
+    let first_header = MockBlockHeader::from_height(1);
+    let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&first_header).unwrap();
+    let (stf_changes, _) =
+        stf_storage.materialize_from_key_values(&[(vec![1, 0, 0], Some(vec![1]))], 0);
+    storage_manager
+        .save_change_set(&first_header, stf_changes, SchemaBatch::default())
+        .unwrap();
+    storage_manager.finalize(&first_header).unwrap();
+    storage_manager.wait_for_pruner_to_finish();
+
+    fail_next_pruning_commit_for_test();
+
+    let second_header = MockBlockHeader::from_height(2);
+    let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&second_header).unwrap();
+    let (stf_changes, _) =
+        stf_storage.materialize_from_key_values(&[(vec![2, 0, 0], Some(vec![2]))], 1);
+    storage_manager
+        .save_change_set(&second_header, stf_changes, SchemaBatch::default())
+        .unwrap();
+
+    let error = storage_manager.finalize(&second_header).unwrap_err();
+    let error = format!("{error:#}");
+
+    assert!(
+        error.contains("periodic pruning failed while finalizing block height=2 hash="),
+        "missing top-level pruning/finalization context: {error}"
+    );
+    assert!(
+        error.contains("failed to commit pruning batch to RocksDB"),
+        "missing pruning commit context: {error}"
+    );
+    assert!(
+        error.contains("injected pruning commit failure"),
+        "missing inner pruning failure cause: {error}"
+    );
+}
+
 impl TestableStorageManager for Sm {
     fn new(path: impl AsRef<Path>) -> Self {
         let config = RollupDbConfig::default_in_path(path.as_ref().to_path_buf());
@@ -291,7 +371,6 @@ async fn test_ledger_finalized_height_is_updated_on_start() {
 ///  - Queries for pruned versions return an error.
 ///  - Queries for unpruned versions return the correct value as of that version.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "TODO: Re-enable this test once pruning is re-enabled"]
 async fn test_historical_state_with_pruning() {
     // Create a temporary directory for the test
     let temp_dir = tempfile::TempDir::new().unwrap();
@@ -301,8 +380,11 @@ async fn test_historical_state_with_pruning() {
     let mut config = RollupDbConfig::default_in_path(db_path.clone());
     let versions_to_keep = 5;
     let pruning_frequency = 1;
-    config.pruner_block_interval = Some(pruning_frequency);
-    config.pruner_versions_to_keep = Some(versions_to_keep);
+    config.pruner = PrunerConfig::Periodic {
+        block_interval: pruning_frequency,
+        versions_to_keep: NonZeroU64::new(versions_to_keep as u64).unwrap(),
+        max_batch_size: default_max_pruning_batch_size(),
+    };
     let mut storage_manager =
         NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config.clone(), false).unwrap();
 
@@ -355,11 +437,23 @@ async fn test_historical_state_with_pruning() {
         storage_manager.finalize(&da_header).unwrap();
     }
 
-    // Create a storage to read from
-    let da_header = MockBlockHeader::from_height(blocks);
+    wait_for_background_pruner(&storage_manager).await;
+
+    // A completed pruning batch is committed only during finalization, so finalize
+    // one more block in case the background pruner completed after block 14.
+    let da_header = MockBlockHeader::from_height(blocks + 1);
     let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
-    // Note: Sleep here to give time for the pruner to run since it's in a background thread.
-    tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+    let dummy_key = vec![u8::MAX, 0, 0];
+    let dummy_value = blocks.to_be_bytes().to_vec();
+    let (stf_changes, _) =
+        stf_storage.materialize_from_key_values(&[(dummy_key, Some(dummy_value))], blocks);
+    storage_manager
+        .save_change_set(&da_header, stf_changes, SchemaBatch::default())
+        .unwrap();
+    storage_manager.finalize(&da_header).unwrap();
+
+    // Create a storage to read from after the completed pruner run has been committed.
+    let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
 
     // This is where the interesting logic happens.
     for key in 1..=10u64 {
@@ -372,13 +466,21 @@ async fn test_historical_state_with_pruning() {
             .map(|v| v.as_ref().to_vec());
         assert_eq!(value, Some(key.to_be_bytes().to_vec()));
 
+        // The committed pruning batch was collected by the pruner spawned at height 13,
+        // which saw `last_committed = blocks - 2`.
+        let oldest_available_version =
+            oldest_available_after_drain(blocks, versions_to_keep as u64);
+
         // Now, check that the value is pruned at the correct versions.
         for version in 0..keys_to_write.len() as u64 {
             let value_at_version = stf_storage
                 .historical_state
                 .get_user_value_option_by_key_historical(&user_key, SlotNumber::new(version));
-            // Everything below the pruning threshold should be pruned. Since pruning doesn't
-            if version < blocks - (versions_to_keep as u64 + pruning_frequency) {
+            if version < oldest_available_version {
+                // rockbound returns `Err(PrunedVersion)` for any read below
+                // `oldest_available_version`, even when the underlying historical row is
+                // physically still present (e.g., a single-version key whose only write
+                // was preserved by the cascading delete logic).
                 assert!(
                     value_at_version.is_err(),
                     "Unexpected value for key {key} at version {version}. Expected error, found {value_at_version:?}",
@@ -386,19 +488,464 @@ async fn test_historical_state_with_pruning() {
             } else {
                 let value_at_version =
                     value_at_version.expect("Query for unpruned version return error");
-                if version == 0 {
-                    assert_eq!(value_at_version, None, "All keys should be none at version 0, since we wrote nothing in that block. Key {key} was {value_at_version:?} instead.");
-                } else {
-                    // We stop writing each key at its own version. (I.e. key '1' is written in block 1, key '2' is written in blocks, 1 and 2, etc.)
-                    let expected_value = std::cmp::min(version, key);
-                    assert_eq!(
-                        value_at_version,
-                        Some(SlotValue::from(expected_value.to_be_bytes().to_vec())),
-                        "Unexpected value for key {key} at version {version}. Expected {:?}, found {value_at_version:?}",
-                        expected_value.to_be_bytes().to_vec(),
-                    );
-                }
+                // We stop writing each key at its own version. (I.e. key '1' is written in block 1, key '2' is written in blocks 1 and 2, etc.)
+                let expected_value = std::cmp::min(version, key);
+                assert_eq!(
+                    value_at_version,
+                    Some(SlotValue::from(expected_value.to_be_bytes().to_vec())),
+                    "Unexpected value for key {key} at version {version}. Expected {:?}, found {value_at_version:?}",
+                    expected_value.to_be_bytes().to_vec(),
+                );
             }
         }
     }
+}
+
+/// Builds a multi-version state backlog at `db_path` with pruning OFF and a CONSISTENT ledger: each
+/// block is finalized immediately and its state root is recorded in the ledger (via
+/// [`LedgerDb::put_slot`] + `materialize_latest_finalize_slot`), so the database can be reopened
+/// without tripping the storage manager's startup root-consistency check (`get_head_root_hash` must
+/// equal the live-DB root). The manager is dropped before returning, flushing everything to disk for
+/// the reopen. `keys_to_write[h]` lists the user keys written in block `h` (value == block height).
+fn build_finalized_backlog_off(db_path: &Path, keys_to_write: &[Vec<u64>]) {
+    let config = RollupDbConfig::default_in_path(db_path.to_path_buf());
+    let mut storage_manager =
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
+    for (height, keys) in keys_to_write.iter().enumerate() {
+        let height = height as u64;
+        let da_header = MockBlockHeader::from_height(height + 1);
+        let (stf_storage, ledger_reader) = storage_manager.create_state_for(&da_header).unwrap();
+
+        let values: Vec<_> = keys
+            .iter()
+            // Keys must be at least 2 bytes long.
+            .map(|key| (vec![*key as u8, 0, 0], Some(height.to_be_bytes().to_vec())))
+            .collect();
+        let (stf_changes, state_root) = stf_storage.materialize_from_key_values(&values, height);
+
+        // Record this slot (with its state root) and mark it finalized so the reopen consistency
+        // check passes.
+        let ledger_db = LedgerDb::with_reader(ledger_reader).unwrap();
+        let slot_num = SlotNumber::new(da_header.height());
+        let mut ledger_change_set = SchemaBatch::new();
+        let slot_to_store = StoredSlot {
+            hash: da_header.hash().into(),
+            state_root: state_root.to_vec().into(),
+            extra_data: vec![].into(),
+            batches: BatchNumber(0)..BatchNumber(0),
+            discarded_blobs: DiscardedBlobNumber(0)..DiscardedBlobNumber(0),
+            timestamp: da_header.time(),
+        };
+        ledger_db
+            .put_slot(&slot_to_store, &slot_num, &mut ledger_change_set)
+            .unwrap();
+        ledger_change_set.merge(
+            ledger_db
+                .materialize_latest_finalize_slot(slot_num, slot_num)
+                .unwrap(),
+        );
+
+        storage_manager
+            .save_change_set(&da_header, stf_changes, ledger_change_set)
+            .unwrap();
+        storage_manager.finalize(&da_header).unwrap();
+    }
+    // Pruning was off, so nothing was pruned and the full backlog is intact on disk.
+    assert_eq!(storage_manager.pruning_commits_count(), 0);
+}
+
+/// `PrunerConfig::OnceAtStartup` must, when the storage manager is constructed, synchronously prune
+/// the on-disk backlog to completion (looping its internal batches until drained) and then never
+/// spawn a periodic pruner for the rest of the run. We build a backlog with pruning OFF and drop the
+/// manager, then reopen the same database with `OnceAtStartup` and a tiny `max_batch_size` to force
+/// multiple internal passes — mirroring a production restart into a prune-at-startup node.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_prune_once_at_startup_runs_to_completion() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().to_path_buf();
+
+    let blocks: u64 = 14;
+    // Key `k` (1..=10) is written at versions 1..=k with value == version; later blocks write a
+    // dummy key. Same workload as `test_historical_state_with_pruning`.
+    let keys_to_write = [
+        vec![],
+        vec![1u64, 2, 3, 4, 5, 6, 7, 8, 9, 10],
+        vec![2, 3, 4, 5, 6, 7, 8, 9, 10],
+        vec![3, 4, 5, 6, 7, 8, 9, 10],
+        vec![4, 5, 6, 7, 8, 9, 10],
+        vec![5, 6, 7, 8, 9, 10],
+        vec![6, 7, 8, 9, 10],
+        vec![7, 8, 9, 10],
+        vec![8, 9, 10],
+        vec![9, 10],
+        vec![10],
+        vec![u64::MAX],
+        vec![u64::MAX],
+        vec![u64::MAX],
+    ];
+
+    // --- Phase 1: build a multi-version backlog (pruning OFF) with a consistent ledger, then drop
+    // the manager so the backlog is flushed to disk for the reopen below. ---
+    build_finalized_backlog_off(&db_path, &keys_to_write);
+
+    // --- Phase 2: reopen with `OnceAtStartup` and a tiny batch. The constructor runs the one-time
+    // startup prune to completion (looping internal batches) before returning. ---
+    let versions_to_keep = 5u64;
+    let mut config = RollupDbConfig::default_in_path(db_path);
+    config.pruner = PrunerConfig::OnceAtStartup {
+        versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
+        // Tiny batch: the backlog far exceeds it, forcing several internal commit passes.
+        max_batch_size: NonZeroUsize::new(8).unwrap(),
+        compact_after: false,
+    };
+    let mut storage_manager =
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
+
+    // The tiny batch forces multiple commit passes (proving prune-to-completion), the run is
+    // synchronous (nothing left in flight), and the final pass drained the backlog.
+    let commits_after_startup = storage_manager.pruning_commits_count();
+    assert!(
+        commits_after_startup >= 2,
+        "expected several startup-prune passes, got {commits_after_startup}"
+    );
+    assert!(
+        !storage_manager.is_pruner_running(),
+        "startup prune must be synchronous (no background pruner left running)"
+    );
+    assert!(
+        !storage_manager.last_pruning_hit_size_limit(),
+        "the final startup-prune pass should have fully drained the backlog"
+    );
+
+    // The startup prune had real effect: the oldest version is now pruned, while live values
+    // survive.
+    let (stf_storage, _ledger_storage) = storage_manager
+        .create_state_after(&MockBlockHeader::from_height(blocks))
+        .unwrap();
+    for key in 1..=10u64 {
+        let user_key = SlotKey::from_slice(&[key as u8, 0, 0]);
+        let live_value = stf_storage
+            .historical_state
+            .get_user_value_option_by_key(&user_key)
+            .unwrap()
+            .map(|v| v.as_ref().to_vec());
+        assert_eq!(
+            live_value,
+            Some(key.to_be_bytes().to_vec()),
+            "live value for key {key} should survive pruning"
+        );
+
+        let oldest = stf_storage
+            .historical_state
+            .get_user_value_option_by_key_historical(&user_key, SlotNumber::new(0));
+        assert!(
+            oldest.is_err(),
+            "version 0 should be pruned for key {key}, found {oldest:?}"
+        );
+    }
+
+    // --- Phase 3: subsequent finalizations must NOT spawn a periodic pruner. ---
+    let commits_before = storage_manager.pruning_commits_count();
+    for height in blocks..(blocks + 3) {
+        let da_header = MockBlockHeader::from_height(height + 1);
+        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+        let (stf_changes, _) = stf_storage.materialize_from_key_values(
+            &[(vec![u8::MAX, 0, 0], Some(height.to_be_bytes().to_vec()))],
+            height,
+        );
+        storage_manager
+            .save_change_set(&da_header, stf_changes, SchemaBatch::default())
+            .unwrap();
+        storage_manager.finalize(&da_header).unwrap();
+        assert!(
+            !storage_manager.is_pruner_running(),
+            "OnceAtStartup must not spawn a periodic pruner during finalization"
+        );
+    }
+    assert_eq!(
+        storage_manager.pruning_commits_count(),
+        commits_before,
+        "OnceAtStartup must not prune again after the one-time startup pass"
+    );
+}
+
+/// `OnceAtStartup` with `compact_after: true` must, on construction, run the post-prune compaction
+/// of every pruned column family — accessory plus the user/kernel archival historical + pruning CFs
+/// (via `DbGroup::compact_pruned_cfs` → `VersionedDB::trigger_compaction`) — without error, and
+/// reads must stay correct afterward. We build a backlog with pruning OFF, drop the manager, then
+/// reopen with `compact_after: true` so the constructor prunes and compacts. This guards the
+/// user/kernel compaction wiring added with the rockbound rev bump;
+/// `test_prune_once_at_startup_runs_to_completion` covers the same path with compaction off.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_prune_once_at_startup_compacts_pruned_cfs() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().to_path_buf();
+
+    // Key `k` (1..=6) is written at versions 1..=k with value == version, building a multi-version
+    // backlog so the startup prune has tombstones to compact away.
+    let blocks: u64 = 7;
+    let keys_to_write = [
+        vec![],
+        vec![1u64, 2, 3, 4, 5, 6],
+        vec![2, 3, 4, 5, 6],
+        vec![3, 4, 5, 6],
+        vec![4, 5, 6],
+        vec![5, 6],
+        vec![6],
+    ];
+
+    // --- Phase 1: build the backlog (pruning OFF) with a consistent ledger, then drop so it is
+    // flushed to disk for the reopen below. ---
+    build_finalized_backlog_off(&db_path, &keys_to_write);
+
+    // --- Phase 2: reopen with `compact_after: true`. The constructor prunes to completion AND
+    // compacts the pruned column families (accessory + user/kernel `trigger_compaction`); this must
+    // not panic or error. ---
+    let versions_to_keep = 2u64;
+    let mut config = RollupDbConfig::default_in_path(db_path);
+    config.pruner = PrunerConfig::OnceAtStartup {
+        versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
+        max_batch_size: default_max_pruning_batch_size(),
+        compact_after: true,
+    };
+    let mut storage_manager =
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
+
+    // Reads remain correct after compaction: live values survive, and the oldest version is pruned.
+    let (stf_storage, _ledger_storage) = storage_manager
+        .create_state_after(&MockBlockHeader::from_height(blocks))
+        .unwrap();
+    for key in 1..=6u64 {
+        let user_key = SlotKey::from_slice(&[key as u8, 0, 0]);
+        let live_value = stf_storage
+            .historical_state
+            .get_user_value_option_by_key(&user_key)
+            .unwrap()
+            .map(|v| v.as_ref().to_vec());
+        assert_eq!(
+            live_value,
+            Some(key.to_be_bytes().to_vec()),
+            "live value for key {key} should survive prune + compaction"
+        );
+
+        let oldest = stf_storage
+            .historical_state
+            .get_user_value_option_by_key_historical(&user_key, SlotNumber::new(0));
+        assert!(
+            oldest.is_err(),
+            "version 0 should be pruned for key {key} after compaction, found {oldest:?}"
+        );
+    }
+}
+
+/// Hot-key workload (the case #3018 cares about): write the SAME key in every block, far more
+/// times than `versions_to_keep`. After pruning, only the recent window must remain queryable —
+/// a hot key must not accumulate unbounded historical versions.
+///
+/// This mirrors the block/drain bookkeeping of `test_historical_state_with_pruning` exactly (same
+/// `blocks`, `versions_to_keep`, drain + one extra finalize), so the same
+/// `oldest_available_version = blocks - versions_to_keep - 2` boundary applies.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_hot_key_pruning_keeps_only_recent_versions() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().to_path_buf();
+
+    let mut config = RollupDbConfig::default_in_path(db_path);
+    let versions_to_keep = 5usize;
+    config.pruner = PrunerConfig::Periodic {
+        block_interval: 1,
+        versions_to_keep: NonZeroU64::new(versions_to_keep as u64).unwrap(),
+        max_batch_size: default_max_pruning_batch_size(),
+    };
+    let mut storage_manager =
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
+
+    let blocks: u64 = 14;
+    let hot_key_bytes = vec![42u8, 0, 0];
+
+    // Write the single hot key in every block (block 0 writes nothing, like the sibling test).
+    // Value is multi-byte and asymmetric (`0x1000 + height`) to catch endianness bugs.
+    for height in 0u64..blocks {
+        let da_header = MockBlockHeader::from_height(height + 1);
+        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+        let values: Vec<(Vec<u8>, Option<Vec<u8>>)> = if height == 0 {
+            vec![]
+        } else {
+            vec![(
+                hot_key_bytes.clone(),
+                Some((0x1000u64 + height).to_be_bytes().to_vec()),
+            )]
+        };
+        let (stf_changes, _) = stf_storage.materialize_from_key_values(&values, height);
+        storage_manager
+            .save_change_set(&da_header, stf_changes, SchemaBatch::default())
+            .unwrap();
+        storage_manager.finalize(&da_header).unwrap();
+    }
+
+    // Wait for the background pruner to finish.
+    wait_for_background_pruner(&storage_manager).await;
+
+    // A completed pruning batch is committed only during finalization; finalize one more block
+    // (writing the hot key again) so the batch lands and the live value is at version `blocks`.
+    let da_header = MockBlockHeader::from_height(blocks + 1);
+    let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+    let (stf_changes, _) = stf_storage.materialize_from_key_values(
+        &[(
+            hot_key_bytes.clone(),
+            Some((0x1000u64 + blocks).to_be_bytes().to_vec()),
+        )],
+        blocks,
+    );
+    storage_manager
+        .save_change_set(&da_header, stf_changes, SchemaBatch::default())
+        .unwrap();
+    storage_manager.finalize(&da_header).unwrap();
+
+    // Read after the committed pruner run.
+    let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+    let hot_key = SlotKey::from_slice(&hot_key_bytes);
+
+    // The live (latest) value is the most recent write and must always be readable.
+    let live = stf_storage
+        .historical_state
+        .get_user_value_option_by_key(&hot_key)
+        .unwrap()
+        .map(|v| v.as_ref().to_vec());
+    assert_eq!(
+        live,
+        Some((0x1000u64 + blocks).to_be_bytes().to_vec()),
+        "Hot key live value should be the most recent write"
+    );
+
+    // Same bookkeeping as `test_historical_state_with_pruning`: the committing pruner saw
+    // `last_committed = blocks - 2`, so the oldest retained version is `last_committed - keep`.
+    let oldest_available_version = oldest_available_after_drain(blocks, versions_to_keep as u64);
+
+    let mut retained = 0u64;
+    for version in 0..blocks {
+        let value_at_version = stf_storage
+            .historical_state
+            .get_user_value_option_by_key_historical(&hot_key, SlotNumber::new(version));
+        if version < oldest_available_version {
+            assert!(
+                value_at_version.is_err(),
+                "Hot key at pruned version {version} should error, found {value_at_version:?}",
+            );
+        } else {
+            let value = value_at_version.expect("Query for unpruned version returned error");
+            // The hot key is written every block, so its value as of `version` is `0x1000 + version`.
+            assert_eq!(
+                value,
+                Some(SlotValue::from(
+                    (0x1000u64 + version).to_be_bytes().to_vec()
+                )),
+                "Hot key value mismatch at version {version}",
+            );
+            retained += 1;
+        }
+    }
+
+    // Only the post-prune window survives: the hot key did NOT accumulate all `blocks` versions.
+    assert_eq!(
+        retained,
+        blocks - oldest_available_version,
+        "Hot key should retain only the recent window [oldest_available_version, blocks)",
+    );
+}
+
+/// Pruner backpressure: with a tiny `max_batch_size`, a large prunable backlog cannot be
+/// cleared in one pass. The pruner must report `hit_size_limit = true` and the storage manager
+/// must re-spawn it across subsequent finalizations until the backlog is drained (the loop in
+/// `finalize`). We observe this via the test-only hooks on `NomtStorageManager`.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_pruner_backpressure_respawns_until_drained() {
+    let temp_dir = tempfile::TempDir::new().unwrap();
+    let db_path = temp_dir.path().to_path_buf();
+
+    let mut config = RollupDbConfig::default_in_path(db_path);
+    let versions_to_keep = 2usize;
+    // Tiny batch: a single block of overwrites already exceeds this, forcing multiple passes.
+    config.pruner = PrunerConfig::Periodic {
+        block_interval: 1,
+        versions_to_keep: NonZeroU64::new(versions_to_keep as u64).unwrap(),
+        max_batch_size: NonZeroUsize::new(8).unwrap(),
+    };
+    let mut storage_manager =
+        NomtStorageManager::<MockDaSpec, H, TestNomtStorage>::new(config, false).unwrap();
+
+    let num_keys = 20usize;
+    let initial_blocks: u64 = 5;
+
+    // Overwrite many keys every block so prunable historical rows (>> max_batch_size) pile up.
+    for height in 0u64..initial_blocks {
+        let da_header = MockBlockHeader::from_height(height + 1);
+        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+        let mut values: Vec<(Vec<u8>, Option<Vec<u8>>)> = Vec::with_capacity(num_keys);
+        for k in 0..num_keys {
+            let key = vec![(k & 0xff) as u8, ((k >> 8) & 0xff) as u8, 0];
+            values.push((key, Some((0x1000u64 + height).to_be_bytes().to_vec())));
+        }
+        let (stf_changes, _) = stf_storage.materialize_from_key_values(&values, height);
+        storage_manager
+            .save_change_set(&da_header, stf_changes, SchemaBatch::default())
+            .unwrap();
+        storage_manager.finalize(&da_header).unwrap();
+    }
+
+    // Drive finalizations, draining the pruner between each so its batch commits on the next
+    // finalize. A dedicated "tick" key (outside the 0..num_keys range) advances the chain.
+    let tick_key = vec![0xAAu8, 0xAA, 0];
+    let mut saw_hit_limit = storage_manager.last_pruning_hit_size_limit();
+    let drain_iterations = 30u64;
+    for i in 0..drain_iterations {
+        storage_manager.wait_for_pruner_to_finish();
+        let height = initial_blocks + i;
+        let da_header = MockBlockHeader::from_height(height + 1);
+        let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+        let (stf_changes, _) = stf_storage.materialize_from_key_values(
+            &[(
+                tick_key.clone(),
+                Some((0x2000u64 + height).to_be_bytes().to_vec()),
+            )],
+            height,
+        );
+        storage_manager
+            .save_change_set(&da_header, stf_changes, SchemaBatch::default())
+            .unwrap();
+        storage_manager.finalize(&da_header).unwrap();
+        saw_hit_limit |= storage_manager.last_pruning_hit_size_limit();
+    }
+
+    assert!(
+        saw_hit_limit,
+        "pruner should have hit the batch size limit at least once with max_batch_size = 8",
+    );
+    assert!(
+        storage_manager.pruning_commits_count() >= 2,
+        "pruner should have committed multiple batches (backpressure respawn loop), got {}",
+        storage_manager.pruning_commits_count(),
+    );
+
+    // Backpressure must eventually DRAIN, not stall: after many passes the pruned floor has
+    // advanced well past the early versions, so old versions of an original key are gone while
+    // its carried-forward live value remains readable.
+    let da_header = MockBlockHeader::from_height(initial_blocks + drain_iterations + 1);
+    let (stf_storage, _ledger_storage) = storage_manager.create_state_for(&da_header).unwrap();
+    let sample_key = SlotKey::from_slice(&[0u8, 0, 0]);
+    let live = stf_storage
+        .historical_state
+        .get_user_value_option_by_key(&sample_key)
+        .unwrap();
+    assert!(
+        live.is_some(),
+        "sampled key should still have a live (carried-forward) value after pruning",
+    );
+    let oldest = stf_storage
+        .historical_state
+        .get_user_value_option_by_key_historical(&sample_key, SlotNumber::new(0));
+    assert!(
+        oldest.is_err(),
+        "version 0 of the sampled key should be pruned once backpressure has drained, found {oldest:?}",
+    );
 }

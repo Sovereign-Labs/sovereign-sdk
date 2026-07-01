@@ -62,9 +62,11 @@ impl Pruner {
             }
         }
         let pruning_time = start.elapsed();
+        // Use the schema's column family name so user / kernel / accessory pruning runs
+        // are distinguishable in metrics even when several schemas share one physical DB.
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(PrunerMetric {
-                db: self.db.name(),
+                db: T::COLUMN_FAMILY_NAME,
                 keys_inspected,
                 keys_to_prune,
                 time: pruning_time,

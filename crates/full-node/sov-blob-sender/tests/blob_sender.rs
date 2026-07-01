@@ -14,12 +14,11 @@ use sov_modules_api::HexHash;
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::BlobDiscardReason;
-use sov_shutdown::PrimaryShutdownController;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use sov_test_utils::logging::LogCollector;
 use std::sync::atomic::AtomicUsize;
 use tempfile::TempDir;
 use tokio::sync::{broadcast, RwLock};
-use tokio::task::JoinHandle;
 use tracing::Level;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry;
@@ -547,7 +546,7 @@ async fn create_blob_sender(
     blob_selector_status: BlobSelectorStatus,
 ) -> (
     BlobSender<StorableMockDaService, TestHooks, TestFinalizationManager<StorableMockDaService>>,
-    JoinHandle<()>,
+    BackgroundHandle<()>,
 ) {
     let finalization_manager = TestFinalizationManager {
         da: deps.da.clone(),

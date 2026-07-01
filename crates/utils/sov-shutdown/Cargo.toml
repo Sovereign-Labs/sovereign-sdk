@@ -15,7 +15,12 @@ workspace = true
 [dependencies]
 tokio = { workspace = true, features = ["macros", "sync", "rt"] }
 tracing = { workspace = true }
+tracing-panic = { version = "0.1.2", default-features = false, features = [
+    "capture-backtrace",
+] }
 
 [dev-dependencies]
+sov-test-utils = { workspace = true }
 tokio = { workspace = true, features = ["macros", "sync", "rt-multi-thread"] }
+tracing-subscriber = { workspace = true }
 tracing-test = { workspace = true }

@@ -240,7 +240,7 @@ pub trait DaService: Clone + Send + Sync + 'static {
 
     /// Returns a [`tokio::task::JoinHandle`] to the DA service background task,
     /// if it exists.
-    async fn take_background_join_handle(&self) -> Option<tokio::task::JoinHandle<()>> {
+    async fn take_background_join_handle(&self) -> Option<sov_shutdown::BackgroundHandle<()>> {
         None
     }
 

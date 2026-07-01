@@ -981,10 +981,6 @@ fn apply_storage_defaults_and_overrides(config: &mut RollupDbConfig, notes: &mut
         config.kernel_preallocate_ht = Some(false);
         notes.push("storage.kernel_preallocate_ht missing; defaulted to false".to_string());
     }
-    if config.pruner_versions_to_keep.is_none() {
-        config.pruner_versions_to_keep = Some(20);
-        notes.push("storage.pruner_versions_to_keep missing; defaulted to 20".to_string());
-    }
 }
 
 fn decode_borsh<T: BorshDeserialize>(bytes: &[u8], field: &str) -> anyhow::Result<T> {

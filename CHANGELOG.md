@@ -1,5 +1,12 @@
 # 2026-06-25
 - #3018 demo-rollup: split the example into two DA-layer Cargo features — `mock_da` (default; mock + SP1 zkVMs) and `celestia_da` (Risc0) — to cut compile time. The DA layer is selected at compile time while the zkVM stays a runtime `--zk-vm` choice within `mock_da`, so a build only compiles the selected DA's zkVM guests: a default `mock_da` build no longer pulls the Celestia/Risc0 adapters, and a `celestia_da` build skips the SP1 guests. When both DA features are enabled (`--all-features`), mock DA is selected by default. Also drops the unused SP1 Celestia guest build. Example crate only (`publish = false`) — no SDK API, state, or protocol change.
+# 2026-06-30
+- #3023 Celestia adapter: adds secondary (fallback) RPC endpoint support, so the node can fail over when its primary Celestia RPC node is unreachable and automatically switch back to the primary once it recovers. New config values (all under the `[da]` table, all optional and backward-compatible):
+  * `rpc_fallback_endpoints` — ordered list of secondary RPC endpoints, backed by the new public `RpcEndpointConfig { url: String, token: Option<String> }` (re-exported from the crate root). `url` is required (e.g. `ws://fallback1:26658`); `token` is an optional per-endpoint JWT auth token, redacted in `Debug` output. The primary stays `rpc_url`; entries are tried in order when the primary fails. Default: empty (no failover).
+  * `rpc_health_check_interval_secs` — how often (seconds) the background task probes the primary to decide whether to switch back. Only used when `rpc_fallback_endpoints` is non-empty. Default: the celestia-client built-in value (3s).
+  * `rpc_max_head_age_secs` — maximum age (seconds) of the primary's head for it to be considered healthy enough to switch back to. Only used when `rpc_fallback_endpoints` is non-empty. Default: the celestia-client built-in value (30s).
+  * Environment-variable fallback: when `rpc_fallback_endpoints` is omitted from the config, a single secondary endpoint is read from `SOV_CELESTIA_RPC_SECONDARY_URL` / `SOV_CELESTIA_RPC_SECONDARY_AUTH_TOKEN`; likewise `grpc_fallback_endpoints` now reads `SOV_CELESTIA_GRPC_SECONDARY_URL` / `SOV_CELESTIA_GRPC_SECONDARY_AUTH_TOKEN`. The URL is taken from the environment because managed providers often treat the endpoint URL itself as a secret. An explicit config list always overrides the env value, and a blank/whitespace-only env URL yields no fallback.
+  * Not state- or API-breaking: with no config entries and no env vars set, behavior is unchanged (no fallback endpoints).
 # 2026-06-27
 - #3024 Shutdown diagnostics: shutdown controllers now log the source location that triggered the shutdown. `PrimaryShutdownController`, `SecondaryShutdownController`, and `RunnerShutdownController` `shutdown()` are now `#[track_caller]` and emit a `"Shutdown triggered"` info log with the triggered `controller` name (`primary`/`secondary`/`runner`) and the caller's `file`/`line`/`column`. Adds a `shutdown_with_location` method for cases where the triggering call site was captured earlier (e.g. across an async boundary), used by the preferred sequencer's `exit_rollup`. Not state- or API-breaking.
 
@@ -53,6 +60,9 @@
 - #2953 Preferred sequencer: replica nodes now deregister from the `nodes` table on graceful shutdown, so node discovery reroutes reads off a departing replica within milliseconds instead of waiting for staleness. Best-effort and bounded; leader removal is unchanged (still timeout-based).
 
 # 2026-06-02
+- #2886 Re-enables NOMT state-version pruning (disabled since the rockbound type-aware refactor). **Breaking config change**: the flat `storage.pruner_block_interval` / `pruner_versions_to_keep` / `pruner_max_batch_size` fields are replaced by a single `[storage.pruner]` enum with three modes — omit it or `pruner = "off"` to disable pruning (default), `[storage.pruner.periodic]` for the previous interval-driven background pruning, and `[storage.pruner.once_at_startup]` to prune once synchronously at node startup (optionally compacting to reclaim disk). Existing configs must migrate: the deprecated flat `pruner_*` keys, and `0` for the now-non-zero `versions_to_keep` / `max_batch_size`, are rejected at config-parse time instead of being silently ignored. Bumps `rockbound` to `0aa43d4`.
+
+# 2026-05-27
 - #2936 Request rate limiting uses milli-requests instead of always rounding down.
   * Per-request budget (`milli_req_counter`) is now more fine-grained and will work even with single digit requests per second.
 # 2026-05-26

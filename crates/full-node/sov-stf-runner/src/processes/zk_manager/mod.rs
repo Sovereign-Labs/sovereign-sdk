@@ -9,10 +9,10 @@ use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::stf::ProofSender;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_shutdown::{
-    FutureOrShutdownOutput, PrimaryShutdownController, SecondaryShutdownController,
+    BackgroundHandle, FutureOrShutdownOutput, PrimaryShutdownController,
+    SecondaryShutdownController,
 };
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 use types::{BlockProofInfo, BlockProofStatus, UnAggregatedProofList};
 
@@ -84,8 +84,8 @@ where
     ///
     /// Returns a single supervisor handle that resolves once both tasks
     /// terminate.
-    pub async fn post_aggregated_proof_to_da_in_background(self) -> JoinHandle<()> {
-        tokio::spawn(async move {
+    pub async fn post_aggregated_proof_to_da_in_background(self) -> BackgroundHandle<()> {
+        BackgroundHandle::spawn("aggregated-proof-poster", async move {
             tracing::info!("Spawning an aggregated proof posting background task");
 
             let (metadata_tx, metadata_rx) = mpsc::channel::<(AggregateProofMetadata<Ps>, u64)>(

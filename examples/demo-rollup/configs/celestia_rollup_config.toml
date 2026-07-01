@@ -10,6 +10,30 @@ rpc_url = "ws://127.0.0.1:26658"
 # Optional.
 #rpc_auth_token = "MY.SECRET.TOKEN"
 
+# Optional fallback (secondary) RPC endpoints used for failover.
+# The primary endpoint is `rpc_url`; these are tried, in order, when the primary
+# is unreachable, and the client automatically switches back to the primary once
+# it recovers. Each entry has a mandatory url and an optional JWT token.
+# Alternatively, when this list is omitted from the config, a single secondary
+# endpoint is read from the SOV_CELESTIA_RPC_SECONDARY_URL and
+# SOV_CELESTIA_RPC_SECONDARY_AUTH_TOKEN environment variables.
+#[[da.rpc_fallback_endpoints]]
+#url = "ws://fallback1:26658"
+#token = "MY.SECRET.TOKEN"
+#
+#[[da.rpc_fallback_endpoints]]
+#url = "ws://fallback2:26658"
+
+# How often (in seconds) the background task probes the preferred RPC endpoint to
+# decide whether to switch back to it. Only used when rpc_fallback_endpoints is set.
+# Default: the celestia-client built-in value (3 seconds).
+#rpc_health_check_interval_secs = 3
+
+# Maximum age (in seconds) of the preferred RPC endpoint's head for it to be
+# considered healthy enough to switch back to. Only used when rpc_fallback_endpoints is set.
+# Default: the celestia-client built-in value (30 seconds).
+#rpc_max_head_age_secs = 30
+
 # The address of the Celestia gRPC server for submitting blobs.
 # Example: http://127.0.0.1:9090
 # If not specified in the config, will be pulled from `SOV_CELESTIA_GRPC_URL` environment variable.
@@ -25,6 +49,9 @@ grpc_url = "http://127.0.0.1:9090"
 # Optional fallback gRPC endpoints for blob submission.
 # Used alongside grpc_url for failover. Each entry has a mandatory url
 # and an optional token (sent as x-token metadata).
+# Alternatively, when this list is omitted from the config, a single secondary
+# endpoint is read from the SOV_CELESTIA_GRPC_SECONDARY_URL and
+# SOV_CELESTIA_GRPC_SECONDARY_AUTH_TOKEN environment variables.
 #[[da.grpc_fallback_endpoints]]
 #url = "http://fallback1:9090"
 #token = "secret-token"
@@ -120,8 +147,11 @@ user_commit_concurrency = 4 # Number of concurrent commit workers for user state
 user_hashtable_buckets = 1_000_000 # Expected state size, cannot be changed after creation
 user_preallocate_ht = false
 kernel_commit_concurrency = 2 # Number of concurrent commit workers for kernel state
-pruner_block_interval = 100 # How often to run pruner measured by DA blocks
-pruner_versions_to_keep = 20 # Number of versions available for historical querying
+
+# State-version pruning policy. Omit this section to disable pruning.
+[storage.pruner.periodic]
+block_interval = 100 # How often to run the pruner, measured in DA blocks
+versions_to_keep = 20 # Number of versions available for historical querying
 
 [runner]
 # 3 times per regular celestia block

@@ -23,7 +23,7 @@ use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
-use sov_db::config::RollupDbConfig;
+use sov_db::config::{PrunerConfig, RollupDbConfig};
 use sov_db::ledger_db::LedgerDb;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::storable::rpc::StorableMockDaClient;
@@ -52,7 +52,7 @@ use sov_sequencer::{
     ForcedTxBatchNotification, SequencerApis, SequencerConfig, SequencerKindConfig, SequencerRole,
     SovRateLimiterConfig, StateUpdateNotification,
 };
-use sov_shutdown::PrimaryShutdownController;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
     HttpServerConfig, MonitoringConfig, ProofManagerConfig, RollupConfig, RunnerConfig,
@@ -106,6 +106,9 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub stop_at_rollup_height: Option<RollupHeight>,
     pub extension: Option<SeqConfigExtension>,
     pub start_fresh_outer_proof_on_resync: bool,
+    /// State-version pruning policy applied to the node's DB config. Defaults to
+    /// `PrunerConfig::Off`, matching production defaults for fresh test nodes.
+    pub pruner: PrunerConfig,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -325,8 +328,10 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 
     pub fn rollup_config(&self) -> RollupConfig<<R::Spec as Spec>::Address, R::DaService> {
-        let rollup_db_config =
+        let mut rollup_db_config =
             RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf());
+        // Apply the configured pruning policy (default test config leaves pruning disabled).
+        rollup_db_config.pruner = self.config.pruner;
 
         RollupConfig {
             storage: rollup_db_config,
@@ -412,6 +417,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
             }),
             start_fresh_outer_proof_on_resync: false,
+            pruner: PrunerConfig::Off,
         }
     }
 }
@@ -695,7 +701,7 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>> {
     /// Used for cleanup/shutdown logic.
     pub rollup_task: JoinHandle<anyhow::Result<()>>,
     /// For optional handles to background tasks.
-    pub other_handles: Vec<JoinHandle<()>>,
+    pub other_handles: Vec<BackgroundHandle<()>>,
     /// In case the rollup was started with a secondary sequencer, this is the
     /// client that can be used to submit transactions.
     pub secondary_test_sequencer_client: Option<sov_api_spec::client::Client>,
@@ -932,6 +938,27 @@ where
         .await
     }
 
+    /// Checks if the sequencer is not ready specifically because it is syncing, i.e. its node has
+    /// fallen behind the DA head (see `SequencerNotReadyDetails::Syncing`).
+    pub async fn is_sequencer_syncing(&self) -> bool {
+        match self.client.client.is_ready().await {
+            Err(err) => err.to_string().contains("fell out of sync"),
+            Ok(_) => false,
+        }
+    }
+
+    /// Polls the sequencer until it reports the syncing (node-behind) not-ready reason.
+    ///
+    /// Times out after TestRollup::POLLING_TIMEOUT seconds. Fails fast if the rollup crashes (see
+    /// [`TestRollup::wait_for_condition`]).
+    pub async fn wait_for_sequencer_syncing(&self) -> anyhow::Result<()> {
+        self.wait_for_condition(
+            || async { Ok(self.is_sequencer_syncing().await) },
+            "sequencer to enter syncing",
+        )
+        .await
+    }
+
     /// Generic helper for waiting on a condition with timeout and polling.
     ///  * condition_string: inserted into "Timeout waiting for {condition_string}", format accordingly
     async fn wait_for_condition<F, Fut>(
@@ -945,6 +972,13 @@ where
     {
         let wait_loop = async {
             loop {
+                // Fail fast if the rollup crashed instead of reaching the awaited condition, so a
+                // regression surfaces as a clear crash error rather than waiting out the timeout.
+                anyhow::ensure!(
+                    !self.is_rollup_crashed(),
+                    "rollup crashed while waiting for {}",
+                    condition_string
+                );
                 match condition_check().await {
                     Ok(true) => return Ok(()),
                     Ok(false) => tokio::time::sleep(Duration::from_millis(100)).await,
