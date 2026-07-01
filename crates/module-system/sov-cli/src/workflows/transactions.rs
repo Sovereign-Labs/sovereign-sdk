@@ -204,7 +204,7 @@ where
 
         Ok(UnsignedTransactionWithoutUniqueness::new(
             tx,
-            RT::CHAIN_HASH,
+            RT::chain_hash(),
             max_priority_fee_bips.into(),
             max_fee,
             gas_limit,

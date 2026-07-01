@@ -9,8 +9,11 @@ use capabilities::{
     HasCapabilities, HasKernel, HasSequencingData, TimelockPolicy, TransactionAuthenticator,
 };
 use serde::{Deserialize, Serialize};
+
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
+
+use crate::sov_universal_wallet::schema::ChainData;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
@@ -82,10 +85,6 @@ pub trait Runtime<S: Spec>:
     + RuntimeEventProcessor
     + 'static
 {
-    /// Chain root hash used for transaction verification. Generated from a
-    /// [schema](crate::sov_universal_wallet::schema::Schema).
-    const CHAIN_HASH: [u8; 32];
-
     /// GenesisConfig type.
     type GenesisConfig: Clone + Send + Sync + GenesisParams;
 
@@ -107,6 +106,16 @@ pub trait Runtime<S: Spec>:
 
     /// Default RPC methods and Axum router.
     fn endpoints(storage: crate::rest::ApiState<S>) -> NodeEndpoints;
+
+    /// Chain root hash used for transaction verification. Generated from a
+    /// [schema](crate::sov_universal_wallet::schema::Schema).
+    fn chain_hash() -> [u8; 32];
+
+    /// Overridable chain-id.
+    fn chain_id() -> u64;
+
+    /// Overridable chain-name.
+    fn chain_name() -> String;
 
     /// Reads genesis configs.
     fn genesis_config(input: &Self::GenesisInput) -> anyhow::Result<Self::GenesisConfig>;
@@ -202,7 +211,13 @@ pub trait Runtime<S: Spec>:
 {
     /// Chain root hash used for transaction verification. Generated from a
     /// [schema](crate::sov_universal_wallet::schema::Schema).
-    const CHAIN_HASH: [u8; 32];
+    fn chain_hash() -> [u8; 32];
+
+    /// Overridable chain-id.
+    fn chain_id() -> u64;
+
+    /// Overridable chain-name.
+    fn chain_name() -> String;
 
     /// `GenesisConfig` type.
     type GenesisConfig: Clone + Send + Sync;
@@ -254,16 +269,16 @@ impl Default for NodeEndpoints {
 }
 
 /// Helper function to get [`sov_universal_wallet::schema::Schema`] for the [`Runtime`]
-pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'static>(
+pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + Runtime<S> + 'static>(
 ) -> anyhow::Result<sov_universal_wallet::schema::Schema> {
     let schema = sov_universal_wallet::schema::Schema::of_rollup_types_with_chain_data::<
         crate::transaction::Transaction<R, S>,
         crate::transaction::TransactionSigningPayload<R, S>,
         R::Decodable,
         S::Address,
-    >(sov_universal_wallet::schema::ChainData {
-        chain_id: sov_modules_macros::config_value!("CHAIN_ID"),
-        chain_name: sov_modules_macros::config_value!("CHAIN_NAME").to_string(),
+    >(ChainData {
+        chain_id: R::chain_id(),
+        chain_name: R::chain_name(),
     })?;
     let overrides: &[ChainHashOverride] =
         sov_modules_macros::config_value_private!("CHAIN_HASH_OVERRIDES");

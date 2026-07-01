@@ -443,7 +443,7 @@ where
         match input {
             EvmAuthenticatorInput::Evm(tx) => {
                 let (tx_and_raw_hash, auth_data, runtime_call) =
-                    authenticate::<_, _>(&tx.data, &Rt::CHAIN_HASH, state)?;
+                    authenticate::<_, _>(&tx.data, &Rt::chain_hash(), state)?;
 
                 Ok((
                     tx_and_raw_hash,
@@ -455,7 +455,7 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     sov_modules_api::capabilities::authenticate::<_, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
+                        &Rt::chain_hash(),
                         state,
                     )?;
 
@@ -497,7 +497,7 @@ where
         {
             Self::Input::Evm(tx) => {
                 let (tx_and_raw_hash, auth_data, runtime_call) =
-                    authenticate::<_, _>(&tx.data, &Rt::CHAIN_HASH, state)?;
+                    authenticate::<_, _>(&tx.data, &Rt::chain_hash(), state)?;
                 Ok((
                     tx_and_raw_hash,
                     auth_data,
