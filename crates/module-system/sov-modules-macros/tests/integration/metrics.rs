@@ -1,8 +1,8 @@
 use sov_metrics::{init_metrics_tracker, MonitoringConfig, TelegrafSocketConfig};
 use sov_modules_api::{Gas, GasMeter};
 use sov_modules_macros::track_gas_constants_usage;
+use sov_shutdown::SecondaryShutdownController;
 use tokio::net::UdpSocket;
-use tokio::sync::watch;
 use tokio::time::timeout;
 
 type S = sov_test_utils::TestSpec;
@@ -38,8 +38,7 @@ async fn test_metrics_macro() {
         .await
         .expect("Impossible to bind to port");
 
-    let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
-    shutdown_receiver.mark_unchanged();
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
 
     init_metrics_tracker(
         &MonitoringConfig {
@@ -49,7 +48,7 @@ async fn test_metrics_macro() {
             tokio_runtime_metrics_interval_millis: 500,
             rpc_aggregation: sov_metrics::RpcAggregationConfig::standard(),
         },
-        shutdown_receiver,
+        &secondary_shutdown_controller,
     );
 
     let input = &mut 10;
@@ -105,8 +104,7 @@ async fn test_metrics_macro_without_input() {
         .await
         .expect("Impossible to bind to port");
 
-    let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
-    shutdown_receiver.mark_unchanged();
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
 
     init_metrics_tracker(
         &MonitoringConfig {
@@ -116,7 +114,7 @@ async fn test_metrics_macro_without_input() {
             tokio_runtime_metrics_interval_millis: 500,
             rpc_aggregation: sov_metrics::RpcAggregationConfig::standard(),
         },
-        shutdown_receiver,
+        &secondary_shutdown_controller,
     );
 
     test_metrics_without_input();

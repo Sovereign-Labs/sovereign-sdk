@@ -48,6 +48,7 @@ pub use get_ip::*;
 pub use pagination::{PageSelection, PaginatedResponse, Pagination};
 use serde::Serialize;
 pub use sorting::{Sorting, SortingOrder};
+use sov_shutdown::PrimaryShutdownController;
 use std::fmt::Debug;
 use tower_http::cors::CorsLayer;
 use tower_http::propagate_header::PropagateHeaderLayer;
@@ -204,7 +205,7 @@ const PONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
 pub async fn serve_generic_ws_subscription<S, M, E>(
     socket: WebSocket,
     subscription: S,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
 ) where
     S: futures::Stream<Item = Result<M, E>> + Unpin,
     E: ReportableWsError,
@@ -213,7 +214,7 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
     serve_generic_ws_subscription_with_config(
         socket,
         subscription,
-        shutdown_receiver,
+        primary_shutdown,
         WsSubscriptionConfig::default(),
     )
     .await
@@ -236,7 +237,7 @@ pub async fn serve_generic_ws_subscription<S, M, E>(
 pub async fn serve_generic_ws_subscription_with_config<S, M, E>(
     mut socket: WebSocket,
     subscription: S,
-    mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
     config: WsSubscriptionConfig,
 ) where
     S: futures::Stream<Item = Result<M, E>> + Unpin,
@@ -418,7 +419,7 @@ pub async fn serve_generic_ws_subscription_with_config<S, M, E>(
                 awaiting_pong = Some(ping_data);
                 trace!("Sent ping to client");
             },
-            _ = shutdown_receiver.changed() => break,
+            _ = primary_shutdown.wait_for_shutdown() => break,
         }
     }
 

@@ -211,9 +211,9 @@ mod tests {
         metrics_publisher_task, receive_with_timeout, spawn_metrics_udp_receiver,
     };
     use crate::influxdb::tracker::timestamp;
+    use sov_shutdown::SecondaryShutdownController;
     use std::io::Write;
     use std::str::FromStr;
-    use tokio::sync::watch;
 
     #[test]
     fn escaped_field_value_preserves_plain_input() {
@@ -262,13 +262,13 @@ mod tests {
         };
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
-        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
-        shutdown_receiver.mark_unchanged();
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         spawn_metrics_udp_receiver(socket, metrics_back_sender.clone());
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
         let _task_handle = tokio::spawn(async move {
-            metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
+            metrics_publisher_task(receiver, &monitoring_config, secondary_shutdown_controller)
+                .await;
         });
 
         let tracker = MetricsTracker { sender };
@@ -363,12 +363,12 @@ mod tests {
 
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(100);
         spawn_metrics_udp_receiver(socket, metrics_back_sender.clone());
-        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
-        shutdown_receiver.mark_unchanged();
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
         let _task_handle = tokio::spawn(async move {
-            metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
+            metrics_publisher_task(receiver, &monitoring_config, secondary_shutdown_controller)
+                .await;
         });
 
         let tracker = MetricsTracker { sender };

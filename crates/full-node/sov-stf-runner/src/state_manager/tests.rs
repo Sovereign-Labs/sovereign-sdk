@@ -29,6 +29,7 @@ use sov_rollup_interface::stf::GenesisParams;
 use sov_rollup_interface::stf::{
     ApplySlotOutput, BatchReceipt, ExecutionContext, StateTransitionFunction,
 };
+use sov_shutdown::SecondaryShutdownController;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{ArrayWitness, NativeStorage, SlotKey, SlotValue, StateAccesses, Storage};
 
@@ -175,7 +176,7 @@ async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Res
         );
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -226,7 +227,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
         );
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -496,7 +497,7 @@ async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Res
         stf_info.aggregated_proofs
     );
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -620,7 +621,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
         }
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -710,7 +711,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
             .await?
             .get()
     );
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -866,7 +867,7 @@ async fn test_progressing_with_shuffle(
         finalized_hashes.insert(last_finalized_header.hash());
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -940,8 +941,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
 
     let finality = 50;
-    let (sender, mut receiver) = tokio::sync::watch::channel(());
-    receiver.mark_unchanged();
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
 
     let da_service = StorableMockDaService::from_config(
         MockDaConfig {
@@ -958,7 +958,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
             }),
             failure_behavior: Default::default(),
         },
-        receiver,
+        &secondary_shutdown_controller,
     )
     .await;
 
@@ -1036,8 +1036,8 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
         height = returned_block.header().height() + 1;
     }
 
-    shutdown_sender_2.send(())?;
-    sender.send(())?;
+    shutdown_sender_2.shutdown();
+    secondary_shutdown_controller.shutdown();
     Ok(())
 }
 
@@ -1155,7 +1155,7 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
         height = returned_block.header().height() + 1;
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -1333,7 +1333,7 @@ async fn test_change_in_finalized_header() {
         .await
         .unwrap();
 
-    shutdown_sender.send(()).unwrap();
+    shutdown_sender.shutdown();
 }
 
 // On empty internal state, if we pass a block that is not adjacent to
@@ -1432,11 +1432,7 @@ async fn setup_storage_manager(
 async fn setup_state_manager<Da>(
     storage_path: &std::path::Path,
     da_service: Da,
-) -> anyhow::Result<(
-    TestStateManager<Da>,
-    StateRoot,
-    tokio::sync::watch::Sender<()>,
-)>
+) -> anyhow::Result<(TestStateManager<Da>, StateRoot, SecondaryShutdownController)>
 where
     Da: DaService<Error = anyhow::Error, Spec = MockDaSpec>,
 {
@@ -1453,15 +1449,14 @@ where
         target_da_height: AtomicU64::new(u64::MAX),
         sync_status_sender,
     });
-    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(());
-    shutdown_rx.mark_unchanged();
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
 
     let update_info = query_state_update_info(&ledger_db, stf_state, sync_state.as_ref()).await?;
     let state_channel = StateChannel::new(update_info);
 
     let da_header_provider = DaServiceWithCachedFinalizedHeaders::new(
         Arc::new(da_service),
-        shutdown_rx,
+        &secondary_shutdown_controller,
         DA_POLLING_INTERVAL,
     )
     .await?;
@@ -1480,7 +1475,11 @@ where
     );
     state_manager.startup().await?;
 
-    Ok((state_manager, initial_state_root, shutdown_tx))
+    Ok((
+        state_manager,
+        initial_state_root,
+        secondary_shutdown_controller,
+    ))
 }
 
 #[allow(clippy::type_complexity)]
@@ -1874,7 +1873,7 @@ async fn test_progressing_with_rewind_below_finalized(
         da_service.send_transaction(&blob_data).await.await??;
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -1975,7 +1974,7 @@ async fn test_binary_search_handles_da_error() -> anyhow::Result<()> {
         Err(e) => panic!("Should succeed after clearing failure, got: {e}"),
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -2088,7 +2087,7 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
     // Internal consistency should still hold
     check_internal_consistency(&state_manager, finality as usize);
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -2142,7 +2141,7 @@ async fn test_ledger_consistency_after_processing() -> anyhow::Result<()> {
         );
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
     Ok(())
 }
 
@@ -2223,6 +2222,6 @@ async fn test_finalized_height_monotonic() -> anyhow::Result<()> {
         }
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
     Ok(())
 }

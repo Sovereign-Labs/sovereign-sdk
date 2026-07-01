@@ -4,7 +4,7 @@ use anyhow::Context;
 use rand::RngCore;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait};
-use sov_rollup_interface::node::da::{DaService, SlotData};
+use sov_rollup_interface::node::da::DaService;
 use std::collections::HashMap;
 use std::hash::{DefaultHasher, Hash, Hasher};
 

@@ -160,24 +160,21 @@ describe("Bank", () => {
   });
 
   describe("tokenMetadata", () => {
-    // Valid bech32m token ID with decimals = 89 (last byte)
-    const mockTokenId =
-      "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7";
+    const mockTokenId = "token_123";
+    const mockGasTokenId = "gas_token_456";
 
     beforeEach(() => {
-      // Mock gasTokenId method
-      vi.spyOn(bank, "gasTokenId").mockResolvedValue(mockTokenId);
+      vi.spyOn(bank, "gasTokenId").mockResolvedValue(mockGasTokenId);
     });
 
-    it("should return token metadata for a specific token", async () => {
+    it("should fetch and map metadata for a specific token", async () => {
+      // Decimals are resolved server-side, so the client maps the response verbatim.
       const mockResponse = {
-        key: mockTokenId,
-        value: {
-          name: "Test Token",
-          total_supply: "1000000000000000000000000",
-          supply_cap: "2000000000000000000000000",
-          admins: [{ user: "sov1abc123" }, { module: "sov1mod456" }],
-        },
+        name: "Test Token",
+        decimals: 18,
+        total_supply: "1000000000000000000000000",
+        supply_cap: "2000000000000000000000000",
+        admins: [{ user: "sov1abc123" }, { module: "sov1mod456" }],
       };
 
       mockClient.get.mockResolvedValue(mockResponse);
@@ -185,26 +182,24 @@ describe("Bank", () => {
       const result = await bank.tokenMetadata(mockTokenId);
 
       expect(mockClient.get).toHaveBeenCalledWith(
-        `/modules/bank/state/tokens/items/${mockTokenId}`,
+        `/modules/bank/tokens/${mockTokenId}/metadata`,
       );
       expect(result).toEqual({
         name: "Test Token",
-        decimals: 89,
+        decimals: 18,
         totalSupply: BigInt("1000000000000000000000000"),
         supplyCap: BigInt("2000000000000000000000000"),
         admins: ["sov1abc123", "sov1mod456"],
       });
     });
 
-    it("should return token metadata for gas token when no tokenId provided", async () => {
+    it("should fetch metadata for the gas token when no tokenId provided", async () => {
       const mockResponse = {
-        key: mockTokenId,
-        value: {
-          name: "Gas Token",
-          total_supply: "500000000000000000000000",
-          supply_cap: "1000000000000000000000000",
-          admins: [{ derived: "sov1derived789" }],
-        },
+        name: "Gas Token",
+        decimals: 6,
+        total_supply: "500000000000000000000000",
+        supply_cap: "1000000000000000000000000",
+        admins: [{ derived: "sov1derived789" }],
       };
 
       mockClient.get.mockResolvedValue(mockResponse);
@@ -212,11 +207,11 @@ describe("Bank", () => {
       const result = await bank.tokenMetadata();
 
       expect(mockClient.get).toHaveBeenCalledWith(
-        `/modules/bank/state/tokens/items/${mockTokenId}`,
+        `/modules/bank/tokens/${mockGasTokenId}/metadata`,
       );
       expect(result).toEqual({
         name: "Gas Token",
-        decimals: 89,
+        decimals: 6,
         totalSupply: BigInt("500000000000000000000000"),
         supplyCap: BigInt("1000000000000000000000000"),
         admins: ["sov1derived789"],

@@ -28,8 +28,9 @@ use crate::metrics::EvmTxMetrics;
 use crate::sov_fee_and_gas_utils::project_receipt_gas_from_actual_fee;
 use crate::{
     gas_metering_mode, BorshSpecId, ChainSpecUpdate, ContractCreationPolicy,
-    ContractCreationPolicyUpdate, Evm, EvmChainSpec, EvmRuntimeConfig, EvmRuntimeConfigUpdate,
-    GasMeteringMode, PendingTransaction, RlpEvmTransaction, TransactionSigned,
+    ContractCreationPolicyUpdate, EnabledCustomPrecompilesUpdate, Evm, EvmChainSpec,
+    EvmRuntimeConfig, EvmRuntimeConfigUpdate, GasMeteringMode, PendingTransaction,
+    RlpEvmTransaction, TransactionSigned,
 };
 use anyhow::{bail, Context as _};
 
@@ -52,6 +53,13 @@ pub enum CallMessage<S: Spec> {
     Call(RlpEvmTransaction),
     /// Update the runtime configuration
     UpdateRuntimeConfig(EvmRuntimeConfigUpdate<S>),
+    /// Enable or disable custom EVM precompiles.
+    ///
+    /// This is a dedicated message (rather than a field of [`EvmRuntimeConfigUpdate`]) so that the
+    /// borsh layout of the pre-existing call messages is preserved: appending a variant keeps the
+    /// existing variant discriminants, and `EvmRuntimeConfigUpdate` keeps its original fields, so
+    /// transactions created before custom precompiles existed still decode identically.
+    UpdateEnabledCustomPrecompiles(EnabledCustomPrecompilesUpdate),
 }
 
 impl<S: Spec, P> Evm<S, P>
@@ -168,6 +176,48 @@ where
         Ok(())
     }
 
+    pub(crate) fn update_enabled_custom_precompiles(
+        &mut self,
+        update: EnabledCustomPrecompilesUpdate,
+        context: &Context<S>,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        let Some(admin) = self.admin.get(state)? else {
+            bail!("No EVM admin is configured. The config cannot be updated without an admin.");
+        };
+        ensure!(
+            context.sender() == &admin,
+            "Only the admin can update the enabled custom precompiles. Got {} but expected {admin}",
+            context.sender()
+        );
+        self.apply_enabled_custom_precompiles_update(update, state)
+    }
+
+    fn apply_enabled_custom_precompiles_update(
+        &mut self,
+        update: EnabledCustomPrecompilesUpdate,
+        state: &mut impl TxState<S>,
+    ) -> anyhow::Result<()> {
+        let mut enabled = self.enabled_custom_precompile_addresses(state)?;
+
+        for address in update.add {
+            let address = Address::from(address);
+            ensure!(
+                P::ADDRESSES.contains(&address),
+                "custom EVM precompile address {address} is not available in this runtime"
+            );
+            enabled.insert(address);
+        }
+
+        for address in update.remove {
+            let address = Address::from(address);
+            enabled.remove(&address);
+        }
+
+        self.enabled_custom_precompiles.set(&enabled, state)?;
+        Ok(())
+    }
+
     fn apply_chain_spec_update(
         &mut self,
         chain_spec_update: ChainSpecUpdate,
@@ -249,7 +299,7 @@ where
             self.fetch_state(context, state, tx)?;
 
         save_elapsed!(fetch_state_time SINCE fetch_state);
-        let precompiles = self.precompile_provider(Some(context))?;
+        let precompiles = self.precompile_provider(Some(context), state)?;
         let db = self.db(state);
         let mut db = MetricsDb::new(db);
 

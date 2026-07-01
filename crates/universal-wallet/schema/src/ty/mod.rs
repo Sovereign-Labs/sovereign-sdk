@@ -175,6 +175,18 @@ impl<L: LinkingScheme> Ty<L> {
                     byte_offset,
                 }),
             ) => vec![(*field_index, *byte_offset)],
+            Ty::Integer(
+                _,
+                IntegerDisplay::FixedPoint(FixedPointDisplay::FromSiblingFieldWithOverride {
+                    field_index,
+                    ..
+                }),
+            ) => {
+                // Intentionally limited to 32-byte sibling fields (our token-id use case): we grab
+                // all 32 bytes to compare against `override_match`, which also covers the fallback
+                // `byte_offset` (always within 0..32).
+                (0..32).map(|i| (*field_index, i)).collect()
+            }
             _ => Vec::new(),
         }
     }
@@ -275,6 +287,16 @@ pub enum FixedPointDisplay {
     FromSiblingField {
         field_index: usize,
         byte_offset: usize,
+    },
+    /// Like [`FixedPointDisplay::FromSiblingField`], but if the sibling field's 32 bytes equal
+    /// `override_match`, `override_decimals` is used instead of the byte at `byte_offset`. Intended
+    /// only for our fixed 32-byte token-id override and intentionally supports 32-byte sibling
+    /// fields only; not a general-purpose primitive.
+    FromSiblingFieldWithOverride {
+        field_index: usize,
+        byte_offset: usize,
+        override_match: [u8; 32],
+        override_decimals: u8,
     },
 }
 

@@ -122,6 +122,7 @@ fn default_config() -> EvmGenesisConfig<S> {
             ..Default::default()
         },
         contract_creation_policy: ContractCreationPolicy::Everyone,
+        enabled_custom_precompiles: Default::default(),
         admin: MultiAddress::from_vm_address(
             EthereumAddress::from_str("0x0123456789012345678901234567890123456789").unwrap(),
         ),

@@ -3,6 +3,7 @@
 //! Always measured on success.
 use crate::metrics::RollupNamespace;
 use crate::verifier::address::CelestiaAddress;
+use crate::CompressOnSubmit;
 use celestia_types::namespace_data::NamespaceData;
 use sov_metrics::Metric;
 use std::io::Write;
@@ -85,6 +86,52 @@ impl Metric for BlobSubmitMeasurement {
         write!(
             buffer,
             "{name},namespace={namespace} bytes={bytes},lock_acquisition_us={lock_acquisition_us},submit_time_us={submit_time_us},total_time_us={total_time_us}"
+        )
+    }
+}
+
+/// Batch-blob compression outcome at submission. Emitted for every batch submit
+/// (including `mode=off`) so the compression ratio is observable as a baseline.
+#[derive(Debug)]
+pub(crate) struct BlobCompressionMeasurement {
+    /// Emission mode tag: `off` or `lz4` (the configured policy).
+    pub mode: CompressOnSubmit,
+    /// Rollup (pre-encoding) payload length.
+    pub rollup_bytes: usize,
+    /// DA (post-encoding) payload length.
+    pub da_bytes: usize,
+}
+
+impl BlobCompressionMeasurement {
+    pub fn new(mode: CompressOnSubmit, rollup_bytes: usize, da_bytes: usize) -> Self {
+        Self {
+            mode,
+            rollup_bytes,
+            da_bytes,
+        }
+    }
+}
+
+impl Metric for BlobCompressionMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_compress_blob"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let mode = self.mode;
+        let rollup_bytes = self.rollup_bytes;
+        let da_bytes = self.da_bytes;
+        let saved_bytes = rollup_bytes.saturating_sub(da_bytes);
+        // da/rollup in basis points (10000 = no reduction). Integer-only.
+        let ratio_bps = if rollup_bytes == 0 {
+            10_000
+        } else {
+            (da_bytes as u64 * 10_000) / rollup_bytes as u64
+        };
+        write!(
+            buffer,
+            "{name},mode={mode} rollup_bytes={rollup_bytes},da_bytes={da_bytes},saved_bytes={saved_bytes},ratio_bps={ratio_bps}"
         )
     }
 }

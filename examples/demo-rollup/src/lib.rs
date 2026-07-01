@@ -3,45 +3,86 @@
 //! See the README for more information.
 // TODO: #![doc = include_str!("../README.md")]
 #![deny(missing_docs)]
-use serde::de::DeserializeOwned;
-use sov_celestia_adapter::types::Namespace;
-use sov_db::ledger_db::LedgerDb;
-use sov_modules_api::macros::config_value;
-use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::da::DaSpec;
-use sov_rollup_interface::zk::aggregated_proof::{
-    AggregatedProofPublicData, CodeCommitmentHash, SerializedAggregatedProof,
-};
-use sov_rollup_interface::zk::ZkVerifier;
+// With no DA feature the crate is only the `compile_error!` below; allow the dead-code /
+// unused-import warnings that result so that error is the single, clear diagnostic.
+#![cfg_attr(
+    not(any(feature = "mock_da", feature = "celestia_da")),
+    allow(dead_code, unused_imports)
+)]
+
+// A DA layer must be selected at compile time. `mock_da` (mock + SP1 zkVMs) and
+// `celestia_da` (Risc0) are the two profiles; at least one must be enabled.
+#[cfg(not(any(feature = "mock_da", feature = "celestia_da")))]
+compile_error!("enable at least one DA feature: `mock_da` or `celestia_da`");
+
 use std::str::FromStr;
+
+mod chain_state_override;
+pub use chain_state_override::override_code_commitments_in_chain_state;
+mod solana_offchain_endpoint;
+
+// Mock-DA rollups: both MockZkvm and SP1 inner VMs (zkVM chosen at runtime via `--zk-vm`).
+#[cfg(feature = "mock_da")]
 mod aggregated_proof;
+#[cfg(feature = "mock_da")]
 pub use aggregated_proof::read_latest_aggregated_proof;
+#[cfg(feature = "mock_da")]
 mod mock_helper;
+#[cfg(feature = "mock_da")]
 pub use mock_helper::{
     create_mock_prover_service, read_mock_code_commitments_from_env, set_inner_code_commitment_env,
     set_outer_code_commitment_env, Hasher, MockAggregatedProofPublicData, NativeStorage,
 };
+#[cfg(feature = "mock_da")]
 mod mock_rollup;
+#[cfg(feature = "mock_da")]
 pub use mock_rollup::*;
+#[cfg(feature = "mock_da")]
 mod mock_sp1_rollup;
+#[cfg(feature = "mock_da")]
 mod sp1_helper;
+#[cfg(feature = "mock_da")]
 pub use mock_sp1_rollup::*;
+#[cfg(feature = "mock_da")]
 mod external_mock_sp1_rollup;
+#[cfg(feature = "mock_da")]
 pub use external_mock_sp1_rollup::*;
-mod chain_state_override;
-pub use chain_state_override::override_code_commitments_in_chain_state;
-mod celestia_rollup;
-pub use celestia_rollup::*;
+#[cfg(feature = "mock_da")]
 mod external_mock_rollup;
+#[cfg(feature = "mock_da")]
 pub use external_mock_rollup::*;
-mod solana_offchain_endpoint;
+
+// Celestia-DA rollup: Risc0 inner VM + MockZkvm outer VM.
+#[cfg(feature = "celestia_da")]
+mod celestia_rollup;
+#[cfg(feature = "celestia_da")]
+pub use celestia_rollup::*;
+
+/// The zkVM a rollup runs on. Selected at runtime via the `--zk-vm` flag and
+/// shared by both the node binary (which picks the rollup to run) and the
+/// light-client binary (which picks the proof verifier).
+#[derive(clap::ValueEnum, Clone, Debug, PartialEq, Eq)]
+pub enum SupportedZkVm {
+    /// The mock zkVM used for fast, proof-free local development.
+    Mock,
+    /// The SP1 zkVM.
+    Sp1,
+}
 
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant by modifying BATCH_NAMESPACE in constants.toml
-pub const ROLLUP_BATCH_NAMESPACE: Namespace = Namespace::const_v0(config_value!("BATCH_NAMESPACE"));
+#[cfg(feature = "celestia_da")]
+pub const ROLLUP_BATCH_NAMESPACE: sov_celestia_adapter::types::Namespace =
+    sov_celestia_adapter::types::Namespace::const_v0(sov_modules_api::macros::config_value!(
+        "BATCH_NAMESPACE"
+    ));
 /// The rollup stores the zk proofs in the namespace b"sov-test-p" on Celestia.
 /// You can change this constant by modifying PROOF_NAMESPACE in constants.toml
-pub const ROLLUP_PROOF_NAMESPACE: Namespace = Namespace::const_v0(config_value!("PROOF_NAMESPACE"));
+#[cfg(feature = "celestia_da")]
+pub const ROLLUP_PROOF_NAMESPACE: sov_celestia_adapter::types::Namespace =
+    sov_celestia_adapter::types::Namespace::const_v0(sov_modules_api::macros::config_value!(
+        "PROOF_NAMESPACE"
+    ));
 
 fn sequencer_type(
     config: &sov_full_node_configs::sequencer::SequencerConfig<impl Copy>,
@@ -61,9 +102,27 @@ fn eth_dev_signer() -> sov_ethereum::Signers {
     .unwrap()])
 }
 
+// Imports used only by `get_persisted_outer_proof`; gated with it behind `mock_da`
+// (only the mock/sp1 prover helpers reconcile a persisted outer proof).
+#[cfg(feature = "mock_da")]
+use serde::de::DeserializeOwned;
+#[cfg(feature = "mock_da")]
+use sov_db::ledger_db::LedgerDb;
+#[cfg(feature = "mock_da")]
+use sov_rollup_interface::common::SlotNumber;
+#[cfg(feature = "mock_da")]
+use sov_rollup_interface::da::DaSpec;
+#[cfg(feature = "mock_da")]
+use sov_rollup_interface::zk::aggregated_proof::{
+    AggregatedProofPublicData, CodeCommitmentHash, SerializedAggregatedProof,
+};
+#[cfg(feature = "mock_da")]
+use sov_rollup_interface::zk::ZkVerifier;
+
 /// Loads the latest persisted aggregated proof and reconciles it with the
 /// current inner/outer code commitments to decide what the outer prover should
 /// resume from.
+#[cfg(feature = "mock_da")]
 pub(crate) async fn get_persisted_outer_proof<Vm, Address, Da, Root>(
     ledger_db: &LedgerDb,
     inner_code_commitment_hash: CodeCommitmentHash,

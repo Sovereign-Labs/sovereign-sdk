@@ -1,4 +1,5 @@
 use std::str::FromStr;
+use std::sync::Arc;
 use std::time::Duration;
 
 use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
@@ -17,7 +18,8 @@ use sov_metrics::MonitoringConfig;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, RelevantBlobs};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::da::SlotData;
+use sov_shutdown::SecondaryShutdownController;
+use sov_test_utils::sov_toxi_proxi_image::CelestiaRpcProxyFleet;
 use tokio::task::JoinSet;
 
 async fn collect_all_blobs_between(
@@ -60,7 +62,8 @@ fn assert_single_blob(
     let mut fetched_blob = blobs.pop().unwrap();
     assert_eq!(fetched_blob.sender, expected_signer);
     assert_eq!(fetched_blob.hash, expected_hash);
-    fetched_blob.blob.advance(fetched_blob.total_len());
+    let total_len = fetched_blob.total_len();
+    fetched_blob.advance(total_len);
     assert_eq!(fetched_blob.verified_data(), expected_data);
 }
 
@@ -263,8 +266,9 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-    let da_service = CelestiaService::new(config, rollup_params, shutdown_rx).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, rollup_params, &secondary_shutdown_controller).await;
     let signer = da_service
         .get_signer()
         .await
@@ -286,11 +290,124 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_submit_compressed_batch_round_trips() -> anyhow::Result<()> {
+    let rollup_params = ROLLUP_PARAMS_DEV;
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let mut config = dev_node.get_config().await?;
+    config.compression = crate::config::CompressOnSubmit::Lz4;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, rollup_params, &secondary_shutdown_controller).await;
+    let signer = da_service
+        .get_signer()
+        .await
+        .expect("Should be configured with signer");
+
+    // A compressible, multi-share batch (8-byte period) so the DA envelope is
+    // strictly smaller than raw and spans several chunks.
+    let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
+    let blob: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
+    let height_before = da_service.get_head_block_header().await?.height();
+    let response = da_service.send_transaction(&blob).await.await??;
+
+    let (collected_batch_blobs, collected_proof_blobs) =
+        collect_all_blobs_between(&da_service, height_before).await?;
+    assert!(
+        collected_proof_blobs.is_empty(),
+        "Proof should not appear when sending batch blobs"
+    );
+    // The blob read back from Celestia decodes to the original rollup payload, even
+    // though a smaller compressed envelope was the bytes actually posted on-DA.
+    assert_single_blob(collected_batch_blobs, signer, response.blob_hash, &blob);
+    Ok(())
+}
+
+/// A single, config-free reader decodes blobs from two senders that compressed with
+/// *different* `compression_chunk_size` values back to the identical rollup payload.
+/// This guards the failover-safety invariant: chunk size is emission-only, so a replica
+/// leader configured differently from the master still produces universally-decodable
+/// blobs. Each chunk carries its own framing, so decode never consults the encoder's size.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_two_senders_different_chunk_sizes_decode_identically() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let base = dev_node.get_config().await?;
+
+    // Sender A: default share-aligned chunk size.
+    let mut config_a = base.clone();
+    config_a.compression = crate::config::CompressOnSubmit::Lz4;
+    config_a.compression_chunk_size = 482;
+
+    // Sender B: a deliberately different chunk size (the per-chunk cap), signer key 1.
+    let mut config_b = base;
+    config_b.signer_private_key = Some(dev_node.export_signer_key(1).await?);
+    config_b.compression = crate::config::CompressOnSubmit::Lz4;
+    config_b.compression_chunk_size = 1446;
+
+    // Compressible, multi-chunk payload at both sizes (8-byte period): ~9 chunks at 482,
+    // ~3 chunks at 1446.
+    let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
+    let payload: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
+
+    // Guard: both configs really emit a chunked envelope (not a raw fallback), otherwise
+    // the round-trip below would not exercise the chunked decode path at all.
+    for cs in [482usize, 1446] {
+        let da_payload = crate::envelope::encode_for_submission(&payload, true, cs);
+        assert!(
+            da_payload.starts_with(&crate::envelope::ENVELOPE_MAGIC)
+                && da_payload.len() < payload.len(),
+            "payload must compress to a chunked envelope at chunk size {cs}"
+        );
+    }
+
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let service_a =
+        CelestiaService::new(config_a, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
+    let service_b =
+        CelestiaService::new(config_b, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
+    let signer_a = service_a
+        .get_signer()
+        .await
+        .expect("signer A should be configured");
+    let signer_b = service_b
+        .get_signer()
+        .await
+        .expect("signer B should be configured");
+
+    let height_before = service_a.get_head_block_header().await?.height();
+    let resp_a = service_a.send_transaction(&payload).await.await??;
+    let resp_b = service_b.send_transaction(&payload).await.await??;
+
+    // The read path is config-free, so either service reads both senders' blobs.
+    let (mut batch_blobs, proof_blobs) =
+        collect_all_blobs_between(&service_a, height_before).await?;
+    assert!(
+        proof_blobs.is_empty(),
+        "no proofs expected for batch submissions"
+    );
+    assert_eq!(batch_blobs.len(), 2, "exactly two batch blobs expected");
+
+    // Each sender's blob — encoded with a different chunk size — decodes to the same
+    // original payload under the single, config-free reader.
+    for (signer, expected_hash) in [(signer_a, resp_a.blob_hash), (signer_b, resp_b.blob_hash)] {
+        let blob = batch_blobs
+            .iter_mut()
+            .find(|b| b.sender == signer)
+            .unwrap_or_else(|| panic!("no blob found from sender {signer}"));
+        assert_eq!(blob.hash, expected_hash);
+        let total_len = blob.total_len();
+        blob.advance(total_len);
+        assert_eq!(blob.verified_data(), payload.as_slice());
+    }
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_submit_proof_correct() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
 
     let zk_proof: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
     let signer = da_service
@@ -342,7 +459,7 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
         rollup_proof_namespace: Namespace::const_v0(*b"n99proof99"),
     };
 
-    let mut shutdown_senders = Vec::new();
+    let mut secondary_shutdown_controllers = Vec::new();
     let mut active_services = Vec::new();
     let mut active_signers = Vec::new();
 
@@ -353,9 +470,9 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
         let mut config = base_config.clone();
         config.signer_private_key = Some(signer_private_key);
 
-        let (shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-        shutdown_senders.push(shutdown_tx);
-        let service = CelestiaService::new(config, *params, shutdown_rx).await;
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
+        let service = CelestiaService::new(config, *params, &secondary_shutdown_controller).await;
+        secondary_shutdown_controllers.push(secondary_shutdown_controller);
         assert_eq!(
             service.get_signer().await,
             Some(expected_signer),
@@ -365,10 +482,14 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
         active_signers.push(expected_signer);
     }
 
-    let (unknown_shutdown_tx, unknown_shutdown_rx) = tokio::sync::watch::channel(());
-    shutdown_senders.push(unknown_shutdown_tx);
-    let unknown_service =
-        CelestiaService::new(base_config, unknown_rollup_params, unknown_shutdown_rx).await;
+    let unknown_secondary_shutdown_controller = SecondaryShutdownController::new();
+    let unknown_service = CelestiaService::new(
+        base_config,
+        unknown_rollup_params,
+        &unknown_secondary_shutdown_controller,
+    )
+    .await;
+    secondary_shutdown_controllers.push(unknown_secondary_shutdown_controller);
 
     let mut verification_services = active_services.clone();
     verification_services.push(unknown_service);
@@ -611,9 +732,17 @@ async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
     };
 
     // CelestiaService for reading/verifying (uses key 0).
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
-    let _ = sov_metrics::init_metrics_tracker(&MonitoringConfig::standard(), shutdown_rx.clone());
-    let da_service = CelestiaService::new(base_config.clone(), rollup_params, shutdown_rx).await;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let _ = sov_metrics::init_metrics_tracker(
+        &MonitoringConfig::standard(),
+        &secondary_shutdown_controller,
+    );
+    let da_service = CelestiaService::new(
+        base_config.clone(),
+        rollup_params,
+        &secondary_shutdown_controller,
+    )
+    .await;
     let verifier = CelestiaVerifier::new(rollup_params);
 
     // Build 6 raw clients with different signers (keys 1–6).
@@ -793,9 +922,10 @@ fn bytes_for_shares_accounts_for_signer_overhead() {
 async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
     // TODO: disable retries
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
@@ -815,9 +945,10 @@ async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
 async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
     // TODO: disable retries
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
@@ -840,9 +971,10 @@ async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
 async fn test_submit_blob_response_timeout() -> anyhow::Result<()> {
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
-    let (_shutdown_tx, shutdown_rx) = tokio::sync::watch::channel(());
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
     // TODO: disable retries
-    let da_service = CelestiaService::new(config, ROLLUP_PARAMS_DEV, shutdown_rx).await;
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
 
     let blob: Vec<u8> = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
 
@@ -923,29 +1055,29 @@ where
 #[tokio::test(flavor = "multi_thread")]
 async fn verification_succeeds_for_correct_blocks() {
     let read_full = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
-        blob_with_sender.blob.advance(total_len);
-        let data = blob_with_sender.blob.accumulator();
+        let total_len = blob_with_sender.total_len();
+        blob_with_sender.advance(total_len);
+        let data = blob_with_sender.verified_data();
         assert_eq!(data.len(), total_len);
     };
     let no_read = |blob_with_sender: &mut BlobWithSender| {
-        let data = blob_with_sender.blob.accumulator();
+        let data = blob_with_sender.verified_data();
         assert_eq!(data.len(), 0);
     };
     let single_byte = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
+        let total_len = blob_with_sender.total_len();
         if total_len > 0 {
-            blob_with_sender.blob.advance(1);
+            blob_with_sender.advance(1);
         }
-        let data = blob_with_sender.blob.accumulator();
+        let data = blob_with_sender.verified_data();
         let expected_len = std::cmp::min(total_len, 1);
         assert_eq!(data.len(), expected_len);
     };
     let read_half = |blob_with_sender: &mut BlobWithSender| {
-        let total_len = blob_with_sender.blob.total_len();
+        let total_len = blob_with_sender.total_len();
         let half_len = total_len / 2;
-        blob_with_sender.blob.advance(half_len);
-        let data = blob_with_sender.blob.accumulator();
+        blob_with_sender.advance(half_len);
+        let data = blob_with_sender.verified_data();
         assert_eq!(data.len(), half_len);
     };
 
@@ -962,6 +1094,57 @@ async fn verification_succeeds_for_correct_blocks() {
     verification_for_correct_blocks(read_half, read_half).await;
     verification_for_correct_blocks(read_half, no_read).await;
     verification_for_correct_blocks(no_read, read_half).await;
+}
+
+/// A partially-read blob keeps exactly the bytes the STF saw across a witness round-trip,
+/// even though the serialized form no longer carries the blob's shares.
+#[tokio::test(flavor = "multi_thread")]
+async fn pruned_witness_round_trips_read_prefix() {
+    let block = with_rollup_batch_data::filtered_block();
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+
+    // Largest blob → the most unread shares dropped by pruning.
+    let blob = relevant_blobs
+        .batch_blobs
+        .iter_mut()
+        .max_by_key(|blob| blob.compressed_total_len())
+        .expect("fixture must contain a batch blob");
+
+    // The STF reads only a one-byte prefix; the rest of the blob stays untouched.
+    blob.advance(1);
+    let expected_verified = blob.verified_data().to_vec();
+    let expected_total_len = blob.total_len();
+
+    let restored: BlobWithSender =
+        bincode::deserialize(&bincode::serialize(&*blob).unwrap()).unwrap();
+
+    assert_eq!(restored.verified_data(), expected_verified.as_slice());
+    assert_eq!(restored.total_len(), expected_total_len);
+}
+
+/// The pruned witness blob serializes to less than its DA payload — impossible if the
+/// (mostly unread) shares were still carried, which is the witness-bloat DoS this fixes.
+#[tokio::test(flavor = "multi_thread")]
+async fn pruned_witness_blob_is_smaller_than_its_payload() {
+    let block = with_rollup_batch_data::filtered_block();
+    let relevant_blobs = extract_relevant_blobs(&block);
+
+    let blob = relevant_blobs
+        .batch_blobs
+        .iter()
+        .max_by_key(|blob| blob.compressed_total_len())
+        .expect("fixture must contain a batch blob");
+    let da_len = blob.compressed_total_len();
+    assert!(
+        da_len > 256,
+        "fixture blob must span multiple shares to make pruning observable (got {da_len} B)"
+    );
+
+    let encoded_len = bincode::serialize(blob).unwrap().len();
+    assert!(
+        encoded_len < da_len,
+        "pruned witness blob ({encoded_len} B) should be smaller than its {da_len} B DA payload"
+    );
 }
 
 #[test]
@@ -1029,15 +1212,17 @@ async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
         );
 
         for blob in relevant_blobs.batch_blobs.iter_mut() {
-            let total_len = blob.blob.total_len();
+            let total_len = blob.total_len();
             match read_mode {
                 "no_read" => {}
                 "single_byte" => {
                     if total_len > 0 {
-                        blob.blob.advance(1);
+                        blob.advance(1);
                     }
                 }
-                "full" => blob.blob.advance(total_len),
+                "full" => {
+                    blob.advance(total_len);
+                }
                 _ => unreachable!("unexpected read mode"),
             }
         }
@@ -1059,9 +1244,37 @@ async fn mixed_multi_v1_parity_boundary_verification_survives_partial_reads() {
 #[tokio::test(flavor = "multi_thread")]
 #[should_panic(expected = "invalid proof self-check: InvalidRoot")]
 async fn verification_fails_if_sender_changed() {
+    let block = block_with_changed_sender();
+    let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
+
+    // This is how it is observed
+    verification_error(block, "InvalidRoot", rollup_params)
+        .await
+        .unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn fetch_integrity_verification_catches_proof_generation_panic() {
+    let block = block_with_changed_sender();
+
+    let error =
+        super::verify_block_integrity_for_params(&block, with_rollup_batch_data::ROLLUP_PARAMS)
+            .unwrap_err()
+            .to_string();
+
+    assert!(
+        error.contains("Celestia block integrity verification panicked"),
+        "Actual error: {error}"
+    );
+    assert!(
+        error.contains("invalid proof self-check: InvalidRoot"),
+        "Actual error: {error}"
+    );
+}
+
+fn block_with_changed_sender() -> FilteredCelestiaBlock {
     // This is the preparation part, consider it as malicious native code:
     let mut block = with_rollup_batch_data::filtered_block();
-    let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
     let addr_1 = CelestiaAddress::from_str(ADDR_1).unwrap();
     let addr_2 = CelestiaAddress::from_str(crate::test_helper::ADDR_2).unwrap();
     let addr_len = addr_1.as_ref().len();
@@ -1090,10 +1303,7 @@ async fn verification_fails_if_sender_changed() {
 
     block.rollup_batch_data.data = malicious_ns_data;
 
-    // This is how it is observed
-    verification_error(block, "InvalidRoot", rollup_params)
-        .await
-        .unwrap();
+    block
 }
 
 async fn verification_error(
@@ -1137,6 +1347,70 @@ async fn verification_fails_if_tx_missing() {
 
     assert!(
         error.to_string().contains("MoreProofsThanBlobs"),
+        "Actual error: {error}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verification_fails_if_witness_total_len_inflated() {
+    verification_fails_for_forged_total_len(ForgedLen::Inflated).await;
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verification_fails_if_witness_total_len_deflated() {
+    verification_fails_for_forged_total_len(ForgedLen::Deflated).await;
+}
+
+/// Direction of a forged `total_len` relative to the blob's authenticated length.
+enum ForgedLen {
+    Inflated,
+    Deflated,
+}
+
+/// `BlobWithSender`'s record of its total payload length backs
+/// `BlobReaderTrait::total_len()`, which feeds gas accounting and size gates in the
+/// STF. It is a prover-supplied witness field, so the verifier must reject any value
+/// that does not match the `sequence_length` of the authenticated first share.
+async fn verification_fails_for_forged_total_len(direction: ForgedLen) {
+    let block = with_rollup_batch_data::filtered_block();
+    let rollup_params = with_rollup_batch_data::ROLLUP_PARAMS;
+
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    // Proofs are built for the honest, unread witness: one share per blob.
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+
+    let blob = relevant_blobs.batch_blobs.remove(0);
+    // Forge relative to the blob's authenticated length so the value always clears the
+    // `AccumulatorExceedsTotalLen` deserialization guard (`forged >= verified prefix`) and is
+    // rejected by the verifier's sequence-length pin — regardless of whether the fixture blob
+    // is legacy (empty prefix) or an envelope (eager header prefix).
+    let real_total_len = blob.compressed_total_len() as u64;
+    let verified_prefix_len = blob.compressed_verified_data().len() as u64;
+    assert!(
+        verified_prefix_len < real_total_len,
+        "fixture blob must span more than its verified prefix to forge a deflated length \
+         (prefix {verified_prefix_len} B, total {real_total_len} B)"
+    );
+    let forged_total_len = match direction {
+        ForgedLen::Inflated => real_total_len + 1,
+        ForgedLen::Deflated => real_total_len - 1,
+    };
+
+    // Forge the witness through its serialized form, as a malicious prover would.
+    let mut serialized = serde_json::to_value(&blob).unwrap();
+    // The witness now serializes through the pruned wire form, which exposes the
+    // prover-supplied total length as a top-level `total_len` field.
+    serialized["total_len"] = serde_json::Value::from(forged_total_len);
+    let forged_blob: BlobWithSender = serde_json::from_value(serialized).unwrap();
+    relevant_blobs.batch_blobs.insert(0, forged_blob);
+
+    let verifier = CelestiaVerifier::new(rollup_params);
+    let error = verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .unwrap_err();
+
+    assert!(
+        error.to_string().contains("MismatchedBlobLength"),
         "Actual error: {error}"
     );
 }
@@ -1188,6 +1462,127 @@ async fn verification_fails_if_not_all_blobs_are_proven() {
             .contains("InvalidRowProof(ProofError(Missing))"),
         "Actual error: {error}"
     );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verification_fails_if_blob_total_len_is_forged() {
+    use crate::shares::BlobIterator;
+    use sov_rollup_interface::da::CountedBufReader;
+
+    let block = with_namespace_padding::filtered_block();
+    let rollup_params = with_namespace_padding::ROLLUP_PARAMS;
+
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    // The length that the DA shares actually prove for this blob.
+    let proven_len = relevant_blobs.batch_blobs[0].total_len();
+
+    // Build the inclusion proof from the honest blob first, then swap in a blob whose
+    // witness-derived `total_len()` disagrees with the proven sequence length. The verifier
+    // only authenticates the accumulator *content*, so without the cross-check a malicious
+    // prover could smuggle in an arbitrary `total_len()` (used downstream by sov-blob-storage
+    // for the malformed-blob slash decision, size limits, and deserialization gas charging).
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    let forged_len = proven_len + 7;
+    relevant_blobs.batch_blobs[0].blob =
+        CountedBufReader::new(BlobIterator::with_forged_len(forged_len));
+
+    let verifier = CelestiaVerifier::new(rollup_params);
+    let error = verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .unwrap_err();
+
+    assert!(
+        error.to_string().contains("MismatchedBlobLength"),
+        "Expected the verifier to reject a forged total_len, got: {error}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn verification_rejects_compressed_envelope_witness_without_header() -> anyhow::Result<()> {
+    use crate::shares::BlobIterator;
+    use sov_rollup_interface::da::CountedBufReader;
+
+    let rollup_params = ROLLUP_PARAMS_DEV;
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let mut config = dev_node.get_config().await?;
+    config.compression = crate::config::CompressOnSubmit::Lz4;
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, rollup_params, &secondary_shutdown_controller).await;
+
+    // A compressible batch whose DA envelope is shorter than the rollup payload.
+    let pattern = [0xDE_u8, 0xAD, 0xBE, 0xEF, 0x12, 0x34, 0x56, 0x78];
+    let rollup_blob: Vec<u8> = pattern.iter().copied().cycle().take(4000).collect();
+    let height_before = da_service.get_head_block_header().await?.height();
+    let response = da_service.send_transaction(&rollup_blob).await.await??;
+    let height_after = da_service
+        .get_head_block_header()
+        .await?
+        .height()
+        .saturating_add(1);
+
+    let mut matching_block = None;
+    for height in height_before..=height_after {
+        let block = da_service.get_block_at(height).await?;
+        let relevant_blobs = extract_relevant_blobs(&block);
+        if relevant_blobs
+            .batch_blobs
+            .iter()
+            .any(|blob| blob.hash == response.blob_hash)
+        {
+            matching_block = Some(block);
+            break;
+        }
+    }
+    let block = matching_block.context("submitted compressed blob was not found")?;
+
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    let blob_idx = relevant_blobs
+        .batch_blobs
+        .iter()
+        .position(|blob| blob.hash == response.blob_hash)
+        .context("submitted compressed blob was not extracted")?;
+
+    let da_len = relevant_blobs.batch_blobs[blob_idx].compressed_total_len();
+    assert!(
+        relevant_blobs.batch_blobs[blob_idx]
+            .compressed_verified_data()
+            .starts_with(&crate::envelope::ENVELOPE_MAGIC),
+        "native extraction should eagerly authenticate the envelope header",
+    );
+    assert_ne!(
+        da_len,
+        rollup_blob.len(),
+        "fixture must distinguish DA and rollup lengths",
+    );
+    assert_eq!(
+        relevant_blobs.batch_blobs[blob_idx].clone().total_len(),
+        rollup_blob.len(),
+        "honest native witness should expose the envelope rollup length",
+    );
+
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    relevant_blobs.batch_blobs[blob_idx].blob =
+        CountedBufReader::new(BlobIterator::with_forged_len(da_len));
+    assert_eq!(
+        relevant_blobs.batch_blobs[blob_idx]
+            .compressed_verified_data()
+            .len(),
+        0,
+        "forged witness omits the authenticated envelope header",
+    );
+    assert_eq!(
+        relevant_blobs.batch_blobs[blob_idx].total_len(),
+        da_len,
+        "without the header, the witness is classified as legacy and exposes DA length",
+    );
+
+    let verifier = CelestiaVerifier::new(rollup_params);
+    verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .expect_err("verifier accepted an envelope witness that omitted the header");
+
+    Ok(())
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -1295,10 +1690,10 @@ async fn test_payload_can_be_read_back() -> anyhow::Result<()> {
     let assert_payload = |blobs: &mut Vec<BlobWithSender>, expected_blobs: Vec<Vec<u8>>| {
         assert_eq!(blobs.len(), expected_blobs.len());
         for (actual_batch, expected_batch) in blobs.iter_mut().zip(expected_blobs.iter()) {
-            let total_len = actual_batch.blob.total_len();
+            let total_len = actual_batch.total_len();
             assert_eq!(total_len, expected_batch.len());
-            actual_batch.blob.advance(total_len);
-            let full_data = actual_batch.blob.accumulator();
+            actual_batch.advance(total_len);
+            let full_data = actual_batch.verified_data();
 
             assert_eq!(full_data, expected_batch);
         }
@@ -1409,6 +1804,81 @@ async fn generate_mixed_multi_v1_parity_boundary_fixture_with_docker() -> anyhow
     Ok(())
 }
 
+/// Generate the SP1 compression-benchmark fixtures. For each real mainnet rollup block we extract
+/// its batch payload, then resubmit that payload to a devnet twice — uncompressed and LZ4 — under
+/// the same namespace, so the off-vs-LZ4 cases differ only in compression. Produces the four
+/// `block_mainnet_real_rollup_{average,p99}_{off,lz4}` fixtures consumed by the celestia microbench.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "manual fixture generation; starts dockerized celestia devnet"]
+async fn generate_mainnet_compression_bench_fixtures() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let signer = dev_node.get_signer_address(0).await?;
+    let signer_private_key = dev_node.export_signer_key(0).await?;
+    let rpc_url = format!("ws://127.0.0.1:{}", dev_node.bridge_port_ipv4().await?);
+    let grpc_url = format!("http://127.0.0.1:{}", dev_node.validator_port_ipv4().await?);
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url(&rpc_url)
+        .grpc_url(&grpc_url)
+        .private_key_hex(&signer_private_key)
+        .build()
+        .await?;
+
+    let chunk_size = crate::config::default_compression_chunk_size();
+    let sources = [
+        (
+            "average",
+            from_mainnet_real_rollup_average::filtered_block(),
+        ),
+        ("p99", from_mainnet_real_rollup_p99::filtered_block()),
+    ];
+
+    let mut any_compressed = false;
+    for (name, block) in sources {
+        let payload = extract_batch_payload(&block);
+
+        // Off: post the rollup payload verbatim.
+        let off_path = make_test_path(&format!("test_data/block_mainnet_real_rollup_{name}_off"));
+        save_single_batch_fixture(&off_path, &client, &signer, payload.clone()).await?;
+
+        // LZ4: post the chunked compression envelope. These are the exact bytes the
+        // `CelestiaService` emits with `compression = Lz4` (it calls the same
+        // `encode_for_submission`), so the fixture matches the production emission path.
+        let da = crate::envelope::encode_for_submission(&payload, true, chunk_size);
+        let is_envelope = crate::envelope::has_magic_prefix(&da);
+        any_compressed |= is_envelope;
+        // `da.len() <= payload.len()` always (encode_for_submission falls back to verbatim when
+        // it cannot beat raw). Integer percent only — the workspace denies float arithmetic.
+        let saved_pct = payload.len().saturating_sub(da.len()) * 100 / payload.len().max(1);
+        println!(
+            "[gen] {name}: payload={} da_bytes={} saved={saved_pct}% envelope={is_envelope}",
+            payload.len(),
+            da.len(),
+        );
+        let lz4_path = make_test_path(&format!("test_data/block_mainnet_real_rollup_{name}_lz4"));
+        save_single_batch_fixture(&lz4_path, &client, &signer, da).await?;
+    }
+
+    assert!(
+        any_compressed,
+        "neither mainnet payload produced an LZ4 envelope (both incompressible), so the _lz4 \
+         fixtures equal the _off fixtures and the bench cases would tie; pick a more compressible \
+         block height"
+    );
+    Ok(())
+}
+
+/// Read back the full rollup batch payload from a loaded fixture block (one batch blob, decoded).
+fn extract_batch_payload(block: &FilteredCelestiaBlock) -> Vec<u8> {
+    let mut blobs = extract_relevant_blobs(block);
+    let blob = blobs
+        .batch_blobs
+        .first_mut()
+        .expect("mainnet fixture should contain one batch blob");
+    let len = blob.total_len();
+    blob.advance(len);
+    blob.verified_data().to_vec()
+}
+
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "should be run manually"]
 async fn generate_mocha_testnet_blocks() -> anyhow::Result<()> {
@@ -1438,6 +1908,19 @@ async fn generate_mocha_multi_candidate_rows_fixture() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "should be run manually if need to regenerate data"]
+async fn generate_mainnet_real_rollup_data() -> anyhow::Result<()> {
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url("http://celestia-mainnet-da.itrocket.net:26658")
+        .build()
+        .await?;
+
+    from_mainnet_real_rollup_average::update_test_data(&client).await;
+    from_mainnet_real_rollup_p99::update_test_data(&client).await;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "should be run manually if need to regenerate data"]
 async fn mocha_shares_panic() -> anyhow::Result<()> {
     // Install the ring crypto provider for rustls (required for TLS connections)
     let _ = rustls::crypto::ring::default_provider().install_default();
@@ -1453,5 +1936,407 @@ async fn mocha_shares_panic() -> anyhow::Result<()> {
     // 10207148
     from_mocha_invalid_row_proof::update_test_data(&client).await;
 
+    Ok(())
+}
+
+/// Median round-trip of a few `get_head_block_header` calls through whichever RPC
+/// endpoint the failover client is currently using. When the secondary carries a
+/// persistent latency toxic, this fingerprints the active endpoint by response time
+/// (toxiproxy exposes no connection counter and the failover client has no public
+/// "active endpoint" accessor, so latency is the available signal).
+async fn measure_active_rpc_latency(da_service: &CelestiaService) -> Duration {
+    let mut samples = Vec::new();
+    for _ in 0..3 {
+        let start = std::time::Instant::now();
+        if da_service.get_head_block_header().await.is_ok() {
+            samples.push(start.elapsed());
+        }
+        tokio::time::sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        !samples.is_empty(),
+        "expected at least one successful head request to measure latency"
+    );
+    samples.sort();
+    samples[samples.len() / 2]
+}
+
+/// Polls [`measure_active_rpc_latency`] until the median crosses `threshold` in the
+/// requested direction (`below` = faster than `threshold`), panicking after `timeout`.
+async fn wait_until_rpc_latency(
+    da_service: &CelestiaService,
+    below: bool,
+    threshold: Duration,
+    timeout: Duration,
+    context: &str,
+) {
+    let deadline = std::time::Instant::now() + timeout;
+    loop {
+        let latency = measure_active_rpc_latency(da_service).await;
+        let satisfied = if below {
+            latency < threshold
+        } else {
+            latency > threshold
+        };
+        if satisfied {
+            return;
+        }
+        assert!(
+            std::time::Instant::now() < deadline,
+            "{context}: median latency {latency:?} did not get {} {threshold:?} within {timeout:?}",
+            if below { "below" } else { "above" }
+        );
+        tokio::time::sleep(Duration::from_millis(300)).await;
+    }
+}
+
+/// End-to-end RPC endpoint failover and proactive switch-back, driven through toxiproxy.
+///
+/// Toxiproxy fronts a single Celestia bridge RPC with two proxies (primary + secondary),
+/// both forwarding to the same node. The adapter uses the primary as `rpc_url` and the
+/// secondary as a fallback endpoint. A persistent latency toxic on the secondary lets us
+/// tell which endpoint is serving by measuring request round-trip time.
+///
+/// The service polls in a background task while the main task toggles the proxies:
+///   1. both up                          -> fast (primary)
+///   2. primary down                     -> slow (secondary), head still advances
+///   3. primary back, secondary still up -> fast again on its own (proactive switch-back)
+///   4. primary down again               -> slow (secondary), confirming it goes back and forth
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rpc_secondary_endpoint_failover_and_switchback() -> anyhow::Result<()> {
+    // Persistent fingerprint latency on the secondary and the classification thresholds
+    // derived from it (a wide gap keeps the fast/slow decision robust).
+    const SECONDARY_LATENCY: Duration = Duration::from_millis(1500);
+    const PRIMARY_MAX_LATENCY: Duration = Duration::from_millis(700);
+    const SECONDARY_MIN_LATENCY: Duration = Duration::from_millis(1000);
+    const PHASE_TIMEOUT: Duration = Duration::from_secs(30);
+
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let bridge_rpc_port = dev_node.bridge_port_ipv4().await?;
+
+    let toxi = CelestiaRpcProxyFleet::start(bridge_rpc_port, 2).await;
+    toxi.set_latency(1, Some(SECONDARY_LATENCY)).await;
+
+    // Primary = proxy 0; secondary fallback = proxy 1.
+    let mut config = dev_node.get_config().await?;
+    config.rpc_url = toxi.rpc_ws_url(0);
+    config.rpc_fallback_endpoints = vec![crate::RpcEndpointConfig {
+        url: toxi.rpc_ws_url(1),
+        token: None,
+    }];
+    // Fast health-check so switch-back is quick; huge max_head_age so a momentarily stale
+    // devnet head can't block switch-back (the celestia-client failover test does the same).
+    config.rpc_health_check_interval_secs = std::num::NonZero::new(1);
+    config.rpc_max_head_age_secs = std::num::NonZero::new(60 * 60 * 24 * 365);
+    // Keep retries minimal so a measured request reflects the active endpoint's latency
+    // rather than adapter-level backoff.
+    config.backoff_max_times = 2;
+    config.backoff_min_delay_ms = 50;
+    config.backoff_max_delay_ms = 200;
+    // The failover behavior under test is read-only; drop submission + background tasks.
+    config.grpc_url = None;
+    config.signer_private_key = None;
+    config.background_stat_polling_interval_secs = 0;
+
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service = Arc::new(
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await,
+    );
+
+    // Continuous traffic in a background task so the persistent WS connection stays active
+    // and the failover client always has work to route.
+    let poller_service = da_service.clone();
+    let poller = tokio::spawn(async move {
+        loop {
+            let _ = poller_service.get_head_block_header().await;
+            tokio::time::sleep(Duration::from_millis(200)).await;
+        }
+    });
+
+    // Phase 1: both endpoints up -> served by the primary (fast).
+    wait_until_rpc_latency(
+        &da_service,
+        true,
+        PRIMARY_MAX_LATENCY,
+        PHASE_TIMEOUT,
+        "phase 1: expected the primary endpoint (fast) initially",
+    )
+    .await;
+    let head_on_primary = da_service.get_head_block_header().await?.height();
+
+    // Phase 2: kill the primary -> fail over to the secondary (slow but working).
+    toxi.set_enabled(0, false).await;
+    wait_until_rpc_latency(
+        &da_service,
+        false,
+        SECONDARY_MIN_LATENCY,
+        PHASE_TIMEOUT,
+        "phase 2: expected failover to the secondary endpoint (slow)",
+    )
+    .await;
+    // Liveness: the secondary is genuinely serving, so the chain head keeps advancing.
+    let head_on_secondary = da_service.get_head_block_header().await?.height();
+    assert!(
+        head_on_secondary >= head_on_primary,
+        "secondary should keep serving fresh headers during the primary outage: \
+         head_on_secondary={head_on_secondary} head_on_primary={head_on_primary}"
+    );
+
+    // Phase 3 (the key scenario): restore the primary while the secondary is STILL enabled
+    // and serving. The background health-check must switch back to the primary on its own,
+    // so latency drops back to fast without us touching the secondary.
+    toxi.set_enabled(0, true).await;
+    wait_until_rpc_latency(
+        &da_service,
+        true,
+        PRIMARY_MAX_LATENCY,
+        PHASE_TIMEOUT,
+        "phase 3: expected automatic switch-back to the primary while the secondary still works",
+    )
+    .await;
+
+    // Phase 4: kill the primary again -> back to the secondary (slow), proving the client
+    // moves back and forth between endpoints.
+    toxi.set_enabled(0, false).await;
+    wait_until_rpc_latency(
+        &da_service,
+        false,
+        SECONDARY_MIN_LATENCY,
+        PHASE_TIMEOUT,
+        "phase 4: expected failover back to the secondary endpoint (slow)",
+    )
+    .await;
+
+    poller.abort();
+    secondary_shutdown_controller.shutdown();
+    toxi.shutdown();
+    drop(dev_node);
+    Ok(())
+}
+
+/// Per-call timeout (seconds) for the RPC-failover tests. Kept at the 1-second minimum so a
+/// broken endpoint surfaces as a timeout quickly and failover is fast.
+const FAILOVER_API_REQUEST_TIMEOUT_SECS: u64 = 1;
+/// High-level per-request timeout (seconds) for the RPC-failover tests. Must comfortably exceed
+/// a full failover sweep across all endpoints (each unreachable endpoint costs up to one
+/// `api_request_timeout`), or the `tokio::time::timeout` wrap in `get_head_block_header_inner`
+/// cancels the sweep mid-flight. With 3 endpoints at a 1s per-call timeout that is ~3s; 15s
+/// leaves ample headroom.
+const FAILOVER_REQUEST_TIMEOUT_SECS: u64 = 15;
+/// Upper bound for each failover phase to reach a healthy endpoint and a fresh head.
+const FAILOVER_PHASE_DEADLINE: Duration = Duration::from_secs(60);
+/// How often the failover tests re-poll for a head while the client is switching endpoints.
+const FAILOVER_POLL_INTERVAL: Duration = Duration::from_millis(250);
+
+/// Applies the knobs shared by the RPC-failover integration tests: a fast per-call timeout (so
+/// failover is quick) under a high-level timeout comfortably larger than a full failover sweep,
+/// tight backoff, and no submission or background tasks (these tests are read-only).
+fn apply_failover_test_knobs(config: &mut crate::CelestiaConfig) {
+    config.api_request_timeout_secs =
+        std::num::NonZero::new(FAILOVER_API_REQUEST_TIMEOUT_SECS).unwrap();
+    config.request_timeout_secs = std::num::NonZero::new(FAILOVER_REQUEST_TIMEOUT_SECS).unwrap();
+    config.rpc_health_check_interval_secs = std::num::NonZero::new(1);
+    config.rpc_max_head_age_secs = std::num::NonZero::new(60 * 60 * 24 * 365);
+    config.backoff_max_times = 2;
+    config.backoff_min_delay_ms = 50;
+    config.backoff_max_delay_ms = 200;
+    config.grpc_url = None;
+    config.signer_private_key = None;
+    config.background_stat_polling_interval_secs = 0;
+}
+
+/// Polls `get_head_block_header` until it succeeds, returning the head height; panics after
+/// `deadline`. Lets a failover test wait for the client to land on a working endpoint without
+/// assuming how quickly it switches.
+async fn poll_until_head_ok(
+    da_service: &CelestiaService,
+    deadline: Duration,
+    context: &str,
+) -> u64 {
+    let start = std::time::Instant::now();
+    loop {
+        // A failing head request is expected while the client is switching endpoints; keep
+        // polling until one succeeds or the deadline elapses.
+        if let Ok(header) = da_service.get_head_block_header().await {
+            return header.height();
+        }
+        assert!(
+            start.elapsed() < deadline,
+            "{context}: no successful head request within {deadline:?}"
+        );
+        tokio::time::sleep(FAILOVER_POLL_INTERVAL).await;
+    }
+}
+
+/// Polls until `get_head_block_header` returns a height strictly greater than `baseline`,
+/// returning it; panics after `deadline`. The strict advance proves the serving endpoint is
+/// live (not a stale cached head), which is what makes the cascade proof valid.
+async fn poll_until_head_advances(
+    da_service: &CelestiaService,
+    baseline: u64,
+    deadline: Duration,
+    context: &str,
+) -> u64 {
+    let start = std::time::Instant::now();
+    loop {
+        // Failures and momentarily stale heads are both expected while the client switches
+        // endpoints; keep polling until the head is strictly fresher than `baseline`.
+        if let Ok(header) = da_service.get_head_block_header().await {
+            let height = header.height();
+            if height > baseline {
+                return height;
+            }
+        }
+        assert!(
+            start.elapsed() < deadline,
+            "{context}: head did not advance past {baseline} within {deadline:?}"
+        );
+        tokio::time::sleep(FAILOVER_POLL_INTERVAL).await;
+    }
+}
+
+/// Transport failure modes exercised by the cascade failover test.
+#[derive(Clone, Copy)]
+enum RpcFailure {
+    /// Immediate TCP RST (toxiproxy `reset_peer`).
+    ConnectionReset,
+    /// A hung endpoint that exceeds the client's per-call timeout (toxiproxy `timeout`).
+    Timeout,
+}
+
+/// Breaks endpoint `index` with the chosen failure mode. The proxy stays enabled — these are
+/// connection-level faults (reset / hang), distinct from a refused connection.
+async fn inject_rpc_failure(fleet: &CelestiaRpcProxyFleet, index: usize, failure: RpcFailure) {
+    match failure {
+        RpcFailure::ConnectionReset => fleet.set_reset_peer(index, true).await,
+        RpcFailure::Timeout => fleet.set_timeout(index, true).await,
+    }
+}
+
+/// Three-endpoint cascade failover: a primary plus two secondaries, all fronting the same
+/// devnet bridge. Breaking the primary must move traffic to secondary-1; breaking secondary-1
+/// as well must move it to secondary-2. Because the first two endpoints stay broken, a fresh
+/// head can only come from the third — proving the cascade. Run for both transport failure
+/// modes via the two `#[tokio::test]` wrappers below.
+async fn run_three_endpoint_cascade(failure: RpcFailure) -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let bridge_rpc_port = dev_node.bridge_port_ipv4().await?;
+    let fleet = CelestiaRpcProxyFleet::start(bridge_rpc_port, 3).await;
+
+    let mut config = dev_node.get_config().await?;
+    config.rpc_url = fleet.rpc_ws_url(0);
+    config.rpc_fallback_endpoints = vec![
+        crate::RpcEndpointConfig {
+            url: fleet.rpc_ws_url(1),
+            token: None,
+        },
+        crate::RpcEndpointConfig {
+            url: fleet.rpc_ws_url(2),
+            token: None,
+        },
+    ];
+    apply_failover_test_knobs(&mut config);
+
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
+
+    // Phase A: all endpoints up -> the client prefers the primary (index 0).
+    let head_initial = poll_until_head_ok(
+        &da_service,
+        FAILOVER_PHASE_DEADLINE,
+        "phase A: initial head",
+    )
+    .await;
+
+    // Phase B: break the primary -> the client must fail over to a live fallback (index 1).
+    inject_rpc_failure(&fleet, 0, failure).await;
+    let head_after_primary_break = poll_until_head_advances(
+        &da_service,
+        head_initial,
+        FAILOVER_PHASE_DEADLINE,
+        "phase B: failover off the broken primary",
+    )
+    .await;
+
+    // Phase C (cascade proof): break secondary-1 too. With indices 0 and 1 both broken, a
+    // strictly fresher head can only be served by secondary-2 (index 2).
+    inject_rpc_failure(&fleet, 1, failure).await;
+    poll_until_head_advances(
+        &da_service,
+        head_after_primary_break,
+        FAILOVER_PHASE_DEADLINE,
+        "phase C: cascade to the third endpoint",
+    )
+    .await;
+
+    secondary_shutdown_controller.shutdown();
+    fleet.shutdown();
+    drop(dev_node);
+    Ok(())
+}
+
+/// Cascade failover when each endpoint dies by connection reset (TCP RST).
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rpc_three_endpoint_cascade_connection_reset() -> anyhow::Result<()> {
+    run_three_endpoint_cascade(RpcFailure::ConnectionReset).await
+}
+
+/// Cascade failover when each endpoint dies by hanging longer than the client's timeout.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rpc_three_endpoint_cascade_timeout() -> anyhow::Result<()> {
+    run_three_endpoint_cascade(RpcFailure::Timeout).await
+}
+
+/// Startup sanity: the node must come up and serve when its configured primary RPC endpoint is
+/// unreachable, as long as a fallback is healthy. Models restarting the node while the preferred
+/// provider is down; the primary is connection-reset before the service is built.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_rpc_startup_with_primary_down_uses_secondary() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let bridge_rpc_port = dev_node.bridge_port_ipv4().await?;
+    let fleet = CelestiaRpcProxyFleet::start(bridge_rpc_port, 2).await;
+
+    // Break the primary before the node starts.
+    fleet.set_reset_peer(0, true).await;
+
+    let mut config = dev_node.get_config().await?;
+    config.rpc_url = fleet.rpc_ws_url(0); // unreachable primary
+    config.rpc_fallback_endpoints = vec![crate::RpcEndpointConfig {
+        url: fleet.rpc_ws_url(1), // healthy secondary
+        token: None,
+    }];
+    apply_failover_test_knobs(&mut config);
+
+    // Building the client must succeed by falling back to the healthy secondary. Asserted on the
+    // `Result` directly (rather than via `CelestiaService::new`, which panics on failure) so a
+    // regression surfaces with a clear message instead of an opaque panic.
+    config
+        .build_client()
+        .await
+        .expect("client should build via the healthy secondary while the primary is down");
+
+    // End-to-end restart sanity: the full service constructs and serves fresh headers through
+    // the secondary.
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, ROLLUP_PARAMS_DEV, &secondary_shutdown_controller).await;
+    let head_initial = poll_until_head_ok(
+        &da_service,
+        FAILOVER_PHASE_DEADLINE,
+        "startup-with-primary-down: first head via secondary",
+    )
+    .await;
+    poll_until_head_advances(
+        &da_service,
+        head_initial,
+        FAILOVER_PHASE_DEADLINE,
+        "startup-with-primary-down: secondary keeps serving fresh headers",
+    )
+    .await;
+
+    secondary_shutdown_controller.shutdown();
+    fleet.shutdown();
+    drop(dev_node);
     Ok(())
 }

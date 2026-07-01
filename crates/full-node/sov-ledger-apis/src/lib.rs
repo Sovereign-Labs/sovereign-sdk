@@ -33,7 +33,7 @@ use sov_rollup_interface::node::ledger_api::{
     SlotIdentifier, SlotResponse, TxIdAndOffset, TxIdentifier, TxResponse,
 };
 use sov_rollup_interface::stf::TxReceiptContents;
-use tokio::sync::watch;
+use sov_shutdown::PrimaryShutdownController;
 
 type PathMap = Path<HashMap<String, NumberOrHash>>;
 
@@ -88,7 +88,7 @@ pub struct LedgerRoutes<T, B, Tx, E> {
 #[derive(Clone)]
 pub struct LedgerState<T: LedgerStateProvider + Clone + Send + Sync + 'static> {
     pub ledger: T,
-    pub shutdown_receiver: watch::Receiver<()>,
+    pub primary_shutdown: PrimaryShutdownController,
 }
 
 impl<T, B, TxReceipt, E> LedgerRoutes<T, B, TxReceipt, E>
@@ -109,11 +109,11 @@ where
     /// Returns an [`axum::Router`] that exposes ledger data.
     pub fn axum_router(
         ledger: T,
-        shutdown_receiver: watch::Receiver<()>,
+        primary_shutdown: PrimaryShutdownController,
     ) -> axum::Router<LedgerState<T>> {
         let state = LedgerState {
             ledger,
-            shutdown_receiver,
+            primary_shutdown,
         };
         let routes = axum::Router::<LedgerState<T>>::new()
             .route(
@@ -732,7 +732,8 @@ where
                 })
                 .boxed();
 
-            serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
+            serve_generic_ws_subscription(socket, subscription, state.primary_shutdown.clone())
+                .await;
         })
     }
 
@@ -750,7 +751,8 @@ where
                     WsLedgerError::AggregatedProofConvertFailed
                 })
             });
-            serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
+            serve_generic_ws_subscription(socket, subscription, state.primary_shutdown.clone())
+                .await;
         })
     }
 
@@ -787,7 +789,8 @@ where
                 })
                 .boxed();
 
-            serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
+            serve_generic_ws_subscription(socket, subscription, state.primary_shutdown.clone())
+                .await;
         })
     }
 
@@ -883,7 +886,7 @@ where
                 .flatten()
                 .boxed();
 
-            serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver).await;
+            serve_generic_ws_subscription(socket, subscription, state.primary_shutdown.clone()).await;
         })
     }
 }

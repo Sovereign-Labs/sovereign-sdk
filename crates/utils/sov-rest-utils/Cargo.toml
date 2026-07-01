@@ -24,6 +24,7 @@ proptest-derive = { workspace = true, optional = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_urlencoded = "0.7"
+sov-shutdown = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true }
 tower = { workspace = true, features = ["util"] }
@@ -42,4 +43,8 @@ axum = { workspace = true, features = ["query", "ws", "json", "original-uri", "t
 flate2 = { version = "1", default-features = false, features = ["rust_backend"] }
 
 [features]
-arbitrary = ["proptest", "proptest-derive", "sov-rest-utils/arbitrary"]
+arbitrary = [
+	"proptest",
+	"proptest-derive",
+	"sov-rest-utils/arbitrary",
+]

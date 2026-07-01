@@ -29,7 +29,7 @@
 //!     start_height,      // First height to fetch
 //!     bulk_size,         // Number of concurrent requests
 //!     channel_capacity,  // Size of the pre-fetch buffer
-//!     shutdown_receiver,
+//!     shutdown,          // RunnerShutdownController
 //! ).await?;
 //!
 //! // Get blocks - returns pre-fetched blocks for the configured range
@@ -46,13 +46,13 @@
 //! # Shutdown Behavior
 //!
 //! The background fetcher task respects shutdown signals and will cleanly terminate
-//! when the `shutdown_receiver` is triggered, ensuring no orphaned tasks remain.
+//! when the `shutdown` controller is triggered, ensuring no orphaned tasks remain.
 use futures::Stream;
 use futures_util::stream::FuturesOrdered;
 use futures_util::StreamExt;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
+use sov_shutdown::{BackgroundHandle, FutureOrShutdownOutput, RunnerShutdownController};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
@@ -97,8 +97,8 @@ where
         start_height: u64,
         bulk_size: u8,
         channel_capacity: usize,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
-    ) -> anyhow::Result<(Self, tokio::task::JoinHandle<anyhow::Result<()>>)> {
+        shutdown: RunnerShutdownController,
+    ) -> anyhow::Result<(Self, BackgroundHandle<anyhow::Result<()>>)> {
         if bulk_size as usize > channel_capacity {
             anyhow::bail!("pre_fetched_blocks_capacity={channel_capacity} should be larger than concurrent_sync_tasks={bulk_size}");
         }
@@ -119,9 +119,9 @@ where
             bulk_size,
         );
 
-        let background_handle = tokio::spawn(async {
+        let background_handle = BackgroundHandle::spawn("finalized-blocks-fetcher", async {
             // Intentionally swallow error to not produce panic on shutdown.
-            match block_fetcher.run(shutdown_receiver).await {
+            match block_fetcher.run(shutdown).await {
                 Ok(()) => {
                     tracing::debug!("BlockFetcher task has completed");
                 }
@@ -244,10 +244,7 @@ where
         Box::pin(futures)
     }
 
-    pub(crate) async fn run(
-        mut self,
-        mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
-    ) -> anyhow::Result<()> {
+    pub(crate) async fn run(mut self, shutdown: RunnerShutdownController) -> anyhow::Result<()> {
         tracing::trace!(
             start = self.start_height,
             last_finalized_height = self.last_finalized_height,
@@ -277,7 +274,7 @@ where
             let mut permit = match select_with_shutdown(
                 // The range is inclusive.
                 self.blocks.reserve_many(self.bulk_size as usize + 1),
-                &mut shutdown_receiver,
+                &shutdown,
                 "reserve space in channel",
             )
             .await
@@ -293,7 +290,7 @@ where
 
             let block_stream = match select_with_shutdown(
                 self.fetch_blocks_in_range(start_height, end_height),
-                &mut shutdown_receiver,
+                &shutdown,
                 "self.fetch_blocks_in_range()",
             )
             .await
@@ -307,12 +304,9 @@ where
             let mut blocks_fetched = 0;
 
             loop {
-                let next_block = select_with_shutdown(
-                    block_stream.next(),
-                    &mut shutdown_receiver,
-                    "block_stream.next()",
-                )
-                .await;
+                let next_block =
+                    select_with_shutdown(block_stream.next(), &shutdown, "block_stream.next()")
+                        .await;
 
                 match next_block {
                     Some(Some(block_result)) => {
@@ -369,13 +363,13 @@ where
 
 async fn select_with_shutdown<F, T>(
     fut: F,
-    shutdown_receiver: &mut tokio::sync::watch::Receiver<()>,
+    shutdown: &RunnerShutdownController,
     label: &'static str,
 ) -> Option<T>
 where
     F: std::future::Future<Output = T>,
 {
-    match future_or_shutdown(fut, shutdown_receiver).await {
+    match shutdown.future_or_shutdown(fut).await {
         FutureOrShutdownOutput::Output(res) => Some(res),
         FutureOrShutdownOutput::Shutdown => {
             tracing::debug!(%label, "Shutting down block fetcher");
@@ -398,11 +392,11 @@ mod tests {
             da_service.send_transaction(&[i; 32]).await.await??;
         }
 
-        let (sender, mut receiver) = tokio::sync::watch::channel(());
-        receiver.mark_unchanged();
+        let shutdown = RunnerShutdownController::new();
 
         let (mut fetcher, handle) =
-            FinalizedBlocksBulkFetcher::new(Arc::new(da_service), 0, 3, 30, receiver).await?;
+            FinalizedBlocksBulkFetcher::new(Arc::new(da_service), 0, 3, 30, shutdown.clone())
+                .await?;
 
         for i in 0..blocks_number {
             let block = fetcher.get_block_at(i as u64).await?;
@@ -410,7 +404,7 @@ mod tests {
         }
 
         // pre-fetcher might exit by that point.
-        let _ = sender.send(());
+        shutdown.shutdown();
         handle.await??;
         Ok(())
     }

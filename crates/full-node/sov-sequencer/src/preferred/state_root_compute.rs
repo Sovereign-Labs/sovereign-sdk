@@ -7,10 +7,10 @@ use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{CryptoSpec, Runtime};
 use sov_modules_api::{Spec, Storage};
 use sov_rollup_interface::common::SlotNumber;
+use sov_shutdown::BackgroundHandle;
 use sov_state::sequencer_state::{RawStateChanges, SequencerStateChanges};
 use sov_state::{NativeStorage, ProvableNamespace, SlotKey, SlotValue, StateAccesses, StateRoot};
 use tokio::sync::{mpsc, oneshot};
-use tokio::task::JoinHandle;
 use tracing::{debug, error, info, span, trace, Level};
 use uuid::Uuid;
 
@@ -204,7 +204,7 @@ impl<S: Spec> StateRootTask<S> {
     pub(super) fn create<Rt: Runtime<S>>(
         mut block_executors_shutdown_receiver: mpsc::Receiver<()>,
         check_state_roots: bool,
-    ) -> (JoinHandle<()>, StateRootTask<S>) {
+    ) -> (BackgroundHandle<()>, StateRootTask<S>) {
         let span = span!(Level::DEBUG, "state_root_compute_background_task");
         let _enter = span.enter();
         info!("Starting sequencer state root computation background task");
@@ -213,7 +213,7 @@ impl<S: Spec> StateRootTask<S> {
         let mut cached_results: BTreeMap<StateRootCacheKey, StateRootCacheEntry<S>> =
             BTreeMap::new();
         let mut cached_results_size = 0;
-        let handle = tokio::spawn(async move {
+        let handle = BackgroundHandle::spawn("state-root-compute", async move {
             loop {
                 let request = tokio::select! {
                     biased;
@@ -361,7 +361,6 @@ mod tests {
     use sov_state::StateUpdate;
     use sov_test_utils::storage::{ForklessStorageManager, SimpleStorageManager};
     use sov_test_utils::{generate_optimistic_runtime, TestHasher, TestSpec, TestStorageSpec};
-    use tokio::task::JoinHandle;
     use uuid::Uuid;
 
     generate_optimistic_runtime!(TestRuntime <=);
@@ -509,7 +508,7 @@ mod tests {
     }
 
     fn start_background_task<S: Spec, Rt: Runtime<S>>(
-    ) -> (StateRootTask<S>, JoinHandle<()>, mpsc::Sender<()>) {
+    ) -> (StateRootTask<S>, BackgroundHandle<()>, mpsc::Sender<()>) {
         let (shutdown_sender, shutdown_receiver) = mpsc::channel(1);
 
         let (handle, task) = StateRootTask::<S>::create::<Rt>(shutdown_receiver, true);

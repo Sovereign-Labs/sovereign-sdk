@@ -178,7 +178,7 @@ where
         let mut block = self.get_block(pending_block.block_number() - 1, &mut state)?;
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
-        let mut shutdown_receiver = self.ethereum.shutdown_receiver.clone();
+        let primary_shutdown = self.ethereum.primary_shutdown.clone();
 
         loop {
             tokio::select! {
@@ -201,7 +201,7 @@ where
                         self.send_matching_logs(&receipt, &block, &filter, time).await?;
                     }
                 }
-                _ = shutdown_receiver.changed() => {
+                _ = primary_shutdown.wait_for_shutdown() => {
                     tracing::info!("Shutdown signal received, terminating logs subscription gracefully");
                     break;
                 }
@@ -223,7 +223,7 @@ where
     ///
     /// By making up these sythetic blocks, we can simulate behavior where the tx is accepted instantly and then the chain experiences a reorg of depth 1.
     /// Tooling that *doesn't* handle reorgs works fine, because the "reorg" simply appends new transactions - so previous tx results are unchanged.
-    /// Tolling that *does* handle reorgs will see breif instability at the chain head, but the block will settle after the next DA block is computed (i.e in about 6 seconds)
+    /// Tolling that *does* handle reorgs will see breif instability at the chain head, but the block will settle after the next DA block is computed (i.e in about 3 seconds)
     ///
     /// Unfortunately, this approach means that we have a *lot* of new_heads notifications (one per tx, plus one per DA block. We expect that receivers will not be able
     /// to cope with notifications at a pace of several hundred per second, so we impose a throttle - we never notify more than once per 200ms.
@@ -237,7 +237,7 @@ where
         );
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
-        let mut shutdown_receiver = self.ethereum.shutdown_receiver.clone();
+        let primary_shutdown = self.ethereum.primary_shutdown.clone();
         let mut last_send_time = std::time::Instant::now();
         let has_waker_task = Arc::new(AtomicBool::new(false));
         let (wakeup_sender, mut wakeup_receiver) = tokio::sync::watch::channel(());
@@ -307,7 +307,7 @@ where
                         }
                     }
                 }
-                _ = shutdown_receiver.changed() => {
+                _ = primary_shutdown.wait_for_shutdown() => {
                     tracing::info!("Shutdown signal received, terminating blocks subscription gracefully");
                     break;
                 }

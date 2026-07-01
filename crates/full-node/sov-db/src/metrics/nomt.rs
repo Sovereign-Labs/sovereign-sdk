@@ -175,8 +175,10 @@ impl Metric for StorageManagerFinalizationMetric {
     }
 }
 
-/// Throughput and efficiency of one pruner pass over a NOMT database. Emitted as `sov_db_pruner`.
-/// The `db` tag distinguishes which database is being pruned.
+/// Throughput and efficiency of one pruner pass over a NOMT database. Emitted as `sov_db_pruner`,
+/// one point per database per pass. The `db` tag distinguishes which database was pruned: `user`
+/// and `kernel` (the historical / versioned state, pruned via rockbound's `VersionedDB`) and
+/// `ModuleAccessoryState` (the accessory state).
 ///
 /// **What healthy looks like:** `time` roughly linear in `keys_inspected`; a non-trivial
 /// `keys_to_prune / keys_inspected` ratio (the pruner finds work on every pass).
@@ -193,10 +195,17 @@ impl Metric for StorageManagerFinalizationMetric {
 /// cost paired with each inspection pass).
 #[derive(Debug)]
 pub struct PrunerMetric {
-    /// Logical name of the NOMT instance being pruned; InfluxDB `db` tag.
+    /// Logical name of the database being pruned (`user`, `kernel`, or `ModuleAccessoryState`);
+    /// InfluxDB `db` tag.
     pub db: &'static str,
+    /// Base keys / pruning-index entries examined this pass. For `user`/`kernel` this is the count
+    /// of pruning-CF entries collected (bounded by the batch-size cap); for `ModuleAccessoryState`
+    /// it is the number of unique base keys scanned.
     pub keys_inspected: usize,
+    /// Number of key-versions queued for deletion this pass.
     pub keys_to_prune: usize,
+    /// Wall-clock time of the collect/scan phase only — not the commit, which is reported as
+    /// `sov_storage_manager_finalization.pruning_commit_time`.
     pub time: std::time::Duration,
 }
 
@@ -214,6 +223,47 @@ impl Metric for PrunerMetric {
             self.keys_inspected,
             self.keys_to_prune,
             self.time.as_micros(),
+        )
+    }
+}
+
+/// Wall-clock cost of the post-prune RocksDB compaction that rewrites the pruned column
+/// families to drop their delete tombstones and reclaim disk space. Emitted as
+/// `sov_db_compaction`, split per database (`accessory`, `user`, `kernel`).
+///
+/// **When it fires:** only the one-time startup prune (`PrunerConfig::OnceAtStartup` with
+/// `compact_after`) triggers this compaction, so the metric is sparse — expect at most one
+/// point per node start. There is no periodic compaction; the tombstones written by periodic
+/// pruning are reclaimed by RocksDB's own background compaction, which is not observable here.
+///
+/// **Diagnostic signals:**
+/// - Large values block startup (the node cannot serve traffic until compaction finishes); the
+///   total is `accessory + user + kernel`. Cross-check the preceding `sov_db_pruner` pass to see
+///   how much was deleted before this compaction ran.
+#[derive(Debug)]
+pub struct CompactionMetric {
+    /// Time spent compacting the accessory-state column family.
+    pub accessory_time: std::time::Duration,
+    /// Time spent compacting the user historical + pruning column families.
+    pub user_time: std::time::Duration,
+    /// Time spent compacting the kernel historical + pruning column families.
+    pub kernel_time: std::time::Duration,
+}
+
+impl Metric for CompactionMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_db_compaction"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} accessory_us={},user_us={},kernel_us={},total_us={}",
+            self.measurement_name(),
+            self.accessory_time.as_micros(),
+            self.user_time.as_micros(),
+            self.kernel_time.as_micros(),
+            (self.accessory_time + self.user_time + self.kernel_time).as_micros(),
         )
     }
 }

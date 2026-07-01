@@ -13,9 +13,8 @@ use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::optimistic::BondingProofService;
 use sov_rollup_interface::stf::ProofSender;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController, SecondaryShutdownController};
 pub use stf_info_manager::*;
-use tokio::sync::watch;
-use tokio::task::JoinHandle;
 pub use zk_manager::*;
 
 /// Starts a process that generates aggregated proofs in the background.
@@ -28,10 +27,10 @@ pub async fn start_zk_workflow_in_background<Ps>(
     proof_sender: Box<dyn ProofSender>,
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
-    shutdown_sender: tokio::sync::watch::Sender<()>,
+    secondary_shutdown_controller: &SecondaryShutdownController,
+    primary_shutdown: PrimaryShutdownController,
     start_fresh_outer_proof_on_resync: bool,
-) -> anyhow::Result<JoinHandle<()>>
+) -> anyhow::Result<BackgroundHandle<()>>
 where
     Ps: ProverService,
     Ps::DaService: DaService<Error = anyhow::Error>,
@@ -44,8 +43,8 @@ where
         proof_sender,
         stf_info_receiver,
         da_sync_state,
-        shutdown_receiver,
-        shutdown_sender,
+        secondary_shutdown_controller,
+        primary_shutdown,
         start_fresh_outer_proof_on_resync,
     )
     .post_aggregated_proof_to_da_in_background()
@@ -56,9 +55,9 @@ where
 pub async fn start_op_workflow_in_background<Ps, Bps>(
     bonding_proof_service: Bps,
     proof_sender: Box<dyn ProofSender>,
-    shutdown_receiver: watch::Receiver<()>,
+    secondary_shutdown_controller: &SecondaryShutdownController,
     st_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
-) -> anyhow::Result<JoinHandle<()>>
+) -> anyhow::Result<BackgroundHandle<()>>
 where
     Ps: ProverService,
     Ps::DaService: DaService<Error = anyhow::Error>,
@@ -68,7 +67,7 @@ where
         st_info_receiver,
         bonding_proof_service,
         proof_sender,
-        shutdown_receiver,
+        secondary_shutdown_controller,
     )
     .post_attestation_to_da_in_background()
     .await)
@@ -76,9 +75,10 @@ where
 
 /// Starts the operator workflow in the background.
 pub async fn start_operator_workflow_in_background(
-    mut shutdown_receiver: watch::Receiver<()>,
-) -> JoinHandle<()> {
-    tokio::spawn(async move {
-        let _ = shutdown_receiver.changed().await;
+    secondary_shutdown_controller: &SecondaryShutdownController,
+) -> BackgroundHandle<()> {
+    let secondary_shutdown_controller = secondary_shutdown_controller.clone();
+    BackgroundHandle::spawn("operator-workflow", async move {
+        let _ = secondary_shutdown_controller.wait_for_shutdown().await;
     })
 }

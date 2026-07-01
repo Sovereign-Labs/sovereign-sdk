@@ -322,7 +322,7 @@ async fn check_start_at(finalization_blocks: u32) {
         .unwrap();
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let mut shutdown_rec = test_rollup.shutdown_sender.subscribe();
+    let shutdown_rec = test_rollup.primary_shutdown.clone();
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
 
     let mut last_height = RollupHeight::new(0);
@@ -342,7 +342,7 @@ async fn check_start_at(finalization_blocks: u32) {
     assert_eq!(last_height, stop_at_height);
 
     // Let's wait for the shutdown.
-    shutdown_rec.changed().await.unwrap();
+    shutdown_rec.wait_for_shutdown().await.unwrap();
 
     pause_update_state::set(true);
 

@@ -42,6 +42,7 @@ sov-bank = { workspace = true }
 bs58 = { workspace = true }
 sov-paymaster = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-shutdown = { workspace = true }
 sov-rollup-full-node-interface = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true }
 sov-db = { workspace = true }

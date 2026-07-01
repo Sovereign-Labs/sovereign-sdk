@@ -4,7 +4,6 @@ PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
                examples/demo-rollup/provers/risc0/guest-celestia \
                examples/demo-rollup/provers/sp1/guest-mock \
                examples/demo-rollup/provers/sp1/guest-aggregation-mock \
-               examples/demo-rollup/provers/sp1/guest-celestia \
                crates/bench/sp1-microbenches/guest-sha256 \
                crates/bench/sp1-microbenches/guest-ed25519
 
@@ -168,11 +167,41 @@ lint-fix:  ## cargo fmt, fix and clippy. Skip clippy on guest code since it's no
 	cargo fix --allow-dirty
 	SKIP_GUEST_BUILD=1 cargo clippy --fix --allow-dirty -- -A clippy::too_many_arguments
 
+# Crates excluded from the feature-powerset check: examples, binaries, benchmarks,
+# fuzz/test harnesses, and other non-published leaf crates (absent from
+# packages_to_publish.yml). They are already compiled by `check`
+# (cargo check --all-targets --all-features) and by the test jobs; no downstream user
+# enables partial feature combinations on them, so powerset coverage adds nothing here
+# while dominating the run time. Listed explicitly (not derived) to avoid coupling to
+# publish-manifest name matching.
+HACK_EXCLUDE := \
+	--exclude demo-simple-stf \
+	--exclude integration-tests \
+	--exclude module-template \
+	--exclude native-gas-microbenches \
+	--exclude py_sovereign_web3 \
+	--exclude sov-benchmarks \
+	--exclude sov-demo-rollup-rest-api-load-testing \
+	--exclude sov-evm-soak-testing \
+	--exclude sov-soak-testing \
+	--exclude sov-soak-testing-lib \
+	--exclude workspace-hack
+
 check-features: ## Checks that project compiles with all combinations of features.
-	cargo hack check --feature-powerset --exclude-features default --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M) --all-targets
+	cargo hack check --feature-powerset --exclude-features default,gas-constant-estimation $(HACK_EXCLUDE) --exclude sov-demo-rollup --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M) --all-targets
+	@# demo-rollup is excluded from the powerset above; its constrained check is partition-independent,
+	@# so run it only on partition 1 instead of redundantly in every partition.
+	@if [ "$(CARGO_HACK_PARTITION_N)" = "1" ]; then $(MAKE) check-demo-rollup-features; fi
 
 check-features-default-targets:
-	cargo hack check --feature-powerset --exclude-features default --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M)
+	cargo hack check --feature-powerset --exclude-features default,gas-constant-estimation $(HACK_EXCLUDE) --exclude sov-demo-rollup --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M)
+	@if [ "$(CARGO_HACK_PARTITION_N)" = "1" ]; then $(MAKE) check-demo-rollup-features; fi
+
+# demo-rollup is split by DA layer (mock_da / celestia_da); its feature-powerset must keep
+# at least one DA feature (a no-DA combo hits a compile_error). It is excluded from the
+# workspace powerset above and checked here with that constraint. Guest builds are skipped.
+check-demo-rollup-features: ## Constrained feature-powerset for demo-rollup (needs a DA feature).
+	SKIP_GUEST_BUILD=1 cargo hack check -p sov-demo-rollup --feature-powerset --at-least-one-of mock_da,celestia_da --exclude-features default --all-targets
 
 check-constant-overriding-is-disabled-in-release-mode:
 	# Passes in release mode...

@@ -29,7 +29,7 @@ use sov_rest_utils::{get_client_ip, WsMessage};
 use sov_rollup_interface::da::{DaBlobHash, DaSpec};
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash;
-use tokio::sync::watch::Receiver;
+use sov_shutdown::PrimaryShutdownController;
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
@@ -131,15 +131,18 @@ impl CompressionQuery {
 #[derivative(Clone(bound = ""))]
 pub struct SequencerApis<Seq: Sequencer> {
     sequencer: Seq,
-    shutdown_receiver: Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
 }
 
 impl<Seq: Sequencer> SequencerApis<Seq> {
     /// Creates a new Axum router for this sequencer.
-    pub fn rest_api_server(sequencer: Seq, shutdown_receiver: Receiver<()>) -> axum::Router<()> {
+    pub fn rest_api_server(
+        sequencer: Seq,
+        primary_shutdown: PrimaryShutdownController,
+    ) -> axum::Router<()> {
         let state = Self {
             sequencer,
-            shutdown_receiver,
+            primary_shutdown,
         };
 
         let router = axum::Router::new()
@@ -238,7 +241,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         let ws = ws.max_message_size(config_value!("MAX_TX_SIZE") * 2);
 
         Ok(ws.on_upgrade(move |mut socket| async move {
-            let mut shutdown_receiver = state.shutdown_receiver.clone();
+            let shutdown_receiver = state.primary_shutdown.clone();
             // Channel sends pre-serialized JSON strings to avoid double serialization
             let (outbound_tx, mut outbound_rx) = tokio::sync::mpsc::channel::<String>(10);
             // Use interval_at to delay the first ping until after a full interval of inactivity
@@ -383,7 +386,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                         awaiting_pong = Some(ping_data);
                         tracing::trace!("Sent ping to client");
                     }
-                    _ = shutdown_receiver.changed() => break,
+                    _ = shutdown_receiver.wait_for_shutdown() => break,
                 }
             }
 
@@ -456,7 +459,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 .await
                 .ok();
 
-            serve_generic_ws_subscription(socket, subscription, state.shutdown_receiver.clone())
+            serve_generic_ws_subscription(socket, subscription, state.primary_shutdown.clone())
                 .await;
         })
     }
@@ -562,7 +565,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             serve_generic_ws_subscription_with_config(
                 socket,
                 stream,
-                state.shutdown_receiver.clone(),
+                state.primary_shutdown.clone(),
                 config,
             )
             .await;
@@ -583,7 +586,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             serve_generic_ws_subscription_with_config(
                 socket,
                 stream,
-                state.shutdown_receiver.clone(),
+                state.primary_shutdown.clone(),
                 config,
             )
             .await;
@@ -618,7 +621,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             let stream = broadcast_to_subscription_stream(
                 state.sequencer.subscribe_blobs_from_blob_sender().await,
             );
-            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+            serve_generic_ws_subscription(socket, stream, state.primary_shutdown.clone()).await;
         })
     }
 
@@ -645,7 +648,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             let stream = broadcast_to_subscription_stream(
                 state.sequencer.subscribe_state_updates_unstable().await,
             );
-            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+            serve_generic_ws_subscription(socket, stream, state.primary_shutdown.clone()).await;
         })
     }
 
@@ -658,7 +661,7 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
             let stream = broadcast_to_subscription_stream(
                 state.sequencer.subscribe_forced_tx_batches_unstable().await,
             );
-            serve_generic_ws_subscription(socket, stream, state.shutdown_receiver.clone()).await;
+            serve_generic_ws_subscription(socket, stream, state.primary_shutdown.clone()).await;
         })
     }
 

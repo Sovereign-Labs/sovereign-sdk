@@ -98,6 +98,25 @@ impl<B: bytes::Buf> CountedBufReader<B> {
         }
     }
 
+    /// Reconstructs a reader from an already-read prefix and a source buffer **without any
+    /// validation** — a low-level building block for rebuilding a blob from a pruned witness.
+    /// Prefer [`Self::new`] when you have a real source to read from.
+    ///
+    /// # Invariants (caller-guaranteed, not checked here)
+    ///
+    /// * `accumulator` is taken verbatim as the bytes already read/verified: it becomes the
+    ///   reader's accumulator, so [`Self::accumulator`] returns it and [`Self::total_len`]
+    ///   counts it.
+    /// * `inner` is the remaining source positioned *after* `accumulator`, such that
+    ///   `inner.remaining() + accumulator.len()` equals the blob's total length.
+    /// * In the pruned-witness use, `inner` is a source-less placeholder that must never be
+    ///   advanced (the guest only ever reads the accumulator).
+    ///
+    /// Violating these yields a reader that mis-reports its length or panics when advanced.
+    pub fn from_raw_parts(inner: B, accumulator: Vec<u8>) -> Self {
+        CountedBufReader { inner, accumulator }
+    }
+
     /// Advance the accumulator by `num_bytes` bytes. If `num_bytes` is greater than the length
     /// of remaining unverified data, then all remaining unverified data is added to the accumulator.
     pub fn advance(&mut self, num_bytes: usize) {
@@ -164,10 +183,48 @@ pub trait BlobReaderTrait: Serialize + DeserializeOwned + Send + Sync + 'static 
     ///
     /// Rollups should use this method in conjunction with `advance` to read only the minimum amount
     /// of data required for execution
+    ///
+    /// The returned bytes are the *rollup* payload as submitted by the original caller.
+    /// Adapters are free to post a different representation to the DA layer
+    /// (e.g. a compressed envelope), as long as the rollup bytes exposed here are
+    /// authenticated by the adapter's verifier.
     fn verified_data(&self) -> &[u8];
 
     /// Returns the total number of bytes in the blob. Note that this may be unequal to `verified_data.len()`.
+    ///
+    /// Like [`Self::verified_data`], this is the length of the *rollup* payload, which may
+    /// differ from the number of bytes the blob occupies on the DA layer.
+    ///
+    /// Implementations MUST derive this length from authenticated DA bytes (e.g. a field
+    /// of an authenticated envelope header), never from a host-supplied claim. The
+    /// blob-storage accept path trusts `total_len()` to distinguish a prover withholding
+    /// bytes (short read → fail closed) from a complete blob, so a host-forgeable length
+    /// would let a malicious prover bypass that check.
     fn total_len(&self) -> usize;
+
+    /// The validity companion to [`Self::verified_data`]'s contract that an adapter may
+    /// post a *different representation* to the DA layer: returns `true` when an
+    /// adapter's authenticated DA bytes are **fully present but do not yield the complete,
+    /// valid rollup payload they claim** (e.g. a compressed envelope whose authenticated
+    /// bytes don't decompress to the declared length, or aren't a canonical encoding).
+    ///
+    /// It exists because the generic consumer (`sov-blob-storage`'s accept path) otherwise
+    /// cannot tell this apart from a prover *withholding* bytes — both surface as fewer
+    /// rollup bytes than [`Self::total_len`] — yet the two need opposite handling:
+    /// undecodable content is the *sender's* fault (slash/discard the blob), whereas
+    /// withheld bytes are the *prover's* (fail the proof closed). The distinguishing fact
+    /// (are all the authenticated DA bytes present?) is the adapter's DA-vs-rollup
+    /// split, which the generic consumer cannot see — so a transforming adapter must report
+    /// it.
+    ///
+    /// Derived deterministically from the authenticated bytes — never a serialized claim —
+    /// so it is identical in native and zk execution, and it must be consulted *before*
+    /// trusting a successful deserialization (a short decoded prefix can itself be a
+    /// complete, valid value). Adapters whose rollup payload equals their DA
+    /// bytes (no transform) keep the default `false`.
+    fn rollup_decode_failed(&self) -> bool {
+        false
+    }
 
     /// Extends the `partial_data` accumulator with the next `num_bytes` of  data from the blob
     /// and returns a reference to the entire contents of the blob up to this point.

@@ -5,6 +5,7 @@ use proptest::bits::u64;
 use schemars::JsonSchema;
 use serde::{Deserialize, Serialize};
 use sov_chain_state::ChainState;
+use sov_db::config::PrunerConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaService};
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
@@ -304,6 +305,44 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     stop_at_rollup_height: Option<RollupHeight>,
     finalization_blocks: u32,
 ) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
+    // Pruning disabled by default, matching production defaults for fresh nodes.
+    new_test_rollup_with_pruning(
+        dir,
+        seq_da_address,
+        genesis_params,
+        minimum_profit_per_tx,
+        automatic_batch_production,
+        max_batch_size_bytes,
+        block_producing_config,
+        rollup_prover_config,
+        blob_processing_timeout_secs,
+        max_batch_execution_time_millis,
+        stop_at_rollup_height,
+        finalization_blocks,
+        PrunerConfig::Off,
+    )
+    .await
+}
+
+/// Like [`new_test_rollup`], but with state-version pruning configured in the node DB config.
+/// Pass the desired `PrunerConfig` (e.g. `PrunerConfig::Periodic { block_interval, .. }`) to
+/// control how pruning runs.
+#[allow(clippy::too_many_arguments)]
+pub async fn new_test_rollup_with_pruning<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
+    dir: Arc<tempfile::TempDir>,
+    seq_da_address: MockAddress,
+    genesis_params: GenesisParams<<RT as Runtime<TestSpec>>::GenesisConfig>,
+    minimum_profit_per_tx: u128,
+    automatic_batch_production: bool,
+    max_batch_size_bytes: usize,
+    block_producing_config: BlockProducingConfig,
+    rollup_prover_config: Option<RollupProverConfig>,
+    blob_processing_timeout_secs: u64,
+    max_batch_execution_time_millis: u64,
+    stop_at_rollup_height: Option<RollupHeight>,
+    finalization_blocks: u32,
+    pruner: PrunerConfig,
+) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
     let builder = RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
         GenesisSource::CustomParams(genesis_params),
         block_producing_config,
@@ -316,6 +355,7 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
         c.max_batch_size_bytes = max_batch_size_bytes;
         c.blob_processing_timeout_secs = blob_processing_timeout_secs;
         c.stop_at_rollup_height = stop_at_rollup_height;
+        c.pruner = pruner;
         if let SequencerKindConfig::Preferred(preferred_sequencer_config) = &mut c.sequencer_config
         {
             preferred_sequencer_config.batch_execution_time_limit_millis =

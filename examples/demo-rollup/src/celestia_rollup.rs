@@ -93,7 +93,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
         &self,
         state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
         sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        primary_shutdown: sov_shutdown::PrimaryShutdownController,
         ledger_db: &LedgerDb,
         sequencer: &SequencerCreationReceipt<Self::Spec>,
         _da_service: &Self::DaService,
@@ -102,7 +102,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
         sov_modules_rollup_blueprint::register_endpoints::<Self, _>(
             state_update_receiver.clone(),
             sync_status_receiver,
-            shutdown_receiver,
+            primary_shutdown,
             ledger_db,
             sequencer,
             rollup_config,
@@ -113,7 +113,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        secondary_shutdown_controller: &sov_shutdown::SecondaryShutdownController,
     ) -> Self::DaService {
         CelestiaService::new(
             rollup_config.da.clone(),
@@ -121,7 +121,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
                 rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
                 rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
             },
-            shutdown_receiver,
+            secondary_shutdown_controller,
         )
         .await
     }
@@ -130,7 +130,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
         &self,
         sequencer: Seq,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        primary_shutdown: sov_shutdown::PrimaryShutdownController,
         sequencer_da_address: <CelestiaSpec as sov_modules_api::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
@@ -143,7 +143,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             sequencer_rollup_address: rollup_config.sequencer.rollup_address,
             sequencer_da_address,
             sequencer_type: crate::sequencer_type(&rollup_config.sequencer),
-            shutdown_receiver,
+            primary_shutdown,
         };
         let axum_router = solana_offchain_router(sequencer.clone());
 
@@ -151,7 +151,6 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             axum_router,
             jsonrpsee_module: sov_ethereum::get_ethereum_rpc(eth_rpc_config, sequencer)
                 .remove_context(),
-            ..Default::default()
         })
     }
 

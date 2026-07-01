@@ -2,6 +2,7 @@ mod db_elected;
 mod proofs;
 mod recovery;
 mod replica_gets_txs_from_master;
+mod replica_node_lag;
 mod replica_partitioned_db;
 mod replica_registers_in_db;
 mod root_hash_checker;
@@ -38,6 +39,7 @@ use sov_proxy_utils::RootHashConsistency;
 use sov_sequencer::preferred::ConfiguredNodeRole;
 use sov_sequencer::preferred::RecoveryStrategy;
 use sov_sequencer::SequencerRole;
+use sov_shutdown::SecondaryShutdownController;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::postgres::CreatePostgresError;
 use sov_test_utils::test_rollup::read_private_key;
@@ -48,7 +50,6 @@ use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 use std::net::SocketAddr;
 use std::sync::Arc;
-use tokio::sync::watch;
 use tokio::time::Duration;
 
 type S = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
@@ -222,7 +223,7 @@ struct NodeDiscoveryTestSetup {
     postgres: Arc<PostgresData>,
     da_service: StorableMockDaService,
     da_addr: SocketAddr,
-    da_shutdown: watch::Sender<()>,
+    da_shutdown: SecondaryShutdownController,
     cluster_info_service: ClusterInfoService,
 }
 
@@ -286,7 +287,7 @@ impl NodeDiscoveryTestSetup {
 
     async fn shutdown(self) {
         self.cluster_info_service.shutdown();
-        let _ = self.da_shutdown.send(());
+        self.da_shutdown.shutdown();
     }
 
     async fn wait_for_cluster_change(&mut self) -> ClusterInfo {
@@ -334,4 +335,24 @@ async fn establish_leader_and_replica(
     };
 
     (leader, replica)
+}
+
+async fn verify_replica_processes_tx(
+    leader: &TestRollup<Rollup>,
+    replica: &TestRollup<Rollup>,
+    key: &<<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    token_id: sov_bank::TokenId,
+    receiver_addr: <S as Spec>::Address,
+    nonce: u64,
+) {
+    let tx = build_transfer_token_tx::<S>(key, token_id, receiver_addr, AMOUNT, nonce);
+
+    let mut event_subscription = replica
+        .api_client()
+        .subscribe_to_events_with_filter("Bank/*")
+        .await
+        .unwrap();
+
+    leader.send_tx_to_sequencer(&tx).await.unwrap();
+    wait_for_all_events_with_timeout(Duration::from_millis(3500), 1, &mut event_subscription).await;
 }

@@ -31,6 +31,16 @@ license-files = [{ path = "LICENSE", hash = 0xbd0eed23 }]
 # Sovereign SDK packages use a custom license
 
 [[licenses.clarify]]
+name = "sov-gas-tools"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "native-gas-microbenches"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "sov-hyperlane-register-module"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
@@ -457,6 +467,11 @@ license-files = []
 
 [[licenses.clarify]]
 name = "sov-solana-offchain-auth"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-shutdown"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 

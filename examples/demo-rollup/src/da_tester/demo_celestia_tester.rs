@@ -5,6 +5,7 @@ use sov_celestia_adapter::verifier::RollupParams;
 use sov_celestia_adapter::CelestiaService;
 use sov_demo_rollup::{ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
 use sov_modules_rollup_blueprint::logging::initialize_logging;
+use sov_shutdown::SecondaryShutdownController;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 
 /// Simple program description
@@ -37,19 +38,18 @@ async fn main() -> anyhow::Result<()> {
 
     tracing::info!("Rollup config: {:?}", rollup_config);
 
-    let (shutdown_tx, mut shutdown_rx) = tokio::sync::watch::channel(());
-    shutdown_rx.mark_unchanged();
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
     let da_service = CelestiaService::new(
         rollup_config.da.clone(),
         RollupParams {
             rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
             rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
         },
-        shutdown_rx,
+        &secondary_shutdown_controller,
     )
     .await;
 
     sov_celestia_adapter::checker::check_da_service(&da_service, args.rounds).await?;
-    shutdown_tx.send(())?;
+    secondary_shutdown_controller.shutdown();
     Ok(())
 }

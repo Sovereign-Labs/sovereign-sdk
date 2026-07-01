@@ -12,9 +12,7 @@ use std::time::{Duration, Instant};
 
 use anyhow::Result;
 use sov_full_node_configs::sequencer::{ConfiguredNodeRole, PostgresConfig};
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
-use tokio::sync::watch;
-use tokio::task::JoinHandle;
+use sov_shutdown::{BackgroundHandle, FutureOrShutdownOutput, PrimaryShutdownController};
 use tracing::{error, info, warn, Instrument};
 
 use super::SequencerRole;
@@ -50,8 +48,7 @@ impl std::fmt::Display for LeadershipRole {
 pub struct HeartBeatTask {
     backend: PostgresBackend,
     node_id: String,
-    shutdown_sender: watch::Sender<()>,
-    shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
     postgres_config: PostgresConfig,
     heartbeat_interval: Duration,
 }
@@ -59,25 +56,23 @@ pub struct HeartBeatTask {
 impl HeartBeatTask {
     pub async fn new(
         postgres_config: PostgresConfig,
-        shutdown_sender: watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         bind_addr: SocketAddr,
         heartbeat_interval: Duration,
     ) -> Result<Self> {
         let backend = PostgresBackend::connect(&postgres_config, bind_addr).await?;
-        let shutdown_receiver = shutdown_sender.subscribe();
 
         Ok(Self {
             backend,
             node_id: postgres_config.node_id.clone(),
-            shutdown_sender,
-            shutdown_receiver,
+            primary_shutdown,
             postgres_config,
             heartbeat_interval,
         })
     }
 
     /// Spawns heartbeat tasks based on the node's configured role.
-    pub async fn spawn(self, seq_role: SequencerRole) -> JoinHandle<()> {
+    pub async fn spawn(self, seq_role: SequencerRole) -> BackgroundHandle<()> {
         let configures_node_role = self.postgres_config.node_role;
         match seq_role {
             SequencerRole::BatchProducer => self.spawn_leader_heartbeat_task(),
@@ -140,7 +135,7 @@ impl HeartBeatTask {
     //
     // Periodically refreshes leadership. If leadership is lost or the database
     // becomes unreachable, triggers a graceful shutdown.
-    fn spawn_leader_heartbeat_task(self) -> JoinHandle<()> {
+    fn spawn_leader_heartbeat_task(self) -> BackgroundHandle<()> {
         self.spawn_heartbeat_loop(LeadershipRole::Leader)
     }
 
@@ -148,7 +143,7 @@ impl HeartBeatTask {
     //
     // Periodically attempts to acquire leadership. If successful, triggers
     // a shutdown so the node can restart as the new leader.
-    fn spawn_replica_heartbeat_task(self) -> JoinHandle<()> {
+    fn spawn_replica_heartbeat_task(self) -> BackgroundHandle<()> {
         self.spawn_heartbeat_loop(LeadershipRole::Replica)
     }
 
@@ -157,7 +152,7 @@ impl HeartBeatTask {
     // Each tick acquires a fresh leadership status and dispatches it to the
     // mode-specific handler. The loop ends on shutdown, or when the handler
     // signals it should stop (e.g. a replica that won the election).
-    fn spawn_heartbeat_loop(self, mode: LeadershipRole) -> JoinHandle<()> {
+    fn spawn_heartbeat_loop(self, mode: LeadershipRole) -> BackgroundHandle<()> {
         // Attach the node identity, role, and interval to a span so every event
         // emitted by this task carries them, instead of repeating the fields on
         // each log.
@@ -169,7 +164,8 @@ impl HeartBeatTask {
             heartbeat_interval = ?self.heartbeat_interval,
         );
 
-        tokio::spawn(
+        BackgroundHandle::spawn(
+            "heartbeat",
             async move {
                 info!("Starting heartbeat task");
                 let mut interval = tokio::time::interval(self.heartbeat_interval);
@@ -185,7 +181,7 @@ impl HeartBeatTask {
                     // makes the tick fire late, so `tick_elapsed` (below) overshoots
                     // the heartbeat interval.
                     let tick_start = Instant::now();
-                    match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
+                    match self.primary_shutdown.future_or_shutdown(interval.tick()).await {
                         FutureOrShutdownOutput::Shutdown => {
                             info!("Shutdown signal received, stopping heartbeat task");
                             // Only a replica deregisters; the leader is removed via the
@@ -248,7 +244,7 @@ impl HeartBeatTask {
                     node_id = %self.node_id,
                     "Leadership lost! Another node has taken over. Initiating graceful shutdown."
                 );
-                exit_rollup(&self.shutdown_sender).await;
+                exit_rollup(&self.primary_shutdown).await;
             }
             Err(e) => {
                 error!(
@@ -256,7 +252,7 @@ impl HeartBeatTask {
                     error = ?e,
                     "Heartbeat error! Unable to communicate with database. Initiating graceful shutdown."
                 );
-                exit_rollup(&self.shutdown_sender).await;
+                exit_rollup(&self.primary_shutdown).await;
             }
         }
     }
@@ -270,7 +266,7 @@ impl HeartBeatTask {
                     node_id = %self.node_id,
                     "Replica acquired leadership! Exiting to restart as leader."
                 );
-                let _ = self.shutdown_sender.send(());
+                self.primary_shutdown.shutdown();
                 true
             }
             Ok(LeadershipRole::Replica) => {
@@ -293,16 +289,17 @@ impl HeartBeatTask {
     //
     // Periodically updates the node's entry in the `nodes` table without
     // competing for leadership. Failures are logged but don't cause shutdown.
-    fn spawn_node_registration_task(self) -> JoinHandle<()> {
+    fn spawn_node_registration_task(self) -> BackgroundHandle<()> {
         let span = tracing::info_span!("registration", mode = %LeadershipRole::Replica);
 
-        tokio::spawn(
+        BackgroundHandle::spawn(
+            "node-registration",
             async move {
                 info!(node_id = %self.node_id, address = %self.backend.node_address, "Starting replica registration task.");
                 let mut interval = tokio::time::interval(self.heartbeat_interval);
 
                 loop {
-                    match future_or_shutdown(interval.tick(), &self.shutdown_receiver).await {
+                    match self.primary_shutdown.future_or_shutdown(interval.tick()).await {
                         FutureOrShutdownOutput::Shutdown => {
                             info!(node_id = %self.node_id, "Shutdown signal received, stopping registration task.");
                             self.deregister_on_shutdown_best_effort().await;

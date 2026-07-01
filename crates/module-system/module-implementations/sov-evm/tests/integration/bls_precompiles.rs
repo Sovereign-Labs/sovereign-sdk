@@ -114,6 +114,7 @@ fn setup_prague() -> (TestRunner<RT, S>, EvmAccount) {
             hardforks: vec![(0, SpecId::PRAGUE)], // Prague enables BLS precompiles
         },
         contract_creation_policy: Default::default(),
+        enabled_custom_precompiles: Default::default(),
         initial_base_fee: 0,
         genesis_timestamp: 0,
         admin: MultiAddress::from_vm_address(
@@ -151,6 +152,7 @@ fn setup_cancun() -> (TestRunner<RT, S>, EvmAccount) {
             hardforks: vec![(0, SpecId::CANCUN)], // Cancun does NOT have BLS precompiles
         },
         contract_creation_policy: Default::default(),
+        enabled_custom_precompiles: Default::default(),
         initial_base_fee: 0,
         genesis_timestamp: 0,
         admin: MultiAddress::from_vm_address(

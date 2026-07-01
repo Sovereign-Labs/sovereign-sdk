@@ -12,7 +12,6 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, watch};
-use tokio::task::JoinHandle;
 use tracing::debug;
 
 /// Builder for [`PreferredSequencer`] initialization.
@@ -55,11 +54,10 @@ where
         storage_path: &Path,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
-        shutdown_sender: watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
-    ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = shutdown_sender.subscribe();
+    ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<BackgroundHandle<()>>)> {
         let latest_state_update = state_update_receiver.borrow().clone();
 
         let da_address = self
@@ -85,13 +83,13 @@ where
 
         let (api_state, checkpoint_sender) = Self::api_state(
             latest_state_update.storage.clone(),
-            shutdown_sender.subscribe(),
+            primary_shutdown.clone(),
         );
 
         let (blobs_sender_channel, _) = broadcast::channel(preferred_config.events_channel_size);
 
         let (db, seq_role) = PreferredSequencerDb::new(
-            shutdown_sender.clone(),
+            primary_shutdown.clone(),
             storage_path,
             &preferred_config.postgres_config,
             bind_addr,
@@ -108,7 +106,7 @@ where
             db_cache.all_proofs_and_completed_blobs().clone(),
             storage_path.into(),
             tx_status_manager.clone(),
-            shutdown_sender.clone(),
+            primary_shutdown.clone(),
             Duration::from_secs(config.blob_processing_timeout_secs),
             blobs_sender_channel.clone(),
             seq_role,
@@ -119,7 +117,7 @@ where
             blob_sender.highest_sequence_number_to_send_after_restart()?
         {
             if blob_sender_sequence_number >= next_sequence_number {
-                let _ = shutdown_sender.send(());
+                primary_shutdown.shutdown();
                 let preferred_db_highest_sequence_number = next_sequence_number
                     .checked_sub(1)
                     .map_or_else(|| "none".to_owned(), |seq| seq.to_string());
@@ -147,7 +145,7 @@ where
         );
 
         let (executor_events_sender, executor_events_receiver) =
-            ExecutorEventsSender::new(shutdown_sender.clone(), db_cache);
+            ExecutorEventsSender::new(primary_shutdown.clone(), db_cache);
 
         let in_flight_batch_blobs = blob_sender.nb_of_in_flight_batch_blobs();
         let in_flight_proof_blobs = blob_sender.nb_of_in_flight_proof_blobs();
@@ -157,8 +155,7 @@ where
             da_address,
             shutdown_notifier: block_executors_shutdown_notifier.clone(),
             state_root_request_sender: state_root_task.request_sender.clone(),
-            shutdown_receiver: shutdown_receiver.clone(),
-            shutdown_sender: shutdown_sender.clone(),
+            primary_shutdown: primary_shutdown.clone(),
             forced_tx_batch_notifier: forced_tx_batch_notifier.clone(),
         };
 
@@ -170,12 +167,10 @@ where
         )
         .await;
 
-        for worker in workers {
-            handles.push(worker);
-        }
+        handles.extend(workers);
 
         let (mut replica_task, start_replica_task_notifier) =
-            ReplicaSyncTask::new(shutdown_sender.clone(), seq_role).await?;
+            ReplicaSyncTask::new(primary_shutdown.clone(), seq_role).await?;
 
         let tx_queue_id = Arc::new(AtomicU64::new(0));
         let batch_execution_time_limit_micros =
@@ -187,8 +182,7 @@ where
             batch_execution_time_limit_micros,
             config.clone(),
             self.max_concurrent_proof_blobs,
-            shutdown_receiver.clone(),
-            shutdown_sender.clone(),
+            primary_shutdown.clone(),
             executor_events_sender,
             next_sequence_number,
             in_flight_batch_blobs,
@@ -217,7 +211,7 @@ where
             executor_events_receiver,
             db,
             api_ledger_db,
-            shutdown_sender: shutdown_sender.clone(),
+            primary_shutdown: primary_shutdown.clone(),
             transaction_cache: cached_txs.write_handle(),
         }
         .spawn();
@@ -234,7 +228,7 @@ where
             preferred_config.maximum_future_nonce_delta,
             preferred_config.future_nonce_transaction_timeout_millis,
             forced_tx_batch_notifier.subscribe(),
-            shutdown_receiver.clone(),
+            primary_shutdown.clone(),
         );
         handles.push(nonce_buffer_task);
 
@@ -248,8 +242,7 @@ where
             _runtime: PhantomData,
             config: config.clone(),
             nonce_buffer_input,
-            shutdown_receiver: shutdown_receiver.clone(),
-            shutdown_sender: shutdown_sender.clone(),
+            primary_shutdown: primary_shutdown.clone(),
             tx_queue_id,
             stop_at_rollup_height,
             test_only_state_update_notification_receiver,
@@ -274,7 +267,7 @@ where
         if let Some(postgres_config) = &preferred_config.postgres_config {
             let heartbeat_task = HeartBeatTask::new(
                 postgres_config.clone(),
-                shutdown_sender.clone(),
+                primary_shutdown.clone(),
                 bind_addr,
                 postgres_config.leader_election.heartbeat_interval(),
             )
@@ -283,20 +276,23 @@ where
             handles.push(heartbeat_handle);
         }
 
-        handles.push(tokio::spawn(update_state_task(
-            seq.clone(),
-            state_update_receiver.clone(),
-            shutdown_receiver.clone(),
-        )));
+        handles.push(BackgroundHandle::spawn(
+            "preferred-update-state",
+            update_state_task(
+                seq.clone(),
+                state_update_receiver.clone(),
+                primary_shutdown.clone(),
+            ),
+        ));
 
-        handles.push(tokio::spawn({
+        handles.push(BackgroundHandle::spawn("preferred-tx-notifications", {
             let ledger_db = ledger_db.clone();
             let seq = seq.clone();
-            let shutdown_rx = shutdown_receiver.clone();
+            let primary_shutdown = primary_shutdown.clone();
             async move {
                 loop_send_tx_notifications::<S, Rt>(
                     state_update_receiver,
-                    shutdown_rx,
+                    primary_shutdown,
                     &ledger_db,
                     seq.tx_status_manager(),
                 )
@@ -338,7 +334,7 @@ where
 
     fn api_state(
         storage: S::Storage,
-        shutdown_receiver: watch::Receiver<()>,
+        primary_shutdown: PrimaryShutdownController,
     ) -> (
         ApiState<S>,
         watch::Sender<Arc<ConcurrentStateCheckpoint<S>>>,
@@ -359,7 +355,7 @@ where
             checkpoint_receiver,
             runtime.kernel_with_slot_mapping(),
             None,
-            shutdown_receiver,
+            primary_shutdown,
         );
         (api_state, checkpoint_sender)
     }

@@ -1,5 +1,6 @@
 use sov_rollup_interface::da::{RelevantBlobs, RelevantProofs};
 
+use super::compare_blobs;
 use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
 use crate::types::{BlobWithSender, FilteredCelestiaBlock, NamespaceBoundaryProof};
 use crate::verifier::proofs::BlobProof;
@@ -30,13 +31,13 @@ pub(crate) async fn test_block_serialization(block: FilteredCelestiaBlock) {
     let deserialized_bincode_relevant_blobs: RelevantBlobs<BlobWithSender> =
         bincode::deserialize(&serialized_bincode_relevant_blobs)
             .expect("relevant blobs bincode deserialization failed");
-    assert_eq!(
-        relevant_blobs.batch_blobs,
-        deserialized_bincode_relevant_blobs.batch_blobs
+    compare_blobs(
+        &deserialized_bincode_relevant_blobs.batch_blobs,
+        &relevant_blobs.batch_blobs,
     );
-    assert_eq!(
-        relevant_blobs.proof_blobs,
-        deserialized_bincode_relevant_blobs.proof_blobs
+    compare_blobs(
+        &deserialized_bincode_relevant_blobs.proof_blobs,
+        &relevant_blobs.proof_blobs,
     );
 
     let serialized_risc0_relevant_blobs = risc0_zkvm::serde::to_vec(&relevant_blobs)
@@ -45,13 +46,13 @@ pub(crate) async fn test_block_serialization(block: FilteredCelestiaBlock) {
         risc0_zkvm::serde::from_slice(&serialized_risc0_relevant_blobs)
             .expect("relevant blobs risc0 deserialization failed");
 
-    assert_eq!(
-        relevant_blobs.batch_blobs,
-        deserialized_risc0_relevant_blobs.batch_blobs
+    compare_blobs(
+        &deserialized_risc0_relevant_blobs.batch_blobs,
+        &relevant_blobs.batch_blobs,
     );
-    assert_eq!(
-        relevant_blobs.proof_blobs,
-        deserialized_risc0_relevant_blobs.proof_blobs
+    compare_blobs(
+        &deserialized_risc0_relevant_blobs.proof_blobs,
+        &relevant_blobs.proof_blobs,
     );
 
     // Extraction proof

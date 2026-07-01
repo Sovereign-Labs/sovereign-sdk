@@ -90,6 +90,12 @@ sov-test-utils = { workspace = true }
 sov-evm-test-utils = { workspace = true }
 sov-eth-dev-signer = { workspace = true }
 sov-modules-api = { workspace = true, features = ["test-utils"] }
+criterion = "0.5.1"
+k256 = { workspace = true }
+
+[[bench]]
+name = "ecrecover"
+harness = false
 
 [features]
 arbitrary = [
@@ -119,6 +125,7 @@ native = [
 	# Optional for speed up in native mode
 	# "revm/asm-keccak"
 	"revm/blst", # Use faster C implementation of bls in native code
+	"revm/secp256k1", # Use faster C implementation of secp256k1 (ecrecover) in native code
 	"sov-evm/native",
 	"sov-metrics/native",
 	"sov-address/native",

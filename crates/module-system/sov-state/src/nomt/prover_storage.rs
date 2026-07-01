@@ -173,20 +173,50 @@ where
             && version_to_use == self.latest_version()
     }
 
+    /// Resolves the result of a read that, by construction, can never observe
+    /// [`HistoricalValueError::PrunedVersion`].
+    ///
+    /// This covers every *unbound* read: the live-tip user/kernel value reads (which bypass the
+    /// snapshot pin via `get_latest_borrowed_unbound` and always observe the latest committed
+    /// version), the accessory reads, and the root-hash reads. None of these are backed by the
+    /// versioned value DB that emits `PrunedVersion`, so they can only fail on a genuine I/O
+    /// fault. We encode that invariant with a `debug_assert!`. Any backing DB error remains fatal
+    /// because `None` means "key absent" to callers such as chain-state height lookups.
+    fn resolve_unbound_read<T>(
+        result: anyhow::Result<Option<T>>,
+        source: &'static str,
+    ) -> Option<T> {
+        match result {
+            Ok(value) => value,
+            Err(error) => {
+                debug_assert!(
+                    !matches!(
+                        error.downcast_ref::<HistoricalValueError>(),
+                        Some(HistoricalValueError::PrunedVersion { .. })
+                    ),
+                    "unbound reads should never observe PrunedVersion (source={source})"
+                );
+                panic!("Unable to read from {source}: {error:?}");
+            }
+        }
+    }
+
     fn read_provable_value_unbound(
         &self,
         namespace: ProvableNamespace,
         key: &SlotKey,
     ) -> Option<SlotValue> {
         match namespace {
-            ProvableNamespace::User => self
-                .historical_state
-                .get_user_value_option_by_key_unbound(key)
-                .expect("Unable to read from UserDb"),
-            ProvableNamespace::Kernel => self
-                .historical_state
-                .get_kernel_value_option_by_key_unbound(key)
-                .expect("Unable to read from KernelDb"),
+            ProvableNamespace::User => Self::resolve_unbound_read(
+                self.historical_state
+                    .get_user_value_option_by_key_unbound(key),
+                "UserDb",
+            ),
+            ProvableNamespace::Kernel => Self::resolve_unbound_read(
+                self.historical_state
+                    .get_kernel_value_option_by_key_unbound(key),
+                "KernelDb",
+            ),
         }
     }
 
@@ -210,11 +240,12 @@ where
         match N::NAMESPACE {
             Namespace::User => self.read_provable_value_unbound(ProvableNamespace::User, key),
             Namespace::Kernel => self.read_provable_value_unbound(ProvableNamespace::Kernel, key),
-            Namespace::Accessory => self
-                .accessory
-                .get_value_option(key, SlotNumber::MAX)
-                .expect("Unable to read from AccessoryDb")
-                .map(Into::into),
+            Namespace::Accessory => Self::resolve_unbound_read(
+                self.accessory
+                    .get_value_option(key, SlotNumber::MAX)
+                    .map(|v| v.map(Into::into)),
+                "AccessoryDb",
+            ),
         }
     }
 
@@ -363,15 +394,16 @@ where
 
     /// Get the latest root hash available in the live db. This could be the newest root hash from the underlying db, or the root hash from the latest delta in memory - whichever is newer.
     fn latest_root_and_version_unbound(&self) -> Option<(SlotNumber, StorageRoot<S>)> {
-        self.historical_state
-            .latest_root_and_version_unbound()
-            .expect("Error reading from database")
-            .map(|(version, root)| {
-                (
-                    version,
-                    borsh::from_slice(&root).expect("Error deserializing root hash"),
-                )
-            })
+        Self::resolve_unbound_read(
+            self.historical_state.latest_root_and_version_unbound(),
+            "state-root DB",
+        )
+        .map(|(version, root)| {
+            (
+                version,
+                borsh::from_slice(&root).expect("Error deserializing root hash"),
+            )
+        })
     }
 
     // Fetch the requested key with proof. Atomically retrieve the values of any provided accessory keys at the same storage version.
@@ -609,6 +641,7 @@ where
         match self.do_get_leaf::<N>(key, None, witness_ref) {
             Ok(val) => val,
             Err(e) => {
+                tracing::warn!(slot = ?self.latest_version(), %key, "reader observed pruned-version race");
                 // Historical errors are not expected when fetching without a version
                 panic!("Database error while getting leaf: for key {key}. error: {e:?}");
             }
@@ -628,6 +661,7 @@ where
                 val
             }
             Err(e) => {
+                tracing::warn!(slot = ?self.latest_version(), %key, "reader observed pruned-version race");
                 // Historical errors are not allowed when fetching without a version
                 panic!("Database error while getting value for key {key}. error: {e:?}");
             }
@@ -638,6 +672,7 @@ where
         match self.read_value::<Accessory>(key, None) {
             Ok(val) => val,
             Err(e) => {
+                tracing::warn!(slot = ?self.latest_version(), %key, "reader observed pruned-version race");
                 // Historical errors are not allowed when fetching without a version
                 panic!("Database error while getting value for accessory key {key}. error: {e:?}");
             }
@@ -873,10 +908,10 @@ where
     }
 
     fn get_root_hash_unbound(&self, version: SlotNumber) -> Option<Self::Root> {
-        let raw_root = self
-            .historical_state
-            .get_serialized_root_hash(version)
-            .expect("Failed to read root hash from historical state")?;
+        let raw_root = Self::resolve_unbound_read(
+            self.historical_state.get_serialized_root_hash(version),
+            "state-root DB",
+        )?;
         let storage_root_historical: Self::Root =
             borsh::from_slice(&raw_root).expect("Failed to deserialize root hash");
         tracing::trace!(%version, root_hash = %storage_root_historical, "Got unbound root hash");
@@ -892,10 +927,12 @@ where
         key: SlotKey,
         max_version: Option<SlotNumber>,
     ) -> Option<SlotValue> {
-        self.accessory
-            .get_value_option(&key, max_version.unwrap_or(SlotNumber::MAX))
-            .expect("Unable to read from AccessoryDb")
-            .map(Into::into)
+        Self::resolve_unbound_read(
+            self.accessory
+                .get_value_option(&key, max_version.unwrap_or(SlotNumber::MAX))
+                .map(|v| v.map(Into::into)),
+            "AccessoryDb",
+        )
     }
 
     fn maybe_iter_user_values_with_prefix(
@@ -961,10 +998,11 @@ impl sov_metrics::Metric for NomtProverComputeStateResult {
 
 #[cfg(test)]
 mod tests {
+    use std::num::NonZeroU64;
     use std::time::Duration;
 
     use sha2::Sha256;
-    use sov_db::config::RollupDbConfig;
+    use sov_db::config::{default_max_pruning_batch_size, PrunerConfig, RollupDbConfig};
     use sov_db::storage_manager::NomtStorageManager;
     use sov_db::test_utils::CommitFaultInjectionLocation;
     use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
@@ -989,6 +1027,23 @@ mod tests {
         ),
         GetWithProofError,
     >;
+
+    #[test]
+    fn unbound_read_resolver_preserves_missing_value() {
+        assert_eq!(
+            TestStorage::resolve_unbound_read::<SlotValue>(Ok(None), "UserDb"),
+            None
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "Unable to read from UserDb")]
+    fn unbound_read_resolver_panics_on_db_error() {
+        let _ = TestStorage::resolve_unbound_read::<SlotValue>(
+            Err(anyhow::anyhow!("injected read failure")),
+            "UserDb",
+        );
+    }
 
     // Writes a block to the storage manager and finalizes it if requested.
     fn write_block(
@@ -1575,6 +1630,122 @@ mod tests {
     fn get_with_proof_succeeds_for_overlay_storage_while_commit_is_paused_before_live() {
         assert_overlay_storage_blocks_then_observes_consistent_success(
             CommitFaultInjectionLocation::BeforeCommittingLive,
+        );
+    }
+
+    /// Builds a pruning-enabled storage manager, captures a reader pinned at version 1, then writes
+    /// and finalizes enough blocks (draining the pruner each time) that version 1 falls well below
+    /// the pruned floor. Returns the now-stale reader. The returned `TempDir` must be kept alive by
+    /// the caller for the duration of the test.
+    fn stale_reader_past_pruned_floor() -> (
+        tempfile::TempDir,
+        TestStorageManager,
+        TestStorage,
+        SlotKey,
+        u8,
+    ) {
+        let tmpdir = tempfile::tempdir().unwrap();
+        let mut config = RollupDbConfig::default_in_path(tmpdir.path().to_path_buf());
+        config.pruner = PrunerConfig::Periodic {
+            block_interval: 1,
+            versions_to_keep: NonZeroU64::new(2).unwrap(),
+            max_batch_size: default_max_pruning_batch_size(),
+        };
+        let mut storage_manager = TestStorageManager::new(config, false).unwrap();
+
+        let user_key = SlotKey::from_slice(b"hot-key");
+        let accessory_key = SlotKey::from_slice(b"acc-key");
+
+        // Block 1, finalized; capture a reader pinned at version 1.
+        let h1 = MockBlockHeader::from_height(1);
+        let mut prev_root = write_block(
+            &mut storage_manager,
+            TestStorage::PRE_GENESIS_ROOT,
+            &h1,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![1]),
+            true,
+        );
+        let (stale_storage, _ledger_storage) = storage_manager.create_state_after(&h1).unwrap();
+
+        // Advance the chain far past `versions_to_keep`, draining the background pruner each block.
+        let last_height = 14u64;
+        for height in 2..=last_height {
+            let h = MockBlockHeader::from_height(height);
+            prev_root = write_block(
+                &mut storage_manager,
+                prev_root,
+                &h,
+                &user_key,
+                &accessory_key,
+                &SlotValue::from(vec![height as u8]),
+                true,
+            );
+            storage_manager.wait_for_pruner_to_finish();
+        }
+        // One more finalize to commit any pending batch.
+        let final_height = last_height + 1;
+        let h_last = MockBlockHeader::from_height(final_height);
+        write_block(
+            &mut storage_manager,
+            prev_root,
+            &h_last,
+            &user_key,
+            &accessory_key,
+            &SlotValue::from(vec![final_height as u8]),
+            true,
+        );
+
+        // Sanity-check the setup: version 1 must actually be pruned, otherwise the stale-reader
+        // tests below would be vacuous.
+        let (fresh_storage, _ledger_storage) = storage_manager.create_state_after(&h_last).unwrap();
+        let pruned = fresh_storage
+            .historical_state
+            .get_user_value_option_by_key_historical(
+                &user_key,
+                sov_rollup_interface::common::SlotNumber::new(1),
+            );
+        assert!(
+            pruned.is_err(),
+            "setup must prune version 1 for the stale-reader tests to be meaningful, got {pruned:?}",
+        );
+
+        (
+            tmpdir,
+            storage_manager,
+            stale_storage,
+            user_key,
+            final_height as u8,
+        )
+    }
+
+    /// Regression: a reader pinned at a version that has since been pruned must still PANIC on an
+    /// unversioned `get` (the bounded `get_latest_borrowed` falls back to the pruned version). This
+    /// pins the current contract so a future refactor that silently changes it is caught. Removing
+    /// the panic entirely (replacing it with a typed error) is a separate, deliberate Phase 2 change.
+    #[test]
+    #[should_panic(expected = "Database error while getting value for key")]
+    fn stale_reader_panics_on_pruned_version_via_unversioned_get() {
+        let (_tmpdir, _storage_manager, stale_storage, user_key, _last_value) =
+            stale_reader_past_pruned_floor();
+        let witness: <TestStorage as Storage>::Witness = Default::default();
+        // Bounded/unversioned read on a reader pinned at the now-pruned version 1.
+        let _ = stale_storage.get::<User>(&user_key, &witness);
+    }
+
+    /// Companion to the hardened unbound path: the SAME stale reader must read the true live tip via
+    /// the unbound API without panicking — unbound reads bypass the snapshot pin and never observe
+    /// `PrunedVersion`.
+    #[test]
+    fn stale_reader_unbound_get_returns_live_tip_without_panic() {
+        let (_tmpdir, _storage_manager, stale_storage, user_key, last_value) =
+            stale_reader_past_pruned_floor();
+        let value = stale_storage.get_unbound::<User>(user_key.clone());
+        assert_eq!(
+            value,
+            Some(SlotValue::from(vec![last_value])),
+            "unbound read should return the latest committed value, not panic on the pruned pinned version",
         );
     }
 }

@@ -15,7 +15,9 @@ use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_modules_api::{NodeEndpoints, Spec};
 use sov_modules_rollup_blueprint::pluggable_traits::PluggableSpec;
 use sov_modules_rollup_blueprint::proof_sender::SovApiProofSender;
-use sov_modules_rollup_blueprint::{FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt};
+use sov_modules_rollup_blueprint::{
+    FullNodeBlueprint, RollupBlueprint, SequencerCreationReceipt, WalletBlueprint,
+};
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::SyncStatus;
@@ -86,7 +88,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         &self,
         state_update_receiver: StateUpdateReceiver<<Self::Spec as Spec>::Storage>,
         sync_status_receiver: tokio::sync::watch::Receiver<SyncStatus>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        primary_shutdown: sov_shutdown::PrimaryShutdownController,
         ledger_db: &LedgerDb,
         sequencer: &SequencerCreationReceipt<Self::Spec>,
         _da_service: &Self::DaService,
@@ -95,7 +97,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         sov_modules_rollup_blueprint::register_endpoints::<Self, Native>(
             state_update_receiver.clone(),
             sync_status_receiver,
-            shutdown_receiver,
+            primary_shutdown,
             ledger_db,
             sequencer,
             rollup_config,
@@ -107,7 +109,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         &self,
         sequencer: Seq,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        primary_shutdown: sov_shutdown::PrimaryShutdownController,
         sequencer_da_address: <MockDaSpec as sov_modules_api::DaSpec>::Address,
     ) -> anyhow::Result<NodeEndpoints>
     where
@@ -120,7 +122,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
             sequencer_rollup_address: rollup_config.sequencer.rollup_address,
             sequencer_da_address,
             sequencer_type: crate::sequencer_type(&rollup_config.sequencer),
-            shutdown_receiver,
+            primary_shutdown,
         };
         let axum_router = solana_offchain_router(sequencer.clone());
 
@@ -128,16 +130,16 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
             axum_router,
             jsonrpsee_module: sov_ethereum::get_ethereum_rpc(eth_rpc_config, sequencer)
                 .remove_context(),
-            ..Default::default()
         })
     }
 
     async fn create_da_service(
         &self,
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
-        shutdown_receiver: tokio::sync::watch::Receiver<()>,
+        secondary_shutdown_controller: &sov_shutdown::SecondaryShutdownController,
     ) -> Self::DaService {
-        StorableMockDaService::from_config(rollup_config.da.clone(), shutdown_receiver).await
+        StorableMockDaService::from_config(rollup_config.da.clone(), secondary_shutdown_controller)
+            .await
     }
 
     async fn create_prover_service(
@@ -172,3 +174,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         Ok(read_mock_code_commitments_from_env())
     }
 }
+
+// Enables the `sov-cli` wallet binary to build against the mock-DA rollup (the wallet
+// is DA-agnostic; it only signs/encodes transactions offline).
+impl WalletBlueprint<Native> for MockDemoRollup<Native> {}

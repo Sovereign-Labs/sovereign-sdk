@@ -41,10 +41,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use sov_shutdown::BackgroundHandle;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
 use tracing::debug;
 
 /// The minimum interval between updates for the PI controller.
@@ -106,8 +106,8 @@ where
         self.heap.len() >= Self::MAX_HEAP_SIZE
     }
 
-    pub(crate) async fn start(mut self) -> JoinHandle<()> {
-        tokio::spawn(async move {
+    pub(crate) async fn start(mut self) -> BackgroundHandle<()> {
+        BackgroundHandle::spawn("synchronized-state", async move {
             let mut index = 0;
             loop {
                 // Start by trying to drain the channel of inbound messages.
@@ -155,7 +155,7 @@ where
                                 return;
                             }
                             SequencerStateUpdatorError::Unexpected => {
-                                self.inner.shutdown_sender.send(()).unwrap();
+                                self.inner.primary_shutdown.shutdown();
                                 panic!("The sequencer experienced an unexpected error and cannot accept transactions! See logs for more details.");
                             }
                         }
@@ -729,7 +729,7 @@ where
             node_user_root = %HexString(node_user_root),
             "Sequencer user state root does not match the node user state root. This indicates a sequencer/node state divergence."
         );
-        crate::preferred::exit_rollup(&inner.shutdown_sender).await;
+        crate::preferred::exit_rollup(&inner.primary_shutdown).await;
     }
 
     async fn process_final_catchup(
@@ -751,7 +751,7 @@ where
         // Some events might come in while we're waiting to grab the lock.
         // Replay them.
         while let Ok(event) = db_event_subscription.try_recv() {
-            if inner.shutdown_receiver.has_changed().unwrap_or(true) {
+            if inner.primary_shutdown.is_triggered() {
                 tracing::info!("The sequencer is shutting down. Exiting replay_batch");
                 return Ok(data);
             }
@@ -1255,6 +1255,11 @@ where
         let batch_from_master =
             Self::ensure_replica_batch_start_visible_slot_matches(&mut inner, batch_from_master)?;
 
+        Self::ensure_replica_batch_start_visible_slot_has_node_state(
+            &mut inner,
+            batch_from_master,
+        )?;
+
         Self::ensure_replica_batch_start_within_rebase_window(&mut inner, batch_from_master)?;
 
         inner
@@ -1390,6 +1395,38 @@ where
             %replica_expected,
             master_expected = %batch_from_master.visible_slot_number_after_increase,
             "Replica VSN diverged from master. Entering sync mode and retrying."
+        );
+
+        let sync_details = SequencerNotReadyDetails::Syncing {
+            target_da_height: inner.latest_info.sync_status.target_da_height(),
+            synced_da_height: inner.latest_info.sync_status.synced_da_height(),
+        };
+
+        inner.is_ready = Err(sync_details.clone());
+
+        Err(ReplicaError::NotReady(
+            sync_details,
+            Box::new(DbData::BatchStart(batch_from_master)),
+        ))
+    }
+
+    fn ensure_replica_batch_start_visible_slot_has_node_state(
+        inner: &mut InnerGuard<'_, S, Rt>,
+        batch_from_master: BatchToStore,
+    ) -> Result<(), ReplicaError<S>> {
+        let node_latest_slot = inner.latest_info.slot_number;
+        let batch_visible_slot = batch_from_master
+            .visible_slot_number_after_increase
+            .as_true();
+
+        if batch_visible_slot <= node_latest_slot {
+            return Ok(());
+        }
+
+        tracing::warn!(
+            %batch_visible_slot,
+            %node_latest_slot,
+            "Replica batch start would advance the visible slot past the latest node slot. Rejecting batch start until node replay catches up."
         );
 
         let sync_details = SequencerNotReadyDetails::Syncing {

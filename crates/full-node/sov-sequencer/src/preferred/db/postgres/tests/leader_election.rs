@@ -25,9 +25,9 @@ async fn test_db_elected_resolution_returns_replica_when_leader_exists() {
 
     let storage_dir = tempfile::tempdir().unwrap();
     let bind_addr = SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
-    let (shutdown_sender, _) = tokio::sync::watch::channel(());
+    let primary_shutdown = sov_shutdown::PrimaryShutdownController::new();
     let (_db, role) = crate::preferred::db::PreferredSequencerDb::new(
-        shutdown_sender,
+        primary_shutdown,
         storage_dir.path(),
         &Some(postgres_config),
         bind_addr,

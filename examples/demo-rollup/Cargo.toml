@@ -8,6 +8,9 @@ license = "Sovereign Permissionless Commercial License"
 repository = { workspace = true }
 publish = false
 default-run = "sov-demo-rollup"
+# Integration tests are declared explicitly as [[test]] (gated on `mock_da`); disable
+# auto-discovery so helper files under tests/ aren't compiled as standalone test bins.
+autotests = false
 
 [lints]
 workspace = true
@@ -15,9 +18,8 @@ workspace = true
 [dependencies]
 # non-optional dependencies
 sov-address = { workspace = true, features = ["evm"] }
-sov-celestia-adapter = { workspace = true, features = ["native"] }
-sov-mock-da = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-shutdown = { workspace = true }
 sov-rollup-full-node-interface = { workspace = true }
 sov-stf-runner = { workspace = true }
 
@@ -33,12 +35,11 @@ sov-ethereum = { workspace = true, features = ["local"] }
 sov-kernels = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
+sov-node-client = { workspace = true }
 sov-modules-rollup-blueprint = { workspace = true, features = ["native"] }
 sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
 sov-solana-offchain-auth = { workspace = true }
-sov-risc0-adapter = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
-sov-sp1-adapter = { workspace = true, features = ["native"] }
 rustls = { workspace = true, features = ["ring"] }
 sov-full-node-configs = { workspace = true }
 sov-state = { workspace = true, features = ["native"] }
@@ -46,8 +47,15 @@ sov-eth-dev-signer = { workspace = true }
 
 demo-stf = { workspace = true, features = ["native"] }
 
-risc0 = { path = "./provers/risc0" }
-sp1 = { path = "./provers/sp1" }
+# DA adapters, zkVM adapters and zkVM guest-ELF crates, feature-gated by DA layer.
+# `mock_da` pulls mock-da + sp1; `celestia_da` pulls celestia + risc0. See [features].
+# `sov-mock-zkvm` stays non-optional (outer VM for both DAs + light-client mock verifier).
+sov-mock-da = { workspace = true, features = ["native"], optional = true }
+sov-sp1-adapter = { workspace = true, features = ["native"], optional = true }
+sp1 = { path = "./provers/sp1", optional = true }
+sov-celestia-adapter = { workspace = true, features = ["native"], optional = true }
+sov-risc0-adapter = { workspace = true, features = ["native"], optional = true }
+risc0 = { path = "./provers/risc0", optional = true }
 
 borsh = { workspace = true, features = ["bytes", "derive"] }
 async-trait = { workspace = true }
@@ -82,8 +90,6 @@ sov-eth-client = { workspace = true }
 jsonrpsee = { workspace = true }
 schemars = { workspace = true }
 sov-address = { workspace = true, features = ["native"] }
-sov-risc0-adapter = { workspace = true, features = ["native"] }
-sov-celestia-adapter = { workspace = true, features = ["native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true }
 sov-modules-api = { workspace = true, features = [
@@ -142,8 +148,24 @@ sov-zkvm-utils = { workspace = true }
 
 
 [features]
-default = []
+default = ["mock_da"]
+
+# Features are split by DA layer; each bundles that DA's zkVM(s). The zkVM is then
+# chosen at runtime via `--zk-vm`. Compile time is dominated by zkVM guest builds, so
+# splitting this way lets a build skip the other DA's guests entirely:
+#   mock_da:     mock-DA rollups w/ MockZkvm + SP1   -> builds 2 SP1 guests (mock + aggregation)
+#   celestia_da: Celestia rollup w/ Risc0 + MockZkvm -> builds the risc0 guest(s)
+# `--all-features` compiles BOTH DAs (and all their guests); `--da-layer`/`--zk-vm`
+# select at runtime. When both DA features are enabled, mock_da is the default DA
+# (the `--da-layer` default is `mock`), so `--all-features` runs normally without
+# extra flags. A combo whose feature isn't compiled in bails at startup.
+mock_da = ["dep:sov-mock-da", "dep:sov-sp1-adapter", "dep:sp1"]
+celestia_da = ["dep:sov-celestia-adapter", "dep:sov-risc0-adapter", "dep:risc0"]
+
 migration-script = [
+    # The migration binary bridges both DAs (references MockDemoRollup + CelestiaDemoRollup).
+    "mock_da",
+    "celestia_da",
     "dep:sov-blob-storage",
     "dep:rockbound",
     "dep:bincode",
@@ -163,8 +185,16 @@ name = "sov-demo-rollup"
 path = "src/main.rs"
 
 [[bin]]
+name = "light-client"
+path = "src/light_client/main.rs"
+# The light client decodes proofs against the mock-DA rollup spec (mock + sp1 outer VMs);
+# there is no Celestia verifier yet, so it only builds for mock-DA rollups.
+required-features = ["mock_da"]
+
+[[bin]]
 name = "demo-celestia-tester"
 path = "src/da_tester/demo_celestia_tester.rs"
+required-features = ["celestia_da"]
 
 [[bin]]
 name = "mockda-to-celestia-migrate"
@@ -174,3 +204,12 @@ required-features = ["migration-script"]
 [[bin]]
 name = "sov-hive-genesis-adapter"
 path = "src/hive/genesis_adapter.rs"
+
+# All integration tests run on mock DA (mock + sp1 zkVMs), so they live under `mock_da`
+# (the default). `external_mock_da.rs` / `test_helpers.rs` are helper modules of
+# `all_tests` (pulled via `mod`); test auto-discovery is disabled (`autotests = false`
+# in [package]) so only this single real test binary is built, gated on its feature.
+[[test]]
+name = "all_tests"
+path = "tests/all_tests.rs"
+required-features = ["mock_da"]

@@ -10,19 +10,26 @@ use crate::influxdb::{
     SubmittableMetricKind, DROPPED_METRICS_COUNT,
 };
 use crate::{MetricsTracker, MonitoringConfig};
+use sov_shutdown::{BackgroundHandle, FutureOrShutdownOutput, SecondaryShutdownController};
 
 pub(crate) static METRICS_TRACKER: OnceLock<MetricsTracker> = OnceLock::new();
 
 /// Spawns task that published metrics in the background.
 pub fn init_metrics_tracker(
     config: &MonitoringConfig,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
-) -> Option<tokio::task::JoinHandle<()>> {
+    secondary_shutdown_controller: &SecondaryShutdownController,
+) -> Option<BackgroundHandle<()>> {
     let (sender, receiver) = tokio::sync::mpsc::channel(config.get_max_pending_metrics() as usize);
     let config_for_task = config.clone();
+    let secondary_shutdown_controller = secondary_shutdown_controller.clone();
     if METRICS_TRACKER.get().is_none() {
-        let handle = tokio::spawn(async move {
-            publisher::metrics_publisher_task(receiver, &config_for_task, shutdown_receiver).await;
+        let handle = BackgroundHandle::spawn("metrics-publisher", async move {
+            publisher::metrics_publisher_task(
+                receiver,
+                &config_for_task,
+                secondary_shutdown_controller,
+            )
+            .await;
         });
         tracing::debug!(?config, "Metrics tracker initialized");
         match OnceLock::set(&METRICS_TRACKER, MetricsTracker { sender }) {
@@ -807,22 +814,24 @@ impl Metric for tokio_metrics::RuntimeMetrics {
 /// Spawns a task to monitor tokio runtime metrics and submit them to the metrics tracker.
 pub fn spawn_tokio_runtime_metrics_task(
     metrics_interval: std::time::Duration,
-    mut shutdown_receiver: tokio::sync::watch::Receiver<()>,
-) -> tokio::task::JoinHandle<()> {
+    secondary_shutdown_controller: &SecondaryShutdownController,
+) -> BackgroundHandle<()> {
     let handle = tokio::runtime::Handle::current();
     let runtime_monitor = tokio_metrics::RuntimeMonitor::new(&handle);
+    let secondary_shutdown_controller = secondary_shutdown_controller.clone();
 
     // print runtime metrics every metrics_interval
-    tokio::spawn(async move {
+    BackgroundHandle::spawn("tokio-runtime-metrics", async move {
         for interval in runtime_monitor.intervals() {
             crate::track_metrics(|tracker| {
                 tracker.submit(interval);
             });
-            tokio::select! {
-                _ = tokio::time::sleep(metrics_interval) => {},
-                _ = shutdown_receiver.changed() => {
-                    break;
-                }
+            match secondary_shutdown_controller
+                .future_or_shutdown(tokio::time::sleep(metrics_interval))
+                .await
+            {
+                FutureOrShutdownOutput::Output(_) => {}
+                FutureOrShutdownOutput::Shutdown => break,
             }
         }
     })

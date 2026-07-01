@@ -1,10 +1,9 @@
 //! Tasks responsible for actual metrics submission.
 
-use std::future::Future;
 use std::net::SocketAddr;
 
+use sov_shutdown::{FutureOrShutdownOutput, SecondaryShutdownController};
 use tokio::io::AsyncWriteExt;
-use tokio::sync::watch;
 
 use crate::influxdb::config::{MonitoringConfig, Transport};
 use crate::influxdb::tracker::DroppedMetrics;
@@ -12,25 +11,6 @@ use crate::influxdb::SubmittableMetric;
 use crate::{Metric, TelegrafSocketConfig};
 
 const SHUTDOWN_DRAINING_LIMIT: std::time::Duration = std::time::Duration::from_secs(1);
-
-enum FutureOrShutdownOutput<O> {
-    Output(O),
-    Shutdown,
-}
-
-async fn future_or_shutdown<T>(
-    inner: T,
-    shutdown: &watch::Receiver<()>,
-) -> FutureOrShutdownOutput<T::Output>
-where
-    T: Future,
-{
-    let mut shutdown = shutdown.clone();
-    tokio::select! {
-        res = inner => FutureOrShutdownOutput::Output(res),
-        _ = shutdown.changed() => FutureOrShutdownOutput::Shutdown,
-    }
-}
 
 enum PublisherTransport {
     Tcp(tokio::net::TcpStream),
@@ -103,7 +83,7 @@ impl MetricsPublisher {
 pub(crate) async fn metrics_publisher_task(
     mut metrics_receiver: tokio::sync::mpsc::Receiver<SubmittableMetric>,
     config: &MonitoringConfig,
-    shutdown_receiver: tokio::sync::watch::Receiver<()>,
+    secondary_shutdown_controller: SecondaryShutdownController,
 ) {
     tracing::trace!(?config, "Starting metrics publisher task");
     let max_buffer_size = config.get_max_datagram_size() as usize;
@@ -152,7 +132,7 @@ pub(crate) async fn metrics_publisher_task(
                                 .await;
 
             }
-            result = future_or_shutdown(metrics_receiver.recv(), &shutdown_receiver) => {
+            result = secondary_shutdown_controller.future_or_shutdown(metrics_receiver.recv()) => {
                 match result {
                     FutureOrShutdownOutput::Output(Some(measurement)) => {
                         #[cfg(feature = "gas-constant-estimation")]
@@ -272,8 +252,8 @@ mod tests {
     use crate::influxdb::config::TelegrafSocketConfig;
     use crate::influxdb::RpcAggregationConfig;
     use crate::influxdb::{Metric, SubmittableMetricKind};
+    use sov_shutdown::SecondaryShutdownController;
     use tokio::io::AsyncReadExt;
-    use tokio::sync::watch;
 
     #[derive(Clone, Debug)]
     struct SampleMetric(Vec<u8>);
@@ -303,8 +283,7 @@ mod tests {
         let first_chunk = 2;
         let second_chunk = 3;
         let max_udp_size = sample_metric_string_with_timestamp.len() * (first_chunk + second_chunk);
-        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
-        shutdown_receiver.mark_unchanged();
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
 
         let total_send = first_chunk + second_chunk;
 
@@ -319,7 +298,8 @@ mod tests {
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
         let _task_handle = tokio::spawn(async move {
-            metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
+            metrics_publisher_task(receiver, &monitoring_config, secondary_shutdown_controller)
+                .await;
         });
 
         for _ in 0..first_chunk {
@@ -418,14 +398,14 @@ mod tests {
             rpc_aggregation: RpcAggregationConfig::standard(),
         };
 
-        let (_shutdown_sender, mut shutdown_receiver) = watch::channel(());
-        shutdown_receiver.mark_unchanged();
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(1);
         spawn_metrics_udp_receiver(socket, metrics_back_sender.clone());
 
         let (sender, receiver) = tokio::sync::mpsc::channel(10);
         let _task_handle = tokio::spawn(async move {
-            metrics_publisher_task(receiver, &monitoring_config, shutdown_receiver).await;
+            metrics_publisher_task(receiver, &monitoring_config, secondary_shutdown_controller)
+                .await;
         });
 
         sender

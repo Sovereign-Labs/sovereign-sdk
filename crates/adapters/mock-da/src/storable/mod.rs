@@ -22,6 +22,7 @@ mod tests {
     use proptest::prelude::*;
     use sov_rollup_interface::da::{BlobReaderTrait, Time};
     use sov_rollup_interface::node::da::DaService;
+    use sov_shutdown::SecondaryShutdownController;
     use tokio::sync::RwLock;
 
     use crate::storable::layer::StorableMockDaLayer;
@@ -44,10 +45,10 @@ mod tests {
         let blocks = 5;
         let start = Time::now();
 
-        let (_shutdown_sender, mut shutdown_receiver) = tokio::sync::watch::channel(());
-        shutdown_receiver.mark_unchanged();
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
 
-        let da_service = StorableMockDaService::from_config(config, shutdown_receiver).await;
+        let da_service =
+            StorableMockDaService::from_config(config, &secondary_shutdown_controller).await;
         let da_service_reader = da_service.clone();
 
         let (tx, mut rx) = tokio::sync::mpsc::channel(1);

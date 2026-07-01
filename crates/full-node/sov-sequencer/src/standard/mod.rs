@@ -32,6 +32,7 @@ use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::BlobSenderStatus;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use std::boxed::Box;
 use std::marker::PhantomData;
 use std::net::IpAddr;
@@ -41,7 +42,6 @@ use std::sync::atomic::AtomicUsize;
 use std::sync::Arc;
 use thiserror::Error;
 use tokio::sync::{watch, Mutex};
-use tokio::task::JoinHandle;
 use tokio::time::Duration;
 use tracing::{debug, trace, warn};
 
@@ -134,9 +134,8 @@ where
         max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
-        shutdown_sender: watch::Sender<()>,
-    ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
-        let shutdown_receiver = shutdown_sender.subscribe();
+        primary_shutdown: PrimaryShutdownController,
+    ) -> anyhow::Result<(Self, Vec<BackgroundHandle<()>>)> {
         let mut runtime = Rt::default();
         let kernel_with_slot_mapping = runtime.kernel_with_slot_mapping();
 
@@ -154,7 +153,7 @@ where
             checkpoint_receiver,
             kernel_with_slot_mapping,
             None,
-            shutdown_receiver.clone(),
+            primary_shutdown.clone(),
         );
 
         let txsm = TxStatusManager::default();
@@ -172,7 +171,7 @@ where
             ledger_db.clone(),
             storage_path,
             TxStatusBlobSenderHooks::new(txsm.clone()),
-            shutdown_sender,
+            primary_shutdown.clone(),
             Duration::from_secs(config.blob_processing_timeout_secs),
             None,
             Default::default(),
@@ -181,7 +180,7 @@ where
         )
         .await?;
 
-        let mut handles: Vec<JoinHandle<()>> = vec![];
+        let mut handles: Vec<BackgroundHandle<()>> = vec![];
         handles.push(blob_sender_handle);
 
         let inner = Inner {
@@ -210,20 +209,20 @@ where
             da_address,
         }));
 
-        handles.push(tokio::spawn({
+        handles.push(BackgroundHandle::spawn("std-update-state", {
             loop_call_update_state(
                 seq.clone(),
                 state_update_receiver.clone(),
-                shutdown_receiver.clone(),
+                primary_shutdown.clone(),
             )
         }));
-        handles.push(tokio::spawn({
+        handles.push(BackgroundHandle::spawn("std-tx-notifications", {
             let ledger_db = ledger_db.clone();
             let seq = seq.clone();
             async move {
                 loop_send_tx_notifications::<S, Rt>(
                     state_update_receiver,
-                    shutdown_receiver,
+                    primary_shutdown,
                     &ledger_db,
                     seq.tx_status_manager(),
                 )

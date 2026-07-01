@@ -263,6 +263,7 @@ where
     M: ModuleSendSync,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Serialize + serde::de::DeserializeOwned + FromStr + Display,
+    <K as FromStr>::Err: Display,
     V: Serialize,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -282,8 +283,17 @@ where
     async fn get_state_map_item_route(
         State(state): State<Self>,
         mut accessor: ApiStateAccessor<M::Spec>,
-        Path(key): Path<K>,
+        Path(input_key): Path<String>,
     ) -> ApiResult<StateItemContents<K, V>> {
+        let key = K::from_str(&input_key).map_err(|err| {
+            sov_rest_utils::errors::bad_request_400(
+                "Invalid key",
+                format!(
+                    "Key '{input_key}' cannot be deserialized to a valid state map key: {err:#}"
+                ),
+            )
+        })?;
+
         let state_map = NamespacedStateMap::<N, K, V, Codec>::with_codec(
             Prefix::new(
                 state.module_discriminant,
@@ -294,9 +304,7 @@ where
 
         let value = state_map.get(&key, &mut accessor).unwrap_infallible();
         match value {
-            // Known issue, will be solved later
-            // https://github.com/Sovereign-Labs/sovereign-sdk-wip/blob/f3b934e33833ec3621f46a3b31824a344de7b433/crates/full-node/sov-ledger-apis/src/lib.rs#L387
-            None => Err(not_found_404(&state.state_item_info.name, "unknown")),
+            None => Err(not_found_404(&state.state_item_info.name, input_key)),
             Some(value) => Ok(StateItemContents::MapElement { key, value }.into()),
         }
     }
@@ -309,6 +317,7 @@ where
     <M::Spec as Spec>::Storage: NativeStorage,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Serialize + serde::de::DeserializeOwned + FromStr + Display + Clone,
+    <K as FromStr>::Err: Display,
     V: Serialize,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -345,10 +354,10 @@ where
         let cursor_key = match &pagination.selection {
             sov_rest_utils::PageSelection::First => None,
             sov_rest_utils::PageSelection::Next { cursor } => {
-                let key = K::from_str(cursor).map_err(|_| {
+                let key = K::from_str(cursor).map_err(|err| {
                     sov_rest_utils::errors::bad_request_400(
                         "Invalid cursor",
-                        "cursor must be a valid key",
+                        format!("cursor '{cursor}' is not a valid key: {err:#}"),
                     )
                 })?;
                 Some(state_map.slot_key(&key))
@@ -445,6 +454,7 @@ where
     <M::Spec as Spec>::Storage: NativeStorage,
     ApiStateAccessor<M::Spec>: StateReader<N, Error = Infallible>,
     K: Display + FromStr + Serialize + serde::de::DeserializeOwned + Clone + Send + Sync + 'static,
+    <K as FromStr>::Err: Display,
     V: Serialize + Clone + Send + Sync + 'static,
     Codec: StateCodec,
     Codec::KeyCodec: StateItemCodec<K>,
@@ -508,6 +518,7 @@ where
     Codec::KeyCodec: StateItemCodec<K>,
     Codec::ValueCodec: StateItemCodec<V>,
     K: FromStr + std::fmt::Display,
+    <K as FromStr>::Err: Display,
 {
 }
 

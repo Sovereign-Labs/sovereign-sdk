@@ -61,6 +61,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::TxHash;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use state_root_compute::StateRootTask;
 use std::boxed::Box;
 use std::marker::PhantomData;
@@ -72,8 +73,7 @@ use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 use sync_sequencer_state::*;
-use tokio::sync::{broadcast, watch};
-use tokio::task::JoinHandle;
+use tokio::sync::broadcast;
 use tokio::time::sleep;
 use tracing::{error, info, trace};
 use transaction_subscriptions::TransactionCache;
@@ -125,9 +125,8 @@ where
     pub(crate) config: SequencerConfig<S::Address, PreferredSequencerConfig<S::Address>>,
     /// Used for intelligently buffering nonce-based TXs if they arrive out of order.
     nonce_buffer_input: NonceBufferInputSender<SequencerTxExecutionBackend<S, Rt>, S, Rt>,
-    shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
     transaction_cache: TransactionCache<S, Rt>,
-    shutdown_sender: watch::Sender<()>,
     // Used to track which txs need to be ignored after the sequencer had downtime (in the sense of giving out 503s)
     tx_queue_id: Arc<AtomicU64>,
     stop_at_rollup_height: Option<RollupHeight>,
@@ -157,17 +156,17 @@ where
         max_concurrent_proof_blobs: usize,
         ledger_db: LedgerDb,
         api_ledger_db: LedgerDb,
-        shutdown_sender: watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
-    ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
+    ) -> anyhow::Result<(Self, Vec<BackgroundHandle<()>>)> {
         Builder::new(da, config, max_concurrent_proof_blobs)
             .build(
                 state_update_receiver,
                 storage_path,
                 ledger_db,
                 api_ledger_db,
-                shutdown_sender,
+                primary_shutdown,
                 stop_at_rollup_height,
                 bind_addr,
             )
@@ -210,7 +209,7 @@ where
     async fn recover_and_catch_up(
         &self,
         state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-        shutdown_receiver: &watch::Receiver<()>,
+        primary_shutdown: &PrimaryShutdownController,
         mut info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
         let mut rt = Rt::default();
@@ -240,7 +239,7 @@ where
                     }
                     info = poll_state_update::<S>(
                         state_update_receiver,
-                        shutdown_receiver,
+                        primary_shutdown,
                         "update_state_task",
                     )
                     .await?;
@@ -281,7 +280,7 @@ where
 
                 info = poll_state_update::<S>(
                     state_update_receiver,
-                    shutdown_receiver,
+                    primary_shutdown,
                     "update_state_task",
                 )
                 .await?;
@@ -324,7 +323,7 @@ where
     async fn wait_for_node_resync(
         &self,
         state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-        shutdown_receiver: &watch::Receiver<()>,
+        primary_shutdown: &PrimaryShutdownController,
         distance_to_tip: u64,
         current_info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
@@ -346,7 +345,7 @@ where
             // Else, poll a state update for the next iteration
             info = poll_state_update::<S>(
                 state_update_receiver,
-                shutdown_receiver,
+                primary_shutdown,
                 "update_state_task",
             )
             .await?;
@@ -357,12 +356,12 @@ where
     async fn wait_for_node_resync_with_allowed_slack(
         &self,
         state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-        shutdown_receiver: &watch::Receiver<()>,
+        primary_shutdown: &PrimaryShutdownController,
         current_info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
         self.wait_for_node_resync(
             state_update_receiver,
-            shutdown_receiver,
+            primary_shutdown,
             // Catch up a bit extra to avoid immediately triggering another resync
             self.config.max_allowed_node_distance_behind.div_ceil(2),
             current_info,
@@ -373,10 +372,10 @@ where
     async fn wait_for_node_resync_to_tip(
         &self,
         state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-        shutdown_receiver: &watch::Receiver<()>,
+        primary_shutdown: &PrimaryShutdownController,
         current_info: StateUpdateInfo<S::Storage>,
     ) -> anyhow::Result<()> {
-        self.wait_for_node_resync(state_update_receiver, shutdown_receiver, 1, current_info)
+        self.wait_for_node_resync(state_update_receiver, primary_shutdown, 1, current_info)
             .await
     }
 
@@ -386,7 +385,7 @@ where
         baked_tx: FullyBakedTx,
         ip_addr: IpAddr,
     ) -> Result<AcceptedTx<<Self as Sequencer>::Confirmation>, ErrorObject> {
-        if self.shutdown_receiver.has_changed().unwrap_or(true) {
+        if self.primary_shutdown.is_triggered() {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
             return Err(shut_down());
         }
@@ -571,7 +570,7 @@ fn raw_max_deferred_slots_delay(max_allowed_node_distance_behind: u64) -> u64 {
 async fn update_state_task<S, Rt, Da>(
     seq: PreferredSequencer<S, Rt, Da>,
     mut state_update_receiver: StateUpdateReceiver<S::Storage>,
-    shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
 ) where
     S: Spec,
     Rt: Runtime<S>,
@@ -579,7 +578,7 @@ async fn update_state_task<S, Rt, Da>(
 {
     loop {
         if let Err(e) =
-            update_state_task_inner(seq.clone(), &mut state_update_receiver, &shutdown_receiver)
+            update_state_task_inner(seq.clone(), &mut state_update_receiver, &primary_shutdown)
                 .await
         {
             // Thrown when polling for state updates is aborted due to a shutdown signal. Don't
@@ -594,7 +593,7 @@ async fn update_state_task<S, Rt, Da>(
                 error = ?e,
                 "Error in preferred sequencer update state task. Shutting down rollup."
             );
-            exit_rollup(&seq.shutdown_sender).await;
+            exit_rollup(&seq.primary_shutdown).await;
         }
     }
 }
@@ -645,7 +644,7 @@ fn should_skip_update_state(postgres_config: Option<&PostgresConfig>) -> bool {
 async fn update_state_task_inner<S, Rt, Da>(
     seq: PreferredSequencer<S, Rt, Da>,
     state_update_receiver: &mut StateUpdateReceiver<S::Storage>,
-    shutdown_receiver: &watch::Receiver<()>,
+    primary_shutdown: &PrimaryShutdownController,
 ) -> anyhow::Result<()>
 where
     S: Spec,
@@ -653,7 +652,7 @@ where
     Da: DaService<Spec = S::Da>,
 {
     let info =
-        poll_state_update::<S>(state_update_receiver, shutdown_receiver, "update_state").await?;
+        poll_state_update::<S>(state_update_receiver, primary_shutdown, "update_state").await?;
 
     if cfg!(debug_assertions)
         && should_skip_update_state(seq.config.sequencer_kind_config.postgres_config.as_ref())
@@ -717,20 +716,20 @@ where
         }
 
         PreferredSeqOperation::WaitForNodeResyncToTip => {
-            seq.wait_for_node_resync_to_tip(state_update_receiver, shutdown_receiver, info)
+            seq.wait_for_node_resync_to_tip(state_update_receiver, primary_shutdown, info)
                 .await?;
         }
 
         PreferredSeqOperation::WaitForNodeResyncWithAllowedSlack => {
             seq.wait_for_node_resync_with_allowed_slack(
                 state_update_receiver,
-                shutdown_receiver,
+                primary_shutdown,
                 info,
             )
             .await?;
         }
         PreferredSeqOperation::RecoverAndCatchUp => {
-            seq.recover_and_catch_up(state_update_receiver, shutdown_receiver, info)
+            seq.recover_and_catch_up(state_update_receiver, primary_shutdown, info)
                 .await?;
         }
 
@@ -1119,22 +1118,20 @@ fn accepts_preferred_batches<B: BlobSelector>(_blob_selector: B) -> bool {
 
 #[track_caller]
 pub(crate) fn exit_rollup(
-    shutdown_sender: &watch::Sender<()>,
+    primary_shutdown: &PrimaryShutdownController,
 ) -> impl std::future::Future<Output = ()> {
     let location = std::panic::Location::caller();
-    exit_rollup_inner(shutdown_sender.clone(), location)
+    exit_rollup_inner(primary_shutdown.clone(), location)
 }
 
 async fn exit_rollup_inner(
-    shutdown_sender: watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
     location: &'static std::panic::Location<'static>,
 ) {
     // In the Kubernetes environment, logs are sometimes lost during shutdown.
     // This delay ensures logs have time to be flushed before the application exits.
     tracing::info!("Shutting down the rollup");
-    if shutdown_sender.send(()).is_err() {
-        tracing::error!(%location, "Failed to send shutdown signal");
-    }
+    primary_shutdown.shutdown_with_location(location);
     let sleep_time = Duration::from_secs(5);
     tracing::error!(%location, after = ?sleep_time, "Calling std::process::exit(1)");
     println!("Calling std::process::exit(1): {location}");

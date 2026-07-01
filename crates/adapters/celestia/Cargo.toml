@@ -20,8 +20,8 @@ bech32 = { workspace = true }
 prost = "0.13"
 
 # Upgrade with care. The new version might be incompatible and require a run of soak tests
-celestia-types = { version = "1.0.0", default-features = false }
-celestia-client = { version = "1.0.0", optional = true }
+celestia-types = { version = "1.1.0-rc.1", default-features = false }
+celestia-client = { version = "1.1.0-rc.1", optional = true }
 tendermint = { version = "0.40.4", default-features = false }
 tendermint-proto = { version = "0.40.4" }
 nmt-rs = { workspace = true, features = ["serde", "borsh"] }
@@ -34,6 +34,13 @@ backon = { workspace = true, optional = true }
 derive_more = { workspace = true, default-features = false, features = ["std"] }
 futures = { workspace = true, default-features = false, optional = true }
 hex = { workspace = true, features = ["serde"] }
+# Bare `default-features = false` selects lz4_flex's *unsafe* codec; the guest decodes
+# adversarial bytes, so keep the bounds-checked safe encode/decode paths. Dropping the
+# default `frame` feature also keeps the dependency `std`-free for the guest build.
+lz4_flex = { workspace = true, default-features = false, features = [
+    "safe-encode",
+    "safe-decode",
+] }
 proptest = { workspace = true, features = ["alloc", "std"], optional = true }
 schemars = { workspace = true, features = ["derive"] }
 serde = { workspace = true, default-features = false, features = [
@@ -49,8 +56,9 @@ tracing = { workspace = true }
 rand = { workspace = true, optional = true }
 
 sov-metrics = { workspace = true, optional = true }
-sov-modules-macros = { workspace = true, optional = true }
+sov-modules-macros = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-shutdown = { workspace = true, optional = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 
 [dev-dependencies]
@@ -83,9 +91,10 @@ native = [
     "dep:tokio",
     "sov-celestia-adapter/native",
     "sov-rollup-interface/native",
+    "dep:sov-shutdown",
     "dep:sov-metrics",
     "sov-metrics/native",
-    "sov-modules-macros?/native",
+    "sov-modules-macros/native",
     "dep:rand",
 ]
 bench = [
@@ -99,6 +108,6 @@ arbitrary = [
     "sov-celestia-adapter/arbitrary",
     "sov-rollup-interface/arbitrary",
     "sov-test-utils/arbitrary",
-    "sov-modules-macros?/arbitrary",
+    "sov-modules-macros/arbitrary",
     "uuid/arbitrary"
 ]

@@ -14,6 +14,7 @@ use sov_bank::{Amount, Coins, TokenId};
 use sov_modules_api::prelude::tracing;
 use sov_rollup_interface::crypto::{CredentialId, PublicKey};
 use sov_rollup_interface::da::DaSpec;
+use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_sequencer_registry::KnownSequencer;
 
@@ -315,6 +316,17 @@ impl NodeClient {
         } else {
             anyhow::bail!("Failed response {status} for {url}: {body}");
         }
+    }
+
+    /// Fetches the node's latest aggregated ("outer") proof from its REST API and
+    /// returns the decoded bytes, without verifying them.
+    pub async fn fetch_latest_aggregated_proof(&self) -> anyhow::Result<SerializedAggregatedProof> {
+        self.client
+            .get_latest_aggregated_proof()
+            .await
+            .map_err(|e| anyhow::anyhow!("Failed to fetch the latest aggregated proof: {e}"))?
+            .into_inner()
+            .try_into()
     }
 
     /// HTTP GET to the given endpoint, returning plain text.

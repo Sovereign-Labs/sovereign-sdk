@@ -155,6 +155,11 @@ celestia-logs:
 build:
 	cargo build --bins
 
+# Build the Celestia variant. The default build is mock DA (mock + sp1 zkVMs); celestia_da
+# is a separate feature so the SP1 guests aren't compiled for a Celestia-only build.
+build-celestia:
+	cargo build --bins --no-default-features --features celestia_da
+
 test-create-token: check-sov-cli
 test-create-token:
 	$(SOV_CLI_REL_PATH) node set-url http://127.0.0.1:12346

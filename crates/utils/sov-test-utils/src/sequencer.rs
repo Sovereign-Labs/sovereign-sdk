@@ -27,6 +27,7 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_sequencer::standard::{StdSequencer, StdSequencerConfig};
 pub use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::{SequencerApis, SequencerConfig};
+use sov_shutdown::PrimaryShutdownController;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::DefaultStorageSpec;
 use sov_stf_runner::query_state_update_info;
@@ -57,13 +58,13 @@ pub struct TestSequencerSetup<Rt: Runtime<TestSpec>> {
     /// The Axum server address.
     pub axum_addr: SocketAddr,
     /// Handler for shutdown of sequencer
-    pub shutdown_sender: watch::Sender<()>,
+    pub primary_shutdown: PrimaryShutdownController,
 }
 
 impl<Rt: Runtime<TestSpec>> Drop for TestSequencerSetup<Rt> {
     fn drop(&mut self) {
         // Error means that senders are already shut down.
-        let _ = self.shutdown_sender.send(());
+        self.primary_shutdown.shutdown();
         self.axum_server_handle.shutdown();
     }
 }
@@ -142,8 +143,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             query_state_update_info(&ledger_db, stf_state, da_sync_state.as_ref()).await?;
 
         let (state_update_sender, state_update_receiver) = watch::channel(state_update_info);
-        let (shutdown_sender, mut shutdown_receiver) = watch::channel(());
-        shutdown_receiver.mark_unchanged();
+        let primary_shutdown = PrimaryShutdownController::new();
 
         let config = SequencerConfig {
             rollup_address: sequencer_rollup_address,
@@ -167,12 +167,13 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             TEST_MAX_CONCURRENT_PROOF_BLOBS,
             ledger_db,
             api_ledger_db,
-            shutdown_sender.clone(),
+            primary_shutdown.clone(),
         )
         .await?;
 
         let (axum_addr, sequencer_axum_server) = {
-            let router = SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver);
+            let router =
+                SequencerApis::rest_api_server(sequencer.clone(), primary_shutdown.clone());
             let handle = axum_server::Handle::new();
 
             let handle1 = handle.clone();
@@ -197,7 +198,7 @@ impl<Rt: Runtime<TestSpec>> TestSequencerSetup<Rt> {
             admin_private_key: admin.private_key,
             axum_server_handle: sequencer_axum_server,
             axum_addr,
-            shutdown_sender,
+            primary_shutdown,
         })
     }
 
