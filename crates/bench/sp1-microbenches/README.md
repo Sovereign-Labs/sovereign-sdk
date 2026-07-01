@@ -45,11 +45,20 @@ primitive call that the metered path eventually makes. Results calibrate
 `DEFAULT_FIXED_GAS_TO_CHARGE_PER_SIGNATURE_VERIFICATION` and
 `DEFAULT_GAS_TO_CHARGE_PER_BYTE_SIGNATURE_VERIFICATION`.
 
+**Celestia verifier** — the host loads the existing Mocha fixture
+`crates/adapters/celestia/test_data/block_mocha_multi_candidate_rows_10261831`,
+builds the same relevant blobs and proofs used by production verification, and
+sends the serialized filtered block plus verifier inputs to the SP1 guest. The
+guest reads and deserializes the full block, runs
+`CelestiaVerifier::verify_relevant_tx_list`, and commits block/hash/blob stats.
+This is a fixed fixture bench rather than a byte-size sweep.
+
 ## Run
 
 ```sh
 cargo run --release -p sp1-microbenches -- sha256
 cargo run --release -p sp1-microbenches -- ed25519
+cargo run --release -p sp1-microbenches -- celestia
 ```
 
 Optional override:

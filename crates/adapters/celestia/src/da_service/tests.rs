@@ -18,7 +18,6 @@ use sov_metrics::MonitoringConfig;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier, RelevantBlobs};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::da::SlotData;
 use sov_shutdown::SecondaryShutdownController;
 use sov_test_utils::sov_toxi_proxi_image::CelestiaRpcProxyFleet;
 use tokio::task::JoinSet;
@@ -1803,6 +1802,81 @@ async fn generate_mixed_multi_v1_parity_boundary_fixture_with_docker() -> anyhow
 
     with_mixed_v0_and_v1_multi_v1_parity_boundary::update_test_data(&client, &signer).await?;
     Ok(())
+}
+
+/// Generate the SP1 compression-benchmark fixtures. For each real mainnet rollup block we extract
+/// its batch payload, then resubmit that payload to a devnet twice — uncompressed and LZ4 — under
+/// the same namespace, so the off-vs-LZ4 cases differ only in compression. Produces the four
+/// `block_mainnet_real_rollup_{average,p99}_{off,lz4}` fixtures consumed by the celestia microbench.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "manual fixture generation; starts dockerized celestia devnet"]
+async fn generate_mainnet_compression_bench_fixtures() -> anyhow::Result<()> {
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let signer = dev_node.get_signer_address(0).await?;
+    let signer_private_key = dev_node.export_signer_key(0).await?;
+    let rpc_url = format!("ws://127.0.0.1:{}", dev_node.bridge_port_ipv4().await?);
+    let grpc_url = format!("http://127.0.0.1:{}", dev_node.validator_port_ipv4().await?);
+    let client = celestia_client::ClientBuilder::new()
+        .rpc_url(&rpc_url)
+        .grpc_url(&grpc_url)
+        .private_key_hex(&signer_private_key)
+        .build()
+        .await?;
+
+    let chunk_size = crate::config::default_compression_chunk_size();
+    let sources = [
+        (
+            "average",
+            from_mainnet_real_rollup_average::filtered_block(),
+        ),
+        ("p99", from_mainnet_real_rollup_p99::filtered_block()),
+    ];
+
+    let mut any_compressed = false;
+    for (name, block) in sources {
+        let payload = extract_batch_payload(&block);
+
+        // Off: post the rollup payload verbatim.
+        let off_path = make_test_path(&format!("test_data/block_mainnet_real_rollup_{name}_off"));
+        save_single_batch_fixture(&off_path, &client, &signer, payload.clone()).await?;
+
+        // LZ4: post the chunked compression envelope. These are the exact bytes the
+        // `CelestiaService` emits with `compression = Lz4` (it calls the same
+        // `encode_for_submission`), so the fixture matches the production emission path.
+        let da = crate::envelope::encode_for_submission(&payload, true, chunk_size);
+        let is_envelope = crate::envelope::has_magic_prefix(&da);
+        any_compressed |= is_envelope;
+        // `da.len() <= payload.len()` always (encode_for_submission falls back to verbatim when
+        // it cannot beat raw). Integer percent only — the workspace denies float arithmetic.
+        let saved_pct = payload.len().saturating_sub(da.len()) * 100 / payload.len().max(1);
+        println!(
+            "[gen] {name}: payload={} da_bytes={} saved={saved_pct}% envelope={is_envelope}",
+            payload.len(),
+            da.len(),
+        );
+        let lz4_path = make_test_path(&format!("test_data/block_mainnet_real_rollup_{name}_lz4"));
+        save_single_batch_fixture(&lz4_path, &client, &signer, da).await?;
+    }
+
+    assert!(
+        any_compressed,
+        "neither mainnet payload produced an LZ4 envelope (both incompressible), so the _lz4 \
+         fixtures equal the _off fixtures and the bench cases would tie; pick a more compressible \
+         block height"
+    );
+    Ok(())
+}
+
+/// Read back the full rollup batch payload from a loaded fixture block (one batch blob, decoded).
+fn extract_batch_payload(block: &FilteredCelestiaBlock) -> Vec<u8> {
+    let mut blobs = extract_relevant_blobs(block);
+    let blob = blobs
+        .batch_blobs
+        .first_mut()
+        .expect("mainnet fixture should contain one batch blob");
+    let len = blob.total_len();
+    blob.advance(len);
+    blob.verified_data().to_vec()
 }
 
 #[tokio::test(flavor = "multi_thread")]

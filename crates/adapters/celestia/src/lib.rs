@@ -29,6 +29,8 @@ pub use config::{
     VerifyOnFetchMode,
 };
 #[cfg(feature = "native")]
-pub use da_service::CelestiaService;
+pub use da_service::{
+    extract_relevant_blobs, filtered_block_from_json_path, get_extraction_proof, CelestiaService,
+};
 
 pub use crate::celestia::*;

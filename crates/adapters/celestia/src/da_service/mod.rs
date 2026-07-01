@@ -25,6 +25,7 @@ use backon::ExponentialBuilder;
 use celestia_types::blob::Blob as JsonBlob;
 use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
+use celestia_types::ExtendedHeader;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_rollup_interface::common::HexHash;
@@ -35,6 +36,7 @@ use sov_rollup_interface::node::da::{
     run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SubmitBlobReceipt,
 };
 use sov_shutdown::SecondaryShutdownController;
+use std::path::Path;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;
@@ -678,9 +680,7 @@ impl DaService for CelestiaService {
     }
 }
 
-pub(crate) fn extract_relevant_blobs(
-    block: &FilteredCelestiaBlock,
-) -> RelevantBlobs<BlobWithSender> {
+pub fn extract_relevant_blobs(block: &FilteredCelestiaBlock) -> RelevantBlobs<BlobWithSender> {
     let proof_blobs = block.rollup_proof_data.get_blobs_with_sender();
     let batch_blobs = block.rollup_batch_data.get_blobs_with_sender();
     RelevantBlobs {
@@ -689,7 +689,7 @@ pub(crate) fn extract_relevant_blobs(
     }
 }
 
-pub(crate) fn get_extraction_proof(
+pub fn get_extraction_proof(
     block: &FilteredCelestiaBlock,
     blobs: &RelevantBlobs<BlobWithSender>,
 ) -> RelevantProofs<Vec<BlobProof>, Option<NamespaceBoundaryProof>> {
@@ -725,6 +725,36 @@ pub(crate) fn get_extraction_proof(
     };
 
     RelevantProofs { proof, batch }
+}
+
+#[doc(hidden)]
+pub fn filtered_block_from_json_path(
+    batch_namespace: Namespace,
+    proof_namespace: Namespace,
+    path: &Path,
+) -> anyhow::Result<FilteredCelestiaBlock> {
+    const HEADER_JSON: &str = "header.json";
+    const ROLLUP_BATCH_ROWS_JSON: &str = "rollup_batch_rows.json";
+    const ROLLUP_PROOF_ROWS_JSON: &str = "rollup_proof_rows.json";
+
+    let header: ExtendedHeader = load_json_from_fixture(path, HEADER_JSON)?;
+    let rollup_batch_rows: NamespaceData = load_json_from_fixture(path, ROLLUP_BATCH_ROWS_JSON)?;
+    let rollup_proof_rows: NamespaceData = load_json_from_fixture(path, ROLLUP_PROOF_ROWS_JSON)?;
+
+    let rollup_batch_shares = NamespaceRelevantData::new(batch_namespace, rollup_batch_rows);
+    let rollup_proof_shares = NamespaceRelevantData::new(proof_namespace, rollup_proof_rows);
+
+    FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header.into())
+}
+
+fn load_json_from_fixture<T: serde::de::DeserializeOwned>(
+    path: &Path,
+    name: &str,
+) -> anyhow::Result<T> {
+    let path = path.join(name);
+    let contents = std::fs::read_to_string(&path)
+        .with_context(|| format!("Failed to open {}", path.display()))?;
+    serde_json::from_str(&contents).with_context(|| format!("Failed to parse {}", path.display()))
 }
 
 fn flatten_timeout<T>(
