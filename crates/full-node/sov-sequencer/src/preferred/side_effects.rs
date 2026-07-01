@@ -3,9 +3,9 @@ use std::collections::VecDeque;
 use anyhow::Result;
 use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
-use tokio::task::JoinHandle;
 use tracing::{debug, enabled, error, warn, Level};
 
 use super::executor_events::ExecutorEvent;
@@ -30,7 +30,7 @@ where
     pub db: PreferredSequencerDb,
     pub api_ledger_db: LedgerDb,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
-    pub shutdown_sender: watch::Sender<()>,
+    pub primary_shutdown: PrimaryShutdownController,
     pub transaction_cache: TxResultWriter<S, Rt>,
 }
 
@@ -141,7 +141,7 @@ where
                 RecoveryStrategy::None => {
                     // Shut down
                     error!(RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY);
-                    exit_rollup(&self.shutdown_sender).await;
+                    exit_rollup(&self.primary_shutdown).await;
                 }
             }
         } else {
@@ -331,18 +331,18 @@ where
                 if let Err(e) = self.handle_executor_event(&mut event_queue).await {
                     tracing::error!(error = ?e, "Error handling executor event");
                     // If we've already started shutting down, this might fail - but then we're happy.
-                    let _ = self.shutdown_sender.send(());
+                    self.primary_shutdown.shutdown();
                     break;
                 }
             }
         }
     }
 
-    pub(crate) fn spawn(mut self) -> JoinHandle<()> {
+    pub(crate) fn spawn(mut self) -> BackgroundHandle<()> {
         // We use a queue so that we can batch insert txs.
         let max_queue_size = self.executor_events_receiver.max_capacity();
         let event_queue = VecDeque::with_capacity(max_queue_size);
-        tokio::spawn(async move {
+        BackgroundHandle::spawn("side-effects", async move {
             self.receive_and_process_events(event_queue, max_queue_size)
                 .await;
         })

@@ -23,7 +23,7 @@ use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
-use sov_db::config::RollupDbConfig;
+use sov_db::config::{PrunerConfig, RollupDbConfig};
 use sov_db::ledger_db::LedgerDb;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::storable::rpc::StorableMockDaClient;
@@ -52,6 +52,7 @@ use sov_sequencer::{
     ForcedTxBatchNotification, SequencerApis, SequencerConfig, SequencerKindConfig, SequencerRole,
     SovRateLimiterConfig, StateUpdateNotification,
 };
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 pub use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{
     HttpServerConfig, MonitoringConfig, ProofManagerConfig, RollupConfig, RunnerConfig,
@@ -105,6 +106,9 @@ pub struct RollupBuilderConfig<S: Spec> {
     pub stop_at_rollup_height: Option<RollupHeight>,
     pub extension: Option<SeqConfigExtension>,
     pub start_fresh_outer_proof_on_resync: bool,
+    /// State-version pruning policy applied to the node's DB config. Defaults to
+    /// `PrunerConfig::Off`, matching production defaults for fresh test nodes.
+    pub pruner: PrunerConfig,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -273,7 +277,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             )
             .await?;
 
-        let shutdown_sender = rollup.shutdown_sender.clone();
+        let primary_shutdown = rollup.primary_shutdown.clone();
 
         let mut other_handles = Vec::new();
         let da_service = rollup.runner.da_service();
@@ -316,7 +320,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             node_id,
             client,
             da_service,
-            shutdown_sender,
+            primary_shutdown,
             secondary_test_sequencer_client: None,
             _secondary_sequencer_state_sender: None,
             other_handles,
@@ -324,8 +328,10 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
     }
 
     pub fn rollup_config(&self) -> RollupConfig<<R::Spec as Spec>::Address, R::DaService> {
-        let rollup_db_config =
+        let mut rollup_db_config =
             RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf());
+        // Apply the configured pruning policy (default test config leaves pruning disabled).
+        rollup_db_config.pruner = self.config.pruner;
 
         RollupConfig {
             storage: rollup_db_config,
@@ -411,6 +417,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 response_size_limit: (1024 * 1024) - (1024 * 30), // Limit our response size to 1MB, leaving 30kb for headers, overhead, and misestimation.
             }),
             start_fresh_outer_proof_on_resync: false,
+            pruner: PrunerConfig::Off,
         }
     }
 }
@@ -558,7 +565,7 @@ where
         let da_service = test_rollup.da_service.clone();
 
         let rollup_config = test_rollup.rollup_config.clone();
-        let shutdown_sender = test_rollup.shutdown_sender.clone();
+        let primary_shutdown = test_rollup.primary_shutdown.clone();
         let (secondary_test_sequencer_client, secondary_sequencer_state_sender) =
             match with_secondary_sequencer {
                 Some(addr) => {
@@ -572,7 +579,7 @@ where
                     let (client, sender) = Self::start_secondary_sequencer(
                         da_service.another_on_the_same_layer(addr).await,
                         rollup_config.clone(),
-                        shutdown_sender.clone(),
+                        primary_shutdown.clone(),
                     )
                     .await?;
                     (Some(client), Some(sender))
@@ -589,12 +596,11 @@ where
     async fn start_secondary_sequencer(
         secondary_da_service: StorableMockDaService,
         rollup_config: RollupConfig<<R::Spec as Spec>::Address, R::DaService>,
-        shutdown_sender: tokio::sync::watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
     ) -> anyhow::Result<(
         sov_api_spec::client::Client,
         watch::Sender<StateUpdateInfo<<R::Spec as Spec>::Storage>>,
     )> {
-        let mut shutdown_receiver = shutdown_sender.subscribe();
         let blueprint: R = Default::default();
 
         let mut storage_manager = blueprint.create_storage_manager(&rollup_config, false)?;
@@ -631,11 +637,11 @@ where
                 &rollup_config.storage.path,
                 &rollup_config.sequencer.with_seq_config(()),
                 ledger_db,
-                shutdown_sender,
+                primary_shutdown.clone(),
             )
             .await?;
 
-        let router = SequencerApis::rest_api_server(sequencer.clone(), shutdown_receiver.clone());
+        let router = SequencerApis::rest_api_server(sequencer.clone(), primary_shutdown.clone());
 
         let addr = SocketAddr::from((std::net::Ipv4Addr::LOCALHOST, 0));
         let listener = tokio::net::TcpListener::bind(addr).await?;
@@ -648,7 +654,7 @@ where
                 ServiceExt::<Request>::into_make_service_with_connect_info::<SocketAddr>(router),
             )
             .with_graceful_shutdown(async move {
-                shutdown_receiver.changed().await.ok();
+                let _ = primary_shutdown.wait_for_shutdown().await;
             })
             .await
         });
@@ -691,11 +697,11 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>> {
         Arc<<R as FullNodeBlueprint<sov_modules_api::execution_mode::Native>>::DaService>,
     /// Allows programmatically initialize shutdown of the test-rollup.
     /// Used for checking graceful shutdown and restart.
-    pub shutdown_sender: watch::Sender<()>,
+    pub primary_shutdown: PrimaryShutdownController,
     /// Used for cleanup/shutdown logic.
     pub rollup_task: JoinHandle<anyhow::Result<()>>,
     /// For optional handles to background tasks.
-    pub other_handles: Vec<JoinHandle<()>>,
+    pub other_handles: Vec<BackgroundHandle<()>>,
     /// In case the rollup was started with a secondary sequencer, this is the
     /// client that can be used to submit transactions.
     pub secondary_test_sequencer_client: Option<sov_api_spec::client::Client>,
@@ -822,9 +828,7 @@ where
 
     /// Shuts down the rollup and waits for all background tasks to finish.
     pub async fn shutdown(self) -> anyhow::Result<RollupBuilder<R>> {
-        if let Err(error) = self.shutdown_sender.send(()) {
-            tracing::info!(%error, "shutdown triggered elsewhere, this is probably OK");
-        }
+        self.primary_shutdown.shutdown();
         self.rollup_task.await.expect("Can't join rollup task")?;
 
         for handle in self.other_handles {

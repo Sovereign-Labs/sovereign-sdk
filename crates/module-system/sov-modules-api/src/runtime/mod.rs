@@ -237,10 +237,6 @@ pub struct NodeEndpoints {
     pub axum_router: axum::Router<()>,
     /// A [`jsonrpsee::RpcModule`] for the runtime's JSON-RPC server.
     pub jsonrpsee_module: jsonrpsee::RpcModule<()>,
-    /// A list of optional background tasks that have been spawned for the endpoints' purposes.
-    ///
-    /// These will be joined upon node shutdown.
-    pub background_handles: Vec<tokio::task::JoinHandle<anyhow::Result<()>>>,
 }
 
 #[cfg(feature = "native")]
@@ -249,7 +245,6 @@ impl Default for NodeEndpoints {
         Self {
             axum_router: Default::default(),
             jsonrpsee_module: jsonrpsee::RpcModule::new(()),
-            background_handles: Vec::new(),
         }
     }
 }

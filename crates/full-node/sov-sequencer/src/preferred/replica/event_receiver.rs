@@ -6,13 +6,13 @@ use crate::preferred::replica::db_data::EventType;
 use crate::preferred::replica::db_data::EventsNotificationPayload;
 use crate::preferred::replica::db_data::ParsingError;
 use crate::SequencerNotReadyDetails;
-use sov_rollup_interface::node::future_or_shutdown;
-use sov_rollup_interface::node::FutureOrShutdownOutput;
+use sov_shutdown::BackgroundHandle;
+use sov_shutdown::FutureOrShutdownOutput;
+use sov_shutdown::PrimaryShutdownController;
 use sqlx::postgres::{PgListener, PgPoolOptions};
 use sqlx::PgPool;
 use sqlx::Row;
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
 use tracing::{debug, error, trace};
 
 const MAX_DB_ERRORS_ALLOWED: u32 = 20;
@@ -97,7 +97,7 @@ impl EventReceiverStartNotifier {
 pub(crate) struct EventReceiver {
     connection_string: String,
     db_data_sender: tokio::sync::mpsc::Sender<DbData>,
-    shutdown_sender: watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
     query_pool: PgPool,
     page_size: usize,
     ready_to_process_db_events_recv: watch::Receiver<()>,
@@ -106,7 +106,7 @@ pub(crate) struct EventReceiver {
 impl EventReceiver {
     pub(crate) async fn new(
         connection_string: String,
-        shutdown_sender: watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         page_size: usize,
         ready_to_process_db_events_recv: watch::Receiver<()>,
     ) -> (Self, tokio::sync::mpsc::Receiver<DbData>) {
@@ -128,7 +128,7 @@ impl EventReceiver {
             Self {
                 connection_string,
                 db_data_sender,
-                shutdown_sender,
+                primary_shutdown,
                 query_pool,
                 page_size,
                 ready_to_process_db_events_recv,
@@ -137,12 +137,12 @@ impl EventReceiver {
         )
     }
 
-    pub(crate) async fn spawn_db_data_fetcher(mut self) -> JoinHandle<()> {
+    pub(crate) async fn spawn_db_data_fetcher(mut self) -> BackgroundHandle<()> {
         let mut nb_of_consecutive_db_errors = 0;
-        let shutdown_receiver = self.shutdown_sender.subscribe();
+        let shutdown_receiver = self.primary_shutdown.clone();
         let mut start_replica_task_receiver = self.ready_to_process_db_events_recv.clone();
 
-        tokio::spawn(async move {
+        BackgroundHandle::spawn("replica-db-fetcher", async move {
             let mut start_event_id = None;
             let mut prev_event_type = None;
 
@@ -164,10 +164,11 @@ impl EventReceiver {
 
             debug!("Replica event receiver started.");
             loop {
-                let fut = future_or_shutdown(
-                    self.fetch_data(start_event_id, prev_event_type, &mut listener),
-                    &shutdown_receiver,
-                );
+                let fut = shutdown_receiver.future_or_shutdown(self.fetch_data(
+                    start_event_id,
+                    prev_event_type,
+                    &mut listener,
+                ));
 
                 let FutureOrShutdownOutput::Output(res) = fut.await else {
                     break;
@@ -190,7 +191,7 @@ impl EventReceiver {
                             EventReceiverError::DbError(err) => {
                                 error!(?err, ?start_event_id, "Failed to receive notifications from database. Shutting down replica.");
 
-                                if shutdown_receiver.has_changed().unwrap_or(true) {
+                                if shutdown_receiver.is_triggered() {
                                     break;
                                 }
 

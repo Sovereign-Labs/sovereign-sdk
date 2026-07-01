@@ -11,11 +11,10 @@ use op_manager::attestations::AttestationsManager;
 pub use prover_service::*;
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::SecondaryShutdownController;
 use sov_rollup_interface::optimistic::BondingProofService;
 use sov_rollup_interface::stf::ProofSender;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController, SecondaryShutdownController};
 pub use stf_info_manager::*;
-use tokio::task::JoinHandle;
 pub use zk_manager::*;
 
 /// Starts a process that generates aggregated proofs in the background.
@@ -29,9 +28,9 @@ pub async fn start_zk_workflow_in_background<Ps>(
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
     secondary_shutdown_controller: &SecondaryShutdownController,
-    shutdown_sender: tokio::sync::watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
     start_fresh_outer_proof_on_resync: bool,
-) -> anyhow::Result<JoinHandle<()>>
+) -> anyhow::Result<BackgroundHandle<()>>
 where
     Ps: ProverService,
     Ps::DaService: DaService<Error = anyhow::Error>,
@@ -45,7 +44,7 @@ where
         stf_info_receiver,
         da_sync_state,
         secondary_shutdown_controller,
-        shutdown_sender,
+        primary_shutdown,
         start_fresh_outer_proof_on_resync,
     )
     .post_aggregated_proof_to_da_in_background()
@@ -58,7 +57,7 @@ pub async fn start_op_workflow_in_background<Ps, Bps>(
     proof_sender: Box<dyn ProofSender>,
     secondary_shutdown_controller: &SecondaryShutdownController,
     st_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
-) -> anyhow::Result<JoinHandle<()>>
+) -> anyhow::Result<BackgroundHandle<()>>
 where
     Ps: ProverService,
     Ps::DaService: DaService<Error = anyhow::Error>,
@@ -77,9 +76,9 @@ where
 /// Starts the operator workflow in the background.
 pub async fn start_operator_workflow_in_background(
     secondary_shutdown_controller: &SecondaryShutdownController,
-) -> JoinHandle<()> {
+) -> BackgroundHandle<()> {
     let secondary_shutdown_controller = secondary_shutdown_controller.clone();
-    tokio::spawn(async move {
+    BackgroundHandle::spawn("operator-workflow", async move {
         let _ = secondary_shutdown_controller.wait_for_shutdown().await;
     })
 }

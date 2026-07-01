@@ -16,6 +16,7 @@ workspace = true
 [dependencies]
 console-subscriber = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-shutdown = { workspace = true, optional = true }
 sov-stf-runner = { workspace = true, optional = true }
 sov-state = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
@@ -38,7 +39,6 @@ serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["sync", "signal"], optional = true }
 tracing = { workspace = true, optional = true }
-tracing-panic = { version = "0.1.2", optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"], optional = true }
 tracing-appender = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
@@ -66,13 +66,13 @@ native = [
 	"sov-rollup-apis",
 	"sov-rollup-full-node-interface",
 	"sov-rollup-interface/native",
+	"sov-shutdown",
 	"sov-sequencer",
 	"sov-state/native",
 	"sov-stf-runner",
 	"sov-metrics",
 	"tokio",
 	"tracing",
-	"tracing-panic",
 	"tracing-subscriber",
 	"tracing-appender",
 	"hex",

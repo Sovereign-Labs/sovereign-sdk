@@ -18,6 +18,7 @@ sov-address = { workspace = true, features = ["evm"] }
 sov-celestia-adapter = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-shutdown = { workspace = true }
 sov-rollup-full-node-interface = { workspace = true }
 sov-stf-runner = { workspace = true }
 

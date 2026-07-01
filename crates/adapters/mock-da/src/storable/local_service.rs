@@ -5,12 +5,11 @@ use futures::StreamExt;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait};
 use sov_rollup_interface::node::da::{DaService, SlotData, SubmitBlobReceipt};
-use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController};
+use sov_shutdown::{BackgroundHandle, FutureOrShutdownOutput, SecondaryShutdownController};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use std::time::Instant;
 use tokio::sync::{broadcast, watch, Mutex, RwLock};
-use tokio::task::JoinHandle;
 use tokio::time::{interval, sleep};
 use tracing::Instrument;
 
@@ -53,7 +52,7 @@ impl BlockProducingConfig {
         &self,
         secondary_shutdown_controller: &SecondaryShutdownController,
         da_layer: Arc<RwLock<StorableMockDaLayer>>,
-    ) -> Option<JoinHandle<()>> {
+    ) -> Option<BackgroundHandle<()>> {
         let BlockProducingConfig::Periodic { block_time_ms } = self else {
             return None;
         };
@@ -62,7 +61,8 @@ impl BlockProducingConfig {
         let span = tracing::info_span!("periodic_batch_producer");
         let secondary_shutdown_controller = secondary_shutdown_controller.clone();
 
-        Some(tokio::spawn(
+        Some(BackgroundHandle::spawn(
+            "mock-da-block-producer",
             async move {
                 tracing::debug!(interval = ?block_time, "Spawning a task for periodic producing");
                 loop {
@@ -106,7 +106,7 @@ pub struct StorableMockDaService {
     pub(crate) block_producing: BlockProducingConfig,
     pub(crate) aggregated_proof_sender: broadcast::Sender<()>,
     pub(crate) head_block: watch::Receiver<MockBlockHeader>,
-    pub(crate) block_producer_handle: Arc<Mutex<Option<JoinHandle<()>>>>,
+    pub(crate) block_producer_handle: Arc<Mutex<Option<BackgroundHandle<()>>>>,
     pub(crate) block_producing_pauser: Arc<Mutex<Option<watch::Sender<()>>>>,
     pub(crate) send_transaction_success: Arc<AtomicBool>,
     /// Configurable failure injection for testing. Allows injecting failures,
@@ -119,7 +119,7 @@ impl StorableMockDaService {
         sequencer_da_address: MockAddress,
         da_layer: Arc<RwLock<StorableMockDaLayer>>,
         block_producing: BlockProducingConfig,
-        block_producer_handle: Option<JoinHandle<()>>,
+        block_producer_handle: Option<BackgroundHandle<()>>,
         failure_behavior: FailureBehavior,
     ) -> Self {
         let (aggregated_proof_subscription, mut rec) = broadcast::channel(16);

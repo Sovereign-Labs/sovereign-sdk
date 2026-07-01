@@ -8,7 +8,7 @@ use std::net::SocketAddr;
 use sov_mock_da::storable::rpc::start_server;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig};
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_shutdown::SecondaryShutdownController;
 
 /// Mock-DA sequencer address. Must match
 /// `examples/test-data/genesis/integration-tests/sequencer_registry.json`,

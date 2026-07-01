@@ -2,10 +2,9 @@ use borsh::BorshSerialize;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
-use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController};
 use sov_rollup_interface::optimistic::{Attestation, BondingProofService, SerializedAttestation};
 use sov_rollup_interface::stf::ProofSender;
-use tokio::task::JoinHandle;
+use sov_shutdown::{BackgroundHandle, FutureOrShutdownOutput, SecondaryShutdownController};
 
 use crate::processes::{Receiver, StateTransitionInfo};
 
@@ -40,8 +39,8 @@ where
     }
 
     /// Starts a background task for `Attestation` generation.
-    pub async fn post_attestation_to_da_in_background(self) -> JoinHandle<()> {
-        tokio::spawn(async move {
+    pub async fn post_attestation_to_da_in_background(self) -> BackgroundHandle<()> {
+        BackgroundHandle::spawn("attestation-poster", async move {
             if let Err(e) = self.post_attestation_to_da().await {
                 tracing::error!(error = ?e, "Failed to post attestation to DA");
             }

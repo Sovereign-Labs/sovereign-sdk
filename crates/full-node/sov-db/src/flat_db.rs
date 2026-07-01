@@ -807,6 +807,120 @@ mod tests {
         }
     }
 
+    /// Pruning (which removes the OLDEST versions) and archival rollback (which removes the NEWEST
+    /// version) must coexist without racing or corrupting each other. The pre-#2197/#2301 rollback
+    /// depended on a dedicated pruning-hint table that no longer exists — rockbound now owns the
+    /// pruning column families and `iter_pruning_keys_at_version`. This test commits several
+    /// versions, runs a real pruning batch (advancing the pruned floor), then rolls back the newest
+    /// archival version and asserts the result is self-consistent: no panic, pruned versions stay
+    /// pruned, the rolled-back version is gone, and the surviving window reads correctly.
+    #[test]
+    fn test_rollback_after_pruning_is_consistent() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path();
+
+        let user_hot = make_key("hot_user");
+        let kernel_hot = make_key("hot_kernel");
+        let last_version = 5u64;
+        let keep = 2u64;
+
+        // Commit the same keys at every version 0..=5 (a fresh handle per commit, mirroring the
+        // other rollback tests). After this the pruned floor will be `last_committed - keep`.
+        for version in 0..=last_version {
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
+            let user_changes = vec![(user_hot.clone(), Some(make_value("hot_user", version)))];
+            let kernel_changes =
+                vec![(kernel_hot.clone(), Some(make_value("hot_kernel", version)))];
+            flat_db
+                .commit(make_change_set(user_changes, kernel_changes, version))
+                .unwrap();
+            assert_flat_state(version, version, &flat_db);
+            drop(flat_db);
+            unlock_dbs(&tempdir);
+        }
+
+        // Run a real pruning batch the same way the pruner does: collect for user + kernel, merge,
+        // and write into the archival DB.
+        {
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
+            let user_out = flat_db.user.collect_pruning_batch(keep, None).unwrap();
+            let kernel_out = flat_db.kernel.collect_pruning_batch(keep, None).unwrap();
+            let mut pruning_batch = user_out.batch;
+            pruning_batch.merge(kernel_out.batch);
+            flat_db.archival_db.write_schemas(&pruning_batch).unwrap();
+            drop(flat_db);
+            unlock_dbs(&tempdir);
+        }
+
+        // With last_committed = 5 and keep = 2, the cutoff is 3, so the historical rows for
+        // versions 0,1,2 are physically deleted and versions 3,4,5 are retained. (The
+        // `PrunedVersion` *error* surfaced by the higher-level reader is covered separately by the
+        // sov-state and storage-manager tests; here we assert the physical effect on the archival
+        // DB so we can reason about its interaction with rollback.)
+        let oldest_available = last_version - keep; // = 3
+        {
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
+
+            // Pruned versions: the historical row is gone, so an as-of read finds nothing.
+            for version in 0..oldest_available {
+                assert_eq!(
+                    flat_db
+                        .user
+                        .get_historical_value(&user_hot, version)
+                        .unwrap(),
+                    None,
+                    "user hot key at pruned version {version} should have no historical row",
+                );
+                assert_eq!(
+                    flat_db
+                        .kernel
+                        .get_historical_value(&kernel_hot, version)
+                        .unwrap(),
+                    None,
+                    "kernel hot key at pruned version {version} should have no historical row",
+                );
+            }
+            // Retained versions still read their exact value.
+            for version in oldest_available..=last_version {
+                assert_eq!(
+                    flat_db
+                        .user
+                        .get_historical_value(&user_hot, version)
+                        .unwrap(),
+                    Some(make_value("hot_user", version)),
+                    "retained user version {version} should read correctly after pruning",
+                );
+            }
+
+            // Roll back the NEWEST archival version — the opposite end from pruning.
+            flat_db.rollback_archival_one_slot().unwrap();
+            // Live stays at 5, archival rolls back to 4: proves the newest version was removed
+            // without panicking despite the pruned floor underneath.
+            assert_flat_state(last_version, last_version - 1, &flat_db);
+
+            // The new archival tip still reads correctly...
+            assert_eq!(
+                flat_db
+                    .user
+                    .get_historical_value(&user_hot, last_version - 1)
+                    .unwrap(),
+                Some(make_value("hot_user", last_version - 1)),
+                "the new archival tip should still read correctly after rollback",
+            );
+            // ...and the rollback did NOT resurrect the pruned versions.
+            for version in 0..oldest_available {
+                assert_eq!(
+                    flat_db
+                        .user
+                        .get_historical_value(&user_hot, version)
+                        .unwrap(),
+                    None,
+                    "after rollback, pruned version {version} must stay gone (not resurrected)",
+                );
+            }
+        }
+    }
+
     fn assert_flat_state(live_db_version: u64, archival_db_version: u64, flat_db: &FlatStateDb) {
         let expected_root_hash_live_db = [live_db_version as u8; 64].to_vec();
         let root_hash_from_live_db = flat_db.root_hash_from_live_db().unwrap().unwrap();

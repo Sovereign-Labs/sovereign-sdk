@@ -39,7 +39,7 @@
 
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController};
+use sov_shutdown::{FutureOrShutdownOutput, SecondaryShutdownController};
 use std::collections::BTreeMap;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;

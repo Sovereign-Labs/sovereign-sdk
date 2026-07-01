@@ -33,6 +33,7 @@ use axum::routing::get;
 use serde::{Deserialize, Serialize};
 use sov_rest_utils::{json_obj, ErrorObject, Query};
 use sov_rollup_interface::common::SlotNumber;
+use sov_shutdown::PrimaryShutdownController;
 use tokio::sync::watch;
 use utoipa::openapi::OpenApi;
 
@@ -178,7 +179,7 @@ pub struct ApiState<S: Spec, T = ()> {
     requested_height: Option<HeightParam>,
     /// Signals node shutdown so long-lived handlers (e.g. WebSocket subscriptions)
     /// can terminate gracefully.
-    shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
 }
 
 impl<S: Spec, T> ApiState<S, T> {
@@ -189,14 +190,14 @@ impl<S: Spec, T> ApiState<S, T> {
         checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
         requested_height: Option<HeightParam>,
-        shutdown_receiver: watch::Receiver<()>,
+        primary_shutdown: PrimaryShutdownController,
     ) -> Self {
         Self {
             inner,
             checkpoint_receiver,
             kernel,
             requested_height,
-            shutdown_receiver,
+            primary_shutdown,
         }
     }
 
@@ -207,7 +208,7 @@ impl<S: Spec, T> ApiState<S, T> {
             checkpoint_receiver: self.checkpoint_receiver,
             kernel: self.kernel,
             requested_height: self.requested_height,
-            shutdown_receiver: self.shutdown_receiver,
+            primary_shutdown: self.primary_shutdown,
         }
     }
 
@@ -292,10 +293,10 @@ impl<S: Spec, T> ApiState<S, T> {
         self.checkpoint_receiver.clone()
     }
 
-    /// Returns a receiver that is notified on node shutdown. Long-lived handlers
-    /// (e.g. WebSocket subscriptions) should select on it to terminate gracefully.
-    pub fn shutdown_receiver(&self) -> watch::Receiver<()> {
-        self.shutdown_receiver.clone()
+    /// Returns the primary shutdown controller. Long-lived handlers (e.g. WebSocket
+    /// subscriptions) should select on it to terminate gracefully on node shutdown.
+    pub fn primary_shutdown(&self) -> PrimaryShutdownController {
+        self.primary_shutdown.clone()
     }
 }
 

@@ -14,11 +14,11 @@ use sov_modules_api::HexHash;
 use sov_rollup_interface::da::BlobReaderTrait;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::BlobDiscardReason;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use sov_test_utils::logging::LogCollector;
 use std::sync::atomic::AtomicUsize;
 use tempfile::TempDir;
-use tokio::sync::{broadcast, watch, RwLock};
-use tokio::task::JoinHandle;
+use tokio::sync::{broadcast, RwLock};
 use tracing::Level;
 use tracing_subscriber::prelude::*;
 use tracing_subscriber::registry;
@@ -181,7 +181,7 @@ async fn blob_sender_shutdown_task() -> anyhow::Result<()> {
 
     // Wait for the blob task to start.
     status_reciever.recv().await.unwrap();
-    deps.shutdown_sender.send(()).unwrap();
+    deps.primary_shutdown.shutdown();
     handle.await.unwrap();
 
     let mut records = collector.records();
@@ -216,9 +216,17 @@ async fn blob_sender_resubmits_blobs_in_progress_after_restart() -> anyhow::Resu
                 .await?;
             data
         };
-        deps.shutdown_sender.send(()).unwrap();
+        deps.primary_shutdown.shutdown();
         handle.await.unwrap();
     }
+
+    // Simulate a process restart: rebuild the deps with a fresh shutdown controller
+    // (the old one is permanently triggered after the shutdown above), while keeping
+    // the same DA and storage so the persisted in-progress blob survives the restart.
+    let deps = Deps {
+        primary_shutdown: PrimaryShutdownController::new(),
+        ..deps
+    };
 
     // After restart, the blob sender, resubmits the previous blob on the first call to `publish_batch_blob`.
     {
@@ -277,7 +285,7 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
     subscriber.init();
 
     let deps = create_deps().await;
-    let mut shutdown_receiver = deps.shutdown_sender.subscribe();
+    let primary_shutdown = deps.primary_shutdown.clone();
 
     let (mut blob_sender, blob_sender_handle) = create_blob_sender(
         Duration::from_secs(1),
@@ -295,8 +303,8 @@ async fn blob_sender_exit_if_blob_not_processed() -> anyhow::Result<()> {
 
     // Blob publication fails due to the absence of DA blocks.
     // After MAX_NB_OF_BLOB_SUBMISSION_RETRIES attempts, BlobSender should request shutdown.
-    shutdown_receiver
-        .changed()
+    primary_shutdown
+        .wait_for_shutdown()
         .await
         .expect("The BlobSender should request shutdown after failing to process blobs.");
 
@@ -503,22 +511,20 @@ async fn proofs_in_flight_do_not_block_batch_gate() -> anyhow::Result<()> {
 
 struct Deps {
     _da_dir: TempDir,
-    shutdown_sender: watch::Sender<()>,
-    _shutdown_receiver: watch::Receiver<()>,
+    primary_shutdown: PrimaryShutdownController,
     da: StorableMockDaService,
     storage_dir: TempDir,
 }
 
 async fn create_deps() -> Deps {
     let da_dir = tempfile::tempdir().unwrap();
-    let (shutdown_sender, shutdown_receiver) = watch::channel(());
+    let primary_shutdown = PrimaryShutdownController::new();
     let da = create_da(&da_dir).await;
     let storage_dir = tempfile::tempdir().unwrap();
 
     Deps {
         _da_dir: da_dir,
-        shutdown_sender,
-        _shutdown_receiver: shutdown_receiver,
+        primary_shutdown,
         da,
         storage_dir,
     }
@@ -540,7 +546,7 @@ async fn create_blob_sender(
     blob_selector_status: BlobSelectorStatus,
 ) -> (
     BlobSender<StorableMockDaService, TestHooks, TestFinalizationManager<StorableMockDaService>>,
-    JoinHandle<()>,
+    BackgroundHandle<()>,
 ) {
     let finalization_manager = TestFinalizationManager {
         da: deps.da.clone(),
@@ -557,7 +563,7 @@ async fn create_blob_sender(
         finalization_manager,
         deps.storage_dir.path(),
         hooks,
-        deps.shutdown_sender.clone(),
+        deps.primary_shutdown.clone(),
         blob_processing_timeout,
         blob_status_sender,
         Duration::from_millis(1000),

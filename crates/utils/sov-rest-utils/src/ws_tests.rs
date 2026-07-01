@@ -20,8 +20,9 @@ mod tests {
     use axum::routing::get;
     use axum::Router;
     use futures::StreamExt;
+    use sov_shutdown::PrimaryShutdownController;
     use tokio::net::TcpListener;
-    use tokio::sync::{broadcast, watch};
+    use tokio::sync::broadcast;
     use tokio::time::timeout;
     use tokio_stream::wrappers::BroadcastStream;
 
@@ -81,8 +82,7 @@ mod tests {
     /// State shared between test handlers.
     #[derive(Clone)]
     struct TestState {
-        shutdown_tx: watch::Sender<()>,
-        shutdown_rx: watch::Receiver<()>,
+        primary_shutdown: PrimaryShutdownController,
         /// Tracks how many messages were sent to the broadcast channel.
         messages_produced: Arc<AtomicUsize>,
         /// Tracks how many messages the stream attempted to yield.
@@ -91,10 +91,9 @@ mod tests {
 
     impl TestState {
         fn new() -> Self {
-            let (shutdown_tx, shutdown_rx) = watch::channel(());
+            let primary_shutdown = PrimaryShutdownController::new();
             Self {
-                shutdown_tx,
-                shutdown_rx,
+                primary_shutdown,
                 messages_produced: Arc::new(AtomicUsize::new(0)),
                 messages_yielded: Arc::new(AtomicUsize::new(0)),
             }
@@ -164,7 +163,7 @@ mod tests {
                 }
             });
 
-            serve_generic_ws_subscription(socket, stream, state.shutdown_rx.clone()).await;
+            serve_generic_ws_subscription(socket, stream, state.primary_shutdown.clone()).await;
             producer.abort();
         })
     }
@@ -188,7 +187,7 @@ mod tests {
                 }
             });
 
-            serve_generic_ws_subscription(socket, stream, state.shutdown_rx.clone()).await;
+            serve_generic_ws_subscription(socket, stream, state.primary_shutdown.clone()).await;
             producer.abort();
         })
     }
@@ -201,7 +200,7 @@ mod tests {
         ws.on_upgrade(move |socket| async move {
             // Create a stream that never yields any items (just stays pending)
             let stream = futures::stream::pending::<Result<String, TestSubscriptionError>>();
-            serve_generic_ws_subscription(socket, stream, state.shutdown_rx.clone()).await;
+            serve_generic_ws_subscription(socket, stream, state.primary_shutdown.clone()).await;
         })
     }
 
@@ -227,7 +226,7 @@ mod tests {
             serve_generic_ws_subscription_with_config(
                 socket,
                 stream,
-                state.shutdown_rx.clone(),
+                state.primary_shutdown.clone(),
                 WsSubscriptionConfig { compress: true },
             )
             .await;
@@ -347,7 +346,7 @@ mod tests {
             );
         }
 
-        state.shutdown_tx.send(()).ok();
+        state.primary_shutdown.shutdown();
     }
 
     // =========================================================================
@@ -426,7 +425,7 @@ mod tests {
             );
         }
 
-        state.shutdown_tx.send(()).ok();
+        state.primary_shutdown.shutdown();
     }
 
     // =========================================================================
@@ -466,7 +465,7 @@ mod tests {
             "Server should send ping frames for keepalive"
         );
 
-        state.shutdown_tx.send(()).ok();
+        state.primary_shutdown.shutdown();
     }
 
     /// Test: Server should disconnect if pong is not received within timeout.
@@ -531,7 +530,7 @@ mod tests {
             "Server should disconnect after pong timeout"
         );
 
-        state.shutdown_tx.send(()).ok();
+        state.primary_shutdown.shutdown();
     }
 
     // =========================================================================
@@ -597,7 +596,7 @@ mod tests {
             assert_eq!(msg, &format!("message-{i}"), "Messages should be in order");
         }
 
-        state.shutdown_tx.send(()).ok();
+        state.primary_shutdown.shutdown();
     }
 
     /// Test: Default config (no compression) should produce text frames.
@@ -641,7 +640,7 @@ mod tests {
         assert!(text_count >= 5, "Should have received text frames");
 
         ws.close(None).await.ok();
-        state.shutdown_tx.send(()).ok();
+        state.primary_shutdown.shutdown();
     }
 
     /// Test: Gzip roundtrip preserves data correctly.

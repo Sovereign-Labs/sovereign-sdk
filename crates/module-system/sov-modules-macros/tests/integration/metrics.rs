@@ -1,7 +1,7 @@
 use sov_metrics::{init_metrics_tracker, MonitoringConfig, TelegrafSocketConfig};
 use sov_modules_api::{Gas, GasMeter};
 use sov_modules_macros::track_gas_constants_usage;
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_shutdown::SecondaryShutdownController;
 use tokio::net::UdpSocket;
 use tokio::time::timeout;
 

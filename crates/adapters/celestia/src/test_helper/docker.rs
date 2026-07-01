@@ -13,7 +13,7 @@ use crate::{CelestiaConfig, CelestiaService, VerifyOnFetchMode};
 use anyhow::{anyhow, Context};
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::SecondaryShutdownController;
+use sov_shutdown::SecondaryShutdownController;
 use sov_test_utils::docker::prepull_image_best_effort;
 use testcontainers::core::{ExecCommand, Host, Mount, WaitFor};
 use testcontainers::runners::AsyncRunner;
@@ -284,6 +284,9 @@ impl CelestiaDevNode {
         Ok(CelestiaConfig {
             rpc_url,
             rpc_auth_token: None,
+            rpc_fallback_endpoints: Vec::new(),
+            rpc_health_check_interval_secs: None,
+            rpc_max_head_age_secs: None,
             grpc_url: Some(grpc_url),
             grpc_auth_token: None,
             grpc_fallback_endpoints: Vec::new(),

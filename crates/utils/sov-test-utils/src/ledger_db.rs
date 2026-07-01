@@ -15,8 +15,8 @@ use sov_modules_api::{ModuleId, StoredEvent};
 use sov_rollup_interface::stf::{BatchReceipt, FullyBakedTx, TransactionReceipt, TxEffect};
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::TxHash;
+use sov_shutdown::PrimaryShutdownController;
 use tempfile::{tempdir, TempDir};
-use tokio::sync::watch;
 
 use crate::storage::SimpleLedgerStorageManager;
 use crate::{TestSpec, TestTxReceiptContents};
@@ -261,8 +261,8 @@ pub struct LedgerTestService {
     pub axum_handle: axum_server::Handle<std::net::SocketAddr>,
     /// An Axum client.
     pub axum_client: sov_api_spec::Client,
-    /// Shutdown signal receiver to allow for clean shutdowns of the API.
-    pub shutdown_receiver: watch::Receiver<()>,
+    /// Shutdown signal controller to allow for clean shutdowns of the API.
+    pub primary_shutdown: PrimaryShutdownController,
 }
 
 impl LedgerTestService {
@@ -285,24 +285,24 @@ impl LedgerTestService {
             }
         };
 
-        let (_, shutdown_receiver) = watch::channel(());
+        let primary_shutdown = PrimaryShutdownController::new();
 
         let axum_handle = axum_server::Handle::new();
         let axum_handle1 = axum_handle.clone();
         let ledger_db1 = ledger_db.clone();
-        let shutdown = shutdown_receiver.clone();
+        let shutdown = primary_shutdown.clone();
         tokio::spawn(async move {
             let addr = SocketAddr::from_str("127.0.0.1:0").unwrap();
             let state = LedgerState {
                 ledger: ledger_db1.clone(),
-                shutdown_receiver: shutdown_receiver.clone(),
+                primary_shutdown: primary_shutdown.clone(),
             };
             axum_server::Server::bind(addr)
                 .handle(axum_handle1)
                 .serve(
                     LedgerRoutes::<LedgerDb, u32, TestTxReceiptContents, TestEvent>::axum_router(
                         ledger_db1.clone(),
-                        shutdown_receiver,
+                        primary_shutdown,
                     )
                     .with_state::<()>(state)
                     .into_make_service(),
@@ -321,7 +321,7 @@ impl LedgerTestService {
             _dir: dir,
             axum_handle,
             axum_client,
-            shutdown_receiver: shutdown,
+            primary_shutdown: shutdown,
         })
     }
 }

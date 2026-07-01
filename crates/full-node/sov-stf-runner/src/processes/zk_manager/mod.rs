@@ -5,11 +5,14 @@ use backon::{BackoffBuilder, ExponentialBuilder};
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{FutureOrShutdownOutput, SecondaryShutdownController, SyncStatus};
+use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::stf::ProofSender;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
+use sov_shutdown::{
+    BackgroundHandle, FutureOrShutdownOutput, PrimaryShutdownController,
+    SecondaryShutdownController,
+};
 use tokio::sync::mpsc;
-use tokio::task::JoinHandle;
 use tokio::time::{sleep, Duration};
 use types::{BlockProofInfo, BlockProofStatus, UnAggregatedProofList};
 
@@ -36,7 +39,7 @@ pub struct ZkProofManager<Ps: ProverService> {
     stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
     da_sync_state: Arc<DaSyncState>,
     secondary_shutdown_controller: SecondaryShutdownController,
-    shutdown_sender: tokio::sync::watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
     start_fresh_outer_proof_on_resync: bool,
 }
 
@@ -55,7 +58,7 @@ where
         stf_info_receiver: Receiver<Ps::StateRoot, Ps::Witness, <Ps::DaService as DaService>::Spec>,
         da_sync_state: Arc<DaSyncState>,
         secondary_shutdown_controller: &SecondaryShutdownController,
-        shutdown_sender: tokio::sync::watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         start_fresh_outer_proof_on_resync: bool,
     ) -> Self {
         Self {
@@ -72,7 +75,7 @@ where
             stf_info_receiver,
             da_sync_state,
             secondary_shutdown_controller: secondary_shutdown_controller.clone(),
-            shutdown_sender,
+            primary_shutdown,
             start_fresh_outer_proof_on_resync,
         }
     }
@@ -81,8 +84,8 @@ where
     ///
     /// Returns a single supervisor handle that resolves once both tasks
     /// terminate.
-    pub async fn post_aggregated_proof_to_da_in_background(self) -> JoinHandle<()> {
-        tokio::spawn(async move {
+    pub async fn post_aggregated_proof_to_da_in_background(self) -> BackgroundHandle<()> {
+        BackgroundHandle::spawn("aggregated-proof-poster", async move {
             tracing::info!("Spawning an aggregated proof posting background task");
 
             let (metadata_tx, metadata_rx) = mpsc::channel::<(AggregateProofMetadata<Ps>, u64)>(
@@ -101,7 +104,7 @@ where
                 backoff_policy: self.backoff_policy,
                 metadata_rx,
                 cursor: cursor.clone(),
-                shutdown_sender: self.shutdown_sender,
+                primary_shutdown: self.primary_shutdown,
             };
 
             let aggregator_shutdown_controller = self.secondary_shutdown_controller.clone();
@@ -328,7 +331,7 @@ struct AggregatorTask<Ps: ProverService> {
     backoff_policy: ExponentialBuilder,
     metadata_rx: mpsc::Receiver<(AggregateProofMetadata<Ps>, u64)>,
     cursor: CursorHandle,
-    shutdown_sender: tokio::sync::watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
 }
 
 impl<Ps: ProverService> AggregatorTask<Ps>
@@ -353,9 +356,7 @@ where
                     max_concurrent_proof_blobs = status.max_concurrent,
                     "The zk proof blob sender is busy, which means proofs are not being confirmed by the rollup on time. Triggering shutdown."
                 );
-                if self.shutdown_sender.send(()).is_err() {
-                    tracing::error!("Failed to send primary shutdown signal.");
-                }
+                self.primary_shutdown.shutdown();
                 break;
             }
 

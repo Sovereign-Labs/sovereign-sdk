@@ -30,6 +30,7 @@ serde_yaml = { workspace = true, optional = true }
 sov-rest-utils = { workspace = true, optional = true }
 sov-state = { workspace = true }
 sov-rollup-interface = { workspace = true }
+sov-shutdown = { workspace = true, optional = true }
 sov-modules-macros = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["serde", "macros"] }
 sov-db = { workspace = true, optional = true }
@@ -114,6 +115,7 @@ native = [
     "sov-modules-macros/native",
     "sov-rest-utils",
     "sov-rollup-interface/native",
+    "sov-shutdown",
     "sov-state/native",
     "tokio",
     "utoipa",

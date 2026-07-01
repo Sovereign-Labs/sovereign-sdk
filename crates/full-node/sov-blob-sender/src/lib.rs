@@ -18,10 +18,9 @@ use sov_modules_api::{DaSpec, EventModuleName, RuntimeEventResponse};
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::node::da::{DaService, SubmitBlobReceipt};
 use sov_rollup_interface::node::ledger_api::{LedgerStateProvider, QueryMode};
-use sov_rollup_interface::node::{future_or_shutdown, FutureOrShutdownOutput};
 use sov_rollup_interface::stf::BlobDiscardReason;
-use tokio::sync::{broadcast, oneshot, watch, Mutex};
-use tokio::task::JoinHandle;
+use sov_shutdown::{BackgroundHandle, FutureOrShutdownOutput, PrimaryShutdownController};
+use tokio::sync::{broadcast, oneshot, Mutex};
 use tokio::time::{interval, sleep};
 use tracing::{debug, error, info, trace};
 
@@ -80,8 +79,7 @@ pub struct BlobSender<Da: DaService, H, FM: FinalizationManager> {
     db: Arc<BlobSenderDb>,
     hooks: Arc<H>,
     in_flight_blobs: Arc<Mutex<HashMap<BlobInternalId, InFlightBlob<Da::Spec>>>>,
-    shutdown_receiver: watch::Receiver<()>,
-    shutdown_sender: watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
     da: Da,
     finalization_manager: FM,
     nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
@@ -103,19 +101,19 @@ where
         finalization_manager: FM,
         storage_path: &Path,
         hooks: H,
-        shutdown_sender: watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         blob_processing_timeout: Duration,
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
         nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
-    ) -> anyhow::Result<(Self, JoinHandle<()>)> {
+    ) -> anyhow::Result<(Self, BackgroundHandle<()>)> {
         Self::new_with_task_intervals(
             da,
             finalization_manager,
             storage_path,
             hooks,
-            shutdown_sender,
+            primary_shutdown,
             blob_processing_timeout,
             blob_sender_channel,
             LEDGER_POLL_INTERVAL,
@@ -131,15 +129,14 @@ where
         finalization_manager: FM,
         storage_path: &Path,
         hooks: H,
-        shutdown_sender: watch::Sender<()>,
+        primary_shutdown: PrimaryShutdownController,
         blob_processing_timeout: Duration,
         blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
         ledger_pool_interval: Duration,
         completed_blobs_to_send: Vec<(BlobToSend, BlobInternalId)>,
         nb_of_concurrent_batch_blob_submissions: Arc<AtomicUsize>,
         nb_of_concurrent_proof_blob_submissions: Arc<AtomicUsize>,
-    ) -> anyhow::Result<(Self, JoinHandle<()>)> {
-        let shutdown_receiver = shutdown_sender.subscribe();
+    ) -> anyhow::Result<(Self, BackgroundHandle<()>)> {
         let db = Arc::new(BlobSenderDb::new(storage_path).await?);
 
         let mut all_blobs = db.get_all::<Da::Spec>().await?;
@@ -165,8 +162,7 @@ where
             db,
             hooks,
             in_flight_blobs: in_flight_blobs.clone(),
-            shutdown_receiver: shutdown_receiver.clone(),
-            shutdown_sender,
+            primary_shutdown: primary_shutdown.clone(),
             da,
             finalization_manager,
             nb_of_concurrent_batch_blob_submissions,
@@ -177,7 +173,7 @@ where
             blobs_to_send_after_restart: Some(all_blobs),
         };
 
-        let handle = Self::main_task(in_flight_blobs, shutdown_receiver).await;
+        let handle = Self::main_task(in_flight_blobs, primary_shutdown).await;
 
         Ok((sender, handle))
     }
@@ -289,7 +285,7 @@ where
         blob_id: BlobInternalId,
         latest_known_processing_state: BlobExecutionStatus<Da::Spec>,
     ) -> anyhow::Result<()> {
-        if self.shutdown_receiver.has_changed()? {
+        if self.primary_shutdown.is_triggered() {
             info!("BlobSender: shutdown signal received, skipping blob submission");
             return Ok(());
         }
@@ -325,10 +321,10 @@ where
             blob_processing_timeout: self.blob_processing_timeout,
             ledger_pool_interval: self.ledger_pool_interval,
             blob_sender_channel: self.blob_sender_channel.clone(),
-            shutdown_sender: self.shutdown_sender.clone(),
+            primary_shutdown: self.primary_shutdown.clone(),
         };
 
-        let shutdown_receiver = self.shutdown_receiver.clone();
+        let primary_shutdown = self.primary_shutdown.clone();
 
         task_state.inc_nb_of_concurrent_blob_submissions(is_batch);
         let handle = tokio::task::spawn({
@@ -342,7 +338,7 @@ where
                     blob_id,
                     latest_known_processing_state,
                 );
-                let res = future_or_shutdown(fut, &shutdown_receiver).await;
+                let res = primary_shutdown.future_or_shutdown(fut).await;
 
                 match res {
                     FutureOrShutdownOutput::Output(()) => {}
@@ -377,16 +373,16 @@ where
 
     async fn main_task(
         in_flight_blobs: Arc<Mutex<HashMap<BlobInternalId, InFlightBlob<Da::Spec>>>>,
-        mut shutdown_receiver: watch::Receiver<()>,
-    ) -> JoinHandle<()> {
-        tokio::spawn(async move {
+        primary_shutdown: PrimaryShutdownController,
+    ) -> BackgroundHandle<()> {
+        BackgroundHandle::spawn("blob-sender", async move {
             let mut metrics_interval = interval(Duration::from_secs(10));
             loop {
-                let fut = future_or_shutdown(metrics_interval.tick(), &shutdown_receiver);
+                let fut = primary_shutdown.future_or_shutdown(metrics_interval.tick());
 
                 match fut.await {
                     FutureOrShutdownOutput::Shutdown => {
-                        if let Err(err) = shutdown_receiver.changed().await {
+                        if let Err(err) = primary_shutdown.wait_for_shutdown().await {
                             error!(%err, "BlobSender: The shutdown sender was dropped, shutting down anyway");
                         }
                     }
@@ -500,7 +496,7 @@ struct TaskState<Da: DaService, FM: FinalizationManager> {
     blob_processing_timeout: Duration,
     ledger_pool_interval: Duration,
     blob_sender_channel: Option<broadcast::Sender<BlobExecutionStatus<Da::Spec>>>,
-    shutdown_sender: watch::Sender<()>,
+    primary_shutdown: PrimaryShutdownController,
 }
 
 impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
@@ -633,7 +629,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         .is_err()
                     {
                         // If we can't save the state, we shut down.
-                        let _ = self.shutdown_sender.send(());
+                        self.primary_shutdown.shutdown();
                         return;
                     }
 
@@ -654,7 +650,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                 ?blob_status,
                                 "BlobSender: unable to send blob. Shutting down."
                             );
-                            let _ = self.shutdown_sender.send(());
+                            self.primary_shutdown.shutdown();
                             return;
                         }
                     }
@@ -670,7 +666,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         .is_err()
                     {
                         // If we can't save the state, we shut down.
-                        let _ = self.shutdown_sender.send(());
+                        self.primary_shutdown.shutdown();
                         return;
                     }
 
@@ -695,7 +691,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                                     %blob_hash,
                                     "Shutting down the rollup. Blob processing wasn't completed on time."
                                 );
-                                let _ = self.shutdown_sender.send(());
+                                self.primary_shutdown.shutdown();
                                 return;
                             }
 
@@ -721,7 +717,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                             // Error is logged inside the method
                             Err(_) => {
                                 // If we can't check the finality status, we shut down.
-                                let _ = self.shutdown_sender.send(());
+                                self.primary_shutdown.shutdown();
                                 return;
                             }
                         };
@@ -756,7 +752,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         .is_err()
                     {
                         // If we can't save the state, we shut down.
-                        let _ = self.shutdown_sender.send(());
+                        self.primary_shutdown.shutdown();
                         return;
                     }
 
@@ -772,7 +768,7 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                             Ok(finality_status) => finality_status,
                             Err(_) => {
                                 // If we can't check the finality status, we shut down.
-                                let _ = self.shutdown_sender.send(());
+                                self.primary_shutdown.shutdown();
                                 return;
                             }
                         };

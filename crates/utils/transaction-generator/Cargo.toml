@@ -51,7 +51,6 @@ sov-mock-zkvm = { workspace = true, features = ["native", "arbitrary"] }
 sov-paymaster = { workspace = true, features = ["native"] }
 sov-state = { workspace = true, features = ["native"] }
 sov-sequencer-registry = { workspace = true, features = ["native"] }
-sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-sequencer = { workspace = true }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 

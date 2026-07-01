@@ -418,4 +418,142 @@ mod tests {
 
         assert_eq!(config.proof_manager, None);
     }
+
+    /// Locks in the externally-tagged TOML representation of `PrunerConfig`: an omitted section
+    /// (and an explicit `"off"`) means no pruning, while `periodic` / `once_at_startup` parse into
+    /// the matching variants.
+    #[test]
+    fn pruner_config_round_trips_through_toml() {
+        use sov_db::config::{default_max_pruning_batch_size, PrunerConfig, RollupDbConfig};
+        use std::num::{NonZeroU64, NonZeroUsize};
+
+        // Omitted `pruner` defaults to `Off`.
+        let omitted: RollupDbConfig = toml::from_str(r#"path = "/tmp""#).unwrap();
+        assert_eq!(omitted.pruner, PrunerConfig::Off);
+
+        // Explicit `off`.
+        let off: RollupDbConfig = toml::from_str(
+            r#"
+            path = "/tmp"
+            pruner = "off"
+            "#,
+        )
+        .unwrap();
+        assert_eq!(off.pruner, PrunerConfig::Off);
+
+        // Periodic (max_batch_size omitted -> default).
+        let periodic: RollupDbConfig = toml::from_str(
+            r#"
+            path = "/tmp"
+            [pruner.periodic]
+            block_interval = 100
+            versions_to_keep = 20
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            periodic.pruner,
+            PrunerConfig::Periodic {
+                block_interval: 100,
+                versions_to_keep: NonZeroU64::new(20).unwrap(),
+                max_batch_size: default_max_pruning_batch_size(),
+            }
+        );
+
+        // OnceAtStartup with every knob set.
+        let once: RollupDbConfig = toml::from_str(
+            r#"
+            path = "/tmp"
+            [pruner.once_at_startup]
+            versions_to_keep = 500
+            max_batch_size = 4096
+            compact_after = true
+            "#,
+        )
+        .unwrap();
+        assert_eq!(
+            once.pruner,
+            PrunerConfig::OnceAtStartup {
+                versions_to_keep: NonZeroU64::new(500).unwrap(),
+                max_batch_size: NonZeroUsize::new(4096).unwrap(),
+                compact_after: true,
+            }
+        );
+    }
+
+    /// A config still carrying the deprecated flat `pruner_*` keys must fail to deserialize
+    /// (`RollupDbConfig` uses `deny_unknown_fields`) rather than being silently parsed with
+    /// pruning disabled.
+    #[test]
+    fn legacy_flat_pruner_keys_are_rejected() {
+        use sov_db::config::RollupDbConfig;
+
+        let result: Result<RollupDbConfig, _> = toml::from_str(
+            r#"
+            path = "/tmp"
+            pruner_block_interval = 100
+            pruner_versions_to_keep = 20
+            "#,
+        );
+        assert!(
+            result.is_err(),
+            "legacy flat pruner_* keys must be rejected by deny_unknown_fields, got {result:?}",
+        );
+    }
+
+    /// An unknown key inside a `[pruner.*]` subtable must also be rejected (`PrunerConfig` uses
+    /// `deny_unknown_fields`), catching typos like `block_intervl`.
+    #[test]
+    fn unknown_pruner_subkey_is_rejected() {
+        use sov_db::config::RollupDbConfig;
+
+        let result: Result<RollupDbConfig, _> = toml::from_str(
+            r#"
+            path = "/tmp"
+            [pruner.periodic]
+            block_interval = 100
+            versions_to_keep = 20
+            bogus_key = 1
+            "#,
+        );
+        assert!(
+            result.is_err(),
+            "unknown pruner subkey must be rejected by deny_unknown_fields, got {result:?}",
+        );
+    }
+
+    /// `versions_to_keep = 0` and `max_batch_size = 0` are rejected at parse time by the `NonZero`
+    /// field types (zero versions is meaningless; a zero batch would stop the pruner from making
+    /// progress).
+    #[test]
+    fn zero_pruner_values_are_rejected() {
+        use sov_db::config::RollupDbConfig;
+
+        let zero_versions: Result<RollupDbConfig, _> = toml::from_str(
+            r#"
+            path = "/tmp"
+            [pruner.periodic]
+            block_interval = 100
+            versions_to_keep = 0
+            "#,
+        );
+        assert!(
+            zero_versions.is_err(),
+            "versions_to_keep = 0 must be rejected by NonZeroU64, got {zero_versions:?}",
+        );
+
+        let zero_batch: Result<RollupDbConfig, _> = toml::from_str(
+            r#"
+            path = "/tmp"
+            [pruner.periodic]
+            block_interval = 100
+            versions_to_keep = 20
+            max_batch_size = 0
+            "#,
+        );
+        assert!(
+            zero_batch.is_err(),
+            "max_batch_size = 0 must be rejected by NonZeroUsize, got {zero_batch:?}",
+        );
+    }
 }

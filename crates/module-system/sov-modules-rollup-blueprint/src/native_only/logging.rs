@@ -6,7 +6,10 @@ use std::str::FromStr;
 use crate::native_only::telemetry::should_init_tokio_console_subscriber;
 pub use crate::native_only::telemetry::{should_init_open_telemetry_exporter, OtelGuard};
 use crate::GIT_COMMIT_HASH;
+// The panic-hook implementation lives in `sov-shutdown` alongside the other
+// full-node lifecycle utilities; re-exported here to preserve the public path.
 use sov_modules_api::ExecutionContext;
+pub use sov_shutdown::set_tracing_panic_hook;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
 use tracing_subscriber::layer::{Context, Filter};
@@ -161,13 +164,4 @@ fn log_info_about_logging(current_env_filter: &str) {
     if !should_init_open_telemetry_exporter() {
         info!("Open Telemetry exporter is not enabled");
     }
-}
-
-/// Adds [`tracing_panic::panic_hook`] to the panic hook.
-pub fn set_tracing_panic_hook() {
-    let prev_hook = std::panic::take_hook();
-    std::panic::set_hook(Box::new(move |panic_info| {
-        tracing_panic::panic_hook(panic_info);
-        prev_hook(panic_info);
-    }));
 }

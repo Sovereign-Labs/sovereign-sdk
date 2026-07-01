@@ -5,9 +5,7 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaConfig;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::node::{
-    future_or_shutdown, FutureOrShutdownOutput, SecondaryShutdownController,
-};
+use sov_shutdown::{future_or_shutdown, FutureOrShutdownOutput, SecondaryShutdownController};
 
 const BLOCK_TIME_MS: u64 = 50;
 const READERS_COUNT: usize = 10;
