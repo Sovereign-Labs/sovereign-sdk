@@ -14,7 +14,6 @@ use sov_modules_api::capabilities::{
     AuthorizationData, ChainState, TransactionAuthorizer, UniquenessData,
 };
 use sov_modules_api::common::Amount;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::anyhow;
 use sov_modules_api::sov_universal_wallet::schema::{RollupRoots, SchemaError};
 use sov_modules_api::transaction::{Credentials, PriorityFeeBips, TxDetails};
@@ -271,7 +270,7 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
             .transpose()
             .map_err(|e| SimulateError::InvalidInput(format!("{e:?}")))?;
         Ok(TxDetails {
-            chain_id: config_value!("CHAIN_ID"),
+            chain_id: R::chain_id(),
             max_priority_fee_bips: partial
                 .max_priority_fee_bips
                 .unwrap_or(PriorityFeeBips::ZERO),

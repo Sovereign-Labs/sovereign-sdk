@@ -232,8 +232,9 @@ where
 
 pub fn authenticate<Accessor, S, D>(
     raw_tx: &[u8],
+    runtime_chain_id: u64,
     runtime_chain_hash: &[u8; 32],
-    runtime_chain_name: &'static str,
+    runtime_chain_name: &str,
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError>
 where
@@ -309,7 +310,7 @@ where
         ));
     }
 
-    verify_chain_id(&unsigned_tx.details, raw_tx_hash)?;
+    verify_chain_id(&unsigned_tx.details, raw_tx_hash, runtime_chain_id)?;
 
     // Verify signatures (branches internally for single-sig vs multisig)
     verify_signatures::<S>(&unpacked_message, raw_tx_hash, state)?;

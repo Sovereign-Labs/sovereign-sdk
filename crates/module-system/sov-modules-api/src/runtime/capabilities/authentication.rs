@@ -24,7 +24,7 @@ use crate::{
     RawTx, Runtime, Spec, VersionReader,
 };
 
-/// The chain ID of the rollup.
+/// The default chain ID of the rollup.
 pub fn config_chain_id() -> u64 {
     config_value_private!("CHAIN_ID")
 }
@@ -212,7 +212,12 @@ where
             capabilities::fatal_deserialization_error::<_, S, _>(&tx.data, e, pre_exec_ws)
         })?;
 
-        crate::capabilities::authenticate::<_, S, Rt>(&input.data, &Rt::CHAIN_HASH, pre_exec_ws)
+        crate::capabilities::authenticate::<_, S, Rt>(
+            &input.data,
+            Rt::chain_id(),
+            &Rt::chain_hash(),
+            pre_exec_ws,
+        )
     }
 
     #[cfg(feature = "native")]
@@ -351,11 +356,12 @@ impl From<AuthenticationError> for UnregisteredAuthenticationError {
 pub fn verify_chain_id<S: Spec>(
     tx_details: &TxDetails<S>,
     raw_tx_hash: TxHash,
+    expected_chain_id: u64,
 ) -> Result<(), AuthenticationError> {
-    if tx_details.chain_id != config_chain_id() {
+    if tx_details.chain_id != expected_chain_id {
         return Err(AuthenticationError::FatalError(
             FatalError::InvalidChainId {
-                expected: config_chain_id(),
+                expected: expected_chain_id,
                 got: tx_details.chain_id,
             },
             raw_tx_hash,
@@ -420,6 +426,7 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
 pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     tx: Transaction<D, S>,
+    expected_chain_id: u64,
     chain_hash: &[u8; 32],
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
@@ -427,7 +434,7 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
         primary: *chain_hash,
         grace_period_hashes: Vec::new(),
     };
-    verify_and_decode_tx_multi_hash(raw_tx_hash, tx, resolved_hashes, meter)
+    verify_and_decode_tx_multi_hash(raw_tx_hash, tx, expected_chain_id, resolved_hashes, meter)
 }
 
 /// Authenticate raw sov-transaction.
@@ -445,6 +452,7 @@ pub fn authenticate<
     D: DispatchCall<Spec = S>,
 >(
     mut raw_tx: &[u8],
+    expected_chain_id: u64,
     default_chain_hash: &[u8; 32],
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
@@ -483,7 +491,13 @@ pub fn authenticate<
         ));
     }
 
-    verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
+    verify_and_decode_tx_multi_hash::<S, D>(
+        raw_tx_hash,
+        tx,
+        expected_chain_id,
+        resolved_hashes,
+        state,
+    )
 }
 
 /// Authenticate and verify deserialized sov-tx with multiple chain hashes.
@@ -493,6 +507,7 @@ pub fn authenticate<
 fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     tx: Transaction<D, S>,
+    expected_chain_id: u64,
     resolved_hashes: crate::runtime::ResolvedChainHashes,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
@@ -508,7 +523,7 @@ fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
         }
     };
 
-    verify_chain_id(details, raw_tx_hash)?;
+    verify_chain_id(details, raw_tx_hash, expected_chain_id)?;
 
     // Try signature verification with each valid chain hash
     let mut last_error = None;
@@ -548,12 +563,16 @@ pub fn authenticate_unregistered<
     pre_exec_ws: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, Rt::Decodable>, UnregisteredAuthenticationError> {
     let (tx_and_raw_hash, auth_data, runtime_call) =
-        authenticate::<_, S, Rt>(raw_tx, &Rt::CHAIN_HASH, pre_exec_ws).map_err(|e| match e {
-            AuthenticationError::FatalError(err, hash) => {
-                UnregisteredAuthenticationError::FatalError(err, hash)
-            }
-            AuthenticationError::OutOfGas(err) => UnregisteredAuthenticationError::OutOfGas(err),
-        })?;
+        authenticate::<_, S, Rt>(raw_tx, Rt::chain_id(), &Rt::chain_hash(), pre_exec_ws).map_err(
+            |e| match e {
+                AuthenticationError::FatalError(err, hash) => {
+                    UnregisteredAuthenticationError::FatalError(err, hash)
+                }
+                AuthenticationError::OutOfGas(err) => {
+                    UnregisteredAuthenticationError::OutOfGas(err)
+                }
+            },
+        )?;
     Ok((tx_and_raw_hash, auth_data, runtime_call))
 }
 

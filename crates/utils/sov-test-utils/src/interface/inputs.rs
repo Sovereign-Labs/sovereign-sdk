@@ -112,7 +112,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
             } => RT::Auth::encode_with_standard_auth(Self::sign_and_serialize(
                 message,
                 key,
-                &RT::CHAIN_HASH,
+                &RT::chain_hash(),
                 details,
                 nonces,
             )),

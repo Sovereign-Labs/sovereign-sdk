@@ -6,7 +6,6 @@ use serde::Serialize;
 use sov_modules_api::capabilities::{
     BatchFromUnregisteredSequencer, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
-use sov_modules_api::macros::config_value;
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec, VersionReader,
 };
@@ -88,8 +87,9 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     crate::authentication::authenticate::<Accessor, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
-                        config_value!("CHAIN_NAME"),
+                        Rt::chain_id(),
+                        &Rt::chain_hash(),
+                        &Rt::chain_name(),
                         state,
                     )?;
 
@@ -99,7 +99,8 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     sov_modules_api::capabilities::authenticate::<_, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
+                        Rt::chain_id(),
+                        &Rt::chain_hash(),
                         state,
                     )?;
 
@@ -140,8 +141,9 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     crate::authentication::authenticate::<Accessor, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
-                        config_value!("CHAIN_NAME"),
+                        Rt::chain_id(),
+                        &Rt::chain_hash(),
+                        &Rt::chain_name(),
                         state,
                     )?;
                 Ok((tx_and_raw_hash, auth_data, runtime_call))
