@@ -208,7 +208,7 @@ where
             capabilities::fatal_deserialization_error::<_, S, _>(&tx.data, e, pre_exec_ws)
         })?;
 
-        crate::capabilities::authenticate::<_, S, Rt>(&input.data, &Rt::CHAIN_HASH, pre_exec_ws)
+        crate::capabilities::authenticate::<_, S, Rt>(&input.data, &Rt::chain_hash(), pre_exec_ws)
     }
 
     #[cfg(feature = "native")]
@@ -576,7 +576,7 @@ pub fn authenticate_unregistered<
     pre_exec_ws: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, Rt::Decodable>, UnregisteredAuthenticationError> {
     let (tx_and_raw_hash, auth_data, runtime_call) =
-        authenticate::<_, S, Rt>(raw_tx, &Rt::CHAIN_HASH, pre_exec_ws).map_err(|e| match e {
+        authenticate::<_, S, Rt>(raw_tx, &Rt::chain_hash(), pre_exec_ws).map_err(|e| match e {
             AuthenticationError::FatalError(err, hash) => {
                 UnregisteredAuthenticationError::FatalError(err, hash)
             }

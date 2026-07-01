@@ -131,7 +131,7 @@ where
             Eip712AuthenticatorInput::Standard(tx) => {
                 sov_modules_api::capabilities::authenticate::<_, S, Rt>(
                     &tx.data,
-                    &Rt::CHAIN_HASH,
+                    &Rt::chain_hash(),
                     state,
                 )
             }

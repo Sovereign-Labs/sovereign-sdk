@@ -113,6 +113,7 @@ macro_rules! generate_runtime_without_capabilities {
                 }
             }
         }
+	use ::sov_modules_api::macros::config_value;
 
         impl<S> $crate::runtime::Runtime<S> for $id<S>
         where
@@ -121,8 +122,6 @@ macro_rules! generate_runtime_without_capabilities {
             <Self as ::sov_modules_api::DispatchCall>::Decodable: $crate::sov_universal_wallet::schema::UniversalWallet,
             $($runtime_trait_impl_bounds)*
         {
-            const CHAIN_HASH: [u8; 32] = [11; 32];
-
             type GenesisConfig = <Self as ::sov_modules_api::Genesis>::Config;
             type GenesisInput = ();
             type ModuleExecutionConfig = ();
@@ -135,6 +134,8 @@ macro_rules! generate_runtime_without_capabilities {
                 use ::sov_modules_api::macros::config_value;
                 use ::sov_modules_api::transaction::{Transaction, TransactionSigningPayload};
                 use ::sov_modules_api::rest::HasRestApi;
+		use ::sov_rollup_apis::endpoints::constants::ConstantsResponse;
+		use ::sov_rollup_apis::endpoints::constants::ConstantsEndpoint;
 
                 let axum_router = Self::default().rest_api(api_state.clone());
                 // Provide an endpoint to return dedup information associated with addresses.
@@ -148,27 +149,44 @@ macro_rules! generate_runtime_without_capabilities {
                 <Self as ::sov_modules_api::DispatchCall>::Decodable,
                 S::Address,
                 >(ChainData {
-                    chain_id: config_value!("CHAIN_ID"),
-                    chain_name: config_value!("CHAIN_NAME").to_string(),
-                })
-                .unwrap();
+		    chain_id: <Self as $crate::runtime::Runtime<S>>::chain_id(),
+		    chain_name: <Self as $crate::runtime::Runtime<S>>::chain_name(),
+		}).unwrap();
 
                 // StandardSchemaEndpoint resolves chain hash based on current height.
                 // This ensures wallets get the correct chain hash during chain hash transitions.
                 let schema_endpoint = StandardSchemaEndpoint::<S>::new(
                     &schema,
-                    Self::CHAIN_HASH.into(),
+                    Self::chain_hash().into(),
                     api_state.checkpoint_receiver(),
                 )
                 .expect("Failed to initialize StandardSchemaEndpoint");
                 let axum_router = axum_router.merge(schema_endpoint.axum_router());
-                let axum_router = axum_router.merge($crate::sov_rollup_apis::endpoints::constants::axum_router());
+
+		let constants_endpoint = ConstantsResponse {
+		    chain_id:  <Self as $crate::runtime::Runtime<S>>::chain_id(),
+		    chain_name:  <Self as $crate::runtime::Runtime<S>>::chain_name(),
+		    hyperlane_domain: config_value!("HYPERLANE_BRIDGE_DOMAIN"),
+		    address_prefix: config_value!("ADDRESS_PREFIX"),
+		};
+                let axum_router = axum_router.merge(constants_endpoint.axum_router());
 
                 ::sov_modules_api::NodeEndpoints {
                     axum_router,
                     jsonrpsee_module: get_rpc_methods(api_state),
                 }
             }
+	    fn chain_hash() ->  [u8; 32] {
+		[11; 32]
+	    }
+
+	    fn chain_id() -> u64 {
+		config_value!("CHAIN_ID")
+	    }
+
+	    fn chain_name() -> String {
+		config_value!("CHAIN_NAME").to_string()
+	    }
 
             fn genesis_config(_input: &Self::GenesisInput) -> ::sov_modules_api::prelude::anyhow::Result<Self::GenesisConfig> {
                 unimplemented!()
