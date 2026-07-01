@@ -2,6 +2,7 @@ mod db_elected;
 mod proofs;
 mod recovery;
 mod replica_gets_txs_from_master;
+mod replica_node_lag;
 mod replica_partitioned_db;
 mod replica_registers_in_db;
 mod root_hash_checker;
@@ -334,4 +335,24 @@ async fn establish_leader_and_replica(
     };
 
     (leader, replica)
+}
+
+async fn verify_replica_processes_tx(
+    leader: &TestRollup<Rollup>,
+    replica: &TestRollup<Rollup>,
+    key: &<<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    token_id: sov_bank::TokenId,
+    receiver_addr: <S as Spec>::Address,
+    nonce: u64,
+) {
+    let tx = build_transfer_token_tx::<S>(key, token_id, receiver_addr, AMOUNT, nonce);
+
+    let mut event_subscription = replica
+        .api_client()
+        .subscribe_to_events_with_filter("Bank/*")
+        .await
+        .unwrap();
+
+    leader.send_tx_to_sequencer(&tx).await.unwrap();
+    wait_for_all_events_with_timeout(Duration::from_millis(3500), 1, &mut event_subscription).await;
 }
