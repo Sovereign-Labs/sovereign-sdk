@@ -4,7 +4,6 @@ PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
                examples/demo-rollup/provers/risc0/guest-celestia \
                examples/demo-rollup/provers/sp1/guest-mock \
                examples/demo-rollup/provers/sp1/guest-aggregation-mock \
-               examples/demo-rollup/provers/sp1/guest-celestia \
                crates/bench/sp1-microbenches/guest-sha256 \
                crates/bench/sp1-microbenches/guest-ed25519
 
@@ -189,10 +188,20 @@ HACK_EXCLUDE := \
 	--exclude workspace-hack
 
 check-features: ## Checks that project compiles with all combinations of features.
-	cargo hack check --feature-powerset --exclude-features default,gas-constant-estimation $(HACK_EXCLUDE) --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M) --all-targets
+	cargo hack check --feature-powerset --exclude-features default,gas-constant-estimation $(HACK_EXCLUDE) --exclude sov-demo-rollup --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M) --all-targets
+	@# demo-rollup is excluded from the powerset above; its constrained check is partition-independent,
+	@# so run it only on partition 1 instead of redundantly in every partition.
+	@if [ "$(CARGO_HACK_PARTITION_N)" = "1" ]; then $(MAKE) check-demo-rollup-features; fi
 
 check-features-default-targets:
-	cargo hack check --feature-powerset --exclude-features default,gas-constant-estimation $(HACK_EXCLUDE) --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M)
+	cargo hack check --feature-powerset --exclude-features default,gas-constant-estimation $(HACK_EXCLUDE) --exclude sov-demo-rollup --partition $(CARGO_HACK_PARTITION_N)/$(CARGO_HACK_PARTITION_M)
+	@if [ "$(CARGO_HACK_PARTITION_N)" = "1" ]; then $(MAKE) check-demo-rollup-features; fi
+
+# demo-rollup is split by DA layer (mock_da / celestia_da); its feature-powerset must keep
+# at least one DA feature (a no-DA combo hits a compile_error). It is excluded from the
+# workspace powerset above and checked here with that constraint. Guest builds are skipped.
+check-demo-rollup-features: ## Constrained feature-powerset for demo-rollup (needs a DA feature).
+	SKIP_GUEST_BUILD=1 cargo hack check -p sov-demo-rollup --feature-powerset --at-least-one-of mock_da,celestia_da --exclude-features default --all-targets
 
 check-constant-overriding-is-disabled-in-release-mode:
 	# Passes in release mode...

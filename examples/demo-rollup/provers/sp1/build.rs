@@ -15,15 +15,10 @@ fn main() -> anyhow::Result<()> {
     println!("cargo::rerun-if-env-changed=OUT_DIR");
     let features = sov_zkvm_utils::collect_features(&["bench"], &["native"]);
 
+    // Only the mock-DA inner guest and the aggregation guest are used. There is no
+    // celestia+sp1 rollup, so the SP1 celestia guest is intentionally not built.
     build_program_with_args(
         "./guest-mock",
-        BuildArgs {
-            features: features.clone(),
-            ..Default::default()
-        },
-    );
-    build_program_with_args(
-        "./guest-celestia",
         BuildArgs {
             features,
             ..Default::default()

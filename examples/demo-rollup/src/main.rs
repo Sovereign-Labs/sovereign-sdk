@@ -5,17 +5,11 @@ use anyhow::Context as _;
 use clap::Parser;
 use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::MultiAddressEvmSolana;
-use sov_celestia_adapter::CelestiaService;
 use sov_db::config::{
     RocksDbKind, RocksdbCfCustomization, RocksdbOptionsCustomization, RollupDbConfig,
     RollupDbConfigWithCustomizations, VersionedColumnFamilyKind,
 };
-use sov_demo_rollup::{
-    override_code_commitments_in_chain_state, CelestiaDemoRollup, ExternalMockDemoRollup,
-    ExternalMockSp1DemoRollup, MockDemoRollup, MockSp1DemoRollup, SupportedZkVm,
-};
-use sov_mock_da::storable::rpc::StorableMockDaClient;
-use sov_mock_da::storable::StorableMockDaService;
+use sov_demo_rollup::{override_code_commitments_in_chain_state, SupportedZkVm};
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_rollup_blueprint::logging::initialize_logging;
@@ -24,14 +18,22 @@ use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::debug;
 
+#[cfg(not(any(feature = "mock_da", feature = "celestia_da")))]
+compile_error!("enable at least one DA feature: `mock_da` or `celestia_da`");
+
 /// Main demo runner. Initializes a DA chain, and starts a demo-rollup using the provided.
 /// If you're trying to sign or submit transactions to the rollup, the `sov-cli` binary
 /// is the one you want. You can run it `cargo run --bin sov-cli`.
 #[derive(Parser, Debug)]
 #[command(author, version, about, long_about = None)]
 struct Args {
-    /// The data layer type.
-    #[arg(long, default_value = "mock")]
+    /// The data layer type. Defaults to `mock` whenever `mock_da` is compiled in
+    /// (so `--all-features` picks mock DA), and to `celestia` for a celestia-only build.
+    #[cfg_attr(feature = "mock_da", arg(long, default_value = "mock"))]
+    #[cfg_attr(
+        all(feature = "celestia_da", not(feature = "mock_da")),
+        arg(long, default_value = "celestia")
+    )]
     da_layer: SupportedDaLayer,
 
     /// The zk VM to use.
@@ -39,11 +41,25 @@ struct Args {
     zk_vm: SupportedZkVm,
 
     /// The path to the rollup config.
-    #[arg(long, default_value = "configs/mock_rollup_config.toml")]
+    #[cfg_attr(
+        feature = "mock_da",
+        arg(long, default_value = "configs/mock_rollup_config.toml")
+    )]
+    #[cfg_attr(
+        all(feature = "celestia_da", not(feature = "mock_da")),
+        arg(long, default_value = "configs/celestia_rollup_config.toml")
+    )]
     rollup_config_path: String,
 
     /// The path to the genesis configs.
-    #[arg(long, default_value = "../test-data/genesis/demo/mock")]
+    #[cfg_attr(
+        feature = "mock_da",
+        arg(long, default_value = "../test-data/genesis/demo/mock")
+    )]
+    #[cfg_attr(
+        all(feature = "celestia_da", not(feature = "mock_da")),
+        arg(long, default_value = "../test-data/genesis/demo/celestia")
+    )]
     genesis_config_dir: PathBuf,
 
     /// Stops the rollup at a given height.
@@ -105,6 +121,7 @@ async fn run() -> anyhow::Result<()> {
     let stop_at_rollup_height = args.stop_at_rollup_height.map(RollupHeight::new);
 
     match (args.da_layer, args.zk_vm) {
+        #[cfg(feature = "mock_da")]
         (SupportedDaLayer::Mock, SupportedZkVm::Mock) => {
             let rollup = new_rollup_with_mock_da(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
@@ -119,6 +136,7 @@ async fn run() -> anyhow::Result<()> {
             .context("Failed to initialize MockDa rollup")?;
             rollup.run().await
         }
+        #[cfg(feature = "mock_da")]
         (SupportedDaLayer::Mock, SupportedZkVm::Sp1) => {
             let rollup = new_rollup_with_sp1_mock_da(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
@@ -133,6 +151,7 @@ async fn run() -> anyhow::Result<()> {
             .context("Failed to initialize SP1 MockDa rollup")?;
             rollup.run().await
         }
+        #[cfg(feature = "mock_da")]
         (SupportedDaLayer::ExternalMock, SupportedZkVm::Mock) => {
             let rollup = new_rollup_with_external_mock_da(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
@@ -147,6 +166,7 @@ async fn run() -> anyhow::Result<()> {
             .context("Failed to initialize ExternalMockDa rollup")?;
             rollup.run().await
         }
+        #[cfg(feature = "mock_da")]
         (SupportedDaLayer::ExternalMock, SupportedZkVm::Sp1) => {
             let rollup = new_rollup_with_external_mock_sp1_da(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
@@ -161,6 +181,7 @@ async fn run() -> anyhow::Result<()> {
             .context("Failed to initialize SP1 ExternalMockDa rollup")?;
             rollup.run().await
         }
+        #[cfg(feature = "celestia_da")]
         (SupportedDaLayer::Celestia, SupportedZkVm::Mock) => {
             let rollup = new_rollup_with_celestia_da(
                 &GenesisPaths::from_dir(&args.genesis_config_dir),
@@ -175,10 +196,11 @@ async fn run() -> anyhow::Result<()> {
             .context("Failed to initialize Celestia rollup")?;
             rollup.run().await
         }
-        (da, SupportedZkVm::Sp1) => {
+        (da, zk) => {
             anyhow::bail!(
-                "zk_vm=sp1 is only compatible with da_layer=mock or da_layer=external-mock (got da_layer={:?})",
-                da
+                "da_layer={da:?} + zk_vm={zk:?} is not available in this build. \
+                 Celestia runs only with `--zk-vm mock`; mock / external-mock need the \
+                 `mock_da` feature, and celestia needs the `celestia_da` feature.",
             );
         }
     }
@@ -286,6 +308,7 @@ where
     Ok(())
 }
 
+#[cfg(feature = "celestia_da")]
 async fn new_rollup_with_celestia_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
@@ -294,21 +317,21 @@ async fn new_rollup_with_celestia_da(
     stop_at_rollup_height: Option<RollupHeight>,
     override_code_commitments: bool,
     start_fresh_outer_proof_on_resync: bool,
-) -> anyhow::Result<Rollup<CelestiaDemoRollup<Native>, Native>> {
+) -> anyhow::Result<Rollup<sov_demo_rollup::CelestiaDemoRollup<Native>, Native>> {
     debug!(config_path = rollup_config_path, "Starting Celestia rollup");
 
-    apply_code_commitments_override::<CelestiaDemoRollup<Native>>(
+    apply_code_commitments_override::<sov_demo_rollup::CelestiaDemoRollup<Native>>(
         rt_genesis_paths,
         override_code_commitments,
     )
     .await?;
 
-    let rollup_config: RollupConfig<MultiAddressEvmSolana, CelestiaService> =
+    let rollup_config: RollupConfig<MultiAddressEvmSolana, sov_celestia_adapter::CelestiaService> =
         from_toml_path(rollup_config_path).with_context(|| {
             format!("Failed to read rollup configuration from {rollup_config_path}")
         })?;
 
-    let celestia_rollup = CelestiaDemoRollup::<Native>::default();
+    let celestia_rollup = sov_demo_rollup::CelestiaDemoRollup::<Native>::default();
     celestia_rollup
         .create_new_rollup(
             rt_genesis_paths,
@@ -322,6 +345,7 @@ async fn new_rollup_with_celestia_da(
         .await
 }
 
+#[cfg(feature = "mock_da")]
 async fn new_rollup_with_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
@@ -330,24 +354,26 @@ async fn new_rollup_with_mock_da(
     stop_at_rollup_height: Option<RollupHeight>,
     override_code_commitments: bool,
     start_fresh_outer_proof_on_resync: bool,
-) -> anyhow::Result<Rollup<MockDemoRollup<Native>, Native>> {
+) -> anyhow::Result<Rollup<sov_demo_rollup::MockDemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
         "Starting rollup on mock DA"
     );
 
-    apply_code_commitments_override::<MockDemoRollup<Native>>(
+    apply_code_commitments_override::<sov_demo_rollup::MockDemoRollup<Native>>(
         rt_genesis_paths,
         override_code_commitments,
     )
     .await?;
 
-    let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaService> =
-        from_toml_path(rollup_config_path).with_context(|| {
-            format!("Failed to read rollup configuration from {rollup_config_path}")
-        })?;
+    let rollup_config: RollupConfig<
+        MultiAddressEvmSolana,
+        sov_mock_da::storable::StorableMockDaService,
+    > = from_toml_path(rollup_config_path).with_context(|| {
+        format!("Failed to read rollup configuration from {rollup_config_path}")
+    })?;
 
-    let mock_rollup = MockDemoRollup::<Native>::default();
+    let mock_rollup = sov_demo_rollup::MockDemoRollup::<Native>::default();
     mock_rollup
         .create_new_rollup(
             rt_genesis_paths,
@@ -361,6 +387,7 @@ async fn new_rollup_with_mock_da(
         .await
 }
 
+#[cfg(feature = "mock_da")]
 async fn new_rollup_with_sp1_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
@@ -369,24 +396,26 @@ async fn new_rollup_with_sp1_mock_da(
     stop_at_rollup_height: Option<RollupHeight>,
     override_code_commitments: bool,
     start_fresh_outer_proof_on_resync: bool,
-) -> anyhow::Result<Rollup<MockSp1DemoRollup<Native>, Native>> {
+) -> anyhow::Result<Rollup<sov_demo_rollup::MockSp1DemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
         "Starting rollup on mock DA with SP1 zkVM"
     );
 
-    apply_code_commitments_override::<MockSp1DemoRollup<Native>>(
+    apply_code_commitments_override::<sov_demo_rollup::MockSp1DemoRollup<Native>>(
         rt_genesis_paths,
         override_code_commitments,
     )
     .await?;
 
-    let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaService> =
-        from_toml_path(rollup_config_path).with_context(|| {
-            format!("Failed to read rollup configuration from {rollup_config_path}")
-        })?;
+    let rollup_config: RollupConfig<
+        MultiAddressEvmSolana,
+        sov_mock_da::storable::StorableMockDaService,
+    > = from_toml_path(rollup_config_path).with_context(|| {
+        format!("Failed to read rollup configuration from {rollup_config_path}")
+    })?;
 
-    let mock_rollup = MockSp1DemoRollup::<Native>::default();
+    let mock_rollup = sov_demo_rollup::MockSp1DemoRollup::<Native>::default();
     mock_rollup
         .create_new_rollup(
             rt_genesis_paths,
@@ -400,6 +429,7 @@ async fn new_rollup_with_sp1_mock_da(
         .await
 }
 
+#[cfg(feature = "mock_da")]
 async fn new_rollup_with_external_mock_sp1_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
@@ -408,24 +438,26 @@ async fn new_rollup_with_external_mock_sp1_da(
     stop_at_rollup_height: Option<RollupHeight>,
     override_code_commitments: bool,
     start_fresh_outer_proof_on_resync: bool,
-) -> anyhow::Result<Rollup<ExternalMockSp1DemoRollup<Native>, Native>> {
+) -> anyhow::Result<Rollup<sov_demo_rollup::ExternalMockSp1DemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
         "Starting rollup on external-mock DA with SP1 zkVM"
     );
 
-    apply_code_commitments_override::<ExternalMockSp1DemoRollup<Native>>(
+    apply_code_commitments_override::<sov_demo_rollup::ExternalMockSp1DemoRollup<Native>>(
         rt_genesis_paths,
         override_code_commitments,
     )
     .await?;
 
-    let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaClient> =
-        from_toml_path(rollup_config_path).with_context(|| {
-            format!("Failed to read rollup configuration from {rollup_config_path}")
-        })?;
+    let rollup_config: RollupConfig<
+        MultiAddressEvmSolana,
+        sov_mock_da::storable::rpc::StorableMockDaClient,
+    > = from_toml_path(rollup_config_path).with_context(|| {
+        format!("Failed to read rollup configuration from {rollup_config_path}")
+    })?;
 
-    let mock_rollup = ExternalMockSp1DemoRollup::<Native>::default();
+    let mock_rollup = sov_demo_rollup::ExternalMockSp1DemoRollup::<Native>::default();
     mock_rollup
         .create_new_rollup(
             rt_genesis_paths,
@@ -439,6 +471,7 @@ async fn new_rollup_with_external_mock_sp1_da(
         .await
 }
 
+#[cfg(feature = "mock_da")]
 async fn new_rollup_with_external_mock_da(
     rt_genesis_paths: &GenesisPaths,
     rollup_config_path: &str,
@@ -447,24 +480,26 @@ async fn new_rollup_with_external_mock_da(
     stop_at_rollup_height: Option<RollupHeight>,
     override_code_commitments: bool,
     start_fresh_outer_proof_on_resync: bool,
-) -> anyhow::Result<Rollup<ExternalMockDemoRollup<Native>, Native>> {
+) -> anyhow::Result<Rollup<sov_demo_rollup::ExternalMockDemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
         "Starting rollup on external-mock DA"
     );
 
-    apply_code_commitments_override::<ExternalMockDemoRollup<Native>>(
+    apply_code_commitments_override::<sov_demo_rollup::ExternalMockDemoRollup<Native>>(
         rt_genesis_paths,
         override_code_commitments,
     )
     .await?;
 
-    let rollup_config: RollupConfig<MultiAddressEvmSolana, StorableMockDaClient> =
-        from_toml_path(rollup_config_path).with_context(|| {
-            format!("Failed to read rollup configuration from {rollup_config_path}")
-        })?;
+    let rollup_config: RollupConfig<
+        MultiAddressEvmSolana,
+        sov_mock_da::storable::rpc::StorableMockDaClient,
+    > = from_toml_path(rollup_config_path).with_context(|| {
+        format!("Failed to read rollup configuration from {rollup_config_path}")
+    })?;
 
-    let mock_rollup = ExternalMockDemoRollup::<Native>::default();
+    let mock_rollup = sov_demo_rollup::ExternalMockDemoRollup::<Native>::default();
     mock_rollup
         .create_new_rollup(
             rt_genesis_paths,

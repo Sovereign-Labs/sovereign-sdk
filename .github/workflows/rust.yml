@@ -150,7 +150,6 @@ jobs:
           # served from cache instead of rebuilt on every run.
           path: |
             examples/demo-rollup/provers/sp1/guest-mock/target
-            examples/demo-rollup/provers/sp1/guest-celestia/target
             examples/demo-rollup/provers/sp1/guest-aggregation-mock/target
             crates/bench/sp1-microbenches/guest-sha256/target
             crates/bench/sp1-microbenches/guest-ed25519/target
@@ -178,7 +177,6 @@ jobs:
           # so they aren't rebuilt on every run.
           path: |
             examples/demo-rollup/provers/sp1/guest-mock/target
-            examples/demo-rollup/provers/sp1/guest-celestia/target
             examples/demo-rollup/provers/sp1/guest-aggregation-mock/target
       - name: rollup bench check
         env:
@@ -266,7 +264,6 @@ jobs:
           # pending CI validation.)
           path: |
             examples/demo-rollup/provers/sp1/guest-mock/target
-            examples/demo-rollup/provers/sp1/guest-celestia/target
             examples/demo-rollup/provers/sp1/guest-aggregation-mock/target
             crates/bench/sp1-microbenches/guest-sha256/target
             crates/bench/sp1-microbenches/guest-ed25519/target
@@ -459,7 +456,6 @@ jobs:
           # so they aren't rebuilt on every run.
           path: |
             examples/demo-rollup/provers/sp1/guest-mock/target
-            examples/demo-rollup/provers/sp1/guest-celestia/target
             examples/demo-rollup/provers/sp1/guest-aggregation-mock/target
       - name: Compile README.md to Bash
         run: bashtestmd --input examples/demo-rollup/README_CELESTIA.md --output demo-rollup-readme.sh --tag test-ci
@@ -483,7 +479,6 @@ jobs:
           # so they aren't rebuilt on every run.
           path: |
             examples/demo-rollup/provers/sp1/guest-mock/target
-            examples/demo-rollup/provers/sp1/guest-celestia/target
             examples/demo-rollup/provers/sp1/guest-aggregation-mock/target
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
@@ -652,7 +647,6 @@ jobs:
           # the same incremental state (and validates guest caching).
           path: |
             examples/demo-rollup/provers/sp1/guest-mock/target
-            examples/demo-rollup/provers/sp1/guest-celestia/target
             examples/demo-rollup/provers/sp1/guest-aggregation-mock/target
             crates/bench/sp1-microbenches/guest-sha256/target
             crates/bench/sp1-microbenches/guest-ed25519/target
