@@ -4,10 +4,10 @@ use crate::preferred::replica::event_receiver::EventReceiver;
 use crate::preferred::replica::event_receiver::EventReceiverStartNotifier;
 use async_trait::async_trait;
 use sov_full_node_configs::sequencer::PostgresConfig;
+use sov_shutdown::BackgroundHandle;
 use sov_shutdown::FutureOrShutdownOutput;
 use sov_shutdown::PrimaryShutdownController;
 use tokio::sync::watch;
-use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 // Process events in pages to avoid excessive memory consumption
@@ -27,8 +27,8 @@ pub(crate) trait ReplicaEventHandler: Send + Sync + 'static {
 }
 
 pub(crate) struct ReplicaTaskHandles {
-    pub(crate) data_fetcher_handle: JoinHandle<()>,
-    pub(crate) sync_task_handle: JoinHandle<()>,
+    pub(crate) data_fetcher_handle: BackgroundHandle<()>,
+    pub(crate) sync_task_handle: BackgroundHandle<()>,
 }
 
 pub(crate) struct ReplicaSyncTask {
@@ -78,7 +78,7 @@ impl ReplicaSyncTask {
         let data_fetcher_handle = event_receiver.spawn_db_data_fetcher().await;
         let primary_shutdown = self.primary_shutdown.clone();
 
-        let sync_task_handle = tokio::spawn(async move {
+        let sync_task_handle = BackgroundHandle::spawn("replica-sync", async move {
             Self::run_handler(handler, db_data_receiver, primary_shutdown).await;
         });
 

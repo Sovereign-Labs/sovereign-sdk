@@ -3,9 +3,9 @@
 use async_trait::async_trait;
 use sov_rollup_interface::da::{DaSpec, RelevantBlobs, RelevantProofs};
 use sov_rollup_interface::node::da::{DaService, SubmitBlobReceipt};
+use sov_shutdown::BackgroundHandle;
 use std::time::Duration;
 use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
 
 use crate::storable::StorableMockDaService;
 
@@ -90,7 +90,7 @@ impl DaService for StorableMockDaService {
         self.get_proofs_at_inner(height).await
     }
 
-    async fn take_background_join_handle(&self) -> Option<JoinHandle<()>> {
+    async fn take_background_join_handle(&self) -> Option<BackgroundHandle<()>> {
         self.block_producer_handle.lock().await.take()
     }
 

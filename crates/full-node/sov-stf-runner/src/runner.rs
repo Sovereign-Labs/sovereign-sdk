@@ -24,7 +24,9 @@ use sov_rollup_interface::stf::{
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::ProvableHeightTracker;
-use sov_shutdown::{FutureOrShutdownOutput, PrimaryShutdownController, RunnerShutdownController};
+use sov_shutdown::{
+    BackgroundHandle, FutureOrShutdownOutput, PrimaryShutdownController, RunnerShutdownController,
+};
 use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
@@ -91,7 +93,7 @@ where
     sync_fetcher: FinalizedBlocksBulkFetcher<Da>,
     primary_shutdown: PrimaryShutdownController,
     runner_shutdown: RunnerShutdownController,
-    background_handles: Vec<tokio::task::JoinHandle<anyhow::Result<()>>>,
+    background_handles: Vec<BackgroundHandle<anyhow::Result<()>>>,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
     save_tx_bodies: bool,

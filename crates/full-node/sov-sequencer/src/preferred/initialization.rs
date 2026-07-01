@@ -12,7 +12,6 @@ use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::{broadcast, mpsc, watch};
-use tokio::task::JoinHandle;
 use tracing::debug;
 
 /// Builder for [`PreferredSequencer`] initialization.
@@ -58,7 +57,7 @@ where
         primary_shutdown: PrimaryShutdownController,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
-    ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<JoinHandle<()>>)> {
+    ) -> Result<(PreferredSequencer<S, Rt, Da>, Vec<BackgroundHandle<()>>)> {
         let latest_state_update = state_update_receiver.borrow().clone();
 
         let da_address = self
@@ -168,9 +167,7 @@ where
         )
         .await;
 
-        for worker in workers {
-            handles.push(worker);
-        }
+        handles.extend(workers);
 
         let (mut replica_task, start_replica_task_notifier) =
             ReplicaSyncTask::new(primary_shutdown.clone(), seq_role).await?;
@@ -279,13 +276,16 @@ where
             handles.push(heartbeat_handle);
         }
 
-        handles.push(tokio::spawn(update_state_task(
-            seq.clone(),
-            state_update_receiver.clone(),
-            primary_shutdown.clone(),
-        )));
+        handles.push(BackgroundHandle::spawn(
+            "preferred-update-state",
+            update_state_task(
+                seq.clone(),
+                state_update_receiver.clone(),
+                primary_shutdown.clone(),
+            ),
+        ));
 
-        handles.push(tokio::spawn({
+        handles.push(BackgroundHandle::spawn("preferred-tx-notifications", {
             let ledger_db = ledger_db.clone();
             let seq = seq.clone();
             let primary_shutdown = primary_shutdown.clone();

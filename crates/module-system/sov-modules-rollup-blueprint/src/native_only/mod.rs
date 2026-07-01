@@ -33,7 +33,7 @@ use sov_rollup_interface::ProvableHeightTracker;
 use sov_sequencer::preferred::PreferredSequencer;
 use sov_sequencer::standard::StdSequencer;
 use sov_sequencer::{ProofBlobSender, Sequencer, SequencerApis, SequencerKindConfig};
-use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController, SecondaryShutdownController};
 use sov_state::storage::NativeStorage;
 use sov_state::Storage;
 use sov_stf_runner::processes::{
@@ -845,7 +845,7 @@ fn validate_operating_mode_config(
 async fn cleanup_failed_startup<S: Spec>(
     primary_shutdown: &PrimaryShutdownController,
     secondary_shutdown_controller: &SecondaryShutdownController,
-    background_handles: &mut Vec<JoinHandle<()>>,
+    background_handles: &mut Vec<BackgroundHandle<()>>,
     sequencer: &mut SequencerCreationReceipt<S>,
 ) {
     primary_shutdown.shutdown();
@@ -860,7 +860,7 @@ async fn cleanup_failed_startup<S: Spec>(
 async fn cleanup_failed_startup_before_sequencer(
     primary_shutdown: &PrimaryShutdownController,
     secondary_shutdown_controller: &SecondaryShutdownController,
-    background_handles: &mut Vec<JoinHandle<()>>,
+    background_handles: &mut Vec<BackgroundHandle<()>>,
 ) {
     primary_shutdown.shutdown();
     secondary_shutdown_controller.shutdown();
@@ -871,8 +871,8 @@ async fn cleanup_failed_startup_before_sequencer(
 }
 
 async fn wait_for_failed_startup_tasks(
-    background_handles_to_join: Vec<JoinHandle<()>>,
-    sequencer_background_handles: Vec<JoinHandle<()>>,
+    background_handles_to_join: Vec<BackgroundHandle<()>>,
+    sequencer_background_handles: Vec<BackgroundHandle<()>>,
 ) {
     // Drain handles concurrently rather than serially.
     let drain = async move {
@@ -948,7 +948,7 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
     // Trigger after the runner has finished.
     secondary_shutdown_controller: SecondaryShutdownController,
 
-    background_handles: Vec<tokio::task::JoinHandle<()>>,
+    background_handles: Vec<BackgroundHandle<()>>,
 
     /// RPC metrics aggregation settings, captured from
     /// `rollup_config.monitoring` at creation time and handed to the HTTP
@@ -1025,7 +1025,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
 
 fn spawn_task_monitor(
     primary_shutdown: PrimaryShutdownController,
-    handles: Vec<tokio::task::JoinHandle<()>>,
+    handles: Vec<BackgroundHandle<()>>,
 ) -> tokio::task::JoinHandle<Result<(), anyhow::Error>> {
     tokio::spawn(async move {
         tracing::trace!("blocking until a background task joins or rollup shutdown");
@@ -1069,7 +1069,7 @@ fn spawn_task_monitor(
 }
 
 fn spawn_os_signal_handler(primary_shutdown: PrimaryShutdownController) {
-    tokio::spawn(async move {
+    BackgroundHandle::spawn("os-signal-handler", async move {
         let mut terminate = tokio::signal::unix::signal(SignalKind::terminate())
             .expect("Failed to set up SIGTERM handler");
         let mut quit = tokio::signal::unix::signal(SignalKind::quit())
@@ -1103,7 +1103,7 @@ pub struct SequencerCreationReceipt<S: Spec> {
     #[allow(missing_docs)]
     pub endpoints: NodeEndpoints,
     #[allow(missing_docs)]
-    pub background_handles: Vec<JoinHandle<()>>,
+    pub background_handles: Vec<BackgroundHandle<()>>,
     #[allow(missing_docs)]
     pub da_address: <S::Da as DaSpec>::Address,
     /// Whether the resolved sequencer role is a replica role.

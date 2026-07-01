@@ -6,10 +6,14 @@
 
 #![deny(missing_docs)]
 
+mod background_handle;
+mod panic_hook;
 mod shutdown_controller;
 
 use std::future::Future;
 
+pub use background_handle::BackgroundHandle;
+pub use panic_hook::set_tracing_panic_hook;
 pub use shutdown_controller::{
     PrimaryShutdownController, RunnerShutdownController, SecondaryShutdownController,
 };

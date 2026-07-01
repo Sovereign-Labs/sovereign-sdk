@@ -41,10 +41,10 @@ use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
 
+use sov_shutdown::BackgroundHandle;
 use tokio::sync::broadcast;
 use tokio::sync::mpsc;
 use tokio::sync::oneshot;
-use tokio::task::JoinHandle;
 use tracing::debug;
 
 /// The minimum interval between updates for the PI controller.
@@ -106,8 +106,8 @@ where
         self.heap.len() >= Self::MAX_HEAP_SIZE
     }
 
-    pub(crate) async fn start(mut self) -> JoinHandle<()> {
-        tokio::spawn(async move {
+    pub(crate) async fn start(mut self) -> BackgroundHandle<()> {
+        BackgroundHandle::spawn("synchronized-state", async move {
             let mut index = 0;
             loop {
                 // Start by trying to drain the channel of inbound messages.

@@ -39,7 +39,6 @@ serde = { workspace = true }
 serde_json = { workspace = true, optional = true }
 tokio = { workspace = true, features = ["sync", "signal"], optional = true }
 tracing = { workspace = true, optional = true }
-tracing-panic = { version = "0.1.2", optional = true }
 tracing-subscriber = { workspace = true, features = ["env-filter"], optional = true }
 tracing-appender = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
@@ -74,7 +73,6 @@ native = [
 	"sov-metrics",
 	"tokio",
 	"tracing",
-	"tracing-panic",
 	"tracing-subscriber",
 	"tracing-appender",
 	"hex",

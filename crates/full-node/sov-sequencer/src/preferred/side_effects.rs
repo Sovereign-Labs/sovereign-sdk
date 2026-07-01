@@ -3,10 +3,9 @@ use std::collections::VecDeque;
 use anyhow::Result;
 use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
-use sov_shutdown::PrimaryShutdownController;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use std::sync::Arc;
 use tokio::sync::{mpsc, watch};
-use tokio::task::JoinHandle;
 use tracing::{debug, enabled, error, warn, Level};
 
 use super::executor_events::ExecutorEvent;
@@ -339,11 +338,11 @@ where
         }
     }
 
-    pub(crate) fn spawn(mut self) -> JoinHandle<()> {
+    pub(crate) fn spawn(mut self) -> BackgroundHandle<()> {
         // We use a queue so that we can batch insert txs.
         let max_queue_size = self.executor_events_receiver.max_capacity();
         let event_queue = VecDeque::with_capacity(max_queue_size);
-        tokio::spawn(async move {
+        BackgroundHandle::spawn("side-effects", async move {
             self.receive_and_process_events(event_queue, max_queue_size)
                 .await;
         })

@@ -15,11 +15,10 @@ use jsonrpsee::server::{
 use jsonrpsee::types::{ErrorCode, ErrorObject};
 use jsonrpsee::RpcModule;
 use sov_metrics::{track_metrics, HttpMetrics, RpcAggregationConfig, RpcStatsAggregator};
-use sov_shutdown::RunnerShutdownController;
+use sov_shutdown::{BackgroundHandle, RunnerShutdownController};
 use std::net::SocketAddr;
 use std::sync::Arc;
 use tokio::net::TcpListener;
-use tokio::task::JoinHandle;
 use tower::BoxError;
 use tower_http::cors::CorsLayer;
 use tower_http::normalize_path::NormalizePathLayer;
@@ -79,8 +78,8 @@ where
 }
 
 pub struct HttpServerStart {
-    pub http_server_handle: JoinHandle<anyhow::Result<()>>,
-    pub rpc_metrics_flush_handle: JoinHandle<anyhow::Result<()>>,
+    pub http_server_handle: BackgroundHandle<anyhow::Result<()>>,
+    pub rpc_metrics_flush_handle: BackgroundHandle<anyhow::Result<()>>,
 }
 
 /// Starts the HTTP server and the RPC metrics flush task, returning both
@@ -100,14 +99,14 @@ pub(crate) async fn start_http_server(
     // Drives the aggregator until the RPC server has fully stopped; the final
     // flush then captures calls that completed during graceful shutdown.
     let server_stopped = server_handle.clone();
-    let flush_handle = tokio::spawn(async move {
+    let flush_handle = BackgroundHandle::spawn("rpc-metrics-flush", async move {
         aggregator
             .run_flush_loop(async move { server_stopped.stopped().await })
             .await;
         anyhow::Ok(())
     });
 
-    let handle = tokio::spawn(async move {
+    let handle = BackgroundHandle::spawn("http-server", async move {
         tracing::info!(%rest_address, "Starting HTTP server");
         let mut router = router.layer(axum::middleware::from_fn(measure_time));
         if let CorsConfiguration::Permissive = cors_configuration {

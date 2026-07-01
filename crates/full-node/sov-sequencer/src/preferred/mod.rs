@@ -61,7 +61,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_rollup_interface::TxHash;
-use sov_shutdown::PrimaryShutdownController;
+use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use state_root_compute::StateRootTask;
 use std::boxed::Box;
 use std::marker::PhantomData;
@@ -74,7 +74,6 @@ use std::sync::Arc;
 use std::time::Duration;
 use sync_sequencer_state::*;
 use tokio::sync::broadcast;
-use tokio::task::JoinHandle;
 use tokio::time::sleep;
 use tracing::{error, info, trace};
 use transaction_subscriptions::TransactionCache;
@@ -160,7 +159,7 @@ where
         primary_shutdown: PrimaryShutdownController,
         stop_at_rollup_height: Option<RollupHeight>,
         bind_addr: SocketAddr,
-    ) -> anyhow::Result<(Self, Vec<JoinHandle<()>>)> {
+    ) -> anyhow::Result<(Self, Vec<BackgroundHandle<()>>)> {
         Builder::new(da, config, max_concurrent_proof_blobs)
             .build(
                 state_update_receiver,

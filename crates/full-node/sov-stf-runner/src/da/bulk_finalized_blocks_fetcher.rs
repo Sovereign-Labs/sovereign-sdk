@@ -52,7 +52,7 @@ use futures_util::stream::FuturesOrdered;
 use futures_util::StreamExt;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::node::da::{DaService, SlotData};
-use sov_shutdown::{FutureOrShutdownOutput, RunnerShutdownController};
+use sov_shutdown::{BackgroundHandle, FutureOrShutdownOutput, RunnerShutdownController};
 use std::pin::Pin;
 use std::sync::Arc;
 use tokio::sync::mpsc::Receiver;
@@ -98,7 +98,7 @@ where
         bulk_size: u8,
         channel_capacity: usize,
         shutdown: RunnerShutdownController,
-    ) -> anyhow::Result<(Self, tokio::task::JoinHandle<anyhow::Result<()>>)> {
+    ) -> anyhow::Result<(Self, BackgroundHandle<anyhow::Result<()>>)> {
         if bulk_size as usize > channel_capacity {
             anyhow::bail!("pre_fetched_blocks_capacity={channel_capacity} should be larger than concurrent_sync_tasks={bulk_size}");
         }
@@ -119,7 +119,7 @@ where
             bulk_size,
         );
 
-        let background_handle = tokio::spawn(async {
+        let background_handle = BackgroundHandle::spawn("finalized-blocks-fetcher", async {
             // Intentionally swallow error to not produce panic on shutdown.
             match block_fetcher.run(shutdown).await {
                 Ok(()) => {
