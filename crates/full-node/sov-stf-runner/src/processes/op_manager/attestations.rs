@@ -124,7 +124,6 @@ mod tests {
     use sov_rollup_interface::stf::BlobSenderStatus;
     use sov_rollup_interface::stf::ProofSender;
     use sov_rollup_interface::zk::StateTransitionWitness;
-    use tokio::sync::watch;
 
     use super::*;
     use crate::processes::{new_stf_info_channel, StateTransitionInfo};
@@ -193,12 +192,12 @@ mod tests {
 
         // The cursor is in-memory only; processing an attestation advances it (no persistence).
         let cursor = receiver.cursor_handle();
-        let (_shutdown_sender, shutdown_receiver) = watch::channel(());
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
         let mut manager = AttestationsManager::new(
             receiver,
             TestBondingProofService,
             Box::new(NoopProofSender),
-            shutdown_receiver,
+            &secondary_shutdown_controller,
         );
 
         manager.process_stf_info(make_stf_info(1)).await?;

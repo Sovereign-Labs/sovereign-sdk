@@ -278,7 +278,7 @@ async fn test_non_instant_finality_notifies_only_finalized_slots() -> anyhow::Re
         }
     }
 
-    shutdown_sender.send(())?;
+    shutdown_sender.shutdown();
 
     Ok(())
 }
@@ -312,7 +312,7 @@ async fn test_proof_manager_crash_after_staging_hides_uncommitted_slot() -> anyh
             "expected crash after staging ProofManager STF info"
         );
 
-        shutdown_sender.send(())?;
+        shutdown_sender.shutdown();
     }
 
     {
@@ -384,7 +384,7 @@ async fn test_proof_manager_restart_recovers_after_ledger_finalize_crash() -> an
             "expected crash after ledger finalize and before ProofManager commit"
         );
 
-        shutdown_sender.send(())?;
+        shutdown_sender.shutdown();
         restart_header
     };
 
