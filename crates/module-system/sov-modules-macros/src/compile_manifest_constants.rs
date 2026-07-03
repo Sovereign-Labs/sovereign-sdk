@@ -55,7 +55,11 @@ pub fn make_const_value_inner(input: &ConfigValueInput) -> syn::Result<TokenStre
     // Finally, compile it into a Rust expression.
     let rust_expr = compile_toml_value_to_rust(toml_value, input)?;
 
-    Ok(quote::quote!(#rust_expr))
+    let tracking = manifest.dependency_tracking_tokens();
+    Ok(quote::quote!({
+        #tracking
+        #rust_expr
+    }))
 }
 
 #[derive(serde::Deserialize)]

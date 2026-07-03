@@ -12,6 +12,10 @@ pub struct Manifest<'a> {
     parent: &'a Ident,
     path: PathBuf,
     value: Value,
+    /// Whether `path` is a real file that generated code must declare as a
+    /// compile-time dependency (see [`Self::dependency_tracking_tokens`]).
+    /// `false` for manifests parsed from in-memory strings (unit tests).
+    track_as_dependency: bool,
 }
 
 impl<'a> Manifest<'a> {
@@ -31,6 +35,7 @@ impl<'a> Manifest<'a> {
             parent,
             path,
             value,
+            track_as_dependency: false,
         })
     }
 
@@ -64,11 +69,43 @@ impl<'a> Manifest<'a> {
             Self::err(
                 &constants_path,
                 parent,
-                format!("failed to read `{}`: {}", constants_path.display(), e),
+                format!(
+                    "failed to read `{}`: {}. The path is resolved once when \
+                     `sov-modules-macros` is compiled; if the file was moved or the workspace \
+                     was relocated since, run `cargo clean -p sov-modules-macros` to re-resolve \
+                     it, or set the `CONSTANTS_MANIFEST` environment variable to the directory \
+                     containing the file",
+                    constants_path.display(),
+                    e
+                ),
             )
         })?;
 
-        Self::read_str(constants, constants_path, parent)
+        let mut manifest = Self::read_str(constants, constants_path, parent)?;
+        manifest.track_as_dependency = true;
+        Ok(manifest)
+    }
+
+    /// Tokens that record the manifest file in the dep-info of the crate whose
+    /// macro expansion is currently being generated, so Cargo recompiles
+    /// exactly the crates that read constants when the file changes.
+    ///
+    /// The `sov-modules-macros` build script intentionally does not watch the
+    /// file (see `build.rs`); without these tokens, edits to the manifest
+    /// would not trigger any recompilation at all.
+    pub fn dependency_tracking_tokens(&self) -> TokenStream {
+        if !self.track_as_dependency {
+            return TokenStream::new();
+        }
+        // File-backed paths originate from the `CONSTANTS_MANIFEST_PATH` env
+        // var, which is always valid UTF-8.
+        let path = self
+            .path
+            .to_str()
+            .expect("constants manifest path is not valid UTF-8");
+        quote::quote!(
+            const _: &[u8] = ::core::include_bytes!(#path);
+        )
     }
 
     /// Gets the requested object from the manifest by key
@@ -199,7 +236,9 @@ impl<'a> Manifest<'a> {
             }
         }
 
+        let tracking = self.dependency_tracking_tokens();
         Ok(quote::quote! {
+            #tracking
             let #field = #ty {
                 #(#field_values,)*
             };
