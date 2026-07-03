@@ -48,7 +48,7 @@ pub fn make_const_value(input: &ConfigValueInput) -> syn::Result<TokenStream> {
 pub fn make_const_value_inner(input: &ConfigValueInput) -> syn::Result<TokenStream> {
     // Parse the manifest...
     let field_ident = Ident::new(&input.constant_name.value(), input.constant_name.span());
-    let manifest = Manifest::read_constants(&field_ident)?;
+    let manifest = Manifest::read_for_constant(&field_ident)?;
 
     // ... and extract the TOML value.
     let toml_value = manifest.get(&field_ident)?;

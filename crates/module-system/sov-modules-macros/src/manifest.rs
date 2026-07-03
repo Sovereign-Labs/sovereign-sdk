@@ -7,6 +7,39 @@ use toml::Value;
 
 const CONSTANTS_MANIFEST_PATH: Option<&str> = option_env!("CONSTANTS_MANIFEST_PATH");
 
+/// Constants holding per-network chain identity. When a `chain-metadata.toml`
+/// file exists next to `constants.toml`, these keys are read from it instead
+/// (see [`Manifest::read_for_constant`]), so editing them recompiles only the
+/// crates that read them.
+///
+/// The routing is static — by key name only. A content-based "look in one
+/// file, then the other" lookup would make the choice depend on both files'
+/// contents, forcing every consumer to track both files and destroying the
+/// fine-grained recompilation this split exists to provide.
+const CHAIN_METADATA_KEYS: &[&str] = &[
+    "CHAIN_ID",
+    "CHAIN_NAME",
+    "CHAIN_HASH_OVERRIDES",
+    "BATCH_NAMESPACE",
+    "PROOF_NAMESPACE",
+];
+
+/// Path of the chain-metadata manifest sitting next to the given constants
+/// manifest: `chain-metadata.toml` next to `constants.toml`, or
+/// `chain-metadata.testing.toml` next to `constants.testing.toml` (the baked
+/// constants filename already encodes whether build.rs selected test mode, so
+/// there is deliberately no cross-variant fallback).
+fn chain_metadata_sibling(constants_path: &Path) -> PathBuf {
+    let filename = if constants_path.file_name().and_then(|name| name.to_str())
+        == Some("constants.testing.toml")
+    {
+        "chain-metadata.testing.toml"
+    } else {
+        "chain-metadata.toml"
+    };
+    constants_path.with_file_name(filename)
+}
+
 #[derive(Debug, Clone)]
 pub struct Manifest<'a> {
     parent: &'a Ident,
@@ -55,7 +88,53 @@ impl<'a> Manifest<'a> {
     ///
     /// `parent` is used to report the errors to the correct span location.
     pub fn read_constants(parent: &'a Ident) -> syn::Result<Self> {
-        let constants_path = CONSTANTS_MANIFEST_PATH.map(PathBuf::from).ok_or_else(|| {
+        let constants_path = Self::baked_constants_path(parent)?;
+        Self::read_file(constants_path, parent)
+    }
+
+    /// Reads the manifest that serves the constant `name`, for
+    /// `config_value!`-style lookups.
+    ///
+    /// Most constants live in `constants.toml`, resolved exactly like
+    /// [`Self::read_constants`]. The chain-identity constants listed in
+    /// [`CHAIN_METADATA_KEYS`] are instead served by the
+    /// [`chain_metadata_sibling`] file, when it exists:
+    ///
+    /// * chain-metadata file exists → the key **must** be defined there;
+    ///   a chain key missing from it is a hard error even if
+    ///   `constants.toml` still defines it, because a partial migration
+    ///   must fail loudly rather than silently make consumers track both
+    ///   files.
+    /// * chain-metadata file does not exist → the key is read from
+    ///   `constants.toml` like any other constant, so pre-split layouts
+    ///   keep working unchanged.
+    ///
+    /// Whichever file is actually read becomes this manifest's tracked
+    /// dependency (see [`Self::dependency_tracking_tokens`]), which is what
+    /// makes editing chain metadata recompile only the crates that read it.
+    pub fn read_for_constant(name: &'a Ident) -> syn::Result<Self> {
+        let constants_path = Self::baked_constants_path(name)?;
+        Self::read_for_constant_at(constants_path, name)
+    }
+
+    /// Path-parameterized body of [`Self::read_for_constant`], testable
+    /// without the baked `CONSTANTS_MANIFEST_PATH`.
+    fn read_for_constant_at(constants_path: PathBuf, name: &'a Ident) -> syn::Result<Self> {
+        if CHAIN_METADATA_KEYS.contains(&name.to_string().as_str()) {
+            let chain_metadata_path = chain_metadata_sibling(&constants_path);
+            if chain_metadata_path.is_file() {
+                let manifest = Self::read_file(chain_metadata_path, name)?;
+                manifest.check_has_constant(name)?;
+                return Ok(manifest);
+            }
+        }
+        Self::read_file(constants_path, name)
+    }
+
+    /// The `constants.toml` path resolved by the build script (see
+    /// `build.rs`) and baked into this proc-macro binary.
+    fn baked_constants_path(parent: &Ident) -> syn::Result<PathBuf> {
+        CONSTANTS_MANIFEST_PATH.map(PathBuf::from).ok_or_else(|| {
             syn::Error::new(
                 parent.span(),
                 format!(
@@ -63,11 +142,15 @@ impl<'a> Manifest<'a> {
                     "constants.toml"
                 ),
             )
-        })?;
+        })
+    }
 
-        let constants = fs::read_to_string(&constants_path).map_err(|e| {
+    /// Reads and parses a manifest file, marking it as a tracked dependency
+    /// of the consuming crate.
+    fn read_file(path: PathBuf, parent: &'a Ident) -> syn::Result<Self> {
+        let contents = fs::read_to_string(&path).map_err(|e| {
             Self::err(
-                &constants_path,
+                &path,
                 parent,
                 format!(
                     "failed to read `{}`: {}. The path is resolved once when \
@@ -75,15 +158,39 @@ impl<'a> Manifest<'a> {
                      was relocated since, run `cargo clean -p sov-modules-macros` to re-resolve \
                      it, or set the `CONSTANTS_MANIFEST` environment variable to the directory \
                      containing the file",
-                    constants_path.display(),
+                    path.display(),
                     e
                 ),
             )
         })?;
 
-        let mut manifest = Self::read_str(constants, constants_path, parent)?;
+        let mut manifest = Self::read_str(contents, path, parent)?;
         manifest.track_as_dependency = true;
         Ok(manifest)
+    }
+
+    /// Errors unless `name` is defined under this manifest's `[constants]`
+    /// table. Used to fail loudly on partially migrated chain-metadata
+    /// files instead of falling back to `constants.toml`.
+    fn check_has_constant(&self, name: &Ident) -> syn::Result<()> {
+        let is_present = self
+            .value
+            .as_table()
+            .and_then(|root| root.get("constants"))
+            .and_then(toml::Value::as_table)
+            .is_some_and(|constants| constants.contains_key(&name.to_string()));
+        if is_present {
+            return Ok(());
+        }
+        Err(syn::Error::new(
+            name.span(),
+            format!(
+                "`{}` is a chain-metadata constant; it must be defined in `{}` \
+                 (found the file but not the key). Move it there from `constants.toml`.",
+                name,
+                self.path.display(),
+            ),
+        ))
     }
 
     /// Tokens that record the manifest file in the dep-info of the crate whose
@@ -322,6 +429,91 @@ mod tests {
                 };
             )
             .to_string()
+        );
+    }
+
+    fn ident(name: &str) -> Ident {
+        Ident::new(name, proc_macro2::Span::call_site())
+    }
+
+    /// `constants.toml` path of a committed fixture layout under
+    /// `tests/manifest_fixtures/`.
+    fn fixture_constants_path(layout: &str) -> PathBuf {
+        Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/manifest_fixtures")
+            .join(layout)
+            .join("constants.toml")
+    }
+
+    #[test]
+    fn chain_metadata_sibling_of_production_manifest() {
+        assert_eq!(
+            chain_metadata_sibling(Path::new("/workspace/constants.toml")),
+            PathBuf::from("/workspace/chain-metadata.toml")
+        );
+    }
+
+    #[test]
+    fn chain_metadata_sibling_of_testing_manifest() {
+        assert_eq!(
+            chain_metadata_sibling(Path::new("/workspace/constants.testing.toml")),
+            PathBuf::from("/workspace/chain-metadata.testing.toml")
+        );
+    }
+
+    #[test]
+    fn chain_key_is_read_from_chain_metadata_file_when_present() {
+        let field = ident("CHAIN_ID");
+        let manifest =
+            Manifest::read_for_constant_at(fixture_constants_path("split"), &field).unwrap();
+
+        assert_eq!(
+            manifest.path,
+            fixture_constants_path("split").with_file_name("chain-metadata.toml"),
+            "chain keys must be served by (and tracked against) the chain-metadata file"
+        );
+    }
+
+    #[test]
+    fn non_chain_key_is_read_from_constants_file() {
+        let field = ident("MAX_TX_SIZE");
+        let manifest =
+            Manifest::read_for_constant_at(fixture_constants_path("split"), &field).unwrap();
+
+        assert_eq!(
+            manifest.path,
+            fixture_constants_path("split"),
+            "non-chain keys must always be served by constants.toml"
+        );
+    }
+
+    #[test]
+    fn chain_key_falls_back_to_constants_file_when_chain_metadata_is_absent() {
+        let field = ident("CHAIN_ID");
+        let manifest =
+            Manifest::read_for_constant_at(fixture_constants_path("legacy"), &field).unwrap();
+
+        assert_eq!(
+            manifest.path,
+            fixture_constants_path("legacy"),
+            "pre-split layouts must keep reading chain keys from constants.toml"
+        );
+    }
+
+    #[test]
+    fn chain_key_missing_from_existing_chain_metadata_file_is_an_error() {
+        let field = ident("CHAIN_ID");
+        let error = Manifest::read_for_constant_at(fixture_constants_path("partial"), &field)
+            .unwrap_err()
+            .to_string();
+
+        assert!(
+            error.contains("`CHAIN_ID` is a chain-metadata constant"),
+            "error must name the missing key: {error}"
+        );
+        assert!(
+            error.contains("chain-metadata.toml"),
+            "error must name the chain-metadata file: {error}"
         );
     }
 }
