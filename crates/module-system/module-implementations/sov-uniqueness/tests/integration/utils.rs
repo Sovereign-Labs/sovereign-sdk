@@ -13,7 +13,7 @@ use sov_evm::{
     AccountData, EthereumAuthenticator, EvmChainSpec, EvmGenesisConfig, RlpEvmTransaction, SpecId,
 };
 use sov_evm_test_utils::LegacySimpleStorage;
-use sov_modules_api::capabilities::{config_chain_id, TransactionAuthenticator, UniquenessData};
+use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
 use sov_modules_api::{EncodeCall, RawTx};
@@ -104,7 +104,7 @@ pub(crate) fn generate_value_setter_uniqueness_tx(
 
     let transaction = UnsignedTransaction::new(
         runtime_msg,
-        config_chain_id(),
+        config_value!("CHAIN_ID"),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         uniqueness,

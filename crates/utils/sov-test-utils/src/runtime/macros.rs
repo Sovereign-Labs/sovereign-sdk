@@ -123,6 +123,14 @@ macro_rules! generate_runtime_without_capabilities {
         {
             const CHAIN_HASH: [u8; 32] = [11; 32];
 
+            fn chain_id() -> u64 {
+                ::sov_modules_api::macros::config_value!("CHAIN_ID")
+            }
+
+            fn chain_hash_overrides() -> &'static [::sov_modules_api::ChainHashOverride] {
+                ::sov_modules_api::macros::config_value!("CHAIN_HASH_OVERRIDES")
+            }
+
             type GenesisConfig = <Self as ::sov_modules_api::Genesis>::Config;
             type GenesisInput = ();
             type ModuleExecutionConfig = ();
@@ -158,6 +166,7 @@ macro_rules! generate_runtime_without_capabilities {
                 let schema_endpoint = StandardSchemaEndpoint::<S>::new(
                     &schema,
                     Self::CHAIN_HASH.into(),
+                    <Self as $crate::runtime::Runtime<S>>::chain_hash_overrides(),
                     api_state.checkpoint_receiver(),
                 )
                 .expect("Failed to initialize StandardSchemaEndpoint");

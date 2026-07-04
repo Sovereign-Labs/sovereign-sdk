@@ -206,7 +206,7 @@ pub(crate) fn derive_cli_wallet(
             }
 
             impl #impl_generics_with_inner ::sov_modules_api::cli::CliTxImportArg for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_deserialize_bounds, __Inner: clap::Args + ::sov_modules_api::cli::CliTxImportArg {
-                fn chain_id(&self) -> u64 {
+                fn chain_id(&self) -> Option<u64> {
                     match self {
                         #( #tx_args_subcommand_match_arms_chain_id )*
                         _ => unreachable!(),

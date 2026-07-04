@@ -80,8 +80,13 @@ mod schema_generation {
         static SCHEMA: OnceLock<Schema> = OnceLock::new();
 
         SCHEMA.get_or_init(|| {
-            get_runtime_schema::<S, SchemaGenRuntime<S>>()
-                .expect("Failed to generate test runtime schema")
+            get_runtime_schema::<S, SchemaGenRuntime<S>>(
+                sov_modules_api::sov_universal_wallet::schema::ChainData {
+                    chain_id: sov_modules_api::macros::config_value!("CHAIN_ID"),
+                    chain_name: sov_modules_api::macros::config_value!("CHAIN_NAME").to_string(),
+                },
+            )
+            .expect("Failed to generate test runtime schema")
         })
     }
 }

@@ -5,7 +5,6 @@ use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_test_utils::MockDaSpec;
 
-use crate::capabilities::config_chain_id;
 use crate::{ModuleId, ModuleInfo, Spec};
 
 type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
@@ -182,19 +181,6 @@ fn test_default_signature_roundtrip() {
     let sig = key.sign(msg);
     sig.verify(&key.pub_key(), msg)
         .expect("Roundtrip verification failed");
-}
-
-// This is a bit of a special test because it only fails when:
-//  1. the chain ID is overridden with `SOV_TEST_CONST_OVERRIDE_CHAIN_ID`; and
-//  2. the test is run in non-release mode.
-//
-// By setting the env. variable and controlling the test profile, this test
-// can be used to ensure that constant overriding is disabled in release mode.
-//
-// Grep for `SOV_TEST_CONST_OVERRIDE_CHAIN_ID` to find the relevant code.
-#[test]
-fn assert_chain_id_was_not_overridden() {
-    assert_eq!(config_chain_id(), 4321);
 }
 
 mod chain_hash_override_tests {

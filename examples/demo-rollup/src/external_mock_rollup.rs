@@ -164,7 +164,8 @@ impl FullNodeBlueprint<Native> for ExternalMockDemoRollup<Native> {
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         sequence_number_provider: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
-        Ok(Self::ProofSender::new(sequence_number_provider))
+        let chain_id = <Runtime<Self::Spec> as sov_modules_api::Runtime<Self::Spec>>::chain_id();
+        Ok(Self::ProofSender::new(sequence_number_provider, chain_id))
     }
 
     fn compute_code_commitments() -> anyhow::Result<(MockCodeCommitment, MockCodeCommitment)> {

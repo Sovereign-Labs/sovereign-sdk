@@ -128,11 +128,7 @@ where
         match input {
             Eip712AuthenticatorInput::Eip712(tx) => authenticate::<_, S, Rt, SP>(&tx.data, state),
             Eip712AuthenticatorInput::Standard(tx) => {
-                sov_modules_api::capabilities::authenticate::<_, S, Rt>(
-                    &tx.data,
-                    &Rt::CHAIN_HASH,
-                    state,
-                )
+                sov_modules_api::capabilities::authenticate::<_, S, Rt>(&tx.data, state)
             }
         }
     }
@@ -194,7 +190,7 @@ where
 pub fn authenticate<
     Accessor: ProvableStateReader<User, Spec = S>,
     S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
-    D: DispatchCall<Spec = S>,
+    D: Runtime<S>,
     SP: SchemaProvider,
 >(
     raw_tx: &[u8],
@@ -237,7 +233,7 @@ pub fn authenticate<
 
 fn verify_and_decode_tx<
     S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
-    D: DispatchCall<Spec = S>,
+    D: Runtime<S>,
     SP: SchemaProvider,
 >(
     raw_tx_hash: TxHash,
@@ -255,7 +251,7 @@ fn verify_and_decode_tx<
         }
     };
 
-    verify_chain_id(details, raw_tx_hash)?;
+    verify_chain_id::<S, D>(details, raw_tx_hash)?;
     verify_eip712_signature::<S, D, SP>(&tx, raw_tx_hash, meter)?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {

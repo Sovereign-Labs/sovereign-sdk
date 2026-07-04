@@ -1,6 +1,5 @@
 use std::fs;
 
-use crate::capabilities::config_chain_id;
 use crate::{clap, Amount, CliWallet};
 
 /// A trait that defines the interface for a CLI wallet.
@@ -14,8 +13,10 @@ where
 
 /// A trait that defines the arguments for a CLI transaction import method.
 pub trait CliTxImportArg {
-    /// The chain ID of the transaction.
-    fn chain_id(&self) -> u64;
+    /// The chain ID of the transaction, if explicitly provided. `None` means
+    /// "use the rollup's configured chain ID": the runtime-aware wallet layer
+    /// fills it with `Runtime::chain_id()`.
+    fn chain_id(&self) -> Option<u64>;
 
     /// The priority fee to pay the sequencer, expressed as a fraction of the tokens spent on gas in basis points.
     /// for example, setting this value to 1 pays a tip of 1 token to the sequencer for every 10_000 tokens spent on gas.
@@ -43,8 +44,11 @@ pub struct JsonStringArg {
     pub json: String,
 
     /// The chain ID of the transaction.
-    #[arg(long, help = "The chain ID of the transaction.", default_value_t = config_chain_id())]
-    pub chain_id: u64,
+    #[arg(
+        long,
+        help = "The chain ID of the transaction. Defaults to the rollup's configured chain ID."
+    )]
+    pub chain_id: Option<u64>,
 
     /// the gas tip for the sequencer.
     #[arg(
@@ -85,8 +89,11 @@ pub struct FileNameArg {
     pub path: String,
 
     /// The chain ID of the transaction.
-    #[arg(long, help = "The chain ID of the transaction.", default_value_t = config_chain_id())]
-    pub chain_id: u64,
+    #[arg(
+        long,
+        help = "The chain ID of the transaction. Defaults to the rollup's configured chain ID."
+    )]
+    pub chain_id: Option<u64>,
 
     /// the gas tip for the sequencer.
     #[arg(
@@ -120,7 +127,7 @@ pub struct FileNameArg {
 }
 
 impl CliTxImportArg for JsonStringArg {
-    fn chain_id(&self) -> u64 {
+    fn chain_id(&self) -> Option<u64> {
         self.chain_id
     }
 
@@ -138,7 +145,7 @@ impl CliTxImportArg for JsonStringArg {
 }
 
 impl CliTxImportArg for FileNameArg {
-    fn chain_id(&self) -> u64 {
+    fn chain_id(&self) -> Option<u64> {
         self.chain_id
     }
 

@@ -181,14 +181,14 @@ where
 
         let intermediate_repr: RT::CliStringRepr<U> = match self {
             TransactionLoadWorkflow::FromFile(file) => {
-                chain_id = file.chain_id();
+                chain_id = file.chain_id().unwrap_or_else(RT::chain_id);
                 max_priority_fee_bips = file.max_priority_fee_bips();
                 max_fee = file.max_fee();
                 gas_limit = file.gas_limit().map(|m| m.to_vec());
                 file.try_into().map_err(Into::<anyhow::Error>::into)?
             }
             TransactionLoadWorkflow::FromString(json) => {
-                chain_id = json.chain_id();
+                chain_id = json.chain_id().unwrap_or_else(RT::chain_id);
                 max_priority_fee_bips = json.max_priority_fee_bips();
                 max_fee = json.max_fee();
                 gas_limit = json.gas_limit().map(|m| m.to_vec());

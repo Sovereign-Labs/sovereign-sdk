@@ -83,6 +83,28 @@ pub trait Runtime<S: Spec>:
     /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
+    /// The chain ID of the rollup, checked against the chain id claimed by
+    /// every transaction as defense-in-depth under the [`Self::CHAIN_HASH`]
+    /// signature binding.
+    ///
+    /// Implement as a one-liner reading the manifest at the leaf crate:
+    /// `sov_modules_api::macros::config_value!("CHAIN_ID")`. This is a method
+    /// rather than an associated const because the debug-build env-override
+    /// branch of `config_value!` is not const-evaluable, and it deliberately
+    /// has no default body: a default would read the manifest inside
+    /// `sov-modules-api`, making every api dependent rebuild on chain-id
+    /// edits.
+    fn chain_id() -> u64;
+
+    /// The chain-hash overrides by height range (see [`ChainHashOverride`]),
+    /// letting transactions signed against older schemas keep verifying
+    /// across upgrades.
+    ///
+    /// Implement as
+    /// `sov_modules_api::macros::config_value!("CHAIN_HASH_OVERRIDES")` at
+    /// the leaf crate.
+    fn chain_hash_overrides() -> &'static [ChainHashOverride];
+
     /// GenesisConfig type.
     type GenesisConfig: Clone + Send + Sync + GenesisParams;
 
@@ -200,6 +222,28 @@ pub trait Runtime<S: Spec>:
     /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
+    /// The chain ID of the rollup, checked against the chain id claimed by
+    /// every transaction as defense-in-depth under the [`Self::CHAIN_HASH`]
+    /// signature binding.
+    ///
+    /// Implement as a one-liner reading the manifest at the leaf crate:
+    /// `sov_modules_api::macros::config_value!("CHAIN_ID")`. This is a method
+    /// rather than an associated const because the debug-build env-override
+    /// branch of `config_value!` is not const-evaluable, and it deliberately
+    /// has no default body: a default would read the manifest inside
+    /// `sov-modules-api`, making every api dependent rebuild on chain-id
+    /// edits.
+    fn chain_id() -> u64;
+
+    /// The chain-hash overrides by height range (see [`ChainHashOverride`]),
+    /// letting transactions signed against older schemas keep verifying
+    /// across upgrades.
+    ///
+    /// Implement as
+    /// `sov_modules_api::macros::config_value!("CHAIN_HASH_OVERRIDES")` at
+    /// the leaf crate.
+    fn chain_hash_overrides() -> &'static [ChainHashOverride];
+
     /// `GenesisConfig` type.
     type GenesisConfig: Clone + Send + Sync;
 
@@ -250,17 +294,20 @@ impl Default for NodeEndpoints {
 }
 
 /// Helper function to get [`sov_universal_wallet::schema::Schema`] for the [`Runtime`]
+///
+/// The caller supplies the chain identity explicitly (typically read via
+/// `config_value!("CHAIN_ID")` / `config_value!("CHAIN_NAME")` in the calling
+/// crate), so that `sov-modules-api` itself never reads — and therefore never
+/// rebuilds on edits to — the chain-metadata manifest.
 pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'static>(
+    chain_data: sov_universal_wallet::schema::ChainData,
 ) -> anyhow::Result<sov_universal_wallet::schema::Schema> {
     let schema = sov_universal_wallet::schema::Schema::of_rollup_types_with_chain_data::<
         crate::transaction::Transaction<R, S>,
         crate::transaction::UnsignedTransaction<R, S>,
         R::Decodable,
         S::Address,
-    >(sov_universal_wallet::schema::ChainData {
-        chain_id: sov_modules_macros::config_value!("CHAIN_ID"),
-        chain_name: sov_modules_macros::config_value!("CHAIN_NAME").to_string(),
-    })?;
+    >(chain_data)?;
     Ok(schema)
 }
 

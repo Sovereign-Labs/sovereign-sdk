@@ -6,7 +6,6 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::Digest;
 use serde::{Deserialize, Serialize};
-use sov_modules_macros::config_value_private;
 use sov_rollup_interface::TxHash;
 use sov_state::User;
 use thiserror::Error;
@@ -23,29 +22,6 @@ use crate::{
     MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher, ProvableStateReader,
     RawTx, Runtime, Spec, VersionReader,
 };
-
-/// The chain ID of the rollup.
-pub fn config_chain_id() -> u64 {
-    config_value_private!("CHAIN_ID")
-}
-
-/// Resolves all valid chain hashes for a given height using configured overrides.
-///
-/// This function loads the `CHAIN_HASH_OVERRIDES` from config and uses them
-/// to resolve the appropriate chain hashes for the given height, including
-/// any hashes that are valid due to grace periods.
-///
-/// This is useful for endpoints (like `/rollup/schema`) that need to return
-/// the currently active chain hash for wallets.
-pub fn resolve_chain_hashes_for_height(
-    height: u64,
-    default_hash: [u8; 32],
-) -> crate::runtime::ResolvedChainHashes {
-    #[allow(clippy::needless_borrow)]
-    // We have slightly different types when static vs. dynamic constant resolution is enabled. We need an extra borrow in one case but not the other, so clippy complains.
-    let overrides: &[crate::ChainHashOverride] = &config_value_private!("CHAIN_HASH_OVERRIDES");
-    crate::runtime::resolve_chain_hashes(height, overrides, default_hash)
-}
 
 /// A batch sent by an unregistered sequencer contains only one transaction.
 pub struct BatchFromUnregisteredSequencer {
@@ -212,7 +188,7 @@ where
             capabilities::fatal_deserialization_error::<_, S, _>(&tx.data, e, pre_exec_ws)
         })?;
 
-        crate::capabilities::authenticate::<_, S, Rt>(&input.data, &Rt::CHAIN_HASH, pre_exec_ws)
+        crate::capabilities::authenticate::<_, S, Rt>(&input.data, pre_exec_ws)
     }
 
     #[cfg(feature = "native")]
@@ -347,15 +323,16 @@ impl From<AuthenticationError> for UnregisteredAuthenticationError {
     }
 }
 
-/// Verifies that the transaction has the correct chain ID.
-pub fn verify_chain_id<S: Spec>(
+/// Verifies that the transaction has the chain ID configured by the runtime
+/// (see [`Runtime::chain_id`]).
+pub fn verify_chain_id<S: Spec, Rt: Runtime<S>>(
     tx_details: &TxDetails<S>,
     raw_tx_hash: TxHash,
 ) -> Result<(), AuthenticationError> {
-    if tx_details.chain_id != config_chain_id() {
+    if tx_details.chain_id != Rt::chain_id() {
         return Err(AuthenticationError::FatalError(
             FatalError::InvalidChainId {
-                expected: config_chain_id(),
+                expected: Rt::chain_id(),
                 got: tx_details.chain_id,
             },
             raw_tx_hash,
@@ -412,29 +389,12 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     res
 }
 
-/// Authenticate and verify deserialized sov-tx. See `authenticate`.
-///
-/// # Errors
-/// Returns an error if gas runs out at any point, if deserialization or hashing fails, or if the
-/// signature cannot be verified.
-pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
-    raw_tx_hash: TxHash,
-    tx: Transaction<D, S>,
-    chain_hash: &[u8; 32],
-    meter: &mut impl GasMeter<Spec = S>,
-) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    let resolved_hashes = crate::runtime::ResolvedChainHashes {
-        primary: *chain_hash,
-        grace_period_hashes: Vec::new(),
-    };
-    verify_and_decode_tx_multi_hash(raw_tx_hash, tx, resolved_hashes, meter)
-}
-
 /// Authenticate raw sov-transaction.
 ///
 /// This function resolves the appropriate chain hashes for the current block height
-/// using configured overrides (including grace periods), falling back to `default_chain_hash`
-/// when no override applies. It tries verification with each valid hash until one succeeds.
+/// using the runtime's configured overrides (including grace periods), falling back to
+/// [`Runtime::CHAIN_HASH`] when no override applies. It tries verification with each
+/// valid hash until one succeeds.
 ///
 /// # Errors
 /// Returns an error if gas runs out at any point, if deserialization or hashing fails, or if the
@@ -442,21 +402,24 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
 pub fn authenticate<
     Accessor: ProvableStateReader<User, Spec = S> + VersionReader,
     S: Spec,
-    D: DispatchCall<Spec = S>,
+    Rt: Runtime<S>,
 >(
     mut raw_tx: &[u8],
-    default_chain_hash: &[u8; 32],
     state: &mut Accessor,
-) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+) -> Result<AuthenticationOutput<S, Rt::Decodable>, AuthenticationError> {
     // Resolve all valid chain hashes for this height (including grace period hashes)
     let height = state.rollup_height_to_access();
-    let resolved_hashes = resolve_chain_hashes_for_height(height.get(), *default_chain_hash);
+    let resolved_hashes = crate::runtime::resolve_chain_hashes(
+        height.get(),
+        Rt::chain_hash_overrides(),
+        Rt::CHAIN_HASH,
+    );
 
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
     let tx =
-        match <Transaction<D, S> as MeteredBorshDeserialize<S>>::deserialize(&mut raw_tx, state) {
+        match <Transaction<Rt, S> as MeteredBorshDeserialize<S>>::deserialize(&mut raw_tx, state) {
             Ok(ok) => ok,
 
             Err(MeteredBorshDeserializeError::GasError(e)) => {
@@ -483,19 +446,19 @@ pub fn authenticate<
         ));
     }
 
-    verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
+    verify_and_decode_tx_multi_hash::<S, Rt>(raw_tx_hash, tx, resolved_hashes, state)
 }
 
 /// Authenticate and verify deserialized sov-tx with multiple chain hashes.
 ///
 /// Tries verification with the primary hash first, then any grace period hashes.
 /// Returns success on the first hash that verifies successfully.
-fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
+fn verify_and_decode_tx_multi_hash<S: Spec, Rt: Runtime<S>>(
     raw_tx_hash: TxHash,
-    tx: Transaction<D, S>,
+    tx: Transaction<Rt, S>,
     resolved_hashes: crate::runtime::ResolvedChainHashes,
     meter: &mut impl GasMeter<Spec = S>,
-) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+) -> Result<AuthenticationOutput<S, Rt::Decodable>, AuthenticationError> {
     // Extract auth_data and verify chain_id (these don't depend on chain_hash)
     let (auth_data, details, runtime_call) = match &tx {
         Transaction::V0(tx_v0) => {
@@ -508,7 +471,7 @@ fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
         }
     };
 
-    verify_chain_id(details, raw_tx_hash)?;
+    verify_chain_id::<S, Rt>(details, raw_tx_hash)?;
 
     // Try signature verification with each valid chain hash
     let mut last_error = None;
@@ -547,8 +510,8 @@ pub fn authenticate_unregistered<
     raw_tx: &[u8],
     pre_exec_ws: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, Rt::Decodable>, UnregisteredAuthenticationError> {
-    let (tx_and_raw_hash, auth_data, runtime_call) =
-        authenticate::<_, S, Rt>(raw_tx, &Rt::CHAIN_HASH, pre_exec_ws).map_err(|e| match e {
+    let (tx_and_raw_hash, auth_data, runtime_call) = authenticate::<_, S, Rt>(raw_tx, pre_exec_ws)
+        .map_err(|e| match e {
             AuthenticationError::FatalError(err, hash) => {
                 UnregisteredAuthenticationError::FatalError(err, hash)
             }

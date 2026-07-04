@@ -246,7 +246,7 @@ where
         _rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         proof_blob_sender: Arc<dyn ProofBlobSender>,
     ) -> anyhow::Result<Self::ProofSender> {
-        Ok(Self::ProofSender::new(proof_blob_sender))
+        Ok(Self::ProofSender::new(proof_blob_sender, R::chain_id()))
     }
 
     #[allow(clippy::type_complexity)]

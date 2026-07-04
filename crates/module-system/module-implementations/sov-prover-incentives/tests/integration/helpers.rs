@@ -1,6 +1,7 @@
 use serde::Serialize;
 use sov_bank::{config_gas_token_id, Bank};
 use sov_chain_state::ChainState;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::registration_lib::StakeRegistration;
 use sov_modules_api::{
@@ -143,7 +144,7 @@ pub(crate) fn serialize_proof_with_commitment<T: Serialize>(
     };
 
     borsh::to_vec(
-        &serialize_proof_blob_with_metadata::<S>(serialized_proof)
+        &serialize_proof_blob_with_metadata::<S>(serialized_proof, config_value!("CHAIN_ID"))
             .unwrap()
             .0,
     )

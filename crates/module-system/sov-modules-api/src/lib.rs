@@ -190,6 +190,7 @@ pub mod prelude {
     pub extern crate bech32;
     #[cfg(feature = "native")]
     pub extern crate clap;
+    pub extern crate hex;
     #[cfg(feature = "native")]
     pub extern crate jsonrpsee;
     #[cfg(feature = "arbitrary")]
