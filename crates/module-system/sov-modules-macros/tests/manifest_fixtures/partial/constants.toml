@@ -1,0 +1,5 @@
+# Unit-test fixture for `Manifest::read_for_constant_at` (src/manifest.rs):
+# partially migrated layout — chain-metadata.toml exists but is missing
+# CHAIN_ID, which must be a hard error (no fallback to this file).
+[constants]
+CHAIN_ID = 7777
