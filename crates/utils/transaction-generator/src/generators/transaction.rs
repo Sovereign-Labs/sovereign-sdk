@@ -3,7 +3,6 @@ use std::sync::Arc;
 
 use sov_mock_da::MockDaSpec;
 use sov_mock_da::MockHash;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::arbitrary;
 use sov_modules_api::transaction::TxDetails;
 use sov_modules_api::{
@@ -260,7 +259,7 @@ where
                 max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
                 max_fee: TEST_DEFAULT_MAX_FEE,
                 gas_limit: None,
-                chain_id: config_value!("CHAIN_ID"),
+                chain_id: RT::chain_id(),
             },
         };
 

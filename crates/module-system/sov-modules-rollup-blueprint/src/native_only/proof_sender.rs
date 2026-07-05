@@ -20,14 +20,11 @@ pub struct SovApiProofSender<S: Spec> {
     _phantom: std::marker::PhantomData<S>,
     inner: Arc<dyn ProofBlobSender>,
     /// The rollup's chain id, stamped into the proof-blob tx details.
-    /// Supplied by the caller from `Runtime::chain_id()` (this type implements
-    /// the runtime-agnostic `ProofSender` trait, so it cannot read it itself).
     chain_id: u64,
 }
 
 impl<S: Spec> SovApiProofSender<S> {
-    /// Creates a new [`SovApiProofSender`]. `chain_id` should come from
-    /// `Runtime::chain_id()`.
+    /// Creates a new [`SovApiProofSender`].
     pub fn new(inner: Arc<dyn ProofBlobSender>, chain_id: u64) -> Self {
         Self {
             _phantom: Default::default(),
@@ -75,7 +72,6 @@ impl<S: Spec> ProofSender for SovApiProofSender<S> {
 }
 
 /// See [`ProofSender::publish_attestation_blob_with_metadata`].
-/// `chain_id` should come from `Runtime::chain_id()`.
 pub fn serialize_attestation_blob_with_metadata<S: Spec>(
     serialized_attestation: SerializedAttestation,
     chain_id: u64,
@@ -91,7 +87,6 @@ pub fn serialize_attestation_blob_with_metadata<S: Spec>(
 }
 
 /// See [`ProofSender::publish_challenge_blob_with_metadata`].
-/// `chain_id` should come from `Runtime::chain_id()`.
 pub fn serialize_challenge_blob_with_metadata<S: Spec>(
     serialized_challenge: SerializedChallenge,
     slot_height: SlotNumber,
@@ -108,7 +103,6 @@ pub fn serialize_challenge_blob_with_metadata<S: Spec>(
 }
 
 /// See [`ProofSender::publish_proof_blob_with_metadata`].
-/// `chain_id` should come from `Runtime::chain_id()`.
 pub fn serialize_proof_blob_with_metadata<S: Spec>(
     serialized_proof: SerializedAggregatedProof,
     chain_id: u64,

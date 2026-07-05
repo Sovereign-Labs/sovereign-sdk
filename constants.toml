@@ -7,7 +7,7 @@ freeze = [1, 1]
 
 
 [constants]
-# Chain identity (CHAIN_ID, CHAIN_NAME, CHAIN_HASH_OVERRIDES, BATCH_NAMESPACE,
+# Chain metadata (CHAIN_ID, CHAIN_NAME, CHAIN_HASH_OVERRIDES, BATCH_NAMESPACE,
 # PROOF_NAMESPACE) lives in chain-metadata.toml.
 
 # The number of bytes a transaction can have.

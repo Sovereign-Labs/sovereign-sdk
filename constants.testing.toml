@@ -6,8 +6,7 @@ mint = [2, 2]
 freeze = [1, 1]
 
 [constants]
-# Chain identity (CHAIN_ID, CHAIN_NAME, CHAIN_HASH_OVERRIDES) lives in
-# chain-metadata.testing.toml.
+# Chain metadata lives in chain-metadata.testing.toml.
 
 # The number of bytes a transaction can have.
 MAX_TX_SIZE=1_048_576

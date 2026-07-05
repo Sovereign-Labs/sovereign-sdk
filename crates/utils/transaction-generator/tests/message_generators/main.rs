@@ -1,7 +1,6 @@
 use std::sync::Arc;
 
 use sov_bank::Bank;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::arbitrary::{self};
 use sov_modules_api::transaction::TxDetails;
 use sov_modules_api::{Amount, DispatchCall, EncodeCall, Runtime};
@@ -120,7 +119,7 @@ pub fn plain_tx_with_default_details<R: Runtime<S>>(
             max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
             max_fee: TEST_DEFAULT_MAX_FEE,
             gas_limit: None,
-            chain_id: config_value!("CHAIN_ID"),
+            chain_id: R::chain_id(),
         },
     }
 }

@@ -329,10 +329,11 @@ pub fn verify_chain_id<S: Spec, Rt: Runtime<S>>(
     tx_details: &TxDetails<S>,
     raw_tx_hash: TxHash,
 ) -> Result<(), AuthenticationError> {
-    if tx_details.chain_id != Rt::chain_id() {
+    let expected = Rt::chain_id();
+    if tx_details.chain_id != expected {
         return Err(AuthenticationError::FatalError(
             FatalError::InvalidChainId {
-                expected: Rt::chain_id(),
+                expected,
                 got: tx_details.chain_id,
             },
             raw_tx_hash,

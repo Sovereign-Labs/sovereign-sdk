@@ -1,4 +1,4 @@
-# Per-network chain identity, split out of constants.toml. These values change
+# Per-network chain metadata, split out of constants.toml. These values change
 # on every network switch (devnet/testnet/mainnet), so they live in their own
 # file: editing it recompiles only the crates whose macro expansions read chain
 # metadata (and their dependents), leaving crates that only read constants.toml

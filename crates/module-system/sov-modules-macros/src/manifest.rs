@@ -7,7 +7,7 @@ use toml::Value;
 
 const CONSTANTS_MANIFEST_PATH: Option<&str> = option_env!("CONSTANTS_MANIFEST_PATH");
 
-/// Constants holding per-network chain identity. When a `chain-metadata.toml`
+/// Constants holding per-network chain metadata. When a `chain-metadata.toml`
 /// file exists next to `constants.toml`, these keys are read from it instead
 /// (see [`Manifest::read_for_constant`]), so editing them recompiles only the
 /// crates that read them.
@@ -23,6 +23,11 @@ const CHAIN_METADATA_KEYS: &[&str] = &[
     "BATCH_NAMESPACE",
     "PROOF_NAMESPACE",
 ];
+
+fn is_chain_metadata_key(name: &Ident) -> bool {
+    let name = name.to_string();
+    CHAIN_METADATA_KEYS.contains(&name.as_str())
+}
 
 /// Path of the chain-metadata manifest sitting next to the given constants
 /// manifest: `chain-metadata.toml` next to `constants.toml`, or
@@ -96,7 +101,7 @@ impl<'a> Manifest<'a> {
     /// `config_value!`-style lookups.
     ///
     /// Most constants live in `constants.toml`, resolved exactly like
-    /// [`Self::read_constants`]. The chain-identity constants listed in
+    /// [`Self::read_constants`]. The chain metadata keys listed in
     /// [`CHAIN_METADATA_KEYS`] are instead served by the
     /// [`chain_metadata_sibling`] file, when it exists:
     ///
@@ -120,7 +125,7 @@ impl<'a> Manifest<'a> {
     /// Path-parameterized body of [`Self::read_for_constant`], testable
     /// without the baked `CONSTANTS_MANIFEST_PATH`.
     fn read_for_constant_at(constants_path: PathBuf, name: &'a Ident) -> syn::Result<Self> {
-        if CHAIN_METADATA_KEYS.contains(&name.to_string().as_str()) {
+        if is_chain_metadata_key(name) {
             let chain_metadata_path = chain_metadata_sibling(&constants_path);
             if chain_metadata_path.is_file() {
                 let manifest = Self::read_file(chain_metadata_path, name)?;

@@ -77,7 +77,7 @@ CONSTANTS_MANIFEST=/foo/bar cargo build --manifest-path /foo/bar/Cargo.toml
 
 #### `chain-metadata.toml`
 
-The per-network chain-identity constants — `CHAIN_ID`, `CHAIN_NAME`, `CHAIN_HASH_OVERRIDES`, `BATCH_NAMESPACE`, and `PROOF_NAMESPACE` — can be split into a `chain-metadata.toml` file sitting next to `constants.toml` (`chain-metadata.testing.toml` next to `constants.testing.toml`). It uses the same `[constants]` format:
+The per-network chain metadata keys — `CHAIN_ID`, `CHAIN_NAME`, `CHAIN_HASH_OVERRIDES`, `BATCH_NAMESPACE`, and `PROOF_NAMESPACE` — can be split into a `chain-metadata.toml` file sitting next to `constants.toml` (`chain-metadata.testing.toml` next to `constants.testing.toml`). It uses the same `[constants]` format:
 
 ```toml
 [constants]

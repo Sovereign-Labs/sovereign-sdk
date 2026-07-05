@@ -83,26 +83,20 @@ pub trait Runtime<S: Spec>:
     /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
-    /// The chain ID of the rollup, checked against the chain id claimed by
-    /// every transaction as defense-in-depth under the [`Self::CHAIN_HASH`]
-    /// signature binding.
+    /// The chain ID configured by the runtime and checked against every
+    /// transaction.
     ///
-    /// Implement as a one-liner reading the manifest at the leaf crate:
-    /// `sov_modules_api::macros::config_value!("CHAIN_ID")`. This is a method
-    /// rather than an associated const because the debug-build env-override
-    /// branch of `config_value!` is not const-evaluable, and it deliberately
-    /// has no default body: a default would read the manifest inside
-    /// `sov-modules-api`, making every api dependent rebuild on chain-id
-    /// edits.
+    /// Runtimes usually implement this with
+    /// `sov_modules_api::macros::config_value!("CHAIN_ID")` in the leaf crate;
+    /// keeping it required avoids manifest reads from `sov-modules-api`.
     fn chain_id() -> u64;
 
     /// The chain-hash overrides by height range (see [`ChainHashOverride`]),
     /// letting transactions signed against older schemas keep verifying
     /// across upgrades.
     ///
-    /// Implement as
-    /// `sov_modules_api::macros::config_value!("CHAIN_HASH_OVERRIDES")` at
-    /// the leaf crate.
+    /// Runtimes usually implement this with
+    /// `sov_modules_api::macros::config_value!("CHAIN_HASH_OVERRIDES")`.
     fn chain_hash_overrides() -> &'static [ChainHashOverride];
 
     /// GenesisConfig type.
@@ -222,26 +216,11 @@ pub trait Runtime<S: Spec>:
     /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
-    /// The chain ID of the rollup, checked against the chain id claimed by
-    /// every transaction as defense-in-depth under the [`Self::CHAIN_HASH`]
-    /// signature binding.
-    ///
-    /// Implement as a one-liner reading the manifest at the leaf crate:
-    /// `sov_modules_api::macros::config_value!("CHAIN_ID")`. This is a method
-    /// rather than an associated const because the debug-build env-override
-    /// branch of `config_value!` is not const-evaluable, and it deliberately
-    /// has no default body: a default would read the manifest inside
-    /// `sov-modules-api`, making every api dependent rebuild on chain-id
-    /// edits.
+    /// The chain ID configured by the runtime and checked against every
+    /// transaction.
     fn chain_id() -> u64;
 
-    /// The chain-hash overrides by height range (see [`ChainHashOverride`]),
-    /// letting transactions signed against older schemas keep verifying
-    /// across upgrades.
-    ///
-    /// Implement as
-    /// `sov_modules_api::macros::config_value!("CHAIN_HASH_OVERRIDES")` at
-    /// the leaf crate.
+    /// The chain-hash overrides by height range.
     fn chain_hash_overrides() -> &'static [ChainHashOverride];
 
     /// `GenesisConfig` type.

@@ -1,4 +1,4 @@
-# Per-network chain identity for test-mode builds (SOV_TEST_MODE_CONST_MANIFEST),
+# Per-network chain metadata for test-mode builds (SOV_TEST_MODE_CONST_MANIFEST),
 # split out of constants.testing.toml. See chain-metadata.toml for details.
 
 [constants]
@@ -6,3 +6,5 @@
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
 CHAIN_HASH_OVERRIDES = []
+BATCH_NAMESPACE = { byte_string = "sov-test-b" }
+PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }
