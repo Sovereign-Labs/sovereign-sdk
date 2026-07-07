@@ -1,5 +1,4 @@
 use std::collections::{BTreeMap, BTreeSet};
-use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::str::FromStr;
 use std::sync::{Arc, LazyLock, Mutex};
@@ -8,7 +7,6 @@ use std::time::Duration;
 use alloy_primitives::{Address, Bytes, TxHash, U256};
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_address::{EthereumAddress, FromVmAddress, MultiAddress};
-use sov_blob_storage::PreferredBatchData;
 use sov_evm::precompiles::{
     EvmPrecompile, EvmPrecompileEnv, PrecompileError, PrecompileOutput, PrecompileResult,
 };
@@ -19,28 +17,16 @@ use sov_evm::{
 use sov_evm_test_utils::{PrecompileTester, SolCall};
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::capabilities::{
-    AuthorizationData, GasEnforcer, Guard, HasCapabilities, HasKernel, ProofProcessor,
-    SequencerAuthorization, SequencerRemuneration, SequencingDataHandler, TransactionAuthenticator,
-    TransactionAuthorizer,
+    Guard, HasCapabilities, HasSequencingData, SequencingDataFormat, TransactionAuthenticator,
 };
 use sov_modules_api::sov_universal_wallet::schema::UniversalWallet;
-use sov_modules_api::transaction::{
-    AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward, Transaction,
-};
-use sov_modules_api::{
-    AggregatedProofPublicData, Amount, BlobReaderTrait, Context, DaSpec, ExecutionContext, Gas,
-    GetGasPrice, InfallibleStateAccessor, InvalidProofError, OperatingMode, RawTx, Rewards,
-    SequencerType, SovAttestation, SovStateTransitionPublicData, Spec, StateAccessor, StateReader,
-    StateWriter, Storage, TxState, VersionReader,
-};
-use sov_modules_stf_blueprint::{GenesisParams, Runtime as RuntimeTrait};
+use sov_modules_api::transaction::Transaction;
+use sov_modules_api::{Amount, RawTx, Spec, TxState};
+use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::Paymaster;
-use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
-use sov_rollup_interface::optimistic::{SerializedAttestation, SerializedChallenge};
-use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
+use sov_rollup_interface::TxHash as SovTxHash;
 use sov_sequencer::SequencerKindConfig;
-use sov_state::{Kernel, User};
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::StandardProvenRollupCapabilities;
@@ -65,9 +51,21 @@ static ORACLE_DATA: LazyLock<Mutex<OracleSequencingData>> =
 #[derive(Clone, Debug, Default, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
 pub struct OracleSequencingData(BTreeMap<u64, u64>);
 
-impl sov_modules_api::capabilities::SequencingDataTrait for OracleSequencingData {
-    fn get_maybe_timestamp(self) -> Option<sov_modules_api::HDTimestamp> {
-        None
+impl SequencingDataFormat for OracleSequencingData {
+    type Key = u64;
+    type Value = u64;
+
+    fn get(bytes: &[u8], key: &Self::Key) -> anyhow::Result<Option<Self::Value>> {
+        Ok(Self::try_from_slice(bytes)?.0.get(key).copied())
+    }
+
+    fn prune_to_used_keys(
+        bytes: sov_modules_api::Bytes,
+        used_keys: &BTreeSet<Self::Key>,
+    ) -> anyhow::Result<Option<sov_modules_api::Bytes>> {
+        let mut data = Self::try_from_slice(&bytes)?;
+        data.0.retain(|key, _| used_keys.contains(key));
+        Ok(Some(borsh::to_vec(&data)?.into()))
     }
 }
 
@@ -99,15 +97,10 @@ impl<S: Spec> EvmPrecompile<S> for OraclePrecompile<S> {
             return Err(PrecompileError::OutOfGas);
         }
 
-        let sequencing_data = {
-            let sequencing_data = env
-                .sov_context
-                .and_then(|ctx| ctx.sequencing_data().as_ref())
-                .ok_or_else(|| PrecompileError::State("missing sequencing data".to_string()))?;
-            OracleSequencingData::try_from_slice(sequencing_data).map_err(|err| {
-                PrecompileError::State(format!("failed to deserialize sequencing data: {err}"))
-            })?
-        };
+        let sequencing_data = env
+            .sov_context
+            .map(|ctx| ctx.sequencing_data_view::<OracleSequencingData>())
+            .ok_or_else(|| PrecompileError::State("missing sequencing data".to_string()))?;
 
         let mut output = Vec::with_capacity(input.len());
         for raw_key in input.chunks_exact(32) {
@@ -118,14 +111,14 @@ impl<S: Spec> EvmPrecompile<S> for OraclePrecompile<S> {
                 ));
             }
             let key = raw_key.to::<u64>();
-            let value = *sequencing_data.0.get(&key).ok_or_else(|| {
-                PrecompileError::InvalidInput(format!("missing oracle key {key}"))
-            })?;
-
-            // This crate doesn't have a `"native"` feature, but in a real precompile
-            // implementation, key recording is native-only.
-            // #[cfg(feature = "native")]
-            record_used_oracle_key(env, key)?;
+            let value = sequencing_data
+                .get(&key)
+                .map_err(|err| {
+                    PrecompileError::State(format!("failed to read sequencing data: {err}"))
+                })?
+                .ok_or_else(|| {
+                    PrecompileError::InvalidInput(format!("missing oracle key {key}"))
+                })?;
 
             output.extend_from_slice(&U256::from(value).to_be_bytes::<32>());
         }
@@ -135,30 +128,6 @@ impl<S: Spec> EvmPrecompile<S> for OraclePrecompile<S> {
             bytes: output.into(),
         })
     }
-}
-
-fn record_used_oracle_key<S: Spec, ST: TxState<S>>(
-    env: &EvmPrecompileEnv<'_, S, ST>,
-    key: u64,
-) -> Result<(), PrecompileError> {
-    env.sov_context
-        .expect("sov context was checked above")
-        .sequencing_scratchpad()
-        .with_value(|scratchpad| {
-            let mut used_keys = match scratchpad.as_deref() {
-                Some(bytes) => Vec::<u64>::try_from_slice(bytes).map_err(|err| {
-                    PrecompileError::State(format!("failed to deserialize used oracle keys: {err}"))
-                })?,
-                None => Vec::new(),
-            };
-            used_keys.push(key);
-            *scratchpad = Some(
-                borsh::to_vec(&used_keys)
-                    .expect("u64 vector serialization is infallible")
-                    .into(),
-            );
-            Ok(())
-        })
 }
 
 sov_evm::generate_precompile_set! {
@@ -194,288 +163,43 @@ where
 type S = EvmTestSpec;
 type RT = PruningRuntime<S>;
 type PruningBlueprint = RtAgnosticBlueprintWithApis<S, RT, EvmAdditionalApis>;
-type StandardCapabilities<'a, S> = StandardProvenRollupCapabilities<'a, S, &'a mut Paymaster<S>>;
-
-pub struct PruningCapabilities<'a, S: Spec> {
-    standard: StandardCapabilities<'a, S>,
-}
-
-impl<S: Spec> SequencingDataHandler<S> for PruningCapabilities<'_, S> {
-    type SequencingData = OracleSequencingData;
-
-    fn handle_sequencing_data(
-        &mut self,
-        _data: Self::SequencingData,
-        _context: &Context<S>,
-        _state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
-        Ok(())
-    }
-
-    fn create_sequencing_data(&self) -> Self::SequencingData {
-        ORACLE_DATA
-            .lock()
-            .expect("oracle data mutex was poisoned")
-            .clone()
-    }
-
-    fn finalize_sequencing_data(
-        &mut self,
-        mut data: Self::SequencingData,
-        scratchpad: Option<sov_rollup_interface::Bytes>,
-    ) -> Self::SequencingData {
-        let Some(scratchpad) = scratchpad else {
-            return data;
-        };
-        let Ok(used_keys) = Vec::<u64>::try_from_slice(&scratchpad) else {
-            return data;
-        };
-        let used_keys = used_keys.into_iter().collect::<BTreeSet<_>>();
-        data.0.retain(|key, _| used_keys.contains(key));
-        data
-    }
-}
-
-impl<S: Spec> GasEnforcer<S> for PruningCapabilities<'_, S> {
-    fn try_reserve_gas(
-        &mut self,
-        tx: &AuthenticatedTransactionData<S>,
-        gas_price: <S::Gas as Gas>::Price,
-        ctx: &mut Context<S>,
-        state: &mut impl StateAccessor,
-    ) -> anyhow::Result<()> {
-        self.standard.try_reserve_gas(tx, gas_price, ctx, state)
-    }
-
-    fn try_reserve_gas_for_proof(
-        &mut self,
-        tx: &AuthenticatedTransactionData<S>,
-        gas_price: <S::Gas as Gas>::Price,
-        sender: &S::Address,
-        state: &mut impl StateAccessor,
-    ) -> anyhow::Result<()> {
-        self.standard
-            .try_reserve_gas_for_proof(tx, gas_price, sender, state)
-    }
-
-    fn reward_prover(
-        &mut self,
-        prover_rewards: &ProverReward,
-        operating_mode: OperatingMode,
-        state: &mut impl InfallibleStateAccessor,
-    ) {
-        self.standard
-            .reward_prover(prover_rewards, operating_mode, state);
-    }
-
-    fn refund_remaining_gas(
-        &mut self,
-        recipient: &S::Address,
-        remaining_funds: &RemainingFunds,
-        state: &mut impl InfallibleStateAccessor,
-    ) {
-        self.standard
-            .refund_remaining_gas(recipient, remaining_funds, state);
-    }
-
-    fn reward_prover_from_sequencer_balance(
-        &mut self,
-        amount: Amount,
-        sequencer: &S::Address,
-        operating_mode: OperatingMode,
-        state: &mut impl InfallibleStateAccessor,
-    ) -> anyhow::Result<()> {
-        self.standard
-            .reward_prover_from_sequencer_balance(amount, sequencer, operating_mode, state)
-    }
-
-    fn return_escrowed_funds_to_sequencer<
-        Accessor: StateReader<Kernel, Error = Infallible>
-            + StateWriter<Kernel, Error = Infallible>
-            + StateWriter<User, Error = Infallible>
-            + StateReader<User, Error = Infallible>
-            + VersionReader,
-    >(
-        &mut self,
-        bond_amount: Amount,
-        reward: Rewards,
-        sequencer: &<S::Da as DaSpec>::Address,
-        state: &mut Accessor,
-    ) {
-        self.standard
-            .return_escrowed_funds_to_sequencer(bond_amount, reward, sequencer, state);
-    }
-}
-
-impl<S: Spec> SequencerAuthorization<S> for PruningCapabilities<'_, S> {
-    fn is_preferred_sequencer(
-        &self,
-        sequencer: &<S::Da as DaSpec>::Address,
-        state: &mut impl InfallibleStateAccessor,
-    ) -> bool {
-        self.standard.is_preferred_sequencer(sequencer, state)
-    }
-}
-
-impl<S: Spec> TransactionAuthorizer<S> for PruningCapabilities<'_, S> {
-    fn resolve_context(
-        &mut self,
-        auth_data: &AuthorizationData<S>,
-        sequencer: &<S::Da as DaSpec>::Address,
-        sequencer_rollup_address: S::Address,
-        state: &mut impl StateReader<User>,
-        sequencing_data: Option<sov_rollup_interface::Bytes>,
-        execution_context: ExecutionContext,
-        sequencer_type: SequencerType,
-    ) -> anyhow::Result<Context<S>> {
-        self.standard.resolve_context(
-            auth_data,
-            sequencer,
-            sequencer_rollup_address,
-            state,
-            sequencing_data,
-            execution_context,
-            sequencer_type,
-        )
-    }
-
-    fn resolve_unregistered_context(
-        &mut self,
-        auth_data: &AuthorizationData<S>,
-        sequencer: &<S::Da as DaSpec>::Address,
-        state: &mut impl StateReader<User>,
-        execution_context: ExecutionContext,
-    ) -> anyhow::Result<Context<S>> {
-        self.standard
-            .resolve_unregistered_context(auth_data, sequencer, state, execution_context)
-    }
-
-    fn check_uniqueness(
-        &self,
-        auth_data: &AuthorizationData<S>,
-        context: &Context<S>,
-        execution_context: &ExecutionContext,
-        state: &mut impl StateReader<User>,
-    ) -> anyhow::Result<()> {
-        self.standard
-            .check_uniqueness(auth_data, context, execution_context, state)
-    }
-
-    fn mark_tx_attempted(
-        &mut self,
-        auth_data: &AuthorizationData<S>,
-        sequencer: &<S::Da as DaSpec>::Address,
-        state: &mut impl StateAccessor,
-    ) -> anyhow::Result<()> {
-        self.standard.mark_tx_attempted(auth_data, sequencer, state)
-    }
-}
-
-impl<'a, S: Spec> ProofProcessor<S> for PruningCapabilities<'a, S> {
-    type BondingProofService<K: HasKernel<S>> =
-        <StandardCapabilities<'a, S> as ProofProcessor<S>>::BondingProofService<K>;
-
-    fn create_bonding_proof_service<K: HasKernel<S>>(
-        &self,
-        attester_address: S::Address,
-        storage_receiver: tokio::sync::watch::Receiver<S::Storage>,
-    ) -> Self::BondingProofService<K> {
-        self.standard
-            .create_bonding_proof_service::<K>(attester_address, storage_receiver)
-    }
-
-    fn process_aggregated_proof<ST: TxState<S> + GetGasPrice<Spec = S>>(
-        &mut self,
-        proof: SerializedAggregatedProof,
-        prover_address: &S::Address,
-        execution_context: ExecutionContext,
-        state: &mut ST,
-    ) -> Result<
-        (
-            AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
-            SerializedAggregatedProof,
-        ),
-        InvalidProofError,
-    > {
-        self.standard
-            .process_aggregated_proof(proof, prover_address, execution_context, state)
-    }
-
-    fn process_attestation<ST: TxState<S> + GetGasPrice<Spec = S>>(
-        &mut self,
-        proof: SerializedAttestation,
-        prover_address: &S::Address,
-        state: &mut ST,
-    ) -> Result<SovAttestation<S>, InvalidProofError> {
-        self.standard
-            .process_attestation(proof, prover_address, state)
-    }
-
-    fn process_challenge<ST: TxState<S> + GetGasPrice<Spec = S>>(
-        &mut self,
-        proof: SerializedChallenge,
-        rollup_height: SlotNumber,
-        prover_address: &S::Address,
-        state: &mut ST,
-    ) -> Result<SovStateTransitionPublicData<S>, InvalidProofError> {
-        self.standard
-            .process_challenge(proof, rollup_height, prover_address, state)
-    }
-}
-
-impl<S: Spec> SequencerRemuneration<S> for PruningCapabilities<'_, S> {
-    fn reward_sequencer_or_refund<
-        Accessor: StateReader<Kernel, Error = Infallible>
-            + StateWriter<Kernel, Error = Infallible>
-            + StateWriter<User, Error = Infallible>
-            + StateReader<User, Error = Infallible>,
-    >(
-        &mut self,
-        sequencer: &<S::Da as DaSpec>::Address,
-        sequencer_rollup_address: &S::Address,
-        reward: SequencerReward,
-        state: &mut Accessor,
-    ) {
-        self.standard.reward_sequencer_or_refund(
-            sequencer,
-            sequencer_rollup_address,
-            reward,
-            state,
-        );
-    }
-
-    fn preferred_sequencer(
-        &self,
-        state: &mut impl InfallibleStateAccessor,
-    ) -> Option<<S::Da as DaSpec>::Address> {
-        self.standard.preferred_sequencer(state)
-    }
-}
 
 impl<S: Spec> HasCapabilities<S> for PruningRuntime<S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
     type Capabilities<'a>
-        = PruningCapabilities<'a, S>
+        = StandardProvenRollupCapabilities<'a, S, &'a mut Paymaster<S>>
     where
         Self: 'a;
-    type SequencingData = OracleSequencingData;
 
     fn capabilities(&mut self) -> Guard<Self::Capabilities<'_>> {
-        Guard::new(PruningCapabilities {
-            standard: StandardProvenRollupCapabilities {
-                bank: &mut self.bank,
-                gas_payer: &mut self.paymaster,
-                sequencer_registry: &mut self.sequencer_registry,
-                accounts: &mut self.accounts,
-                uniqueness: &mut self.uniqueness,
-                chain_state: &mut self.chain_state,
-                operator_incentives: &mut self.operator_incentives,
-                prover_incentives: &mut self.prover_incentives,
-                attester_incentives: &mut self.attester_incentives,
-            },
+        Guard::new(StandardProvenRollupCapabilities {
+            bank: &mut self.bank,
+            gas_payer: &mut self.paymaster,
+            sequencer_registry: &mut self.sequencer_registry,
+            accounts: &mut self.accounts,
+            uniqueness: &mut self.uniqueness,
+            chain_state: &mut self.chain_state,
+            operator_incentives: &mut self.operator_incentives,
+            prover_incentives: &mut self.prover_incentives,
+            attester_incentives: &mut self.attester_incentives,
         })
+    }
+}
+
+impl<S: Spec> HasSequencingData<S> for PruningRuntime<S>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    type SequencingData = OracleSequencingData;
+
+    fn create_sequencing_data(&self) -> Option<sov_modules_api::Bytes> {
+        Some(
+            borsh::to_vec(&*ORACLE_DATA.lock().expect("oracle data mutex was poisoned"))
+                .expect("oracle data serialization should be infallible")
+                .into(),
+        )
     }
 }
 
@@ -491,17 +215,17 @@ async fn evm_precompile_can_prune_sequencing_data_and_replay_from_da() -> anyhow
     let oracle_entries = BTreeMap::from([(11, 1_100), (22, 2_200), (33, 3_300)]);
     set_oracle_data(oracle_entries.clone());
 
-    let mut expected_by_hash: BTreeMap<[u8; 32], BTreeSet<u64>> = BTreeMap::new();
+    let mut expected_by_hash: BTreeMap<SovTxHash, BTreeSet<u64>> = BTreeMap::new();
     for &key in oracle_entries.keys() {
         let keys = [key];
         let tx_hash =
             assert_precompile_values(&evm_client, tester_address, &keys, &oracle_entries).await?;
-        expected_by_hash.insert(tx_hash_bytes(tx_hash), keys.into_iter().collect());
+        expected_by_hash.insert(SovTxHash::from(tx_hash.0), keys.into_iter().collect());
     }
     for keys in [vec![11, 22], vec![33, 11, 22]] {
         let tx_hash =
             assert_precompile_values(&evm_client, tester_address, &keys, &oracle_entries).await?;
-        expected_by_hash.insert(tx_hash_bytes(tx_hash), keys.into_iter().collect());
+        expected_by_hash.insert(SovTxHash::from(tx_hash.0), keys.into_iter().collect());
     }
 
     let last_checked_height = test_rollup.da_service.get_head_block_header().await?.height;
@@ -520,7 +244,7 @@ async fn evm_precompile_can_prune_sequencing_data_and_replay_from_da() -> anyhow
 
     for tx_hash in expected_by_hash.keys() {
         let receipt = evm_client
-            .wait_for_finalized_receipt(TxHash::from(*tx_hash))
+            .wait_for_finalized_receipt(TxHash::from(tx_hash.0))
             .await;
         assert!(receipt.status(), "oracle assertion tx should be finalized");
     }
@@ -533,7 +257,7 @@ async fn evm_precompile_can_prune_sequencing_data_and_replay_from_da() -> anyhow
 
     for tx_hash in expected_by_hash.keys() {
         let receipt = resynced_client
-            .wait_for_finalized_receipt(TxHash::from(*tx_hash))
+            .wait_for_finalized_receipt(TxHash::from(tx_hash.0))
             .await;
         assert!(
             receipt.status(),
@@ -673,57 +397,38 @@ async fn assert_precompile_values(
 
 async fn wait_for_pruned_txs_on_da(
     test_rollup: &TestRollup<PruningBlueprint>,
-    expected_by_hash: &BTreeMap<[u8; 32], BTreeSet<u64>>,
+    expected_by_hash: &BTreeMap<SovTxHash, BTreeSet<u64>>,
     oracle_entries: &BTreeMap<u64, u64>,
-    mut last_checked_height: u64,
+    last_checked_height: u64,
 ) -> anyhow::Result<()> {
-    tokio::time::timeout(Duration::from_secs(20), async {
-        let mut found = BTreeMap::new();
-        loop {
-            test_rollup.da_service.produce_block_now().await?;
-            let head_height = test_rollup.da_service.get_head_block_header().await?.height;
-            for height in last_checked_height + 1..=head_height {
-                let mut block = test_rollup.da_service.get_block_at(height).await?;
-                for blob in block.batch_blobs.iter_mut() {
-                    let batch = PreferredBatchData::try_from_slice(blob.full_data())?;
-                    for tx in batch.data.iter() {
-                        let tx_hash = <RT as RuntimeTrait<S>>::Auth::compute_tx_hash(tx)?;
-                        let tx_hash = <[u8; 32]>::from(tx_hash);
-                        let Some(expected_keys) = expected_by_hash.get(&tx_hash) else {
-                            continue;
-                        };
-                        let sequencing_data = tx
-                            .sequencing_data
-                            .as_ref()
-                            .expect("oracle tx should include sequencing data");
-                        let sequencing_data =
-                            OracleSequencingData::try_from_slice(sequencing_data)?;
-                        let actual_keys =
-                            sequencing_data.0.keys().copied().collect::<BTreeSet<_>>();
-                        assert_eq!(
-                            actual_keys, *expected_keys,
-                            "published tx should retain only the used oracle keys"
-                        );
-                        for expected_key in expected_keys {
-                            assert_eq!(
-                                sequencing_data.0.get(expected_key),
-                                oracle_entries.get(expected_key),
-                                "published tx should retain the used oracle value"
-                            );
-                        }
-                        found.insert(tx_hash, expected_keys.clone());
-                    }
-                }
-            }
-            if found.len() == expected_by_hash.len() {
-                return anyhow::Ok(());
-            }
-            last_checked_height = head_height;
-            tokio::task::yield_now().await;
+    let published = test_rollup
+        .wait_for_txs_on_da::<RT>(
+            &expected_by_hash.keys().copied().collect(),
+            last_checked_height,
+            Duration::from_secs(20),
+        )
+        .await?;
+
+    for (tx_hash, expected_keys) in expected_by_hash {
+        let sequencing_data = published[tx_hash]
+            .sequencing_data
+            .as_ref()
+            .expect("oracle tx should include sequencing data");
+        let sequencing_data = OracleSequencingData::try_from_slice(sequencing_data)?;
+        let actual_keys = sequencing_data.0.keys().copied().collect::<BTreeSet<_>>();
+        assert_eq!(
+            actual_keys, *expected_keys,
+            "published tx should retain only the used oracle keys"
+        );
+        for expected_key in expected_keys {
+            assert_eq!(
+                sequencing_data.0.get(expected_key),
+                oracle_entries.get(expected_key),
+                "published tx should retain the used oracle value"
+            );
         }
-    })
-    .await
-    .expect("timed out waiting for oracle txs to be published")
+    }
+    Ok(())
 }
 
 async fn restart_from_scratch_on_same_da(
@@ -749,10 +454,4 @@ fn u256_words(values: impl IntoIterator<Item = u64>) -> Bytes {
         bytes.extend_from_slice(&U256::from(value).to_be_bytes::<32>());
     }
     Bytes::from(bytes)
-}
-
-fn tx_hash_bytes(tx_hash: TxHash) -> [u8; 32] {
-    let mut bytes = [0; 32];
-    bytes.copy_from_slice(tx_hash.as_slice());
-    bytes
 }

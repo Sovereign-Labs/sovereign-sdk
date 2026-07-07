@@ -22,7 +22,9 @@ use crate::preferred::block_executor::RollupBlockExecutorConfig;
 use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
-use crate::preferred::rpc_errors::{cant_fit_tx, rate_limit, replica_mode, shut_down};
+use crate::preferred::rpc_errors::{
+    cant_fit_tx, rate_limit, replica_mode, shut_down, tx_with_sequencing_data_too_big,
+};
 use async_trait::async_trait;
 use axum::http::StatusCode;
 use batch_size_tracker::BatchSizeTracker;
@@ -522,6 +524,15 @@ where
                         max_batch_size,
                         tx_len,
                     } => return Err(cant_fit_tx(current_batch_size, max_batch_size, tx_len)),
+                    DoNewTxError::TxWithSequencingDataTooBig {
+                        total_payload_len,
+                        max_payload_len,
+                    } => {
+                        return Err(tx_with_sequencing_data_too_big(
+                            total_payload_len,
+                            max_payload_len,
+                        ))
+                    }
                     DoNewTxError::ExecutorError(err) => {
                         return Err(RollupBlockExecutorError::into_http_error(err));
                     }

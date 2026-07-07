@@ -1,9 +1,30 @@
-use anyhow::{bail, ensure, Context as _};
+use anyhow::ensure;
+use borsh::{BorshDeserialize, BorshSerialize};
 use chrono::{TimeZone, Utc};
-use sov_modules_api::{Context, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, Spec, TxState};
+use serde::{Deserialize, Serialize};
+use sov_modules_api::macros::UniversalWallet;
+use sov_modules_api::{
+    Context, DaSpec, GenesisState, HDTimestamp, Module, ModuleId, ModuleInfo, Spec, TxState,
+};
 
-#[cfg(feature = "native")]
-pub const SCRATCHPAD_TIMESTAMP_NANOS: u128 = 1_987_654_321_000_000_000;
+#[derive(
+    Clone,
+    BorshSerialize,
+    BorshDeserialize,
+    Debug,
+    PartialEq,
+    Eq,
+    PartialOrd,
+    Hash,
+    Serialize,
+    Deserialize,
+    schemars::JsonSchema,
+    UniversalWallet,
+)]
+pub enum CallMessage {
+    AssertTimestampIsReasonable,
+    Noop,
+}
 
 #[derive(Clone, ModuleInfo)]
 pub struct SequencingDataTester<S: Spec> {
@@ -17,7 +38,7 @@ impl<S: Spec> Module for SequencingDataTester<S> {
     type Spec = S;
 
     type Config = ();
-    type CallMessage = ();
+    type CallMessage = CallMessage;
     type Event = ();
     type Error = anyhow::Error;
 
@@ -32,15 +53,19 @@ impl<S: Spec> Module for SequencingDataTester<S> {
 
     fn call(
         &mut self,
-        _msg: Self::CallMessage,
+        msg: Self::CallMessage,
         context: &Context<Self::Spec>,
         _state: &mut impl TxState<S>,
     ) -> Result<(), Self::Error> {
-        let data = context
-            .sequencing_data()
-            .as_ref()
-            .context("No sequencing data in context")?;
-        let timestamp = parse_timestamp(data)?;
+        if matches!(msg, CallMessage::Noop) {
+            return Ok(());
+        }
+
+        let timestamp = context
+            .sequencing_data_view::<HDTimestamp>()
+            .get(&())?
+            .ok_or_else(|| anyhow::anyhow!("No sequencing data in context"))?
+            .as_nanos();
         let reasonable_range = year_to_timestamp(2025)..year_to_timestamp(2100);
         ensure!(
             reasonable_range.contains(&timestamp),
@@ -48,19 +73,8 @@ impl<S: Spec> Module for SequencingDataTester<S> {
             timestamp,
             reasonable_range
         );
-        #[cfg(feature = "native")]
-        context
-            .sequencing_scratchpad()
-            .set(SCRATCHPAD_TIMESTAMP_NANOS.to_le_bytes().to_vec().into());
         Ok(())
     }
-}
-
-fn parse_timestamp(data: &[u8]) -> anyhow::Result<u128> {
-    let Ok(bytes) = data.try_into() else {
-        bail!("Failed to convert to [u8; 16]");
-    };
-    Ok(u128::from_le_bytes(bytes))
 }
 
 fn year_to_timestamp(year: i32) -> u128 {

@@ -175,7 +175,7 @@ impl SequencingContext {
 }
 
 #[cfg(feature = "native")]
-pub use native_sequencing::SequencingScratchpad;
+pub use native_sequencing::{SequencingScratchpad, SequencingScratchpadContents};
 
 /// The context in which a transaction executes
 
@@ -218,6 +218,25 @@ impl<S: Spec> Context<S> {
     /// Returns the sequencing data
     pub fn sequencing_data(&self) -> &Option<Bytes> {
         self.sequencing.data()
+    }
+
+    /// Returns a typed view over the sequencing data.
+    pub fn sequencing_data_view<F>(&self) -> crate::capabilities::SequencingDataView<'_, F>
+    where
+        F: crate::capabilities::SequencingDataFormat,
+    {
+        #[cfg(feature = "native")]
+        {
+            crate::capabilities::SequencingDataView::with_scratchpad(
+                self.sequencing_data().as_ref(),
+                self.sequencing.scratchpad(),
+            )
+        }
+
+        #[cfg(not(feature = "native"))]
+        {
+            crate::capabilities::SequencingDataView::new(self.sequencing_data().as_ref())
+        }
     }
 
     /// Returns the rollup address which will receive any gas refund from the transaction.
@@ -300,50 +319,57 @@ impl<S: Spec> Context<S> {
 mod native_sequencing {
     use std::sync::{Arc, Mutex};
 
-    use sov_rollup_interface::Bytes;
+    /// Native-only scratchpad contents for sequencing data access tracking.
+    pub type SequencingScratchpadContents = std::collections::BTreeSet<Vec<u8>>;
 
-    /// Native-only scratchpad for recording data while finalizing sequencing metadata.
+    /// Native-only scratchpad for recording sequencing data keys accessed during execution.
     #[derive(Clone, Debug, Default)]
     pub struct SequencingScratchpad {
-        inner: Arc<Mutex<Option<Bytes>>>,
+        inner: Arc<Mutex<SequencingScratchpadContents>>,
     }
 
     impl SequencingScratchpad {
-        /// Replaces the scratchpad contents.
-        pub fn set(&self, value: Bytes) {
-            self.with_value(|slot| *slot = Some(value));
-        }
-
-        /// Takes the scratchpad contents, leaving it empty.
-        pub fn take(&self) -> Option<Bytes> {
-            self.with_value(Option::take)
-        }
-
-        /// Mutates the scratchpad contents under the scratchpad lock.
-        pub fn with_value<R>(&self, f: impl FnOnce(&mut Option<Bytes>) -> R) -> R {
+        /// Records a serialized sequencing data key.
+        pub(crate) fn insert(&self, value: Vec<u8>) {
             let mut guard = self
                 .inner
                 .lock()
                 .expect("sequencing scratchpad mutex was poisoned");
-            f(&mut guard)
+            guard.insert(value);
+        }
+
+        /// Takes the scratchpad contents, leaving it empty. Returns `None` if no keys were recorded.
+        pub(crate) fn take(&self) -> Option<SequencingScratchpadContents> {
+            let mut guard = self
+                .inner
+                .lock()
+                .expect("sequencing scratchpad mutex was poisoned");
+            if guard.is_empty() {
+                None
+            } else {
+                Some(std::mem::take(&mut *guard))
+            }
         }
     }
 
     impl super::SequencingContext {
         /// Returns the native sequencing scratchpad.
-        pub fn scratchpad(&self) -> super::SequencingScratchpad {
+        pub(crate) fn scratchpad(&self) -> super::SequencingScratchpad {
             self.scratchpad.clone()
         }
     }
 
     impl<S: super::Spec> super::Context<S> {
-        /// Returns the native sequencing scratchpad.
-        pub fn sequencing_scratchpad(&self) -> super::SequencingScratchpad {
-            self.sequencing.scratchpad()
-        }
-
-        /// Takes the native sequencing scratchpad contents.
-        pub fn take_sequencing_scratchpad(&self) -> Option<Bytes> {
+        /// Takes the native sequencing scratchpad contents, i.e. the record of sequencing data
+        /// keys accessed so far during this transaction's execution.
+        ///
+        /// This is an SDK-internal API: the STF blueprint calls it exactly once, after the
+        /// transaction has executed, to drive sequencing data pruning. Calling it from anywhere
+        /// else erases the access record mid-execution, which causes the sequencer to prune
+        /// data its own execution actually read and to diverge from nodes replaying the
+        /// published transaction.
+        #[doc(hidden)]
+        pub fn take_sequencing_scratchpad(&self) -> Option<super::SequencingScratchpadContents> {
             self.sequencing.scratchpad().take()
         }
     }

@@ -192,7 +192,7 @@ pub struct ProvisionalSequencerOutcome<S: Spec> {
     pub execution_status: MaybeExecuted<S>,
     /// Native scratchpad recorded while executing with the transaction's sequencing data.
     #[cfg(feature = "native")]
-    pub sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
+    pub sequencing_scratchpad: Option<crate::SequencingScratchpadContents>,
 }
 
 /// The reason a transaction was rejected by the sequencer due to insufficient funds.

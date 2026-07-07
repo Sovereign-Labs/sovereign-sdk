@@ -3629,6 +3629,7 @@ dependencies = [
  "sov-synthetic-load",
  "sov-test-modules",
  "sov-test-utils",
+ "tracing",
 ]
 
 [[package]]
@@ -11058,6 +11059,7 @@ dependencies = [
  "sov-bank",
  "sov-chain-state",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
  "strum 0.28.0",

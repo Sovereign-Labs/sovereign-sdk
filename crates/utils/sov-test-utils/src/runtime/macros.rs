@@ -285,7 +285,6 @@ macro_rules! generate_runtime {
             $($runtime_trait_impl_bounds)*
         {
             type Capabilities<'a> = $crate::runtime::StandardProvenRollupCapabilities<'a, S, &'a mut $gas_enforcer_ty>;
-            type SequencingData = ::sov_modules_api::HDTimestamp;
 
             fn capabilities(&mut self) -> ::sov_modules_api::capabilities::Guard<Self::Capabilities<'_>> {
                 ::sov_modules_api::capabilities::Guard::new(
@@ -304,6 +303,40 @@ macro_rules! generate_runtime {
             }
 
             $crate::__impl_runtime_timelock_capability!($($timelock_capability_expr)?);
+        }
+
+        impl<S> ::sov_modules_api::capabilities::HasSequencingData<S> for $id<S>
+        where
+            S: ::sov_modules_api::Spec,
+            $($runtime_trait_impl_bounds)*
+        {
+            type SequencingData = ::sov_modules_api::HDTimestamp;
+
+            fn handle_sequencing_data(
+                &mut self,
+                data: &::sov_modules_api::capabilities::SequencingDataView<'_, Self::SequencingData>,
+                context: &::sov_modules_api::Context<S>,
+                state: &mut impl ::sov_modules_api::TxState<S>,
+            ) -> anyhow::Result<()> {
+                if !context.sequencer_is_preferred() {
+                    return Ok(());
+                }
+
+                match data.get(&()) {
+                    Ok(Some(timestamp)) => {
+                        self.chain_state
+                            .update_oracle_time_from_sequencing_data(timestamp, state)?;
+                    }
+                    Ok(None) => {}
+                    Err(error) => ::sov_modules_api::prelude::tracing::warn!(%error, "Invalid sequencing metadata; ignoring"),
+                }
+
+                Ok(())
+            }
+
+            fn create_sequencing_data(&self) -> Option<::sov_modules_api::Bytes> {
+                Some(::sov_modules_api::HDTimestamp::default_sequencing_data_bytes())
+            }
         }
     };
     (
@@ -345,7 +378,6 @@ macro_rules! generate_runtime {
             $($runtime_trait_impl_bounds)*
         {
             type Capabilities<'a> = $crate::runtime::StandardProvenRollupCapabilities<'a, S>;
-            type SequencingData = ::sov_modules_api::HDTimestamp;
 
             fn capabilities(&mut self) -> ::sov_modules_api::capabilities::Guard<Self::Capabilities<'_>> {
                 ::sov_modules_api::capabilities::Guard::new(
@@ -364,6 +396,40 @@ macro_rules! generate_runtime {
             }
 
             $crate::__impl_runtime_timelock_capability!($($timelock_capability_expr)?);
+        }
+
+        impl<S> ::sov_modules_api::capabilities::HasSequencingData<S> for $id<S>
+        where
+            S: ::sov_modules_api::Spec,
+            $($runtime_trait_impl_bounds)*
+        {
+            type SequencingData = ::sov_modules_api::HDTimestamp;
+
+            fn handle_sequencing_data(
+                &mut self,
+                data: &::sov_modules_api::capabilities::SequencingDataView<'_, Self::SequencingData>,
+                context: &::sov_modules_api::Context<S>,
+                state: &mut impl ::sov_modules_api::TxState<S>,
+            ) -> anyhow::Result<()> {
+                if !context.sequencer_is_preferred() {
+                    return Ok(());
+                }
+
+                match data.get(&()) {
+                    Ok(Some(timestamp)) => {
+                        self.chain_state
+                            .update_oracle_time_from_sequencing_data(timestamp, state)?;
+                    }
+                    Ok(None) => {}
+                    Err(error) => ::sov_modules_api::prelude::tracing::warn!(%error, "Invalid sequencing metadata; ignoring"),
+                }
+
+                Ok(())
+            }
+
+            fn create_sequencing_data(&self) -> Option<::sov_modules_api::Bytes> {
+                Some(::sov_modules_api::HDTimestamp::default_sequencing_data_bytes())
+            }
         }
     }
 }

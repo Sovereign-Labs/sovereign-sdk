@@ -16,11 +16,13 @@ use crate::{
     TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MAX_CONCURRENT_PROOF_BLOBS,
 };
 use anyhow::Context;
+use borsh::BorshDeserialize;
 use serde::Deserialize;
 use sov_api_spec::types;
 use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
 use sov_blob_sender::BlobExecutionStatus;
+use sov_blob_storage::PreferredBatchData;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
 use sov_db::config::{PrunerConfig, RollupDbConfig};
@@ -30,12 +32,14 @@ use sov_mock_da::storable::rpc::StorableMockDaClient;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::{BlockProducingConfig, MockAddress, MockDaConfig, MockDaSpec};
 use sov_modules_api::capabilities::RollupHeight;
+use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::prelude::axum;
 use sov_modules_api::prelude::axum::extract::Request;
 use sov_modules_api::prelude::axum::ServiceExt;
 use sov_modules_api::ModuleExecutionConfig;
 use sov_modules_api::Spec;
+use sov_modules_api::{BlobReaderTrait, FullyBakedTx};
 pub use sov_modules_rollup_blueprint::FullNodeBlueprint;
 use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_blueprint::Runtime;
@@ -45,6 +49,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
+use sov_rollup_interface::TxHash;
 use sov_sequencer::preferred::{ConfiguredNodeRole, PostgresConfig, PreferredSequencerConfig};
 use sov_sequencer::test_stateless::TestStatelessSequencer;
 use sov_sequencer::SeqConfigExtension;
@@ -1212,6 +1217,50 @@ where
             .unwrap()
             .unwrap();
         }
+    }
+
+    /// Produces DA blocks and scans new batch blobs until every hash in `tx_hashes` has been
+    /// published in a preferred-sequencer batch, returning the published txs keyed by hash.
+    ///
+    /// Scanning starts after `last_checked_height`. Panics if `timeout` elapses first.
+    pub async fn wait_for_txs_on_da<RT>(
+        &self,
+        tx_hashes: &std::collections::BTreeSet<TxHash>,
+        mut last_checked_height: u64,
+        timeout: Duration,
+    ) -> anyhow::Result<std::collections::BTreeMap<TxHash, FullyBakedTx>>
+    where
+        RT: sov_modules_api::Runtime<R::Spec>,
+    {
+        tokio::time::timeout(timeout, async {
+            let mut found = std::collections::BTreeMap::new();
+            loop {
+                self.da_service.produce_block_now().await?;
+                let head_height = self.da_service.get_head_block_header().await?.height;
+                for height in last_checked_height + 1..=head_height {
+                    let mut block = self.da_service.get_block_at(height).await?;
+                    for blob in block.batch_blobs.iter_mut() {
+                        let batch = PreferredBatchData::try_from_slice(blob.full_data())?;
+                        for tx in batch.data.iter() {
+                            let tx_hash =
+                                <RT::Auth as TransactionAuthenticator<R::Spec>>::compute_tx_hash(
+                                    tx,
+                                )?;
+                            if tx_hashes.contains(&tx_hash) {
+                                found.insert(tx_hash, tx.clone());
+                            }
+                        }
+                    }
+                }
+                if found.len() == tx_hashes.len() {
+                    return Ok(found);
+                }
+                last_checked_height = head_height;
+                tokio::task::yield_now().await;
+            }
+        })
+        .await
+        .expect("timed out waiting for the submitted txs to be published on the DA layer")
     }
 
     /// Produce DA blocks, but wait enough time in between, that finalized header poller sees each of them.

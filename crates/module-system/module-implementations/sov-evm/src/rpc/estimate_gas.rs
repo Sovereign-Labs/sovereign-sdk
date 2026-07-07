@@ -14,7 +14,6 @@ use revm::context::result::{ExecutionResult, ResultAndState};
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::capabilities::ChainState;
-use sov_modules_api::capabilities::SequencingDataHandler;
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -241,11 +240,7 @@ where
 
         let mut runtime = R::default();
         let sequencing_data = if sequencer_type == SequencerType::Preferred {
-            Some(
-                borsh::to_vec(&runtime.sequencing_data_handler().create_sequencing_data())
-                    .map(sov_rollup_interface::Bytes::from)
-                    .map_err(|err| format!("sequencing data serialization failed: {err}"))?,
-            )
+            runtime.create_sequencing_data()
         } else {
             None
         };

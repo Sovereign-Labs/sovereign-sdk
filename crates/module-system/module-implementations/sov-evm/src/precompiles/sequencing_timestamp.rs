@@ -1,5 +1,7 @@
+use std::marker::PhantomData;
+
 use alloy_primitives::{Bytes, U256};
-use borsh::BorshDeserialize;
+use sov_modules_api::capabilities::SequencingDataFormat;
 use sov_modules_api::{HDTimestamp, Spec, TxState};
 
 use super::{
@@ -15,20 +17,33 @@ pub const SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS: Address = Address::new([
 const SEQUENCING_TIMESTAMP_GAS: u64 = 50;
 
 /// A built-in precompile that returns the current sequencing/oracle timestamp in nanoseconds.
-#[derive(Clone)]
-pub struct SequencingTimestampPrecompile<S: Spec> {
+pub struct SequencingTimestampPrecompile<S: Spec, F: SequencingDataFormat = HDTimestamp> {
     chain_state: sov_chain_state::ChainState<S>,
+    _phantom: PhantomData<F>,
 }
 
-impl<S: Spec> Default for SequencingTimestampPrecompile<S> {
-    fn default() -> Self {
+impl<S: Spec, F: SequencingDataFormat> Clone for SequencingTimestampPrecompile<S, F> {
+    fn clone(&self) -> Self {
         Self {
-            chain_state: sov_chain_state::ChainState::default(),
+            chain_state: self.chain_state.clone(),
+            _phantom: PhantomData,
         }
     }
 }
 
-impl<S: Spec> EvmPrecompile<S> for SequencingTimestampPrecompile<S> {
+impl<S: Spec, F: SequencingDataFormat> Default for SequencingTimestampPrecompile<S, F> {
+    fn default() -> Self {
+        Self {
+            chain_state: sov_chain_state::ChainState::default(),
+            _phantom: PhantomData,
+        }
+    }
+}
+
+impl<S: Spec, F> EvmPrecompile<S> for SequencingTimestampPrecompile<S, F>
+where
+    F: SequencingDataFormat<Key = (), Value = HDTimestamp>,
+{
     const ADDRESS: Address = SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS;
 
     fn execute<ST: TxState<S>>(
@@ -37,11 +52,14 @@ impl<S: Spec> EvmPrecompile<S> for SequencingTimestampPrecompile<S> {
         gas_limit: u64,
         env: &mut EvmPrecompileEnv<'_, S, ST>,
     ) -> PrecompileResult {
-        sequencing_timestamp_precompile(input, gas_limit, &self.chain_state, env)
+        sequencing_timestamp_precompile::<S, ST, F>(input, gas_limit, &self.chain_state, env)
     }
 }
 
-impl<S: Spec> EvmPrecompileSet<S> for SequencingTimestampPrecompile<S> {
+impl<S: Spec, F> EvmPrecompileSet<S> for SequencingTimestampPrecompile<S, F>
+where
+    F: SequencingDataFormat<Key = (), Value = HDTimestamp>,
+{
     const ADDRESSES: &'static [Address] = &[SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS];
 
     fn execute<ST: TxState<S>>(
@@ -55,12 +73,17 @@ impl<S: Spec> EvmPrecompileSet<S> for SequencingTimestampPrecompile<S> {
     }
 }
 
-fn sequencing_timestamp_precompile<S: Spec, ST: TxState<S>>(
+fn sequencing_timestamp_precompile<S, ST, F>(
     input: &[u8],
     gas_limit: u64,
     chain_state: &sov_chain_state::ChainState<S>,
     env: &mut EvmPrecompileEnv<'_, S, ST>,
-) -> PrecompileResult {
+) -> PrecompileResult
+where
+    S: Spec,
+    ST: TxState<S>,
+    F: SequencingDataFormat<Key = (), Value = HDTimestamp>,
+{
     if SEQUENCING_TIMESTAMP_GAS > gas_limit {
         return Err(PrecompileError::OutOfGas);
     }
@@ -73,10 +96,9 @@ fn sequencing_timestamp_precompile<S: Spec, ST: TxState<S>>(
 
     let nanos = env
         .sov_context
-        .and_then(|ctx| ctx.sequencing_data().as_ref())
-        .and_then(|bytes| HDTimestamp::try_from_slice(bytes).ok())
-        .map(|timestamp| timestamp.as_nanos())
-        .map(Ok)
+        .map(|ctx| ctx.sequencing_data_view::<F>())
+        .and_then(|sequencing_data| sequencing_data.get(&()).ok().flatten())
+        .map(|timestamp| Ok(timestamp.as_nanos()))
         .unwrap_or_else(|| {
             chain_state
                 .get_oracle_time_nanos(env.state)

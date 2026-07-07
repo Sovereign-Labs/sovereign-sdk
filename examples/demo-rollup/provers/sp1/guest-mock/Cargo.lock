@@ -1615,6 +1615,7 @@ dependencies = [
  "sov-state",
  "sov-synthetic-load",
  "sov-test-modules",
+ "tracing",
 ]
 
 [[package]]

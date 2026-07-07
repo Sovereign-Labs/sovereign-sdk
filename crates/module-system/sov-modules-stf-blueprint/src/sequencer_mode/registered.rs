@@ -663,7 +663,7 @@ enum AuthAndProcessOutcome<S: Spec> {
         transaction_consumption: TransactionConsumption<S::Gas>,
         receipt: TransactionReceipt<S>,
         #[cfg(feature = "native")]
-        sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
+        sequencing_scratchpad: Option<sov_modules_api::SequencingScratchpadContents>,
     },
 }
 

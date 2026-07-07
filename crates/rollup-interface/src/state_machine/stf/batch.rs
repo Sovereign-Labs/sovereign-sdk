@@ -127,14 +127,6 @@ impl FullyBakedTx {
         }
     }
 
-    /// Sets sequencing metadata
-    ///
-    /// Note that the `get_maybe_timestamp_from_sequencing_data` function relies on this method to serialize the SequencingData using borsh
-    /// without other modification. Changing that behavior will require a change to `get_maybe_timestamp_from_sequencing_data`
-    pub fn set_sequencing_metadata(&mut self, metadata: &impl BorshSerialize) {
-        self.sequencing_data = Some(borsh::to_vec(metadata).unwrap().into());
-    }
-
     /// Returns the total serialized length of the transaction, including both
     /// the transaction data and sequencing metadata (if present).
     /// This is the length that will be sent on the DA layer.
@@ -406,7 +398,7 @@ mod tests {
         let data = vec![1u8; 1024]; // 1KB
         let mut tx = FullyBakedTx::new(data.clone());
         let seq_data = vec![2u8; 512]; // 512 bytes
-        tx.set_sequencing_metadata(&seq_data);
+        tx.sequencing_data = Some(seq_data.into());
 
         // Test borsh
         let serialized = borsh::to_vec(&tx).unwrap();
@@ -421,7 +413,7 @@ mod tests {
         let data = vec![1u8; MAX_FULLY_BAKED_TX_SIZE - 500];
         let mut tx = FullyBakedTx::new(data);
         let seq_data = vec![2u8; 600]; // This will push total over limit
-        tx.set_sequencing_metadata(&seq_data);
+        tx.sequencing_data = Some(seq_data.into());
 
         // Serialize with borsh
         let serialized = borsh::to_vec(&tx).unwrap();

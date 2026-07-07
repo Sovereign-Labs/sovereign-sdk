@@ -109,6 +109,7 @@ impl<S: Spec> HasCustomRestApi for Accounts<S> {
 mod tests {
     use std::sync::Arc;
 
+    use sov_rollup_interface::node::PrimaryShutdownController;
     use sov_modules_api::capabilities::mocks::MockKernel;
     use sov_modules_api::rest::utils::Path;
     use sov_modules_api::{ConcurrentStateCheckpoint, StateCheckpoint};
