@@ -113,7 +113,17 @@ export type IntegerDisplay =
 
 export type FixedPointDisplay =
   | { Decimals: number }
-  | { FromSiblingField: { field_index: number; byte_offset: number } };
+  | { FromSiblingField: { field_index: number; byte_offset: number } }
+  | {
+      FromSiblingFieldWithOverride: {
+        field_index: number;
+        byte_offset: number;
+        /** 32-byte array; if the sibling field's bytes equal this value,
+         * `override_decimals` is used instead of the byte at `byte_offset`. */
+        override_match: number[];
+        override_decimals: number;
+      };
+    };
 
 export type ByteDisplay =
   | "Hex"
