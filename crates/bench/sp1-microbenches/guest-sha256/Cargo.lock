@@ -1152,9 +1152,9 @@ dependencies = [
 
 [[package]]
 name = "nomt-core"
-version = "1.0.4"
+version = "1.0.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1c29af216422c69aeef84d7c20bb7638d442ec5016d93df53d1fb5152f7e4dc7"
+checksum = "19b43245e3ed2b32eaf8c062506ec16a4ff3f08e0373c29c2b0b202e8c325409"
 dependencies = [
  "arrayvec",
  "bitvec",
