@@ -955,7 +955,7 @@
           "minimum": 0
         },
         "kernel_hashtable_buckets": {
-          "description": "Cannot be changed for the existing database.\nMore details at [`Options::hashtable_buckets`]",
+          "description": "Can be increased for an existing database, but cannot be decreased.\nMore details at [`Options::hashtable_buckets`]",
           "type": [
             "integer",
             "null"
@@ -1032,7 +1032,7 @@
           "minimum": 0
         },
         "user_hashtable_buckets": {
-          "description": "Value is determined by the expected size of the state. Recommended to start with 15_000_000.\nCannot be changed for the existing database.\nMore details at [`Options::hashtable_buckets`]",
+          "description": "Value is determined by the expected size of the state. Recommended to start with 15_000_000.\nCan be increased for an existing database, but cannot be decreased.\nMore details at [`Options::hashtable_buckets`]",
           "type": [
             "integer",
             "null"

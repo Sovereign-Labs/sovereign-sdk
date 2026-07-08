@@ -3114,17 +3114,16 @@ dependencies = [
 
 [[package]]
 name = "nomt-core"
-version = "1.0.4"
-source = "git+https://github.com/Sovereign-Labs/nomt?rev=c85fb01f526b9eee742bafbdc89c4a58313b249b#c85fb01f526b9eee742bafbdc89c4a58313b249b"
+version = "1.0.5"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19b43245e3ed2b32eaf8c062506ec16a4ff3f08e0373c29c2b0b202e8c325409"
 dependencies = [
  "arrayvec",
  "bitvec",
- "blake3",
  "borsh",
  "digest 0.10.7",
  "ruint",
  "serde",
- "sha2 0.10.9",
 ]
 
 [[package]]

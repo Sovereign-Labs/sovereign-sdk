@@ -43,7 +43,7 @@ impl NomtDbMetric {
             tracing::warn!(
                 %db,
                 rate = hash_table_utilization.occupancy_rate(),
-                "Occupancy rate for NOMT hashtable is too high. Please increase the configured bucket count and restart the node");
+                "Occupancy rate for NOMT hashtable is too high. Please increase the configured bucket count and restart the node to resize the hashtable (note that this can take some time on the next startup).");
         }
         let metrics = nomt.metrics();
         Self {

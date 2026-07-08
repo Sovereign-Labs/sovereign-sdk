@@ -275,7 +275,7 @@ impl RollupDbConfig {
     }
 
     pub(crate) fn kernel_hashtable_buckets(&self) -> u32 {
-        self.kernel_hashtable_buckets.unwrap_or_else(|| {
+        self.kernel_hashtable_buckets.unwrap_or({
             if cfg!(debug_assertions) {
                 // 2MB
                 500
