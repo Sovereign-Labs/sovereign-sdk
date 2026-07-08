@@ -1,7 +1,7 @@
 {
   "name": "phantom-solana-offchain-example",
   "private": true,
-  "version": "0.0.0",
+  "version": "0.0.1",
   "packageManager": "pnpm@9.0.0",
   "type": "module",
   "scripts": {
