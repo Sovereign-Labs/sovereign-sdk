@@ -159,7 +159,7 @@ pub(crate) struct ExecutedTxResponse<S: Spec> {
     pub(crate) receipt: TransactionReceipt<S>,
     pub(crate) tx_changes: TxChangeSet,
     pub(crate) remaining_slot_gas: <S as Spec>::Gas,
-    pub(crate) sequencing_scratchpad: Option<sov_modules_api::SequencingScratchpadContents>,
+    pub(crate) sequencing_scratchpad: sov_modules_api::SequencingScratchpadContents,
 }
 
 /// The channel responsible for notifying an async tx submitter of the txs result

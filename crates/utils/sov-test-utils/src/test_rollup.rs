@@ -1222,16 +1222,14 @@ where
     /// Produces DA blocks and scans new batch blobs until every hash in `tx_hashes` has been
     /// published in a preferred-sequencer batch, returning the published txs keyed by hash.
     ///
+    /// Hashes are computed with the blueprint runtime's transaction authenticator.
     /// Scanning starts after `last_checked_height`. Panics if `timeout` elapses first.
-    pub async fn wait_for_txs_on_da<RT>(
+    pub async fn wait_for_txs_on_da(
         &self,
         tx_hashes: &std::collections::BTreeSet<TxHash>,
         mut last_checked_height: u64,
         timeout: Duration,
-    ) -> anyhow::Result<std::collections::BTreeMap<TxHash, FullyBakedTx>>
-    where
-        RT: sov_modules_api::Runtime<R::Spec>,
-    {
+    ) -> anyhow::Result<std::collections::BTreeMap<TxHash, FullyBakedTx>> {
         tokio::time::timeout(timeout, async {
             let mut found = std::collections::BTreeMap::new();
             loop {
@@ -1242,10 +1240,8 @@ where
                     for blob in block.batch_blobs.iter_mut() {
                         let batch = PreferredBatchData::try_from_slice(blob.full_data())?;
                         for tx in batch.data.iter() {
-                            let tx_hash =
-                                <RT::Auth as TransactionAuthenticator<R::Spec>>::compute_tx_hash(
-                                    tx,
-                                )?;
+                            let tx_hash = <<R::Runtime as sov_modules_api::Runtime<R::Spec>>::Auth
+                                as TransactionAuthenticator<R::Spec>>::compute_tx_hash(tx)?;
                             if tx_hashes.contains(&tx_hash) {
                                 found.insert(tx_hash, tx.clone());
                             }

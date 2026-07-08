@@ -1,5 +1,3 @@
-use std::marker::PhantomData;
-
 use alloy_primitives::{Bytes, U256};
 use sov_modules_api::{Spec, TxState};
 
@@ -21,25 +19,15 @@ const SEQUENCING_TIMESTAMP_GAS: u64 = 50;
 /// transaction is dispatched, so within a preferred-sequencer transaction this reflects that
 /// transaction's own sequencing timestamp. When no oracle time is set, it falls back to the DA
 /// layer time.
+#[derive(Clone)]
 pub struct SequencingTimestampPrecompile<S: Spec> {
     chain_state: sov_chain_state::ChainState<S>,
-    _phantom: PhantomData<S>,
-}
-
-impl<S: Spec> Clone for SequencingTimestampPrecompile<S> {
-    fn clone(&self) -> Self {
-        Self {
-            chain_state: self.chain_state.clone(),
-            _phantom: PhantomData,
-        }
-    }
 }
 
 impl<S: Spec> Default for SequencingTimestampPrecompile<S> {
     fn default() -> Self {
         Self {
             chain_state: sov_chain_state::ChainState::default(),
-            _phantom: PhantomData,
         }
     }
 }
@@ -53,7 +41,7 @@ impl<S: Spec> EvmPrecompile<S> for SequencingTimestampPrecompile<S> {
         gas_limit: u64,
         env: &mut EvmPrecompileEnv<'_, S, ST>,
     ) -> PrecompileResult {
-        sequencing_timestamp_precompile::<S, ST>(input, gas_limit, &self.chain_state, env)
+        sequencing_timestamp_precompile(input, gas_limit, &self.chain_state, env)
     }
 }
 
@@ -71,16 +59,12 @@ impl<S: Spec> EvmPrecompileSet<S> for SequencingTimestampPrecompile<S> {
     }
 }
 
-fn sequencing_timestamp_precompile<S, ST>(
+fn sequencing_timestamp_precompile<S: Spec, ST: TxState<S>>(
     input: &[u8],
     gas_limit: u64,
     chain_state: &sov_chain_state::ChainState<S>,
     env: &mut EvmPrecompileEnv<'_, S, ST>,
-) -> PrecompileResult
-where
-    S: Spec,
-    ST: TxState<S>,
-{
+) -> PrecompileResult {
     if SEQUENCING_TIMESTAMP_GAS > gas_limit {
         return Err(PrecompileError::OutOfGas);
     }

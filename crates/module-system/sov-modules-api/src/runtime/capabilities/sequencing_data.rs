@@ -116,24 +116,15 @@ pub trait HasSequencingData<S: Spec> {
     ) -> anyhow::Result<()> {
         Ok(())
     }
-
-    /// Creates the format-specific sequencing data (the `data` payload of [`SequencingData`])
-    /// for a transaction accepted by the preferred sequencer.
-    ///
-    /// Defaults to [`SequencingDataFormat::create`].
-    #[cfg(feature = "native")]
-    fn create_sequencing_data(&self) -> Option<Bytes> {
-        Self::SequencingData::create()
-    }
 }
 
-/// Builds the full serialized [`SequencingData`] (timestamp plus runtime-provided data) that
+/// Builds the full serialized [`SequencingData`] (timestamp plus format-provided data) that
 /// the preferred sequencer attaches to a transaction when accepting it.
 #[cfg(feature = "native")]
-pub fn new_tx_sequencing_data<S: Spec, Rt: HasSequencingData<S>>(runtime: &Rt) -> Bytes {
+pub fn new_tx_sequencing_data<S: Spec, Rt: HasSequencingData<S>>() -> Bytes {
     SequencingData {
         timestamp: Some(HDTimestamp::default_sequencing_data()),
-        data: runtime.create_sequencing_data(),
+        data: Rt::SequencingData::create(),
     }
     .encode()
 }
@@ -180,7 +171,7 @@ impl<'a, F: SequencingDataFormat> SequencingDataView<'a, F> {
     /// Reads the value at `key`, recording the access in native execution.
     pub fn get(&self, key: &F::Key) -> anyhow::Result<Option<F::Value>> {
         #[cfg(feature = "native")]
-        record_used_key::<F>(&self.scratchpad, key)?;
+        self.scratchpad.insert(borsh::to_vec(key)?);
 
         let Some(data) = self.data else {
             return Ok(None);
@@ -190,24 +181,11 @@ impl<'a, F: SequencingDataFormat> SequencingDataView<'a, F> {
     }
 }
 
-#[cfg(feature = "native")]
-fn record_used_key<F: SequencingDataFormat>(
-    scratchpad: &crate::SequencingScratchpad,
-    key: &F::Key,
-) -> anyhow::Result<()> {
-    scratchpad.insert(borsh::to_vec(key)?);
-    Ok(())
-}
-
 /// Decodes used sequencing data keys from a native scratchpad.
 #[cfg(feature = "native")]
 pub fn decode_used_sequencing_keys<F: SequencingDataFormat>(
-    scratchpad: Option<crate::SequencingScratchpadContents>,
+    scratchpad: crate::SequencingScratchpadContents,
 ) -> anyhow::Result<std::collections::BTreeSet<F::Key>> {
-    let Some(scratchpad) = scratchpad else {
-        return Ok(std::collections::BTreeSet::new());
-    };
-
     scratchpad
         .into_iter()
         .map(|key| F::Key::try_from_slice(&key).map_err(Into::into))
@@ -222,22 +200,22 @@ pub fn decode_used_sequencing_keys<F: SequencingDataFormat>(
 #[cfg(feature = "native")]
 pub fn prune_sequencing_data<F: SequencingDataFormat>(
     bytes: Bytes,
-    scratchpad: Option<crate::SequencingScratchpadContents>,
+    scratchpad: crate::SequencingScratchpadContents,
 ) -> anyhow::Result<Option<Bytes>> {
     let original_len = bytes.len();
     let envelope = SequencingData::decode(&bytes)?;
 
-    let data = match envelope.data {
-        Some(data) => {
-            let used_keys = decode_used_sequencing_keys::<F>(scratchpad)?;
-            F::prune_to_used_keys(data, &used_keys)?
-        }
-        None => None,
+    let Some(data) = envelope.data else {
+        // There is no data payload to prune. The codec encodes every decodable value uniquely,
+        // so re-encoding would reproduce `bytes` exactly; keep them as-is (or drop an entirely
+        // empty envelope).
+        return Ok(envelope.timestamp.is_some().then_some(bytes));
     };
 
+    let used_keys = decode_used_sequencing_keys::<F>(scratchpad)?;
     let pruned = SequencingData {
         timestamp: envelope.timestamp,
-        data,
+        data: F::prune_to_used_keys(data, &used_keys)?,
     };
     if pruned.is_empty() {
         return Ok(None);
@@ -329,7 +307,7 @@ mod tests {
     fn pruning_rejects_growth() {
         let bytes = encoded_envelope(None, Some(vec![1]));
         let original_len = bytes.len();
-        let err = prune_sequencing_data::<GrowingSequencingData>(bytes, None)
+        let err = prune_sequencing_data::<GrowingSequencingData>(bytes, Default::default())
             .expect_err("pruning must reject larger finalized sequencing data");
         assert!(err.to_string().contains(&format!(
             "grew from {original_len} to {} bytes",
@@ -342,7 +320,7 @@ mod tests {
         let timestamp = HDTimestamp::from_str("17123456789012345678").unwrap();
         let bytes = encoded_envelope(Some(timestamp), Some(vec![1, 2, 3]));
 
-        let pruned = prune_sequencing_data::<DroppingSequencingData>(bytes, None)
+        let pruned = prune_sequencing_data::<DroppingSequencingData>(bytes, Default::default())
             .expect("pruning should succeed")
             .expect("the timestamp must survive pruning");
         assert_eq!(
@@ -359,7 +337,7 @@ mod tests {
     fn pruning_removes_empty_envelope() {
         let bytes = encoded_envelope(None, Some(vec![1, 2, 3]));
 
-        let pruned = prune_sequencing_data::<DroppingSequencingData>(bytes, None)
+        let pruned = prune_sequencing_data::<DroppingSequencingData>(bytes, Default::default())
             .expect("pruning should succeed");
         assert_eq!(
             pruned, None,

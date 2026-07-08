@@ -94,18 +94,19 @@ impl<'de> Deserialize<'de> for FullyBakedTx {
 
         let helper = FullyBakedTxHelper::deserialize(deserializer)?;
 
-        let total_size = helper.data.len() + helper.sequencing_data.as_ref().map_or(0, |d| d.len());
+        let tx = Self {
+            data: helper.data,
+            sequencing_data: helper.sequencing_data,
+        };
 
+        let total_size = tx.payload_len();
         if total_size > MAX_FULLY_BAKED_TX_SIZE {
             return Err(serde::de::Error::custom(format!(
                 "FullyBakedTx total size {total_size} exceeds maximum allowed size of {MAX_FULLY_BAKED_TX_SIZE} bytes",
             )));
         }
 
-        Ok(Self {
-            data: helper.data,
-            sequencing_data: helper.sequencing_data,
-        })
+        Ok(tx)
     }
 }
 
@@ -135,6 +136,14 @@ impl FullyBakedTx {
         borsh::to_vec(self)
             .expect("Serialization to vec is infallible")
             .len()
+    }
+
+    /// Returns the combined length of the raw transaction data and sequencing data fields,
+    /// without encoding overhead. This is the quantity that [`MAX_FULLY_BAKED_TX_SIZE`] bounds:
+    /// the deserializers reject any transaction whose payload length exceeds it.
+    #[must_use]
+    pub fn payload_len(&self) -> usize {
+        self.data.len() + self.sequencing_data.as_ref().map_or(0, |d| d.len())
     }
 
     /// Returns true if the transaction has no data

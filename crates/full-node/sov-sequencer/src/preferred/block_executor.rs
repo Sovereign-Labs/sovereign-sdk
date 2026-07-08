@@ -692,23 +692,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     fn finalize_tx_sequencing_data(
         tx: &mut FullyBakedTx,
-        scratchpad: Option<sov_modules_api::SequencingScratchpadContents>,
+        scratchpad: sov_modules_api::SequencingScratchpadContents,
     ) {
-        let Some(data) = tx.sequencing_data.take() else {
+        // data is `Bytes` so cloning is cheap
+        let Some(data) = tx.sequencing_data.clone() else {
             return;
         };
 
-        match prune_sequencing_data::<
-            <Rt as sov_modules_api::capabilities::HasSequencingData<S>>::SequencingData,
-        >(
-            // data is `Bytes` so cloning is cheap
-            data.clone(),
-            scratchpad,
-        ) {
+        match prune_sequencing_data::<Rt::SequencingData>(data, scratchpad) {
             Ok(finalized) => tx.sequencing_data = finalized,
             Err(error) => {
                 tracing::warn!(%error, "Failed to prune sequencing data; keeping original data");
-                tx.sequencing_data = Some(data);
             }
         }
     }

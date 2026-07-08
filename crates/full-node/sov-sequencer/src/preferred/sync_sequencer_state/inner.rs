@@ -807,13 +807,9 @@ where
         // `MAX_FULLY_BAKED_TX_SIZE` is enforced by `FullyBakedTx`'s deserializers, so a tx that
         // exceeds it once sequencing data is attached would execute and soft-confirm here, yet
         // produce a blob that every node (including our own blob sender) rejects. Reject it up
-        // front instead, using the same raw field lengths the deserializers check. Note that
-        // pruning can only shrink the sequencing data, so this check is conservative.
-        let total_payload_len = baked_tx.data.len()
-            + baked_tx
-                .sequencing_data
-                .as_ref()
-                .map_or(0, |data| data.len());
+        // front instead. Note that pruning can only shrink the sequencing data, so this check
+        // is conservative.
+        let total_payload_len = baked_tx.payload_len();
         if total_payload_len > sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE {
             return (
                 Err(DoNewTxError::TxWithSequencingDataTooBig {

@@ -402,7 +402,7 @@ async fn wait_for_pruned_txs_on_da(
     last_checked_height: u64,
 ) -> anyhow::Result<()> {
     let published = test_rollup
-        .wait_for_txs_on_da::<RT>(
+        .wait_for_txs_on_da(
             &expected_by_hash.keys().copied().collect(),
             last_checked_height,
             Duration::from_secs(20),

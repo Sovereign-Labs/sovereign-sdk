@@ -368,17 +368,13 @@ mod native_sequencing {
             guard.insert(value);
         }
 
-        /// Takes the scratchpad contents, leaving it empty. Returns `None` if no keys were recorded.
-        pub(crate) fn take(&self) -> Option<SequencingScratchpadContents> {
+        /// Takes the scratchpad contents, leaving it empty.
+        pub(crate) fn take(&self) -> SequencingScratchpadContents {
             let mut guard = self
                 .inner
                 .lock()
                 .expect("sequencing scratchpad mutex was poisoned");
-            if guard.is_empty() {
-                None
-            } else {
-                Some(std::mem::take(&mut *guard))
-            }
+            std::mem::take(&mut *guard)
         }
     }
 
@@ -399,7 +395,7 @@ mod native_sequencing {
         /// data its own execution actually read and to diverge from nodes replaying the
         /// published transaction.
         #[doc(hidden)]
-        pub fn take_sequencing_scratchpad(&self) -> Option<super::SequencingScratchpadContents> {
+        pub fn take_sequencing_scratchpad(&self) -> super::SequencingScratchpadContents {
             self.sequencing.scratchpad().take()
         }
     }

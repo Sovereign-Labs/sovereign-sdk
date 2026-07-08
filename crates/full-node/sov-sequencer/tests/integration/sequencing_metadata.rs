@@ -4,27 +4,22 @@ use std::time::Duration;
 use borsh::to_vec;
 use sov_api_spec::types::TxReceiptResult;
 use sov_mock_da::BlockProducingConfig;
-use sov_modules_api::capabilities::{
-    Guard, HasCapabilities, HasSequencingData, TransactionAuthenticator,
-};
-use sov_modules_api::{
-    EncodeCall, FullyBakedTx, HDTimestamp, RawTx, Runtime, SequencingData, Spec,
-};
+use sov_modules_api::capabilities::TransactionAuthenticator;
+use sov_modules_api::{EncodeCall, FullyBakedTx, HDTimestamp, RawTx, Runtime, SequencingData};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_rollup_interface::node::da::DaService;
 use sov_test_modules::sequencing_data::{CallMessage, SequencingDataTester};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
-use sov_test_utils::runtime::StandardProvenRollupCapabilities;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::RtAgnosticBlueprint;
 use sov_test_utils::{
-    default_test_signed_transaction, generate_runtime_without_capabilities, TestSpec, TestUser,
+    default_test_signed_transaction, generate_runtime, TestSpec, TestUser,
     TEST_BLOB_PROCESSING_TIMEOUT, TEST_FINALIZATION_BLOCKS, TEST_MAX_BATCH_SIZE,
 };
 
 use crate::utils::{new_test_rollup, tempdir_inside_codebase_dir, MAX_BATCH_EXECUTION_TIME_MILLIS};
 
-generate_runtime_without_capabilities!(
+generate_runtime!(
     name: TestRuntime,
     modules: [sequencing_data_tester: SequencingDataTester<S>],
     operating_mode: sov_modules_api::runtime::OperatingMode::Optimistic,
@@ -38,31 +33,6 @@ generate_runtime_without_capabilities!(
 type S = TestSpec;
 type RT = TestRuntime<S>;
 type TestBlueprint = RtAgnosticBlueprint<S, RT>;
-
-impl<S: Spec> HasCapabilities<S> for TestRuntime<S> {
-    type Capabilities<'a>
-        = StandardProvenRollupCapabilities<'a, S>
-    where
-        Self: 'a;
-
-    fn capabilities(&mut self) -> Guard<Self::Capabilities<'_>> {
-        Guard::new(StandardProvenRollupCapabilities {
-            bank: &mut self.bank,
-            gas_payer: (),
-            sequencer_registry: &mut self.sequencer_registry,
-            accounts: &mut self.accounts,
-            uniqueness: &mut self.uniqueness,
-            chain_state: &mut self.chain_state,
-            operator_incentives: &mut self.operator_incentives,
-            prover_incentives: &mut self.prover_incentives,
-            attester_incentives: &mut self.attester_incentives,
-        })
-    }
-}
-
-impl<S: Spec> HasSequencingData<S> for TestRuntime<S> {
-    type SequencingData = ();
-}
 
 fn create_genesis_params() -> (GenesisParams<GenesisConfig<S>>, TestUser<S>) {
     let genesis_config =
@@ -205,7 +175,7 @@ async fn submit_and_publish_tx(
     test_rollup.force_close_batch().await.unwrap();
 
     let mut published = test_rollup
-        .wait_for_txs_on_da::<RT>(
+        .wait_for_txs_on_da(
             &BTreeSet::from([tx_hash]),
             last_checked_height,
             Duration::from_secs(15),
