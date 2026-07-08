@@ -3,9 +3,7 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use chrono::{TimeZone, Utc};
 use serde::{Deserialize, Serialize};
 use sov_modules_api::macros::UniversalWallet;
-use sov_modules_api::{
-    Context, DaSpec, GenesisState, HDTimestamp, Module, ModuleId, ModuleInfo, Spec, TxState,
-};
+use sov_modules_api::{Context, DaSpec, GenesisState, Module, ModuleId, ModuleInfo, Spec, TxState};
 
 #[derive(
     Clone,
@@ -62,9 +60,8 @@ impl<S: Spec> Module for SequencingDataTester<S> {
         }
 
         let timestamp = context
-            .sequencing_data_view::<HDTimestamp>()
-            .get(&())?
-            .ok_or_else(|| anyhow::anyhow!("No sequencing data in context"))?
+            .sequencing_timestamp()
+            .ok_or_else(|| anyhow::anyhow!("No sequencing timestamp in context"))?
             .as_nanos();
         let reasonable_range = year_to_timestamp(2025)..year_to_timestamp(2100);
         ensure!(

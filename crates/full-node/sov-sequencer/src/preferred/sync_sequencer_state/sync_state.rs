@@ -1144,7 +1144,8 @@ where
         ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
-        let sequencing_data = self.runtime.create_sequencing_data();
+        let sequencing_data =
+            Some(sov_modules_api::capabilities::new_tx_sequencing_data::<S, Rt>(&self.runtime));
         let load_based_accept_probability = if self.use_pi_rate_limiter {
             self.get_acceptance_probability(&baked_tx)
         } else {

@@ -152,15 +152,24 @@ impl<C: CryptoHelper> CryptoSpecExt for C {}
 /// Sequencer-provided data plus native-only execution scratchpad.
 #[derive(Clone, Debug)]
 pub struct SequencingContext {
-    data: Option<Bytes>,
+    data: Option<crate::SequencingData>,
     #[cfg(feature = "native")]
     scratchpad: SequencingScratchpad,
 }
 
 impl SequencingContext {
-    /// Creates a new sequencing context.
+    /// Creates a new sequencing context, decoding the raw sequencing data attached to the
+    /// transaction. Undecodable sequencing data is treated as absent; this keeps execution
+    /// deterministic across all node types for garbage submitted by a malicious sequencer.
     #[must_use]
-    pub fn new(data: Option<Bytes>) -> Self {
+    pub fn new(raw_data: Option<Bytes>) -> Self {
+        let data = raw_data.and_then(|bytes| match crate::SequencingData::decode(&bytes) {
+            Ok(decoded) => Some(decoded),
+            Err(error) => {
+                tracing::warn!(%error, "Failed to decode sequencing data; treating it as absent");
+                None
+            }
+        });
         Self {
             data,
             #[cfg(feature = "native")]
@@ -168,9 +177,9 @@ impl SequencingContext {
         }
     }
 
-    /// Returns the sequencing data.
-    pub fn data(&self) -> &Option<Bytes> {
-        &self.data
+    /// Returns the decoded sequencing data.
+    pub fn data(&self) -> Option<&crate::SequencingData> {
+        self.data.as_ref()
     }
 }
 
@@ -215,27 +224,37 @@ impl<S: Spec> Context<S> {
         &self.sequencer_da_address
     }
 
-    /// Returns the sequencing data
-    pub fn sequencing_data(&self) -> &Option<Bytes> {
+    /// Returns the decoded sequencing data attached to the transaction, if any.
+    ///
+    /// Only preferred-sequencer transactions carry sequencing data; data attached by any other
+    /// sequencer is discarded at context construction.
+    pub fn sequencing_data(&self) -> Option<&crate::SequencingData> {
         self.sequencing.data()
     }
 
-    /// Returns a typed view over the sequencing data.
+    /// Returns the timestamp the sequencer attached to the transaction, if any.
+    pub fn sequencing_timestamp(&self) -> Option<crate::HDTimestamp> {
+        self.sequencing.data().and_then(|data| data.timestamp)
+    }
+
+    /// Returns a typed view over the format-specific sequencing data.
     pub fn sequencing_data_view<F>(&self) -> crate::capabilities::SequencingDataView<'_, F>
     where
         F: crate::capabilities::SequencingDataFormat,
     {
+        let data = self.sequencing.data().and_then(|data| data.data.as_ref());
+
         #[cfg(feature = "native")]
         {
             crate::capabilities::SequencingDataView::with_scratchpad(
-                self.sequencing_data().as_ref(),
+                data,
                 self.sequencing.scratchpad(),
             )
         }
 
         #[cfg(not(feature = "native"))]
         {
-            crate::capabilities::SequencingDataView::new(self.sequencing_data().as_ref())
+            crate::capabilities::SequencingDataView::new(data)
         }
     }
 
@@ -297,6 +316,17 @@ impl<S: Spec> Context<S> {
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
     ) -> Self {
+        // Sequencing data is only trusted from the preferred sequencer; discard it for every
+        // other sequencer type so that neither pre-dispatch hooks nor in-transaction reads
+        // (e.g. precompiles) can observe untrusted sequencing data. This is deterministic
+        // across all node types: `sequencer_type` is derived from the on-chain sequencer
+        // registry, so replaying nodes classify each batch identically to the sequencer that
+        // published it.
+        let sequencing_data = match sequencer_type {
+            SequencerType::Preferred => sequencing_data,
+            SequencerType::NonPreferred => None,
+        };
+
         Self {
             sender_credentials,
             sender,

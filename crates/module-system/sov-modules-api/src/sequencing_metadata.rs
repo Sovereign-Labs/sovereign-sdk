@@ -4,8 +4,7 @@ use std::{
 };
 
 use borsh::{BorshDeserialize, BorshSerialize};
-
-use crate::capabilities::SequencingDataFormat;
+use sov_rollup_interface::Bytes;
 
 /// High definition execution timestamp, in nanoseconds since the unix epoch.
 #[derive(
@@ -22,23 +21,6 @@ use crate::capabilities::SequencingDataFormat;
 )]
 #[serde(transparent)]
 pub struct HDTimestamp(u128);
-
-impl SequencingDataFormat for HDTimestamp {
-    type Key = ();
-    type Value = HDTimestamp;
-
-    fn get(bytes: &[u8], _key: &Self::Key) -> anyhow::Result<Option<Self::Value>> {
-        Ok(Some(Self::try_from_slice(bytes)?))
-    }
-
-    #[cfg(feature = "native")]
-    fn prune_to_used_keys(
-        bytes: sov_rollup_interface::Bytes,
-        used_keys: &std::collections::BTreeSet<Self::Key>,
-    ) -> anyhow::Result<Option<sov_rollup_interface::Bytes>> {
-        Ok(used_keys.contains(&()).then_some(bytes))
-    }
-}
 
 #[cfg(feature = "native")]
 const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
@@ -58,7 +40,8 @@ impl HDTimestamp {
         self.0
     }
 
-    /// Creates the default timestamp metadata used by the preferred sequencer.
+    /// Creates the default timestamp used by the preferred sequencer when it attaches
+    /// [`SequencingData`] to an accepted transaction.
     #[cfg(feature = "native")]
     pub fn default_sequencing_data() -> Self {
         if cfg!(debug_assertions) {
@@ -69,14 +52,6 @@ impl HDTimestamp {
         } else {
             Self::now()
         }
-    }
-
-    /// Creates byte-compatible default timestamp metadata for a fully baked transaction.
-    #[cfg(feature = "native")]
-    pub fn default_sequencing_data_bytes() -> sov_rollup_interface::Bytes {
-        borsh::to_vec(&Self::default_sequencing_data())
-            .expect("HDTimestamp serialization is infallible")
-            .into()
     }
 }
 
@@ -93,6 +68,85 @@ impl FromStr for HDTimestamp {
     }
 }
 
+/// Sequencer-provided per-transaction sequencing data.
+///
+/// This is the decoded form of the `sequencing_data` field of
+/// [`FullyBakedTx`](sov_rollup_interface::stf::FullyBakedTx): serialized format-specific
+/// sequencing data (interpreted through the runtime's
+/// [`SequencingDataFormat`](crate::capabilities::SequencingDataFormat)), plus a timestamp
+/// attached by the preferred sequencer.
+///
+/// The timestamp is SDK-managed: the preferred sequencer attaches it on transaction acceptance
+/// and it is always published as-is, while the `data` payload is pruned to the keys accessed
+/// during execution.
+///
+/// # Why a hand-rolled codec instead of a borsh derive?
+///
+/// The encoding is equivalent to borsh-serializing an `(Option<u128>, Option<Vec<u8>>)` tuple
+/// (pinned by a test). A derive is deliberately not used: borsh deserializes through an
+/// `io::Read`-style interface that cannot borrow from the source buffer, so it would copy the
+/// `data` payload (potentially large, e.g. an oracle snapshot) on every decode. [`Self::decode`]
+/// instead takes the source as [`Bytes`] and reference-counts the payload out of it zero-copy.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub struct SequencingData {
+    /// Timestamp attached by the preferred sequencer when it accepted the transaction.
+    pub timestamp: Option<HDTimestamp>,
+    /// Serialized format-specific sequencing data, interpreted by the runtime's
+    /// [`SequencingDataFormat`](crate::capabilities::SequencingDataFormat).
+    pub data: Option<Bytes>,
+}
+
+impl SequencingData {
+    /// Returns `true` if there is neither a timestamp nor any data.
+    pub fn is_empty(&self) -> bool {
+        self.timestamp.is_none() && self.data.is_none()
+    }
+
+    /// Serializes the sequencing data.
+    pub fn encode(&self) -> Bytes {
+        let mut out = borsh::to_vec(&self.timestamp)
+            .expect("serializing an Option<HDTimestamp> is infallible");
+        match &self.data {
+            None => out.push(0),
+            Some(data) => {
+                out.push(1);
+                let len = u32::try_from(data.len())
+                    .expect("sequencing data larger than u32::MAX bytes cannot be encoded");
+                out.extend_from_slice(&len.to_le_bytes());
+                out.extend_from_slice(data);
+            }
+        }
+        out.into()
+    }
+
+    /// Deserializes sequencing data, borrowing the `data` payload from `bytes` without copying.
+    pub fn decode(bytes: &Bytes) -> anyhow::Result<Self> {
+        let mut cursor: &[u8] = bytes;
+        let timestamp = <Option<HDTimestamp> as BorshDeserialize>::deserialize(&mut cursor)?;
+        let data = match u8::deserialize(&mut cursor)? {
+            0 => {
+                anyhow::ensure!(
+                    cursor.is_empty(),
+                    "sequencing data contains {} trailing bytes",
+                    cursor.len()
+                );
+                None
+            }
+            1 => {
+                let len = u32::deserialize(&mut cursor)? as usize;
+                anyhow::ensure!(
+                    cursor.len() == len,
+                    "sequencing data declares {len} data bytes but {} remain",
+                    cursor.len()
+                );
+                Some(bytes.slice_ref(cursor))
+            }
+            tag => anyhow::bail!("invalid option tag {tag} in sequencing data"),
+        };
+        Ok(Self { timestamp, data })
+    }
+}
+
 #[test]
 fn test_hd_timestamp_display_roundtrip() {
     let nanos = 17123456789012345678;
@@ -104,31 +158,43 @@ fn test_hd_timestamp_display_roundtrip() {
 }
 
 #[test]
-fn hd_timestamp_sequencing_format_is_byte_compatible() {
-    let nanos = 17123456789012345678;
-    let timestamp = HDTimestamp(nanos);
-    let bytes = borsh::to_vec(&timestamp).unwrap();
+fn sequencing_data_encode_decode_roundtrip() {
+    let sequencing_data = SequencingData {
+        timestamp: Some(HDTimestamp(17123456789012345678)),
+        data: Some(Bytes::from(vec![0x12, 0x34, 0x56, 0x78])),
+    };
 
-    assert_eq!(bytes, nanos.to_le_bytes());
+    let decoded = SequencingData::decode(&sequencing_data.encode()).unwrap();
+    assert_eq!(decoded, sequencing_data);
+}
+
+#[test]
+fn sequencing_data_encoding_matches_borsh() {
+    let sequencing_data = SequencingData {
+        timestamp: Some(HDTimestamp(17123456789012345678)),
+        data: Some(Bytes::from(vec![0x12, 0x34, 0x56, 0x78])),
+    };
+
+    let equivalent_tuple = (
+        Some(17123456789012345678u128),
+        Some(vec![0x12u8, 0x34, 0x56, 0x78]),
+    );
     assert_eq!(
-        HDTimestamp::get(&bytes, &()).unwrap().unwrap().as_nanos(),
-        nanos
+        sequencing_data.encode(),
+        borsh::to_vec(&equivalent_tuple).unwrap(),
+        "SequencingData must stay wire-compatible with borsh (Option<u128>, Option<Vec<u8>>)"
     );
 }
 
-#[cfg(feature = "native")]
 #[test]
-fn hd_timestamp_prunes_only_when_accessed() {
-    let timestamp = HDTimestamp(17123456789012345678);
-    let bytes: sov_rollup_interface::Bytes = borsh::to_vec(&timestamp).unwrap().into();
+fn sequencing_data_decode_rejects_trailing_bytes() {
+    let mut encoded = SequencingData {
+        timestamp: Some(HDTimestamp(17123456789012345678)),
+        data: None,
+    }
+    .encode()
+    .to_vec();
+    encoded.push(0xFF);
 
-    assert_eq!(
-        HDTimestamp::prune_to_used_keys(bytes.clone(), &std::collections::BTreeSet::from([()]))
-            .unwrap(),
-        Some(bytes.clone())
-    );
-    assert_eq!(
-        HDTimestamp::prune_to_used_keys(bytes, &std::collections::BTreeSet::new()).unwrap(),
-        None
-    );
+    SequencingData::decode(&Bytes::from(encoded)).expect_err("decoding must reject trailing bytes");
 }

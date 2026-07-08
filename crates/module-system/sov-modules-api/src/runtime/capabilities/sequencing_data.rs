@@ -1,16 +1,18 @@
-use std::any::TypeId;
 use std::marker::PhantomData;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_rollup_interface::stf::FullyBakedTx;
 use sov_rollup_interface::Bytes;
 
-use crate::{Context, HDTimestamp, Runtime, Spec, TxState};
+use crate::{Context, HDTimestamp, SequencingData, Spec, TxState};
 
 /// A serialized, key-addressable format for sequencer-provided transaction metadata.
 ///
 /// Implementations define how to read and prune their own serialized representation. The SDK
 /// controls access tracking and only asks the format to retain the recorded keys.
+///
+/// The format only governs the `data` payload of [`SequencingData`]; the accompanying timestamp
+/// is SDK-managed and never pruned.
 ///
 /// # Determinism and idempotency requirements
 ///
@@ -38,7 +40,7 @@ pub trait SequencingDataFormat: Send + Sync + 'static {
 
     /// Prunes serialized sequencing data to the keys accessed during native execution.
     ///
-    /// Returning `None` removes the sequencing data from the published transaction entirely.
+    /// Returning `None` removes the data payload from the published transaction entirely.
     /// The output must never be larger than the input and must satisfy the idempotency
     /// requirements described on [the trait](Self).
     #[cfg(feature = "native")]
@@ -46,23 +48,66 @@ pub trait SequencingDataFormat: Send + Sync + 'static {
         bytes: Bytes,
         used_keys: &std::collections::BTreeSet<Self::Key>,
     ) -> anyhow::Result<Option<Bytes>>;
+
+    /// Creates the serialized sequencing data that the preferred sequencer attaches to each
+    /// accepted transaction.
+    ///
+    /// Returning `None` (the default) attaches no format-specific data; the SDK still attaches
+    /// a timestamp alongside it (see [`new_tx_sequencing_data`]).
+    #[cfg(feature = "native")]
+    fn create() -> Option<Bytes> {
+        None
+    }
+}
+
+/// The trivial sequencing data format for runtimes that use no format-specific sequencing data.
+///
+/// Transactions still carry the SDK-managed timestamp of [`SequencingData`].
+impl SequencingDataFormat for () {
+    type Key = ();
+    type Value = std::convert::Infallible;
+
+    fn get(_bytes: &[u8], _key: &Self::Key) -> anyhow::Result<Option<Self::Value>> {
+        Ok(None)
+    }
+
+    #[cfg(feature = "native")]
+    fn prune_to_used_keys(
+        _bytes: Bytes,
+        _used_keys: &std::collections::BTreeSet<Self::Key>,
+    ) -> anyhow::Result<Option<Bytes>> {
+        Ok(None)
+    }
 }
 
 /// Runtime support for sequencer-provided transaction metadata.
+///
+/// Runtimes without custom sequencing data only need to set the associated type:
+///
+/// ```ignore
+/// impl<S: Spec> HasSequencingData<S> for MyRuntime<S> {
+///     type SequencingData = ();
+/// }
+/// ```
+///
+/// The sequencer-attached timestamp is handled by the SDK independently of this trait: the STF
+/// updates the chain-state time oracle from it before dispatching each preferred-sequencer
+/// transaction.
 pub trait HasSequencingData<S: Spec> {
     /// Serialized sequencing data format used by this runtime.
     type SequencingData: SequencingDataFormat;
 
     /// Handles sequencing data before transaction dispatch.
     ///
-    /// This hook is only invoked when the transaction carries sequencing data. Because unread
+    /// This hook is only invoked when the transaction carries sequencing data, which is only
+    /// ever the case for preferred-sequencer transactions: data attached by any other sequencer
+    /// is discarded before execution. Because unread
     /// data is pruned from the published transaction, full nodes and provers replaying the
-    /// transaction may not invoke this hook (or may observe fewer keys) even though the
-    /// sequencer's own execution did. To keep execution deterministic between the sequencer
-    /// and replaying nodes, implementations must only let values obtained through recorded
-    /// [`SequencingDataView::get`] reads influence state, and must not condition state changes
-    /// on the mere presence or absence of sequencing data. Errors returned from this hook
-    /// revert the transaction.
+    /// transaction may observe fewer keys than the sequencer's own execution did. To keep
+    /// execution deterministic between the sequencer and replaying nodes, implementations must
+    /// only let values obtained through recorded [`SequencingDataView::get`] reads influence
+    /// state, and must not condition state changes on the mere presence or absence of
+    /// sequencing data. Errors returned from this hook revert the transaction.
     fn handle_sequencing_data(
         &mut self,
         _data: &SequencingDataView<'_, Self::SequencingData>,
@@ -72,9 +117,25 @@ pub trait HasSequencingData<S: Spec> {
         Ok(())
     }
 
-    /// Creates serialized sequencing data for a transaction accepted by the preferred sequencer.
+    /// Creates the format-specific sequencing data (the `data` payload of [`SequencingData`])
+    /// for a transaction accepted by the preferred sequencer.
+    ///
+    /// Defaults to [`SequencingDataFormat::create`].
     #[cfg(feature = "native")]
-    fn create_sequencing_data(&self) -> Option<Bytes>;
+    fn create_sequencing_data(&self) -> Option<Bytes> {
+        Self::SequencingData::create()
+    }
+}
+
+/// Builds the full serialized [`SequencingData`] (timestamp plus runtime-provided data) that
+/// the preferred sequencer attaches to a transaction when accepting it.
+#[cfg(feature = "native")]
+pub fn new_tx_sequencing_data<S: Spec, Rt: HasSequencingData<S>>(runtime: &Rt) -> Bytes {
+    SequencingData {
+        timestamp: Some(HDTimestamp::default_sequencing_data()),
+        data: runtime.create_sequencing_data(),
+    }
+    .encode()
 }
 
 /// A typed view over serialized sequencing data.
@@ -154,55 +215,64 @@ pub fn decode_used_sequencing_keys<F: SequencingDataFormat>(
 }
 
 /// Applies SDK-controlled pruning to serialized sequencing data.
+///
+/// The timestamp (if any) is always preserved; only the format-specific data payload is pruned
+/// to the keys recorded during native execution. Returns `None` if neither a timestamp nor any
+/// data remains.
 #[cfg(feature = "native")]
 pub fn prune_sequencing_data<F: SequencingDataFormat>(
     bytes: Bytes,
     scratchpad: Option<crate::SequencingScratchpadContents>,
 ) -> anyhow::Result<Option<Bytes>> {
     let original_len = bytes.len();
-    let used_keys = decode_used_sequencing_keys::<F>(scratchpad)?;
-    let pruned = F::prune_to_used_keys(bytes, &used_keys)?;
+    let envelope = SequencingData::decode(&bytes)?;
 
-    if let Some(pruned) = pruned.as_ref() {
-        anyhow::ensure!(
-            pruned.len() <= original_len,
-            "pruned sequencing data grew from {} to {} bytes",
-            original_len,
-            pruned.len()
-        );
+    let data = match envelope.data {
+        Some(data) => {
+            let used_keys = decode_used_sequencing_keys::<F>(scratchpad)?;
+            F::prune_to_used_keys(data, &used_keys)?
+        }
+        None => None,
+    };
+
+    let pruned = SequencingData {
+        timestamp: envelope.timestamp,
+        data,
+    };
+    if pruned.is_empty() {
+        return Ok(None);
     }
 
-    Ok(pruned)
+    let pruned = pruned.encode();
+    anyhow::ensure!(
+        pruned.len() <= original_len,
+        "pruned sequencing data grew from {} to {} bytes",
+        original_len,
+        pruned.len()
+    );
+    Ok(Some(pruned))
 }
 
-/// Extracts an [`HDTimestamp`] from the sequencing data if the runtime uses [`HDTimestamp`] as its
-/// exact sequencing data format.
+/// Extracts the sequencer-attached timestamp from a transaction's sequencing data, if any.
 ///
 /// In some cases (i.e. inside the sequencer), we expect that the sequencing data will be valid and want to report an error if it is not.
 /// In other cases, the tx may have come from an untrusted sequencer and we only want to log at the debug level.
-pub fn get_maybe_timestamp_from_sequencing_data<S: Spec, Rt: Runtime<S>>(
+pub fn get_timestamp_from_sequencing_data(
     baked_tx: &FullyBakedTx,
     log_deserialization_error: bool,
 ) -> Option<HDTimestamp> {
-    baked_tx.sequencing_data.as_ref().and_then(|data| {
-        if TypeId::of::<<Rt as HasSequencingData<S>>::SequencingData>()
-            != TypeId::of::<HDTimestamp>()
-        {
-            return None;
-        }
-
-        match HDTimestamp::try_from_slice(data) {
-            Ok(timestamp) => Some(timestamp),
-            Err(error) => {
-                if log_deserialization_error {
-                    tracing::error!(%error, "Failed to deserialize sequencing data");
-                } else {
-                    tracing::debug!(%error, "Failed to deserialize sequencing data");
-                }
-                None
+    let data = baked_tx.sequencing_data.as_ref()?;
+    match SequencingData::decode(data) {
+        Ok(sequencing_data) => sequencing_data.timestamp,
+        Err(error) => {
+            if log_deserialization_error {
+                tracing::error!(%error, "Failed to deserialize sequencing data");
+            } else {
+                tracing::debug!(%error, "Failed to deserialize sequencing data");
             }
+            None
         }
-    })
+    }
 }
 
 #[cfg(all(test, feature = "native"))]
@@ -229,28 +299,105 @@ mod tests {
         }
     }
 
+    struct DroppingSequencingData;
+
+    impl SequencingDataFormat for DroppingSequencingData {
+        type Key = ();
+        type Value = ();
+
+        fn get(_bytes: &[u8], _key: &Self::Key) -> anyhow::Result<Option<Self::Value>> {
+            Ok(Some(()))
+        }
+
+        fn prune_to_used_keys(
+            _bytes: Bytes,
+            _used_keys: &std::collections::BTreeSet<Self::Key>,
+        ) -> anyhow::Result<Option<Bytes>> {
+            Ok(None)
+        }
+    }
+
+    fn encoded_envelope(timestamp: Option<HDTimestamp>, data: Option<Vec<u8>>) -> Bytes {
+        SequencingData {
+            timestamp,
+            data: data.map(Into::into),
+        }
+        .encode()
+    }
+
     #[test]
     fn pruning_rejects_growth() {
-        let err = prune_sequencing_data::<GrowingSequencingData>(Bytes::from(vec![1]), None)
+        let bytes = encoded_envelope(None, Some(vec![1]));
+        let original_len = bytes.len();
+        let err = prune_sequencing_data::<GrowingSequencingData>(bytes, None)
             .expect_err("pruning must reject larger finalized sequencing data");
-        assert!(err.to_string().contains("grew from 1 to 2 bytes"));
+        assert!(err.to_string().contains(&format!(
+            "grew from {original_len} to {} bytes",
+            original_len + 1
+        )));
+    }
+
+    #[test]
+    fn pruning_preserves_timestamp_when_data_is_dropped() {
+        let timestamp = HDTimestamp::from_str("17123456789012345678").unwrap();
+        let bytes = encoded_envelope(Some(timestamp), Some(vec![1, 2, 3]));
+
+        let pruned = prune_sequencing_data::<DroppingSequencingData>(bytes, None)
+            .expect("pruning should succeed")
+            .expect("the timestamp must survive pruning");
+        assert_eq!(
+            SequencingData::decode(&pruned).unwrap(),
+            SequencingData {
+                timestamp: Some(timestamp),
+                data: None
+            },
+            "pruning must keep the timestamp and drop only the data payload"
+        );
+    }
+
+    #[test]
+    fn pruning_removes_empty_envelope() {
+        let bytes = encoded_envelope(None, Some(vec![1, 2, 3]));
+
+        let pruned = prune_sequencing_data::<DroppingSequencingData>(bytes, None)
+            .expect("pruning should succeed");
+        assert_eq!(
+            pruned, None,
+            "sequencing data with no timestamp and fully pruned data must be removed"
+        );
+    }
+
+    struct KeyedSequencingData;
+
+    impl SequencingDataFormat for KeyedSequencingData {
+        type Key = u16;
+        type Value = ();
+
+        fn get(_bytes: &[u8], _key: &Self::Key) -> anyhow::Result<Option<Self::Value>> {
+            Ok(Some(()))
+        }
+
+        fn prune_to_used_keys(
+            bytes: Bytes,
+            _used_keys: &std::collections::BTreeSet<Self::Key>,
+        ) -> anyhow::Result<Option<Bytes>> {
+            Ok(Some(bytes))
+        }
     }
 
     #[test]
     fn view_records_accessed_key() {
         let scratchpad = crate::SequencingScratchpad::default();
-        let bytes = borsh::to_vec(&crate::HDTimestamp::from_str("42").unwrap())
-            .unwrap()
-            .into();
-        let view = SequencingDataView::<crate::HDTimestamp>::with_scratchpad(
+        let bytes = Bytes::from(vec![0x12, 0x34]);
+        let view = SequencingDataView::<KeyedSequencingData>::with_scratchpad(
             Some(&bytes),
             scratchpad.clone(),
         );
 
-        view.get(&()).unwrap();
+        view.get(&0x1234).unwrap();
 
-        let used_keys = decode_used_sequencing_keys::<crate::HDTimestamp>(scratchpad.take())
+        let used_keys = decode_used_sequencing_keys::<KeyedSequencingData>(scratchpad.take())
             .expect("scratchpad should decode");
-        assert!(used_keys.contains(&()));
+        assert!(used_keys.contains(&0x1234));
     }
 }

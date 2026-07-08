@@ -1,16 +1,14 @@
 use std::collections::BTreeSet;
-use std::str::FromStr;
-use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::LazyLock;
 use std::time::Duration;
 
 use borsh::to_vec;
+use sov_api_spec::types::TxReceiptResult;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::capabilities::{
-    Guard, HasCapabilities, HasSequencingData, SequencingDataView, TransactionAuthenticator,
+    Guard, HasCapabilities, HasSequencingData, TransactionAuthenticator,
 };
 use sov_modules_api::{
-    Context, EncodeCall, FullyBakedTx, HDTimestamp, RawTx, Runtime, Spec, TxState,
+    EncodeCall, FullyBakedTx, HDTimestamp, RawTx, Runtime, SequencingData, Spec,
 };
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_rollup_interface::node::da::DaService;
@@ -25,26 +23,6 @@ use sov_test_utils::{
 };
 
 use crate::utils::{new_test_rollup, tempdir_inside_codebase_dir, MAX_BATCH_EXECUTION_TIME_MILLIS};
-
-const INITIAL_TIMESTAMP_NANOS: u128 = 1_893_456_000_000_000_000;
-static ACCESS_TIMESTAMP_IN_HANDLER: AtomicBool = AtomicBool::new(true);
-static SEQUENCING_METADATA_TEST_LOCK: LazyLock<tokio::sync::Mutex<()>> =
-    LazyLock::new(|| tokio::sync::Mutex::new(()));
-
-struct TimestampAccessMode;
-
-impl TimestampAccessMode {
-    fn set(access_timestamp: bool) -> Self {
-        ACCESS_TIMESTAMP_IN_HANDLER.store(access_timestamp, Ordering::SeqCst);
-        Self
-    }
-}
-
-impl Drop for TimestampAccessMode {
-    fn drop(&mut self) {
-        ACCESS_TIMESTAMP_IN_HANDLER.store(true, Ordering::SeqCst);
-    }
-}
 
 generate_runtime_without_capabilities!(
     name: TestRuntime,
@@ -83,37 +61,7 @@ impl<S: Spec> HasCapabilities<S> for TestRuntime<S> {
 }
 
 impl<S: Spec> HasSequencingData<S> for TestRuntime<S> {
-    type SequencingData = HDTimestamp;
-
-    fn handle_sequencing_data(
-        &mut self,
-        data: &SequencingDataView<'_, Self::SequencingData>,
-        context: &Context<S>,
-        state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
-        if !context.sequencer_is_preferred() {
-            return Ok(());
-        }
-
-        if !ACCESS_TIMESTAMP_IN_HANDLER.load(Ordering::SeqCst) {
-            return Ok(());
-        }
-
-        if let Some(timestamp) = data.get(&())? {
-            self.chain_state
-                .update_oracle_time_from_sequencing_data(timestamp, state)?;
-        }
-
-        Ok(())
-    }
-
-    fn create_sequencing_data(&self) -> Option<sov_modules_api::Bytes> {
-        Some(
-            to_vec(&timestamp_from_nanos(INITIAL_TIMESTAMP_NANOS))
-                .expect("timestamp serialization should be infallible")
-                .into(),
-        )
-    }
+    type SequencingData = ();
 }
 
 fn create_genesis_params() -> (GenesisParams<GenesisConfig<S>>, TestUser<S>) {
@@ -163,8 +111,6 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<S>) {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn sequencer_sets_timestamp_before_execution() {
-    let _test_lock = SEQUENCING_METADATA_TEST_LOCK.lock().await;
-    let _access_mode = TimestampAccessMode::set(true);
     let (test_rollup, admin) = create_test_rollup().await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -172,40 +118,58 @@ async fn sequencer_sets_timestamp_before_execution() {
     let call = <RT as EncodeCall<SequencingDataTester<S>>>::to_decodable(
         CallMessage::AssertTimestampIsReasonable,
     );
-    let published_tx = submit_and_publish_tx(&test_rollup, &admin, call).await;
+    let before = HDTimestamp::now();
+    let (published_tx, receipt) = submit_and_publish_tx(&test_rollup, &admin, call).await;
+    let after = HDTimestamp::now();
 
-    let sequencing_data = published_tx
-        .sequencing_data
-        .expect("published transaction should include finalized sequencing metadata");
     assert_eq!(
-        timestamp_bytes_to_nanos(&sequencing_data).unwrap(),
-        INITIAL_TIMESTAMP_NANOS,
-        "sequencer should preserve metadata accessed during execution"
+        receipt,
+        TxReceiptResult::Successful,
+        "the module should observe the sequencing timestamp through the transaction context"
+    );
+
+    let timestamp = decode_sequencing_data(&published_tx)
+        .timestamp
+        .expect("published transaction should include the sequencer timestamp");
+    assert!(
+        before <= timestamp && timestamp <= after,
+        "published timestamp {timestamp} should have been generated during tx acceptance, between {before} and {after}"
     );
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn sequencer_prunes_timestamp_when_not_accessed() {
-    let _test_lock = SEQUENCING_METADATA_TEST_LOCK.lock().await;
-    let _access_mode = TimestampAccessMode::set(false);
+async fn sequencer_publishes_timestamp_even_when_unused() {
     let (test_rollup, admin) = create_test_rollup().await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let call = <RT as EncodeCall<SequencingDataTester<S>>>::to_decodable(CallMessage::Noop);
-    let published_tx = submit_and_publish_tx(&test_rollup, &admin, call).await;
+    let (published_tx, _receipt) = submit_and_publish_tx(&test_rollup, &admin, call).await;
 
+    let sequencing_data = decode_sequencing_data(&published_tx);
     assert!(
-        published_tx.sequencing_data.is_none(),
-        "sequencer should prune timestamp metadata that was not accessed during execution"
+        sequencing_data.timestamp.is_some(),
+        "the sequencer timestamp must be published even when execution never reads it"
     );
+    assert_eq!(
+        sequencing_data.data, None,
+        "a runtime without format-specific sequencing data must not publish a data payload"
+    );
+}
+
+fn decode_sequencing_data(tx: &FullyBakedTx) -> SequencingData {
+    let bytes = tx
+        .sequencing_data
+        .as_ref()
+        .expect("published transaction should include sequencing data");
+    SequencingData::decode(bytes).expect("published sequencing data should decode")
 }
 
 async fn submit_and_publish_tx(
     test_rollup: &TestRollup<TestBlueprint>,
     admin: &TestUser<S>,
     call: <RT as sov_modules_api::DispatchCall>::Decodable,
-) -> FullyBakedTx {
+) -> (FullyBakedTx, TxReceiptResult) {
     let tx =
         default_test_signed_transaction::<RT, S>(&admin.private_key, &call, 0, &RT::CHAIN_HASH);
     let raw_tx = RawTx::new(to_vec(&tx).unwrap());
@@ -222,11 +186,16 @@ async fn submit_and_publish_tx(
     let tx_hash = <RT as Runtime<S>>::Auth::compute_tx_hash(&baked_tx)
         .expect("submitted transaction hash should compute");
 
-    test_rollup
+    let response = test_rollup
         .api_client()
         .send_raw_tx_to_sequencer(&raw_tx)
         .await
-        .expect("sequencer execution should insert sequencing metadata");
+        .expect("sequencer should accept the transaction");
+    let receipt = response
+        .into_inner()
+        .receipt
+        .expect("sequencer confirmation should include a receipt")
+        .result;
     let last_checked_height = test_rollup
         .da_service
         .get_head_block_header()
@@ -243,16 +212,10 @@ async fn submit_and_publish_tx(
         )
         .await
         .expect("published batch blobs should decode");
-    published
-        .remove(&tx_hash)
-        .expect("the submitted tx should be published")
-}
-
-fn timestamp_from_nanos(nanos: u128) -> HDTimestamp {
-    HDTimestamp::from_str(&nanos.to_string()).expect("u128 timestamp should parse")
-}
-
-fn timestamp_bytes_to_nanos(bytes: &[u8]) -> anyhow::Result<u128> {
-    let bytes = <[u8; 16]>::try_from(bytes)?;
-    Ok(u128::from_le_bytes(bytes))
+    (
+        published
+            .remove(&tx_hash)
+            .expect("the submitted tx should be published"),
+        receipt,
+    )
 }

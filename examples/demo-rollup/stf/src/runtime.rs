@@ -16,11 +16,10 @@ use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::KernelWithSlotMapping;
 use sov_modules_api::capabilities::{
-    Guard, HasCapabilities, HasKernel, HasSequencingData, SequencingDataView,
-    TransactionAuthenticator,
+    Guard, HasCapabilities, HasKernel, HasSequencingData, TransactionAuthenticator,
 };
 use sov_modules_api::Base58Address;
-use sov_modules_api::{Context, HDTimestamp, RawTx, Spec, TxState};
+use sov_modules_api::{RawTx, Spec};
 
 pub use demo_stf_declaration::GenesisConfig;
 use demo_stf_declaration::Runtime as RuntimeInner;
@@ -173,35 +172,7 @@ impl<S: Spec> HasSequencingData<S> for Runtime<S>
 where
     S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
-    type SequencingData = HDTimestamp;
-
-    fn handle_sequencing_data(
-        &mut self,
-        data: &SequencingDataView<'_, Self::SequencingData>,
-        context: &Context<S>,
-        state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
-        if !context.sequencer_is_preferred() {
-            return Ok(());
-        }
-
-        match data.get(&()) {
-            Ok(Some(timestamp)) => {
-                self.0
-                    .chain_state
-                    .update_oracle_time_from_sequencing_data(timestamp, state)?;
-            }
-            Ok(None) => {}
-            Err(error) => tracing::warn!(%error, "Invalid sequencing metadata; ignoring"),
-        }
-
-        Ok(())
-    }
-
-    #[cfg(feature = "native")]
-    fn create_sequencing_data(&self) -> Option<sov_modules_api::Bytes> {
-        Some(HDTimestamp::default_sequencing_data_bytes())
-    }
+    type SequencingData = ();
 }
 
 impl<S: Spec> HasKernel<S> for Runtime<S>

@@ -1,3 +1,4 @@
+use sov_modules_api::capabilities::ChainState as _;
 use sov_modules_api::capabilities::{AuthenticationError, AuthenticationOutput, FatalError};
 use sov_modules_api::capabilities::{
     TimelockCapability, TimelockProposalData, TimelockProposalOutcome,
@@ -131,9 +132,17 @@ fn attempt_tx<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
     runtime: &mut RT,
     state: &mut WorkingSet<S, I>,
 ) -> Result<(), Error> {
-    if ctx.sequencing_data().is_some() {
-        let sequencing_data = ctx.sequencing_data_view::<RT::SequencingData>();
-        runtime.handle_sequencing_data(&sequencing_data, ctx, state)?;
+    if let Some(sequencing_data) = ctx.sequencing_data() {
+        // The context only carries sequencing data for preferred-sequencer transactions
+        // (enforced at `Context` construction), so both the oracle update and the runtime hook
+        // exclusively observe trusted data. The timestamp channel is SDK-managed and never
+        // pruned, so replaying nodes observe the same oracle update.
+        if let Some(timestamp) = sequencing_data.timestamp {
+            runtime.chain_state().update_oracle_time(timestamp, state)?;
+        }
+
+        let view = ctx.sequencing_data_view::<RT::SequencingData>();
+        runtime.handle_sequencing_data(&view, ctx, state)?;
     }
 
     runtime.pre_dispatch_tx_hook(tx, state)?;

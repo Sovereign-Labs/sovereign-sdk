@@ -240,7 +240,7 @@ where
 
         let mut runtime = R::default();
         let sequencing_data = if sequencer_type == SequencerType::Preferred {
-            runtime.create_sequencing_data()
+            Some(sov_modules_api::capabilities::new_tx_sequencing_data::<S, R>(&runtime))
         } else {
             None
         };

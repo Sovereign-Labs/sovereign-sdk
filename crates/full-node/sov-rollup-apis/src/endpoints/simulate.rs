@@ -454,7 +454,8 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
             AuthenticatedTransactionData(state.tx_details(params.tx_details.unwrap_or_default())?);
 
         let mut scratchpad = accessor.to_tx_scratchpad();
-        let sequencing_metadata = runtime.create_sequencing_data();
+        let sequencing_metadata =
+            Some(sov_modules_api::capabilities::new_tx_sequencing_data::<S, R>(&runtime));
         let context = runtime
             .transaction_authorizer()
             .resolve_context(

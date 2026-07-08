@@ -44,7 +44,9 @@ fn make_unregistered_blobs<
                 nonces,
             );
             let mut fully_baked_tx = FullyBakedTx::new(tx.data);
-            fully_baked_tx.sequencing_data = RT::default().create_sequencing_data();
+            fully_baked_tx.sequencing_data = Some(
+                sov_modules_api::capabilities::new_tx_sequencing_data::<S, RT>(&RT::default()),
+            );
 
             MockBlob::new_with_hash(borsh::to_vec(&fully_baked_tx).unwrap(), sender.da_address)
         })
@@ -71,7 +73,8 @@ fn make_unregistered_blob_with_approx_size<
         nonces,
     );
     let mut fully_baked_tx = FullyBakedTx::new(tx.data);
-    fully_baked_tx.sequencing_data = RT::default().create_sequencing_data();
+    fully_baked_tx.sequencing_data =
+        Some(sov_modules_api::capabilities::new_tx_sequencing_data::<S, RT>(&RT::default()));
 
     MockBlob::new_with_hash(borsh::to_vec(&fully_baked_tx).unwrap(), sender.da_address)
 }

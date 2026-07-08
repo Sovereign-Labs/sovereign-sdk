@@ -67,6 +67,14 @@ impl SequencingDataFormat for OracleSequencingData {
         data.0.retain(|key, _| used_keys.contains(key));
         Ok(Some(borsh::to_vec(&data)?.into()))
     }
+
+    fn create() -> Option<sov_modules_api::Bytes> {
+        Some(
+            borsh::to_vec(&*ORACLE_DATA.lock().expect("oracle data mutex was poisoned"))
+                .expect("oracle data serialization should be infallible")
+                .into(),
+        )
+    }
 }
 
 #[derive(Clone, Default)]
@@ -193,14 +201,6 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
 {
     type SequencingData = OracleSequencingData;
-
-    fn create_sequencing_data(&self) -> Option<sov_modules_api::Bytes> {
-        Some(
-            borsh::to_vec(&*ORACLE_DATA.lock().expect("oracle data mutex was poisoned"))
-                .expect("oracle data serialization should be infallible")
-                .into(),
-        )
-    }
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -414,7 +414,12 @@ async fn wait_for_pruned_txs_on_da(
             .sequencing_data
             .as_ref()
             .expect("oracle tx should include sequencing data");
-        let sequencing_data = OracleSequencingData::try_from_slice(sequencing_data)?;
+        let envelope = sov_modules_api::SequencingData::decode(sequencing_data)?;
+        let data = envelope
+            .data
+            .as_ref()
+            .expect("oracle tx should retain its data payload");
+        let sequencing_data = OracleSequencingData::try_from_slice(data)?;
         let actual_keys = sequencing_data.0.keys().copied().collect::<BTreeSet<_>>();
         assert_eq!(
             actual_keys, *expected_keys,

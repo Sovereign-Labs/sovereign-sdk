@@ -9,8 +9,8 @@ use borsh::BorshDeserialize;
 use sov_blob_storage::PreferredProofData;
 use sov_modules_api::capabilities::prune_sequencing_data;
 use sov_modules_api::capabilities::{
-    get_maybe_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState,
-    FatalError, RollupHeight, TransactionAuthenticator,
+    get_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState, FatalError,
+    RollupHeight, TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
@@ -304,7 +304,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 // transaction bytes. If pruning removed the timestamp, the confirmation must
                 // not report one either, since nodes deriving it from the stored body cannot
                 // reproduce it.
-                let timestamp = get_maybe_timestamp_from_sequencing_data::<S, Rt>(&tx, true);
+                let timestamp = get_timestamp_from_sequencing_data(&tx, true);
                 let accepted_tx = self.process_tx_receipt(receipt, tx, timestamp);
                 if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
                     writer.insert(accepted_tx.clone()).await;
