@@ -1,12 +1,61 @@
 use std::collections::BTreeMap;
+use std::fmt;
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derive_more::{From, Into};
+use serde::de::{self, Visitor};
 use serde::{Deserialize, Serialize};
 use sov_universal_wallet::UniversalWallet;
 
 use crate::{Amount, BasicGasMeter, Gas, GasArray, Spec};
+
+/// Returns the 64-bit fragment used to identify a full chain hash in transaction
+/// details.
+///
+/// The fragment is the first eight bytes of the chain hash. Interpreting it as
+/// little-endian means Borsh serializes the `u64` back to those same eight bytes.
+#[must_use]
+pub const fn chain_hash_fragment(chain_hash: &[u8; 32]) -> u64 {
+    u64::from_le_bytes([
+        chain_hash[0],
+        chain_hash[1],
+        chain_hash[2],
+        chain_hash[3],
+        chain_hash[4],
+        chain_hash[5],
+        chain_hash[6],
+        chain_hash[7],
+    ])
+}
+
+fn deserialize_u64_from_number_or_string<'de, D>(deserializer: D) -> Result<u64, D::Error>
+where
+    D: serde::Deserializer<'de>,
+{
+    struct U64Visitor;
+
+    impl Visitor<'_> for U64Visitor {
+        type Value = u64;
+
+        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+            formatter.write_str("a u64 number or decimal string")
+        }
+
+        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
+            Ok(value)
+        }
+
+        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+        where
+            E: de::Error,
+        {
+            value.parse::<u64>().map_err(E::custom)
+        }
+    }
+
+    deserializer.deserialize_any(U64Visitor)
+}
 
 /// A type wrapper around a u64 which represents the priority fee.
 /// Since the priority fee is expressed as a basis point, we should use this wrapper for
@@ -108,8 +157,10 @@ pub struct TxDetails<S: Spec> {
     /// Then up to `gas_limit *_scalar gas_price` gas tokens can be spent on gas execution in the transaction execution - if the
     /// transaction spends more than that amount, it will run out of gas and be reverted.
     pub gas_limit: Option<S::Gas>,
-    /// The ID of the target chain.
-    pub chain_id: u64,
+    /// The 64-bit fragment of the target chain hash.
+    #[serde(deserialize_with = "deserialize_u64_from_number_or_string")]
+    #[sov_wallet(hidden)]
+    pub chain_hash_fragment: u64,
 }
 
 /// Holds the original credentials to authenticate the transaction.

@@ -244,6 +244,22 @@ pub const DEFAULT_MAX_PRIORITY_FEE_BIPS: u64 = 0;
 /// Default maximum fee amount (100,000,000 units).
 pub const DEFAULT_MAX_FEE: u128 = 100000000;
 
+/// Returns the 64-bit fragment used to identify a full chain hash in transaction
+/// details.
+#[must_use]
+pub const fn chain_hash_fragment(chain_hash: &[u8; 32]) -> u64 {
+    u64::from_le_bytes([
+        chain_hash[0],
+        chain_hash[1],
+        chain_hash[2],
+        chain_hash[3],
+        chain_hash[4],
+        chain_hash[5],
+        chain_hash[6],
+        chain_hash[7],
+    ])
+}
+
 /// Generates default uniqueness data based on current timestamp.
 ///
 /// Creates a `UniquenessData::Generation` variant using the current
@@ -274,9 +290,9 @@ pub fn default_uniqueness() -> Result<UniquenessData, TransactionBuilderError> {
 /// Errors that can occur when building transactions using the schema-based approach.
 #[derive(thiserror::Error, Debug)]
 pub enum TransactionBuilderError {
-    /// The chain ID is required but was not provided in the transaction details.
-    #[error("chain_id is a required field but was not provided")]
-    MissingChainId,
+    /// The chain hash fragment is required but was not provided in the transaction details.
+    #[error("chain_hash_fragment is a required field but was not provided")]
+    MissingChainHashFragment,
     #[error("system time error: {0}")]
     TimeError(#[from] std::time::SystemTimeError),
 }
@@ -338,10 +354,10 @@ pub struct TxDetails {
     /// If `None`, the transaction has no gas limit. If `Some(vec)`, each element
     /// represents a gas limit for different execution phases or modules.
     pub gas_limit: Option<Vec<u64>>,
-    /// Chain identifier to prevent cross-chain replay attacks.
+    /// Chain hash fragment to prevent cross-chain replay attacks.
     ///
     /// This ensures transactions can only be executed on the intended blockchain.
-    pub chain_id: u64,
+    pub chain_hash_fragment: u64,
 }
 
 /// Consumer-facing transaction payload before signing.
@@ -484,7 +500,7 @@ pub enum Transaction {
 /// let builder = TransactionBuilder::new(my_call)
 ///     .max_fee(1000u128)
 ///     .priority_fee_bips(100u64)
-///     .chain_id(1)
+///     .chain_hash_fragment(1)
 ///     .uniqueness(my_uniqueness_data);
 ///
 /// let unsigned_tx = builder.build()?;
@@ -495,7 +511,7 @@ pub struct TransactionBuilder {
     priority_fee_bips: Option<u64>,
     max_fee: Option<u128>,
     gas_limit: Option<Option<Vec<u64>>>,
-    chain_id: Option<u64>,
+    chain_hash_fragment: Option<u64>,
     address_override: Option<String>,
 }
 
@@ -503,8 +519,8 @@ impl TransactionBuilder {
     /// Creates a new transaction builder with the specified runtime call.
     ///
     /// All optional parameters are initially unset and will use default values
-    /// when the transaction is built. The chain_id is required and must be set
-    /// before calling `build()`.
+    /// when the transaction is built. The chain hash fragment is required and
+    /// must be set before calling `build()`.
     ///
     /// # Arguments
     ///
@@ -516,7 +532,7 @@ impl TransactionBuilder {
             priority_fee_bips: None,
             max_fee: None,
             gas_limit: None,
-            chain_id: None,
+            chain_hash_fragment: None,
             address_override: None,
         }
     }
@@ -575,16 +591,16 @@ impl TransactionBuilder {
         self
     }
 
-    /// Sets the chain ID for the transaction.
+    /// Sets the chain hash fragment for the transaction.
     ///
-    /// The chain ID is required and must be set before calling `build()`.
+    /// The chain hash fragment is required and must be set before calling `build()`.
     /// It prevents transactions from being replayed on different chains.
     ///
     /// # Arguments
     ///
-    /// * `chain_id` - The chain identifier
-    pub fn chain_id(mut self, chain_id: u64) -> Self {
-        self.chain_id = Some(chain_id);
+    /// * `chain_hash_fragment` - The chain hash fragment
+    pub fn chain_hash_fragment(mut self, chain_hash_fragment: u64) -> Self {
+        self.chain_hash_fragment = Some(chain_hash_fragment);
         self
     }
 
@@ -602,7 +618,7 @@ impl TransactionBuilder {
     /// - Gas limit: `None` (unlimited)
     /// - Uniqueness: Generated via [`default_uniqueness`]
     ///
-    /// The chain_id must be set explicitly before calling this method.
+    /// The chain hash fragment must be set explicitly before calling this method.
     ///
     /// # Returns
     ///
@@ -611,7 +627,7 @@ impl TransactionBuilder {
     ///
     /// # Errors
     ///
-    /// * [`TransactionBuilderError::MissingChainId`] - If chain_id was not set
+    /// * [`TransactionBuilderError::MissingChainHashFragment`] - If chain hash fragment was not set
     pub fn build(self) -> Result<UnsignedTransaction, TransactionBuilderError> {
         let priority_fee = self
             .priority_fee_bips
@@ -622,9 +638,9 @@ impl TransactionBuilder {
             Some(u) => u,
             None => default_uniqueness()?,
         };
-        let chain_id = self
-            .chain_id
-            .ok_or(TransactionBuilderError::MissingChainId)?;
+        let chain_hash_fragment = self
+            .chain_hash_fragment
+            .ok_or(TransactionBuilderError::MissingChainHashFragment)?;
 
         Ok(UnsignedTransaction {
             runtime_call: self.call,
@@ -633,7 +649,7 @@ impl TransactionBuilder {
                 max_priority_fee_bips: priority_fee,
                 max_fee,
                 gas_limit,
-                chain_id,
+                chain_hash_fragment,
             },
             address_override: self.address_override,
         })

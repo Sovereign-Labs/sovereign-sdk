@@ -7,7 +7,7 @@ import type {
   TxDetails,
   UnsignedTransaction,
 } from "@sovereign-sdk/types";
-import { bytesToHex } from "@sovereign-sdk/utils";
+import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
 import { addressFromPublicKey } from "../addresses";
 import type { DeepPartial } from "../utils";
 import {
@@ -37,6 +37,18 @@ export type StandardRollupSpec<RuntimeCall> = {
   RuntimeCall: RuntimeCall;
   Dedup: Dedup;
 };
+
+export function chainHashFragment(chainHash: Uint8Array): string {
+  if (chainHash.length < 8) {
+    throw new Error("chain hash must contain at least 8 bytes");
+  }
+
+  let fragment = 0n;
+  for (let i = 0; i < 8; i++) {
+    fragment |= BigInt(chainHash[i] ?? 0) << BigInt(i * 8);
+  }
+  return fragment.toString();
+}
 
 const useOrFetchUniqueness = async <S extends StandardRollupSpec<unknown>>({
   overrides,
@@ -178,7 +190,7 @@ export class StandardRollup<RuntimeCall> extends Rollup<
   }
 }
 
-export const DEFAULT_TX_DETAILS: Omit<TxDetails, "chain_id"> = {
+export const DEFAULT_TX_DETAILS: Omit<TxDetails, "chain_hash_fragment"> = {
   max_priority_fee_bips: 0,
   max_fee: "100000000",
   gas_limit: null,
@@ -194,10 +206,12 @@ async function buildContext<C extends StandardRollupContext>(
     ...context?.defaultTxDetails,
   };
 
-  if (!defaultTxDetails.chain_id) {
-    const { chain_id } = await client.rollup.constants();
+  if (!defaultTxDetails.chain_hash_fragment) {
+    const { chain_hash } = await client.rollup.schema();
 
-    defaultTxDetails.chain_id = chain_id;
+    defaultTxDetails.chain_hash_fragment = chainHashFragment(
+      hexToBytes(chain_hash),
+    );
   }
 
   return {

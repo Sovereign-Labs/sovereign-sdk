@@ -98,7 +98,7 @@ describe("SolanaSignableRollup", () => {
       client: mockClient,
       context: {
         defaultTxDetails: {
-          chain_id: 42,
+          chain_hash_fragment: "42",
           max_priority_fee_bips: 100,
           max_fee: "200000000",
           gas_limit: null,
@@ -108,7 +108,7 @@ describe("SolanaSignableRollup", () => {
 
     const rollup = await createSolanaSignableRollup(customConfig);
 
-    expect(rollup.context.defaultTxDetails.chain_id).toBe(42);
+    expect(rollup.context.defaultTxDetails.chain_hash_fragment).toBe("42");
     expect(rollup.context.defaultTxDetails.max_priority_fee_bips).toBe(100);
     expect(rollup.context.defaultTxDetails.max_fee).toBe("200000000");
   });
@@ -119,7 +119,7 @@ describe("SolanaSignableRollup", () => {
     const rollup = await createSolanaSignableRollup({ client: mockClient });
 
     expect(rollup).toBeInstanceOf(SolanaSignableRollup);
-    expect(rollup.context.defaultTxDetails.chain_id).toBe(1);
+    expect(rollup.context.defaultTxDetails.chain_hash_fragment).toBe("0");
   });
 
   it("should allow custom Solana endpoint configuration", async () => {
@@ -161,7 +161,7 @@ describe("SolanaSignableRollup", () => {
           max_priority_fee_bips: 0,
           max_fee: "1000",
           gas_limit: null,
-          chain_id: 1,
+          chain_hash_fragment: "0",
         },
       } as any,
       {
@@ -209,7 +209,7 @@ describe("SolanaSignableRollup", () => {
           max_priority_fee_bips: 0,
           max_fee: "1000",
           gas_limit: null,
-          chain_id: fixtureChainId,
+          chain_hash_fragment: "0",
         },
       } as any,
       {
@@ -256,7 +256,7 @@ describe("SolanaSignableRollup", () => {
           max_priority_fee_bips: 0,
           max_fee: "1000",
           gas_limit: null,
-          chain_id: 1,
+          chain_hash_fragment: "0",
         },
         address_override: "sov1target",
       },
@@ -289,7 +289,7 @@ describe("SolanaSignableRollup", () => {
       const privateKeyHex =
         "2bf7a34f197040d49014e026aa35a61b094ad6b32d5ae86e769e777a51a83c5d";
       const expectedJson =
-        '{"body":{"body":"fAEAAHsicnVudGltZV9jYWxsIjp7ImJhbmsiOnsidHJhbnNmZXIiOnsidG8iOiI0emR3SE5hRWE1bnBIdFJ0YVozUkwxbTZycHR1UVo2UkJMSEc2Y0F5VkhqTCIsImNvaW5zIjp7ImFtb3VudCI6IjEwMDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2lkIjo0MzIxfSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiIsInZlcnNpb24iOjB9CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwt0I7oBLzTClR8+NiHHPE6LyyQfcVTjHex79N5keSD1gm4KQIi9Wdvph88C+u2Y1i/1eZF9j5q2tRUY+QPqVw2BnwF+uFCpwdsmpqQQgi1DfY4dMMCxQzUFuhz7krpMtQI="}}';
+        '{"body":{"body":"lwEAAHsicnVudGltZV9jYWxsIjp7ImJhbmsiOnsidHJhbnNmZXIiOnsidG8iOiI0emR3SE5hRWE1bnBIdFJ0YVozUkwxbTZycHR1UVo2UkJMSEc2Y0F5VkhqTCIsImNvaW5zIjp7ImFtb3VudCI6IjEwMDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2hhc2hfZnJhZ21lbnQiOiI3OTU3NDE5MDEyMTg4NDM0MDMifSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiIsInZlcnNpb24iOjB9CwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwt0I7oBLzTClR8+NiHHPE6LyyQfcVTjHex79N5keSD1gsvqIJOZp17q3OiVs8imQ1uYVbpGTr2eKDQZzAC9OEWF5Q0+fWsBtlViK2F9L6NO38U/7NknbOyhuXUZxh7pMQs="}}';
 
       const mockClient = createMockClient({
         chainId: 4321,
@@ -338,7 +338,7 @@ describe("SolanaSignableRollup", () => {
           max_priority_fee_bips: 0,
           max_fee: "100000000000",
           gas_limit: [1000000000, 1000000000],
-          chain_id: 4321,
+          chain_hash_fragment: "795741901218843403",
         },
         address_override: null,
       };
@@ -364,7 +364,7 @@ describe("SolanaSignableRollup", () => {
       const knownSignatureHex =
         "89941ccebc40db1daf60b0b392121616868000d4799d930d18f4eaff266cd560cf61c6bf62c97955f64b33cc0640718427d0dc0180cf65e9746b7522d7f6d20e";
       const expectedJson =
-        '{"body":{"body":"0AEAAP9zb2xhbmEgb2ZmY2hhaW4ACwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsAAXAkjJmh05dpgxyZcGlIuYUVhcupB6Z30RL5o2lMvLTNewF7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI1MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2lkIjo0MzIxfSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiIsInZlcnNpb24iOjB9iZQczrxA2x2vYLCzkhIWFoaAANR5nZMNGPTq/yZs1WDPYca/Ysl5VfZLM8wGQHGEJ9DcAYDPZel0a3Ui1/bSDg=="}}';
+        '{"body":{"body":"6wEAAP9zb2xhbmEgb2ZmY2hhaW4ACwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsAAXAkjJmh05dpgxyZcGlIuYUVhcupB6Z30RL5o2lMvLTNlgF7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI1MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7ImdlbmVyYXRpb24iOjB9LCJkZXRhaWxzIjp7Im1heF9wcmlvcml0eV9mZWVfYmlwcyI6MCwibWF4X2ZlZSI6IjEwMDAwMDAwMDAwMCIsImdhc19saW1pdCI6WzEwMDAwMDAwMDAsMTAwMDAwMDAwMF0sImNoYWluX2hhc2hfZnJhZ21lbnQiOiI3OTU3NDE5MDEyMTg4NDM0MDMifSwiY2hhaW5fbmFtZSI6IlRlc3RDaGFpbiIsInZlcnNpb24iOjB9iZQczrxA2x2vYLCzkhIWFoaAANR5nZMNGPTq/yZs1WDPYca/Ysl5VfZLM8wGQHGEJ9DcAYDPZel0a3Ui1/bSDg=="}}';
 
       const mockClient = createMockClient({
         chainId: 4321,
@@ -425,7 +425,7 @@ describe("SolanaSignableRollup", () => {
           max_priority_fee_bips: 0,
           max_fee: "100000000000",
           gas_limit: [1000000000, 1000000000],
-          chain_id: 4321,
+          chain_hash_fragment: "795741901218843403",
         },
         address_override: null,
       };
@@ -452,7 +452,7 @@ describe("SolanaSignableRollup", () => {
     const key3PrivHex =
       "90f1cca556a78435468bb17f116a923c8eb5c6074619a9bf39f28eb673a22a50";
     const expectedJson =
-      '{"body":{"body":"swEAAIB7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI3MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7Im5vbmNlIjowfSwiZGV0YWlscyI6eyJtYXhfcHJpb3JpdHlfZmVlX2JpcHMiOjAsIm1heF9mZWUiOiIxMDAwMDAwMDAwMDAiLCJnYXNfbGltaXQiOlsxMDAwMDAwMDAwLDEwMDAwMDAwMDBdLCJjaGFpbl9pZCI6NDMyMX0sImNoYWluX25hbWUiOiJUZXN0Q2hhaW4iLCJtdWx0aXNpZ19pZCI6Ino2RHlmUGVaekN4SkVEOFlBWTltQmRKcmpnYnBCWXFMVjh0TU1OcEt2M2siLCJ2ZXJzaW9uIjoxfQsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLAgAAALGwrShO91iJLqf6Ne0Bx0Mt4DCv/hQIhiR+LegEDayRgD14q6kXbVVUrAHhyhZG2TWlr+6W9OjwY8srNbqkXgcv4nipbIUhu2N6tX9gRlwQDXaiJqLt4WPbVSxip3aoIhQ6tjQZ1t9xE30vHWb2ATKwfZLkwlcd1YUR4NL/NyCTeNelR0QRS9XubQlHpFH6gWbr7vh/c84zN46qDBOR0woVYBc1xrVz6bzFCcgAxODD5kb1GRU3v+eRUbVRZ3udIAEAAAA1/Qt6TH3bXwUlsuG8tx6Fh26y7p57mnXqrGBSp+LzBQI="}}';
+      '{"body":{"body":"zgEAAIB7InJ1bnRpbWVfY2FsbCI6eyJiYW5rIjp7InRyYW5zZmVyIjp7InRvIjoiNHpkd0hOYUVhNW5wSHRSdGFaM1JMMW02cnB0dVFaNlJCTEhHNmNBeVZIakwiLCJjb2lucyI6eyJhbW91bnQiOiI3MDAwIiwidG9rZW5faWQiOiJ0b2tlbl8xbnlsMGUweXdlcmFnZnNhdHlndDI0em1kOGpycjJ2cXR2ZGZwdHpqaHhrZ3V6Mnh4eDN2czB5MDd1NyJ9fX19LCJ1bmlxdWVuZXNzIjp7Im5vbmNlIjowfSwiZGV0YWlscyI6eyJtYXhfcHJpb3JpdHlfZmVlX2JpcHMiOjAsIm1heF9mZWUiOiIxMDAwMDAwMDAwMDAiLCJnYXNfbGltaXQiOlsxMDAwMDAwMDAwLDEwMDAwMDAwMDBdLCJjaGFpbl9oYXNoX2ZyYWdtZW50IjoiNzk1NzQxOTAxMjE4ODQzNDAzIn0sImNoYWluX25hbWUiOiJUZXN0Q2hhaW4iLCJtdWx0aXNpZ19pZCI6Ino2RHlmUGVaekN4SkVEOFlBWTltQmRKcmpnYnBCWXFMVjh0TU1OcEt2M2siLCJ2ZXJzaW9uIjoxfQsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLAgAAAJ/0JLjGX1H2lXqpOX6Cdm7hhLtiGbUOtvVb9sEj9bSCWfS5gD2U+yGng1skqC5EslHi10tXa34gvGw67B3EgQIv4nipbIUhu2N6tX9gRlwQDXaiJqLt4WPbVSxip3aoIri6+DTe2fz0jV+E9R1N1Myb+psGvw8oB3UR5Pq1ScpyiXqAwUd2FO2ecZv//lhu2cCWqzzPhburzCIw11tnQg4VYBc1xrVz6bzFCcgAxODD5kb1GRU3v+eRUbVRZ3udIAEAAAA1/Qt6TH3bXwUlsuG8tx6Fh26y7p57mnXqrGBSp+LzBQI="}}';
 
     const mockClient = createMockClient({
       chainId: 4321,
@@ -513,7 +513,7 @@ describe("SolanaSignableRollup", () => {
         max_priority_fee_bips: 0,
         max_fee: "100000000000",
         gas_limit: [1000000000, 1000000000],
-        chain_id: 4321,
+        chain_hash_fragment: "795741901218843403",
       },
       address_override: null,
     };
@@ -571,7 +571,7 @@ describe("SolanaSignableRollup", () => {
         max_priority_fee_bips: 0,
         max_fee: "1000",
         gas_limit: null,
-        chain_id: 1,
+        chain_hash_fragment: "0",
       },
       address_override: null,
     };
@@ -609,7 +609,7 @@ describe("SolanaSignableRollup", () => {
     const key3PrivHex =
       "aa52d1811235c1c02cbbcf995b9dcabc7838a0931b12e97bf4eead7e0d573414";
     const expectedJson =
-      '{"body":"SAIAAP9zb2xhbmEgb2ZmY2hhaW4ACwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsAAxCC8hWZvytLdhSuQz4hCg8AU5iG9i7Lm5d3TsrXXseqIq7fXUxXzPzWMSb2MrMb3ZHejz5ys9PwFhFBce+qogqkMLj7Z4EBZpuFaeJrH3G98UiHtBd00SHZoG/4/YYGvLMBeyJydW50aW1lX2NhbGwiOnsiYmFuayI6eyJ0cmFuc2ZlciI6eyJ0byI6IjR6ZHdITmFFYTVucEh0UnRhWjNSTDFtNnJwdHVRWjZSQkxIRzZjQXlWSGpMIiwiY29pbnMiOnsiYW1vdW50IjoiNzAwMCIsInRva2VuX2lkIjoidG9rZW5fMW55bDBlMHl3ZXJhZ2ZzYXR5Z3QyNHptZDhqcnIydnF0dmRmcHR6amh4a2d1ejJ4eHgzdnMweTA3dTcifX19fSwidW5pcXVlbmVzcyI6eyJub25jZSI6MH0sImRldGFpbHMiOnsibWF4X3ByaW9yaXR5X2ZlZV9iaXBzIjowLCJtYXhfZmVlIjoiMTAwMDAwMDAwMDAwIiwiZ2FzX2xpbWl0IjpbMTAwMDAwMDAwMCwxMDAwMDAwMDAwXSwiY2hhaW5faWQiOjQzMjF9LCJjaGFpbl9uYW1lIjoiVGVzdENoYWluIiwibXVsdGlzaWdfaWQiOiI2NFN2N2tMZVl0VXpVdGNuTTZCQVlqQXY4WjY1R2c1aXVtUGRVZzVaTXRKbiIsInZlcnNpb24iOjF9AgAAAAksFU/XcuxSQ2WBYJoZiYQf3gikgQi3CctMHuYBX3wBukIMQPhO5X7IwojPw5NtfjrbQhBVCSaLMjP7Bvi6SAsNM01gzyzMZ00ySPuO1RnF5Y0bTEDd57o8GWNCOHyizwqygFn1pehUMpBAp5FMeI1Fz7ZRe7K7mHiu26MFwq8HBgAAAAI="}';
+      '{"body":"YwIAAP9zb2xhbmEgb2ZmY2hhaW4ACwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsLCwsAAxCC8hWZvytLdhSuQz4hCg8AU5iG9i7Lm5d3TsrXXseqIq7fXUxXzPzWMSb2MrMb3ZHejz5ys9PwFhFBce+qogqkMLj7Z4EBZpuFaeJrH3G98UiHtBd00SHZoG/4/YYGvM4BeyJydW50aW1lX2NhbGwiOnsiYmFuayI6eyJ0cmFuc2ZlciI6eyJ0byI6IjR6ZHdITmFFYTVucEh0UnRhWjNSTDFtNnJwdHVRWjZSQkxIRzZjQXlWSGpMIiwiY29pbnMiOnsiYW1vdW50IjoiNzAwMCIsInRva2VuX2lkIjoidG9rZW5fMW55bDBlMHl3ZXJhZ2ZzYXR5Z3QyNHptZDhqcnIydnF0dmRmcHR6amh4a2d1ejJ4eHgzdnMweTA3dTcifX19fSwidW5pcXVlbmVzcyI6eyJub25jZSI6MH0sImRldGFpbHMiOnsibWF4X3ByaW9yaXR5X2ZlZV9iaXBzIjowLCJtYXhfZmVlIjoiMTAwMDAwMDAwMDAwIiwiZ2FzX2xpbWl0IjpbMTAwMDAwMDAwMCwxMDAwMDAwMDAwXSwiY2hhaW5faGFzaF9mcmFnbWVudCI6Ijc5NTc0MTkwMTIxODg0MzQwMyJ9LCJjaGFpbl9uYW1lIjoiVGVzdENoYWluIiwibXVsdGlzaWdfaWQiOiI2NFN2N2tMZVl0VXpVdGNuTTZCQVlqQXY4WjY1R2c1aXVtUGRVZzVaTXRKbiIsInZlcnNpb24iOjF9AgAAALqZ6CBwaWxjUG2qZcmZzTQxJ9d0+NzYgNS7g2391KSpnEq+Pcxj/YG3G9tkg4jaSXz+RgHWwgCPAbXNcnKbDQUnH8ulC3nADh3qr0/Xf9X7VRaQbgPm7NGJI6AhWW7p2aRy07HkyaoueAVpYzYhiaai7zl13usxx04dmlqkSMEJBgAAAAI="}';
 
     const mockClient = createMockClient({
       chainId: 4321,
@@ -667,7 +667,7 @@ describe("SolanaSignableRollup", () => {
         max_priority_fee_bips: 0,
         max_fee: "100000000000",
         gas_limit: [1000000000, 1000000000],
-        chain_id: 4321,
+        chain_hash_fragment: "795741901218843403",
       },
       address_override: null,
     };
@@ -763,7 +763,7 @@ describe("SolanaSignableRollup", () => {
           max_priority_fee_bips: 0,
           max_fee: "100000000000",
           gas_limit: [1000000000, 1000000000],
-          chain_id: 4321,
+          chain_hash_fragment: "795741901218843403",
         },
         address_override: null,
       };
@@ -888,7 +888,7 @@ describe("SolanaSignableRollup", () => {
             max_priority_fee_bips: 0,
             max_fee: "1000",
             gas_limit: null,
-            chain_id: 1,
+            chain_hash_fragment: "0",
           },
         } as any,
         {
@@ -939,7 +939,7 @@ describe("SolanaSignableRollup", () => {
             max_priority_fee_bips: 0,
             max_fee: "1000",
             gas_limit: null,
-            chain_id: 1,
+            chain_hash_fragment: "0",
           },
         } as any,
         {

@@ -84,7 +84,7 @@ pub struct Version1<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Sp
     pub runtime_call: R::Call,
     /// Uniqueness identifier of this transaction. see [`UniquenessData`] for more details.
     pub uniqueness: UniquenessData,
-    /// The transaction metadata. Contains gas parameters and the chain ID.
+    /// The transaction metadata. Contains gas parameters and the chain hash fragment.
     pub details: TxDetails<S>,
     /// Signer-declared address override.
     /// See [`crate::capabilities::AuthorizationData::address_override`] for routing semantics.
@@ -135,6 +135,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
     /// Signs and adds the signature to the transaction.
     #[cfg(feature = "native")]
     pub fn sign(&mut self, key: &C::PrivateKey, chain_hash: &[u8; 32]) -> anyhow::Result<()> {
+        self.details.chain_hash_fragment = crate::transaction::chain_hash_fragment(chain_hash);
         let signature = self.sign_without_adding(key, chain_hash);
         self.add_signature(signature, key.pub_key())
     }

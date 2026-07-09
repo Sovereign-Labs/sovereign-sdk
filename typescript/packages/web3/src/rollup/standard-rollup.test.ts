@@ -20,7 +20,7 @@ describe("standardTypeBuilder", () => {
       defaultTxDetails: {
         max_priority_fee_bips: 100,
         max_fee: "1000",
-        chain_id: 1,
+        chain_hash_fragment: "1",
       },
     },
     rollup: {
@@ -55,7 +55,7 @@ describe("standardTypeBuilder", () => {
         details: {
           max_priority_fee_bips: 100,
           max_fee: "1000",
-          chain_id: 1,
+          chain_hash_fragment: "1",
         },
         address_override: null,
       });
@@ -76,7 +76,7 @@ describe("standardTypeBuilder", () => {
         details: {
           max_priority_fee_bips: 100,
           max_fee: "1000",
-          chain_id: 1,
+          chain_hash_fragment: "1",
         },
         address_override: null,
       });
@@ -103,7 +103,7 @@ describe("standardTypeBuilder", () => {
           max_priority_fee_bips: 100,
           max_fee: "2000",
           gas_limit: [1000000, 1000000],
-          chain_id: 1,
+          chain_hash_fragment: "1",
         },
         address_override: null,
       });
@@ -121,7 +121,7 @@ describe("standardTypeBuilder", () => {
           details: {
             max_priority_fee_bips: 100,
             max_fee: "1000",
-            chain_id: 1,
+            chain_hash_fragment: "1",
             gas_limit: null,
           },
           address_override: null,
@@ -142,7 +142,7 @@ describe("standardTypeBuilder", () => {
           details: {
             max_priority_fee_bips: 100,
             max_fee: "1000",
-            chain_id: 1,
+            chain_hash_fragment: "1",
             gas_limit: null,
           },
           address_override: null,
@@ -161,7 +161,7 @@ describe("standardTypeBuilder", () => {
         details: {
           max_priority_fee_bips: 100,
           max_fee: "1000",
-          chain_id: 1,
+          chain_hash_fragment: "1",
           gas_limit: null,
         },
         address_override: null,
@@ -222,7 +222,7 @@ describe("createStandardRollup", () => {
       defaultTxDetails: {
         max_priority_fee_bips: 100,
         max_fee: "1000",
-        chain_id: 1,
+        chain_hash_fragment: "1",
         gas_limit: null,
       },
     },
@@ -279,6 +279,10 @@ describe("createStandardRollup", () => {
     mockConfig.client.rollup.constants = vi
       .fn()
       .mockResolvedValue({ chain_id: 55 });
+    mockConfig.client.rollup.schema = vi.fn().mockResolvedValue({
+      chain_hash:
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+    });
     const rollup = await createStandardRollup({
       ...mockConfig,
       context: undefined,
@@ -288,7 +292,7 @@ describe("createStandardRollup", () => {
         max_priority_fee_bips: 0,
         max_fee: "100000000",
         gas_limit: null,
-        chain_id: 55,
+        chain_hash_fragment: "0",
       },
     });
   });
@@ -302,7 +306,7 @@ describe("createStandardRollup", () => {
       context: {
         defaultTxDetails: {
           max_priority_fee_bips: 5,
-          chain_id: 1,
+          chain_hash_fragment: "1",
         },
       },
     });
@@ -311,7 +315,7 @@ describe("createStandardRollup", () => {
         max_priority_fee_bips: 5,
         max_fee: "100000000",
         gas_limit: null,
-        chain_id: 1,
+        chain_hash_fragment: "1",
       },
     });
   });

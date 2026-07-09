@@ -7,8 +7,7 @@ use anyhow::ensure;
 use backon::Retryable;
 use futures::{Stream, StreamExt};
 use sov_mock_da::storable::StorableMockDaService;
-use sov_modules_api::capabilities::config_chain_id;
-use sov_modules_api::transaction::TxDetails;
+use sov_modules_api::transaction::{chain_hash_fragment, TxDetails};
 use sov_modules_api::{CryptoSpec, HexHash, Runtime, Spec};
 use sov_node_client::NodeClient;
 use sov_rollup_interface::node::ledger_api::IncludeChildren;
@@ -233,7 +232,7 @@ impl BatchSender {
                             max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
                             max_fee: TEST_DEFAULT_MAX_FEE,
                             gas_limit: None,
-                            chain_id: config_chain_id(),
+                            chain_hash_fragment: chain_hash_fragment(&RT::CHAIN_HASH),
                         },
                         &mut self.generation_numbers,
                     ),

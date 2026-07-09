@@ -40,7 +40,7 @@ const sampleSigningPayload = {
       max_priority_fee_bips: "1000",
       max_fee: "10000",
       gas_limit: null,
-      chain_id: "1",
+      chain_hash_fragment: "1",
     },
     address_override: null,
     chain_hash: Array.from(schema.chainHash),

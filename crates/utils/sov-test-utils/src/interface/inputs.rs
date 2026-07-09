@@ -60,10 +60,10 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         }
     }
 
-    /// Set the chain ID of the transaction.
-    pub fn with_chain_id(mut self, chain_id: u64) -> Self {
+    /// Set the chain hash fragment of the transaction.
+    pub fn with_chain_hash_fragment(mut self, chain_hash_fragment: u64) -> Self {
         if let Some(details) = self.details_mut() {
-            details.chain_id = chain_id;
+            details.chain_hash_fragment = chain_hash_fragment;
         }
 
         self
@@ -150,7 +150,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
             chain_hash,
             UnsignedTransaction::new(
                 msg,
-                details.chain_id,
+                *chain_hash,
                 details.max_priority_fee_bips,
                 details.max_fee,
                 UniquenessData::Nonce(nonce),

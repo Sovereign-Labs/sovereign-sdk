@@ -39,7 +39,7 @@ impl<S: Spec, Mod: Module> Message<S, Mod> {
     fn new(
         sender_key: Rc<<S::CryptoSpec as CryptoSpec>::PrivateKey>,
         content: Mod::CallMessage,
-        chain_id: u64,
+        _chain_id: u64,
         max_priority_fee_bips: PriorityFeeBips,
         max_fee: Amount,
         gas_limit: Option<S::Gas>,
@@ -49,7 +49,7 @@ impl<S: Spec, Mod: Module> Message<S, Mod> {
             sender_key,
             content,
             details: TxDetails {
-                chain_id,
+                chain_hash_fragment: 0,
                 max_priority_fee_bips,
                 max_fee,
                 gas_limit,
@@ -67,7 +67,7 @@ impl<S: Spec, Mod: Module> Message<S, Mod> {
             &RT::CHAIN_HASH,
             UnsignedTransaction::new(
                 <RT as EncodeCall<Mod>>::to_decodable(self.content),
-                self.details.chain_id,
+                RT::CHAIN_HASH,
                 self.details.max_priority_fee_bips,
                 self.details.max_fee,
                 UniquenessData::Generation(self.generation),

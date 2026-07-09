@@ -4,7 +4,6 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use borsh::{BorshDeserialize, BorshSerialize};
-use sov_modules_api::capabilities::config_chain_id;
 use sov_modules_api::proof_metadata::{ProofType, SerializeProofWithDetails};
 use sov_modules_api::transaction::{PriorityFeeBips, TxDetails};
 use sov_modules_api::{Amount, ProofSender, Spec};
@@ -113,7 +112,7 @@ fn make_details<S: Spec>(max_fee: Amount) -> TxDetails<S> {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee,
         gas_limit: None,
-        chain_id: config_chain_id(),
+        chain_hash_fragment: 0,
     }
 }
 

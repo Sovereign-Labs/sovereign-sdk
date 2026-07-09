@@ -575,7 +575,7 @@ fn make_v1_tx(
     let details = default_test_tx_details::<S>();
     UnsignedTransaction::<RT, S>::new(
         TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
-        details.chain_id,
+        <RT as Runtime<S>>::CHAIN_HASH,
         details.max_priority_fee_bips,
         details.max_fee,
         sov_modules_api::capabilities::UniquenessData::Generation(0),

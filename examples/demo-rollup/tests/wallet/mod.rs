@@ -6,7 +6,6 @@ use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::sov_universal_wallet::schema::{ChainData, RollupRoots, Schema};
 use sov_modules_api::transaction::{Transaction, TransactionSigningPayload, UnsignedTransaction};
 use sov_modules_api::{Address, Amount, DispatchCall, PrivateKey, Spec};
-use sov_modules_macros::config_value;
 use sov_test_utils::{
     TestUser, TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
 };
@@ -31,7 +30,7 @@ fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
     });
     UnsignedTransaction::<_, S>::new(
         msg,
-        config_value!("CHAIN_ID"),
+        CHAIN_HASH,
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Generation(0),
@@ -105,7 +104,7 @@ fn test_display_unsigned_tx() {
                 &signing_payload_data
             )
             .unwrap(),
-        r#"V0 { runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, uniqueness: Generation(0), details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 }, address_override: None }"#
+        r#"V0 { runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, uniqueness: Generation(0), details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000] }, address_override: None }"#
     );
 }
 
@@ -143,15 +142,15 @@ fn test_display_signed_tx() {
                 &signed_data
             )
             .unwrap(),
-        format!("V0 {{ signature: 0x{signature_display}, pub_key: 0x{pubkey_display}, runtime_call: Bank.Mint {{ coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }}, uniqueness: Generation(0), details: {{ max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 }}, address_override: None }}")
+        format!("V0 {{ signature: 0x{signature_display}, pub_key: 0x{pubkey_display}, runtime_call: Bank.Mint {{ coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }}, uniqueness: Generation(0), details: {{ max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000] }}, address_override: None }}")
     );
 }
 
 #[test]
 fn detect_schema_has_breaking_change() {
     let current_hash: [u8; 32] = [
-        16, 196, 211, 62, 67, 238, 148, 215, 143, 186, 158, 213, 85, 188, 198, 91, 117, 192, 63,
-        239, 226, 123, 59, 168, 98, 169, 46, 163, 41, 157, 9, 252,
+        27, 211, 110, 96, 196, 84, 88, 92, 228, 130, 243, 34, 229, 207, 92, 97, 244, 96, 195, 68,
+        138, 207, 75, 75, 42, 144, 254, 100, 83, 209, 220, 135,
     ];
     assert_eq!(CHAIN_HASH, current_hash, "The chain hash changed. Update the \"current_hash\" value in this test but be aware: this is a breaking change for any production rollups.");
 }

@@ -224,12 +224,11 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
     nonce: u64,
     max_priority_fee_bips: PriorityFeeBips,
     signer: &TestUser<S>,
-    chain_id: u64,
     message: RT::Decodable,
 ) -> Transaction<RT, S> {
     let utx = UnsignedTransaction::<RT, S>::new(
         message,
-        chain_id,
+        RT::CHAIN_HASH,
         max_priority_fee_bips,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(nonce),
@@ -252,7 +251,7 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
                 max_priority_fee_bips,
                 max_fee: Amount::new(200_000),
                 gas_limit: None,
-                chain_id,
+                chain_hash_fragment: inner.details.chain_hash_fragment,
             },
             address_override: inner.address_override,
         }),
@@ -265,13 +264,12 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
 pub fn create_tx_bad_sender<RT: Runtime<S>>(
     nonce: u64,
     max_priority_fee_bips: PriorityFeeBips,
-    chain_id: u64,
     message: RT::Decodable,
     chain_hash: &[u8; 32],
 ) -> Transaction<RT, S> {
     let utx = UnsignedTransaction::new(
         message,
-        chain_id,
+        *chain_hash,
         max_priority_fee_bips,
         Amount::new(200_000),
         UniquenessData::Nonce(nonce),
@@ -287,12 +285,12 @@ pub fn create_tx_valid<RT: Runtime<S>>(
     generation: u64,
     max_priority_fee_bips: PriorityFeeBips,
     signer: &TestUser<S>,
-    chain_id: u64,
+    chain_hash: &[u8; 32],
     message: RT::Decodable,
 ) -> Transaction<RT, S> {
     let utx = UnsignedTransaction::new(
         message,
-        chain_id,
+        *chain_hash,
         max_priority_fee_bips,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Generation(generation),
@@ -300,7 +298,7 @@ pub fn create_tx_valid<RT: Runtime<S>>(
         None,
     );
 
-    Transaction::<RT, S>::new_signed_tx(signer.private_key(), &RT::CHAIN_HASH, utx)
+    Transaction::<RT, S>::new_signed_tx(signer.private_key(), chain_hash, utx)
 }
 
 // Transaction with zero gas limit.
@@ -308,12 +306,11 @@ pub fn create_tx_out_of_gas<RT: Runtime<S>>(
     nonce: u64,
     max_priority_fee_bips: PriorityFeeBips,
     signer: &TestUser<S>,
-    chain_id: u64,
     message: RT::Decodable,
 ) -> Transaction<RT, S> {
     let utx = UnsignedTransaction::new(
         message,
-        chain_id,
+        RT::CHAIN_HASH,
         max_priority_fee_bips,
         Amount::new(200_000),
         UniquenessData::Nonce(nonce),
@@ -345,7 +342,7 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                     generation,
                     max_priority_fee_bips,
                     admin,
-                    config_value!("CHAIN_ID"),
+                    &RT::CHAIN_HASH,
                     encode_message::<RT>(None),
                 );
                 txs.push(encode(tx));
@@ -359,18 +356,20 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                         0,
                         max_priority_fee_bips,
                         admin,
-                        config_value!("CHAIN_ID"),
+                        &RT::CHAIN_HASH,
                         encode_message::<RT>(None),
                     );
                     txs.push(encode(tx));
                 }
             }
             TxStatus::BadChainId => {
+                let mut bad_chain_hash = RT::CHAIN_HASH;
+                bad_chain_hash[0] ^= 1;
                 let tx = create_tx_valid::<RT>(
                     generation,
                     max_priority_fee_bips,
                     admin,
-                    config_value!("CHAIN_ID") + 1,
+                    &bad_chain_hash,
                     encode_message::<RT>(None),
                 );
                 txs.push(encode(tx));
@@ -381,7 +380,6 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                     generation,
                     max_priority_fee_bips,
                     admin,
-                    config_value!("CHAIN_ID"),
                     encode_message::<RT>(None),
                 );
                 txs.push(encode(tx));
@@ -391,7 +389,6 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                     generation,
                     max_priority_fee_bips,
                     admin,
-                    config_value!("CHAIN_ID"),
                     encode_message::<RT>(None),
                 );
                 txs.push(encode(tx));
@@ -402,7 +399,7 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                     0,
                     max_priority_fee_bips,
                     not_admin,
-                    config_value!("CHAIN_ID"),
+                    &RT::CHAIN_HASH,
                     encode_message::<RT>(None),
                 );
                 txs.push(encode(tx));
@@ -415,7 +412,6 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                 let tx = create_tx_bad_sender::<RT>(
                     0,
                     max_priority_fee_bips,
-                    config_value!("CHAIN_ID"),
                     encode_message::<RT>(None),
                     &RT::CHAIN_HASH,
                 );

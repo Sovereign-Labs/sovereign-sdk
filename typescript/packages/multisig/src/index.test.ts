@@ -160,7 +160,7 @@ describe("Multisig", () => {
         max_priority_fee_bips: 0,
         max_fee: "1000",
         gas_limit: null,
-        chain_id: 1,
+        chain_hash_fragment: "1",
       },
       address_override: null,
     };

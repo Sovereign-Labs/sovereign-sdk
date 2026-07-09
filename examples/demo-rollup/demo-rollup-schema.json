@@ -4324,8 +4324,8 @@
             "doc": ""
           },
           {
-            "display_name": "chain_id",
-            "silent": false,
+            "display_name": "chain_hash_fragment",
+            "silent": true,
             "value": {
               "Immediate": {
                 "Integer": [
@@ -6382,7 +6382,7 @@
           "name": "gas_limit"
         },
         {
-          "name": "chain_id"
+          "name": "chain_hash_fragment"
         }
       ]
     },

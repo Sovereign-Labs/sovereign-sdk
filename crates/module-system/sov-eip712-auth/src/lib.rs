@@ -3,7 +3,7 @@ use std::sync::OnceLock;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_modules_api::capabilities::{
-    self, calculate_hash_metered, calculate_non_malleable_hash_metered, verify_chain_id,
+    self, calculate_hash_metered, calculate_non_malleable_hash_metered, verify_chain_hash_fragment,
     AuthenticationError, AuthenticationOutput, BatchFromUnregisteredSequencer, FatalError,
     ReplayHashMaterial, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
@@ -250,8 +250,9 @@ fn verify_and_decode_tx<
         Transaction::V1(tx_v1) => (&tx_v1.details, &tx_v1.runtime_call),
     };
 
-    verify_chain_id(details, raw_tx_hash)?;
-    let eip712_hash = verify_eip712_signature::<S, D, SP>(&tx, raw_tx_hash, meter)?;
+    let chain_hash = chain_hash::<SP>(raw_tx_hash)?;
+    verify_chain_hash_fragment(details, &chain_hash, raw_tx_hash)?;
+    let eip712_hash = verify_eip712_signature::<S, D, SP>(&tx, &chain_hash, raw_tx_hash, meter)?;
     let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
         match &tx {
             Transaction::V0(_) => ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash),
@@ -273,28 +274,32 @@ fn verify_and_decode_tx<
     Ok((tx_and_raw_hash, auth_data, runtime_call.clone()))
 }
 
-fn get_eip712_hash<
-    S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
-    D: DispatchCall<Spec = S>,
-    SP: SchemaProvider,
->(
-    tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
-    raw_tx_hash: TxHash,
-) -> Result<Eip712Hash, AuthenticationError> {
+fn chain_hash<SP: SchemaProvider>(raw_tx_hash: TxHash) -> Result<[u8; 32], AuthenticationError> {
     // Use the schema provider to get the schema and calculate the EIP712 signing hash.
     let schema = SP::get_schema();
-    let chain_hash = schema.chain_hash().map_err(|e| {
+    schema.chain_hash().map_err(|e| {
         AuthenticationError::FatalError(
             FatalError::SigVerificationFailed(format!(
                 "Failed to calculate chain hash from schema: {e}"
             )),
             raw_tx_hash,
         )
-    })?;
+    })
+}
 
+fn get_eip712_hash<
+    S: Spec<CryptoSpec: Secp256k1CryptoSpec>,
+    D: DispatchCall<Spec = S>,
+    SP: SchemaProvider,
+>(
+    tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
+    chain_hash: &[u8; 32],
+    raw_tx_hash: TxHash,
+) -> Result<Eip712Hash, AuthenticationError> {
+    let schema = SP::get_schema();
     // Convert the transaction to the canonical signing bytes that are transformed into
     // EIP-712 typed data.
-    let signing_payload_bytes = tx.to_signing_bytes(&chain_hash);
+    let signing_payload_bytes = tx.to_signing_bytes(chain_hash);
 
     let transaction_type_index = schema.rollup_expected_index(sov_modules_api::sov_universal_wallet::schema::RollupRoots::TransactionSigningPayload)
          .map_err(|e| AuthenticationError::FatalError(
@@ -320,6 +325,7 @@ fn verify_eip712_signature<
     SP: SchemaProvider,
 >(
     tx: &Transaction<D, S, <S::CryptoSpec as Secp256k1CryptoSpec>::CryptoSpec>,
+    chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<Eip712Hash, AuthenticationError> {
@@ -339,7 +345,7 @@ fn verify_eip712_signature<
         return known_result;
     }
 
-    let eip712_hash = get_eip712_hash::<S, D, SP>(tx, raw_tx_hash)?;
+    let eip712_hash = get_eip712_hash::<S, D, SP>(tx, chain_hash, raw_tx_hash)?;
 
     let res = tx
         .verify_signature_unmetered(&eip712_hash)

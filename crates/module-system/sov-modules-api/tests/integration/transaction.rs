@@ -29,7 +29,7 @@ fn test_serde_serialize_tx() {
         max_priority_fee_bips: sov_modules_api::transaction::PriorityFeeBips(1),
         max_fee: sov_bank::Amount(10000),
         gas_limit: Some(vec![500, 500].try_into().unwrap()),
-        chain_id: 1337,
+        chain_hash_fragment: 1337,
     };
     let native_tx = Version0 {
         signature: native_sig,
@@ -75,7 +75,7 @@ fn test_schema_and_native_serialization_consistency() {
                     "max_priority_fee_bips": 1,
                     "max_fee": 10000,
                     "gas_limit": [500, 500],
-                    "chain_id": 1337
+                    "chain_hash_fragment": 1337
                 },
                 "address_override": null
             }
@@ -98,7 +98,7 @@ fn test_schema_and_native_serialization_consistency() {
         max_priority_fee_bips: sov_modules_api::transaction::PriorityFeeBips(1),
         max_fee: sov_bank::Amount(10000),
         gas_limit: Some(vec![500, 500].try_into().unwrap()),
-        chain_id: 1337,
+        chain_hash_fragment: 1337,
     };
     let native_tx = Version0 {
         signature: native_sig,
@@ -159,7 +159,7 @@ mod web3_compatibility {
             "max_priority_fee_bips": 1,
             "max_fee": 10000,
             "gas_limit": null,
-            "chain_id": 1337
+            "chain_hash_fragment": 1337
         },
         "address_override": null,
         "chain_hash": "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -188,7 +188,7 @@ mod web3_compatibility {
             "max_priority_fee_bips": 1,
             "max_fee": 10000,
             "gas_limit": [500, 500],
-            "chain_id": 1337
+            "chain_hash_fragment": 1337
         },
         "address_override": null,
         "chain_hash": "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -217,7 +217,7 @@ mod web3_compatibility {
             "max_priority_fee_bips": 1,
             "max_fee": 10000,
             "gas_limit": null,
-            "chain_id": 1337
+            "chain_hash_fragment": 1337
         },
         "address_override": null,
         "chain_hash": "0x0000000000000000000000000000000000000000000000000000000000000000"
@@ -250,7 +250,7 @@ mod web3_compatibility {
                     "max_priority_fee_bips": 1,
                     "max_fee": 10000,
                     "gas_limit": [500, 500],
-                    "chain_id": 1337
+                    "chain_hash_fragment": 1337
                 },
                 "address_override": null
             }
@@ -282,7 +282,7 @@ mod web3_compatibility {
                     "max_priority_fee_bips": 1,
                     "max_fee": 10000,
                     "gas_limit": null,
-                    "chain_id": 1337
+                    "chain_hash_fragment": 1337
                 },
                 "address_override": null
             }

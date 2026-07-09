@@ -67,14 +67,12 @@ fn transaction_is_serialized_correctly() {
 
     let runtime_call = RuntimeCall::Bank(call_message_from_file("requests/create_token.json"));
 
-    let chain_id = 0;
     let max_priority_fee_bips = TEST_DEFAULT_MAX_PRIORITY_FEE;
     let max_fee = TEST_DEFAULT_MAX_FEE;
     let gas_limit = None;
 
     let unsigned_tx = UnsignedTransactionWithoutUniqueness::new(
         runtime_call.clone(),
-        chain_id,
         <Runtime as RuntimeTrait<TestSpec>>::CHAIN_HASH,
         max_priority_fee_bips,
         max_fee,
@@ -97,7 +95,7 @@ fn transaction_is_serialized_correctly() {
             &chain_hash,
             UnsignedTransaction::new(
                 runtime_call.clone(),
-                chain_id,
+                chain_hash,
                 max_priority_fee_bips,
                 max_fee,
                 UniquenessData::Generation(initial_nonce + i as u64),
@@ -384,7 +382,6 @@ fn default_file_name_arg_for_test(path: &str) -> FileNameArg {
     let test_path = make_test_path(path);
     FileNameArg {
         path: test_path.to_str().unwrap().into(),
-        chain_id: 0,
         max_priority_fee_bips: 0,
         max_fee: Amount::ZERO,
         gas_limit: None,
@@ -395,7 +392,6 @@ fn default_json_string_arg_for_test(path: impl AsRef<Path>) -> JsonStringArg {
     let test_path = make_test_path(path);
     JsonStringArg {
         json: std::fs::read_to_string(test_path).unwrap(),
-        chain_id: 0,
         max_priority_fee_bips: 0,
         max_fee: Amount::ZERO,
         gas_limit: None,

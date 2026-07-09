@@ -1,5 +1,4 @@
 use sov_hyperlane_integration::warp::{Admin, StoredTokenKind, TokenKind, WarpRouteId};
-use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::transaction::{PriorityFeeBips, TxDetails};
 use sov_test_utils::{
@@ -104,7 +103,7 @@ fn register_relayer_gasless(runner: &mut TestRunner<RT, S>, relayer: &TestUser<S
                 max_fee: Amount::ZERO,
                 max_priority_fee_bips: PriorityFeeBips::ZERO,
                 gas_limit: None,
-                chain_id: config_value!("CHAIN_ID"),
+                chain_hash_fragment: 0,
             },
         },
         assert: Box::new(|result, _| {
@@ -134,7 +133,7 @@ pub fn enroll_router_gasless(
                 max_fee: Amount::ZERO,
                 max_priority_fee_bips: PriorityFeeBips::ZERO,
                 gas_limit: None,
-                chain_id: config_value!("CHAIN_ID"),
+                chain_hash_fragment: 0,
             },
         },
         assert: Box::new(move |result, _| {
@@ -177,7 +176,7 @@ pub fn register_warp_route_gasless(
                 max_fee: Amount::ZERO,
                 max_priority_fee_bips: PriorityFeeBips::ZERO,
                 gas_limit: None,
-                chain_id: config_value!("CHAIN_ID"),
+                chain_hash_fragment: 0,
             },
         },
         assert: Box::new(move |result, _| {
@@ -258,7 +257,7 @@ fn do_inbound_transfer_gasless(
 				max_fee: Amount::ZERO,
 				max_priority_fee_bips: PriorityFeeBips::ZERO,
 				gas_limit: None,
-				chain_id: config_value!("CHAIN_ID"),
+					chain_hash_fragment: 0,
 			}
         },
         assert: Box::new(move |result, state| {
@@ -344,7 +343,7 @@ fn test_bridged_gas_token() {
                 max_fee: Amount::ZERO,
                 max_priority_fee_bips: PriorityFeeBips::ZERO,
                 gas_limit: None,
-                chain_id: config_value!("CHAIN_ID"),
+                chain_hash_fragment: 0,
             },
         },
         assert: Box::new(move |result, _| {
@@ -364,7 +363,7 @@ fn test_bridged_gas_token() {
                 max_fee: Amount::ZERO,
                 max_priority_fee_bips: PriorityFeeBips::ZERO,
                 gas_limit: None,
-                chain_id: config_value!("CHAIN_ID"),
+                chain_hash_fragment: 0,
             },
         },
         assert: Box::new(move |result, _| {

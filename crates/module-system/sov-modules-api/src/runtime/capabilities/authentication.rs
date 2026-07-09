@@ -13,7 +13,8 @@ use thiserror::Error;
 
 use crate::capabilities::AuthorizationData;
 use crate::transaction::{
-    AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError, TxDetails,
+    chain_hash_fragment, AuthenticatedTransactionAndRawHash, Transaction,
+    TransactionVerificationError, TxDetails,
 };
 #[cfg(feature = "native")]
 use crate::CryptoSpecExt;
@@ -286,6 +287,14 @@ pub enum FatalError {
         /// The actual chain id
         got: String,
     },
+    /// The chain hash fragment in the transaction did not match any valid chain hash.
+    #[error("Invalid chain hash fragment: expected one of {expected:?}, got {got}")]
+    InvalidChainHashFragment {
+        /// The valid chain hash fragments.
+        expected: Vec<u64>,
+        /// The transaction-provided chain hash fragment.
+        got: u64,
+    },
     /// The chain name was invalid. Not every type of transaction will be able to throw this (some
     /// will just implicitly fail signature checks).
     #[error("Invalid chain name: expected {expected}, got {got}")]
@@ -355,21 +364,44 @@ impl From<AuthenticationError> for UnregisteredAuthenticationError {
     }
 }
 
-/// Verifies that the transaction has the correct chain ID.
-pub fn verify_chain_id<S: Spec>(
+/// Verifies that the transaction has the expected chain hash fragment.
+pub fn verify_chain_hash_fragment<S: Spec>(
     tx_details: &TxDetails<S>,
+    chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
 ) -> Result<(), AuthenticationError> {
-    if tx_details.chain_id != config_chain_id() {
+    let expected = chain_hash_fragment(chain_hash);
+    if tx_details.chain_hash_fragment != expected {
         return Err(AuthenticationError::FatalError(
-            FatalError::InvalidChainId {
-                expected: config_chain_id(),
-                got: tx_details.chain_id,
+            FatalError::InvalidChainHashFragment {
+                expected: vec![expected],
+                got: tx_details.chain_hash_fragment,
             },
             raw_tx_hash,
         ));
     }
     Ok(())
+}
+
+/// Selects the full chain hash committed to by a transaction.
+pub fn select_chain_hash<S: Spec>(
+    tx_details: &TxDetails<S>,
+    resolved_hashes: &crate::runtime::ResolvedChainHashes,
+    raw_tx_hash: TxHash,
+) -> Result<[u8; 32], AuthenticationError> {
+    for chain_hash in resolved_hashes.iter() {
+        if tx_details.chain_hash_fragment == chain_hash_fragment(chain_hash) {
+            return Ok(*chain_hash);
+        }
+    }
+
+    Err(AuthenticationError::FatalError(
+        FatalError::InvalidChainHashFragment {
+            expected: resolved_hashes.iter().map(chain_hash_fragment).collect(),
+            got: tx_details.chain_hash_fragment,
+        },
+        raw_tx_hash,
+    ))
 }
 
 /// Verifies the transaction signature.
@@ -450,7 +482,8 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
 ///
 /// This function resolves the appropriate chain hashes for the current block height
 /// using configured overrides (including grace periods), falling back to `default_chain_hash`
-/// when no override applies. It tries verification with each valid hash until one succeeds.
+/// when no override applies. It selects the hash matching the transaction's chain
+/// hash fragment before verifying the signature.
 ///
 /// # Errors
 /// Returns an error if gas runs out at any point, if deserialization or hashing fails, or if the
@@ -506,8 +539,8 @@ pub fn authenticate<
 
 /// Authenticate and verify deserialized sov-tx with multiple chain hashes.
 ///
-/// Tries verification with the primary hash first, then any grace period hashes.
-/// Returns success on the first hash that verifies successfully.
+/// Selects the full chain hash by matching the transaction's chain hash fragment
+/// against the hashes valid for this height.
 fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     tx: Transaction<D, S>,
@@ -519,54 +552,25 @@ fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
         Transaction::V1(tx_v1) => (&tx_v1.details, &tx_v1.runtime_call),
     };
 
-    verify_chain_id(details, raw_tx_hash)?;
-
-    // Try signature verification with each valid chain hash
-    let mut last_error = None;
-    for chain_hash in resolved_hashes.iter() {
-        match verify_signature(&tx, chain_hash, raw_tx_hash, meter) {
-            Ok(serialized_tx) => {
-                let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
-                    match &tx {
-                        Transaction::V0(_) => {
-                            ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash)
-                        }
-                        Transaction::V1(_) => {
-                            ReplayHashMaterial::VerifiedSignatureMessage(&serialized_tx)
-                        }
-                    },
-                    meter,
-                )
-                .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
-                let auth_data = match &tx {
-                    Transaction::V0(tx_v0) => {
-                        tx_v0.auth_data(raw_tx_hash, non_malleable_hash, meter)?
-                    }
-                    Transaction::V1(tx_v1) => {
-                        tx_v1.auth_data(raw_tx_hash, non_malleable_hash, meter)?
-                    }
-                };
-                let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
-                    raw_tx_hash,
-                    authenticated_tx: details.clone().into(),
-                };
-                return Ok((tx_and_raw_hash, auth_data, runtime_call.clone()));
-            }
-            Err(AuthenticationError::FatalError(
-                FatalError::SigVerificationFailed(error),
-                hash,
-            )) => {
-                last_error = Some(AuthenticationError::FatalError(
-                    FatalError::SigVerificationFailed(error),
-                    hash,
-                ));
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    // All chain hashes failed - return the last error
-    Err(last_error.expect("resolved_hashes always has at least one hash (the primary)"))
+    let chain_hash = select_chain_hash(details, &resolved_hashes, raw_tx_hash)?;
+    let serialized_tx = verify_signature(&tx, &chain_hash, raw_tx_hash, meter)?;
+    let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
+        match &tx {
+            Transaction::V0(_) => ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash),
+            Transaction::V1(_) => ReplayHashMaterial::VerifiedSignatureMessage(&serialized_tx),
+        },
+        meter,
+    )
+    .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+    let auth_data = match &tx {
+        Transaction::V0(tx_v0) => tx_v0.auth_data(raw_tx_hash, non_malleable_hash, meter)?,
+        Transaction::V1(tx_v1) => tx_v1.auth_data(raw_tx_hash, non_malleable_hash, meter)?,
+    };
+    let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
+        raw_tx_hash,
+        authenticated_tx: details.clone().into(),
+    };
+    Ok((tx_and_raw_hash, auth_data, runtime_call.clone()))
 }
 
 /// Authenticate raw unregistered sov-transaction.
