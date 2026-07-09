@@ -122,7 +122,8 @@ async fn sequencer_publishes_timestamp_even_when_unused() {
         "the sequencer timestamp must be published even when execution never reads it"
     );
     assert_eq!(
-        sequencing_data.data, None,
+        sequencing_data.unrecorded_data(),
+        None,
         "a runtime without format-specific sequencing data must not publish a data payload"
     );
 }

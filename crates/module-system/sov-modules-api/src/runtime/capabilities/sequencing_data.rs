@@ -30,12 +30,21 @@ use crate::{Context, HDTimestamp, SequencingData, Spec, TxState};
 /// bytes it published to the DA layer.
 pub trait SequencingDataFormat: Send + Sync + 'static {
     /// Key type used to address entries inside the serialized sequencing data.
+    ///
+    /// Serialization must be infallible: accessed keys are recorded during native execution
+    /// and the SDK panics if serializing one fails. A fallible serializer cannot be allowed to
+    /// surface as an error, because recording only happens in native builds — the zk guest
+    /// would execute the same read successfully and diverge from the full node.
     type Key: BorshDeserialize + BorshSerialize + Clone + Ord + Send + Sync + 'static;
 
     /// Value returned for an accessed key.
     type Value;
 
     /// Reads the value at `key` from the serialized sequencing data.
+    ///
+    /// Absent keys must be reported as `Ok(None)`, and absence must be stable under pruning:
+    /// the SDK does not record reads that return `Ok(None)`, relying on a key absent from the
+    /// full payload also being absent from the pruned payload.
     fn get(bytes: &[u8], key: &Self::Key) -> anyhow::Result<Option<Self::Value>>;
 
     /// Prunes serialized sequencing data to the keys accessed during native execution.
@@ -54,6 +63,11 @@ pub trait SequencingDataFormat: Send + Sync + 'static {
     ///
     /// Returning `None` (the default) attaches no format-specific data; the SDK still attaches
     /// a timestamp alongside it (see [`new_tx_sequencing_data`]).
+    ///
+    /// The output must fit within [`MAX_FULLY_BAKED_TX_SIZE`](sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE)
+    /// together with the transaction it is attached to; a payload that alone exceeds that limit
+    /// is discarded by [`new_tx_sequencing_data`], since no node could ever deserialize the
+    /// resulting transaction.
     #[cfg(feature = "native")]
     fn create() -> Option<Bytes> {
         None
@@ -120,11 +134,29 @@ pub trait HasSequencingData<S: Spec> {
 
 /// Builds the full serialized [`SequencingData`] (timestamp plus format-provided data) that
 /// the preferred sequencer attaches to a transaction when accepting it.
+///
+/// A data payload that alone exceeds
+/// [`MAX_FULLY_BAKED_TX_SIZE`](sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE) is discarded
+/// with an error log: a transaction carrying it could never be published, since every node's
+/// deserializer rejects it, and encoding an unbounded payload risks a panic. Execution then
+/// proceeds without a data payload, which stays deterministic across all node types.
 #[cfg(feature = "native")]
 pub fn new_tx_sequencing_data<S: Spec, Rt: HasSequencingData<S>>() -> Bytes {
+    let data = Rt::SequencingData::create().filter(|data| {
+        let fits = data.len() <= sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE;
+        if !fits {
+            tracing::error!(
+                payload_len = data.len(),
+                max_len = sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE,
+                "SequencingDataFormat::create() returned a payload exceeding the maximum \
+                 transaction size; attaching no data payload"
+            );
+        }
+        fits
+    });
     SequencingData {
         timestamp: Some(HDTimestamp::default_sequencing_data()),
-        data: Rt::SequencingData::create(),
+        data,
     }
     .encode()
 }
@@ -169,15 +201,35 @@ impl<'a, F: SequencingDataFormat> SequencingDataView<'a, F> {
     }
 
     /// Reads the value at `key`, recording the access in native execution.
+    ///
+    /// Reads that observe nothing (`Ok(None)`) are not recorded: pruning can only remove
+    /// entries, so a key absent from the full payload is also absent from the pruned payload
+    /// and the replayed read observes `Ok(None)` again. Errors ARE recorded like successful
+    /// reads, so that a replayed read of e.g. a corrupt entry observes the same error instead
+    /// of `Ok(None)`.
     pub fn get(&self, key: &F::Key) -> anyhow::Result<Option<F::Value>> {
-        #[cfg(feature = "native")]
-        self.scratchpad.insert(borsh::to_vec(key)?);
-
+        // Payload-less reads skip recording: pruning ignores the scratchpad when the envelope
+        // carries no data payload, so a record here could never be observed.
         let Some(data) = self.data else {
             return Ok(None);
         };
 
-        F::get(data, key)
+        let result = F::get(data, key);
+
+        #[cfg(feature = "native")]
+        if !matches!(result, Ok(None)) {
+            // Panic rather than propagate: this write only exists in native builds, so a
+            // fallible key serializer surfacing as an error would revert the transaction on
+            // full nodes while the zk guest (which never records) executes it successfully —
+            // a consensus divergence. See the infallibility requirement on
+            // `SequencingDataFormat::Key`.
+            let mut encoded_key = Vec::new();
+            borsh::BorshSerialize::serialize(key, &mut encoded_key)
+                .expect("sequencing data keys must serialize infallibly");
+            self.scratchpad.insert(encoded_key);
+        }
+
+        result
     }
 }
 
@@ -188,7 +240,16 @@ pub fn decode_used_sequencing_keys<F: SequencingDataFormat>(
 ) -> anyhow::Result<std::collections::BTreeSet<F::Key>> {
     scratchpad
         .into_iter()
-        .map(|key| F::Key::try_from_slice(&key).map_err(Into::into))
+        .map(|key| {
+            F::Key::try_from_slice(&key).map_err(|error| {
+                anyhow::anyhow!(
+                    "recorded sequencing data key {key:02x?} does not decode as the key of \
+                     `{}`: {error}. Was a `SequencingDataView` instantiated with a format \
+                     other than the runtime's `HasSequencingData::SequencingData`?",
+                    std::any::type_name::<F>()
+                )
+            })
+        })
         .collect()
 }
 
@@ -377,5 +438,43 @@ mod tests {
         let used_keys = decode_used_sequencing_keys::<KeyedSequencingData>(scratchpad.take())
             .expect("scratchpad should decode");
         assert!(used_keys.contains(&0x1234));
+    }
+
+    /// Format whose `get` observes no value for any key.
+    struct AbsentKeySequencingData;
+
+    impl SequencingDataFormat for AbsentKeySequencingData {
+        type Key = u16;
+        type Value = ();
+
+        fn get(_bytes: &[u8], _key: &Self::Key) -> anyhow::Result<Option<Self::Value>> {
+            Ok(None)
+        }
+
+        fn prune_to_used_keys(
+            bytes: Bytes,
+            _used_keys: &std::collections::BTreeSet<Self::Key>,
+        ) -> anyhow::Result<Option<Bytes>> {
+            Ok(Some(bytes))
+        }
+    }
+
+    #[test]
+    fn view_does_not_record_absent_key() {
+        let scratchpad = crate::SequencingScratchpad::default();
+        let bytes = Bytes::from(vec![0x12, 0x34]);
+        let view = SequencingDataView::<AbsentKeySequencingData>::with_scratchpad(
+            Some(&bytes),
+            scratchpad.clone(),
+        );
+
+        assert_eq!(view.get(&0x1234).unwrap(), None);
+
+        assert_eq!(
+            scratchpad.take(),
+            Default::default(),
+            "reads observing no value must not be recorded: an absent key stays absent after \
+             pruning, so the record would only bloat the published data"
+        );
     }
 }

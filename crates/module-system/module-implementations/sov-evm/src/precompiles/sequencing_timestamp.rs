@@ -16,9 +16,11 @@ const SEQUENCING_TIMESTAMP_GAS: u64 = 50;
 /// A built-in precompile that returns the current oracle timestamp in nanoseconds.
 ///
 /// The SDK updates the oracle from the preferred sequencer's transaction timestamp before each
-/// transaction is dispatched, so within a preferred-sequencer transaction this reflects that
-/// transaction's own sequencing timestamp. When no oracle time is set, it falls back to the DA
-/// layer time.
+/// transaction is dispatched, so within a preferred-sequencer transaction this normally
+/// reflects that transaction's own sequencing timestamp. Exceptions: the oracle never moves
+/// backwards, so a regressing transaction timestamp is ignored and the previous (larger) oracle
+/// value is returned; and before the oracle activation height the update is a no-op. When no
+/// oracle time is set, it falls back to the DA layer time.
 #[derive(Clone)]
 pub struct SequencingTimestampPrecompile<S: Spec> {
     chain_state: sov_chain_state::ChainState<S>,

@@ -416,8 +416,7 @@ async fn wait_for_pruned_txs_on_da(
             .expect("oracle tx should include sequencing data");
         let envelope = sov_modules_api::SequencingData::decode(sequencing_data)?;
         let data = envelope
-            .data
-            .as_ref()
+            .unrecorded_data()
             .expect("oracle tx should retain its data payload");
         let sequencing_data = OracleSequencingData::try_from_slice(data)?;
         let actual_keys = sequencing_data.0.keys().copied().collect::<BTreeSet<_>>();

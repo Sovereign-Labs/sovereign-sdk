@@ -1144,8 +1144,6 @@ where
         ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
     ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
-        let sequencing_data =
-            Some(sov_modules_api::capabilities::new_tx_sequencing_data::<S, Rt>());
         let load_based_accept_probability = if self.use_pi_rate_limiter {
             self.get_acceptance_probability(&baked_tx)
         } else {
@@ -1206,9 +1204,15 @@ where
         }
 
         let mut baked_tx = baked_tx;
-        // Important: we read the sequencing data from the baked tx inside apply_tx_to_in_progress_batch (which is called from do_new_tx)
-        // so this must not be moved without updating do_new_tx. See the comment in apply_tx_to_in_progress_batch for more details.
-        baked_tx.sequencing_data = sequencing_data;
+        // Important: the sequencing data must be attached before `do_new_tx`. Execution inside
+        // `apply_tx_to_in_progress_batch` reads it from the baked tx (time-oracle update,
+        // `handle_sequencing_data` hook, and pruning), and `do_new_tx`'s up-front
+        // `MAX_FULLY_BAKED_TX_SIZE` check must account for its length, or an accepted tx could
+        // produce a blob that every node's deserializer rejects.
+        // This runs after all the reject paths above so rejected transactions don't pay for
+        // sequencing data creation.
+        baked_tx.sequencing_data =
+            Some(sov_modules_api::capabilities::new_tx_sequencing_data::<S, Rt>());
         let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`

@@ -1223,7 +1223,8 @@ where
     /// published in a preferred-sequencer batch, returning the published txs keyed by hash.
     ///
     /// Hashes are computed with the blueprint runtime's transaction authenticator.
-    /// Scanning starts after `last_checked_height`. Panics if `timeout` elapses first.
+    /// Scanning starts after `last_checked_height`. Panics if `timeout` elapses first, or if a
+    /// requested tx is published more than once within the scanned blocks.
     pub async fn wait_for_txs_on_da(
         &self,
         tx_hashes: &std::collections::BTreeSet<TxHash>,
@@ -1243,7 +1244,11 @@ where
                             let tx_hash = <<R::Runtime as sov_modules_api::Runtime<R::Spec>>::Auth
                                 as TransactionAuthenticator<R::Spec>>::compute_tx_hash(tx)?;
                             if tx_hashes.contains(&tx_hash) {
-                                found.insert(tx_hash, tx.clone());
+                                let previous = found.insert(tx_hash, tx.clone());
+                                assert!(
+                                    previous.is_none(),
+                                    "tx {tx_hash} was published more than once on the DA layer"
+                                );
                             }
                         }
                     }
