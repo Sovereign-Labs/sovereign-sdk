@@ -70,8 +70,8 @@ serde = { workspace = true, default-features = false, features = [
 serde_json = { workspace = true, default-features = false, features = [
     "alloc",
 ] }
-hex = { workspace = true }
-bincode = { workspace = true }
+hex = { workspace = true, optional = true }
+bincode = { workspace = true, optional = true }
 tokio = { workspace = true, features = [
     "rt-multi-thread",
     "sync",
@@ -80,7 +80,7 @@ tokio = { workspace = true, features = [
     "tracing",
 ] }
 tracing = { workspace = true }
-rockbound = { workspace = true }
+rockbound = { workspace = true, optional = true }
 clap = { workspace = true, features = ["derive"] }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
 alloy = { workspace = true, features = ["genesis"] }
@@ -116,6 +116,7 @@ sov-synthetic-load = { workspace = true, features = ["native"] }
 futures = { workspace = true }
 demo-stf = { workspace = true, features = ["native"] }
 demo-stf-json-client = { path = "./stf/demo-stf-json-client", default-features = false }
+
 tracing-panic = { version = "0.1.2" }
 
 base64 = { workspace = true }
@@ -164,6 +165,16 @@ default = ["mock_da"]
 mock_da = ["dep:sov-mock-da", "dep:sov-sp1-adapter", "dep:sp1"]
 celestia_da = ["dep:sov-celestia-adapter", "dep:sov-risc0-adapter", "dep:risc0"]
 
+da-migration-script = [
+    # The migration binary bridges both DAs (references MockDemoRollup + CelestiaDemoRollup).
+    "mock_da",
+    "celestia_da",
+    "dep:rockbound",
+    "dep:bincode",
+    "dep:hex",
+    "sov-db/migration-script",
+]
+
 [[bin]]
 name = "sov-cli"
 path = "src/sov-cli/main.rs"
@@ -187,10 +198,12 @@ required-features = ["celestia_da"]
 [[bin]]
 name = "mockda-to-celestia-migrate"
 path = "src/migrations/mockda_to_celestia.rs"
+required-features = ["da-migration-script"]
 
 [[bin]]
 name = "migrate_to_v1"
 path = "src/migrations/legacy_accounts.rs"
+required-features = ["mock_da"]
 
 [[bin]]
 name = "sov-hive-genesis-adapter"
