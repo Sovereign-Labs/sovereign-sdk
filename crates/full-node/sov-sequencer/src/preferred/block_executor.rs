@@ -7,9 +7,10 @@ use anyhow::Context;
 use axum::http::StatusCode;
 use borsh::BorshDeserialize;
 use sov_blob_storage::PreferredProofData;
+use sov_modules_api::capabilities::prune_sequencing_data;
 use sov_modules_api::capabilities::{
-    get_maybe_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState,
-    FatalError, HasCapabilities, RollupHeight, SequencingDataHandler, TransactionAuthenticator,
+    get_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState, FatalError,
+    RollupHeight, TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
@@ -293,14 +294,17 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         baked_tx: FullyBakedTxWithMaybeChangeSet,
     ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorErrorWithBudget<S>>
     {
-        // Extract the timestamp from the sequencing data. We do this even though we could pass the timestamp directly from the place where it is generated
-        // for symmetry with the replicas. Replicas have to extract the timestamp from the sequencing data, but they can only do so if the runtime is using the standard
-        // sequencing data handler. Doing it the same way here ensures that the replica and the master agree on the timestamp in all cases.
-        let timestamp = get_maybe_timestamp_from_sequencing_data::<S, Rt>(&baked_tx.tx, true);
         let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
 
         match result {
             Ok((receipt, tx, remaining_slot_gas, execution_time_micros, tx_changes)) => {
+                // Extract the HDTimestamp from the finalized (pruned) tx body, rather than from
+                // the pre-pruning bytes or the locally generated value, so the preferred
+                // sequencer and replicas derive confirmation metadata from the same published
+                // transaction bytes. If pruning removed the timestamp, the confirmation must
+                // not report one either, since nodes deriving it from the stored body cannot
+                // reproduce it.
+                let timestamp = get_timestamp_from_sequencing_data(&tx, true);
                 let accepted_tx = self.process_tx_receipt(receipt, tx, timestamp);
                 if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
                     writer.insert(accepted_tx.clone()).await;
@@ -688,20 +692,19 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     fn finalize_tx_sequencing_data(
         tx: &mut FullyBakedTx,
-        scratchpad: Option<sov_rollup_interface::Bytes>,
+        scratchpad: sov_modules_api::SequencingScratchpadContents,
     ) {
-        let Some(data) = tx.sequencing_data.as_ref() else {
-            return;
-        };
-        let Ok(decoded) = <Rt as HasCapabilities<S>>::SequencingData::try_from_slice(data) else {
-            tracing::warn!("Failed to deserialize sequencing data while finalizing transaction");
+        // data is `Bytes` so cloning is cheap
+        let Some(data) = tx.sequencing_data.clone() else {
             return;
         };
 
-        let mut runtime = Rt::default();
-        let mut handler = runtime.sequencing_data_handler();
-        let finalized = handler.finalize_sequencing_data(decoded, scratchpad);
-        tx.set_sequencing_metadata(&finalized);
+        match prune_sequencing_data::<Rt::SequencingData>(data, scratchpad) {
+            Ok(finalized) => tx.sequencing_data = finalized,
+            Err(error) => {
+                tracing::warn!(%error, "Failed to prune sequencing data; keeping original data");
+            }
+        }
     }
 
     fn update_kernel_with_user_state_root(&mut self) {

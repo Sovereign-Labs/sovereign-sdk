@@ -15,7 +15,9 @@ use sov_evm::EthereumAuthenticator;
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::KernelWithSlotMapping;
-use sov_modules_api::capabilities::{Guard, HasCapabilities, HasKernel, TransactionAuthenticator};
+use sov_modules_api::capabilities::{
+    Guard, HasCapabilities, HasKernel, HasSequencingData, TransactionAuthenticator,
+};
 use sov_modules_api::Base58Address;
 use sov_modules_api::{RawTx, Spec};
 
@@ -150,7 +152,6 @@ where
     S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
     type Capabilities<'a> = StandardCapabilities<'a, S, &'a mut sov_paymaster::Paymaster<S>>;
-    type SequencingData = sov_modules_api::HDTimestamp;
 
     fn capabilities(&mut self) -> Guard<Self::Capabilities<'_>> {
         Guard::new(StandardCapabilities {
@@ -165,6 +166,13 @@ where
             attester_incentives: &mut self.0.attester_incentives,
         })
     }
+}
+
+impl<S: Spec> HasSequencingData<S> for Runtime<S>
+where
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
+{
+    type SequencingData = ();
 }
 
 impl<S: Spec> HasKernel<S> for Runtime<S>

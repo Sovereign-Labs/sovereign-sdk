@@ -68,6 +68,10 @@ pub(crate) enum DoNewTxError<S: Spec> {
         max_batch_size: usize,
         tx_len: usize,
     },
+    TxWithSequencingDataTooBig {
+        total_payload_len: usize,
+        max_payload_len: usize,
+    },
     ExecutorError(RollupBlockExecutorError<S>),
     Shutdown,
 }
@@ -795,6 +799,22 @@ where
                     current_batch_size: batch_size_tracker.current_batch_size,
                     max_batch_size: batch_size_tracker.max_batch_size,
                     tx_len,
+                }),
+                request_used,
+            );
+        }
+
+        // `MAX_FULLY_BAKED_TX_SIZE` is enforced by `FullyBakedTx`'s deserializers, so a tx that
+        // exceeds it once sequencing data is attached would execute and soft-confirm here, yet
+        // produce a blob that every node (including our own blob sender) rejects. Reject it up
+        // front instead. Note that pruning can only shrink the sequencing data, so this check
+        // is conservative.
+        let total_payload_len = baked_tx.payload_len();
+        if total_payload_len > sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE {
+            return (
+                Err(DoNewTxError::TxWithSequencingDataTooBig {
+                    total_payload_len,
+                    max_payload_len: sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE,
                 }),
                 request_used,
             );

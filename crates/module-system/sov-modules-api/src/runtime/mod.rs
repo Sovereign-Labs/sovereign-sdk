@@ -5,7 +5,9 @@ pub mod capabilities;
 use std::io;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use capabilities::{HasCapabilities, HasKernel, TimelockPolicy, TransactionAuthenticator};
+use capabilities::{
+    HasCapabilities, HasKernel, HasSequencingData, TimelockPolicy, TransactionAuthenticator,
+};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
@@ -70,6 +72,7 @@ impl ModuleExecutionConfig for () {
 pub trait Runtime<S: Spec>:
     DispatchCall<Spec = S>
     + HasCapabilities<S>
+    + HasSequencingData<S>
     + HasKernel<S>
     + Genesis<Spec = S, Config = Self::GenesisConfig>
     + TxHooks<Spec = S>
@@ -188,6 +191,7 @@ pub fn decode_borsh_serialized_message<T: borsh::BorshDeserialize>(
 pub trait Runtime<S: Spec>:
     DispatchCall<Spec = S>
     + HasCapabilities<S>
+    + HasSequencingData<S>
     + HasKernel<S>
     + Genesis<Spec = S, Config = Self::GenesisConfig>
     + TxHooks<Spec = S>

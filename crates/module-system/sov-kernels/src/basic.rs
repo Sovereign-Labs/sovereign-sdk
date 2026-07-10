@@ -126,6 +126,15 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for BasicKernel<'_, S> {
         self.chain_state.finalize_chain_state(gas_used, state);
     }
 
+    fn update_oracle_time(
+        &mut self,
+        timestamp: sov_modules_api::HDTimestamp,
+        state: &mut impl sov_modules_api::TxState<S>,
+    ) -> anyhow::Result<()> {
+        self.chain_state
+            .update_oracle_time_from_sequencing_data(timestamp, state)
+    }
+
     fn base_fee_per_gas<
         Reader: VersionReader
             + StateReader<Kernel, Error = Infallible>

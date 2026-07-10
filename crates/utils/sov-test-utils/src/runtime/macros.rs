@@ -285,7 +285,6 @@ macro_rules! generate_runtime {
             $($runtime_trait_impl_bounds)*
         {
             type Capabilities<'a> = $crate::runtime::StandardProvenRollupCapabilities<'a, S, &'a mut $gas_enforcer_ty>;
-            type SequencingData = ::sov_modules_api::HDTimestamp;
 
             fn capabilities(&mut self) -> ::sov_modules_api::capabilities::Guard<Self::Capabilities<'_>> {
                 ::sov_modules_api::capabilities::Guard::new(
@@ -304,6 +303,14 @@ macro_rules! generate_runtime {
             }
 
             $crate::__impl_runtime_timelock_capability!($($timelock_capability_expr)?);
+        }
+
+        impl<S> ::sov_modules_api::capabilities::HasSequencingData<S> for $id<S>
+        where
+            S: ::sov_modules_api::Spec,
+            $($runtime_trait_impl_bounds)*
+        {
+            type SequencingData = ();
         }
     };
     (
@@ -345,7 +352,6 @@ macro_rules! generate_runtime {
             $($runtime_trait_impl_bounds)*
         {
             type Capabilities<'a> = $crate::runtime::StandardProvenRollupCapabilities<'a, S>;
-            type SequencingData = ::sov_modules_api::HDTimestamp;
 
             fn capabilities(&mut self) -> ::sov_modules_api::capabilities::Guard<Self::Capabilities<'_>> {
                 ::sov_modules_api::capabilities::Guard::new(
@@ -364,6 +370,14 @@ macro_rules! generate_runtime {
             }
 
             $crate::__impl_runtime_timelock_capability!($($timelock_capability_expr)?);
+        }
+
+        impl<S> ::sov_modules_api::capabilities::HasSequencingData<S> for $id<S>
+        where
+            S: ::sov_modules_api::Spec,
+            $($runtime_trait_impl_bounds)*
+        {
+            type SequencingData = ();
         }
     }
 }
