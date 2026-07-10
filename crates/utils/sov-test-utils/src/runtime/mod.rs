@@ -72,7 +72,7 @@ pub mod traits;
 use traits::MinimalGenesis;
 
 type NoncesMap<S> = HashMap<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey, u64>;
-const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
+use sov_modules_api::OVERRIDE_HD_TIMESTAMPS_ENV_VAR;
 
 /// Metadata about a blob.
 #[derive(Debug, Clone, PartialEq, Eq)]

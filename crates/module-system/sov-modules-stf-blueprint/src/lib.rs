@@ -65,7 +65,7 @@ pub struct ApplyTxResult<S: Spec> {
     /// Native scratchpad recorded while executing with the transaction's sequencing data.
     #[cfg(feature = "native")]
     #[serde(skip)]
-    pub sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
+    pub sequencing_scratchpad: sov_modules_api::SequencingScratchpadContents,
 }
 
 /// Genesis parameters for a blueprint

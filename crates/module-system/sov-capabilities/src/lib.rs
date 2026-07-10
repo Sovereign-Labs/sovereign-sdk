@@ -9,12 +9,11 @@ use sov_chain_state::ChainState as ChainStateModule;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::{
     AuthorizationData, GasEnforcer, ProofProcessor, SequencerAuthorization, SequencerRemuneration,
-    SequencingDataHandler, TransactionAuthorizer,
+    TransactionAuthorizer,
 };
 use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
 };
-use sov_modules_api::HDTimestamp;
 use sov_modules_api::SequencerType;
 use sov_modules_api::{
     AggregatedProofPublicData, Amount, Context, DaSpec, Gas, GetGasPrice, InfallibleStateAccessor,
@@ -228,40 +227,6 @@ impl<S: Spec, T> SequencerAuthorization<S> for StandardProvenRollupCapabilities<
         self.sequencer_registry.preferred_sequencer(state).as_ref() == Some(sequencer)
     }
 }
-
-impl<S: Spec, T> SequencingDataHandler<S> for StandardProvenRollupCapabilities<'_, S, T> {
-    type SequencingData = HDTimestamp;
-
-    fn handle_sequencing_data(
-        &mut self,
-        data: Self::SequencingData,
-        context: &Context<S>,
-        state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
-        if !context.sequencer_is_preferred() {
-            return Ok(());
-        }
-
-        self.chain_state
-            .update_oracle_time_from_sequencing_data(data, state)
-    }
-
-    #[cfg(feature = "native")]
-    fn create_sequencing_data(&self) -> Self::SequencingData {
-        use std::str::FromStr;
-        if cfg!(debug_assertions) {
-            let Ok(timestamp) = std::env::var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR) else {
-                return HDTimestamp::now();
-            };
-            HDTimestamp::from_str(&timestamp).unwrap_or_else(|_| HDTimestamp::now())
-        } else {
-            HDTimestamp::now()
-        }
-    }
-}
-
-#[cfg(feature = "native")]
-const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
 
 impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'_, S, T> {
     /// Prevents duplicate transactions from running.

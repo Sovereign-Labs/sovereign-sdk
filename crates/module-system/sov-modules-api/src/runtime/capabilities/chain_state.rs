@@ -56,6 +56,19 @@ pub trait ChainState {
         state: &mut KernelStateAccessor<'_, Self::Spec>,
     );
 
+    /// Updates the rollup's time oracle from the timestamp attached to a transaction by the
+    /// preferred sequencer.
+    ///
+    /// Invoked by the STF before dispatching every preferred-sequencer transaction that carries
+    /// a timestamp in its sequencing data. Implementations must be best-effort and deterministic:
+    /// invalid, overflowing, or regressing timestamps must be ignored rather than rejected, since
+    /// an error reverts the transaction.
+    fn update_oracle_time(
+        &mut self,
+        timestamp: crate::HDTimestamp,
+        state: &mut impl crate::TxState<Self::Spec>,
+    ) -> anyhow::Result<()>;
+
     /// Returns the base fee per gas accessible at the current *visible* slot.
     ///
     /// ## Note

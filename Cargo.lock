@@ -11058,6 +11058,7 @@ dependencies = [
  "sov-bank",
  "sov-chain-state",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
  "strum 0.28.0",

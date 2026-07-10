@@ -7,7 +7,7 @@ use sov_modules_api::capabilities::TransactionAuthenticator;
 use futures::task::Poll;
 use futures::{Future, FutureExt, Stream, StreamExt};
 use sov_db::ledger_db::LedgerDb;
-use sov_modules_api::capabilities::get_maybe_timestamp_from_sequencing_data;
+use sov_modules_api::capabilities::get_timestamp_from_sequencing_data;
 use sov_modules_api::{HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
 use sov_rollup_interface::node::ledger_api::{EventIdentifier, LedgerStateProvider, QueryMode};
 use tokio::sync::{broadcast, RwLock};
@@ -265,7 +265,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         let maybe_timestamp = tx
             .body
             .as_ref()
-            .and_then(|body| get_maybe_timestamp_from_sequencing_data::<S, Rt>(body, false));
+            .and_then(|body| get_timestamp_from_sequencing_data(body, false));
 
         Ok(Some(AcceptedTx {
             tx: tx.body.unwrap_or_default(),
@@ -473,9 +473,10 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
             .flatten()
             .enumerate()
             .map(|(idx, tx)| {
-                let timestamp_nanos = tx.body.as_ref().and_then(|body| {
-                    get_maybe_timestamp_from_sequencing_data::<S, Rt>(body, false)
-                });
+                let timestamp_nanos = tx
+                    .body
+                    .as_ref()
+                    .and_then(|body| get_timestamp_from_sequencing_data(body, false));
                 let tx_body = tx
                     .body
                     .and_then(|body| Rt::Auth::decode_serialized_tx(&body).ok())

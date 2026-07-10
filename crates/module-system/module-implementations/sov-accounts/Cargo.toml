@@ -27,6 +27,7 @@ sov-state = { workspace = true }
 arbitrary = { workspace = true, optional = true }
 
 [dev-dependencies]
+sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-accounts = { path = ".", features = ["native"] }
 sov-bank = { workspace = true }
 tempfile = { workspace = true }
@@ -42,13 +43,15 @@ arbitrary = [
 	"sov-modules-api/arbitrary",
 	"sov-state/arbitrary",
 	"sov-test-utils/arbitrary",
-	"sov-bank/arbitrary"
+	"sov-bank/arbitrary",
+	"sov-rollup-interface/arbitrary"
 ]
 native = [
 	"sov-accounts/native",
 	"sov-chain-state/native",
 	"sov-modules-api/native",
 	"sov-state/native",
-	"sov-bank/native"
+	"sov-bank/native",
+	"sov-rollup-interface/native"
 ]
 test-utils = []
