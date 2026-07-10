@@ -21,6 +21,7 @@ import {
   type StandardRollup,
   type StandardRollupContext,
   type StandardRollupSpec,
+  chainHashFragment,
   createStandardRollup,
   standardTypeBuilder,
 } from "./standard-rollup";
@@ -109,6 +110,16 @@ const SIGNING_DOMAIN = new Uint8Array([
 ]);
 const HEADER_VERSION = 0;
 const MESSAGE_FORMAT = 0;
+
+function refreshChainHashFragment<RuntimeCall>(
+  unsignedTx: UnsignedTransaction<RuntimeCall>,
+  chainHash: Uint8Array,
+): void {
+  unsignedTx.details = {
+    ...unsignedTx.details,
+    chain_hash_fragment: chainHashFragment(chainHash),
+  };
+}
 
 function compareByteArrays(left: Uint8Array, right: Uint8Array): number {
   const minLength = Math.min(left.length, right.length);
@@ -344,10 +355,11 @@ export class SolanaSignableRollup<RuntimeCall> {
     signer: Signer,
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
+    const chainHash = await this.inner.chainHash();
+    refreshChainHashFragment(unsignedTx, chainHash);
     const jsonBytes = await this.createSolanaJsonBytes(unsignedTx);
 
     const pubkey = await signer.publicKey();
-    const chainHash = await this.inner.chainHash();
 
     const signature = await signer.sign(jsonBytes);
 
@@ -372,10 +384,11 @@ export class SolanaSignableRollup<RuntimeCall> {
     signer: Signer,
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
+    const chainHash = await this.inner.chainHash();
+    refreshChainHashFragment(unsignedTx, chainHash);
     const jsonBytes = await this.createSolanaJsonBytes(unsignedTx);
 
     const pubkey = await signer.publicKey();
-    const chainHash = await this.inner.chainHash();
 
     // Create preamble and combine with message
     const preamble = createSolanaPreamble(
@@ -610,11 +623,12 @@ export class SolanaSignableRollup<RuntimeCall> {
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisig: Multisig,
   ): Promise<Uint8Array> {
+    const chainHash = await this.inner.chainHash();
+    refreshChainHashFragment(unsignedTx, chainHash);
     const jsonBytes = await this.createMultisigJsonBytes(
       unsignedTx,
       await this.multisigIdFromMultisig(multisig),
     );
-    const chainHash = await this.inner.chainHash();
     const preamble = createSolanaPreamble(
       this.canonicalizeMultisigPubkeys([...multisig.allPubKeys]),
       chainHash,
@@ -632,11 +646,13 @@ export class SolanaSignableRollup<RuntimeCall> {
     switch (authenticator) {
       case "standard":
         return this.inner.multisigSigningBytes(unsignedTx, multisig);
-      case "solanaSimple":
+      case "solanaSimple": {
+        refreshChainHashFragment(unsignedTx, await this.inner.chainHash());
         return this.createMultisigJsonBytes(
           unsignedTx,
           await this.multisigIdFromMultisig(multisig),
         );
+      }
       case "solana":
         return this.createSpecCompliantMultisigSignedMessage(
           unsignedTx,

@@ -279,6 +279,56 @@ describe("SolanaSignableRollup", () => {
     expect(message.address_override).toBe("sov1target");
   });
 
+  it("should refresh stale chain hash fragments before Solana simple signing", async () => {
+    const mockClient = createMockClient({
+      chainName: "TestChain",
+      chainHash:
+        "0x0102030405060708000000000000000000000000000000000000000000000000",
+    });
+    let capturedPayload: any;
+    mockClient.post = vi
+      .fn()
+      .mockImplementation((_path: string, options: any) => {
+        capturedPayload = options;
+        return Promise.resolve({ id: "test-tx-hash" });
+      });
+
+    const rollup = await createSolanaSignableRollup({
+      client: mockClient,
+      getSerializer: (schema: any) => ({ schema }) as any,
+    });
+
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { generation: 123 },
+      details: {
+        max_priority_fee_bips: 0,
+        max_fee: "1000",
+        gas_limit: null,
+        chain_hash_fragment: "stale",
+      },
+      address_override: null,
+    };
+
+    await rollup.signAndSubmitTransaction(unsignedTx, {
+      signer: createMockSigner(),
+      authenticator: "solanaSimple",
+    });
+
+    const decodedBody = Buffer.from(capturedPayload.body.body, "base64");
+    const view = new DataView(
+      decodedBody.buffer,
+      decodedBody.byteOffset,
+      decodedBody.byteLength,
+    );
+    const messageLength = view.getUint32(0, true);
+    const jsonBytes = decodedBody.slice(4, 4 + messageLength);
+    const message = JSON.parse(new TextDecoder().decode(jsonBytes));
+
+    expect(message.details.chain_hash_fragment).toBe("578437695752307201");
+    expect(unsignedTx.details.chain_hash_fragment).toBe("578437695752307201");
+  });
+
   describe("byte-level compatibility with Rust implementation", () => {
     it("should generate identical bytes to Rust test_submit_raw_signed_message_transaction", async () => {
       // This test verifies that our TypeScript implementation generates the exact same bytes

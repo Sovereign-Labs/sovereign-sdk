@@ -50,6 +50,18 @@ export function chainHashFragment(chainHash: Uint8Array): string {
   return fragment.toString();
 }
 
+function refreshChainHashFragment<RuntimeCall>(
+  unsignedTx: UnsignedTransaction<RuntimeCall>,
+  chainHash: Uint8Array,
+): UnsignedTransaction<RuntimeCall> {
+  unsignedTx.details = {
+    ...unsignedTx.details,
+    chain_hash_fragment: chainHashFragment(chainHash),
+  };
+
+  return unsignedTx;
+}
+
 const useOrFetchUniqueness = async <S extends StandardRollupSpec<unknown>>({
   overrides,
 }: Omit<
@@ -104,9 +116,14 @@ export function standardTypeBuilder<
       unsignedTx,
       chainHash,
     }: TransactionSigningPayloadContext<S, StandardRollupContext>) {
+      const normalizedUnsignedTx = refreshChainHashFragment(
+        unsignedTx,
+        chainHash,
+      );
+
       return {
         V0: {
-          ...unsignedTx,
+          ...normalizedUnsignedTx,
           chain_hash: Array.from(chainHash),
         },
       } as S["TransactionSigningPayload"];
@@ -148,15 +165,32 @@ export class StandardRollup<RuntimeCall> extends Rollup<
     return addressFromPublicKey(credentialId, "sov");
   }
 
+  async signTransaction(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    signer: SignerParams["signer"],
+  ): Promise<StandardRollupSpec<RuntimeCall>["Transaction"]> {
+    const chainHash = await this.chainHash();
+
+    return super.signTransaction(
+      refreshChainHashFragment(unsignedTx, chainHash),
+      signer,
+    );
+  }
+
   async multisigSigningBytes(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisig: Multisig,
   ): Promise<Uint8Array> {
     const serializer = await this.serializer();
+    const chainHash = await this.chainHash();
+    const normalizedUnsignedTx = refreshChainHashFragment(
+      unsignedTx,
+      chainHash,
+    );
     const signingPayload: TransactionSigningPayload<RuntimeCall> = {
       V1: {
-        ...unsignedTx,
-        chain_hash: Array.from(await this.chainHash()),
+        ...normalizedUnsignedTx,
+        chain_hash: Array.from(chainHash),
         credential_address: await this.credentialAddressFromId(
           multisig.getMultisigAddress(),
         ),

@@ -169,16 +169,23 @@ describe("standardTypeBuilder", () => {
 
       const result = await builder.transactionSigningPayload({
         unsignedTx,
-        chainHash: new Uint8Array([1, 2, 3, 4]),
+        chainHash: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
         rollup: mockRollup as any,
       });
 
       expect(result).toEqual({
         V0: {
           ...unsignedTx,
-          chain_hash: [1, 2, 3, 4],
+          details: {
+            ...unsignedTx.details,
+            chain_hash_fragment: "578437695752307201",
+          },
+          chain_hash: [1, 2, 3, 4, 5, 6, 7, 8],
         },
       });
+      expect(unsignedTx.details.chain_hash_fragment).toBe(
+        "578437695752307201",
+      );
     });
   });
 });
@@ -382,14 +389,29 @@ describe("createStandardRollup", () => {
       address_override: null,
     };
 
-    await rollup.signTransaction(unsignedTx, signer as any);
+    const tx = await rollup.signTransaction(unsignedTx, signer as any);
+    const expectedUnsignedTx = {
+      ...unsignedTx,
+      details: {
+        ...unsignedTx.details,
+        chain_hash_fragment: "0",
+      },
+    };
 
     expect(serializer.serializeSigningPayload).toHaveBeenCalledWith({
       V0: {
-        ...unsignedTx,
+        ...expectedUnsignedTx,
         chain_hash: new Array(32).fill(0),
       },
     });
+    expect(tx).toEqual({
+      V0: {
+        pub_key: "040506",
+        signature: "010203",
+        ...expectedUnsignedTx,
+      },
+    });
+    expect(unsignedTx.details.chain_hash_fragment).toBe("0");
   });
 
   it("should fetch dedup data directly by credential id", async () => {
@@ -442,10 +464,17 @@ describe("createStandardRollup", () => {
       unsignedTx,
       multisig,
     );
+    const expectedUnsignedTx = {
+      ...unsignedTx,
+      details: {
+        ...unsignedTx.details,
+        chain_hash_fragment: "0",
+      },
+    };
 
     expect(serializer.serializeSigningPayload).toHaveBeenCalledWith({
       V1: {
-        ...unsignedTx,
+        ...expectedUnsignedTx,
         chain_hash: new Array(32).fill(0),
         credential_address: addressFromPublicKey(
           multisig.getMultisigAddress(),
@@ -464,7 +493,7 @@ describe("createStandardRollup", () => {
 
     expect(multisig.toTransaction(unsignedTx)).toEqual({
       V1: {
-        ...unsignedTx,
+        ...expectedUnsignedTx,
         signatures: [signature],
         unused_pub_keys: [bytesToHex(otherPublicKey)],
         min_signers: 1,
