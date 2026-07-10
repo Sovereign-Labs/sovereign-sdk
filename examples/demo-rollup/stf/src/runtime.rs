@@ -73,6 +73,14 @@ where
 {
     const CHAIN_HASH: [u8; 32] = __generated::CHAIN_HASH;
 
+    fn chain_id() -> u64 {
+        sov_modules_api::macros::config_value!("CHAIN_ID")
+    }
+
+    fn chain_hash_overrides() -> &'static [sov_modules_api::ChainHashOverride] {
+        sov_modules_api::macros::config_value!("CHAIN_HASH_OVERRIDES")
+    }
+
     type GenesisConfig = GenesisConfig<S>;
 
     #[cfg(feature = "native")]
@@ -103,6 +111,7 @@ where
             &serde_json::from_str(__generated::SCHEMA_JSON)
                 .expect("Failed to deserialize schema json"),
             Self::CHAIN_HASH.into(),
+            Self::chain_hash_overrides(),
             api_state.checkpoint_receiver(),
         )
         .expect("Failed to initialize StandardSchemaEndpoint");

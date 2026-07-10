@@ -48,14 +48,18 @@ pub fn make_const_value(input: &ConfigValueInput) -> syn::Result<TokenStream> {
 pub fn make_const_value_inner(input: &ConfigValueInput) -> syn::Result<TokenStream> {
     // Parse the manifest...
     let field_ident = Ident::new(&input.constant_name.value(), input.constant_name.span());
-    let manifest = Manifest::read_constants(&field_ident)?;
+    let manifest = Manifest::read_for_constant(&field_ident)?;
 
     // ... and extract the TOML value.
     let toml_value = manifest.get(&field_ident)?;
     // Finally, compile it into a Rust expression.
     let rust_expr = compile_toml_value_to_rust(toml_value, input)?;
 
-    Ok(quote::quote!(#rust_expr))
+    let tracking = manifest.dependency_tracking_tokens();
+    Ok(quote::quote!({
+        #tracking
+        #rust_expr
+    }))
 }
 
 #[derive(serde::Deserialize)]
@@ -281,8 +285,15 @@ fn allowed_toml_value_to_const_expr(
             let might_be_chain_hash_array = is_chain_hash_override_array(arr)
                 || (values.is_empty() && constant_name.value() == "CHAIN_HASH_OVERRIDES");
             // We return slices instead of raw arrays for the chain hash overrides. This is because the length of the array is unknown.
+            // The named const (rather than `[…].as_slice()` on a temporary) makes the
+            // slice `'static`, so `Runtime::chain_hash_overrides()` impls can return it
+            // directly (`as_slice` on a temporary would not outlive the function).
             if might_be_chain_hash_array {
-                syn::parse_quote!([#(#values),*].as_slice())
+                syn::parse_quote!({
+                    const __CHAIN_HASH_OVERRIDES: &[sov_modules_api::ChainHashOverride] =
+                        [#(#values),*].as_slice();
+                    __CHAIN_HASH_OVERRIDES
+                })
             } else {
                 syn::Expr::Array(syn::ExprArray {
                     attrs: Vec::new(),
@@ -317,7 +328,7 @@ fn chain_hash_override_array_override_logic() -> TokenStream {
     // ChainHashOverride arrays need special handling: deserialize with string chain_hash,
     // then convert hex strings to [u8; 32]
     quote::quote!({
-        use sov_modules_api::prelude::{serde, toml};
+        use sov_modules_api::prelude::{hex, serde, toml};
 
         // Intermediate struct for deserialization with string chain_hash
         #[derive(serde::Deserialize)]

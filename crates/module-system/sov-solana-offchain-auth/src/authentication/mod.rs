@@ -11,6 +11,7 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::transaction::AuthenticatedTransactionAndRawHash;
 use sov_modules_api::transaction::Credentials;
 use sov_modules_api::transaction::{v1::MAX_SIGNERS, PubKeyAndSignature};
+use sov_modules_api::Runtime;
 use sov_modules_api::SafeVec;
 use sov_modules_api::{
     charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, GasSpec,
@@ -239,7 +240,7 @@ pub fn authenticate<Accessor, S, D>(
 where
     Accessor: ProvableStateReader<sov_state::User, Spec = S>,
     S: Spec,
-    D: DispatchCall<Spec = S>,
+    D: Runtime<S>,
     <D as DispatchCall>::Decodable: Serialize + DeserializeOwned,
 {
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
@@ -309,7 +310,7 @@ where
         ));
     }
 
-    verify_chain_id(&unsigned_tx.details, raw_tx_hash)?;
+    verify_chain_id::<S, D>(&unsigned_tx.details, raw_tx_hash)?;
 
     // Verify signatures (branches internally for single-sig vs multisig)
     verify_signatures::<S>(&unpacked_message, raw_tx_hash, state)?;

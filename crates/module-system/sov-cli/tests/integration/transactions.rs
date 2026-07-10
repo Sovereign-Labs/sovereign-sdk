@@ -391,7 +391,7 @@ fn default_file_name_arg_for_test(path: &str) -> FileNameArg {
     let test_path = make_test_path(path);
     FileNameArg {
         path: test_path.to_str().unwrap().into(),
-        chain_id: 0,
+        chain_id: Some(0),
         max_priority_fee_bips: 0,
         max_fee: Amount::ZERO,
         gas_limit: None,
@@ -402,7 +402,7 @@ fn default_json_string_arg_for_test(path: impl AsRef<Path>) -> JsonStringArg {
     let test_path = make_test_path(path);
     JsonStringArg {
         json: std::fs::read_to_string(test_path).unwrap(),
-        chain_id: 0,
+        chain_id: Some(0),
         max_priority_fee_bips: 0,
         max_fee: Amount::ZERO,
         gas_limit: None,

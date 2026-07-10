@@ -460,7 +460,12 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
         let ws_gas_meter = auth_tx_data.gas_meter(gas_price, <S::Gas>::MAX);
         let working_set = WorkingSet::create_working_set(scratchpad, &auth_tx_data, ws_gas_meter);
 
-        let schema = get_runtime_schema::<S, R>().map_err(SimulateError::SchemaConstruction)?;
+        let schema =
+            get_runtime_schema::<S, R>(sov_modules_api::sov_universal_wallet::schema::ChainData {
+                chain_id: config_value!("CHAIN_ID"),
+                chain_name: config_value!("CHAIN_NAME").to_string(),
+            })
+            .map_err(SimulateError::SchemaConstruction)?;
         let call_bytes = schema.json_to_borsh(
             schema.rollup_expected_index(RollupRoots::RuntimeCall)?,
             &params.call.to_string(),

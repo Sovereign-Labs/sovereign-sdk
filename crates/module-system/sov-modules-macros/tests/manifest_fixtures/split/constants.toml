@@ -1,0 +1,4 @@
+# Unit-test fixture for `Manifest::read_for_constant_at` (src/manifest.rs):
+# split layout — chain-metadata.toml exists next to this file.
+[constants]
+MAX_TX_SIZE = 1000

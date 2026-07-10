@@ -3,10 +3,21 @@ use std::{env, fs};
 
 fn main() -> anyhow::Result<()> {
     println!("cargo::rerun-if-env-changed=SOV_EXPAND_PROC_MACROS");
+    // These env vars change which manifest file `find_constants_manifest`
+    // resolves, so the resolution must be redone when they change.
+    println!("cargo::rerun-if-env-changed=CONSTANTS_MANIFEST");
+    println!("cargo::rerun-if-env-changed=SOV_TEST_MODE_CONST_MANIFEST");
 
     let constants_json_path = find_constants_manifest()?;
     if let Some(path) = constants_json_path {
-        println!("cargo:rerun-if-changed={}", path.display());
+        // Deliberately NO `cargo:rerun-if-changed={path}` here: watching the
+        // file at the build-script level marks this proc-macro crate dirty on
+        // every content edit, and Cargo then conservatively recompiles every
+        // crate that depends on it — nearly the whole workspace. Content edits
+        // are instead tracked per consuming crate: the macros embed
+        // `include_bytes!(<path>)` in their expansions (see
+        // `Manifest::dependency_tracking_tokens`), so only crates that
+        // actually read constants recompile when the file changes.
         println!("cargo:rustc-env=CONSTANTS_MANIFEST_PATH={}", path.display());
     }
 

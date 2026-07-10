@@ -65,6 +65,7 @@ pub trait SchemaEndpoint: Clone + Send + Sync + 'static {
 pub struct StandardSchemaEndpoint<S: Spec> {
     schema: serde_json::Value,
     default_chain_hash: HexHash,
+    chain_hash_overrides: &'static [sov_modules_api::ChainHashOverride],
     checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
 }
 
@@ -74,15 +75,18 @@ impl<S: Spec> StandardSchemaEndpoint<S> {
     /// # Arguments
     /// * `schema` - The schema to return
     /// * `default_chain_hash` - The default chain hash (from `Runtime::CHAIN_HASH`)
+    /// * `chain_hash_overrides` - The height-ranged overrides (from `Runtime::chain_hash_overrides()`)
     /// * `checkpoint_receiver` - Receiver for state checkpoints to read current height
     pub fn new(
         schema: &Schema,
         default_chain_hash: HexHash,
+        chain_hash_overrides: &'static [sov_modules_api::ChainHashOverride],
         checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
     ) -> anyhow::Result<Self> {
         Ok(Self {
             schema: serde_json::to_value(schema)?,
             default_chain_hash,
+            chain_hash_overrides,
             checkpoint_receiver,
         })
     }
@@ -106,8 +110,9 @@ impl<S: Spec> SchemaEndpoint for StandardSchemaEndpoint<S> {
         let height = checkpoint.rollup_height_to_access();
 
         // Resolve the chain hash for the current height
-        let resolved = sov_modules_api::capabilities::resolve_chain_hashes_for_height(
+        let resolved = sov_modules_api::runtime::resolve_chain_hashes(
             height.get(),
+            self.chain_hash_overrides,
             self.default_chain_hash.0,
         );
 

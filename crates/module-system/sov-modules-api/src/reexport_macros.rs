@@ -435,6 +435,18 @@ pub mod macros {
     /// TOKEN_ID = { bech32 = "token_1qwqr2h2e5g961t4f2m1qt3t3d7xx7r4jchjc9ey5pe1r5u8ers9ts", type = "TokenId" }
     /// ```
     ///
+    /// ## Chain metadata
+    ///
+    /// The per-network chain metadata keys — `CHAIN_ID`, `CHAIN_NAME`,
+    /// `CHAIN_HASH_OVERRIDES`, `BATCH_NAMESPACE`, and `PROOF_NAMESPACE` — can
+    /// be moved to a `chain-metadata.toml` file next to `constants.toml`
+    /// (same `[constants]` section format). When that file exists, these keys
+    /// must be defined there and are read from it; when it doesn't, they are
+    /// read from `constants.toml` like any other constant. Keeping them in a
+    /// separate file means editing chain metadata only recompiles the crates
+    /// that read chain metadata (and their dependents), leaving crates that
+    /// only read `constants.toml` untouched.
+    ///
     /// ## Overriding constants
     ///
     /// When testing your code, it's often useful to override constants. You can do that by setting the

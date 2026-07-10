@@ -6,10 +6,8 @@ mint = [2, 2]
 freeze = [1, 1]
 
 [constants]
-# We use the ID 4321 for demo purposes. Change this value before deploying!
-CHAIN_ID = 4321
-CHAIN_NAME = "TestChain"
-CHAIN_HASH_OVERRIDES = []
+# Chain metadata lives in chain-metadata.testing.toml.
+
 # The number of bytes a transaction can have.
 MAX_TX_SIZE=1_048_576
 

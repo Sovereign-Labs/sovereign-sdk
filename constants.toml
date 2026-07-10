@@ -7,31 +7,8 @@ freeze = [1, 1]
 
 
 [constants]
-# We use the ID 4321 for demo purposes. Change this value before deploying!
-CHAIN_ID = 4321
-CHAIN_NAME = "TestChain"
-
-# Chain hash overrides by rollup block height range.
-# When the rollup schema changes (e.g., adding a new transaction type), the CHAIN_HASH changes.
-# To avoid rejecting previously signed transactions, define overrides for old chain hashes.
-# Format: [{ start_height = <height>, end_height = <height>, chain_hash = "0x...", grace_period = <blocks> }, ...]
-# Ranges are [start_height, end_height) - start is inclusive, end is exclusive.
-# Falls back to Runtime::CHAIN_HASH when no override applies.
-# The optional `grace_period` field (defaults to 0) specifies how many blocks after end_height
-# the old hash will still be accepted alongside the new hash, allowing for smooth transitions.
-# Example: CHAIN_HASH_OVERRIDES = [{ start_height = 0, end_height = 1000, chain_hash = "0xabc...32_bytes_hex", grace_period = 100 }]
-CHAIN_HASH_OVERRIDES = []
-
-# The namespace used by the rollup to store its data.
-# Using byte_string to convert "sov-test-b" to ASCII bytes
-# Should be 10 bytes long for Celestia
-BATCH_NAMESPACE = { byte_string = "sov-test-b" }
-# The namespace used by the rollup to store aggregated ZK proofs.
-# This is "sov-test-p" encoded as ASCII bytes.
-# "hex" format is used as an example, that it is possible to define namespace as any sequence of bytes.
-# `python3 -c "import sys; print('0x' + sys.argv[1].encode().hex())" "sov-test-p"`
-# Should be 10 bytes long for Celestia
-PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }
+# Chain metadata (CHAIN_ID, CHAIN_NAME, CHAIN_HASH_OVERRIDES, BATCH_NAMESPACE,
+# PROOF_NAMESPACE) lives in chain-metadata.toml.
 
 # The number of bytes a transaction can have.
 MAX_TX_SIZE=1_048_576
