@@ -62,6 +62,20 @@ function refreshChainHashFragment<RuntimeCall>(
   return unsignedTx;
 }
 
+function assertChainHashFragment<RuntimeCall>(
+  unsignedTx: UnsignedTransaction<RuntimeCall>,
+  chainHash: Uint8Array,
+): void {
+  const expectedFragment = chainHashFragment(chainHash);
+  const actualFragment = unsignedTx.details.chain_hash_fragment;
+
+  if (actualFragment !== expectedFragment) {
+    throw new Error(
+      `Cannot sign multisig transaction: chain_hash_fragment ${actualFragment} does not match the current chain hash fragment ${expectedFragment}`,
+    );
+  }
+}
+
 const useOrFetchUniqueness = async <S extends StandardRollupSpec<unknown>>({
   overrides,
 }: Omit<
@@ -183,13 +197,10 @@ export class StandardRollup<RuntimeCall> extends Rollup<
   ): Promise<Uint8Array> {
     const serializer = await this.serializer();
     const chainHash = await this.chainHash();
-    const normalizedUnsignedTx = refreshChainHashFragment(
-      unsignedTx,
-      chainHash,
-    );
+    assertChainHashFragment(unsignedTx, chainHash);
     const signingPayload: TransactionSigningPayload<RuntimeCall> = {
       V1: {
-        ...normalizedUnsignedTx,
+        ...unsignedTx,
         chain_hash: Array.from(chainHash),
         credential_address: await this.credentialAddressFromId(
           multisig.getMultisigAddress(),

@@ -127,16 +127,31 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
 
 impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
     /// Signs the transaction with the given key but does not add the signature to the list in the transaction.
+    ///
+    /// Returns an error if the supplied chain hash does not match the fragment stored in the
+    /// transaction details.
     #[cfg(feature = "native")]
-    pub fn sign_without_adding(&self, key: &C::PrivateKey, chain_hash: &[u8; 32]) -> C::Signature {
-        key.sign(&self.to_signing_bytes(chain_hash))
+    pub fn sign_without_adding(
+        &self,
+        key: &C::PrivateKey,
+        chain_hash: &[u8; 32],
+    ) -> anyhow::Result<C::Signature> {
+        let chain_hash_fragment = crate::transaction::chain_hash_fragment(chain_hash);
+        anyhow::ensure!(
+            self.details.chain_hash_fragment == chain_hash_fragment,
+            "Chain hash fragment mismatch: transaction details contain {}, but the supplied chain hash has fragment {chain_hash_fragment}",
+            self.details.chain_hash_fragment,
+        );
+        Ok(key.sign(&self.to_signing_bytes(chain_hash)))
     }
 
     /// Signs and adds the signature to the transaction.
     #[cfg(feature = "native")]
     pub fn sign(&mut self, key: &C::PrivateKey, chain_hash: &[u8; 32]) -> anyhow::Result<()> {
-        self.details.chain_hash_fragment = crate::transaction::chain_hash_fragment(chain_hash);
-        let signature = self.sign_without_adding(key, chain_hash);
+        if self.signatures.is_empty() {
+            self.details.chain_hash_fragment = crate::transaction::chain_hash_fragment(chain_hash);
+        }
+        let signature = self.sign_without_adding(key, chain_hash)?;
         self.add_signature(signature, key.pub_key())
     }
 

@@ -454,25 +454,26 @@ describe("createStandardRollup", () => {
     const unsignedTx = {
       runtime_call: { test: "call" },
       uniqueness: { nonce: 1 },
-      details: mockConfig.context.defaultTxDetails,
+      details: {
+        ...mockConfig.context.defaultTxDetails,
+        chain_hash_fragment: "0",
+      },
       address_override: null,
+    };
+    const originalDetails = unsignedTx.details;
+    const originalUnsignedTx = {
+      ...unsignedTx,
+      details: { ...unsignedTx.details },
     };
 
     const signingBytes = await rollup.multisigSigningBytes(
       unsignedTx,
       multisig,
     );
-    const expectedUnsignedTx = {
-      ...unsignedTx,
-      details: {
-        ...unsignedTx.details,
-        chain_hash_fragment: "0",
-      },
-    };
 
     expect(serializer.serializeSigningPayload).toHaveBeenCalledWith({
       V1: {
-        ...expectedUnsignedTx,
+        ...unsignedTx,
         chain_hash: new Array(32).fill(0),
         credential_address: addressFromPublicKey(
           multisig.getMultisigAddress(),
@@ -481,6 +482,8 @@ describe("createStandardRollup", () => {
       },
     });
     expect(signingBytes).toEqual(new Uint8Array([7, 8, 9]));
+    expect(unsignedTx).toEqual(originalUnsignedTx);
+    expect(unsignedTx.details).toBe(originalDetails);
 
     const signatureBytes = await signer.sign(signingBytes);
     const signature = {
@@ -491,12 +494,47 @@ describe("createStandardRollup", () => {
 
     expect(multisig.toTransaction(unsignedTx)).toEqual({
       V1: {
-        ...expectedUnsignedTx,
+        ...unsignedTx,
         signatures: [signature],
         unused_pub_keys: [bytesToHex(otherPublicKey)],
         min_signers: 1,
       },
     });
+  });
+
+  it("should reject multisig signing when the chain hash fragment is stale without mutation", async () => {
+    const client = createMockStandardClient();
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer,
+      context: mockConfig.context,
+    });
+    const multisig = Multisig.fromPubKeys(
+      [
+        bytesToHex(new Uint8Array(32).fill(1)),
+        bytesToHex(new Uint8Array(32).fill(2)),
+      ],
+      1,
+    );
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 1 },
+      details: { ...mockConfig.context.defaultTxDetails },
+      address_override: null,
+    };
+    const originalDetails = unsignedTx.details;
+    const originalUnsignedTx = {
+      ...unsignedTx,
+      details: { ...unsignedTx.details },
+    };
+
+    await expect(
+      rollup.multisigSigningBytes(unsignedTx, multisig),
+    ).rejects.toThrow(
+      "Cannot sign multisig transaction: chain_hash_fragment 1 does not match the current chain hash fragment 0",
+    );
+    expect(unsignedTx).toEqual(originalUnsignedTx);
+    expect(unsignedTx.details).toBe(originalDetails);
   });
 
   it("should fail fast when converting an incomplete multisig transaction", () => {

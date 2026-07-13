@@ -121,6 +121,20 @@ function refreshChainHashFragment<RuntimeCall>(
   };
 }
 
+function assertChainHashFragment<RuntimeCall>(
+  unsignedTx: UnsignedTransaction<RuntimeCall>,
+  chainHash: Uint8Array,
+): void {
+  const expectedFragment = chainHashFragment(chainHash);
+  const actualFragment = unsignedTx.details.chain_hash_fragment;
+
+  if (actualFragment !== expectedFragment) {
+    throw new Error(
+      `Cannot sign multisig transaction: chain_hash_fragment ${actualFragment} does not match the current chain hash fragment ${expectedFragment}`,
+    );
+  }
+}
+
 function compareByteArrays(left: Uint8Array, right: Uint8Array): number {
   const minLength = Math.min(left.length, right.length);
 
@@ -624,7 +638,7 @@ export class SolanaSignableRollup<RuntimeCall> {
     multisig: Multisig,
   ): Promise<Uint8Array> {
     const chainHash = await this.inner.chainHash();
-    refreshChainHashFragment(unsignedTx, chainHash);
+    assertChainHashFragment(unsignedTx, chainHash);
     const jsonBytes = await this.createMultisigJsonBytes(
       unsignedTx,
       await this.multisigIdFromMultisig(multisig),
@@ -647,7 +661,7 @@ export class SolanaSignableRollup<RuntimeCall> {
       case "standard":
         return this.inner.multisigSigningBytes(unsignedTx, multisig);
       case "solanaSimple": {
-        refreshChainHashFragment(unsignedTx, await this.inner.chainHash());
+        assertChainHashFragment(unsignedTx, await this.inner.chainHash());
         return this.createMultisigJsonBytes(
           unsignedTx,
           await this.multisigIdFromMultisig(multisig),

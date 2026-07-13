@@ -651,6 +651,74 @@ describe("SolanaSignableRollup", () => {
     expect(capturedEndpoint).toBe("/sequencer/txs");
   });
 
+  it.each(["solanaSimple", "solana"] as const)(
+    "should enforce the fragment invariant without mutation for %s multisig signing",
+    async (authenticator) => {
+      const mockClient = createMockClient({
+        chainName: "TestChain",
+        chainHash:
+          "0x0102030405060708000000000000000000000000000000000000000000000000",
+      });
+      const rollup = await createSolanaSignableRollup({
+        client: mockClient,
+        getSerializer: () =>
+          createMockSerializer({
+            schema: { chain_data: { chain_name: "TestChain" } },
+          }),
+      });
+      const multisig = Multisig.fromPubKeys(
+        [
+          bytesToHex(new Uint8Array(32).fill(1)),
+          bytesToHex(new Uint8Array(32).fill(2)),
+        ],
+        1,
+      );
+      const unsignedTx = {
+        runtime_call: { test: "call" },
+        uniqueness: { nonce: 0 },
+        details: {
+          max_priority_fee_bips: 0,
+          max_fee: "1000",
+          gas_limit: null,
+          chain_hash_fragment: "578437695752307201",
+        },
+        address_override: null,
+      };
+      const originalDetails = unsignedTx.details;
+      const originalUnsignedTx = {
+        ...unsignedTx,
+        details: { ...unsignedTx.details },
+      };
+
+      await expect(
+        rollup.multisigSigningBytes(unsignedTx, multisig, authenticator),
+      ).resolves.toBeInstanceOf(Uint8Array);
+      expect(unsignedTx).toEqual(originalUnsignedTx);
+      expect(unsignedTx.details).toBe(originalDetails);
+
+      const staleUnsignedTx = {
+        ...unsignedTx,
+        details: {
+          ...unsignedTx.details,
+          chain_hash_fragment: "stale",
+        },
+      };
+      const originalStaleDetails = staleUnsignedTx.details;
+      const originalStaleUnsignedTx = {
+        ...staleUnsignedTx,
+        details: { ...staleUnsignedTx.details },
+      };
+
+      await expect(
+        rollup.multisigSigningBytes(staleUnsignedTx, multisig, authenticator),
+      ).rejects.toThrow(
+        "Cannot sign multisig transaction: chain_hash_fragment stale does not match the current chain hash fragment 578437695752307201",
+      );
+      expect(staleUnsignedTx).toEqual(originalStaleUnsignedTx);
+      expect(staleUnsignedTx.details).toBe(originalStaleDetails);
+    },
+  );
+
   it("should match the Rust spec-compliant multisig request payload", async () => {
     const key1PrivHex =
       "d4ce78b7250da62754bd2b180aa95ecc63f2c79dd4a7cd1f104416e7039ae18b";

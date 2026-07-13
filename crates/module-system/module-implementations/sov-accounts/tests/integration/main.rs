@@ -328,8 +328,9 @@ fn test_setup_multisig_and_act() {
         // Manually add a signature from a non-member key
         {
             let non_member_key = TestPrivateKey::generate();
-            let non_member_sig =
-                tx.sign_without_adding(&non_member_key, &<RT as Runtime<S>>::CHAIN_HASH);
+            let non_member_sig = tx
+                .sign_without_adding(&non_member_key, &<RT as Runtime<S>>::CHAIN_HASH)
+                .unwrap();
             tx.signatures
                 .try_push(PubKeyAndSignature {
                     signature: non_member_sig,
@@ -379,8 +380,9 @@ fn test_setup_multisig_and_act() {
         sign(&mut tx, &multisig_keys[1]);
         // Manually add a duplicate signature
         {
-            let duplicate_sig =
-                tx.sign_without_adding(&multisig_keys[0], &<RT as Runtime<S>>::CHAIN_HASH);
+            let duplicate_sig = tx
+                .sign_without_adding(&multisig_keys[0], &<RT as Runtime<S>>::CHAIN_HASH)
+                .unwrap();
             tx.signatures
                 .try_push(PubKeyAndSignature {
                     signature: duplicate_sig,
@@ -632,6 +634,49 @@ fn make_v0_tx_with_call(
 
 fn sign_v1(tx: &mut Version1<RT, S>, key: &TestPrivateKey) {
     tx.sign(key, &<RT as Runtime<S>>::CHAIN_HASH).unwrap();
+}
+
+#[test]
+fn test_v1_signing_rejects_mixed_chain_hashes() {
+    let env = make_multisig_env();
+    let mut tx = make_v1_tx(&env.multisig, [9; 32].into(), None);
+    let stale_chain_hash = [9; 32];
+    let first_chain_hash = [1; 32];
+    let other_chain_hash = [2; 32];
+    tx.details.chain_hash_fragment =
+        sov_modules_api::transaction::chain_hash_fragment(&stale_chain_hash);
+
+    let error = tx
+        .sign_without_adding(&env.keys[0], &first_chain_hash)
+        .expect_err("detached signing with a mismatched chain hash must fail");
+    assert!(error.to_string().contains("Chain hash fragment mismatch"));
+    assert!(tx.signatures.is_empty());
+    assert_eq!(
+        tx.details.chain_hash_fragment,
+        sov_modules_api::transaction::chain_hash_fragment(&stale_chain_hash)
+    );
+
+    tx.sign(&env.keys[0], &first_chain_hash).unwrap();
+    assert_eq!(
+        tx.details.chain_hash_fragment,
+        sov_modules_api::transaction::chain_hash_fragment(&first_chain_hash)
+    );
+
+    let error = tx
+        .sign_without_adding(&env.keys[1], &other_chain_hash)
+        .err()
+        .expect("signing with a mismatched chain hash must fail");
+    assert!(error.to_string().contains("Chain hash fragment mismatch"));
+
+    let error = tx
+        .sign(&env.keys[1], &other_chain_hash)
+        .expect_err("adding a signature for a different chain hash must fail");
+    assert!(error.to_string().contains("Chain hash fragment mismatch"));
+    assert_eq!(tx.signatures.len(), 1);
+    assert_eq!(
+        tx.details.chain_hash_fragment,
+        sov_modules_api::transaction::chain_hash_fragment(&first_chain_hash)
+    );
 }
 
 fn submit_v0(tx: Transaction<RT, S>) -> TransactionType<RT, S> {
