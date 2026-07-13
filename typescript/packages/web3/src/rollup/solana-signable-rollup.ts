@@ -16,12 +16,15 @@ import bs58 from "bs58";
 import { Base64 } from "js-base64";
 import type { Subscription, SubscriptionToCallbackMap } from "../subscriptions";
 import type { DeepPartial } from "../utils";
+import {
+  assertChainHashFragment,
+  refreshChainHashFragment,
+} from "./chain-hash";
 import type { RollupConfig, TransactionResult } from "./rollup";
 import {
   type StandardRollup,
   type StandardRollupContext,
   type StandardRollupSpec,
-  chainHashFragment,
   createStandardRollup,
   standardTypeBuilder,
 } from "./standard-rollup";
@@ -110,30 +113,6 @@ const SIGNING_DOMAIN = new Uint8Array([
 ]);
 const HEADER_VERSION = 0;
 const MESSAGE_FORMAT = 0;
-
-function refreshChainHashFragment<RuntimeCall>(
-  unsignedTx: UnsignedTransaction<RuntimeCall>,
-  chainHash: Uint8Array,
-): void {
-  unsignedTx.details = {
-    ...unsignedTx.details,
-    chain_hash_fragment: chainHashFragment(chainHash),
-  };
-}
-
-function assertChainHashFragment<RuntimeCall>(
-  unsignedTx: UnsignedTransaction<RuntimeCall>,
-  chainHash: Uint8Array,
-): void {
-  const expectedFragment = chainHashFragment(chainHash);
-  const actualFragment = unsignedTx.details.chain_hash_fragment;
-
-  if (actualFragment !== expectedFragment) {
-    throw new Error(
-      `Cannot sign multisig transaction: chain_hash_fragment ${actualFragment} does not match the current chain hash fragment ${expectedFragment}`,
-    );
-  }
-}
 
 function compareByteArrays(left: Uint8Array, right: Uint8Array): number {
   const minLength = Math.min(left.length, right.length);
@@ -776,6 +755,8 @@ export class SolanaSignableRollup<RuntimeCall> {
 
     switch (authenticator) {
       case "solanaSimple": {
+        const chainHash = await this.inner.chainHash();
+        assertChainHashFragment(unsignedTx, chainHash);
         const jsonBytes = await this.createMultisigJsonBytes(
           unsignedTx,
           await this.multisigIdFromMultisig(multisig),
@@ -784,7 +765,6 @@ export class SolanaSignableRollup<RuntimeCall> {
         wireBytes[0] = MULTISIG_SIMPLE_DISCRIMINATOR;
         wireBytes.set(jsonBytes, 1);
 
-        const chainHash = await this.inner.chainHash();
         const serialized = this.serializeSolanaMultisigMessage({
           wire_bytes: wireBytes,
           chain_hash: chainHash,
@@ -832,11 +812,12 @@ export class SolanaSignableRollup<RuntimeCall> {
     };
     const pubkey = hexToBytes(normalizeHexString(transaction.pub_key));
     const signature = hexToBytes(normalizeHexString(transaction.signature));
+    const chainHash = await this.inner.chainHash();
+    assertChainHashFragment(unsignedTx, chainHash);
 
     switch (authenticator) {
       case "solanaSimple": {
         const signedMessage = await this.createSolanaJsonBytes(unsignedTx);
-        const chainHash = await this.inner.chainHash();
         const message: SolanaOffchainSimpleEnvelope = {
           signed_message: signedMessage,
           chain_hash: chainHash,
@@ -847,7 +828,6 @@ export class SolanaSignableRollup<RuntimeCall> {
       }
       case "solana": {
         const signedMessage = await this.createSolanaJsonBytes(unsignedTx);
-        const chainHash = await this.inner.chainHash();
         const preamble = createSolanaPreamble(
           [pubkey],
           chainHash,

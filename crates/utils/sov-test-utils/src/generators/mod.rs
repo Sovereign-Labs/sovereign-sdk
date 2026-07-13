@@ -9,7 +9,6 @@ use std::sync::Arc;
 
 use sov_blob_storage::PreferredBatchData;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
-use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, TxDetails, UnsignedTransaction};
 use sov_modules_api::{Amount, CryptoSpec, EncodeCall, FullyBakedTx, Module, RawTx, Spec};
 use sov_modules_stf_blueprint::Runtime;
@@ -39,7 +38,6 @@ impl<S: Spec, Mod: Module> Message<S, Mod> {
     fn new(
         sender_key: Rc<<S::CryptoSpec as CryptoSpec>::PrivateKey>,
         content: Mod::CallMessage,
-        _chain_id: u64,
         max_priority_fee_bips: PriorityFeeBips,
         max_fee: Amount,
         gas_limit: Option<S::Gas>,
@@ -100,15 +98,9 @@ pub trait MessageGenerator {
     /// Module spec
     type Spec: Spec;
 
-    /// The default chain ID to use for the messages. Defaults to `constants.toml` constant.
-    fn default_chain_id() -> u64 {
-        config_value!("CHAIN_ID")
-    }
-
     /// Generates a list of messages originating from the module using the provided transaction details.
     fn create_messages(
         &self,
-        chain_id: u64,
         max_priority_fee_bips: PriorityFeeBips,
         max_fee: Amount,
         estimated_gas_usage: Option<<Self::Spec as Spec>::Gas>,
@@ -118,7 +110,6 @@ pub trait MessageGenerator {
     /// Note: sets the gas usage to the default gas limit.
     fn create_default_messages(&self) -> Vec<Message<Self::Spec, Self::Module>> {
         self.create_messages(
-            Self::default_chain_id(),
             TEST_DEFAULT_MAX_PRIORITY_FEE,
             TEST_DEFAULT_MAX_FEE,
             Some(<Self::Spec as Spec>::Gas::from(TEST_DEFAULT_GAS_LIMIT)),
@@ -127,12 +118,7 @@ pub trait MessageGenerator {
 
     /// Generates a list of messages originating from the module using default transaction details and no gas usage.
     fn create_default_messages_without_gas_usage(&self) -> Vec<Message<Self::Spec, Self::Module>> {
-        self.create_messages(
-            Self::default_chain_id(),
-            TEST_DEFAULT_MAX_PRIORITY_FEE,
-            TEST_DEFAULT_MAX_FEE,
-            None,
-        )
+        self.create_messages(TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_DEFAULT_MAX_FEE, None)
     }
 
     /// Creates a vector of raw transactions from the module.
@@ -140,7 +126,6 @@ pub trait MessageGenerator {
         &self,
     ) -> Vec<FullyBakedTx> {
         self.create_encoded_txs::<RT>(
-            Self::default_chain_id(),
             TEST_DEFAULT_MAX_PRIORITY_FEE,
             TEST_DEFAULT_MAX_FEE,
             Some(<Self::Spec as Spec>::Gas::from(TEST_DEFAULT_GAS_LIMIT)),
@@ -153,29 +138,18 @@ pub trait MessageGenerator {
     >(
         &self,
     ) -> Vec<FullyBakedTx> {
-        self.create_encoded_txs::<RT>(
-            Self::default_chain_id(),
-            TEST_DEFAULT_MAX_PRIORITY_FEE,
-            TEST_DEFAULT_MAX_FEE,
-            None,
-        )
+        self.create_encoded_txs::<RT>(TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_DEFAULT_MAX_FEE, None)
     }
 
     /// Creates a vector of raw transactions from the module.
     fn create_encoded_txs<RT: Runtime<Self::Spec> + EncodeCall<Self::Module>>(
         &self,
-        chain_id: u64,
         max_priority_fee_bips: PriorityFeeBips,
         max_fee: Amount,
         estimated_gas_usage: Option<<Self::Spec as Spec>::Gas>,
     ) -> Vec<FullyBakedTx> {
         let messages_iter = self
-            .create_messages(
-                chain_id,
-                max_priority_fee_bips,
-                max_fee,
-                estimated_gas_usage,
-            )
+            .create_messages(max_priority_fee_bips, max_fee, estimated_gas_usage)
             .into_iter();
         let mut serialized_messages = Vec::default();
         for message in messages_iter {

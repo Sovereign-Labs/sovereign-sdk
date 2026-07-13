@@ -7,9 +7,15 @@ import type {
   TxDetails,
   UnsignedTransaction,
 } from "@sovereign-sdk/types";
-import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
+import { bytesToHex } from "@sovereign-sdk/utils";
 import { addressFromPublicKey } from "../addresses";
+import { VersionMismatchError } from "../errors";
 import type { DeepPartial } from "../utils";
+import {
+  assertChainHashFragment,
+  chainHashFragment,
+  refreshChainHashFragment,
+} from "./chain-hash";
 import {
   type CredentialIdToAddress,
   Rollup,
@@ -20,6 +26,8 @@ import {
   type TypeBuilder,
   type UnsignedTransactionContext,
 } from "./rollup";
+
+export { chainHashFragment } from "./chain-hash";
 
 export type Dedup = {
   nonce: number;
@@ -37,44 +45,6 @@ export type StandardRollupSpec<RuntimeCall> = {
   RuntimeCall: RuntimeCall;
   Dedup: Dedup;
 };
-
-export function chainHashFragment(chainHash: Uint8Array): string {
-  if (chainHash.length < 8) {
-    throw new Error("chain hash must contain at least 8 bytes");
-  }
-
-  let fragment = 0n;
-  for (let i = 0; i < 8; i++) {
-    fragment |= BigInt(chainHash[i] ?? 0) << BigInt(i * 8);
-  }
-  return fragment.toString();
-}
-
-function refreshChainHashFragment<RuntimeCall>(
-  unsignedTx: UnsignedTransaction<RuntimeCall>,
-  chainHash: Uint8Array,
-): UnsignedTransaction<RuntimeCall> {
-  unsignedTx.details = {
-    ...unsignedTx.details,
-    chain_hash_fragment: chainHashFragment(chainHash),
-  };
-
-  return unsignedTx;
-}
-
-function assertChainHashFragment<RuntimeCall>(
-  unsignedTx: UnsignedTransaction<RuntimeCall>,
-  chainHash: Uint8Array,
-): void {
-  const expectedFragment = chainHashFragment(chainHash);
-  const actualFragment = unsignedTx.details.chain_hash_fragment;
-
-  if (actualFragment !== expectedFragment) {
-    throw new Error(
-      `Cannot sign multisig transaction: chain_hash_fragment ${actualFragment} does not match the current chain hash fragment ${expectedFragment}`,
-    );
-  }
-}
 
 const useOrFetchUniqueness = async <S extends StandardRollupSpec<unknown>>({
   overrides,
@@ -165,6 +135,11 @@ export class StandardRollup<RuntimeCall> extends Rollup<
   StandardRollupSpec<RuntimeCall>,
   StandardRollupContext
 > {
+  private updateDefaultChainHashFragment(chainHash: Uint8Array): void {
+    this.context.defaultTxDetails.chain_hash_fragment =
+      chainHashFragment(chainHash);
+  }
+
   private async credentialAddressFromId(
     credentialId: Uint8Array,
   ): Promise<string> {
@@ -179,16 +154,23 @@ export class StandardRollup<RuntimeCall> extends Rollup<
     return addressFromPublicKey(credentialId, "sov");
   }
 
-  async signTransaction(
-    unsignedTx: UnsignedTransaction<RuntimeCall>,
-    signer: SignerParams["signer"],
-  ): Promise<StandardRollupSpec<RuntimeCall>["Transaction"]> {
-    const chainHash = await this.chainHash();
+  async submitTransaction(
+    transaction: StandardRollupSpec<RuntimeCall>["Transaction"],
+    options?: SovereignClient.RequestOptions,
+  ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
+    try {
+      return await super.submitTransaction(transaction, options);
+    } catch (error) {
+      if (error instanceof VersionMismatchError) {
+        this.updateDefaultChainHashFragment(await super.chainHash());
+      }
+      throw error;
+    }
+  }
 
-    return super.signTransaction(
-      refreshChainHashFragment(unsignedTx, chainHash),
-      signer,
-    );
+  async hydrate(): Promise<void> {
+    await super.hydrate();
+    this.updateDefaultChainHashFragment(await super.chainHash());
   }
 
   async multisigSigningBytes(
@@ -241,23 +223,14 @@ export const DEFAULT_TX_DETAILS: Omit<TxDetails, "chain_hash_fragment"> = {
   gas_limit: null,
 };
 
-async function buildContext<C extends StandardRollupContext>(
-  client: SovereignClient,
+function buildContext<C extends StandardRollupContext>(
   context?: DeepPartial<C>,
   credentialIdToAddress?: CredentialIdToAddress,
-): Promise<C> {
+): C {
   const defaultTxDetails = {
     ...DEFAULT_TX_DETAILS,
     ...context?.defaultTxDetails,
   };
-
-  if (!defaultTxDetails.chain_hash_fragment) {
-    const { chain_hash } = await client.rollup.schema();
-
-    defaultTxDetails.chain_hash_fragment = chainHashFragment(
-      hexToBytes(chain_hash),
-    );
-  }
 
   return {
     ...context,
@@ -280,16 +253,12 @@ export async function createStandardRollup<
   const client = config.client ?? new SovereignClient({ baseURL: config.url });
   const getSerializer =
     config.getSerializer ?? ((schema) => new JsSerializer(schema));
-  const context = await buildContext<C>(
-    client,
-    config.context,
-    config.credentialIdToAddress,
-  );
+  const context = buildContext<C>(config.context, config.credentialIdToAddress);
 
   // Default to the standard transaction submission endpoint
   const txSubmissionEndpoint = config.txSubmissionEndpoint ?? "/sequencer/txs";
 
-  return new StandardRollup<RuntimeCall>(
+  const rollup = new StandardRollup<RuntimeCall>(
     {
       ...config,
       client,
@@ -302,4 +271,10 @@ export async function createStandardRollup<
       ...typeBuilderOverrides,
     },
   );
+
+  if (!context.defaultTxDetails.chain_hash_fragment) {
+    await rollup.hydrate();
+  }
+
+  return rollup;
 }

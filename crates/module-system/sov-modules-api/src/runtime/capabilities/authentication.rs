@@ -25,11 +25,6 @@ use crate::{
     RawTx, Runtime, Spec, VersionReader,
 };
 
-/// The chain ID of the rollup.
-pub fn config_chain_id() -> u64 {
-    config_value_private!("CHAIN_ID")
-}
-
 /// Resolves all valid chain hashes for a given height using configured overrides.
 ///
 /// This function loads the `CHAIN_HASH_OVERRIDES` from config and uses them
@@ -370,17 +365,15 @@ pub fn verify_chain_hash_fragment<S: Spec>(
     chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
 ) -> Result<(), AuthenticationError> {
-    let expected = chain_hash_fragment(chain_hash);
-    if tx_details.chain_hash_fragment != expected {
-        return Err(AuthenticationError::FatalError(
-            FatalError::InvalidChainHashFragment {
-                expected: vec![expected],
-                got: tx_details.chain_hash_fragment,
-            },
-            raw_tx_hash,
-        ));
-    }
-    Ok(())
+    select_chain_hash(
+        tx_details,
+        &crate::runtime::ResolvedChainHashes {
+            primary: *chain_hash,
+            grace_period_hashes: Vec::new(),
+        },
+        raw_tx_hash,
+    )
+    .map(|_| ())
 }
 
 /// Selects the full chain hash committed to by a transaction.

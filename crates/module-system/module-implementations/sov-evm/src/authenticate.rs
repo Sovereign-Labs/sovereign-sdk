@@ -167,6 +167,8 @@ fn create_auth_tx_and_hash<
         }
     }
 
+    // EVM signatures do not commit to this fragment; it populates the shared
+    // authenticated transaction details shape.
     let authenticated_tx = build_authenticated_tx_data::<_, S>(
         tx_hash,
         chain_hash_fragment(chain_hash),
@@ -285,10 +287,9 @@ where
                 FatalError::Other("Missing gas price".into()),
                 sentinel_tx_hash,
             ))?;
-    match request.chain_id {
-        Some(chain_id) => validate_chain_id(Some(chain_id), sentinel_tx_hash)?,
-        None => config_value!("CHAIN_ID"),
-    };
+    if let Some(chain_id) = request.chain_id {
+        validate_chain_id(Some(chain_id), sentinel_tx_hash)?;
+    }
     let authenticated_tx = build_authenticated_tx_data::<_, S>(
         sentinel_tx_hash,
         0,

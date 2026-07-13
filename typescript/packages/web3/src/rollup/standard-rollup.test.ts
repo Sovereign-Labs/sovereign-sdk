@@ -4,11 +4,24 @@ import type { RollupSchema, Serializer } from "@sovereign-sdk/serializers";
 import { bytesToHex } from "@sovereign-sdk/utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { addressFromPublicKey } from "../addresses";
+import { VersionMismatchError } from "../errors";
 import {
+  DEFAULT_TX_DETAILS,
   StandardRollup,
+  chainHashFragment,
   createStandardRollup,
   standardTypeBuilder,
 } from "./standard-rollup";
+
+describe("chainHashFragment", () => {
+  it("reads the first eight bytes as a little-endian u64", () => {
+    const backing = Uint8Array.from([255, 1, 2, 3, 4, 5, 6, 7, 8, 255]);
+
+    expect(chainHashFragment(backing.subarray(1, 9))).toBe(
+      "578437695752307201",
+    );
+  });
+});
 
 describe("standardTypeBuilder", () => {
   const mockRollup = {
@@ -300,6 +313,9 @@ describe("createStandardRollup", () => {
         chain_hash_fragment: "0",
       },
     });
+    await rollup.serializer();
+    await rollup.chainHash();
+    expect(mockConfig.client.rollup.schema).toHaveBeenCalledTimes(1);
   });
 
   it("should preserve supplied context and merge default context", async () => {
@@ -323,6 +339,71 @@ describe("createStandardRollup", () => {
         chain_hash_fragment: "1",
       },
     });
+  });
+
+  it("should refresh default transaction details after a chain hash change", async () => {
+    const client = createMockStandardClient();
+    const oldChainHash = `0x${"00".repeat(32)}`;
+    const newChainHash = `0x01${"00".repeat(31)}`;
+    client.rollup.schema = vi
+      .fn()
+      .mockResolvedValueOnce({
+        schema: { chain_data: { chain_name: "TestChain" } },
+        chain_hash: oldChainHash,
+      })
+      .mockResolvedValueOnce({
+        schema: { chain_data: { chain_name: "TestChain" } },
+        chain_hash: newChainHash,
+      });
+    client.post = vi.fn().mockRejectedValue({
+      error: {
+        details: {
+          code: "invalid_chain_hash_fragment",
+          error: "Authentication failed",
+        },
+      },
+    });
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer,
+      context: {
+        defaultTxDetails: {
+          ...DEFAULT_TX_DETAILS,
+          chain_hash_fragment: "0",
+        },
+      },
+    });
+
+    await rollup.chainHash();
+    await expect(
+      rollup.submitTransaction({ foo: "bar" } as any),
+    ).rejects.toThrow(VersionMismatchError);
+
+    const unsignedTx = await rollup.buildUnsignedTransaction({ test: "call" });
+    expect(unsignedTx.details.chain_hash_fragment).toBe("1");
+  });
+
+  it("should refresh default transaction details when rehydrated", async () => {
+    const client = createMockStandardClient();
+    client.rollup.schema = vi.fn().mockResolvedValue({
+      schema: { chain_data: { chain_name: "TestChain" } },
+      chain_hash: `0x02${"00".repeat(31)}`,
+    });
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer,
+      context: {
+        defaultTxDetails: {
+          ...DEFAULT_TX_DETAILS,
+          chain_hash_fragment: "0",
+        },
+      },
+    });
+
+    await rollup.hydrate();
+
+    expect(rollup.context.defaultTxDetails.chain_hash_fragment).toBe("2");
+    expect(client.rollup.schema).toHaveBeenCalledTimes(1);
   });
 
   it("should pass optional simulation parameters to the client", async () => {
@@ -531,7 +612,7 @@ describe("createStandardRollup", () => {
     await expect(
       rollup.multisigSigningBytes(unsignedTx, multisig),
     ).rejects.toThrow(
-      "Cannot sign multisig transaction: chain_hash_fragment 1 does not match the current chain hash fragment 0",
+      "Cannot sign transaction: chain_hash_fragment 1 does not match the current chain hash fragment 0",
     );
     expect(unsignedTx).toEqual(originalUnsignedTx);
     expect(unsignedTx.details).toBe(originalDetails);

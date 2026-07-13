@@ -435,9 +435,16 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
 }
 
 function isVersionMismatchError(e: APIError): boolean {
+  // biome-ignore lint/suspicious/noExplicitAny: Stainless error details are untyped
+  const details = (e.error as any)?.details;
+  if (details?.code === "invalid_chain_hash_fragment") {
+    return true;
+  }
+
+  const error = details?.error;
   if (
-    // biome-ignore lint/suspicious/noExplicitAny: yolo
-    (e.error as any)?.details?.error?.includes("Signature verification failed")
+    typeof error === "string" &&
+    error.includes("Signature verification failed")
   ) {
     return true;
   }

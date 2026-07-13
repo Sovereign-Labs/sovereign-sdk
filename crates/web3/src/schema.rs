@@ -42,6 +42,7 @@ use serde_with::serde_as;
 use sov_universal_wallet::schema::{RollupRoots, Schema};
 
 pub use serde_json::json;
+pub use sov_universal_wallet::schema::chain_hash_fragment;
 
 /// Errors that can occur during schema-based serialization operations.
 #[derive(thiserror::Error, Debug)]
@@ -57,6 +58,16 @@ pub enum SerializerError {
     InvalidSchema(#[source] serde_json::Error),
     #[error("Failed to calculate chain hash: {0}")]
     ChainHash(#[source] sov_universal_wallet::schema::SchemaError),
+    /// The transaction targets a different chain hash than the serializer's schema.
+    #[error(
+        "Chain hash fragment mismatch: transaction details contain {actual}, but the serializer chain hash has fragment {expected}"
+    )]
+    ChainHashFragmentMismatch {
+        /// Fragment stored in the transaction details.
+        actual: u64,
+        /// Fragment derived from the serializer's chain hash.
+        expected: u64,
+    },
     /// Error occurred during HTTP request to fetch schema from URL.
     #[error("HTTP request error: {0}")]
     HttpRequest(#[from] reqwest::Error),
@@ -244,22 +255,6 @@ pub const DEFAULT_MAX_PRIORITY_FEE_BIPS: u64 = 0;
 /// Default maximum fee amount (100,000,000 units).
 pub const DEFAULT_MAX_FEE: u128 = 100000000;
 
-/// Returns the 64-bit fragment used to identify a full chain hash in transaction
-/// details.
-#[must_use]
-pub const fn chain_hash_fragment(chain_hash: &[u8; 32]) -> u64 {
-    u64::from_le_bytes([
-        chain_hash[0],
-        chain_hash[1],
-        chain_hash[2],
-        chain_hash[3],
-        chain_hash[4],
-        chain_hash[5],
-        chain_hash[6],
-        chain_hash[7],
-    ])
-}
-
 /// Generates default uniqueness data based on current timestamp.
 ///
 /// Creates a `UniquenessData::Generation` variant using the current
@@ -432,8 +427,21 @@ impl UnsignedTransaction {
     ///
     /// The chain hash is read from the serializer's schema and included as a field
     /// in the serialized signing payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SerializerError::ChainHashFragmentMismatch`] if the transaction details
+    /// target a different chain hash than the serializer's schema. It also returns an error
+    /// if the chain hash cannot be calculated or the signing payload cannot be serialized.
     pub fn bytes_for_signing(&self, serializer: &Serializer) -> Result<Vec<u8>, SerializerError> {
         let chain_hash = serializer.chain_hash()?;
+        let expected = chain_hash_fragment(&chain_hash);
+        if self.details.chain_hash_fragment != expected {
+            return Err(SerializerError::ChainHashFragmentMismatch {
+                actual: self.details.chain_hash_fragment,
+                expected,
+            });
+        }
         serializer.serialize_signing_payload(&self.signing_payload_v0(chain_hash))
     }
 
@@ -500,7 +508,7 @@ pub enum Transaction {
 /// let builder = TransactionBuilder::new(my_call)
 ///     .max_fee(1000u128)
 ///     .priority_fee_bips(100u64)
-///     .chain_hash_fragment(1)
+///     .chain_hash_fragment(chain_hash_fragment(&serializer.chain_hash()?))
 ///     .uniqueness(my_uniqueness_data);
 ///
 /// let unsigned_tx = builder.build()?;

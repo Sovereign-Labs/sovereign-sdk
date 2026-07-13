@@ -1,6 +1,7 @@
 import { generateKeyPairSync, sign, verify, type KeyObject } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { expect, test } from "@playwright/test";
+import { chainHashFragment } from "@sovereign-sdk/web3";
 
 const ROLLUP_URL = process.env.VITE_ROLLUP_URL ?? "http://localhost:12346";
 const SOLANA_ENDPOINT =
@@ -51,15 +52,6 @@ function base58Encode(bytes: Uint8Array): string {
   }
 
   return "1".repeat(leadingZeros) + encoded;
-}
-
-function chainHashFragment(chainHashHex: string): string {
-  const chainHash = Buffer.from(chainHashHex.replace(/^0x/, ""), "hex");
-  let fragment = 0n;
-  for (let i = 0; i < 8; i++) {
-    fragment |= BigInt(chainHash[i] ?? 0) << BigInt(i * 8);
-  }
-  return fragment.toString();
 }
 
 function publicKeyToRawBytes(publicKey: KeyObject): Buffer {
@@ -278,7 +270,7 @@ test.describe("Phantom mocked-provider with real rollup", () => {
 
     expect(unsignedTx.chain_name).toBe("TestChain");
     expect(unsignedTx.details?.chain_hash_fragment).toBe(
-      chainHashFragment(liveChainHash),
+      chainHashFragment(Buffer.from(liveChainHash, "hex")),
     );
     expect(unsignedTx.runtime_call?.bank?.create_token?.mint_to_address).toBe(
       walletAddress,

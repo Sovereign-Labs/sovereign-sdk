@@ -1,60 +1,52 @@
 use std::collections::BTreeMap;
-use std::fmt;
 use std::rc::Rc;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use derive_more::{From, Into};
-use serde::de::{self, Visitor};
+use serde::de;
 use serde::{Deserialize, Serialize};
+pub use sov_universal_wallet::schema::chain_hash_fragment;
 use sov_universal_wallet::UniversalWallet;
 
 use crate::{Amount, BasicGasMeter, Gas, GasArray, Spec};
 
-/// Returns the 64-bit fragment used to identify a full chain hash in transaction
-/// details.
-///
-/// The fragment is the first eight bytes of the chain hash. Interpreting it as
-/// little-endian means Borsh serializes the `u64` back to those same eight bytes.
-#[must_use]
-pub const fn chain_hash_fragment(chain_hash: &[u8; 32]) -> u64 {
-    u64::from_le_bytes([
-        chain_hash[0],
-        chain_hash[1],
-        chain_hash[2],
-        chain_hash[3],
-        chain_hash[4],
-        chain_hash[5],
-        chain_hash[6],
-        chain_hash[7],
-    ])
+struct U64DecimalStringVisitor;
+
+impl<'de> de::Visitor<'de> for U64DecimalStringVisitor {
+    type Value = u64;
+
+    fn expecting(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter.write_str("a decimal string representing a u64")
+    }
+
+    fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
+    where
+        E: de::Error,
+    {
+        value.parse().map_err(de::Error::custom)
+    }
 }
 
-fn deserialize_u64_from_number_or_string<'de, D>(deserializer: D) -> Result<u64, D::Error>
+fn deserialize_u64_from_decimal_string<'de, D>(deserializer: D) -> Result<u64, D::Error>
 where
     D: serde::Deserializer<'de>,
 {
-    struct U64Visitor;
-
-    impl Visitor<'_> for U64Visitor {
-        type Value = u64;
-
-        fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-            formatter.write_str("a u64 number or decimal string")
-        }
-
-        fn visit_u64<E>(self, value: u64) -> Result<Self::Value, E> {
-            Ok(value)
-        }
-
-        fn visit_str<E>(self, value: &str) -> Result<Self::Value, E>
-        where
-            E: de::Error,
-        {
-            value.parse::<u64>().map_err(E::custom)
-        }
+    if deserializer.is_human_readable() {
+        deserializer.deserialize_str(U64DecimalStringVisitor)
+    } else {
+        <u64 as Deserialize>::deserialize(deserializer)
     }
+}
 
-    deserializer.deserialize_any(U64Visitor)
+fn serialize_u64_as_decimal_string<S>(value: &u64, serializer: S) -> Result<S::Ok, S::Error>
+where
+    S: serde::Serializer,
+{
+    if serializer.is_human_readable() {
+        serializer.collect_str(value)
+    } else {
+        serializer.serialize_u64(*value)
+    }
 }
 
 /// A type wrapper around a u64 which represents the priority fee.
@@ -158,9 +150,24 @@ pub struct TxDetails<S: Spec> {
     /// transaction spends more than that amount, it will run out of gas and be reverted.
     pub gas_limit: Option<S::Gas>,
     /// The 64-bit fragment of the target chain hash.
-    #[serde(deserialize_with = "deserialize_u64_from_number_or_string")]
+    #[serde(
+        serialize_with = "serialize_u64_as_decimal_string",
+        deserialize_with = "deserialize_u64_from_decimal_string"
+    )]
     #[sov_wallet(hidden)]
     pub chain_hash_fragment: u64,
+}
+
+impl<S: Spec> TxDetails<S> {
+    pub(crate) fn ensure_matches_chain_hash(&self, chain_hash: &[u8; 32]) -> anyhow::Result<()> {
+        let chain_hash_fragment = chain_hash_fragment(chain_hash);
+        anyhow::ensure!(
+            self.chain_hash_fragment == chain_hash_fragment,
+            "Chain hash fragment mismatch: transaction details contain {}, but the supplied chain hash has fragment {chain_hash_fragment}",
+            self.chain_hash_fragment,
+        );
+        Ok(())
+    }
 }
 
 /// Holds the original credentials to authenticate the transaction.
@@ -219,6 +226,38 @@ impl<S: Spec> AuthenticatedTransactionData<S> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[derive(Debug, PartialEq, Eq, Serialize, Deserialize)]
+    struct Fragment {
+        #[serde(
+            serialize_with = "serialize_u64_as_decimal_string",
+            deserialize_with = "deserialize_u64_from_decimal_string"
+        )]
+        value: u64,
+    }
+
+    #[test]
+    fn chain_hash_fragment_serde_uses_decimal_string_for_json() {
+        let fragment = Fragment { value: u64::MAX };
+
+        let json = serde_json::to_string(&fragment).unwrap();
+        assert_eq!(json, r#"{"value":"18446744073709551615"}"#);
+        assert_eq!(serde_json::from_str::<Fragment>(&json).unwrap(), fragment);
+
+        let numeric_json = r#"{"value":18446744073709551615}"#;
+        assert!(serde_json::from_str::<Fragment>(numeric_json).is_err());
+    }
+
+    #[test]
+    fn chain_hash_fragment_serde_remains_binary_compatible() {
+        let value = 0x0102_0304_0506_0708;
+        let fragment = Fragment { value };
+
+        let bytes = bincode::serialize(&fragment).unwrap();
+        assert_eq!(bytes.as_slice(), &value.to_le_bytes());
+        assert_eq!(bincode::deserialize::<Fragment>(&bytes).unwrap(), fragment);
+    }
+
     #[test]
     fn test_priority_fee_apply_basic() {
         let fee = PriorityFeeBips::from_percentage(100);

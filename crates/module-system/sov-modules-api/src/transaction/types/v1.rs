@@ -136,23 +136,32 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
         key: &C::PrivateKey,
         chain_hash: &[u8; 32],
     ) -> anyhow::Result<C::Signature> {
-        let chain_hash_fragment = crate::transaction::chain_hash_fragment(chain_hash);
-        anyhow::ensure!(
-            self.details.chain_hash_fragment == chain_hash_fragment,
-            "Chain hash fragment mismatch: transaction details contain {}, but the supplied chain hash has fragment {chain_hash_fragment}",
-            self.details.chain_hash_fragment,
-        );
+        self.details.ensure_matches_chain_hash(chain_hash)?;
         Ok(key.sign(&self.to_signing_bytes(chain_hash)))
     }
 
     /// Signs and adds the signature to the transaction.
     #[cfg(feature = "native")]
     pub fn sign(&mut self, key: &C::PrivateKey, chain_hash: &[u8; 32]) -> anyhow::Result<()> {
-        if self.signatures.is_empty() {
-            self.details.chain_hash_fragment = crate::transaction::chain_hash_fragment(chain_hash);
+        if !self.signatures.is_empty() {
+            let signature = self.sign_without_adding(key, chain_hash)?;
+            return self.add_signature(signature, key.pub_key());
         }
-        let signature = self.sign_without_adding(key, chain_hash)?;
-        self.add_signature(signature, key.pub_key())
+
+        let mut updated = Self {
+            signatures: self.signatures.clone(),
+            unused_pub_keys: self.unused_pub_keys.clone(),
+            min_signers: self.min_signers,
+            runtime_call: self.runtime_call.clone(),
+            uniqueness: self.uniqueness,
+            details: self.details.clone(),
+            address_override: self.address_override,
+        };
+        updated.details.chain_hash_fragment = crate::transaction::chain_hash_fragment(chain_hash);
+        let signature = updated.sign_without_adding(key, chain_hash)?;
+        updated.add_signature(signature, key.pub_key())?;
+        *self = updated;
+        Ok(())
     }
 
     /// Adds a signature to the signing set of the multisig, removing the public key from the set of unused pub keys.
@@ -216,5 +225,71 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
 impl<R: TransactionCallable, S: Spec> From<Version1<R, S>> for Transaction<R, S> {
     fn from(value: Version1<R, S>) -> Self {
         Transaction::V1(value)
+    }
+}
+
+#[cfg(all(test, feature = "native"))]
+mod tests {
+    use super::*;
+    use crate::capabilities::UniquenessData;
+    use crate::transaction::{chain_hash_fragment, PriorityFeeBips};
+    use crate::Amount;
+    use sov_mock_da::MockDaSpec;
+    use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
+    use sov_rollup_interface::execution_mode::Native;
+
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestPrivateKey = <MockZkvmCryptoSpec as CryptoSpec>::PrivateKey;
+
+    struct TestRuntime;
+
+    impl TransactionCallable for TestRuntime {
+        type Call = u64;
+    }
+
+    fn unsigned_transaction(chain_hash: [u8; 32]) -> UnsignedTransaction<TestRuntime, TestSpec> {
+        UnsignedTransaction::new(
+            7,
+            chain_hash,
+            PriorityFeeBips::ZERO,
+            Amount::new(1),
+            UniquenessData::Generation(0),
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn failed_first_signature_does_not_change_chain_hash_fragment() {
+        let member = TestPrivateKey::generate();
+        let non_member = TestPrivateKey::generate();
+        let original_chain_hash = [0; 32];
+        let signing_chain_hash = [1; 32];
+        let mut transaction = unsigned_transaction(original_chain_hash)
+            .to_multisig_tx(Multisig::new(1, vec![member.pub_key()]));
+
+        let error = transaction
+            .sign(&non_member, &signing_chain_hash)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("Public key is not a member"));
+        assert_eq!(
+            transaction.details.chain_hash_fragment,
+            chain_hash_fragment(&original_chain_hash)
+        );
+        assert!(transaction.signatures.is_empty());
+    }
+
+    #[test]
+    fn unsigned_v1_signing_bytes_reject_mismatched_chain_hash() {
+        let member = TestPrivateKey::generate();
+        let multisig = Multisig::new(1, vec![member.pub_key()]);
+        let transaction = unsigned_transaction([0; 32]);
+
+        let error = transaction
+            .to_signing_bytes_v1(&multisig, [1; 32])
+            .unwrap_err();
+
+        assert!(error.to_string().contains("Chain hash fragment mismatch"));
     }
 }

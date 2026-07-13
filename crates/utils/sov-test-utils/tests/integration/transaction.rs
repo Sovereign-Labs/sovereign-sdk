@@ -227,8 +227,7 @@ fn test_custom_transaction_format() {
         })
         .with_max_fee(Amount::new(100))
         .with_max_priority_fee_bips(PriorityFeeBips::from_percentage(10))
-        .with_gas_limit(Some(GasUnit::from([5; 2])))
-        .with_chain_hash_fragment(5555);
+        .with_gas_limit(Some(GasUnit::from([5; 2])));
 
     match message {
         TransactionType::Plain {
@@ -256,7 +255,7 @@ fn test_custom_transaction_format() {
             assert_eq!(details.max_fee, 100);
             assert_eq!(details.gas_limit, Some(GasUnit::from([5; 2])));
 
-            assert_eq!(details.chain_hash_fragment, 5555);
+            assert_eq!(details.chain_hash_fragment, 0);
         }
         _ => panic!("The message is not a plain message"),
     }

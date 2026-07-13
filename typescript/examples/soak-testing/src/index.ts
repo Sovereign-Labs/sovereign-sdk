@@ -36,7 +36,7 @@ const defaultTxDetails = {
   max_priority_fee_bips: 0,
   max_fee: "100000000",
   gas_limit: null,
-  chain_hash_fragment: "15534302987291968528",
+  chain_hash_fragment: "0",
 };
 
 /**

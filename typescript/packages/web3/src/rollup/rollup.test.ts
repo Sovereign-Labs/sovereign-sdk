@@ -91,7 +91,8 @@ describe("Rollup", () => {
     const versionMismatchError = {
       error: {
         details: {
-          error: "Signature verification failed",
+          code: "invalid_chain_hash_fragment",
+          error: "Authentication failed",
         },
       },
     };
@@ -182,6 +183,23 @@ describe("Rollup", () => {
       );
     });
 
+    it("should not identify chain hash error prose as a version mismatch", async () => {
+      const error = {
+        error: {
+          details: {
+            error: "Invalid chain hash fragment: expected one of [1], got 2",
+          },
+        },
+      };
+      const { rollup, client } = testRollup();
+      client.post = vi.fn().mockRejectedValue(error);
+
+      await expect(rollup.submitTransaction({ foo: "bar" })).rejects.toEqual(
+        error,
+      );
+      expect(client.rollup.schema).toHaveBeenCalledTimes(1);
+    });
+
     it("should throw VersionMismatchError when chain hash changes", async () => {
       const { rollup, client } = testRollup();
 
@@ -197,6 +215,24 @@ describe("Rollup", () => {
       const transaction = { foo: "bar" };
 
       await expect(rollup.submitTransaction(transaction)).rejects.toThrow(
+        VersionMismatchError,
+      );
+    });
+
+    it("should retain schema recovery for signature verification failures", async () => {
+      const { rollup, client } = testRollup();
+      client.post = vi.fn().mockRejectedValue({
+        error: { details: { error: "Signature verification failed: stale" } },
+      });
+      client.rollup.schema = vi.fn().mockResolvedValue({
+        schema: demoRollupSchema,
+        chain_hash: "0x00",
+      });
+      vi.spyOn(rollup, "chainHash").mockResolvedValueOnce(
+        new Uint8Array([1, 2, 3, 4]),
+      );
+
+      await expect(rollup.submitTransaction({ foo: "bar" })).rejects.toThrow(
         VersionMismatchError,
       );
     });

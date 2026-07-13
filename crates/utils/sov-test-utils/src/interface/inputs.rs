@@ -60,15 +60,6 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         }
     }
 
-    /// Set the chain hash fragment of the transaction.
-    pub fn with_chain_hash_fragment(mut self, chain_hash_fragment: u64) -> Self {
-        if let Some(details) = self.details_mut() {
-            details.chain_hash_fragment = chain_hash_fragment;
-        }
-
-        self
-    }
-
     /// Set the max priority fee of the transaction.
     pub fn with_max_priority_fee_bips(mut self, max_priority_fee_bips: PriorityFeeBips) -> Self {
         if let Some(details) = self.details_mut() {

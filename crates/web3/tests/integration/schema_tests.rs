@@ -1,7 +1,28 @@
 use base64::Engine;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::PrivateKey;
-use sovereign_web3::schema::{chain_hash_fragment, json, Serializer, TransactionBuilder};
+use sovereign_web3::schema::{
+    chain_hash_fragment, json, Serializer, SerializerError, TransactionBuilder,
+};
+
+#[test]
+fn stale_chain_hash_fragment_is_rejected_before_signing() {
+    let serializer = Serializer::from_json(include_str!(
+        "../../../../examples/demo-rollup/demo-rollup-schema.json"
+    ))
+    .unwrap();
+    let expected_fragment = chain_hash_fragment(&serializer.chain_hash().unwrap());
+    let stale_tx = TransactionBuilder::new(json!(null))
+        .chain_hash_fragment(expected_fragment ^ 1)
+        .build()
+        .unwrap();
+
+    assert!(matches!(
+        stale_tx.bytes_for_signing(&serializer).unwrap_err(),
+        SerializerError::ChainHashFragmentMismatch { actual, expected }
+            if actual == expected_fragment ^ 1 && expected == expected_fragment
+    ));
+}
 
 // Run with: cargo test -- --ignored
 // This is intended as a simple manual smoke test against a pre-running local demo rollup

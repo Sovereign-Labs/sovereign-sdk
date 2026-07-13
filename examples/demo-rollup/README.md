@@ -339,7 +339,7 @@ Adding the following transaction to batch:
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",
     "gas_limit": null,
-    "chain_hash_fragment": 6654161651848106779
+    "chain_hash_fragment": "6654161651848106779"
   }
 }
 ```

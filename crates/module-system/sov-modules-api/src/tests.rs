@@ -5,7 +5,6 @@ use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_test_utils::MockDaSpec;
 
-use crate::capabilities::config_chain_id;
 use crate::{ModuleId, ModuleInfo, Spec};
 
 type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
@@ -194,7 +193,7 @@ fn test_default_signature_roundtrip() {
 // Grep for `SOV_TEST_CONST_OVERRIDE_CHAIN_ID` to find the relevant code.
 #[test]
 fn assert_chain_id_was_not_overridden() {
-    assert_eq!(config_chain_id(), 4321);
+    assert_eq!(sov_modules_macros::config_value_private!("CHAIN_ID"), 4321);
 }
 
 mod chain_hash_override_tests {

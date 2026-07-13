@@ -712,10 +712,64 @@ describe("SolanaSignableRollup", () => {
       await expect(
         rollup.multisigSigningBytes(staleUnsignedTx, multisig, authenticator),
       ).rejects.toThrow(
-        "Cannot sign multisig transaction: chain_hash_fragment stale does not match the current chain hash fragment 578437695752307201",
+        "Cannot sign transaction: chain_hash_fragment stale does not match the current chain hash fragment 578437695752307201",
       );
       expect(staleUnsignedTx).toEqual(originalStaleUnsignedTx);
       expect(staleUnsignedTx.details).toBe(originalStaleDetails);
+    },
+  );
+
+  it.each([
+    ["V0", "solanaSimple"],
+    ["V0", "solana"],
+    ["V1", "solanaSimple"],
+    ["V1", "solana"],
+  ] as const)(
+    "should reject stale %s transactions before %s resubmission",
+    async (version, authenticator) => {
+      const mockClient = createMockClient({
+        chainHash:
+          "0x0102030405060708000000000000000000000000000000000000000000000000",
+      });
+      mockClient.post = vi.fn();
+      const rollup = await createSolanaSignableRollup({
+        client: mockClient,
+        getSerializer: () =>
+          createMockSerializer({
+            schema: { chain_data: { chain_name: "TestChain" } },
+          }),
+      });
+      const unsignedTx = {
+        runtime_call: { test: "call" },
+        uniqueness: { nonce: 0 },
+        details: {
+          max_priority_fee_bips: 0,
+          max_fee: "1000",
+          gas_limit: null,
+          chain_hash_fragment: "stale",
+        },
+        address_override: null,
+      };
+      const pubKey = "01".repeat(32);
+      const signature = "02".repeat(64);
+      const transaction =
+        version === "V0"
+          ? { V0: { ...unsignedTx, pub_key: pubKey, signature } }
+          : {
+              V1: {
+                ...unsignedTx,
+                signatures: [{ pub_key: pubKey, signature }],
+                unused_pub_keys: ["03".repeat(32)],
+                min_signers: 1,
+              },
+            };
+
+      await expect(
+        rollup.submitTransaction(transaction as any, authenticator),
+      ).rejects.toThrow(
+        "chain_hash_fragment stale does not match the current chain hash fragment 578437695752307201",
+      );
+      expect(mockClient.post).not.toHaveBeenCalled();
     },
   );
 
