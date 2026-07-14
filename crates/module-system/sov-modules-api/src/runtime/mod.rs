@@ -69,27 +69,48 @@ use std::sync::LazyLock;
 
 /// The CHAIN_NAME stored in the binary in a linker section.
 pub static CHAIN_NAME: LazyLock<&str> = LazyLock::new(|| {
-    #[cfg_attr(target_os = "macos", link_section = "__RODATA,.CHAIN_NAME")]
-    #[cfg_attr(target_os = "linux", link_section = ".rodata.CHAIN_NAME")]
-    static RAW_CHAIN_NAME: [u8; 64] = [0; _];
-    let p = RAW_CHAIN_NAME
-        .iter()
-        .position(|x| *x == 0)
-        .unwrap_or(RAW_CHAIN_NAME.len());
-    str::from_utf8(&RAW_CHAIN_NAME[..p]).expect("invalid CHAIN_NAME")
+    /// MacOS has a different convention for section names.
+    #[cfg_attr(target_os = "macos", link_section = "__DATA,__CHAIN_NAME")]
+    #[cfg_attr(target_os = "linux", link_section = ".data.CHAIN_NAME")]
+    /// Start with an empty section for now. Should be straight
+    /// forward in a proc-macro to load the default from the
+    /// constant.toml file and pad them accordingly.
+    static mut RAW_CHAIN_NAME: [u8; 64] =
+        *b"TestChain\x00                                                      ";
+    unsafe {
+        let mut p = 64;
+	for i in 0..64 {
+	    if RAW_CHAIN_NAME[i] == 0 {
+		p = i;
+		break;
+	    }
+        }
+        str::from_utf8(&RAW_CHAIN_NAME[..p]).expect("invalid CHAIN_NAME")
+    }
 });
 
 /// An overridable chain-id stored as ascii in a linker section.
 pub static CHAIN_ID: LazyLock<u64> = LazyLock::new(|| {
-    #[cfg_attr(target_os = "macos", link_section = "__RODATA,.CHAIN_ID")]
-    #[cfg_attr(target_os = "linux", link_section = ".rodata.CHAIN_ID")]
-    static RAW_CHAIN_ID: [u8; 20] = [
+    #[cfg_attr(target_os = "macos", link_section = "__DATA,__CHAIN_ID")]
+    #[cfg_attr(target_os = "linux", link_section = ".data.CHAIN_ID")]
+    #[no_mangle]
+    static mut RAW_CHAIN_ID: [u8; 20] = [
         b'4', b'3', b'2', b'1', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
-    str::from_utf8(&RAW_CHAIN_ID)
-        .ok()
-        .and_then(|x| x.trim_end_matches('\x00').parse().ok())
-        .expect("invalid CHAIN_ID")
+    unsafe {
+        let mut p = 20;
+	for i in 0..20 {
+	    if RAW_CHAIN_ID[i] == 0 {
+		p = i;
+		break;
+	    }
+        }
+
+        str::from_utf8(&RAW_CHAIN_ID[..p])
+            .ok()
+            .and_then(|x| x.parse().ok())
+            .expect("invalid CHAIN_ID")
+    }
 });
 
 #[cfg(feature = "native")]
