@@ -262,7 +262,7 @@ pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'stat
         chain_name: sov_modules_macros::config_value!("CHAIN_NAME").to_string(),
     })?;
     let overrides: &[ChainHashOverride] =
-        &sov_modules_macros::config_value_private!("CHAIN_HASH_OVERRIDES");
+        sov_modules_macros::config_value_private!("CHAIN_HASH_OVERRIDES");
     validate_chain_hash_fragments(overrides, schema.chain_hash()?)?;
     Ok(schema)
 }

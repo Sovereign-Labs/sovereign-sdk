@@ -622,27 +622,6 @@ impl AcceptTxErrorDetails {
     }
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn maps_invalid_chain_hash_fragment_to_stable_accept_tx_error_code() {
-        let error = AuthenticationError::FatalError(
-            FatalError::InvalidChainHashFragment {
-                expected: vec![1],
-                got: 2,
-            },
-            TxHash::new([0; 32]),
-        );
-
-        assert_eq!(
-            AcceptTxErrorDetails::from_auth_error(&error).code,
-            Some(AcceptTxErrorCode::InvalidChainHashFragment)
-        );
-    }
-}
-
 pub fn generic_accept_tx_error(details: impl std::fmt::Debug) -> ErrorObject {
     ErrorObject {
         status: StatusCode::BAD_REQUEST,

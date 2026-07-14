@@ -664,8 +664,7 @@ fn test_v1_signing_rejects_mixed_chain_hashes() {
 
     let error = tx
         .sign_without_adding(&env.keys[1], &other_chain_hash)
-        .err()
-        .expect("signing with a mismatched chain hash must fail");
+        .expect_err("signing with a mismatched chain hash must fail");
     assert!(error.to_string().contains("Chain hash fragment mismatch"));
 
     let error = tx
