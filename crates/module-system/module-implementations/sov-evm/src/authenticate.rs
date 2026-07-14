@@ -14,7 +14,6 @@ use sov_modules_api::capabilities::{
     BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator, UniquenessData,
     UnregisteredAuthenticationError,
 };
-use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::capabilities::AuthenticationError;
 use sov_modules_api::transaction::{
     chain_hash_fragment, AuthenticatedTransactionAndRawHash, AuthenticatedTransactionData,
@@ -22,6 +21,7 @@ use sov_modules_api::transaction::{
 };
 use sov_modules_api::StateReader;
 use sov_modules_api::VersionReader;
+use sov_modules_api::CHAIN_ID;
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
 };
@@ -187,7 +187,7 @@ fn validate_chain_id(
     tx_chain_id: Option<u64>,
     tx_hash: TxHash,
 ) -> Result<u64, AuthenticationError> {
-    let rollup_chain_id = config_value!("CHAIN_ID");
+    let rollup_chain_id = *CHAIN_ID;
     let tx_chain_id = tx_chain_id.ok_or(AuthenticationError::FatalError(
         FatalError::MissingChainId(rollup_chain_id),
         tx_hash,
