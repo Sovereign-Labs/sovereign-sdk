@@ -71,7 +71,8 @@ use std::sync::LazyLock;
 
 /// The CHAIN_NAME stored in the binary in a linker section.
 pub static CHAIN_NAME: LazyLock<&str> = LazyLock::new(|| {
-    #[link_section = "__RODATA,.CHAIN_NAME"]
+    #[cfg_attr(target_os="macos", link_section = "__RODATA,.CHAIN_NAME")]
+    #[cfg_attr(target_os="linux", link_section = ".rodata.CHAIN_NAME")]
     static RAW_CHAIN_NAME: [u8; 64] = [0; _];
     let p = RAW_CHAIN_NAME
         .iter()
@@ -82,7 +83,8 @@ pub static CHAIN_NAME: LazyLock<&str> = LazyLock::new(|| {
 
 /// An overridable chain-id stored as ascii in a linker section.
 pub static CHAIN_ID: LazyLock<u64> = LazyLock::new(|| {
-    #[link_section = "__RODATA,.CHAIN_ID"]
+    #[cfg_attr(target_os="macos", link_section = "__RODATA,.CHAIN_ID")]
+    #[cfg_attr(target_os="linux", link_section = ".rodata.CHAIN_ID")]
     static RAW_CHAIN_ID: [u8; 20] = [
         b'4', b'3', b'2', b'1', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
     ];
