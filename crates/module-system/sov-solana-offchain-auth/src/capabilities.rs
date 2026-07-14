@@ -8,6 +8,7 @@ use sov_modules_api::capabilities::{
 };
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec, VersionReader,
+    CHAIN_NAME,
 };
 
 /// Indicates that a runtime supports the `SolanaOffchain` transaction authenticator
@@ -88,7 +89,7 @@ where
                     crate::authentication::authenticate::<Accessor, S, Rt>(
                         &tx.data,
                         &Rt::chain_hash(),
-                        &Rt::chain_name(),
+                        &CHAIN_NAME,
                         state,
                     )?;
 
@@ -140,7 +141,7 @@ where
                     crate::authentication::authenticate::<Accessor, S, Rt>(
                         &tx.data,
                         &Rt::chain_hash(),
-                        &Rt::chain_name(),
+                        &CHAIN_NAME,
                         state,
                     )?;
                 Ok((tx_and_raw_hash, auth_data, runtime_call))
