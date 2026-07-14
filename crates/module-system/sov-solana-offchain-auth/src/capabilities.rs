@@ -7,7 +7,8 @@ use sov_modules_api::capabilities::{
     BatchFromUnregisteredSequencer, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
 use sov_modules_api::{
-    DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec, VersionReader,
+    DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec, VersionReader, CHAIN_ID,
+    CHAIN_NAME,
 };
 
 /// Indicates that a runtime supports the `SolanaOffchain` transaction authenticator
@@ -87,9 +88,9 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     crate::authentication::authenticate::<Accessor, S, Rt>(
                         &tx.data,
-                        Rt::chain_id(),
+                        *CHAIN_ID,
                         &Rt::chain_hash(),
-                        &Rt::chain_name(),
+                        &CHAIN_NAME,
                         state,
                     )?;
 
@@ -99,7 +100,7 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     sov_modules_api::capabilities::authenticate::<_, S, Rt>(
                         &tx.data,
-                        Rt::chain_id(),
+                        *CHAIN_ID,
                         &Rt::chain_hash(),
                         state,
                     )?;
@@ -141,9 +142,9 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     crate::authentication::authenticate::<Accessor, S, Rt>(
                         &tx.data,
-                        Rt::chain_id(),
+                        *CHAIN_ID,
                         &Rt::chain_hash(),
-                        &Rt::chain_name(),
+                        &CHAIN_NAME,
                         state,
                     )?;
                 Ok((tx_and_raw_hash, auth_data, runtime_call))
