@@ -13,7 +13,7 @@ use sov_modules_api::transaction::{
 };
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
-    ProvableStateReader, RawTx, Runtime, Spec, TxHash, VersionReader,
+    ProvableStateReader, RawTx, Runtime, Spec, TxHash, VersionReader, CHAIN_ID,
 };
 use sov_state::User;
 
@@ -130,7 +130,8 @@ where
             Eip712AuthenticatorInput::Standard(tx) => {
                 sov_modules_api::capabilities::authenticate::<_, S, Rt>(
                     &tx.data,
-                    &Rt::CHAIN_HASH,
+                    *CHAIN_ID,
+                    &Rt::chain_hash(),
                     state,
                 )
             }
@@ -255,7 +256,7 @@ fn verify_and_decode_tx<
         }
     };
 
-    verify_chain_id(details, raw_tx_hash)?;
+    verify_chain_id(details, raw_tx_hash, *CHAIN_ID)?;
     verify_eip712_signature::<S, D, SP>(&tx, raw_tx_hash, meter)?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {

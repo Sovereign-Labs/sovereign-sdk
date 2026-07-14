@@ -131,11 +131,11 @@ macro_rules! generate_runtime_without_capabilities {
                 use $crate::sov_rollup_apis::endpoints::dedup::{DeDupEndpoint, SovereignDeDupEndpoint};
                 use $crate::sov_rollup_apis::endpoints::schema::{SchemaEndpoint, StandardSchemaEndpoint};
                 use $crate::sov_universal_wallet::schema::{Schema, ChainData};
+		use $crate::sov_rollup_apis::endpoints::constants::ConstantsResponse;
+		use $crate::sov_rollup_apis::endpoints::constants::ConstantsEndpoint;
                 use ::sov_modules_api::transaction::{Transaction, UnsignedTransaction};
                 use ::sov_modules_api::rest::HasRestApi;
-		use ::sov_modules_api::macros::config_value;
-		use ::sov_rollup_apis::endpoints::constants::ConstantsResponse;
-		use ::sov_rollup_apis::endpoints::constants::ConstantsEndpoint;
+                use ::sov_modules_api::{CHAIN_ID, CHAIN_NAME};
 
                 let axum_router = Self::default().rest_api(api_state.clone());
                 // Provide an endpoint to return dedup information associated with addresses.
@@ -149,8 +149,8 @@ macro_rules! generate_runtime_without_capabilities {
                 <Self as ::sov_modules_api::DispatchCall>::Decodable,
                 S::Address,
                 >(ChainData {
-		    chain_id: <Self as $crate::runtime::Runtime<S>>::chain_id(),
-		    chain_name: <Self as $crate::runtime::Runtime<S>>::chain_name(),
+		    chain_id: *CHAIN_ID,
+		    chain_name: CHAIN_NAME.to_string(),
 		}).unwrap();
 
                 // StandardSchemaEndpoint resolves chain hash based on current height.
@@ -164,8 +164,8 @@ macro_rules! generate_runtime_without_capabilities {
                 let axum_router = axum_router.merge(schema_endpoint.axum_router());
 
 		let constants_endpoint = ConstantsResponse {
-		    chain_id:  <Self as $crate::runtime::Runtime<S>>::chain_id(),
-		    chain_name:  <Self as $crate::runtime::Runtime<S>>::chain_name(),
+		    chain_id:  *CHAIN_ID,
+		    chain_name:  CHAIN_NAME.to_string(),
 		    hyperlane_domain: config_value!("HYPERLANE_BRIDGE_DOMAIN"),
 		    address_prefix: config_value!("ADDRESS_PREFIX"),
 		};
@@ -178,14 +178,6 @@ macro_rules! generate_runtime_without_capabilities {
             }
 	    fn chain_hash() ->  [u8; 32] {
 		[11; 32]
-	    }
-
-	    fn chain_id() -> u64 {
-		config_value!("CHAIN_ID")
-	    }
-
-	    fn chain_name() -> String {
-		config_value!("CHAIN_NAME").to_string()
 	    }
 
             fn genesis_config(_input: &Self::GenesisInput) -> ::sov_modules_api::prelude::anyhow::Result<Self::GenesisConfig> {

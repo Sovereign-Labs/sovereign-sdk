@@ -65,6 +65,31 @@ impl ModuleExecutionConfig for () {
     }
 }
 
+use std::sync::LazyLock;
+
+/// The CHAIN_NAME stored in the binary in a linker section.
+pub static CHAIN_NAME: LazyLock<&str> = LazyLock::new(|| {
+    #[link_section = "__RODATA,.CHAIN_NAME"]
+    static RAW_CHAIN_NAME: [u8; 64] = [0; _];
+    let p = RAW_CHAIN_NAME
+        .iter()
+        .position(|x| *x == 0)
+        .unwrap_or(RAW_CHAIN_NAME.len());
+    str::from_utf8(&RAW_CHAIN_NAME[..p]).expect("invalid CHAIN_NAME")
+});
+
+/// An overridable chain-id stored as ascii in a linker section.
+pub static CHAIN_ID: LazyLock<u64> = LazyLock::new(|| {
+    #[link_section = "__RODATA,.CHAIN_ID"]
+    static RAW_CHAIN_ID: [u8; 20] = [
+        b'4', b'3', b'2', b'1', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+    ];
+    str::from_utf8(&RAW_CHAIN_ID)
+        .ok()
+        .and_then(|x| x.trim_end_matches('\x00').parse().ok())
+        .expect("invalid CHAIN_ID")
+});
+
 #[cfg(feature = "native")]
 /// This trait has to be implemented by a runtime in order to be used in `StfBlueprint`.
 ///
@@ -107,12 +132,6 @@ pub trait Runtime<S: Spec>:
     /// Chain root hash used for transaction verification. Generated from a
     /// [schema](crate::sov_universal_wallet::schema::Schema).
     fn chain_hash() -> [u8; 32];
-
-    /// Overridable chain-id.
-    fn chain_id() -> u64;
-
-    /// Overridable chain-name.
-    fn chain_name() -> String;
 
     /// Reads genesis configs.
     fn genesis_config(input: &Self::GenesisInput) -> anyhow::Result<Self::GenesisConfig>;
@@ -212,9 +231,6 @@ pub trait Runtime<S: Spec>:
     /// Overridable chain-id.
     fn chain_id() -> u64;
 
-    /// Overridable chain-name.
-    fn chain_name() -> String;
-
     /// `GenesisConfig` type.
     type GenesisConfig: Clone + Send + Sync;
 
@@ -273,8 +289,8 @@ pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + Runti
         R::Decodable,
         S::Address,
     >(ChainData {
-        chain_id: R::chain_id(),
-        chain_name: R::chain_name(),
+        chain_id: *CHAIN_ID,
+        chain_name: CHAIN_NAME.to_string(),
     })?;
     Ok(schema)
 }

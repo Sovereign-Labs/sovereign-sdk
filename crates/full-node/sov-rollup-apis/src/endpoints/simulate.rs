@@ -270,7 +270,7 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
             .transpose()
             .map_err(|e| SimulateError::InvalidInput(format!("{e:?}")))?;
         Ok(TxDetails {
-            chain_id: R::chain_id(),
+            chain_id: *sov_modules_api::CHAIN_ID,
             max_priority_fee_bips: partial
                 .max_priority_fee_bips
                 .unwrap_or(PriorityFeeBips::ZERO),

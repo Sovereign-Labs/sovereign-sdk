@@ -18,6 +18,7 @@ use crate::transaction::{
 #[cfg(feature = "native")]
 use crate::CryptoSpecExt;
 use crate::GetGasPrice;
+use crate::CHAIN_ID;
 use crate::{
     capabilities, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter, GasMeteringError,
     MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher, ProvableStateReader,
@@ -26,7 +27,7 @@ use crate::{
 
 /// The default chain ID of the rollup.
 pub fn config_chain_id() -> u64 {
-    config_value_private!("CHAIN_ID")
+    *CHAIN_ID
 }
 
 /// Resolves all valid chain hashes for a given height using configured overrides.
@@ -214,7 +215,7 @@ where
 
         crate::capabilities::authenticate::<_, S, Rt>(
             &input.data,
-            Rt::chain_id(),
+            *CHAIN_ID,
             &Rt::chain_hash(),
             pre_exec_ws,
         )
@@ -563,7 +564,7 @@ pub fn authenticate_unregistered<
     pre_exec_ws: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, Rt::Decodable>, UnregisteredAuthenticationError> {
     let (tx_and_raw_hash, auth_data, runtime_call) =
-        authenticate::<_, S, Rt>(raw_tx, Rt::chain_id(), &Rt::chain_hash(), pre_exec_ws).map_err(
+        authenticate::<_, S, Rt>(raw_tx, *CHAIN_ID, &Rt::chain_hash(), pre_exec_ws).map_err(
             |e| match e {
                 AuthenticationError::FatalError(err, hash) => {
                     UnregisteredAuthenticationError::FatalError(err, hash)
