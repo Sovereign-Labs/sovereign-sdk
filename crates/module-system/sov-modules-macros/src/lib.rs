@@ -128,6 +128,7 @@
 mod cli_parser;
 mod common;
 mod compile_manifest_constants;
+mod static_bytes;
 mod dispatch;
 mod event;
 mod expand_macro;
@@ -144,6 +145,7 @@ mod rpc;
 mod metrics;
 
 use compile_manifest_constants::{make_const_value, ConfigValueInput};
+use static_bytes::{make_static_bytes, StaticBytesInput};
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::hooks::HooksMacro;
@@ -313,6 +315,12 @@ pub fn config_value_private(item: TokenStream) -> TokenStream {
         .map(Into::into);
 
     handle_macro_error_and_expand(fn_name!(), tokens)
+}
+
+#[proc_macro]
+pub fn static_bytes(item: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(item as StaticBytesInput);
+    handle_macro_error_and_expand(fn_name!(), make_static_bytes(&input).map(Into::into))
 }
 
 #[cfg(any(feature = "native", feature = "bench"))]
