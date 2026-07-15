@@ -378,19 +378,22 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
+    charge_signature_gas: bool,
 ) -> Result<Vec<u8>, AuthenticationError> {
     let serialized_tx = tx.to_signing_bytes(chain_hash);
 
-    tx.charge_gas_for_signature(serialized_tx.len(), meter)
-        .map_err(|e| match e {
-            TransactionVerificationError::GasError(_) => {
-                AuthenticationError::OutOfGas(e.to_string())
-            }
-            _ => AuthenticationError::FatalError(
-                FatalError::SigVerificationFailed(e.to_string()),
-                raw_tx_hash,
-            ),
-        })?;
+    if charge_signature_gas {
+        tx.charge_gas_for_signature(serialized_tx.len(), meter)
+            .map_err(|e| match e {
+                TransactionVerificationError::GasError(_) => {
+                    AuthenticationError::OutOfGas(e.to_string())
+                }
+                _ => AuthenticationError::FatalError(
+                    FatalError::SigVerificationFailed(e.to_string()),
+                    raw_tx_hash,
+                ),
+            })?;
+    }
 
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&(raw_tx_hash, *chain_hash)) {
@@ -523,8 +526,11 @@ fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
 
     // Try signature verification with each valid chain hash
     let mut last_error = None;
-    for chain_hash in resolved_hashes.iter() {
-        match verify_signature(&tx, chain_hash, raw_tx_hash, meter) {
+    for (index, chain_hash) in resolved_hashes.iter().enumerate() {
+        // Every candidate replaces the same 32-byte chain-hash suffix, so the signed message
+        // length is identical. Charge once to preserve the gas cost paid by transactions before
+        // multi-hash grace periods were introduced, then try all valid hashes unmetered.
+        match verify_signature(&tx, chain_hash, raw_tx_hash, meter, index == 0) {
             Ok(serialized_tx) => {
                 let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
                     match &tx {
