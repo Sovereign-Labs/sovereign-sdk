@@ -65,52 +65,31 @@ impl ModuleExecutionConfig for () {
     }
 }
 
+
+sov_modules_macros::static_bytes!(CONSTANTS, "constants.toml");
+
 use std::sync::LazyLock;
 
-/// The CHAIN_NAME stored in the binary in a linker section.
-pub static CHAIN_NAME: LazyLock<&str> = LazyLock::new(|| {
-    /// MacOS has a different convention for section names.
-    #[cfg_attr(target_os = "macos", link_section = "__DATA,__CHAIN_NAME")]
-    #[cfg_attr(target_os = "linux", link_section = ".data.CHAIN_NAME")]
-    /// Start with an empty section for now. Should be straight
-    /// forward in a proc-macro to load the default from the
-    /// constant.toml file and pad them accordingly.
-    static mut RAW_CHAIN_NAME: [u8; 64] =
-        *b"TestChain\x00                                                      ";
-    unsafe {
-        let mut p = 64;
-	for i in 0..64 {
-	    if RAW_CHAIN_NAME[i] == 0 {
-		p = i;
-		break;
-	    }
-        }
-        str::from_utf8(&RAW_CHAIN_NAME[..p]).expect("invalid CHAIN_NAME")
-    }
+/// Get a field from the CONSTANTS.
+pub fn get_from_constants(section: &str, key: &str) -> Option<String> {
+    let value = str::from_utf8(CONSTANTS.as_ref()).expect("not a string");
+    let value: toml::Table = toml::from_str(value).expect("no TOML format");
+    let value = value.get(section).expect("no section");
+    Some(value.as_table().and_then(|x| x.get(key))?.to_string())
+	
+}
+
+/// The CHAIN_NAME as extracted from the CONSTANTS.
+pub static CHAIN_NAME: LazyLock<String> = LazyLock::new(|| {
+    let mut res = get_from_constants("constants", "CHAIN_NAME").expect("no CHAIN_NAME");
+    // drop the quotation marks
+    res.retain(|x| x != '"');
+    res
 });
 
-/// An overridable chain-id stored as ascii in a linker section.
+/// The CHAIN_ID as extracted from the CONSTANTS.
 pub static CHAIN_ID: LazyLock<u64> = LazyLock::new(|| {
-    #[cfg_attr(target_os = "macos", link_section = "__DATA,__CHAIN_ID")]
-    #[cfg_attr(target_os = "linux", link_section = ".data.CHAIN_ID")]
-    #[no_mangle]
-    static mut RAW_CHAIN_ID: [u8; 20] = [
-        b'4', b'3', b'2', b'1', 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-    ];
-    unsafe {
-        let mut p = 20;
-	for i in 0..20 {
-	    if RAW_CHAIN_ID[i] == 0 {
-		p = i;
-		break;
-	    }
-        }
-
-        str::from_utf8(&RAW_CHAIN_ID[..p])
-            .ok()
-            .and_then(|x| x.parse().ok())
-            .expect("invalid CHAIN_ID")
-    }
+    get_from_constants("constants", "CHAIN_ID").expect("no CHAIN_ID").parse().expect("invalud CHAIN_ID")
 });
 
 #[cfg(feature = "native")]
