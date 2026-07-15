@@ -1,14 +1,109 @@
 use sov_mock_zkvm::MockZkvmCryptoSpec;
-use sov_modules_api::capabilities::UniquenessData;
+use sov_modules_api::capabilities::{authenticate, mocks::MockKernel, UniquenessData};
 use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction, Version0};
-use sov_modules_api::CryptoSpec;
+use sov_modules_api::{
+    Amount, BasicGasMeter, CryptoSpec, PrivateKey, Runtime as RuntimeTrait, Spec, StateCheckpoint,
+    StateProvider,
+};
 use sov_test_utils::runtime::{sov_value_setter, TestOptimisticRuntime, TestOptimisticRuntimeCall};
-use sov_test_utils::TestSpec;
+use sov_test_utils::storage::SimpleStorageManager;
+use sov_test_utils::{
+    default_test_signed_transaction, default_test_tx_details, TestPrivateKey, TestSpec,
+};
 use sov_universal_wallet::schema::Schema;
 
 type Runtime = TestOptimisticRuntime<TestSpec>;
 
 const ASSERT_MSG: &str = "JSON representation changed, this is a breaking change for web3 SDK, please ensure it is also updated";
+
+fn gas_used_to_authenticate(tx: &Transaction<Runtime, TestSpec>) -> <TestSpec as Spec>::Gas {
+    let storage_manager = SimpleStorageManager::new();
+    let storage = storage_manager.create_storage();
+    let kernel = MockKernel::<TestSpec>::new(10, 10);
+    let checkpoint = StateCheckpoint::<TestSpec>::new(storage, &kernel);
+    let gas_meter = BasicGasMeter::<TestSpec>::new_with_gas(
+        [u64::MAX, u64::MAX].into(),
+        [Amount::ZERO, Amount::ZERO].into(),
+    );
+    let mut state = checkpoint
+        .to_tx_scratchpad()
+        .to_pre_exec_working_set(gas_meter);
+
+    authenticate::<_, TestSpec, Runtime>(
+        &borsh::to_vec(tx).unwrap(),
+        &Runtime::CHAIN_HASH,
+        &mut state,
+    )
+    .unwrap();
+
+    let (_, meter) = state.to_scratchpad_and_gas_meter();
+    meter.gas_info().gas_used
+}
+
+#[test]
+fn v0_fallback_chain_hash_does_not_change_authentication_gas() {
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_CHAIN_HASH_OVERRIDES",
+        "[{start_height = 0, end_height = 10, chain_hash = \"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF\", grace_period = 5}]",
+    );
+
+    let key = TestPrivateKey::generate();
+    let call: TestOptimisticRuntimeCall<TestSpec> =
+        TestOptimisticRuntimeCall::ValueSetter(sov_value_setter::CallMessage::SetValue {
+            value: 42,
+            gas: None,
+        });
+    let fallback_hash = [0xFF; 32];
+    let primary_tx =
+        default_test_signed_transaction::<Runtime, TestSpec>(&key, &call, 0, &Runtime::CHAIN_HASH);
+    let fallback_tx =
+        default_test_signed_transaction::<Runtime, TestSpec>(&key, &call, 0, &fallback_hash);
+
+    assert_eq!(
+        gas_used_to_authenticate(&primary_tx),
+        gas_used_to_authenticate(&fallback_tx),
+        "a grace-period signature retry must not change transaction gas"
+    );
+}
+
+#[test]
+fn v1_fallback_chain_hash_does_not_change_authentication_gas() {
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_CHAIN_HASH_OVERRIDES",
+        "[{start_height = 0, end_height = 10, chain_hash = \"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF\", grace_period = 5}]",
+    );
+
+    let keys = [TestPrivateKey::generate(), TestPrivateKey::generate()];
+    let multisig =
+        sov_modules_api::Multisig::new(2, keys.iter().map(PrivateKey::pub_key).collect());
+    let call: TestOptimisticRuntimeCall<TestSpec> =
+        TestOptimisticRuntimeCall::ValueSetter(sov_value_setter::CallMessage::SetValue {
+            value: 42,
+            gas: None,
+        });
+    let build_tx = |chain_hash: &[u8; 32]| -> Transaction<Runtime, TestSpec> {
+        let mut tx = UnsignedTransaction::<Runtime, TestSpec>::new_with_details(
+            call.clone(),
+            UniquenessData::Generation(0),
+            default_test_tx_details::<TestSpec>(),
+        )
+        .to_multisig_tx(multisig.clone());
+        for key in &keys {
+            tx.sign(key, chain_hash).unwrap();
+        }
+        tx.into()
+    };
+
+    let fallback_hash = [0xFF; 32];
+    let primary_tx = build_tx(&Runtime::CHAIN_HASH);
+    let fallback_tx = build_tx(&fallback_hash);
+
+    assert_eq!(
+        gas_used_to_authenticate(&primary_tx),
+        gas_used_to_authenticate(&fallback_tx),
+        "a grace-period V1 signature retry must not change transaction gas"
+    );
+}
 
 // ensure custom serde serialized fields are serialized as expected
 // i.e Transaction pub_key and signature fields as hex strings
