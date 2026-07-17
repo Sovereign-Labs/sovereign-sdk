@@ -1,14 +1,17 @@
 use std::collections::HashMap;
 use std::num::NonZero;
+use std::panic::AssertUnwindSafe;
+use std::path::Path;
 use std::sync::atomic::AtomicU64;
 use std::sync::Arc;
 
 use anyhow::Context as _;
-use futures::StreamExt;
+use futures::{FutureExt, StreamExt};
 use proptest::prelude::*;
 use rand::{Rng, SeedableRng};
 use serde::Deserialize;
 use sov_db::config::RollupDbConfig;
+use sov_db::proof_manager_db::ProofManagerDb;
 use sov_db::schema::DeltaReader;
 use sov_db::storage_manager::{NomtChangeSet, NomtStorageManager};
 use sov_mock_da::storable::layer::{Randomizer, StorableMockDaLayer};
@@ -31,6 +34,7 @@ use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{ArrayWitness, NativeStorage, SlotKey, SlotValue, StateAccesses, Storage};
 
 use super::*;
+use crate::test_hooks::{CrashLocation, CRASH_ENV_NAME};
 // We need a proof receipt type whose first and last generics are serializable, and middle two params are daspec and state root.
 // This is never constructed - just used to satisfy the type checker.
 type DummyProofReceipt = PartialProofReceipt<u64, MockDaSpec, StateRoot, u64>;
@@ -131,6 +135,21 @@ const SEED_1: [u8; 32] = [1; 32];
 const SEED_2: [u8; 32] = [2; 32];
 const SEED_3: [u8; 32] = [3; 32];
 
+struct CrashEnvGuard;
+
+impl CrashEnvGuard {
+    fn set(location: CrashLocation) -> Self {
+        location.set_crash_env();
+        Self
+    }
+}
+
+impl Drop for CrashEnvGuard {
+    fn drop(&mut self) {
+        std::env::remove_var(CRASH_ENV_NAME);
+    }
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn test_empty_state_manager_returns_last_finalized_height() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
@@ -169,13 +188,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
     let (mut state_manager, initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
-    let (sender, mut receiver) = crate::processes::new_stf_info_channel(
-        state_manager.ledger_db.clone(),
-        NonZero::new(40).unwrap(),
-        NonZero::new(40).unwrap(),
-        None,
-    )
-    .await?;
+    let (_proof_manager_db, sender, mut receiver) = setup_proof_manager_channel(tempdir.path())?;
     state_manager.stf_info_sender = Some(sender);
 
     let mut state_root = initial_state_root;
@@ -220,22 +233,217 @@ async fn test_instant_finality() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_non_instant_finality_notifies_only_finalized_slots() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let finality = 2;
+    let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    let (_proof_manager_db, sender, mut receiver) = setup_proof_manager_channel(tempdir.path())?;
+    state_manager.stf_info_sender = Some(sender);
+
+    for height in 1..=4 {
+        da_service
+            .send_transaction(&[height as u8; 10])
+            .await
+            .await??;
+        let filtered_block = da_service.get_block_at(height).await?;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        process_continuous_transition(&mut state_manager, filtered_block, &da_service, finality)
+            .await?;
+
+        match height {
+            1 | 2 => {
+                assert!(
+                    tokio::time::timeout(
+                        std::time::Duration::from_millis(100),
+                        receiver.read_next(),
+                    )
+                    .await
+                    .is_err(),
+                    "non-finalized slots must not be emitted before finality"
+                );
+            }
+            3 | 4 => {
+                let finalized = receiver.read_next().await?.unwrap();
+                assert_eq!(finalized.slot_number().get(), height - finality as u64);
+                state_manager
+                    .stf_info_sender
+                    .as_ref()
+                    .expect("proof manager sender should be configured")
+                    .inc_next_height_to_receive();
+            }
+            _ => unreachable!(),
+        }
+    }
+
+    shutdown_sender.shutdown();
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_proof_manager_crash_after_staging_hides_uncommitted_slot() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let da_service = MockDaService::new(SEQUENCER_ADDRESS);
+
+    {
+        let (mut state_manager, _initial_state_root, shutdown_sender) =
+            setup_state_manager(tempdir.path(), da_service.clone()).await?;
+        let (_proof_manager_db, sender, _receiver) = setup_proof_manager_channel(tempdir.path())?;
+        state_manager.stf_info_sender = Some(sender);
+
+        da_service.send_transaction(&[1; 10]).await.await??;
+        let filtered_block = da_service.get_block_at(1).await?;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+
+        let _crash_guard = CrashEnvGuard::set(CrashLocation::AfterStagingProofManagerStfInfo);
+        let result = AssertUnwindSafe(process_continuous_transition(
+            &mut state_manager,
+            filtered_block,
+            &da_service,
+            0,
+        ))
+        .catch_unwind()
+        .await;
+        assert!(
+            result.is_err(),
+            "expected crash after staging ProofManager STF info"
+        );
+
+        shutdown_sender.shutdown();
+    }
+
+    {
+        let (proof_manager_db, mut sender, mut receiver) =
+            setup_proof_manager_channel(tempdir.path())?;
+        let config = RollupDbConfig::default_in_path(tempdir.path().to_path_buf());
+        let mut storage_manager: NomtStorageManager<MockDaSpec, sha2::Sha256, TestStorage> =
+            NomtStorageManager::new(config, true)?;
+        let (_stf_state, ledger_state) =
+            storage_manager.create_state_after(&MockBlockHeader::from_height(0))?;
+        let ledger_db = LedgerDb::with_reader(ledger_state)?;
+
+        let ledger_head = ledger_db
+            .get_head_slot()?
+            .map(|(slot, _)| slot)
+            .unwrap_or(SlotNumber::GENESIS);
+        assert_eq!(ledger_head, SlotNumber::GENESIS);
+        assert!(proof_manager_db.has_row_at_slot(SlotNumber::ONE)?);
+
+        let resolver_ledger = ledger_db.clone();
+        sender
+            .startup_notify_about_infos_from_db(
+                ledger_head,
+                ledger_head,
+                &InfiniteHeight,
+                move |slot| resolver_ledger.da_block_hash_for_slot(slot),
+            )
+            .await?;
+
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(100), receiver.read_next())
+                .await
+                .is_err(),
+            "uncommitted staged STF info should not be emitted after restart"
+        );
+    }
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_proof_manager_restart_recovers_after_ledger_finalize_crash() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let da_service = MockDaService::new(SEQUENCER_ADDRESS);
+
+    let restart_header = {
+        let (mut state_manager, _initial_state_root, shutdown_sender) =
+            setup_state_manager(tempdir.path(), da_service.clone()).await?;
+        let (_proof_manager_db, sender, _receiver) = setup_proof_manager_channel(tempdir.path())?;
+        state_manager.stf_info_sender = Some(sender);
+
+        da_service.send_transaction(&[1; 10]).await.await??;
+        let filtered_block = da_service.get_block_at(1).await?;
+        let restart_header = filtered_block.header().clone();
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+
+        let _crash_guard =
+            CrashEnvGuard::set(CrashLocation::AfterFinalizingLedgerBeforeProofManagerCommit);
+        let result = AssertUnwindSafe(process_continuous_transition(
+            &mut state_manager,
+            filtered_block,
+            &da_service,
+            0,
+        ))
+        .catch_unwind()
+        .await;
+        assert!(
+            result.is_err(),
+            "expected crash after ledger finalize and before ProofManager commit"
+        );
+
+        shutdown_sender.shutdown();
+        restart_header
+    };
+
+    {
+        let (proof_manager_db, mut sender, mut receiver) =
+            setup_proof_manager_channel(tempdir.path())?;
+        let config = RollupDbConfig::default_in_path(tempdir.path().to_path_buf());
+        let mut storage_manager: NomtStorageManager<MockDaSpec, sha2::Sha256, TestStorage> =
+            NomtStorageManager::new(config, true)?;
+        let (_stf_state, ledger_state) = storage_manager.create_state_after(&restart_header)?;
+        let ledger_db = LedgerDb::with_reader(ledger_state)?;
+
+        let ledger_head = ledger_db
+            .get_head_slot()?
+            .map(|(slot, _)| slot)
+            .unwrap_or(SlotNumber::GENESIS);
+        assert_eq!(ledger_head, SlotNumber::ONE);
+        assert!(proof_manager_db.has_row_at_slot(SlotNumber::ONE)?);
+
+        let resolver_ledger = ledger_db.clone();
+        sender
+            .startup_notify_about_infos_from_db(
+                ledger_head,
+                ledger_head,
+                &InfiniteHeight,
+                move |slot| resolver_ledger.da_block_hash_for_slot(slot),
+            )
+            .await?;
+
+        let recovered =
+            tokio::time::timeout(std::time::Duration::from_secs(1), receiver.read_next()).await??;
+        let recovered = recovered.expect("recovered slot should be visible after restart");
+        assert_eq!(recovered.slot_number(), SlotNumber::ONE);
+    }
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
     let da_service = MockDaService::new(SEQUENCER_ADDRESS);
     let (mut state_manager, _initial_state_root, shutdown_sender) =
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
+    let proof_manager_db = ProofManagerDb::open(tempdir.path())?;
     let (sender, mut receiver) = crate::processes::new_stf_info_channel(
-        state_manager.ledger_db.clone(),
+        proof_manager_db,
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
         None,
-    )
-    .await?;
+    )?;
     state_manager.stf_info_sender = Some(sender);
 
     da_service.send_transaction(&[1; 10]).await.await??;
+    // Let the background finalized-header poller observe block 1 before driving
+    // `process_stf_changes`; otherwise it reads a stale cached finalized header, skips
+    // `commit_stf_info`, and `read_next()` below blocks forever waiting for a notification.
+    tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
     let filtered_block = da_service.get_block_at(1).await?;
 
     let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(
@@ -1272,6 +1480,24 @@ where
         initial_state_root,
         secondary_shutdown_controller,
     ))
+}
+
+#[allow(clippy::type_complexity)]
+fn setup_proof_manager_channel(
+    storage_path: &Path,
+) -> anyhow::Result<(
+    ProofManagerDb,
+    crate::processes::Sender<StateRoot, Witness, MockDaSpec>,
+    crate::processes::Receiver<StateRoot, Witness, MockDaSpec>,
+)> {
+    let proof_manager_db = ProofManagerDb::open(storage_path)?;
+    let (sender, receiver) = crate::processes::new_stf_info_channel(
+        proof_manager_db.clone(),
+        NonZero::new(40).unwrap(),
+        NonZero::new(40).unwrap(),
+        None,
+    )?;
+    Ok((proof_manager_db, sender, receiver))
 }
 
 // Writes to user space concatenation of block height bytes and block hash.

@@ -1,5 +1,5 @@
 use std::num::NonZero;
-use std::path::Path;
+use std::path::{Path, PathBuf};
 
 use schemars::JsonSchema;
 use serde::de::DeserializeOwned;
@@ -117,7 +117,7 @@ impl HttpServerConfig {
 }
 
 /// Prover service configuration.
-#[derive(Debug, Clone, Deserialize, Serialize, Copy, PartialEq, Eq, JsonSchema)]
+#[derive(Debug, Clone, Deserialize, Serialize, PartialEq, Eq, JsonSchema)]
 pub struct ProofManagerConfig<Address> {
     /// The "distance" measured in the number of blocks between two consecutive aggregated proofs.
     pub aggregated_proof_block_jump: NonZero<usize>,
@@ -146,6 +146,10 @@ pub struct ProofManagerConfig<Address> {
     /// Maximum number of proof blobs sent in parallel. Batch blobs are not
     /// counted against this limit.
     pub max_concurrent_proof_blobs: usize,
+    /// Optional path to the proof manager database directory.
+    /// Defaults to the rollup storage path if not specified.
+    #[serde(default, skip_serializing_if = "Option::is_none")]
+    pub storage_path: Option<PathBuf>,
 }
 
 fn default_eager_proof_submission() -> bool {

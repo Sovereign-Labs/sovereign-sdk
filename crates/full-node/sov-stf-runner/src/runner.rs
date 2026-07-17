@@ -6,6 +6,7 @@ use std::time::Duration;
 use anyhow::Context;
 use jsonrpsee::RpcModule;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
+use sov_db::proof_manager_db::ProofManagerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_full_node_configs::runner::{CorsConfiguration, ProofManagerConfig, RunnerConfig};
 use sov_metrics::RunnerMetrics;
@@ -31,7 +32,7 @@ use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
 use crate::http::HttpServerStart;
-use crate::processes::{new_stf_info_channel, Receiver};
+use crate::processes::{new_stf_info_channel_for_runner, Receiver};
 use crate::state_manager::{AggregatedProofs, BlockCandidateResolution, StateManager};
 use tokio::net::TcpListener;
 
@@ -191,6 +192,7 @@ where
         da_service_with_cached_finalized_headers: DaServiceWithCachedFinalizedHeaders<Da>,
         genesis_da_height: u64,
         latest_proof_final_slot: Option<SlotNumber>,
+        start_fresh_outer_proof_on_resync: bool,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
@@ -222,13 +224,18 @@ where
 
         let (stf_info_sender, stf_info_receiver) = if let Some(config) = pm_config {
             validate_proof_manager_config(&config)?;
-            let channel = new_stf_info_channel(
-                ledger_db.clone(),
+            let storage_path = config
+                .storage_path
+                .as_ref()
+                .context("proof manager storage_path must be configured before runner startup")?;
+            let proof_manager_db = ProofManagerDb::open(storage_path)?;
+            let channel = new_stf_info_channel_for_runner(
+                proof_manager_db,
                 config.max_number_of_transitions_in_memory,
                 config.max_number_of_transitions_in_db,
                 latest_proof_final_slot,
-            )
-            .await?;
+                start_fresh_outer_proof_on_resync,
+            )?;
 
             (Some(channel.0), Some(channel.1))
         } else {

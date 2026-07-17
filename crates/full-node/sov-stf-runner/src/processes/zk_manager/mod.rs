@@ -341,8 +341,8 @@ where
     async fn run(mut self) -> anyhow::Result<()> {
         loop {
             let (metadata, window_size) = match self.metadata_rx.recv().await {
-                // Intake side dropped its sender (clean shutdown or intake error).
                 None => {
+                    // Intake side dropped its sender (clean shutdown or intake error).
                     tracing::debug!("Intake task closed metadata channel; aggregator exiting");
                     break;
                 }
@@ -384,6 +384,8 @@ where
                 .publish_proof_blob_with_metadata(agg_proof)
                 .await?;
 
+            // Advance the in-memory cursor only (never persisted; re-proof on restart is sound —
+            // see `CursorHandle::inc_next_height_to_receive_by`).
             self.cursor.inc_next_height_to_receive_by(window_size);
         }
         tracing::debug!("Aggregator task has been completed");

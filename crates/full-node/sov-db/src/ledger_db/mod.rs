@@ -17,14 +17,14 @@ use sov_rollup_interface::zk::aggregated_proof::{
 
 use crate::schema::tables::{
     BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey, EventByNumber, EventCountByKey,
-    FinalizedSlots, ProofByUniqueId, ProofReceiptHashesBySlot, SlotByHash, SlotByNumber,
-    StfInfoByNumber, StfInfoMetadata, TxByHash, TxByNumber, LEDGER_TABLES,
+    FinalizedSlots, ProofByUniqueId, ProofReceiptHashesBySlot, SlotByHash, SlotByNumber, TxByHash,
+    TxByNumber, LEDGER_TABLES,
 };
 use crate::schema::tables::{DiscardedBlobHahsByNumber, ProofReceiptByHash};
 use crate::schema::types::{
-    split_tx_for_storage, BatchNumber, DiscardedBlobNumber, EventKeyNumber, EventNumber,
-    LatestFinalizedSlotSingleton, ProofUniqueId, StfInfoUniqueId, StoredBatch, StoredDiscardedBlob,
-    StoredSlot, StoredStfInfo, StoredTransaction, TxNumber,
+    split_tx_for_storage, BatchNumber, DbHash, DiscardedBlobNumber, EventKeyNumber, EventNumber,
+    LatestFinalizedSlotSingleton, ProofUniqueId, StoredBatch, StoredDiscardedBlob, StoredSlot,
+    StoredTransaction, TxNumber,
 };
 use crate::DbOptions;
 
@@ -257,11 +257,6 @@ pub struct LedgerDb {
     db: Arc<RwLock<DeltaReader>>,
     notification_service: LedgerNotificationService,
 }
-
-// Db key for the latest height of the written STF info.
-const WRITE_ROLLUP_HEIGHT_ID: StfInfoUniqueId = StfInfoUniqueId(0);
-// Db key for the oldest saved STF info.
-const LAST_SLOT_NUMBER_ID: StfInfoUniqueId = StfInfoUniqueId(2);
 
 impl LedgerDb {
     const DB_PATH_SUFFIX: &'static str = "ledger";
@@ -564,6 +559,18 @@ impl LedgerDb {
             .get_largest::<SlotByNumber>()
     }
 
+    /// Get the canonical DA block hash for a rollup slot — the finalized-fork selector used by
+    /// the proof-manager STF-info queue. Returns `None` if the ledger has no slot at that height.
+    pub fn da_block_hash_for_slot(&self, slot: SlotNumber) -> anyhow::Result<Option<DbHash>> {
+        Ok(self
+            .db
+            .read()
+            .expect(DB_LOCK_POISONED)
+            .clone()
+            .get::<SlotByNumber>(&slot)?
+            .map(|stored_slot| stored_slot.hash))
+    }
+
     /// Get the state root from the most recent committed slot, if any.
     pub fn get_head_state_root(&self) -> anyhow::Result<Option<Vec<u8>>> {
         Ok(self
@@ -618,63 +625,6 @@ impl LedgerDb {
         let mut schema_batch = SchemaBatch::new();
         schema_batch.put::<ProofReceiptHashesBySlot>(&slot_number, &hashes)?;
         Ok(schema_batch)
-    }
-
-    /// Materializes [`StoredStfInfo`] into [`SchemaBatch`].
-    pub fn materialize_stf_info(
-        &self,
-        stf_info: &StoredStfInfo,
-        slot_number: SlotNumber,
-    ) -> anyhow::Result<SchemaBatch> {
-        let mut schema_batch = SchemaBatch::new();
-        schema_batch.put::<StfInfoByNumber>(&slot_number, stf_info)?;
-        Ok(schema_batch)
-    }
-
-    /// Get [`StoredStfInfo`] for the given slot number.
-    pub fn get_stf_info(&self, slot_num: SlotNumber) -> anyhow::Result<Option<StoredStfInfo>> {
-        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
-        db.get::<StfInfoByNumber>(&slot_num)
-    }
-
-    /// Materializes the latest height of the written STF info.
-    pub fn materialize_stf_info_write_slot_number(
-        &self,
-        stf_write_slot_number: SlotNumber,
-    ) -> anyhow::Result<SchemaBatch> {
-        let mut schema_batch = SchemaBatch::new();
-        schema_batch.put::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID, &stf_write_slot_number)?;
-        Ok(schema_batch)
-    }
-
-    /// Gets the latest height of the written STF info.
-    pub async fn get_stf_info_write_slot_number(&self) -> anyhow::Result<Option<SlotNumber>> {
-        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
-        db.get_async::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID)
-            .await
-    }
-
-    /// Materializes the oldest height of the retrieved STF info.
-    pub fn materialize_stf_info_oldest_slot_number(
-        &self,
-        read_slot_number: SlotNumber,
-    ) -> anyhow::Result<SchemaBatch> {
-        let mut schema_batch = SchemaBatch::new();
-        schema_batch.put::<StfInfoMetadata>(&LAST_SLOT_NUMBER_ID, &read_slot_number)?;
-        Ok(schema_batch)
-    }
-
-    /// Delete STF info for the given slot number.
-    pub fn delete_stf_info(&self, slot_number: SlotNumber) -> anyhow::Result<SchemaBatch> {
-        let mut schema_batch = SchemaBatch::new();
-        schema_batch.delete::<StfInfoByNumber>(&slot_number)?;
-        Ok(schema_batch)
-    }
-
-    /// Gets the oldest slot number STF info in the Db.
-    pub async fn get_stf_info_oldest_slot_number(&self) -> anyhow::Result<Option<SlotNumber>> {
-        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
-        db.get_async::<StfInfoMetadata>(&LAST_SLOT_NUMBER_ID).await
     }
 
     /// Gets the discarded blob (if any) corresponding to the given `blob_hash`.

@@ -358,6 +358,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
                 prover_thread_count_override: None,
                 max_number_of_aggregated_proofs_in_memory: NonZero::new(5).unwrap(),
                 max_concurrent_proof_blobs: self.config.max_concurrent_proof_blobs,
+                storage_path: None,
             }),
             sequencer: SequencerConfig {
                 automatic_batch_production: self.config.automatic_batch_production,

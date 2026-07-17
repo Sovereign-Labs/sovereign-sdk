@@ -9,6 +9,8 @@ use std::sync::Arc;
 use crate::da::DaServiceWithCachedFinalizedHeaders;
 use crate::processes::{Sender as StfInfoSender, StateTransitionInfo};
 use crate::query_state_update_info;
+#[cfg(test)]
+use crate::test_hooks::CrashLocation;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
@@ -19,6 +21,7 @@ use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::{BlockHeaderTrait, DaSpec};
 use sov_rollup_interface::node::da::{DaService, SlotData};
+use sov_rollup_interface::node::ledger_api::LedgerStateProvider;
 use sov_rollup_interface::stf::{PartialProofReceipt, TxReceiptContents};
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
@@ -186,12 +189,28 @@ where
 
     pub(crate) async fn startup(&mut self) -> anyhow::Result<()> {
         if let Some(sender) = &mut self.stf_info_sender {
-            // If this state manager uses a channel, it MUST be correctly
-            // initialized before usage.
+            // The proof manager DB is reconciled against the finalized ledger
+            // view before any new STF info is produced.
+            let ledger_head = self
+                .ledger_db
+                .get_head_slot()?
+                .map(|(slot, _)| slot)
+                .unwrap_or(SlotNumber::GENESIS);
+            let latest_finalized_slot_number = self
+                .ledger_db
+                .get_latest_finalized_slot_number()
+                .await?
+                .min(ledger_head);
+
+            // Resolver maps a slot to the ledger's canonical DA hash so the proof manager selects
+            // the finalized fork without coupling the receiver to LedgerDb.
+            let ledger_db = self.ledger_db.clone();
             sender
                 .startup_notify_about_infos_from_db(
-                    &self.ledger_db,
+                    ledger_head,
+                    latest_finalized_slot_number,
                     &*self.max_provable_slot_number_tracker,
+                    move |slot| ledger_db.da_block_hash_for_slot(slot),
                 )
                 .await?;
         }
@@ -417,42 +436,45 @@ where
             "Initial Ledger ChangeSet is materialized"
         );
 
-        let last_finalized_slot_number = finalized_transitions.iter().last().map(|t| {
-            SlotNumber::new(
-                t.block_header
-                    .height()
-                    .saturating_sub(self.genesis_da_height),
-            )
-        });
+        let last_finalized_slot_number: Option<SlotNumber> =
+            if let Some(finalized_transition) = finalized_transitions.iter().last() {
+                let last_processed_finalized_header = &finalized_transition.block_header;
+                let last_finalized_slot_number = SlotNumber::new(
+                    last_processed_finalized_header
+                        .height()
+                        .saturating_sub(self.genesis_da_height),
+                );
+                tracing::trace!(
+                    ?last_finalized_slot_number,
+                    "Going to materialize last finalized slot number"
+                );
+                let last_finalized_slot_update = self
+                    .ledger_db
+                    .materialize_latest_finalize_slot(slot_number, last_finalized_slot_number)?;
 
-        if let Some(last_finalized_slot_number) = last_finalized_slot_number {
-            tracing::trace!(
-                ?last_finalized_slot_number,
-                "Going to materialize last finalized slot number"
-            );
-            let last_finalized_slot_update = self
-                .ledger_db
-                .materialize_latest_finalize_slot(slot_number, last_finalized_slot_number)?;
-
-            ledger_change_set.merge(last_finalized_slot_update);
-            tracing::trace!(
-                ?last_finalized_slot_number,
-                current_slot_number = ?slot_number,
-                "Last finalized slot is materialized into LedgerDb ChangeSet"
-            );
-        }
+                ledger_change_set.merge(last_finalized_slot_update);
+                tracing::trace!(
+                    ?last_finalized_slot_number,
+                    current_slot_number = ?slot_number,
+                    "Last finalized slot is materialized into LedgerDb ChangeSet"
+                );
+                Some(last_finalized_slot_number)
+            } else {
+                None
+            };
 
         if let Some(stf_info_sender) = &self.stf_info_sender {
-            tracing::trace!("Going to materialize StateTransitionInfo");
+            tracing::trace!("Going to stage StateTransitionInfo in ProofManagerDb");
             let stf_info = StateTransitionInfo {
                 data: transition_witness,
                 aggregated_proofs: all_aggregated_proofs,
             };
-            let stf_info_schema = stf_info_sender
-                .materialize_stf_info(&stf_info, &self.ledger_db)
-                .await?;
-            ledger_change_set.merge(stf_info_schema);
-            tracing::trace!("StateTransitionInfo is materialized into Ledger ChangeSet");
+            // Stage STF info data before ledger commit. Metadata is updated only after
+            // the ledger commit succeeds to avoid advancing ProofManager beyond LedgerDb.
+            stf_info_sender.stage_stf_info(&stf_info).await?;
+            #[cfg(test)]
+            CrashLocation::AfterStagingProofManagerStfInfo.crash_if_env_set();
+            tracing::trace!("StateTransitionInfo is staged in ProofManagerDb");
         }
 
         for aggregated_proof in accepted_aggregated_proofs {
@@ -498,6 +520,8 @@ where
             ?commit_time,
             "All finalized transitions are marked as finalized"
         );
+        #[cfg(test)]
+        CrashLocation::AfterFinalizingLedgerBeforeProofManagerCommit.crash_if_env_set();
 
         // Evict all cached headers below the finalized height — they will
         // never be looked up again and removing them prevents stale
@@ -511,6 +535,11 @@ where
 
         let sending_to_prover_start = std::time::Instant::now();
         if let Some(stf_info_sender) = &mut self.stf_info_sender {
+            // Later STF rows stay staged but hidden until ledger finality reaches them.
+            if let Some(finalized_slot) = last_finalized_slot_number {
+                stf_info_sender.commit_stf_info(finalized_slot).await?;
+            }
+
             // Notify `StateTransitionInfo` consumers that the data is saved in the Db.
             let max_provable_slot_number = self
                 .max_provable_slot_number_tracker
@@ -519,8 +548,11 @@ where
                 ?max_provable_slot_number,
                 "Going to notify stf_info_sender about max provable slot"
             );
+            let ledger_db = self.ledger_db.clone();
             stf_info_sender
-                .notify(max_provable_slot_number, &self.ledger_db)
+                .notify(max_provable_slot_number, move |slot| {
+                    ledger_db.da_block_hash_for_slot(slot)
+                })
                 .await?;
             tracing::trace!(
                 ?max_provable_slot_number,
