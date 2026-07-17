@@ -26,7 +26,6 @@ pub(crate) fn derive_cli_wallet(
     let mut tx_args_subcommand_match_arms_max_fee = vec![];
     let mut tx_args_subcommand_match_arms_gas_limit = vec![];
     let mut try_from_subcommand_match_arms = vec![];
-    let mut try_map_match_arms = vec![];
     let mut from_json_match_arms = vec![];
     let mut deserialize_constraints: Vec<syn::WherePredicate> = vec![];
 
@@ -75,10 +74,6 @@ pub(crate) fn derive_cli_wallet(
                     )
                 },
             });
-
-        try_map_match_arms.push(quote! {
-            RuntimeMessage::#field_name { contents } => RuntimeMessage::#field_name { contents: contents.try_into()? },
-        });
 
         tx_args_subcommand_match_arms_chain_id.push(quote! {
             RuntimeSubcommand::#field_name { contents } => <__Inner as ::sov_modules_api::cli::CliTxImportArg>::chain_id(&contents),
@@ -151,7 +146,7 @@ pub(crate) fn derive_cli_wallet(
         generics_with_inner.split_for_impl();
 
     // Generics identical to generics_with_inner, but with the `__Inner` type renamed to `__Dest`.
-    // This type is used in the the try_map conversion
+    // Used for converting `RuntimeSubcommand<__Inner>` into `RuntimeMessage<__Dest>` via `TryFrom`.
     let generics_for_dest = {
         let mut generics = generics.clone();
         generics.params.insert(0, syn::parse_quote! {__Dest});
@@ -265,10 +260,9 @@ pub(crate) fn derive_cli_wallet(
             // use fallible logic to convert it into the final JSON string to be parsed into a callmessage.
             impl #impl_generics_with_inner_and_dest ::core::convert::TryFrom<RuntimeSubcommand #ty_generics_with_inner> for RuntimeMessage #ty_generics_for_dest #where_clause_with_inner_clap_and_try_from {
                 type Error = <__Dest as ::core::convert::TryFrom<__Inner>>::Error;
-                /// Convert a `RuntimeSubcommand` to a `RuntimeSubcommand` with a different `__Inner` type using `try_from`.
-                ///
-                /// This method is called `try_map` instead of `try_from` to avoid conflicting with the `TryFrom` trait in
-                /// the corner case where the source and destination types are the same.
+                /// Convert a `RuntimeSubcommand` to a `RuntimeMessage` with a different `__Inner` type using `try_from`.
+                /// Performs the fallible conversion at the subcommand stage so that different CLI arg types (e.g., file vs json)
+                /// can be unified before deserializing into the runtime call message.
                 fn try_from(item: RuntimeSubcommand #ty_generics_with_inner ) -> Result<Self, Self::Error>
                  {
                     Ok(match item {
