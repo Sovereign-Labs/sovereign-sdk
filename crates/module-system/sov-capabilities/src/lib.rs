@@ -278,7 +278,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         _context: &Context<S>,
         execution_context: &ExecutionContext,
         state: &mut impl StateReader<User>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), sov_modules_api::CheckUniquenessError> {
         self.uniqueness.check_uniqueness(
             &auth_data.credential_id,
             auth_data.uniqueness,

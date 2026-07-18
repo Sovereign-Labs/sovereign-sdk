@@ -1,6 +1,8 @@
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::ExecutionContext;
-use sov_modules_api::{CredentialId, Spec, StateAccessor, StateReader, TxHash};
+use sov_modules_api::{
+    CheckUniquenessError, CredentialId, Spec, StateAccessor, StateReader, TxHash,
+};
 use sov_state::User;
 
 use crate::Uniqueness;
@@ -20,7 +22,7 @@ impl<S: Spec> Uniqueness<S> {
         transaction_hash: TxHash,
         execution_context: &ExecutionContext,
         state: &mut impl StateReader<User>,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), CheckUniquenessError> {
         match transaction_uniqueness {
             UniquenessData::Nonce(nonce) => match execution_context {
                 ExecutionContext::SequencerWarmUp => {

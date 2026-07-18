@@ -11,7 +11,7 @@ use sov_rollup_interface::{Bytes, TxHash};
 use sov_universal_wallet::UniversalWallet;
 
 use crate::transaction::Credentials;
-use crate::{Context, SequencerType, Spec, StateAccessor};
+use crate::{CheckUniquenessError, Context, SequencerType, Spec, StateAccessor};
 
 /// Authorizes transactions to be executed.
 pub trait TransactionAuthorizer<S: Spec> {
@@ -43,7 +43,7 @@ pub trait TransactionAuthorizer<S: Spec> {
         context: &Context<S>,
         execution_context: &ExecutionContext,
         state: &mut impl StateAccessor,
-    ) -> anyhow::Result<()>;
+    ) -> Result<(), CheckUniquenessError>;
 
     /// Marks a transaction as having been executed, preventing it from executing again.
     fn mark_tx_attempted(

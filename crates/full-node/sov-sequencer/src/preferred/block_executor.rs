@@ -13,9 +13,9 @@ use sov_modules_api::capabilities::{
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
-    call_message_repr, Amount, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx,
-    Gas, GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
-    RuntimeEventProcessor, RuntimeEventResponse, SelectedBlob, Spec, StateCheckpoint,
+    call_message_repr, Amount, BlobDataWithId, ChangeSet, DaSpec, ErrorDetail, ExecutionContext,
+    FullyBakedTx, Gas, GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason,
+    Runtime, RuntimeEventProcessor, RuntimeEventResponse, SelectedBlob, Spec, StateCheckpoint,
     TransactionReceipt, TxChangeSet, TxHash, VersionReader, VisibleSlotNumber,
 };
 use sov_modules_api::{CryptoSpec, HDTimestamp};
@@ -95,9 +95,10 @@ impl<S: Spec> RollupBlockExecutorError<S> {
                     sov_rollup_interface::stf::TxEffect::Reverted(reverted) => {
                         reverted.reason.error_detail().unwrap_or(json_obj!({}))
                     }
-                    _ => json_obj!({
-                        "error": format!("{:?}", receipt),
-                    }),
+                    sov_rollup_interface::stf::TxEffect::Skipped(skipped) => {
+                        skipped.error.error_detail().unwrap_or(json_obj!({}))
+                    }
+                    _ => json_obj!({"error": format!("{:?}", receipt)}),
                 };
                 ErrorObject {
                     status: StatusCode::BAD_REQUEST,

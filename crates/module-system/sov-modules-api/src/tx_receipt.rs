@@ -1,5 +1,6 @@
 pub use crate::common::ModuleError as Error;
 use crate::Spec;
+use crate::{CoreModuleError, ErrorContext, ErrorDetail};
 
 /// The receipt type for a transaction using the STF blueprint.
 pub type TransactionReceipt<S> =
@@ -74,6 +75,94 @@ impl<S: Spec> PartialEq for SkippedTxContents<S> {
 }
 impl<S: Spec> Eq for SkippedTxContents<S> {}
 
+/// Why a nonce-based transaction was rejected.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum BadNonceReason {
+    /// Nonce did not match the expected consecutive value.
+    WrongNonce,
+    /// Nonce is outside the valid queue range (past or beyond the max limit); rejected immediately.
+    OutsideQueueRange,
+    /// Transaction was queued but timed out before its predecessor was executed.
+    QueueTimeout,
+    /// Transaction was queued but dropped, usually because the sequencer is shutting down.
+    QueueEvicted,
+    /// A new transaction with the same nonce arrived and replaced this one in the queue.
+    Replaced,
+    /// An identical transaction (same nonce and hash) is already in the queue.
+    AlreadyQueued,
+}
+
+/// Structured error returned when a transaction's uniqueness check fails.
+#[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, thiserror::Error)]
+#[serde(rename_all = "snake_case", tag = "kind")]
+pub enum CheckUniquenessError {
+    /// The generation number is older than the sequencer's acceptance window.
+    #[error("bad generation: latest known generation is {latest_generation}, provided {provided_generation} is too old")]
+    BadGeneration {
+        /// The latest generation the sequencer has seen for this credential.
+        latest_generation: u64,
+        /// The generation provided in the transaction.
+        provided_generation: u64,
+    },
+    /// The transaction hash was already seen at this generation.
+    #[error("duplicate transaction at generation {generation}")]
+    DuplicateGeneration {
+        /// The generation at which the duplicate was detected.
+        generation: u64,
+    },
+    /// Too many transactions at the current generation; the credential must increment it.
+    #[error("too many transactions at generation {current_generation}: increment generation to {next_valid_generation}")]
+    GenerationCapacityExceeded {
+        /// The generation that is full.
+        current_generation: u64,
+        /// The minimum generation value that will be accepted next.
+        next_valid_generation: u64,
+    },
+    /// The nonce was not the expected next value.
+    #[error("bad nonce: expected {expected_nonce}, provided {provided_nonce} ({reason:?})")]
+    BadNonce {
+        /// The nonce the sequencer expected.
+        expected_nonce: u64,
+        /// The nonce provided in the transaction.
+        provided_nonce: u64,
+        /// Why the nonce was rejected.
+        reason: BadNonceReason,
+    },
+    /// The nonce was below the minimum accepted value (warm-up / non-consecutive mode).
+    #[error("nonce too low: minimum {minimum_nonce}, provided {provided_nonce}")]
+    NonceTooLow {
+        /// The minimum nonce the sequencer will accept.
+        minimum_nonce: u64,
+        /// The nonce provided in the transaction.
+        provided_nonce: u64,
+    },
+    /// An unexpected internal error occurred during the uniqueness check.
+    #[error(transparent)]
+    Internal(#[from] CoreModuleError),
+}
+
+impl From<anyhow::Error> for CheckUniquenessError {
+    fn from(e: anyhow::Error) -> Self {
+        CheckUniquenessError::Internal(CoreModuleError::Generic(e))
+    }
+}
+
+impl ErrorDetail for CheckUniquenessError {
+    fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
+        Ok(crate::err_detail!(self))
+    }
+}
+
+impl ErrorDetail for TxProcessingError {
+    fn error_detail(&self) -> Result<ErrorContext, Box<dyn std::error::Error + Send + Sync>> {
+        match self {
+            TxProcessingError::CheckUniquenessFailed(inner) => inner.error_detail(),
+            _ => Ok(crate::err_detail!({"error": format!("{:?}", self)})),
+        }
+    }
+}
+
 /// The transaction processing error.
 #[derive(Debug, Clone, PartialEq, Eq, serde::Serialize, serde::Deserialize, thiserror::Error)]
 #[serde(rename_all = "snake_case")]
@@ -83,7 +172,7 @@ pub enum TxProcessingError {
     AuthenticationFailed(String),
     /// The uniqueness check failed.
     #[error("The uniqueness check failed. Reason: {0}.")]
-    CheckUniquenessFailed(String),
+    CheckUniquenessFailed(CheckUniquenessError),
     /// Impossible to reserve gas for the transaction to be executed.
     #[error("Impossible to reserve gas for the transaction to be executed, reason: {0}.")]
     CannotReserveGas(String),

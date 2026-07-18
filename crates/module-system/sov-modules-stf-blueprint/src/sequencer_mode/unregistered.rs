@@ -59,7 +59,7 @@ pub fn process_unauthorized_tx<S: Spec, R: Runtime<S>>(
     ) {
         let (scratchpad, pre_exec_gas_meter) = pre_exec_working_set.revert();
         return (
-            Err(TxProcessingError::CheckUniquenessFailed(e.to_string())),
+            Err(TxProcessingError::CheckUniquenessFailed(e)),
             scratchpad.commit(),
             pre_exec_gas_meter,
         );

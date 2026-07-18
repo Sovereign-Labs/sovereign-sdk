@@ -1,4 +1,7 @@
-use sov_modules_api::{CredentialId, Spec, StateAccessor, StateReader};
+use sov_modules_api::{
+    BadNonceReason, CheckUniquenessError, CoreModuleError, CredentialId, Spec, StateAccessor,
+    StateReader,
+};
 use sov_state::User;
 
 use crate::Uniqueness;
@@ -8,13 +11,20 @@ impl<S: Spec> Uniqueness<S> {
         credential_id: &CredentialId,
         transaction_nonce: u64,
         state: &mut impl StateReader<User>,
-    ) -> anyhow::Result<()> {
-        let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
+    ) -> Result<(), CheckUniquenessError> {
+        let nonce = self
+            .nonces
+            .get(credential_id, state)
+            .map_err(CoreModuleError::state_read)?
+            .unwrap_or_default();
 
-        anyhow::ensure!(
-            nonce == transaction_nonce,
-            "Tx bad nonce for credential id: {credential_id}, expected: {nonce}, but found: {transaction_nonce}",
-        );
+        if nonce != transaction_nonce {
+            return Err(CheckUniquenessError::BadNonce {
+                expected_nonce: nonce,
+                provided_nonce: transaction_nonce,
+                reason: BadNonceReason::WrongNonce,
+            });
+        }
 
         Ok(())
     }
@@ -24,13 +34,19 @@ impl<S: Spec> Uniqueness<S> {
         credential_id: &CredentialId,
         transaction_nonce: u64,
         state: &mut impl StateReader<User>,
-    ) -> anyhow::Result<()> {
-        let nonce = self.nonces.get(credential_id, state)?.unwrap_or_default();
+    ) -> Result<(), CheckUniquenessError> {
+        let nonce = self
+            .nonces
+            .get(credential_id, state)
+            .map_err(CoreModuleError::state_read)?
+            .unwrap_or_default();
 
-        anyhow::ensure!(
-            nonce <= transaction_nonce,
-            "Tx bad nonce for credential id: {credential_id}, expected at least: {nonce}, but found: {transaction_nonce}",
-        );
+        if nonce > transaction_nonce {
+            return Err(CheckUniquenessError::NonceTooLow {
+                minimum_nonce: nonce,
+                provided_nonce: transaction_nonce,
+            });
+        }
 
         Ok(())
     }
