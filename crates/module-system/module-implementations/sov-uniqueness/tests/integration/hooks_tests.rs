@@ -286,6 +286,11 @@ fn send_tx_works_window_zero_start_nonce() {
 fn send_tx_works_window() {
     let (admin, mut runner, evm_account) = setup();
     let admin_credential_id: CredentialId = admin.credential_id();
+    let window = config_value!("PAST_TRANSACTIONS_WINDOW");
+    let first_nonce = window;
+    let second_nonce = window - 2;
+    let third_nonce = first_nonce + window - 1;
+    let fourth_nonce = third_nonce + 1;
 
     runner.query_visible_state(|state| {
         assert_eq!(
@@ -298,62 +303,56 @@ fn send_tx_works_window() {
     });
 
     runner.execute_transaction(TransactionTestCase {
-        input: generate_default_tx(UniquenessData::Window(42), &admin, &evm_account),
+        input: generate_default_tx(UniquenessData::Window(first_nonce), &admin, &evm_account),
         assert: Box::new(move |ctx, state| {
             assert!(ctx.tx_receipt.is_successful());
 
+            let mut dst = vec![0; window as usize / 8];
+            dst[window as usize / 8 - 1] = 1;
             assert_eq!(
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some(Window::test_only_from_tuple((
-                    0,
-                    vec![0, 0, 0, 0, 0, 1 << 2]
-                ))),
+                Some(Window::test_only_from_tuple((8, dst))),
                 "A bit in the window should be set",
             );
         }),
     });
 
     runner.execute_transaction(TransactionTestCase {
-        input: generate_default_tx(UniquenessData::Window(40), &admin, &evm_account),
+        input: generate_default_tx(UniquenessData::Window(second_nonce), &admin, &evm_account),
         assert: Box::new(move |ctx, state| {
             assert!(ctx.tx_receipt.is_successful());
+            let mut dst = vec![0; window as usize / 8];
+            dst[window as usize / 8 - 2] = 1 << 6;
+            dst[window as usize / 8 - 1] = 1;
             assert_eq!(
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some(Window::test_only_from_tuple((
-                    0,
-                    vec![0, 0, 0, 0, 0, (1 << 2) | (1 << 0)]
-                ))),
+                Some(Window::test_only_from_tuple((8, dst))),
                 "Two bits in the window should be set."
             );
         }),
     });
-    let window = config_value!("PAST_TRANSACTIONS_WINDOW");
     runner.execute_transaction(TransactionTestCase {
-        input: generate_default_tx(
-            UniquenessData::Window(40 + window - 1),
-            &admin,
-            &evm_account,
-        ),
+        input: generate_default_tx(UniquenessData::Window(third_nonce), &admin, &evm_account),
         assert: Box::new(move |ctx, state| {
             assert!(ctx.tx_receipt.is_successful());
             let mut dst = vec![0; window as usize / 8];
-            dst[0] = (1 << 2) | (1 << 0);
+            dst[0] = 1;
             dst[window as usize / 8 - 1] = 1 << 7;
             assert_eq!(
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some(Window::test_only_from_tuple((40, dst))),
+                Some(Window::test_only_from_tuple((first_nonce, dst))),
                 "Dropping bits in the window"
             );
         }),
     });
     runner.execute_transaction(TransactionTestCase {
-        input: generate_default_tx(UniquenessData::Window(40 + window), &admin, &evm_account),
+        input: generate_default_tx(UniquenessData::Window(fourth_nonce), &admin, &evm_account),
         assert: Box::new(move |ctx, state| {
             assert!(ctx.tx_receipt.is_successful());
             let mut dst = vec![0; window as usize / 8];
@@ -363,7 +362,7 @@ fn send_tx_works_window() {
                 Uniqueness::<S>::default()
                     .window(&admin_credential_id, state)
                     .unwrap_infallible(),
-                Some(Window::test_only_from_tuple((48, dst))),
+                Some(Window::test_only_from_tuple((first_nonce + 8, dst))),
                 "Dropping bits in the window"
             );
         }),

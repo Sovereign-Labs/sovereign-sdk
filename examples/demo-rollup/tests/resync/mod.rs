@@ -260,7 +260,7 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
 
     {
         let _span = tracing::info_span!("sync-1").entered();
-        sync_rollup_with_path(rollup_storage_path.clone(), 10_000)
+        sync_rollup_with_path(rollup_storage_path.clone(), 200)
             .await
             .context("Sync 1")?;
     }
@@ -306,7 +306,7 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
     );
 
     {
-        sync_rollup_with_path(rollup_storage_path, 20_000)
+        sync_rollup_with_path(rollup_storage_path, 300)
             .await
             .context("Sync 2")?;
     }

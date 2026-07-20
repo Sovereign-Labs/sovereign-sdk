@@ -1,10 +1,11 @@
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{CredentialId, TxEffect};
 use sov_test_utils::{BatchType, SlotInput, TransactionTestCase, TxProcessingError};
 use sov_uniqueness::Uniqueness;
 
 use crate::runtime::S;
-use crate::utils::{generate_value_setter_tx, setup};
+use crate::utils::{generate_value_setter_tx, generate_value_setter_uniqueness_tx, setup};
 
 /// This test verifies that the `MAX_STORED_TX_HASHES_PER_CREDENTIAL` limit is respected and that authentication succeeds when that limit is not exceeded.
 #[test]
@@ -30,6 +31,83 @@ fn test_max_stored_tx_hashes_per_credential_lite() {
 /// Along the way, this test also checks that the `MAX_STORED_TX_HASHES_PER_CREDENTIAL` limit behaves as expected.
 fn test_max_stored_tx_hashes_per_credential() {
     do_max_stored_tx_hashes_per_credential_test()
+}
+
+#[test]
+fn generation_allows_pruning_floor_then_rejects_too_far_ahead() {
+    let (admin, mut runner, _) = setup();
+    let past_transaction_generations: u64 = config_value!("PAST_TRANSACTION_GENERATIONS");
+    let pruning_floor = past_transaction_generations.checked_add(1).unwrap();
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_value_setter_tx(0, 0, &admin),
+        assert: Box::new(move |ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_value_setter_tx(pruning_floor, 1, &admin),
+        assert: Box::new(move |ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_value_setter_tx(u64::MAX, 2, &admin),
+        assert: Box::new(move |ctx, _state| {
+            let TxEffect::Skipped(skipped) = ctx.tx_receipt else {
+                panic!("Transaction should be skipped");
+            };
+            match skipped.error {
+                TxProcessingError::CheckUniquenessFailed(reason) => {
+                    assert!(reason.contains("exceeds the maximum allowed value"));
+                }
+                _ => {
+                    panic!(
+                        "Transaction should be rejected because its generation is too far ahead"
+                    );
+                }
+            }
+        }),
+    });
+}
+
+#[test]
+fn window_allows_window_floor_then_rejects_too_far_ahead() {
+    let (admin, mut runner, _) = setup();
+    let window_floor: u64 = config_value!("PAST_TRANSACTIONS_WINDOW");
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_value_setter_uniqueness_tx(UniquenessData::Window(0), 0, &admin),
+        assert: Box::new(move |ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_value_setter_uniqueness_tx(UniquenessData::Window(window_floor), 1, &admin),
+        assert: Box::new(move |ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.execute_transaction(TransactionTestCase {
+        input: generate_value_setter_uniqueness_tx(UniquenessData::Window(u64::MAX), 2, &admin),
+        assert: Box::new(move |ctx, _state| {
+            let TxEffect::Skipped(skipped) = ctx.tx_receipt else {
+                panic!("Transaction should be skipped");
+            };
+            match skipped.error {
+                TxProcessingError::CheckUniquenessFailed(reason) => {
+                    assert!(reason.contains("exceeds the maximum allowed value"));
+                }
+                _ => {
+                    panic!("Transaction should be rejected because its nonce is too far ahead");
+                }
+            }
+        }),
+    });
 }
 
 /// This function generates a number of transactions that will fill up the "bucket" of stored transaction hashes

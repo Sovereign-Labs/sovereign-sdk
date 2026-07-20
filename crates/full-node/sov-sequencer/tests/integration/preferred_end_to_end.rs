@@ -894,8 +894,9 @@ impl Default for TestState {
         Self {
             value_by_slot_number: Default::default(),
             _current_slot_number: Default::default(),
-            // initialize to a higher generation so that "invalid generation" actions are always possible
-            next_generation: config_value!("PAST_TRANSACTION_GENERATIONS") + 10,
+            // Start at the pruning boundary so that "too old" generation actions
+            // are possible without exceeding the forward-generation cap during setup.
+            next_generation: config_value!("PAST_TRANSACTION_GENERATIONS"),
             current_value: Default::default(),
         }
     }
