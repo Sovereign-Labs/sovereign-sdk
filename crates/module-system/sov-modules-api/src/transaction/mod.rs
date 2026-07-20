@@ -5,7 +5,9 @@ use std::fmt::Debug;
 use crate::capabilities::UniquenessData;
 use crate::Multisig;
 use borsh::{BorshDeserialize, BorshSerialize};
-pub use data::{AuthenticatedTransactionData, Credentials, PriorityFeeBips, TxDetails};
+pub use data::{
+    chain_hash_fragment, AuthenticatedTransactionData, Credentials, PriorityFeeBips, TxDetails,
+};
 use derivative::Derivative;
 pub(crate) use rewards::transaction_consumption_helper;
 pub use rewards::{ProverReward, RemainingFunds, SequencerReward, TransactionConsumption};
@@ -105,8 +107,9 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     pub fn new_signed_tx(
         priv_key: &C::PrivateKey,
         chain_hash: &[u8; 32],
-        unsigned_tx: UnsignedTransaction<R, S>,
+        mut unsigned_tx: UnsignedTransaction<R, S>,
     ) -> Self {
+        unsigned_tx.details.chain_hash_fragment = chain_hash_fragment(chain_hash);
         let signing_bytes = unsigned_tx.to_signing_bytes_v0(*chain_hash);
 
         let pub_key = priv_key.pub_key();
@@ -167,11 +170,11 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         }
     }
 
-    /// Returns the chain id.
-    pub fn chain_id(&self) -> u64 {
+    /// Returns the chain hash fragment.
+    pub fn chain_hash_fragment(&self) -> u64 {
         match &self {
-            Transaction::V0(inner) => inner.details.chain_id,
-            Transaction::V1(inner) => inner.details.chain_id,
+            Transaction::V0(inner) => inner.details.chain_hash_fragment,
+            Transaction::V1(inner) => inner.details.chain_hash_fragment,
         }
     }
 

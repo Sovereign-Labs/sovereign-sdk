@@ -34,7 +34,7 @@ const rollup = new StandardRollup({
     max_priority_fee_bips: 0,
     max_fee: 1000000,
     gas_limit: null,
-    chain_id: 4321,
+    chain_hash_fragment: "6654161651848106779",
   },
 });
 
@@ -110,7 +110,6 @@ const simulation = await rollup.simulate(
     txDetails: {
       max_priority_fee_bips: 1000,
       max_fee: 1000000,
-      chain_id: 1,
     },
   }
 );

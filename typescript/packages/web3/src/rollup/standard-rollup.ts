@@ -9,7 +9,13 @@ import type {
 } from "@sovereign-sdk/types";
 import { bytesToHex } from "@sovereign-sdk/utils";
 import { addressFromPublicKey } from "../addresses";
+import { VersionMismatchError } from "../errors";
 import type { DeepPartial } from "../utils";
+import {
+  assertChainHashFragment,
+  chainHashFragment,
+  refreshChainHashFragment,
+} from "./chain-hash";
 import {
   type CredentialIdToAddress,
   Rollup,
@@ -20,6 +26,8 @@ import {
   type TypeBuilder,
   type UnsignedTransactionContext,
 } from "./rollup";
+
+export { chainHashFragment } from "./chain-hash";
 
 export type Dedup = {
   nonce: number;
@@ -92,9 +100,14 @@ export function standardTypeBuilder<
       unsignedTx,
       chainHash,
     }: TransactionSigningPayloadContext<S, StandardRollupContext>) {
+      const normalizedUnsignedTx = refreshChainHashFragment(
+        unsignedTx,
+        chainHash,
+      );
+
       return {
         V0: {
-          ...unsignedTx,
+          ...normalizedUnsignedTx,
           chain_hash: Array.from(chainHash),
         },
       } as S["TransactionSigningPayload"];
@@ -122,6 +135,11 @@ export class StandardRollup<RuntimeCall> extends Rollup<
   StandardRollupSpec<RuntimeCall>,
   StandardRollupContext
 > {
+  private updateDefaultChainHashFragment(chainHash: Uint8Array): void {
+    this.context.defaultTxDetails.chain_hash_fragment =
+      chainHashFragment(chainHash);
+  }
+
   private async credentialAddressFromId(
     credentialId: Uint8Array,
   ): Promise<string> {
@@ -136,15 +154,36 @@ export class StandardRollup<RuntimeCall> extends Rollup<
     return addressFromPublicKey(credentialId, "sov");
   }
 
+  async submitTransaction(
+    transaction: StandardRollupSpec<RuntimeCall>["Transaction"],
+    options?: SovereignClient.RequestOptions,
+  ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
+    try {
+      return await super.submitTransaction(transaction, options);
+    } catch (error) {
+      if (error instanceof VersionMismatchError) {
+        this.updateDefaultChainHashFragment(await super.chainHash());
+      }
+      throw error;
+    }
+  }
+
+  async hydrate(): Promise<void> {
+    await super.hydrate();
+    this.updateDefaultChainHashFragment(await super.chainHash());
+  }
+
   async multisigSigningBytes(
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisig: Multisig,
   ): Promise<Uint8Array> {
     const serializer = await this.serializer();
+    const chainHash = await this.chainHash();
+    assertChainHashFragment(unsignedTx, chainHash);
     const signingPayload: TransactionSigningPayload<RuntimeCall> = {
       V1: {
         ...unsignedTx,
-        chain_hash: Array.from(await this.chainHash()),
+        chain_hash: Array.from(chainHash),
         credential_address: await this.credentialAddressFromId(
           multisig.getMultisigAddress(),
         ),
@@ -178,27 +217,20 @@ export class StandardRollup<RuntimeCall> extends Rollup<
   }
 }
 
-export const DEFAULT_TX_DETAILS: Omit<TxDetails, "chain_id"> = {
+export const DEFAULT_TX_DETAILS: Omit<TxDetails, "chain_hash_fragment"> = {
   max_priority_fee_bips: 0,
   max_fee: "100000000",
   gas_limit: null,
 };
 
-async function buildContext<C extends StandardRollupContext>(
-  client: SovereignClient,
+function buildContext<C extends StandardRollupContext>(
   context?: DeepPartial<C>,
   credentialIdToAddress?: CredentialIdToAddress,
-): Promise<C> {
+): C {
   const defaultTxDetails = {
     ...DEFAULT_TX_DETAILS,
     ...context?.defaultTxDetails,
   };
-
-  if (!defaultTxDetails.chain_id) {
-    const { chain_id } = await client.rollup.constants();
-
-    defaultTxDetails.chain_id = chain_id;
-  }
 
   return {
     ...context,
@@ -221,16 +253,12 @@ export async function createStandardRollup<
   const client = config.client ?? new SovereignClient({ baseURL: config.url });
   const getSerializer =
     config.getSerializer ?? ((schema) => new JsSerializer(schema));
-  const context = await buildContext<C>(
-    client,
-    config.context,
-    config.credentialIdToAddress,
-  );
+  const context = buildContext<C>(config.context, config.credentialIdToAddress);
 
   // Default to the standard transaction submission endpoint
   const txSubmissionEndpoint = config.txSubmissionEndpoint ?? "/sequencer/txs";
 
-  return new StandardRollup<RuntimeCall>(
+  const rollup = new StandardRollup<RuntimeCall>(
     {
       ...config,
       client,
@@ -243,4 +271,10 @@ export async function createStandardRollup<
       ...typeBuilderOverrides,
     },
   );
+
+  if (!context.defaultTxDetails.chain_hash_fragment) {
+    await rollup.hydrate();
+  }
+
+  return rollup;
 }

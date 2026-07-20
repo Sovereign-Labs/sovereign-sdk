@@ -103,7 +103,6 @@ fn build_register_sequencer_tx(
             da_address: UNREGISTERED_SENDER,
             amount: MINIMUM_BOND,
         });
-    let chain_id = config_value!("CHAIN_ID");
     let max_priority_fee_bips = PriorityFeeBips::ZERO;
     let max_fee = MAX_TX_FEE;
     let gas_limit = None;
@@ -112,7 +111,7 @@ fn build_register_sequencer_tx(
         &CHAIN_HASH,
         UnsignedTransaction::new(
             msg,
-            chain_id,
+            CHAIN_HASH,
             max_priority_fee_bips,
             max_fee,
             UniquenessData::Nonce(nonce),
@@ -487,7 +486,6 @@ fn build_state_heavy_tx(
         max_heavy_state_size: data_size,
         salt: 42,
     });
-    let chain_id = config_value!("CHAIN_ID");
     let max_priority_fee_bips = PriorityFeeBips::ZERO;
     let max_fee = MAX_TX_FEE;
     Transaction::<Runtime<TestSpec>, TestSpec>::new_signed_tx(
@@ -495,7 +493,7 @@ fn build_state_heavy_tx(
         &CHAIN_HASH,
         UnsignedTransaction::new(
             msg,
-            chain_id,
+            CHAIN_HASH,
             max_priority_fee_bips,
             max_fee,
             UniquenessData::Nonce(nonce),

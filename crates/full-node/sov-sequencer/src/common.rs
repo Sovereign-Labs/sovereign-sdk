@@ -592,6 +592,8 @@ pub fn pre_exec_err_to_accept_tx_err(err: PreExecError) -> ErrorObject {
 pub enum AcceptTxErrorCode {
     /// The transaction's `maxFeePerGas` was below the rollup base fee.
     InsufficientMaxFeePerGas,
+    /// The transaction's chain hash fragment did not match the current runtime schema.
+    InvalidChainHashFragment,
 }
 
 /// Structured details attached to `accept_tx` failures.
@@ -611,6 +613,9 @@ impl AcceptTxErrorDetails {
         let code = match error {
             AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
                 Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
+            }
+            AuthenticationError::FatalError(FatalError::InvalidChainHashFragment { .. }, _) => {
+                Some(AcceptTxErrorCode::InvalidChainHashFragment)
             }
             _ => None,
         };

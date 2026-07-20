@@ -5,7 +5,7 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::capabilities::AuthorizationData;
 use sov_modules_api::capabilities::{
-    calculate_hash_metered, calculate_non_malleable_hash_metered, verify_chain_id,
+    calculate_hash_metered, calculate_non_malleable_hash_metered, verify_chain_hash_fragment,
     AuthenticationError, AuthenticationOutput, FatalError, ReplayHashMaterial, UniquenessData,
 };
 use sov_modules_api::transaction::AuthenticatedTransactionAndRawHash;
@@ -339,7 +339,7 @@ where
         ));
     }
 
-    verify_chain_id(unsigned_tx.details(), raw_tx_hash)?;
+    verify_chain_hash_fragment(unsigned_tx.details(), runtime_chain_hash, raw_tx_hash)?;
 
     // Verify signatures (branches internally for single-sig vs multisig)
     verify_signatures::<S>(&unpacked_message, raw_tx_hash, state)?;

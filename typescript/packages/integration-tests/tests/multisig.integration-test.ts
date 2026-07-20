@@ -30,12 +30,9 @@ function generateSigners(count = 5): Signer[] {
 
 describe("multisig", async () => {
   let rollup: StandardRollup<any>;
-  let chainId = 0;
 
   beforeAll(async () => {
     rollup = await createStandardRollup();
-    const constants = await rollup.rollup.constants();
-    chainId = constants.chain_id;
   });
 
   it("should submit a multisig transaction successfully", async () => {
@@ -54,7 +51,7 @@ describe("multisig", async () => {
     const unsignedTx = {
       runtime_call,
       uniqueness: { nonce: 0 },
-      details: { ...DEFAULT_TX_DETAILS, chain_id: chainId },
+      details: rollup.context.defaultTxDetails,
       address_override: null,
     };
 
@@ -69,7 +66,10 @@ describe("multisig", async () => {
     );
 
     for (const signer of multiSigSigners) {
-      const signingBytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
+      const signingBytes = await rollup.multisigSigningBytes(
+        unsignedTx,
+        multisig,
+      );
       multisig.addSignature(
         bytesToHex(await signer.sign(signingBytes)),
         bytesToHex(await signer.publicKey()),

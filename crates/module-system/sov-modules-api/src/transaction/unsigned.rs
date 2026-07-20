@@ -7,7 +7,8 @@ use sov_universal_wallet::UniversalWallet;
 use crate::{
     capabilities::UniquenessData,
     transaction::{
-        PriorityFeeBips, Transaction, TransactionCallable, TxDetails, Version0, Version1,
+        chain_hash_fragment, PriorityFeeBips, Transaction, TransactionCallable, TxDetails,
+        Version0, Version1,
     },
     Amount, CryptoSpecExt, Multisig, Spec,
 };
@@ -76,9 +77,11 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
 
 impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
     /// Creates a new [`UnsignedTransaction`] with the given arguments.
+    ///
+    /// The transaction stores the 64-bit fragment of `chain_hash` in its details.
     pub const fn new(
         runtime_call: R::Call,
-        chain_id: u64,
+        chain_hash: [u8; 32],
         max_priority_fee_bips: PriorityFeeBips,
         max_fee: Amount,
         uniqueness: UniquenessData,
@@ -92,7 +95,7 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
                 max_priority_fee_bips,
                 max_fee,
                 gas_limit,
-                chain_id,
+                chain_hash_fragment: chain_hash_fragment(&chain_hash),
             },
             address_override,
         }
@@ -180,16 +183,23 @@ impl<R: TransactionCallable, S: Spec> UnsignedTransaction<R, S> {
     }
 
     /// Serializes the V1 transaction signing payload for this unsigned transaction.
+    ///
+    /// # Errors
+    ///
+    /// Returns an error if `chain_hash` does not match the fragment stored in the transaction
+    /// details.
     pub fn to_signing_bytes_v1(
         &self,
         multisig: &Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
         chain_hash: [u8; 32],
-    ) -> Vec<u8> {
+    ) -> anyhow::Result<Vec<u8>> {
+        self.details.ensure_matches_chain_hash(&chain_hash)?;
         let credential_address = multisig
             .credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>()
             .into();
-        self.signing_payload_v1_with_credential(credential_address, chain_hash)
-            .to_bytes()
+        Ok(self
+            .signing_payload_v1_with_credential(credential_address, chain_hash)
+            .to_bytes())
     }
 
     /// Returns a reference to the runtime call.

@@ -16,6 +16,10 @@ import bs58 from "bs58";
 import { Base64 } from "js-base64";
 import type { Subscription, SubscriptionToCallbackMap } from "../subscriptions";
 import type { DeepPartial } from "../utils";
+import {
+  assertChainHashFragment,
+  refreshChainHashFragment,
+} from "./chain-hash";
 import type { RollupConfig, TransactionResult } from "./rollup";
 import {
   type StandardRollup,
@@ -344,10 +348,11 @@ export class SolanaSignableRollup<RuntimeCall> {
     signer: Signer,
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
+    const chainHash = await this.inner.chainHash();
+    refreshChainHashFragment(unsignedTx, chainHash);
     const jsonBytes = await this.createSolanaJsonBytes(unsignedTx);
 
     const pubkey = await signer.publicKey();
-    const chainHash = await this.inner.chainHash();
 
     const signature = await signer.sign(jsonBytes);
 
@@ -372,10 +377,11 @@ export class SolanaSignableRollup<RuntimeCall> {
     signer: Signer,
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<Transaction<RuntimeCall>>> {
+    const chainHash = await this.inner.chainHash();
+    refreshChainHashFragment(unsignedTx, chainHash);
     const jsonBytes = await this.createSolanaJsonBytes(unsignedTx);
 
     const pubkey = await signer.publicKey();
-    const chainHash = await this.inner.chainHash();
 
     // Create preamble and combine with message
     const preamble = createSolanaPreamble(
@@ -610,11 +616,12 @@ export class SolanaSignableRollup<RuntimeCall> {
     unsignedTx: UnsignedTransaction<RuntimeCall>,
     multisig: Multisig,
   ): Promise<Uint8Array> {
+    const chainHash = await this.inner.chainHash();
+    assertChainHashFragment(unsignedTx, chainHash);
     const jsonBytes = await this.createMultisigJsonBytes(
       unsignedTx,
       await this.multisigIdFromMultisig(multisig),
     );
-    const chainHash = await this.inner.chainHash();
     const preamble = createSolanaPreamble(
       this.canonicalizeMultisigPubkeys([...multisig.allPubKeys]),
       chainHash,
@@ -632,11 +639,13 @@ export class SolanaSignableRollup<RuntimeCall> {
     switch (authenticator) {
       case "standard":
         return this.inner.multisigSigningBytes(unsignedTx, multisig);
-      case "solanaSimple":
+      case "solanaSimple": {
+        assertChainHashFragment(unsignedTx, await this.inner.chainHash());
         return this.createMultisigJsonBytes(
           unsignedTx,
           await this.multisigIdFromMultisig(multisig),
         );
+      }
       case "solana":
         return this.createSpecCompliantMultisigSignedMessage(
           unsignedTx,
@@ -746,6 +755,8 @@ export class SolanaSignableRollup<RuntimeCall> {
 
     switch (authenticator) {
       case "solanaSimple": {
+        const chainHash = await this.inner.chainHash();
+        assertChainHashFragment(unsignedTx, chainHash);
         const jsonBytes = await this.createMultisigJsonBytes(
           unsignedTx,
           await this.multisigIdFromMultisig(multisig),
@@ -754,7 +765,6 @@ export class SolanaSignableRollup<RuntimeCall> {
         wireBytes[0] = MULTISIG_SIMPLE_DISCRIMINATOR;
         wireBytes.set(jsonBytes, 1);
 
-        const chainHash = await this.inner.chainHash();
         const serialized = this.serializeSolanaMultisigMessage({
           wire_bytes: wireBytes,
           chain_hash: chainHash,
@@ -802,11 +812,12 @@ export class SolanaSignableRollup<RuntimeCall> {
     };
     const pubkey = hexToBytes(normalizeHexString(transaction.pub_key));
     const signature = hexToBytes(normalizeHexString(transaction.signature));
+    const chainHash = await this.inner.chainHash();
+    assertChainHashFragment(unsignedTx, chainHash);
 
     switch (authenticator) {
       case "solanaSimple": {
         const signedMessage = await this.createSolanaJsonBytes(unsignedTx);
-        const chainHash = await this.inner.chainHash();
         const message: SolanaOffchainSimpleEnvelope = {
           signed_message: signedMessage,
           chain_hash: chainHash,
@@ -817,7 +828,6 @@ export class SolanaSignableRollup<RuntimeCall> {
       }
       case "solana": {
         const signedMessage = await this.createSolanaJsonBytes(unsignedTx);
-        const chainHash = await this.inner.chainHash();
         const preamble = createSolanaPreamble(
           [pubkey],
           chainHash,

@@ -217,7 +217,7 @@ impl HyperlaneBuilder {
 
         // Current image is based on https://github.com/Sovereign-Labs/hyperlane-monorepo/tree/theodore/multisig-upgrade
         let docker_image = docker_image
-            .unwrap_or_else(|_| "ghcr.io/ross-weir/hyperlane-agent:multisig_upgrade2".into());
+            .unwrap_or_else(|_| "ghcr.io/theodorebugnet/hyperlane-agent:multisig_upgrade-4".into());
         let (name, tag) = docker_image
             .split_once(':')
             .unwrap_or((&docker_image, "latest"));

@@ -1,7 +1,6 @@
 use std::env;
 
 use sov_mock_da::MockBlob;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::PriorityFeeBips;
 use sov_modules_api::{
     BlobReaderTrait, Gas, GasArray, GasSpec, GasUnit, Rewards, Spec, TransactionReceipt, TxEffect,
@@ -235,7 +234,7 @@ fn slot_out_of_gas_tests() {
         10,
         priority_fee_bips,
         &actors.admin_account,
-        config_value!("CHAIN_ID"),
+        &<IntegTestRuntime<S> as sov_modules_api::Runtime<S>>::CHAIN_HASH,
         encode_message::<IntegTestRuntime<S>>(Some(gas)),
     );
 

@@ -60,15 +60,6 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
         }
     }
 
-    /// Set the chain ID of the transaction.
-    pub fn with_chain_id(mut self, chain_id: u64) -> Self {
-        if let Some(details) = self.details_mut() {
-            details.chain_id = chain_id;
-        }
-
-        self
-    }
-
     /// Set the max priority fee of the transaction.
     pub fn with_max_priority_fee_bips(mut self, max_priority_fee_bips: PriorityFeeBips) -> Self {
         if let Some(details) = self.details_mut() {
@@ -150,7 +141,7 @@ impl<RT: Runtime<S>, S: Spec> TransactionType<RT, S> {
             chain_hash,
             UnsignedTransaction::new(
                 msg,
-                details.chain_id,
+                *chain_hash,
                 details.max_priority_fee_bips,
                 details.max_fee,
                 UniquenessData::Nonce(nonce),

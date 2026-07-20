@@ -11,8 +11,8 @@ export type TxDetails = {
   max_fee: string;
   /** Optional gas limit as byte array, null for unlimited */
   gas_limit: number[] | null;
-  /** Chain identifier for the target rollup network */
-  chain_id: number;
+  /** 64-bit fragment of the target rollup chain hash, as a decimal string */
+  chain_hash_fragment: string;
 };
 
 /** Timestamp-based uniqueness mechanism using milliseconds since epoch */

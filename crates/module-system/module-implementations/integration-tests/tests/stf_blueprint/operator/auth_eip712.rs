@@ -7,10 +7,9 @@ use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::transaction::PubKeyAndSignature;
 use sov_modules_api::transaction::TxDetails;
+use sov_modules_api::transaction::{chain_hash_fragment, PubKeyAndSignature};
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::Multisig;
@@ -140,11 +139,12 @@ pub fn create_utx_with_generation<S: Spec, RT: Runtime<S>>(
     generation: u64,
     address_override: Option<S::Address>,
 ) -> UnsignedTransaction<RT, S> {
+    let chain_hash = TestSchemaProvider::get_schema().chain_hash().unwrap();
     let details = TxDetails {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee: TEST_DEFAULT_MAX_FEE,
         gas_limit: None,
-        chain_id: config_value!("CHAIN_ID"),
+        chain_hash_fragment: chain_hash_fragment(&chain_hash),
     };
     UnsignedTransaction::new_with_details(
         message,
@@ -189,7 +189,9 @@ pub fn sign_utx_v1_in_place<S: Spec, RT: Runtime<S>>(
         )
         .unwrap();
 
-    let signing_payload_bytes = utx.to_signing_bytes_v1(multisig, schema.chain_hash().unwrap());
+    let signing_payload_bytes = utx
+        .to_signing_bytes_v1(multisig, schema.chain_hash().unwrap())
+        .expect("Chain hash fragment should match the schema chain hash");
     let eip712_signing_data = schema
         .eip712_signing_digest(transaction_type_index, &signing_payload_bytes)
         .expect("Failed to calculate EIP712 hash");

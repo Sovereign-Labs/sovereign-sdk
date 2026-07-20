@@ -38,7 +38,7 @@ pub struct Version0<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Sp
     pub runtime_call: R::Call,
     /// Uniqueness identifier of this transaction. see [`UniquenessData`] for more details.
     pub uniqueness: UniquenessData,
-    /// The transaction metadata. Contains gas parameters and the chain ID.
+    /// The transaction metadata. Contains gas parameters and the chain hash fragment.
     pub details: TxDetails<S>,
     /// Signer-declared address override.
     /// See [`crate::capabilities::AuthorizationData::address_override`] for routing semantics.
