@@ -18,6 +18,10 @@ use crate::common::{SequencerTxStream, SubscriptionStreamError};
 use crate::preferred::{AcceptedTx, Confirmation};
 use crate::rest_api::ApiAcceptedTx;
 
+use super::event_range_len;
+#[cfg(test)]
+use super::InvalidEventRange;
+
 type TxStreamItem<S, Rt> = Result<ApiAcceptedTx<Confirmation<S, Rt>>, SubscriptionStreamError>;
 type GetNextChunkFuture<S, Rt> = Pin<
     Box<
@@ -166,7 +170,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         &self,
         event_numbers: std::ops::Range<u64>,
     ) -> anyhow::Result<Vec<RuntimeEventResponse<Rt::RuntimeEvent>>> {
-        if event_numbers.start >= event_numbers.end {
+        if event_range_len(&event_numbers)? == 0 {
             return Ok(vec![]);
         }
         let cached_events = {
@@ -751,6 +755,16 @@ mod tests {
             .await;
 
         assert!(cache.list_events(1_000..1_025).await.unwrap().is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[allow(clippy::reversed_empty_ranges)]
+    async fn test_list_events_rejects_inverted_range() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+
+        let error = cache.list_events(2..1).await.unwrap_err();
+        assert!(error.is::<InvalidEventRange>());
+        assert!(cache.list_events(1..1).await.unwrap().is_empty());
     }
 
     #[test]
