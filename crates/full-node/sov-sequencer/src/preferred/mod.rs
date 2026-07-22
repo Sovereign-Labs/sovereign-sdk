@@ -97,6 +97,23 @@ use crate::{
 
 type VisibleSlotNumberIncrease = NonZero<u8>;
 
+#[derive(Debug, thiserror::Error)]
+#[error("Invalid event range {start}..{end}: range start must not be greater than range end")]
+pub(crate) struct InvalidEventRange {
+    pub(crate) start: u64,
+    pub(crate) end: u64,
+}
+
+fn event_range_len(event_numbers: &std::ops::Range<u64>) -> Result<u64, InvalidEventRange> {
+    event_numbers
+        .end
+        .checked_sub(event_numbers.start)
+        .ok_or(InvalidEventRange {
+            start: event_numbers.start,
+            end: event_numbers.end,
+        })
+}
+
 // Big info dump for the user that would make the code hard to read if it were inline.
 const RECOVERY_ERROR_MESSAGE_ON_NONE_STRATEGY: &str = "The preferred sequencer is too far behind, and the visible slot number has lagged more than the allowed deferred slots count. This means some non-preferred batches may have been included by the node, if there were any. If this happened, already provided soft confirmations may now no longer be valid. Because the recovery_strategy config was set to None, we are not attempting recovery at this point. You should either: a) delete everything from the preferred_sequencer database (thus annulling all currently pending soft confirmations), which will allow you to restart the sequencer fresh; or b) set the recovery_strategy config value to TryToSave, in which case all pending batches will be flushed to be executed on a best-effort basis. The latter may save some soft-confirmations if they have not been invalidated yet. However, IF a non-preferred batch has been included, AND some soft-confirmations have been invalidated by it, this will cause the sequencer to be penalised for every invalid batch; ensure your sequencer bond is sufficient to cover any penalties to be able to continue operating uninterrupted.";
 
@@ -773,7 +790,7 @@ where
         Vec<RuntimeEventResponse<<Self::Rt as RuntimeEventProcessor>::RuntimeEvent>>,
         anyhow::Error,
     > {
-        let num_events = event_nums.end - event_nums.start;
+        let num_events = event_range_len(&event_nums)?;
         trace!(events_len = num_events, "listing events");
 
         let events = self.transaction_cache.list_events(event_nums).await?;

@@ -18,6 +18,10 @@ use crate::common::{SequencerTxStream, SubscriptionStreamError};
 use crate::preferred::{AcceptedTx, Confirmation};
 use crate::rest_api::ApiAcceptedTx;
 
+use super::event_range_len;
+#[cfg(test)]
+use super::InvalidEventRange;
+
 type TxStreamItem<S, Rt> = Result<ApiAcceptedTx<Confirmation<S, Rt>>, SubscriptionStreamError>;
 type GetNextChunkFuture<S, Rt> = Pin<
     Box<
@@ -166,25 +170,29 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         &self,
         event_numbers: std::ops::Range<u64>,
     ) -> anyhow::Result<Vec<RuntimeEventResponse<Rt::RuntimeEvent>>> {
-        let transaction_cache = self.inner.read().await;
-        let Some(last_needed_event) = event_numbers.end.checked_sub(1) else {
+        if event_range_len(&event_numbers)? == 0 {
             return Ok(vec![]);
+        }
+        let cached_events = {
+            let transaction_cache = self.inner.read().await;
+            let mut relevant_txs = transaction_cache
+                .event_numbers_index
+                .range(event_numbers.clone())
+                .map(|(_, tx_number)| *tx_number);
+            match relevant_txs.next() {
+                Some(first_needed_tx) => {
+                    let last_needed_tx = relevant_txs.next_back().unwrap_or(first_needed_tx);
+                    transaction_cache
+                        .cache
+                        .range(first_needed_tx..=last_needed_tx)
+                        .flat_map(|(_, tx)| tx.confirmation.events.iter())
+                        .filter(|event| event_numbers.contains(&event.number))
+                        .cloned()
+                        .collect::<Vec<_>>()
+                }
+                None => Vec::new(),
+            }
         };
-        let first_needed_tx = transaction_cache
-            .event_numbers_index
-            .get_key_value(&event_numbers.start)
-            .map(|(_, tx_number)| *tx_number)
-            .unwrap_or(0);
-        let last_needed_tx = transaction_cache
-            .event_numbers_index
-            .get_key_value(&last_needed_event)
-            .map(|(_, tx_number)| *tx_number)
-            .unwrap_or(u64::MAX);
-        let cached_events = transaction_cache
-            .cache
-            .range(first_needed_tx..=last_needed_tx)
-            .flat_map(|(_, tx)| tx.confirmation.events.iter().cloned())
-            .collect::<Vec<_>>();
 
         // If we found any events in cache, we don't need to fetch those ones from the DB - adjust the range accordingly
         let db_range_end = if let Some(first_event_from_cache) = cached_events.first() {
@@ -604,15 +612,43 @@ mod tests {
     use sov_db::ledger_db::SlotCommit;
     use sov_mock_da::{MockAddress, MockBlob, MockBlock};
     use sov_modules_api::{
-        ApiTxEffect, BatchReceipt, FullyBakedTx, Gas, SuccessfulTxContents, TransactionReceipt,
-        TxEffect, TxReceiptContents,
+        ApiTxEffect, BatchReceipt, FullyBakedTx, Gas, RuntimeEventProcessor, SuccessfulTxContents,
+        TransactionReceipt, TxEffect, TxReceiptContents,
     };
+    use sov_rollup_interface::stf::StoredEvent;
     use sov_test_utils::storage::SimpleLedgerStorageManager;
     use sov_test_utils::{generate_optimistic_runtime, TestSpec as S};
 
     use super::*;
 
-    generate_optimistic_runtime!(TestRuntime <=);
+    generate_optimistic_runtime!(TestRuntime <= value_setter: sov_value_setter::ValueSetter<S>);
+
+    type TestEvent = RuntimeEventResponse<<TestRuntime<S> as RuntimeEventProcessor>::RuntimeEvent>;
+
+    fn build_event(event_number: u64) -> TestEvent {
+        RuntimeEventResponse {
+            number: event_number,
+            key: "ValueSetter/NewValue".to_owned(),
+            value: TestRuntimeEvent::ValueSetter(sov_value_setter::Event::NewValue(
+                event_number as u32,
+            )),
+            module: sov_modules_api::ModuleRef {
+                name: "ValueSetter".to_owned(),
+            },
+            tx_hash: HexString([event_number as u8; 32]),
+        }
+    }
+
+    fn build_stored_event(event_number: u64, tx_hash: TxHash) -> StoredEvent {
+        let event = TestRuntimeEvent::<S>::ValueSetter(sov_value_setter::Event::NewValue(
+            event_number as u32,
+        ));
+        StoredEvent::new(
+            b"ValueSetter/NewValue",
+            &borsh::to_vec(&event).unwrap(),
+            tx_hash.0,
+        )
+    }
 
     fn build_mock_confirmation(tx_number: u64) -> AcceptedTx<Confirmation<S, TestRuntime<S>>> {
         AcceptedTx {
@@ -629,6 +665,141 @@ mod tests {
                 timestamp_nanos: None,
             },
         }
+    }
+
+    fn build_mock_confirmation_with_events(
+        tx_number: u64,
+        event_numbers: std::ops::Range<u64>,
+    ) -> AcceptedTx<Confirmation<S, TestRuntime<S>>> {
+        let mut tx = build_mock_confirmation(tx_number);
+        tx.confirmation.events = event_numbers.map(build_event).collect();
+        tx
+    }
+
+    fn build_cache_with_db_events(
+        event_numbers: std::ops::Range<u64>,
+    ) -> (tempfile::TempDir, TransactionCache<S, TestRuntime<S>>) {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+        let ledger_db = LedgerDb::with_reader(storage_manager.create_ledger_storage()).unwrap();
+        let tx_hash = HexString([0; 32]);
+        let mut slot = SlotCommit::<_, MockBlob, TxReceiptContents<S>>::new(
+            MockBlock::default(),
+            Default::default(),
+        );
+        let batch = BatchReceipt::<MockBlob, TxReceiptContents<S>> {
+            batch_hash: [0; 32],
+            tx_receipts: vec![TransactionReceipt {
+                tx_hash,
+                body_to_save: None,
+                events: event_numbers
+                    .map(|event_number| build_stored_event(event_number, tx_hash))
+                    .collect(),
+                receipt: TxEffect::Successful(SuccessfulTxContents {
+                    gas_used: <<S as Spec>::Gas as Gas>::zero(),
+                }),
+            }],
+            ignored_tx_receipts: vec![],
+            inner: MockBlob::new(vec![], MockAddress::new([0; 32]), [0; 32]),
+        };
+        slot.add_batch(batch);
+        let commit_data = ledger_db.materialize_slot(slot, b"state-root").unwrap();
+        storage_manager.commit(&commit_data);
+        ledger_db.replace_reader(storage_manager.create_ledger_storage());
+
+        (temp_dir, TransactionCache::new(ledger_db, 1, 100))
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_list_events_db_page_ignores_newer_cached_events() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+        cache
+            .write_handle()
+            .insert(build_mock_confirmation_with_events(1, 1_000..1_002))
+            .await;
+
+        let events = cache.list_events(0..2).await.unwrap();
+        assert_eq!(
+            events.iter().map(|event| event.number).collect::<Vec<_>>(),
+            vec![0, 1]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_list_events_merges_db_and_cache_with_exact_bounds() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+        cache
+            .write_handle()
+            .insert(build_mock_confirmation_with_events(1, 3..6))
+            .await;
+
+        let events = cache.list_events(1..5).await.unwrap();
+        assert_eq!(
+            events.iter().map(|event| event.number).collect::<Vec<_>>(),
+            vec![1, 2, 3, 4]
+        );
+
+        let events = cache.list_events(4..5).await.unwrap();
+        assert_eq!(
+            events.iter().map(|event| event.number).collect::<Vec<_>>(),
+            vec![4]
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_list_events_entirely_in_future() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+        cache
+            .write_handle()
+            .insert(build_mock_confirmation_with_events(1, 3..6))
+            .await;
+
+        assert!(cache.list_events(1_000..1_025).await.unwrap().is_empty());
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[allow(clippy::reversed_empty_ranges)]
+    async fn test_list_events_rejects_inverted_range() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+
+        let error = cache.list_events(2..1).await.unwrap_err();
+        assert!(error.is::<InvalidEventRange>());
+        assert!(cache.list_events(1..1).await.unwrap().is_empty());
+    }
+
+    #[test]
+    fn test_list_events_releases_cache_lock_before_db_await() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+        let ledger_db = LedgerDb::with_reader(storage_manager.create_ledger_storage()).unwrap();
+        let runtime = tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(1)
+            .max_blocking_threads(1)
+            .enable_all()
+            .build()
+            .unwrap();
+
+        runtime.block_on(async {
+            let cache = TransactionCache::<S, TestRuntime<S>>::new(ledger_db, 0, 100);
+            let (started_tx, started_rx) = tokio::sync::oneshot::channel();
+            let (release_tx, release_rx) = std::sync::mpsc::channel();
+            let blocker = tokio::task::spawn_blocking(move || {
+                started_tx.send(()).unwrap();
+                release_rx.recv().unwrap();
+            });
+            started_rx.await.unwrap();
+
+            let mut events = Box::pin(cache.list_events(0..1));
+            assert!(futures::poll!(&mut events).is_pending());
+            assert!(
+                cache.inner.try_write().is_ok(),
+                "cache read lock was held across the DB await"
+            );
+
+            release_tx.send(()).unwrap();
+            assert!(events.await.unwrap().is_empty());
+            blocker.await.unwrap();
+        });
     }
 
     #[tokio::test(flavor = "multi_thread")]

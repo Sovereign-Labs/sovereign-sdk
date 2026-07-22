@@ -395,6 +395,8 @@ paths:
       responses:
         "200":
           $ref: "#/components/responses/PaginatedLedgerEvents"
+        "400":
+          $ref: "#/components/responses/ApiErrorResponse"
         "404":
           $ref: "#/components/responses/ApiErrorResponse"
   /rollup/base-fee-per-gas/latest:

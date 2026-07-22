@@ -34,6 +34,7 @@ use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
 use tokio_stream::wrappers::BroadcastStream;
 
 use crate::common::{error_not_fully_synced, AcceptedTx, Sequencer, SubscriptionStreamError};
+use crate::preferred::InvalidEventRange;
 use crate::TxStatus;
 
 /// Interval between ping frames sent to the client for keepalive.
@@ -41,6 +42,14 @@ const PING_INTERVAL: std::time::Duration = std::time::Duration::from_secs(30);
 
 /// Maximum time to wait for a pong response before considering the connection dead.
 const PONG_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+
+fn list_events_error_response(error: anyhow::Error) -> axum::response::Response {
+    if error.is::<InvalidEventRange>() {
+        errors::bad_request_400("Invalid event range", error)
+    } else {
+        errors::database_error_500("Unable to retrieve events").into_response()
+    }
+}
 
 /// Emits HTTP metrics for a WebSocket message.
 fn emit_ws_metrics(
@@ -709,10 +718,11 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
         // This is now fixed.
         let end = start.saturating_add(pagination.size as u64);
 
-        let events =
-            state.sequencer.list_events(start..end).await.map_err(|_| {
-                errors::database_error_500("Unable to retrieve events").into_response()
-            })?;
+        let events = state
+            .sequencer
+            .list_events(start..end)
+            .await
+            .map_err(list_events_error_response)?;
         let next_cursor = start + events.len() as u64;
         let response = PaginatedResponse {
             items: events,
@@ -780,5 +790,26 @@ impl<C> ApiAcceptedTx<C> {
             tx: tx_json,
             confirmation: tx.confirmation,
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use axum::body::to_bytes;
+
+    use super::*;
+
+    #[tokio::test]
+    async fn invalid_event_range_maps_to_bad_request() {
+        let response = list_events_error_response(InvalidEventRange { start: 2, end: 1 }.into());
+
+        assert_eq!(response.status(), http::StatusCode::BAD_REQUEST);
+        let body = to_bytes(response.into_body(), usize::MAX).await.unwrap();
+        let body: serde_json::Value = serde_json::from_slice(&body).unwrap();
+        assert_eq!(body["message"], "Invalid event range");
+        assert_eq!(
+            body["details"]["error"],
+            "Invalid event range 2..1: range start must not be greater than range end"
+        );
     }
 }

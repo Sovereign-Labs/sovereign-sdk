@@ -1,3 +1,6 @@
+# 2026-07-21
+- #3042 The `sequencer/unstable/events` REST endpoint changes behaviour when a negative event range is supplied (i.e. `end` < `start`): this previously silently returned an empty response, now it returns an explicit error since this can never be a valid range.
+
 # 2026-06-25
 - #3018 demo-rollup: split the example into two DA-layer Cargo features — `mock_da` (default; mock + SP1 zkVMs) and `celestia_da` (Risc0) — to cut compile time. The DA layer is selected at compile time while the zkVM stays a runtime `--zk-vm` choice within `mock_da`, so a build only compiles the selected DA's zkVM guests: a default `mock_da` build no longer pulls the Celestia/Risc0 adapters, and a `celestia_da` build skips the SP1 guests. When both DA features are enabled (`--all-features`), mock DA is selected by default. Also drops the unused SP1 Celestia guest build. Example crate only (`publish = false`) — no SDK API, state, or protocol change.
 # 2026-06-30
