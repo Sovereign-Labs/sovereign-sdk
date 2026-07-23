@@ -677,6 +677,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         AcceptedTx {
             tx,
             tx_hash,
+            credential_id: None,
             confirmation: Confirmation {
                 events,
                 receipt: receipt.into(),

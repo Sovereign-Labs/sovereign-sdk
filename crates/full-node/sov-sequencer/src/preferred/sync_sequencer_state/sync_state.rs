@@ -1211,7 +1211,9 @@ where
         // Important: we read the sequencing data from the baked tx inside apply_tx_to_in_progress_batch (which is called from do_new_tx)
         // so this must not be moved without updating do_new_tx. See the comment in apply_tx_to_in_progress_batch for more details.
         baked_tx.set_sequencing_metadata(&sequencing_data);
-        let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx).await;
+        let (res, resource_used) = inner
+            .do_new_tx(tx_hash, baked_tx, Some(ip_and_credential.credential_id))
+            .await;
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`
         // to ensure the limits are updated even for unsuccessful transactions.
@@ -1299,7 +1301,7 @@ where
             inner.next_unassigned_sequence_number,
         )?;
 
-        let (res, _) = inner.do_new_tx(tx_hash, baked_tx).await;
+        let (res, _) = inner.do_new_tx(tx_hash, baked_tx, None).await;
         let _ = res.map_err(ReplicaError::NewTx)?.0.await;
 
         Ok(())

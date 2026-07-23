@@ -956,6 +956,10 @@ components:
       properties:
         id:
           $ref: "#/components/schemas/TxHash"
+        credential_id:
+          allOf:
+            - $ref: "#/components/schemas/Hash"
+          description: Credential identifier captured during sequencer ingress authentication. Omitted when unavailable, including for transactions reconstructed from ledger history.
         tx:
           description: Decoded transaction body as a JSON object. Omitted if the transaction could not be decoded.
         tx_number:

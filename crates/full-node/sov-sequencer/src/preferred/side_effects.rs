@@ -402,6 +402,7 @@ mod tests {
             accepted_tx: AcceptedTx {
                 tx,
                 tx_hash,
+                credential_id: None,
                 confirmation,
             },
             tx_changes,

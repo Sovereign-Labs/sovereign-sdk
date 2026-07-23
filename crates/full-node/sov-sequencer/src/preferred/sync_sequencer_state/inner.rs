@@ -32,7 +32,7 @@ use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::Gas;
 use sov_modules_api::{
-    FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, VersionReader,
+    CredentialId, FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, VersionReader,
     VisibleSlotNumber,
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
@@ -753,6 +753,7 @@ where
         &mut self,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
+        credential_id: Option<CredentialId>,
     ) -> (
         Result<
             (
@@ -806,7 +807,7 @@ where
 
         let (
             AcceptedTxWithBudgetInfo {
-                accepted_tx,
+                mut accepted_tx,
                 remaining_slot_gas,
                 execution_time_micros,
             },
@@ -834,6 +835,7 @@ where
         let gas_used = accepted_tx.confirmation.gas_used();
         let finalized_tx_len = accepted_tx.tx.len();
         let resource_used = ResourceUsed::new(1, tx_len, execution_time_micros, gas_used);
+        accepted_tx.credential_id = credential_id;
 
         batch_size_tracker.add_tx(finalized_tx_len, execution_time_micros);
         let rx = executor_events_sender

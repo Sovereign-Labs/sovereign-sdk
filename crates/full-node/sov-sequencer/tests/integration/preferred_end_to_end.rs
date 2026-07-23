@@ -24,7 +24,9 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::prelude::*;
-use sov_modules_api::{Amount, DispatchCall, Gas, GasArray, GasPrice, GasUnit, RawTx, Runtime};
+use sov_modules_api::{
+    Amount, DispatchCall, Gas, GasArray, GasPrice, GasUnit, PrivateKey, PublicKey, RawTx, Runtime,
+};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_node_client::NodeClient;
 use sov_paymaster::{Paymaster, PaymasterConfig};
@@ -1728,6 +1730,67 @@ async fn test_sequencer_getters() {
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     let mut responses: Vec<TxInfoWithConfirmation> = Vec::new();
     let mut tx_number = 0;
+
+    // The credential is available on the live stream, cache-backed historical stream, and
+    // cache-backed REST response for a newly authenticated transaction.
+    let expected_credential_id = admin
+        .private_key
+        .pub_key()
+        .credential_id()
+        .to_string()
+        .parse::<types::Hash>()
+        .unwrap();
+    let mut live_tx_ws = test_rollup
+        .api_client()
+        .subscribe_to_txs(None)
+        .await
+        .unwrap();
+    let tx = tx_set_value(&admin.private_key, tx_number, tx_number);
+    let response = test_rollup
+        .api_client()
+        .send_raw_tx_to_sequencer_with_retry(&tx)
+        .await
+        .unwrap()
+        .into_inner();
+    let live_response = tokio::time::timeout(Duration::from_millis(500), live_tx_ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        live_response.credential_id.as_ref(),
+        Some(&expected_credential_id)
+    );
+
+    let cached_response = test_rollup
+        .api_client()
+        .sequencer_get_tx(&response.id)
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(
+        cached_response.credential_id.as_ref(),
+        Some(&expected_credential_id)
+    );
+
+    let mut cached_tx_ws = test_rollup
+        .api_client()
+        .subscribe_to_txs(Some(tx_number))
+        .await
+        .unwrap();
+    let cached_stream_response =
+        tokio::time::timeout(Duration::from_millis(500), cached_tx_ws.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    assert_eq!(
+        cached_stream_response.credential_id.as_ref(),
+        Some(&expected_credential_id)
+    );
+    responses.push(response);
+    tx_number += 1;
+
     // Create a helper function to check that the tx endpoint responds with the expected txs.
     let check_responses = |starting_from: usize,
                            responses: Vec<TxInfoWithConfirmation>,
