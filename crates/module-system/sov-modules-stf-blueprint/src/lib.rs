@@ -35,9 +35,7 @@ pub use sov_modules_api::{BatchWithId, BlobData, Runtime};
 use sov_modules_api::{
     BlobDataWithId, DaSpec, ExecutionContext, Gas, Genesis, Spec, StateCheckpoint,
 };
-#[cfg(feature = "native")]
-use sov_rollup_interface::da::BlockHeaderTrait;
-use sov_rollup_interface::da::RelevantBlobIters;
+use sov_rollup_interface::da::{BlockHeaderTrait, RelevantBlobIters};
 use sov_rollup_interface::stf::{ApplySlotOutput, StateTransitionFunction};
 #[cfg(feature = "native")]
 use sov_state::storage::StateUpdate;
@@ -430,6 +428,25 @@ where
         execution_context: ExecutionContext,
         cf: CF,
     ) -> ApplySlotOutput<S::Da, Self> {
+        // Consensus exception: the slot at this DA height is treated as if the DA block
+        // contained no rollup blobs. A (since fixed) bug in Celestia RPC nodes caused
+        // block 10645809 to be served without its rollup blobs when the rollup
+        // originally executed it, so an empty slot at that height is already part of
+        // canonical history. The height is a fact of reality, not a tunable parameter,
+        // hence local and hardcoded. Shadow the input before anything can observe the
+        // blobs: blob selection below writes state (blob deferral, sequencer penalties)
+        // even for blobs that never execute.
+        const FORCED_EMPTY_DA_HEIGHT: u64 = 10_645_809;
+        let relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]> =
+            if slot_header.height() == FORCED_EMPTY_DA_HEIGHT {
+                RelevantBlobIters {
+                    proof_blobs: &mut [],
+                    batch_blobs: &mut [],
+                }
+            } else {
+                relevant_blobs
+            };
+
         let mut runtime = RT::default();
         // Sanity check that gas limits are set correctly. This is already checked at genesis, but we check again in case
         // Someone modifies the code after genesis.

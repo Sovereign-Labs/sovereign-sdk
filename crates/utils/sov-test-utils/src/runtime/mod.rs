@@ -533,6 +533,10 @@ where
             .checked_add(1)
             .expect("Slot number overflow")
             .get();
+        self.header_at_height(height)
+    }
+
+    fn header_at_height(&self, height: u64) -> MockBlockHeader {
         if let Some(timestamp) = &self.config.freeze_time {
             MockBlockHeader::new(height, timestamp.clone())
         } else {
@@ -630,6 +634,19 @@ where
         self.simulate_with_control_flow(input, ExecutionContext::Node, NoOpControlFlow)
     }
 
+    /// Simulates execution of the provided input at a slot with the given DA block
+    /// height, without committing to the updated state. Useful for testing logic that
+    /// is gated on the DA height. The header is otherwise built as usual (respecting
+    /// `freeze_time`), and the STF does not require DA heights to be contiguous.
+    pub fn simulate_at_da_height<T: Into<SlotInput<RT, S>>>(
+        &mut self,
+        input: T,
+        da_height: u64,
+    ) -> (TestApplySlotOutput<RT, S>, RelevantBlobInfo, NoncesMap<S>) {
+        let block_header = self.header_at_height(da_height);
+        self.simulate_with_header(input, ExecutionContext::Node, NoOpControlFlow, block_header)
+    }
+
     ///  Simulates execution of the provided input without committing to the updated state,
     ///  using custom `InjectedControlFlow`.
     fn simulate_with_control_flow<T: Into<SlotInput<RT, S>>, CF: InjectedControlFlow<S> + Clone>(
@@ -638,8 +655,20 @@ where
         execution_context: ExecutionContext,
         cf: CF,
     ) -> (TestApplySlotOutput<RT, S>, RelevantBlobInfo, NoncesMap<S>) {
-        self.sync_hd_timestamp_env_var_for_tests();
         let block_header = self.next_header();
+        self.simulate_with_header(input, execution_context, cf, block_header)
+    }
+
+    ///  Simulates execution of the provided input at the given block header without
+    ///  committing to the updated state.
+    fn simulate_with_header<T: Into<SlotInput<RT, S>>, CF: InjectedControlFlow<S> + Clone>(
+        &mut self,
+        input: T,
+        execution_context: ExecutionContext,
+        cf: CF,
+        block_header: MockBlockHeader,
+    ) -> (TestApplySlotOutput<RT, S>, RelevantBlobInfo, NoncesMap<S>) {
+        self.sync_hd_timestamp_env_var_for_tests();
         let stf_state = self.storage_manager.create_prover_storage();
         let slot_input: SlotInput<RT, S> = input.into();
         let sequencer = self.config.sequencer_da_address;
@@ -692,6 +721,21 @@ where
         input: T,
     ) -> (SlotReceipt<S>, RelevantBlobInfo) {
         let (result, blob_info, nonces) = self.simulate::<T>(input);
+        let (result, slot_receipt) = split_apply_slot_output::<S, RT>(result);
+
+        self.commit_apply_slot_output(result, nonces);
+
+        (slot_receipt, blob_info)
+    }
+
+    /// Executes the provided input at a slot with the given DA block height and commits
+    /// the state updates. See [`Self::simulate_at_da_height`].
+    pub fn execute_at_da_height<T: Into<SlotInput<RT, S>>>(
+        &mut self,
+        input: T,
+        da_height: u64,
+    ) -> (SlotReceipt<S>, RelevantBlobInfo) {
+        let (result, blob_info, nonces) = self.simulate_at_da_height::<T>(input, da_height);
         let (result, slot_receipt) = split_apply_slot_output::<S, RT>(result);
 
         self.commit_apply_slot_output(result, nonces);
