@@ -25,6 +25,7 @@ use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
 use sov_state::{ArrayWitness, NativeStorage, Storage, StorageRoot};
+use sov_stf_runner::processes::StfInfoResumeSource;
 use sov_stf_runner::StateTransitionRunner;
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
 use sov_test_utils::storage::SimpleStorageManager;
@@ -122,7 +123,7 @@ async fn test_runner_with_background_da_service(
         da_sync_state,
         da_service_with_cache,
         genesis_da_height,
-        None,
+        StfInfoResumeSource::LatestAggregatedProof(None),
     )
     .await?;
 

@@ -38,7 +38,7 @@ use sov_state::storage::NativeStorage;
 use sov_state::Storage;
 use sov_stf_runner::processes::{
     start_op_workflow_in_background, start_operator_workflow_in_background,
-    start_zk_workflow_in_background, ProverService, RollupProverConfig,
+    start_zk_workflow_in_background, ProverService, RollupProverConfig, StfInfoResumeSource,
 };
 use sov_stf_runner::{
     initialize_state, query_state_update_info, CorsConfiguration, RollupConfig,
@@ -567,6 +567,12 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
 
         info!(?operating_mode, "Instantiating a new rollup");
 
+        let latest_optimistic_attestation = if operating_mode == OperatingMode::Optimistic {
+            startup_step!(ledger_db.get_latest_optimistic_attestation().await)
+        } else {
+            None
+        };
+
         let da_sync_state = startup_step!(
             make_da_sync_state(
                 genesis_da_height,
@@ -630,8 +636,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             should_enable_proof_pipeline(prover_config, sequencer.is_replica);
 
         // The prover service validates the latest aggregated proof persisted in
-        // the ledger DB and returns its `final_slot_number`. We pass this slot
-        // into the runner so the STF-info stream resumes at `final_slot + 1`.
+        // the ledger DB and returns its `final_slot_number`. In ZK mode this
+        // anchors the STF-info stream at `final_slot + 1`; optimistic mode uses
+        // its latest locally-checkpointed attestation instead.
         let (prover_service, latest_proof_final_slot) = if proof_pipeline_enabled {
             let create_prover_service_result = self
                 .create_prover_service(
@@ -659,6 +666,22 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         } else {
             (None, None)
         };
+        let stf_info_resume_source = match operating_mode {
+            OperatingMode::Zk => {
+                StfInfoResumeSource::LatestAggregatedProof(latest_proof_final_slot)
+            }
+            OperatingMode::Optimistic => {
+                StfInfoResumeSource::LatestOptimisticAttestation(latest_optimistic_attestation)
+            }
+            OperatingMode::Operator => {
+                assert!(
+                    !proof_pipeline_enabled,
+                    "Operator mode must not enable the proof pipeline"
+                );
+                // The runner does not create an STF-info channel in operator mode.
+                StfInfoResumeSource::LatestAggregatedProof(None)
+            }
+        };
 
         let runner_result = StateTransitionRunner::new(
             rollup_config.runner.clone(),
@@ -681,7 +704,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             da_sync_state.clone(),
             da_service_with_cache,
             genesis_da_height,
-            latest_proof_final_slot,
+            stf_info_resume_source,
         )
         .await;
         let mut runner = match runner_result {
