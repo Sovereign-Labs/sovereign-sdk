@@ -428,17 +428,20 @@ where
         execution_context: ExecutionContext,
         cf: CF,
     ) -> ApplySlotOutput<S::Da, Self> {
-        // Consensus exception: the slot at this DA height is treated as if the DA block
+        // Consensus exception: slots at these DA heights are treated as if the DA blocks
         // contained no rollup blobs. A (since fixed) bug in Celestia RPC nodes caused
-        // block 10645809 to be served without its rollup blobs when the rollup
-        // originally executed it, so an empty slot at that height is already part of
-        // canonical history. The height is a fact of reality, not a tunable parameter,
-        // hence local and hardcoded. Shadow the input before anything can observe the
-        // blobs: blob selection below writes state (blob deferral, sequencer penalties)
-        // even for blobs that never execute.
-        const FORCED_EMPTY_DA_HEIGHT: u64 = 10_645_809;
+        // blocks 10645809 and 10645810 to be served without their rollup blobs when the
+        // rollup originally executed them, so empty slots at those heights are already
+        // part of canonical history. (The preferred-sequencer batches hidden there —
+        // sequence numbers 1366308 and 1366309 — were re-posted by the sequencer and
+        // canonically accepted at blocks 10645821 and 10645822.) The heights are facts
+        // of reality, not tunable parameters, hence local and hardcoded. Shadow the
+        // input before anything can observe the blobs: blob selection below writes
+        // state (blob deferral, sequence-number tracking, sequencer penalties) even
+        // for blobs that never execute.
+        const FORCED_EMPTY_DA_HEIGHTS: [u64; 2] = [10_645_809, 10_645_810];
         let relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]> =
-            if slot_header.height() == FORCED_EMPTY_DA_HEIGHT {
+            if FORCED_EMPTY_DA_HEIGHTS.contains(&slot_header.height()) {
                 RelevantBlobIters {
                     proof_blobs: &mut [],
                     batch_blobs: &mut [],

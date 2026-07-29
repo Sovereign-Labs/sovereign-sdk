@@ -1,5 +1,5 @@
 //! Tests for the hardcoded consensus exception in `apply_slot` that treats Celestia DA
-//! block 10645809 as containing no rollup blobs.
+//! blocks 10645809 and 10645810 as containing no rollup blobs.
 
 use sov_mock_da::MockBlob;
 use sov_rollup_interface::da::{RelevantBlobs, Time};
@@ -8,11 +8,15 @@ use sov_test_utils::{TestUser, TEST_DEFAULT_USER_BALANCE};
 use crate::stf_blueprint::operator::operator_rt::{setup, IntegTestRuntime};
 use crate::stf_blueprint::{create_blob, PriorityFeeBips, TxStatus, S};
 
-/// Deliberately defined independently of the STF: the skipped height is a fact of
-/// reality (the DA block affected by the RPC-node bug), so these tests must verify the
-/// literal value `10645809` and fail if the height hardcoded in `apply_slot` is ever
-/// edited, accidentally or otherwise.
-const FORCED_EMPTY_DA_HEIGHT: u64 = 10_645_809;
+/// Deliberately defined independently of the STF: the skipped heights are facts of
+/// reality (the DA blocks affected by the RPC-node bug), so these tests must verify the
+/// literal values `10645809` and `10645810`, and fail if the heights hardcoded in
+/// `apply_slot` are ever edited, accidentally or otherwise.
+const FORCED_EMPTY_DA_HEIGHTS: [u64; 2] = [10_645_809, 10_645_810];
+
+/// The DA heights directly surrounding the forced-empty range, where execution must
+/// behave normally.
+const ADJACENT_DA_HEIGHTS: [u64; 2] = [10_645_808, 10_645_811];
 
 fn setup_runner_and_valid_blob() -> (
     sov_test_utils::runtime::TestRunner<IntegTestRuntime<S>, S>,
@@ -41,54 +45,63 @@ fn setup_runner_and_valid_blob() -> (
 }
 
 #[test]
-fn blobs_at_forced_empty_da_height_are_dropped_without_trace() {
-    let (mut runner, blobs) = setup_runner_and_valid_blob();
+fn blobs_at_forced_empty_da_heights_are_dropped_without_trace() {
+    for da_height in FORCED_EMPTY_DA_HEIGHTS {
+        let (mut runner, blobs) = setup_runner_and_valid_blob();
 
-    let (result, _) = runner.execute_at_da_height(blobs, FORCED_EMPTY_DA_HEIGHT);
+        let (result, _) = runner.execute_at_da_height(blobs, da_height);
 
-    assert!(
-        result.batch_receipts.is_empty(),
-        "No batch may execute in a forced-empty slot"
-    );
-    assert!(
-        result.discarded_blobs.is_empty(),
-        "Blobs in a forced-empty slot must vanish entirely, not be reported as discarded"
-    );
+        assert!(
+            result.batch_receipts.is_empty(),
+            "No batch may execute in the forced-empty slot at DA height {da_height}"
+        );
+        assert!(
+            result.discarded_blobs.is_empty(),
+            "Blobs in the forced-empty slot at DA height {da_height} must vanish entirely, \
+             not be reported as discarded"
+        );
+    }
 }
 
-/// Control test pinning the exception to exactly the hardcoded height: the same blob
-/// one block later executes normally.
+/// Control test pinning the exception to exactly the hardcoded heights: the same blob
+/// immediately before and after the forced-empty range executes normally.
 #[test]
-fn blobs_at_adjacent_da_height_are_executed() {
-    let (mut runner, blobs) = setup_runner_and_valid_blob();
+fn blobs_at_adjacent_da_heights_are_executed() {
+    for da_height in ADJACENT_DA_HEIGHTS {
+        let (mut runner, blobs) = setup_runner_and_valid_blob();
 
-    let (result, _) = runner.execute_at_da_height(blobs, FORCED_EMPTY_DA_HEIGHT + 1);
+        let (result, _) = runner.execute_at_da_height(blobs, da_height);
 
-    assert_eq!(
-        result.batch_receipts.len(),
-        1,
-        "A valid blob outside the forced-empty height must execute"
-    );
+        assert_eq!(
+            result.batch_receipts.len(),
+            1,
+            "A valid blob at DA height {da_height}, outside the forced-empty range, \
+             must execute"
+        );
+    }
 }
 
-/// The forced-empty slot must produce exactly the state transition of a slot whose DA
+/// A forced-empty slot must produce exactly the state transition of a slot whose DA
 /// block contains no rollup blobs.
 #[test]
 fn forced_empty_slot_state_matches_empty_slot_state() {
-    let (mut runner, blobs) = setup_runner_and_valid_blob();
-    // Freeze time so both simulated headers are identical.
-    runner.config.freeze_time = Some(Time::from_millis(1_700_000_000_000));
+    for da_height in FORCED_EMPTY_DA_HEIGHTS {
+        let (mut runner, blobs) = setup_runner_and_valid_blob();
+        // Freeze time so both simulated headers are identical.
+        runner.config.freeze_time = Some(Time::from_millis(1_700_000_000_000));
 
-    let (slot_with_blobs, _, _) = runner.simulate_at_da_height(blobs, FORCED_EMPTY_DA_HEIGHT);
-    let empty_blobs = RelevantBlobs::<MockBlob> {
-        proof_blobs: vec![],
-        batch_blobs: vec![],
-    };
-    let (empty_slot, _, _) = runner.simulate_at_da_height(empty_blobs, FORCED_EMPTY_DA_HEIGHT);
+        let (slot_with_blobs, _, _) = runner.simulate_at_da_height(blobs, da_height);
+        let empty_blobs = RelevantBlobs::<MockBlob> {
+            proof_blobs: vec![],
+            batch_blobs: vec![],
+        };
+        let (empty_slot, _, _) = runner.simulate_at_da_height(empty_blobs, da_height);
 
-    assert_eq!(
-        slot_with_blobs.state_root.as_ref(),
-        empty_slot.state_root.as_ref(),
-        "A forced-empty slot with blobs must reach the same state root as an empty slot"
-    );
+        assert_eq!(
+            slot_with_blobs.state_root.as_ref(),
+            empty_slot.state_root.as_ref(),
+            "The forced-empty slot at DA height {da_height} with blobs must reach the \
+             same state root as an empty slot"
+        );
+    }
 }
