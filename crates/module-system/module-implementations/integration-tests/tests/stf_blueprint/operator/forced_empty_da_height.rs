@@ -1,5 +1,5 @@
 //! Tests for the hardcoded consensus exception in `apply_slot` that treats Celestia DA
-//! blocks 10645809 and 10645810 as containing no rollup blobs.
+//! blocks 10645809-10645810 and 10897147-10897151 as containing no rollup blobs.
 
 use sov_mock_da::MockBlob;
 use sov_rollup_interface::da::{RelevantBlobs, Time};
@@ -10,13 +10,15 @@ use crate::stf_blueprint::{create_blob, PriorityFeeBips, TxStatus, S};
 
 /// Deliberately defined independently of the STF: the skipped heights are facts of
 /// reality (the DA blocks affected by the RPC-node bug), so these tests must verify the
-/// literal values `10645809` and `10645810`, and fail if the heights hardcoded in
-/// `apply_slot` are ever edited, accidentally or otherwise.
-const FORCED_EMPTY_DA_HEIGHTS: [u64; 2] = [10_645_809, 10_645_810];
+/// literal values `10645809-10645810` and `10897147-10897151`, and fail if the heights
+/// hardcoded in `apply_slot` are ever edited, accidentally or otherwise.
+const FORCED_EMPTY_DA_HEIGHTS: [u64; 7] = [
+    10_645_809, 10_645_810, 10_897_147, 10_897_148, 10_897_149, 10_897_150, 10_897_151,
+];
 
-/// The DA heights directly surrounding the forced-empty range, where execution must
+/// The DA heights directly surrounding the forced-empty ranges, where execution must
 /// behave normally.
-const ADJACENT_DA_HEIGHTS: [u64; 2] = [10_645_808, 10_645_811];
+const ADJACENT_DA_HEIGHTS: [u64; 4] = [10_645_808, 10_645_811, 10_897_146, 10_897_152];
 
 fn setup_runner_and_valid_blob() -> (
     sov_test_utils::runtime::TestRunner<IntegTestRuntime<S>, S>,
