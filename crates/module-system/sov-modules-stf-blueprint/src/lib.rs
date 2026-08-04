@@ -435,14 +435,14 @@ where
         // canonical history:
         // - 10645809..=10645810 (preferred-sequencer sequence numbers 1366308-1366309,
         //   re-posted by the sequencer and canonically accepted at 10645821-10645822);
-        // - 10897147..=10897151 (sequence numbers 1617388-1617392, re-posted and
-        //   canonically accepted at 10897159-10897163).
+        // - 10897147..=10897150 (sequence numbers 1617388-1617391, re-posted and
+        //   canonically accepted at 10897159-10897162).
         // The heights are facts of reality, not tunable parameters, hence local and
         // hardcoded. Shadow the input before anything can observe the blobs: blob
         // selection below writes state (blob deferral, sequence-number tracking,
         // sequencer penalties) even for blobs that never execute.
-        const FORCED_EMPTY_DA_HEIGHTS: [u64; 7] = [
-            10_645_809, 10_645_810, 10_897_147, 10_897_148, 10_897_149, 10_897_150, 10_897_151,
+        const FORCED_EMPTY_DA_HEIGHTS: [u64; 6] = [
+            10_645_809, 10_645_810, 10_897_147, 10_897_148, 10_897_149, 10_897_150,
         ];
         let relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]> =
             if FORCED_EMPTY_DA_HEIGHTS.contains(&slot_header.height()) {
