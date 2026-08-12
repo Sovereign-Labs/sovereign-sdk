@@ -37,6 +37,8 @@ EVM_MAX_FEE_CHECK_HEIGHT = 0
 # After this evm block height, RPC receipts derive effectiveGasPrice
 # from the actual fee charged by the Sovereign gas meter.
 EVM_RECEIPT_ACTUAL_FEE_HEIGHT = 0
+# Before this rollup height, custom EVM precompiles are disabled without reading their enabled set.
+ENABLE_EVM_CUSTOM_PRECOMPILES_AT = 0
 # How many rollup blocks to wait before terminating setup mode. While setup mode is enabled,
 # the rollup does not charge gas. This is useful when initializing the rollup with a bridged gas token.
 SETUP_MODE_TERMINATION_HEIGHT = 0 # Disable setup mode entirely by default.

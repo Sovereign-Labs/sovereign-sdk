@@ -52,6 +52,7 @@ pub use revm::primitives::hardfork::SpecId;
 use serde::Serialize;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::{
     err_detail, AccessoryStateMap, AccessoryStateValue, Context, CoreModuleError, DaSpec,
     ErrorContext, ErrorDetail, GenesisState, Module, ModuleId, ModuleInfo, Spec, StateMap,
@@ -304,9 +305,16 @@ where
         state: &mut Reader,
     ) -> Result<precompiles::SovPrecompileProvider<'a, S, P>, E>
     where
-        Reader: StateReader<User, Error = E>,
+        Reader: StateReader<User, Error = E> + VersionReader,
     {
-        let enabled_custom_precompiles = self.enabled_custom_precompile_addresses(state)?;
+        let activation_height: u64 = config_value!("ENABLE_EVM_CUSTOM_PRECOMPILES_AT");
+        // The enabled-set read is metered. Existing rollups that add their first custom precompile
+        // must preserve the old no-read execution path until a coordinated activation height.
+        let enabled_custom_precompiles = enabled_custom_precompiles_at_height(
+            state.rollup_height_to_access().get(),
+            activation_height,
+            || self.enabled_custom_precompile_addresses(state),
+        )?;
         Ok(precompiles::SovPrecompileProvider::new(
             P::default(),
             context,
@@ -337,6 +345,17 @@ where
     }
 }
 
+fn enabled_custom_precompiles_at_height<E>(
+    rollup_height: u64,
+    activation_height: u64,
+    load_enabled: impl FnOnce() -> Result<BTreeSet<Address>, E>,
+) -> Result<BTreeSet<Address>, E> {
+    if rollup_height < activation_height {
+        return Ok(BTreeSet::new());
+    }
+    load_enabled()
+}
+
 pub(crate) fn to_rollup_address<S: Spec>(address: Address) -> S::Address
 where
     S::Address: FromVmAddress<EthereumAddress>,
@@ -351,4 +370,31 @@ pub(crate) fn to_rollup_balance(balance: U256) -> Amount {
         .try_into()
         .unwrap_or_else(|_| panic!("The impossible happened: Balance overflowed"));
     Amount::new(bank_amount)
+}
+
+#[cfg(test)]
+mod custom_precompile_activation_tests {
+    use std::convert::Infallible;
+
+    use super::enabled_custom_precompiles_at_height;
+
+    #[test]
+    fn enabled_set_is_not_loaded_before_activation() {
+        let enabled = enabled_custom_precompiles_at_height::<Infallible>(41, 42, || {
+            panic!("enabled precompile set must not be read before activation")
+        })
+        .unwrap();
+        assert!(enabled.is_empty());
+    }
+
+    #[test]
+    fn enabled_set_is_loaded_at_activation() {
+        let mut load_called = false;
+        enabled_custom_precompiles_at_height::<Infallible>(42, 42, || {
+            load_called = true;
+            Ok(Default::default())
+        })
+        .unwrap();
+        assert!(load_called);
+    }
 }
