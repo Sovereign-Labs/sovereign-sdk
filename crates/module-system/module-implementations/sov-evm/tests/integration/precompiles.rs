@@ -205,6 +205,32 @@ where
 }
 
 #[track_caller]
+fn execute_noop_call_and_get_gas<RT, Sp>(
+    runner: &mut TestRunner<RT, Sp>,
+    caller: &EvmAccount,
+    recipient: Address,
+) -> u64
+where
+    RT: Runtime<Sp> + EthereumAuthenticator<Sp> + MinimalGenesis<Sp>,
+    Sp: Spec<Da = MockDaSpec, CryptoSpec = MockZkvmCryptoSpec, Storage = TestStorage>,
+{
+    runner.execute_transaction(TransactionTestCase {
+        input: create_evm_tx::<RT, Sp>(0, caller, TxKind::Call(recipient), Bytes::new(), 100_000),
+        assert: Box::new(|ctx, _state| {
+            assert!(ctx.tx_receipt.is_successful());
+        }),
+    });
+
+    runner.query_visible_state(|state| {
+        Evm::<Sp>::default()
+            .receipt(0, state)
+            .expect("noop call should have an EVM receipt")
+            .0
+            .gas_used
+    })
+}
+
+#[track_caller]
 fn assert_precompile_result<RT, Sp>(
     runner: &mut TestRunner<RT, Sp>,
     caller: &EvmAccount,
@@ -386,6 +412,65 @@ fn default_evm_keeps_eth_precompiles_and_custom_addresses_are_empty() {
         SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
         Bytes::new(),
     );
+}
+
+#[test]
+fn provider_read_gas_depends_on_stored_enabled_set_not_compiled_set() {
+    let PrecompileSetup {
+        mut runner,
+        caller,
+        balance_holder,
+        ..
+    } = default_runtime::setup_with_enabled_custom_precompiles(vec![]);
+    let no_compiled_gas =
+        execute_noop_call_and_get_gas(&mut runner, &caller, balance_holder.address());
+
+    let PrecompileSetup {
+        mut runner,
+        caller,
+        balance_holder,
+        ..
+    } = bank_runtime::setup_with_enabled_custom_precompiles(vec![]);
+    let one_compiled_gas =
+        execute_noop_call_and_get_gas(&mut runner, &caller, balance_holder.address());
+
+    let PrecompileSetup {
+        mut runner,
+        caller,
+        balance_holder,
+        ..
+    } = composite_runtime::setup_with_enabled_custom_precompiles(vec![]);
+    let two_compiled_gas =
+        execute_noop_call_and_get_gas(&mut runner, &caller, balance_holder.address());
+
+    assert_eq!(no_compiled_gas, one_compiled_gas);
+    assert_eq!(no_compiled_gas, two_compiled_gas);
+
+    let PrecompileSetup {
+        mut runner,
+        caller,
+        balance_holder,
+        ..
+    } = composite_runtime::setup_with_enabled_custom_precompiles(vec![
+        BANK_BALANCE_PRECOMPILE_ADDRESS,
+    ]);
+    let one_enabled_gas =
+        execute_noop_call_and_get_gas(&mut runner, &caller, balance_holder.address());
+
+    let PrecompileSetup {
+        mut runner,
+        caller,
+        balance_holder,
+        ..
+    } = composite_runtime::setup_with_enabled_custom_precompiles(vec![
+        BANK_BALANCE_PRECOMPILE_ADDRESS,
+        SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS,
+    ]);
+    let two_enabled_gas =
+        execute_noop_call_and_get_gas(&mut runner, &caller, balance_holder.address());
+
+    assert!(one_enabled_gas > two_compiled_gas);
+    assert!(two_enabled_gas > one_enabled_gas);
 }
 
 #[test]
