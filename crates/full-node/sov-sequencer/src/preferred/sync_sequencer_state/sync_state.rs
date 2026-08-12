@@ -1213,7 +1213,9 @@ where
         // sequencing data creation.
         baked_tx.sequencing_data =
             Some(sov_modules_api::capabilities::new_tx_sequencing_data::<S, Rt>());
-        let (res, resource_used) = inner.do_new_tx(tx_hash, baked_tx, Some(ip_and_credential.credential_id)).await;
+        let (res, resource_used) = inner
+            .do_new_tx(tx_hash, baked_tx, Some(ip_and_credential.credential_id))
+            .await;
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`
         // to ensure the limits are updated even for unsuccessful transactions.
