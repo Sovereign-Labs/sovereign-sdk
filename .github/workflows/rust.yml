@@ -434,6 +434,9 @@ jobs:
     runs-on: namespace-profile-sov-ubuntu-24-04-amd64-32x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=demo-rollup-1-93
     needs:
       - check
+    permissions:
+      contents: read
+      packages: read
     timeout-minutes: 60
     env:
       SKIP_GUEST_BUILD: "risc0"
@@ -443,6 +446,12 @@ jobs:
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
+      - name: Login to GitHub Container Registry
+        uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
       - uses: namespacelabs/nscloud-cache-action@v1
         with:
           cache: rust
