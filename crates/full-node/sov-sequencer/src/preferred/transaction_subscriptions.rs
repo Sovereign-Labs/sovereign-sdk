@@ -270,6 +270,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         Ok(Some(AcceptedTx {
             tx: tx.body.unwrap_or_default(),
             tx_hash,
+            credential_id: None,
             confirmation: Confirmation {
                 events: tx
                     .events
@@ -485,6 +486,7 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
                 ApiAcceptedTx {
                     tx: tx_body,
                     id: HexString(tx.hash),
+                    credential_id: None,
                     confirmation: Confirmation {
                         events: tx
                             .events
@@ -612,8 +614,8 @@ mod tests {
     use sov_db::ledger_db::SlotCommit;
     use sov_mock_da::{MockAddress, MockBlob, MockBlock};
     use sov_modules_api::{
-        ApiTxEffect, BatchReceipt, FullyBakedTx, Gas, RuntimeEventProcessor, SuccessfulTxContents,
-        TransactionReceipt, TxEffect, TxReceiptContents,
+        ApiTxEffect, BatchReceipt, CredentialId, FullyBakedTx, Gas, RuntimeEventProcessor,
+        SuccessfulTxContents, TransactionReceipt, TxEffect, TxReceiptContents,
     };
     use sov_rollup_interface::stf::StoredEvent;
     use sov_test_utils::storage::SimpleLedgerStorageManager;
@@ -654,6 +656,7 @@ mod tests {
         AcceptedTx {
             tx: FullyBakedTx::new(vec![]),
             tx_hash: HexString([tx_number as u8; 32]),
+            credential_id: Some(CredentialId::from_bytes([tx_number as u8; 32])),
             confirmation: Confirmation {
                 events: vec![],
                 receipt: ApiTxEffect::Successful {
@@ -832,6 +835,10 @@ mod tests {
                         .unwrap()
                         .unwrap();
                 assert_eq!(next_tx.confirmation.tx_number, j);
+                assert_eq!(
+                    next_tx.credential_id,
+                    Some(CredentialId::from_bytes([j as u8; 32]))
+                );
             }
             // Occasionally, insert a new tx to test that the stream continues working after catchup
             if i % 13 == 0 {
@@ -844,6 +851,10 @@ mod tests {
                         .unwrap()
                         .unwrap();
                 assert_eq!(next_tx.confirmation.tx_number, num_txs);
+                assert_eq!(
+                    next_tx.credential_id,
+                    Some(CredentialId::from_bytes([num_txs as u8; 32]))
+                );
                 num_txs += 1;
             } else {
                 // If we're not inserting a new tx, then the stream should be empty. Check that it is.
@@ -886,6 +897,10 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(next_tx.confirmation.tx_number, num_txs);
+        assert_eq!(
+            next_tx.credential_id,
+            Some(CredentialId::from_bytes([num_txs as u8; 32]))
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]
@@ -1003,6 +1018,9 @@ mod tests {
                 .unwrap();
             assert_eq!(next_tx.confirmation.tx_number, i);
             assert_eq!(next_tx.id, HexString([i as u8; 32]));
+            let expected_credential_id =
+                (i >= 105).then(|| CredentialId::from_bytes([i as u8; 32]));
+            assert_eq!(next_tx.credential_id, expected_credential_id);
         }
 
         // Push a new tx to the stream and check that it comes through
@@ -1013,5 +1031,9 @@ mod tests {
             .unwrap()
             .unwrap();
         assert_eq!(next_tx.confirmation.tx_number, num_txs);
+        assert_eq!(
+            next_tx.credential_id,
+            Some(CredentialId::from_bytes([num_txs as u8; 32]))
+        );
     }
 }

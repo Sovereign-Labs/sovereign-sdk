@@ -620,6 +620,7 @@ where
         Ok(AcceptedTx {
             tx: baked_tx,
             tx_hash,
+            credential_id: None,
             confirmation: EmptyConfirmation {},
         })
     }

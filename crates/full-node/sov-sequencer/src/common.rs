@@ -259,6 +259,10 @@ pub struct AcceptedTx<C> {
     pub tx: FullyBakedTx,
     /// Hash of the transaction.
     pub tx_hash: TxHash,
+    /// Credential identifier captured during sequencer ingress authentication.
+    /// May be unavailable, including for transactions reconstructed from ledger history.
+    #[serde(skip_serializing)]
+    pub credential_id: Option<CredentialId>,
     #[derivative(Debug(bound = "C: Debug"))]
     /// Confirmation data. Could be empty, a receipt, or other data.
     pub confirmation: C,
@@ -295,6 +299,7 @@ impl<C> AcceptedTx<C> {
         AcceptedTx {
             tx: self.tx,
             tx_hash: self.tx_hash,
+            credential_id: self.credential_id,
             confirmation: f(self.confirmation),
         }
     }

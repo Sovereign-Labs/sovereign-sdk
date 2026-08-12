@@ -18,7 +18,7 @@ use sov_metrics::{track_metrics, HttpMetrics};
 use sov_modules_api::capabilities::TransactionAuthenticator;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::Runtime;
-use sov_modules_api::{RawTx, RuntimeEventProcessor, RuntimeEventResponse, Spec};
+use sov_modules_api::{CredentialId, RawTx, RuntimeEventProcessor, RuntimeEventResponse, Spec};
 use sov_rest_utils::handle_bad_ws_request;
 use sov_rest_utils::{
     errors, preconfigured_router_layers, serve_generic_ws_subscription,
@@ -771,6 +771,10 @@ pub struct TxInfoWithConfirmation<DaTransactionId, Confirmation> {
 pub struct ApiAcceptedTx<Confirmation> {
     /// The hex encoded transaction hash
     pub id: TxHash,
+    /// Credential identifier captured during sequencer ingress authentication.
+    /// Omitted when unavailable, including for transactions reconstructed from ledger history.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub credential_id: Option<CredentialId>,
     /// Transaction body
     #[serde(skip_serializing_if = "Option::is_none")]
     pub tx: Option<serde_json::Value>,
@@ -787,6 +791,7 @@ impl<C> ApiAcceptedTx<C> {
         });
         Self {
             id: tx.tx_hash,
+            credential_id: tx.credential_id,
             tx: tx_json,
             confirmation: tx.confirmation,
         }
