@@ -1,0 +1,21 @@
+[package]
+name = "sov-chain-config-patcher-cli"
+version = { workspace = true }
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+publish = false
+
+[lints]
+workspace = true
+
+[[bin]]
+name = "sov-chain-config-patcher"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = { workspace = true }
+clap = { workspace = true }
+sov-chain-config-patcher = { path = "../../../crates/utils/sov-chain-config-patcher" }
