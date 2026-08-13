@@ -236,7 +236,7 @@ fn create_transfer_tx_json_with_address_override(
     });
     let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         msg,
-        RT::CHAIN_HASH,
+        RT::chain_hash(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Generation(0),
@@ -263,7 +263,7 @@ async fn submit_simple_json_tx(
     let signed_message = json.into_bytes();
     let message = SolanaOffchainSimpleEnvelope::<S> {
         signed_message: signed_message.clone(),
-        chain_hash: RT::CHAIN_HASH,
+        chain_hash: RT::chain_hash(),
         pubkey: signer.pub_key(),
         signature: signer.sign(&signed_message),
     };
@@ -336,7 +336,7 @@ async fn test_submit_ledger_signed_transaction() {
 
         let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx,
-            chain_hash: RT::CHAIN_HASH,
+            chain_hash: RT::chain_hash(),
             pubkey,
             signature,
         };
@@ -375,7 +375,7 @@ async fn test_submit_ledger_signed_transaction() {
     .unwrap();
 
     let mut signed_message_with_preamble =
-        make_preamble_for_message(&pubkey, &RT::CHAIN_HASH, encoded_tx.len() as u16).to_vec();
+        make_preamble_for_message(&pubkey, &RT::chain_hash(), encoded_tx.len() as u16).to_vec();
     signed_message_with_preamble.extend_from_slice(&encoded_tx);
 
     // Sanity check — if this changes, re-sign on the Ledger and update the signature below.
@@ -444,7 +444,7 @@ async fn test_submit_raw_signed_message_transaction() {
 
     let message = SolanaOffchainSimpleEnvelope::<S> {
         signed_message: encoded_tx,
-        chain_hash: RT::CHAIN_HASH,
+        chain_hash: RT::chain_hash(),
         pubkey,
         signature,
     };
@@ -491,7 +491,7 @@ async fn test_submit_invalid_raw_signed_message_transaction() {
 
     let message = SolanaOffchainSimpleEnvelope::<S> {
         signed_message: encoded_tx,
-        chain_hash: RT::CHAIN_HASH,
+        chain_hash: RT::chain_hash(),
         pubkey,
         signature,
     };
@@ -549,7 +549,7 @@ fn create_multisig_transfer_tx_json(
     });
     let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         msg,
-        RT::CHAIN_HASH,
+        RT::chain_hash(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(0),
@@ -609,7 +609,7 @@ async fn test_submit_multisig_simple_message_transaction() {
 
         let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx,
-            chain_hash: RT::CHAIN_HASH,
+            chain_hash: RT::chain_hash(),
             pubkey,
             signature,
         };
@@ -638,7 +638,7 @@ async fn test_submit_multisig_simple_message_transaction() {
 
     let multisig_msg = SolanaOffchainSimpleMultisigEnvelope::<S> {
         wire_bytes,
-        chain_hash: RT::CHAIN_HASH,
+        chain_hash: RT::chain_hash(),
         signatures: vec![
             PubKeyAndSignature {
                 signature: sig3,
@@ -713,7 +713,7 @@ async fn test_submit_multisig_insufficient_signatures() {
         let signer = admin.private_key();
         let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx.clone(),
-            chain_hash: RT::CHAIN_HASH,
+            chain_hash: RT::chain_hash(),
             pubkey: signer.pub_key(),
             signature: signer.sign(&encoded_tx),
         };
@@ -730,7 +730,7 @@ async fn test_submit_multisig_insufficient_signatures() {
 
     let multisig_msg = SolanaOffchainSimpleMultisigEnvelope::<S> {
         wire_bytes,
-        chain_hash: RT::CHAIN_HASH,
+        chain_hash: RT::chain_hash(),
         signatures: vec![PubKeyAndSignature {
             signature: sig1,
             pub_key: pub1,
@@ -778,7 +778,7 @@ async fn test_submit_multisig_invalid_signature() {
         let signer = admin.private_key();
         let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx.clone(),
-            chain_hash: RT::CHAIN_HASH,
+            chain_hash: RT::chain_hash(),
             pubkey: signer.pub_key(),
             signature: signer.sign(&encoded_tx),
         };
@@ -798,7 +798,7 @@ async fn test_submit_multisig_invalid_signature() {
 
     let multisig_msg = SolanaOffchainSimpleMultisigEnvelope::<S> {
         wire_bytes,
-        chain_hash: RT::CHAIN_HASH,
+        chain_hash: RT::chain_hash(),
         signatures: vec![
             PubKeyAndSignature {
                 signature: sig1,
@@ -858,7 +858,7 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
 
         let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx,
-            chain_hash: RT::CHAIN_HASH,
+            chain_hash: RT::chain_hash(),
             pubkey,
             signature,
         };
@@ -884,7 +884,7 @@ async fn test_submit_multisig_spec_compliant_message_transaction() {
     preamble_pubkeys.sort();
     let preamble = make_multisig_preamble_for_message(
         &preamble_pubkeys,
-        &RT::CHAIN_HASH,
+        &RT::chain_hash(),
         json_bytes.len() as u16,
     );
 
@@ -973,7 +973,7 @@ async fn test_submit_spec_compliant_multisig_insufficient_signatures() {
         let signer = admin.private_key();
         let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx.clone(),
-            chain_hash: RT::CHAIN_HASH,
+            chain_hash: RT::chain_hash(),
             pubkey: signer.pub_key(),
             signature: signer.sign(&encoded_tx),
         };
@@ -988,7 +988,7 @@ async fn test_submit_spec_compliant_multisig_insufficient_signatures() {
 
     let preamble = make_multisig_preamble_for_message(
         &[*pub1.bytes(), *pub2.bytes(), *pub3.bytes()],
-        &RT::CHAIN_HASH,
+        &RT::chain_hash(),
         json_bytes.len() as u16,
     );
 
@@ -1042,7 +1042,7 @@ async fn test_submit_spec_compliant_multisig_invalid_signature() {
         let signer = admin.private_key();
         let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx.clone(),
-            chain_hash: RT::CHAIN_HASH,
+            chain_hash: RT::chain_hash(),
             pubkey: signer.pub_key(),
             signature: signer.sign(&encoded_tx),
         };
@@ -1056,7 +1056,7 @@ async fn test_submit_spec_compliant_multisig_invalid_signature() {
 
     let preamble = make_multisig_preamble_for_message(
         &[*pub1.bytes(), *pub2.bytes(), *pub3.bytes()],
-        &RT::CHAIN_HASH,
+        &RT::chain_hash(),
         json_bytes.len() as u16,
     );
 
@@ -1131,7 +1131,7 @@ async fn test_submit_ledger_signed_multisig_transaction() {
 
         let message = SolanaOffchainSimpleEnvelope::<S> {
             signed_message: encoded_tx,
-            chain_hash: RT::CHAIN_HASH,
+            chain_hash: RT::chain_hash(),
             pubkey,
             signature,
         };
@@ -1151,7 +1151,7 @@ async fn test_submit_ledger_signed_multisig_transaction() {
     // Build the multisig preamble with all 3 pubkeys (Ledger at index 0)
     let preamble = make_multisig_preamble_for_message(
         &[ledger_pubkey, *pub2.bytes(), *pub3.bytes()],
-        &RT::CHAIN_HASH,
+        &RT::chain_hash(),
         encoded_tx.len() as u16,
     );
 
@@ -1279,7 +1279,7 @@ async fn test_submit_multisig_with_authorized_address_override() {
     let sig2 = key2.sign(json_bytes);
     let multisig_msg = SolanaOffchainSimpleMultisigEnvelope::<S> {
         wire_bytes,
-        chain_hash: RT::CHAIN_HASH,
+        chain_hash: RT::chain_hash(),
         signatures: vec![
             PubKeyAndSignature {
                 signature: sig1,
@@ -1346,7 +1346,7 @@ fn build_v1_payload(
     });
     let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         call,
-        RT::CHAIN_HASH,
+        RT::chain_hash(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(0),
@@ -1537,7 +1537,7 @@ async fn test_submit_single_sig_with_tampered_address_override_fails_signature()
     let tampered_json = serde_json::to_string(&payload).expect("serialize");
     let message = SolanaOffchainSimpleEnvelope::<S> {
         signed_message: tampered_json.into_bytes(),
-        chain_hash: RT::CHAIN_HASH,
+        chain_hash: RT::chain_hash(),
         pubkey: admin.private_key().pub_key(),
         signature,
     };
@@ -1569,7 +1569,7 @@ fn build_v0_payload(
     });
     let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         call,
-        RT::CHAIN_HASH,
+        RT::chain_hash(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(0),

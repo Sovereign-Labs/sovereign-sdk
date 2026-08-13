@@ -107,7 +107,7 @@ pub(crate) fn build_create_token_tx_with_chain_hash_and_token_name(
         admins: SafeVec::new(),
         supply_cap: None,
     });
-    let chain_hash = chain_hash.unwrap_or(CHAIN_HASH);
+    let chain_hash = chain_hash.unwrap_or(*CHAIN_HASH);
     default_test_signed_transaction_with_nonce(key, &msg, nonce, &chain_hash)
 }
 
