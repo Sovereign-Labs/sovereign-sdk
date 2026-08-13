@@ -54,5 +54,9 @@ serde = [
 eip712 = [
   "serde",
   "dep:alloy-dyn-abi",
+  # `std` keeps this feature composable with crates that enable `winnow/std` (e.g. via `toml`),
+  # under which alloy-dyn-abi's parser requires its external errors to implement
+  # `std::error::Error`; that impl only exists with the alloy `std` features.
+  "alloy-dyn-abi/std",
   "dep:alloy-primitives",
 ]
