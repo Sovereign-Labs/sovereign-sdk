@@ -35,7 +35,6 @@
 //! parameters, this module provides better performance and compile-time guarantees.
 //! For language bindings or when generics are not available, use the `schema` module.
 
-use sov_modules_api::capabilities::config_chain_id;
 use sov_modules_api::{CallMessage, CryptoSpec, RuntimeDiscriminant, UnmanagedRuntimeCall};
 
 pub use sov_modules_api::capabilities::UniquenessData;
@@ -57,6 +56,9 @@ pub enum TransactionBuilderError {
 pub trait ChainHash {
     /// Returns the 32-byte hash that uniquely identifies the chain.
     fn chain_hash() -> [u8; 32];
+
+    /// Returns the id of the chain.
+    fn chain_id() -> u64;
 }
 
 /// Default maximum priority fee in basis points (0).
@@ -210,7 +212,7 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
 
         Ok(UnsignedTransaction::new(
             self.call,
-            config_chain_id(),
+            C::chain_id(),
             priority_fee,
             max_fee,
             uniqueness,

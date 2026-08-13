@@ -113,6 +113,7 @@ macro_rules! generate_runtime_without_capabilities {
                 }
             }
         }
+	use ::sov_modules_api::macros::config_value;
 
         impl<S> $crate::runtime::Runtime<S> for $id<S>
         where
@@ -121,8 +122,6 @@ macro_rules! generate_runtime_without_capabilities {
             <Self as ::sov_modules_api::DispatchCall>::Decodable: $crate::sov_universal_wallet::schema::UniversalWallet,
             $($runtime_trait_impl_bounds)*
         {
-            const CHAIN_HASH: [u8; 32] = [11; 32];
-
             type GenesisConfig = <Self as ::sov_modules_api::Genesis>::Config;
             type GenesisInput = ();
             type ModuleExecutionConfig = ();
@@ -131,10 +130,10 @@ macro_rules! generate_runtime_without_capabilities {
             fn endpoints(api_state: sov_modules_api::rest::ApiState<S>) -> ::sov_modules_api::NodeEndpoints {
                 use $crate::sov_rollup_apis::endpoints::dedup::{DeDupEndpoint, SovereignDeDupEndpoint};
                 use $crate::sov_rollup_apis::endpoints::schema::{SchemaEndpoint, StandardSchemaEndpoint};
-                use $crate::sov_universal_wallet::schema::{ChainData, Schema};
-                use ::sov_modules_api::macros::config_value;
-                use ::sov_modules_api::transaction::{Transaction, UnsignedTransaction};
+		use $crate::sov_rollup_apis::endpoints::constants::ConstantsResponse;
+		use $crate::sov_rollup_apis::endpoints::constants::ConstantsEndpoint;
                 use ::sov_modules_api::rest::HasRestApi;
+                use ::sov_modules_api::{CHAIN_ID, CHAIN_NAME};
 
                 let axum_router = Self::default().rest_api(api_state.clone());
                 // Provide an endpoint to return dedup information associated with addresses.
@@ -142,33 +141,34 @@ macro_rules! generate_runtime_without_capabilities {
                 let dedup_endpoint = SovereignDeDupEndpoint::new(api_state.clone());
                 let axum_router = axum_router.merge(dedup_endpoint.axum_router());
 
-                let schema = Schema::of_rollup_types_with_chain_data::<
-                Transaction<Self, S>,
-                UnsignedTransaction<Self, S>,
-                <Self as ::sov_modules_api::DispatchCall>::Decodable,
-                S::Address,
-                >(ChainData {
-                    chain_id: config_value!("CHAIN_ID"),
-                    chain_name: config_value!("CHAIN_NAME").to_string(),
-                })
-                .unwrap();
+		let schema = get_runtime_schema::<S, $id<S>>().unwrap();
 
                 // StandardSchemaEndpoint resolves chain hash based on current height.
                 // This ensures wallets get the correct chain hash during chain hash transitions.
                 let schema_endpoint = StandardSchemaEndpoint::<S>::new(
                     &schema,
-                    Self::CHAIN_HASH.into(),
+		    schema.chain_hash().unwrap().into(),
                     api_state.checkpoint_receiver(),
                 )
                 .expect("Failed to initialize StandardSchemaEndpoint");
                 let axum_router = axum_router.merge(schema_endpoint.axum_router());
-                let axum_router = axum_router.merge($crate::sov_rollup_apis::endpoints::constants::axum_router());
+
+		let constants_endpoint = ConstantsResponse {
+		    chain_id:  *CHAIN_ID,
+		    chain_name:  CHAIN_NAME.to_string(),
+		    hyperlane_domain: config_value!("HYPERLANE_BRIDGE_DOMAIN"),
+		    address_prefix: config_value!("ADDRESS_PREFIX"),
+		};
+                let axum_router = axum_router.merge(constants_endpoint.axum_router());
 
                 ::sov_modules_api::NodeEndpoints {
                     axum_router,
                     jsonrpsee_module: get_rpc_methods(api_state),
                 }
             }
+	    fn chain_hash() ->  [u8; 32] {
+		[11; 32]
+	    }
 
             fn genesis_config(_input: &Self::GenesisInput) -> ::sov_modules_api::prelude::anyhow::Result<Self::GenesisConfig> {
                 unimplemented!()

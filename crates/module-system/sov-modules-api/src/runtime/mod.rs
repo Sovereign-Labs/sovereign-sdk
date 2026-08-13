@@ -7,8 +7,11 @@ use std::io;
 use borsh::{BorshDeserialize, BorshSerialize};
 use capabilities::{HasCapabilities, HasKernel, TimelockPolicy, TransactionAuthenticator};
 use serde::{Deserialize, Serialize};
+
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
+
+use crate::sov_universal_wallet::schema::ChainData;
 
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
@@ -62,6 +65,33 @@ impl ModuleExecutionConfig for () {
     }
 }
 
+
+sov_modules_macros::static_bytes!(CONSTANTS, "constants.toml");
+
+use std::sync::LazyLock;
+
+/// Get a field from the CONSTANTS.
+pub fn get_from_constants(section: &str, key: &str) -> Option<String> {
+    let value = str::from_utf8(CONSTANTS.as_ref()).expect("not a string");
+    let value: toml::Table = toml::from_str(value).expect("no TOML format");
+    let value = value.get(section).expect("no section");
+    Some(value.as_table().and_then(|x| x.get(key))?.to_string())
+	
+}
+
+/// The CHAIN_NAME as extracted from the CONSTANTS.
+pub static CHAIN_NAME: LazyLock<String> = LazyLock::new(|| {
+    let mut res = get_from_constants("constants", "CHAIN_NAME").expect("no CHAIN_NAME");
+    // drop the quotation marks
+    res.retain(|x| x != '"');
+    res
+});
+
+/// The CHAIN_ID as extracted from the CONSTANTS.
+pub static CHAIN_ID: LazyLock<u64> = LazyLock::new(|| {
+    get_from_constants("constants", "CHAIN_ID").expect("no CHAIN_ID").parse().expect("invalud CHAIN_ID")
+});
+
 #[cfg(feature = "native")]
 /// This trait has to be implemented by a runtime in order to be used in `StfBlueprint`.
 ///
@@ -79,10 +109,6 @@ pub trait Runtime<S: Spec>:
     + RuntimeEventProcessor
     + 'static
 {
-    /// Chain root hash used for transaction verification. Generated from a
-    /// [schema](crate::sov_universal_wallet::schema::Schema).
-    const CHAIN_HASH: [u8; 32];
-
     /// GenesisConfig type.
     type GenesisConfig: Clone + Send + Sync + GenesisParams;
 
@@ -104,6 +130,10 @@ pub trait Runtime<S: Spec>:
 
     /// Default RPC methods and Axum router.
     fn endpoints(storage: crate::rest::ApiState<S>) -> NodeEndpoints;
+
+    /// Chain root hash used for transaction verification. Generated from a
+    /// [schema](crate::sov_universal_wallet::schema::Schema).
+    fn chain_hash() -> [u8; 32];
 
     /// Reads genesis configs.
     fn genesis_config(input: &Self::GenesisInput) -> anyhow::Result<Self::GenesisConfig>;
@@ -198,7 +228,10 @@ pub trait Runtime<S: Spec>:
 {
     /// Chain root hash used for transaction verification. Generated from a
     /// [schema](crate::sov_universal_wallet::schema::Schema).
-    const CHAIN_HASH: [u8; 32];
+    fn chain_hash() -> [u8; 32];
+
+    /// Overridable chain-id.
+    fn chain_id() -> u64;
 
     /// `GenesisConfig` type.
     type GenesisConfig: Clone + Send + Sync;
@@ -250,16 +283,16 @@ impl Default for NodeEndpoints {
 }
 
 /// Helper function to get [`sov_universal_wallet::schema::Schema`] for the [`Runtime`]
-pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'static>(
+pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + Runtime<S> + 'static>(
 ) -> anyhow::Result<sov_universal_wallet::schema::Schema> {
     let schema = sov_universal_wallet::schema::Schema::of_rollup_types_with_chain_data::<
         crate::transaction::Transaction<R, S>,
         crate::transaction::UnsignedTransaction<R, S>,
         R::Decodable,
         S::Address,
-    >(sov_universal_wallet::schema::ChainData {
-        chain_id: sov_modules_macros::config_value!("CHAIN_ID"),
-        chain_name: sov_modules_macros::config_value!("CHAIN_NAME").to_string(),
+    >(ChainData {
+        chain_id: *CHAIN_ID,
+        chain_name: CHAIN_NAME.to_string(),
     })?;
     Ok(schema)
 }

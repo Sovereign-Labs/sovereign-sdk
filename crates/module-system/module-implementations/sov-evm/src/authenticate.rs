@@ -14,7 +14,6 @@ use sov_modules_api::capabilities::{
     BatchFromUnregisteredSequencer, FatalError, TransactionAuthenticator, UniquenessData,
     UnregisteredAuthenticationError,
 };
-use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::capabilities::AuthenticationError;
 use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, AuthenticatedTransactionData, Credentials, PriorityFeeBips,
@@ -22,6 +21,7 @@ use sov_modules_api::transaction::{
 };
 use sov_modules_api::StateReader;
 use sov_modules_api::VersionReader;
+use sov_modules_api::CHAIN_ID;
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, Gas, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
 };
@@ -184,7 +184,7 @@ fn validate_chain_id(
     tx_chain_id: Option<u64>,
     tx_hash: TxHash,
 ) -> Result<u64, AuthenticationError> {
-    let rollup_chain_id = config_value!("CHAIN_ID");
+    let rollup_chain_id = *CHAIN_ID;
     let tx_chain_id = tx_chain_id.ok_or(AuthenticationError::FatalError(
         FatalError::MissingChainId(rollup_chain_id),
         tx_hash,
@@ -284,7 +284,7 @@ where
             ))?;
     let tx_chain_id = match request.chain_id {
         Some(chain_id) => validate_chain_id(Some(chain_id), sentinel_tx_hash)?,
-        None => config_value!("CHAIN_ID"),
+        None => *CHAIN_ID,
     };
     let authenticated_tx = build_authenticated_tx_data::<_, S>(
         sentinel_tx_hash,
@@ -450,7 +450,8 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     sov_modules_api::capabilities::authenticate::<_, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
+                        *CHAIN_ID,
+                        &Rt::chain_hash(),
                         state,
                     )?;
 
