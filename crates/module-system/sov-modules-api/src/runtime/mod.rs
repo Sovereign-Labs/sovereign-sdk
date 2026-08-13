@@ -1,5 +1,8 @@
 //! Module system runtime types and traits
 pub mod capabilities;
+mod chain_config;
+
+pub use chain_config::*;
 
 #[cfg(feature = "native")]
 use std::io;
@@ -66,34 +69,6 @@ impl ModuleExecutionConfig for () {
         Ok(())
     }
 }
-
-
-sov_modules_macros::static_bytes!(CONSTANTS, "constants.toml");
-
-use std::sync::LazyLock;
-
-/// Get a field from the CONSTANTS.
-pub fn get_from_constants(section: &str, key: &str) -> Option<String> {
-    let value = str::from_utf8(CONSTANTS.as_ref()).expect("not a string");
-    let value: toml::Table = toml::from_str(value).expect("no TOML format");
-    let value = value.get(section).expect("no section");
-    Some(value.as_table().and_then(|x| x.get(key))?.to_string())
-	
-}
-
-/// The CHAIN_NAME as extracted from the CONSTANTS.
-pub static CHAIN_NAME: LazyLock<String> = LazyLock::new(|| {
-    let mut res = get_from_constants("constants", "CHAIN_NAME").expect("no CHAIN_NAME");
-    // drop the quotation marks
-    res.retain(|x| x != '"');
-    res
-});
-
-/// The CHAIN_ID as extracted from the CONSTANTS.
-pub static CHAIN_ID: LazyLock<u64> = LazyLock::new(|| {
-    get_from_constants("constants", "CHAIN_ID").expect("no CHAIN_ID").parse().expect("invalud CHAIN_ID")
-});
-
 #[cfg(feature = "native")]
 /// This trait has to be implemented by a runtime in order to be used in `StfBlueprint`.
 ///
@@ -234,9 +209,6 @@ pub trait Runtime<S: Spec>:
     /// [schema](crate::sov_universal_wallet::schema::Schema).
     fn chain_hash() -> [u8; 32];
 
-    /// Overridable chain-id.
-    fn chain_id() -> u64;
-
     /// `GenesisConfig` type.
     type GenesisConfig: Clone + Send + Sync;
 
@@ -287,7 +259,7 @@ impl Default for NodeEndpoints {
 }
 
 /// Helper function to get [`sov_universal_wallet::schema::Schema`] for the [`Runtime`]
-pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + Runtime<S> + 'static>(
+pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'static>(
 ) -> anyhow::Result<sov_universal_wallet::schema::Schema> {
     let schema = sov_universal_wallet::schema::Schema::of_rollup_types_with_chain_data::<
         crate::transaction::Transaction<R, S>,
@@ -302,46 +274,6 @@ pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + Runti
         sov_modules_macros::config_value_private!("CHAIN_HASH_OVERRIDES");
     validate_chain_hash_fragments(overrides, schema.chain_hash()?)?;
     Ok(schema)
-}
-
-/// A chain hash override for a range of block heights.
-///
-/// This allows SDK consumers to define different chain hashes for different height ranges,
-/// enabling non-breaking upgrades when the rollup schema changes (e.g., adding a new transaction type).
-///
-/// The range is `[start_height, end_height)` - start is inclusive, end is exclusive.
-/// The `grace_period` allows the hash to remain valid for additional blocks after `end_height`.
-#[derive(Clone, Copy, Debug, PartialEq, Eq, serde::Deserialize)]
-pub struct ChainHashOverride {
-    /// The start height (inclusive).
-    pub start_height: u64,
-    /// The end height (exclusive).
-    pub end_height: u64,
-    /// The chain hash to use for this range.
-    pub chain_hash: [u8; 32],
-    /// Number of blocks after `end_height` during which this hash is still accepted.
-    /// During the grace period `[end_height, end_height + grace_period)`, both this
-    /// hash and the next override's hash (or default) are valid.
-    #[serde(default)]
-    pub grace_period: u64,
-}
-
-impl ChainHashOverride {
-    /// Returns true if the given height falls within this override's primary range.
-    ///
-    /// The range is `[start_height, end_height)` - start is inclusive, end is exclusive.
-    pub const fn contains(&self, height: u64) -> bool {
-        height >= self.start_height && height < self.end_height
-    }
-
-    /// Returns true if the given height falls within this override's grace period.
-    ///
-    /// The grace period is `[end_height, end_height + grace_period)`.
-    pub const fn in_grace_period(&self, height: u64) -> bool {
-        self.grace_period > 0
-            && height >= self.end_height
-            && height < self.end_height.saturating_add(self.grace_period)
-    }
 }
 
 /// Rejects fragment collisions between distinct chain hashes that can be valid simultaneously.
@@ -416,9 +348,9 @@ impl ResolvedChainHashes {
 
 /// Resolves all valid chain hashes for a given height by checking overrides.
 ///
-/// Overrides must be contiguous and start at zero (validated at compile time by the
-/// `config_value!` macro). If the height is beyond all overrides (including grace periods),
-/// falls back to the default hash.
+/// Overrides must be contiguous and start at zero (validated when the embedded chain config is
+/// decoded). If the height is beyond all overrides (including grace periods), falls back to the
+/// default hash.
 ///
 /// # Arguments
 /// * `height` - The block height to resolve the chain hash for

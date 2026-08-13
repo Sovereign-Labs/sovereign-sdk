@@ -128,8 +128,8 @@
 mod cli_parser;
 mod common;
 mod compile_manifest_constants;
-mod static_bytes;
 mod dispatch;
+mod embed_chain_config;
 mod event;
 mod expand_macro;
 mod manifest;
@@ -145,11 +145,11 @@ mod rpc;
 mod metrics;
 
 use compile_manifest_constants::{make_const_value, ConfigValueInput};
-use static_bytes::{make_static_bytes, StaticBytesInput};
 use dispatch::dispatch_call::DispatchCallMacro;
 use dispatch::genesis::GenesisMacro;
 use dispatch::hooks::HooksMacro;
 use dispatch::message_codec::MessageCodec;
+use embed_chain_config::{expand_embed_chain_config, EmbedChainConfigInput};
 use event::EventMacro;
 use proc_macro::TokenStream;
 use syn::parse::Parser;
@@ -317,10 +317,16 @@ pub fn config_value_private(item: TokenStream) -> TokenStream {
     handle_macro_error_and_expand(fn_name!(), tokens)
 }
 
+/// Embeds the patchable chain-configuration record from `constants.toml`.
+///
+/// This macro is an implementation detail of `sov-modules-api`.
 #[proc_macro]
-pub fn static_bytes(item: TokenStream) -> TokenStream {
-    let input = syn::parse_macro_input!(item as StaticBytesInput);
-    handle_macro_error_and_expand(fn_name!(), make_static_bytes(&input).map(Into::into))
+pub fn embed_chain_config(item: TokenStream) -> TokenStream {
+    let input = syn::parse_macro_input!(item as EmbedChainConfigInput);
+    handle_macro_error_and_expand(
+        fn_name!(),
+        expand_embed_chain_config(&input).map(Into::into),
+    )
 }
 
 #[cfg(any(feature = "native", feature = "bench"))]
