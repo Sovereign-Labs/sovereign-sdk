@@ -270,9 +270,9 @@ pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'stat
         chain_id: *CHAIN_ID,
         chain_name: CHAIN_NAME.to_string(),
     })?;
-    let overrides: &[ChainHashOverride] =
-        sov_modules_macros::config_value_private!("CHAIN_HASH_OVERRIDES");
-    validate_chain_hash_fragments(overrides, schema.chain_hash()?)?;
+    // Validate against the embedded (patchable) override schedule — the same source
+    // authentication resolves hashes from — not the compile-time constant.
+    validate_chain_hash_fragments(chain_hash_overrides(), schema.chain_hash()?)?;
     Ok(schema)
 }
 

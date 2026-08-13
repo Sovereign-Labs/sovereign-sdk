@@ -6,7 +6,6 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::Digest;
 use serde::{Deserialize, Serialize};
-use sov_modules_macros::config_value_private;
 use sov_rollup_interface::TxHash;
 use sov_state::User;
 use thiserror::Error;
@@ -37,10 +36,11 @@ pub fn resolve_chain_hashes_for_height(
     height: u64,
     default_hash: [u8; 32],
 ) -> crate::runtime::ResolvedChainHashes {
-    #[allow(clippy::needless_borrow)]
-    // We have slightly different types when static vs. dynamic constant resolution is enabled. We need an extra borrow in one case but not the other, so clippy complains.
-    let overrides: &[crate::ChainHashOverride] = &config_value_private!("CHAIN_HASH_OVERRIDES");
-    crate::runtime::resolve_chain_hashes(height, overrides, default_hash)
+    crate::runtime::resolve_chain_hashes(
+        height,
+        crate::runtime::chain_hash_overrides(),
+        default_hash,
+    )
 }
 
 /// A batch sent by an unregistered sequencer contains only one transaction.

@@ -981,6 +981,9 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
 impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
     /// Runs the rollup.
     pub async fn run(self) -> anyhow::Result<()> {
+        // Validate all embedded chain identity data before starting any background work or APIs.
+        S::Runtime::chain_hash();
+
         let Self {
             mut runner,
             endpoints,
