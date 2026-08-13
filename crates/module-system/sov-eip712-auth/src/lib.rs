@@ -7,13 +7,13 @@ use sov_modules_api::capabilities::{
     AuthenticationError, AuthenticationOutput, BatchFromUnregisteredSequencer, FatalError,
     ReplayHashMaterial, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
-use sov_modules_api::sov_universal_wallet::schema::Schema;
+use sov_modules_api::sov_universal_wallet::schema::{ChainData, Schema};
 use sov_modules_api::transaction::{
     AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError,
 };
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, GasMeter, MeteredBorshDeserialize, MeteredBorshDeserializeError,
-    ProvableStateReader, RawTx, Runtime, Spec, TxHash, VersionReader,
+    ProvableStateReader, RawTx, Runtime, Spec, TxHash, VersionReader, CHAIN_ID, CHAIN_NAME,
 };
 use sov_state::User;
 
@@ -50,8 +50,12 @@ pub trait SchemaProvider {
         static SCHEMA: OnceLock<Schema> = OnceLock::new();
 
         SCHEMA.get_or_init(|| {
-            borsh::from_slice(Self::SCHEMA_BORSH)
+            borsh::from_slice::<Schema>(Self::SCHEMA_BORSH)
                 .expect("Failed to parse serialized schema data (SCHEMA_BORSH)")
+                .with_chain_data(ChainData {
+                    chain_id: *CHAIN_ID,
+                    chain_name: CHAIN_NAME.to_string(),
+                })
         })
     }
 }

@@ -983,6 +983,16 @@ pub struct Rollup<S: FullNodeBlueprint<M>, M: ExecutionMode> {
 impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
     /// Runs the rollup.
     pub async fn run(self) -> anyhow::Result<()> {
+        // Validate the embedded chain identity, which may have been patched after the build,
+        // before running the node. Deriving the runtime chain hash decodes the embedded record
+        // (and panics if it is malformed); the fragment check then covers the embedded override
+        // schedule against that hash, which build-time validation cannot do for patched values.
+        sov_modules_api::validate_chain_hash_fragments(
+            sov_modules_api::chain_hash_overrides(),
+            S::Runtime::chain_hash(),
+        )
+        .context("Invalid embedded chain hash override schedule")?;
+
         let Self {
             mut runner,
             endpoints,

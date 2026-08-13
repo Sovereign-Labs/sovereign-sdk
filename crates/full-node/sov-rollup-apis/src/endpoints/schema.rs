@@ -5,7 +5,7 @@ use axum::response::IntoResponse as _;
 use axum::routing::get;
 use axum::Router;
 use serde::Serialize;
-use sov_modules_api::prelude::anyhow;
+use sov_modules_api::prelude::anyhow::{self, Context as _};
 use sov_modules_api::prelude::tokio::sync::watch;
 use sov_modules_api::sov_universal_wallet::schema::Schema;
 use sov_modules_api::{ConcurrentStateCheckpoint, HexHash, Spec};
@@ -71,17 +71,27 @@ pub struct StandardSchemaEndpoint<S: Spec> {
 impl<S: Spec> StandardSchemaEndpoint<S> {
     /// Creates a new `StandardSchemaEndpoint`.
     ///
+    /// The served schema always carries this binary's embedded chain data
+    /// ([`sov_modules_api::chain_data`]), replacing whatever chain data `schema` was generated
+    /// with. A build-time schema therefore stays consistent with the served chain hash when the
+    /// chain identity was patched into the binary after the build.
+    ///
     /// # Arguments
     /// * `schema` - The schema to return
-    /// * `default_chain_hash` - The default chain hash (from `Runtime::CHAIN_HASH`)
+    /// * `default_chain_hash` - The runtime's default chain hash
     /// * `checkpoint_receiver` - Receiver for state checkpoints to read current height
     pub fn new(
         schema: &Schema,
         default_chain_hash: HexHash,
         checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
     ) -> anyhow::Result<Self> {
+        let mut schema = serde_json::to_value(schema)?;
+        *schema
+            .get_mut("chain_data")
+            .context("The serialized schema has no `chain_data` field")? =
+            serde_json::to_value(sov_modules_api::chain_data())?;
         Ok(Self {
-            schema: serde_json::to_value(schema)?,
+            schema,
             default_chain_hash,
             checkpoint_receiver,
         })

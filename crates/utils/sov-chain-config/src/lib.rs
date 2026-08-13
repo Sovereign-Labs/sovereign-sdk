@@ -280,22 +280,22 @@ impl<T> MaybeConst<T> {
 #[cfg(feature = "toml")]
 #[derive(serde::Deserialize)]
 #[serde(deny_unknown_fields)]
-pub struct ChainHashOverrideToml {
+struct ChainHashOverrideToml {
     /// The start height, inclusive.
-    pub start_height: u64,
+    start_height: u64,
     /// The end height, exclusive.
-    pub end_height: u64,
+    end_height: u64,
     /// The chain hash as a hex string, with or without a `0x` prefix.
-    pub chain_hash: String,
+    chain_hash: String,
     /// Number of blocks after `end_height` during which this hash is still accepted.
     #[serde(default)]
-    pub grace_period: u64,
+    grace_period: u64,
 }
 
 #[cfg(feature = "toml")]
 impl ChainHashOverrideToml {
     /// Decodes the hex chain hash and converts this entry into a [`ChainHashOverride`].
-    pub fn resolve(&self) -> Result<ChainHashOverride, String> {
+    fn resolve(&self) -> Result<ChainHashOverride, String> {
         let encoded = self
             .chain_hash
             .strip_prefix("0x")

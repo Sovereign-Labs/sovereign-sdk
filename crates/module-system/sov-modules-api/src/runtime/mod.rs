@@ -16,8 +16,6 @@ use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
 
-use crate::sov_universal_wallet::schema::ChainData;
-
 #[cfg(feature = "native")]
 use crate::hooks::FinalizeHook;
 use crate::hooks::{BlockHooks, TxHooks};
@@ -266,18 +264,17 @@ pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'stat
         crate::transaction::TransactionSigningPayload<R, S>,
         R::Decodable,
         S::Address,
-    >(ChainData {
-        chain_id: *CHAIN_ID,
-        chain_name: CHAIN_NAME.to_string(),
-    })?;
-    let overrides: &[ChainHashOverride] =
-        sov_modules_macros::config_value_private!("CHAIN_HASH_OVERRIDES");
-    validate_chain_hash_fragments(overrides, schema.chain_hash()?)?;
+    >(chain_data())?;
+    // Validate against the embedded (patchable) override schedule — the same source
+    // authentication resolves hashes from — not the compile-time constant.
+    validate_chain_hash_fragments(chain_hash_overrides(), schema.chain_hash()?)?;
     Ok(schema)
 }
 
 /// Rejects fragment collisions between distinct chain hashes that can be valid simultaneously.
-pub(crate) fn validate_chain_hash_fragments(
+///
+/// `default_hash` is the runtime's own chain hash, which applies after the last override.
+pub fn validate_chain_hash_fragments(
     overrides: &[ChainHashOverride],
     default_hash: [u8; 32],
 ) -> anyhow::Result<()> {

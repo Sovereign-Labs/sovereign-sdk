@@ -1,6 +1,5 @@
 use proc_macro2::{Ident, Span, TokenStream};
 use quote::format_ident;
-use sov_chain_config::{parse_chain_config_value, ChainHashOverrideToml};
 use syn::punctuated::Punctuated;
 
 use crate::manifest::Manifest;
@@ -47,13 +46,18 @@ pub fn make_const_value(input: &ConfigValueInput) -> syn::Result<TokenStream> {
 }
 
 pub fn make_const_value_inner(input: &ConfigValueInput) -> syn::Result<TokenStream> {
+    // The override schedule is embedded in the patchable chain-config record, so the build-time
+    // value this macro would produce can differ from the one the binary actually runs with.
+    if input.constant_name.value() == "CHAIN_HASH_OVERRIDES" {
+        return Err(syn::Error::new(
+            input.constant_name.span(),
+            "`CHAIN_HASH_OVERRIDES` cannot be read as a compile-time constant; use `sov_modules_api::chain_hash_overrides()` instead",
+        ));
+    }
+
     // Parse the manifest...
     let field_ident = Ident::new(&input.constant_name.value(), input.constant_name.span());
     let manifest = Manifest::read_constants(&field_ident)?;
-    if input.constant_name.value() == "CHAIN_HASH_OVERRIDES" {
-        parse_chain_config_value(manifest.toml_value().clone())
-            .map_err(|error| syn::Error::new(input.constant_name.span(), error))?;
-    }
 
     // ... and extract the TOML value.
     let toml_value = manifest.get(&field_ident)?;
@@ -93,7 +97,6 @@ pub enum AllowedTomlValue {
     Bech32(TomlBech32Value),
     Hex(TomlHexValue),
     ByteString(TomlByteStringValue),
-    ChainHashOverride(ChainHashOverrideToml),
 }
 
 pub struct ParsedConstant {
@@ -117,10 +120,6 @@ fn parse_constant_inner(value: &toml::Value, span: Span) -> syn::Result<AllowedT
                 Ok(AllowedTomlValue::Hex(hex_table))
             } else if let Ok(byte_string_table) = value.clone().try_into::<TomlByteStringValue>() {
                 Ok(AllowedTomlValue::ByteString(byte_string_table))
-            } else if let Ok(chain_hash_override) =
-                value.clone().try_into::<ChainHashOverrideToml>()
-            {
-                Ok(AllowedTomlValue::ChainHashOverride(chain_hash_override))
             } else {
                 Err(error("table"))
             }
@@ -205,20 +204,11 @@ fn allowed_toml_value_to_const_expr(
                 .map(|v| allowed_toml_value_to_const_expr(constant_name, v))
                 .collect::<syn::Result<Vec<_>>>()?;
 
-            // HACK: Apply special casing for the chain hash overrides array when given an empty array,
-            // But only if we're actually handling the CHAIN_HASH_OVERRIDES constant.
-            let might_be_chain_hash_array = is_chain_hash_override_array(arr)
-                || (values.is_empty() && constant_name.value() == "CHAIN_HASH_OVERRIDES");
-            // We return slices instead of raw arrays for the chain hash overrides. This is because the length of the array is unknown.
-            if might_be_chain_hash_array {
-                syn::parse_quote!([#(#values),*].as_slice())
-            } else {
-                syn::Expr::Array(syn::ExprArray {
-                    attrs: Vec::new(),
-                    bracket_token: syn::token::Bracket::default(),
-                    elems: Punctuated::from_iter(values),
-                })
-            }
+            syn::Expr::Array(syn::ExprArray {
+                attrs: Vec::new(),
+                bracket_token: syn::token::Bracket::default(),
+                elems: Punctuated::from_iter(values),
+            })
         }
         AllowedTomlValue::Bech32(bech32) => {
             let bech32_type = format_ident!("{}", bech32.r#type);
@@ -228,40 +218,10 @@ fn allowed_toml_value_to_const_expr(
         AllowedTomlValue::ByteString(byte_string) => {
             toml_byte_string_value_to_rust(constant_name, &byte_string.byte_string)?
         }
-        AllowedTomlValue::ChainHashOverride(override_) => {
-            toml_chain_hash_override_to_rust(constant_name, override_)?
-        }
     })
 }
 
-/// Returns true if the array contains ChainHashOverride elements.
-fn is_chain_hash_override_array(arr: &[AllowedTomlValue]) -> bool {
-    arr.first()
-        .map(|v| matches!(v, AllowedTomlValue::ChainHashOverride(_)))
-        .unwrap_or(false)
-}
-
-/// Generates the override logic expression for ChainHashOverride arrays.
-fn chain_hash_override_array_override_logic() -> TokenStream {
-    // The environment value uses the same TOML syntax and validation rules as
-    // `CHAIN_HASH_OVERRIDES` in `constants.toml`, so parsing is delegated to the shared parser.
-    quote::quote!({
-        let overrides =
-            sov_modules_api::sov_chain_config::parse_chain_hash_overrides_toml(&env_value)
-                .expect("invalid chain hash override array in environment variable")
-                // Because we need the type of the result to be slice (to match the type returned by
-                // the function when overrides are disabled), we have to leak the vector. Overrides
-                // are only active when debug assertions are enabled, so this is no big deal.
-                .leak();
-
-        &overrides[..]
-    })
-}
-
-fn allowed_toml_value_to_expr_with_override_logic(
-    constant_name: &str,
-    value: &AllowedTomlValue,
-) -> TokenStream {
+fn allowed_toml_value_to_expr_with_override_logic(value: &AllowedTomlValue) -> TokenStream {
     match value {
         AllowedTomlValue::Bool(_) | AllowedTomlValue::Integer(_) | AllowedTomlValue::Bech32(_) => {
             quote::quote!({ str::parse(&env_value).unwrap() })
@@ -274,18 +234,7 @@ fn allowed_toml_value_to_expr_with_override_logic(
             // leaked once? See <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2510>.
             &*env_value.leak()
         }),
-        AllowedTomlValue::Array(arr)
-        // HACK: Apply special casing for the chain hash overrides array when given an empty array, 
-        // But only if we're actually handling the CHAIN_HASH_OVERRIDES constant.
-        // Special casing is required because the length of the array is unknown.
-            if is_chain_hash_override_array(arr) || (arr.is_empty() && constant_name== "CHAIN_HASH_OVERRIDES") =>
-        {
-            chain_hash_override_array_override_logic()
-        }
-        AllowedTomlValue::Array(_)
-        | AllowedTomlValue::Hex(_)
-        | AllowedTomlValue::ByteString(_)
-        | AllowedTomlValue::ChainHashOverride(_) => {
+        AllowedTomlValue::Array(_) | AllowedTomlValue::Hex(_) | AllowedTomlValue::ByteString(_) => {
             quote::quote!({
                 use sov_modules_api::prelude::{serde, toml};
 
@@ -320,10 +269,7 @@ pub fn compile_toml_value_to_rust(
     Ok(if parsed_constant.make_const {
         quote::quote!(#const_expr)
     } else {
-        let non_const_expr = allowed_toml_value_to_expr_with_override_logic(
-            &input.constant_name.value(),
-            &parsed_constant.value,
-        );
+        let non_const_expr = allowed_toml_value_to_expr_with_override_logic(&parsed_constant.value);
 
         quote::quote!({
             #[cfg(debug_assertions)]
@@ -432,38 +378,4 @@ fn bytes_to_array_expr(bytes: &[u8]) -> syn::Result<syn::Expr> {
         bracket_token: syn::token::Bracket::default(),
         elems: Punctuated::from_iter(elems),
     }))
-}
-
-pub fn toml_chain_hash_override_to_rust(
-    constant_name: &syn::LitStr,
-    hash_override: &ChainHashOverrideToml,
-) -> syn::Result<syn::Expr> {
-    let resolved = hash_override.resolve().map_err(|error| {
-        syn::Error::new(
-            constant_name.span(),
-            format!("invalid chain hash override: {error}"),
-        )
-    })?;
-    let start_height = resolved.start_height;
-    let end_height = resolved.end_height;
-    let grace_period = resolved.grace_period;
-
-    let hash_bytes_tokens = resolved.chain_hash.iter().map(|b| {
-        let lit = syn::LitInt::new(&format!("{b}u8"), Span::call_site());
-        syn::Expr::Lit(syn::ExprLit {
-            attrs: Vec::new(),
-            lit: syn::Lit::Int(lit),
-        })
-    });
-
-    let const_expr_tokens = quote::quote!({
-        sov_modules_api::ChainHashOverride {
-            start_height: #start_height,
-            end_height: #end_height,
-            chain_hash: [#(#hash_bytes_tokens),*],
-            grace_period: #grace_period,
-        }
-    });
-
-    syn::parse2(const_expr_tokens)
 }
