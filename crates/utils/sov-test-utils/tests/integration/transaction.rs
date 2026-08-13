@@ -18,7 +18,7 @@ use crate::helpers::{setup, RT, S};
 fn test_custom_transaction_details_chain_hash_fragment() {
     let (admin, mut runner) = setup();
 
-    let mut bad_chain_hash = <RT as sov_modules_stf_blueprint::Runtime<S>>::CHAIN_HASH;
+    let mut bad_chain_hash = <RT as sov_modules_stf_blueprint::Runtime<S>>::chain_hash();
     bad_chain_hash[0] ^= 1;
     let unsigned_tx = UnsignedTransaction::<RT, S>::new(
         <RT as sov_test_utils::EncodeCall<ValueSetter<S>>>::to_decodable(

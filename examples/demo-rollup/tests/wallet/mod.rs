@@ -30,7 +30,7 @@ fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
     });
     UnsignedTransaction::<_, S>::new(
         msg,
-        CHAIN_HASH,
+        *CHAIN_HASH,
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Generation(0),
@@ -152,5 +152,5 @@ fn detect_schema_has_breaking_change() {
         27, 211, 110, 96, 196, 84, 88, 92, 228, 130, 243, 34, 229, 207, 92, 97, 244, 96, 195, 68,
         138, 207, 75, 75, 42, 144, 254, 100, 83, 209, 220, 135,
     ];
-    assert_eq!(CHAIN_HASH, current_hash, "The chain hash changed. Update the \"current_hash\" value in this test but be aware: this is a breaking change for any production rollups.");
+    assert_eq!(*CHAIN_HASH, current_hash, "The chain hash changed. Update the \"current_hash\" value in this test but be aware: this is a breaking change for any production rollups.");
 }

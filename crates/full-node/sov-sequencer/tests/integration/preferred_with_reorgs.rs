@@ -310,7 +310,7 @@ async fn test_stream_of_transactions(
             let msg = TransactionType::<RT, S>::sign(
                 generated_message.message,
                 generated_message.sender,
-                &RT::CHAIN_HASH,
+                &RT::chain_hash(),
                 default_test_tx_details(),
                 &mut harness.nonces,
             );

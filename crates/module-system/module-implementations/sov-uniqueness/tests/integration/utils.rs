@@ -104,7 +104,7 @@ pub(crate) fn generate_value_setter_uniqueness_tx(
 
     let transaction = UnsignedTransaction::new(
         runtime_msg,
-        <TestNonceRuntime<S> as Runtime<S>>::CHAIN_HASH,
+        <TestNonceRuntime<S> as Runtime<S>>::chain_hash(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         uniqueness,
@@ -114,7 +114,7 @@ pub(crate) fn generate_value_setter_uniqueness_tx(
 
     let transaction = Transaction::<RT, S>::new_signed_tx(
         admin.private_key(),
-        &<TestNonceRuntime<S> as Runtime<S>>::CHAIN_HASH,
+        &<TestNonceRuntime<S> as Runtime<S>>::chain_hash(),
         transaction,
     );
     TransactionType::PreAuthenticated(<RT as Runtime<S>>::Auth::encode_with_standard_auth(RawTx {

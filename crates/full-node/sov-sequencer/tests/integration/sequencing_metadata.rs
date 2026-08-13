@@ -142,7 +142,7 @@ async fn submit_and_publish_tx(
     call: <RT as sov_modules_api::DispatchCall>::Decodable,
 ) -> (FullyBakedTx, TxReceiptResult) {
     let tx =
-        default_test_signed_transaction::<RT, S>(&admin.private_key, &call, 0, &RT::CHAIN_HASH);
+        default_test_signed_transaction::<RT, S>(&admin.private_key, &call, 0, &RT::chain_hash());
     let raw_tx = RawTx::new(to_vec(&tx).unwrap());
 
     let baked_tx =

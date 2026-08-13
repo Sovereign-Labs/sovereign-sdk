@@ -134,7 +134,7 @@ fn generate_tx_with_nonce(user: &TestUser<TestSpec>, nonce: u64) -> RawTx {
         &user.private_key,
         &msg,
         nonce,
-        &TestRuntime::<TestSpec>::CHAIN_HASH,
+        &TestRuntime::<TestSpec>::chain_hash(),
     );
 
     RawTx::new(borsh::to_vec(&tx).unwrap())

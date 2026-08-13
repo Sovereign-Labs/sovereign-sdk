@@ -14,11 +14,10 @@ use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::capabilities::{
     self, BatchFromUnregisteredSequencer, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
-use sov_modules_api::macros::config_value;
 use sov_modules_api::Base58Address;
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, GetGasPrice, ProvableStateReader, RawTx, Runtime, Spec,
-    VersionReader,
+    VersionReader, CHAIN_NAME,
 };
 use sov_state::User;
 use std::marker::PhantomData;
@@ -76,7 +75,7 @@ where
         match input {
             EvmAndSolanaOffchainAuthenticatorInput::Evm(tx) => {
                 let (tx_and_raw_hash, auth_data, runtime_call) =
-                    sov_evm::authenticate::<_, _>(&tx.data, &Rt::CHAIN_HASH, state)?;
+                    sov_evm::authenticate::<_, _>(&tx.data, &Rt::chain_hash(), state)?;
 
                 Ok((
                     tx_and_raw_hash,
@@ -88,8 +87,8 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     sov_solana_offchain_auth::authentication::authenticate::<_, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
-                        config_value!("CHAIN_NAME"),
+                        &Rt::chain_hash(),
+                        CHAIN_NAME.as_str(),
                         state,
                     )?;
 
@@ -103,7 +102,7 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     sov_modules_api::capabilities::authenticate::<_, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
+                        &Rt::chain_hash(),
                         state,
                     )?;
 
@@ -179,8 +178,8 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     sov_solana_offchain_auth::authentication::authenticate::<Accessor, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
-                        config_value!("CHAIN_NAME"),
+                        &Rt::chain_hash(),
+                        CHAIN_NAME.as_str(),
                         state,
                     )?;
                 Ok((
@@ -191,7 +190,7 @@ where
             }
             Self::Input::Evm(tx) => {
                 let (tx_and_raw_hash, auth_data, runtime_call) =
-                    sov_evm::authenticate::<_, _>(&tx.data, &Rt::CHAIN_HASH, state)?;
+                    sov_evm::authenticate::<_, _>(&tx.data, &Rt::chain_hash(), state)?;
                 Ok((
                     tx_and_raw_hash,
                     auth_data,

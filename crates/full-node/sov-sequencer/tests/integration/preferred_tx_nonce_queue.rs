@@ -123,7 +123,7 @@ fn tx_set_value(key: &Ed25519PrivateKey, nonce: u64, value_to_set: u64) -> RawTx
         key,
         &msg,
         UniquenessData::Nonce(nonce),
-        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
+        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::chain_hash(),
         tx_details,
     );
 
@@ -144,7 +144,7 @@ fn tx_reject(key: &Ed25519PrivateKey, nonce: u64) -> RawTx {
         key,
         &msg,
         UniquenessData::Nonce(nonce),
-        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
+        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::chain_hash(),
         tx_details,
     );
 

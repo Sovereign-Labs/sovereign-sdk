@@ -30,7 +30,8 @@ use std::sync::Arc;
 async fn test_chain_hash_override() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_CHAIN_HASH_OVERRIDES", "[{start_height = 0, end_height = 10, chain_hash = \"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF\"}]");
     sov_test_utils::logging::initialize_or_change_logging_with_filter("warn");
-    let default_chain_hash = <Runtime<DemoRollupSpec> as RuntimeTrait<DemoRollupSpec>>::CHAIN_HASH;
+    let default_chain_hash =
+        <Runtime<DemoRollupSpec> as RuntimeTrait<DemoRollupSpec>>::chain_hash();
     let test_rollup = start_test_rollup(
         &TestCase {
             wait_for_aggregated_proof: false,
@@ -139,7 +140,8 @@ async fn test_chain_hash_override() -> anyhow::Result<()> {
 async fn test_chain_hash_override_grace_period() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_CHAIN_HASH_OVERRIDES", "[{start_height = 0, end_height = 10, chain_hash = \"0xFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFFF\", grace_period = 5}]");
     sov_test_utils::logging::initialize_or_change_logging_with_filter("warn");
-    let default_chain_hash = <Runtime<DemoRollupSpec> as RuntimeTrait<DemoRollupSpec>>::CHAIN_HASH;
+    let default_chain_hash =
+        <Runtime<DemoRollupSpec> as RuntimeTrait<DemoRollupSpec>>::chain_hash();
     let override_chain_hash = [255u8; 32];
 
     let test_rollup = start_test_rollup(

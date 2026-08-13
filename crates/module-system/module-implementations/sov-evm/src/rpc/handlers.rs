@@ -17,7 +17,7 @@ use revm_inspectors::access_list::AccessListInspector;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::{config_value, rpc_gen};
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_modules_api::{ApiStateAccessor, Spec, CHAIN_ID};
 use sov_rpc_eth_types::{EthApiError, LogWithExecutionTimestamp};
 use sov_state::{NativeStorage, Storage, StorageProof, User};
 use std::ops::DerefMut;
@@ -46,14 +46,14 @@ where
         trace!(method = "net_version", "EVM module JSON-RPC request");
 
         // Network ID is the same as chain ID for most networks
-        let chain_id: u64 = config_value!("CHAIN_ID");
+        let chain_id = *CHAIN_ID;
         Ok(chain_id.to_string())
     }
 
     /// Handler for: `eth_chainId`
     #[rpc_method(name = "eth_chainId")]
     pub fn chain_id(&self, _state: &mut ApiStateAccessor<S>) -> RpcResult<Option<U64>> {
-        let chain_id: u64 = config_value!("CHAIN_ID");
+        let chain_id = *CHAIN_ID;
         trace!(
             chain_id = chain_id,
             method = "eth_chainId",

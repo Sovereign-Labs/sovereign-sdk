@@ -249,7 +249,7 @@ mod helpers {
     ) -> Transaction<IntegTestRuntime<S>, S> {
         let utx = UnsignedTransaction::new(
             message,
-            IntegTestRuntime::<S>::CHAIN_HASH,
+            IntegTestRuntime::<S>::chain_hash(),
             max_priority_fee_bips,
             Amount::new(200_000),
             UniquenessData::Nonce(nonce),
@@ -260,7 +260,7 @@ mod helpers {
         let signer = TestUser::<S>::generate(Amount::ZERO);
         Transaction::<IntegTestRuntime<S>, S>::new_signed_tx(
             signer.private_key(),
-            &IntegTestRuntime::<S>::CHAIN_HASH,
+            &IntegTestRuntime::<S>::chain_hash(),
             utx,
         )
     }
@@ -283,7 +283,7 @@ mod helpers {
 
         let utx = UnsignedTransaction::new(
             encoded_message,
-            IntegTestRuntime::<S>::CHAIN_HASH,
+            IntegTestRuntime::<S>::chain_hash(),
             max_priority_fee_bips,
             TEST_DEFAULT_MAX_FEE,
             UniquenessData::Nonce(nonce),
@@ -293,7 +293,7 @@ mod helpers {
 
         Transaction::<IntegTestRuntime<S>, S>::new_signed_tx(
             signer.private_key(),
-            &IntegTestRuntime::<S>::CHAIN_HASH,
+            &IntegTestRuntime::<S>::chain_hash(),
             utx,
         )
     }
@@ -322,12 +322,12 @@ mod helpers {
                 0,
                 max_priority_fee_bips,
                 &potential_seq.user,
-                &IntegTestRuntime::<S>::CHAIN_HASH,
+                &IntegTestRuntime::<S>::chain_hash(),
                 encode_message(potential_seq.da_address, BOND_AMOUNT),
             )),
             TxStatus::BadGeneration => panic!("Unregistered blobs send one transaction per user, any generation number is valid for a user's first transaction"),
             TxStatus::BadChainId => {
-                let mut bad_chain_hash = IntegTestRuntime::<S>::CHAIN_HASH;
+                let mut bad_chain_hash = IntegTestRuntime::<S>::chain_hash();
                 bad_chain_hash[0] ^= 1;
                 encode_tx(create_tx_valid::<IntegTestRuntime<S>>(
                     0,
