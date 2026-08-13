@@ -35,9 +35,7 @@ pub use sov_modules_api::{BatchWithId, BlobData, Runtime};
 use sov_modules_api::{
     BlobDataWithId, DaSpec, ExecutionContext, Gas, Genesis, Spec, StateCheckpoint,
 };
-#[cfg(feature = "native")]
-use sov_rollup_interface::da::BlockHeaderTrait;
-use sov_rollup_interface::da::RelevantBlobIters;
+use sov_rollup_interface::da::{BlockHeaderTrait, RelevantBlobIters};
 use sov_rollup_interface::stf::{ApplySlotOutput, StateTransitionFunction};
 #[cfg(feature = "native")]
 use sov_state::storage::StateUpdate;
@@ -430,6 +428,32 @@ where
         execution_context: ExecutionContext,
         cf: CF,
     ) -> ApplySlotOutput<S::Da, Self> {
+        // Consensus exception: slots at these DA heights are treated as if the DA blocks
+        // contained no rollup blobs. A (since fixed) bug in Celestia RPC nodes caused
+        // two windows of blocks to be served without their rollup blobs when the rollup
+        // originally executed them, so empty slots at those heights are already part of
+        // canonical history:
+        // - 10645809..=10645810 (preferred-sequencer sequence numbers 1366308-1366309,
+        //   re-posted by the sequencer and canonically accepted at 10645821-10645822);
+        // - 10897147..=10897150 (sequence numbers 1617388-1617391, re-posted and
+        //   canonically accepted at 10897159-10897162).
+        // The heights are facts of reality, not tunable parameters, hence local and
+        // hardcoded. Shadow the input before anything can observe the blobs: blob
+        // selection below writes state (blob deferral, sequence-number tracking,
+        // sequencer penalties) even for blobs that never execute.
+        const FORCED_EMPTY_DA_HEIGHTS: [u64; 6] = [
+            10_645_809, 10_645_810, 10_897_147, 10_897_148, 10_897_149, 10_897_150,
+        ];
+        let relevant_blobs: RelevantBlobIters<&mut [<S::Da as DaSpec>::BlobTransaction]> =
+            if FORCED_EMPTY_DA_HEIGHTS.contains(&slot_header.height()) {
+                RelevantBlobIters {
+                    proof_blobs: &mut [],
+                    batch_blobs: &mut [],
+                }
+            } else {
+                relevant_blobs
+            };
+
         let mut runtime = RT::default();
         // Sanity check that gas limits are set correctly. This is already checked at genesis, but we check again in case
         // Someone modifies the code after genesis.
