@@ -31,6 +31,7 @@ members = [
     "crates/utils/sov-zkvm-utils",
     "crates/utils/sov-build",
     "crates/utils/sov-chain-config",
+    "crates/utils/sov-chain-config-patcher",
     "crates/utils/sov-rpc-eth-types",
     "crates/utils/sov-evm-soak-testing",
     "crates/utils/sov-test-utils",
@@ -95,6 +96,7 @@ members = [
     "examples/demo-rollup/rest-api-load-testing",
     "examples/demo-rollup/stf/demo-stf-json-client",
     "examples/demo-rollup/sov-soak-testing",
+    "examples/demo-rollup/sov-chain-config-patcher-cli",
     "examples/demo-rollup/tests/prover/sov-aggregated-proof",
     # Bench
     "crates/bench/sp1-microbenches",

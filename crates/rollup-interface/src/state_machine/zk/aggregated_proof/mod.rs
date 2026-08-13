@@ -87,6 +87,11 @@ impl CodeCommitmentHash {
         self.0.is_empty()
     }
 
+    /// Returns the canonical commitment bytes.
+    pub fn as_bytes(&self) -> &[u8] {
+        &self.0
+    }
+
     /// Creates a [`CodeCommitmentHash`] from a `[u8; HASH_LEN]` array. This is
     /// the infallible primary constructor — the fixed-size input statically
     /// guarantees the inner `SafeVec` invariant.
