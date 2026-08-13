@@ -203,13 +203,64 @@ pub enum RollupRoots {
     Address = 3,
 }
 
-/// The standard metadata format for every chain. Includes a numeric chain_id and a human-readable
-/// chain name.
+/// The standard metadata format for every chain.
 #[derive(Debug, Default, Clone, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct ChainData {
+    /// Numeric identifier included in signed transactions.
     pub chain_id: u64,
+    /// Human-readable chain name included in the transaction schema hash.
     pub chain_name: String,
+}
+
+/// The chain-independent inputs used to derive a [`Schema`]'s chain hash.
+///
+/// A template can be generated once at build time and combined with different
+/// [`ChainData`] values without reconstructing or merkleizing the schema.
+#[derive(Debug, Clone, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
+pub struct ChainHashTemplate {
+    merkle_root: [u8; 32],
+    root_type_indices_borsh: Vec<u8>,
+    metadata_hash: [u8; 32],
+}
+
+impl ChainHashTemplate {
+    /// Creates a chain hash template from its chain-independent components.
+    pub fn new(
+        merkle_root: [u8; 32],
+        root_type_indices_borsh: Vec<u8>,
+        metadata_hash: [u8; 32],
+    ) -> Self {
+        Self {
+            merkle_root,
+            root_type_indices_borsh,
+            metadata_hash,
+        }
+    }
+
+    /// Returns the canonical Borsh representation of this template.
+    pub fn borsh_bytes(&self) -> Result<Vec<u8>, SchemaError> {
+        Ok(borsh::to_vec(self)?)
+    }
+
+    /// Decodes a chain-hash template from its canonical Borsh representation.
+    pub fn from_borsh_bytes(bytes: &[u8]) -> Result<Self, SchemaError> {
+        Ok(borsh::from_slice(bytes)?)
+    }
+
+    /// Calculates the chain hash for the supplied chain data.
+    pub fn chain_hash(&self, chain_data: &ChainData) -> Result<[u8; 32], SchemaError> {
+        let mut hasher = Sha256::new();
+        hasher.update(&self.root_type_indices_borsh);
+        hasher.update(&borsh::to_vec(chain_data)?);
+        let internal_data_hash: [u8; 32] = hasher.finalize().into();
+
+        let mut hasher = Sha256::new();
+        hasher.update(self.merkle_root);
+        hasher.update(internal_data_hash);
+        hasher.update(self.metadata_hash);
+        Ok(hasher.finalize().into())
+    }
 }
 
 /// A schema, representing set of types (i.e. rust code) as a data structure.
@@ -328,6 +379,27 @@ impl Schema {
     /// Get the chain data for the schema.
     pub fn chain_data(&self) -> &ChainData {
         &self.chain_data
+    }
+
+    /// Replaces the chain-specific data and invalidates its cached chain hash.
+    ///
+    /// The schema's types and metadata are unchanged, so their caches remain
+    /// valid. Consuming `self` ensures the old and new chain identities cannot
+    /// be observed through aliases during the update.
+    pub fn with_chain_data(mut self, chain_data: ChainData) -> Self {
+        self.chain_data = chain_data;
+        self.chain_hash = OnceCell::new();
+        self
+    }
+
+    /// Returns the chain-independent template used to calculate this schema's
+    /// chain hash.
+    pub fn chain_hash_template(&self) -> Result<ChainHashTemplate, SchemaError> {
+        Ok(ChainHashTemplate::new(
+            self.merkle_root()?,
+            borsh::to_vec(&self.root_type_indices)?,
+            self.metadata_hash()?,
+        ))
     }
 
     #[cfg(not(feature = "serde"))]
@@ -578,28 +650,7 @@ impl Schema {
     /// that a transaction claiming to correspond to a given schema will have the effect it claims).
     pub fn chain_hash(&self) -> Result<[u8; 32], SchemaError> {
         self.chain_hash
-            .get_or_try_init(|| {
-                // First, merkleize the schema
-                let merkle_root = self.merkle_root()?;
-
-                // Then, hash the auxilliary internal data - root indices and chain data
-                let mut hasher = Sha256::new();
-                hasher.update(&borsh::to_vec(&self.root_type_indices)?);
-                hasher.update(&borsh::to_vec(&self.chain_data)?);
-                let internal_data_hash: [u8; 32] = hasher.finalize().into();
-
-                // Get the metadata hash
-                let metadata_hash = self.metadata_hash()?;
-
-                // Finally, combine the three hashes in order to get the final chain hash
-                let mut hasher = Sha256::new();
-                hasher.update(merkle_root);
-                hasher.update(internal_data_hash);
-                hasher.update(metadata_hash);
-
-                let chain_hash: [u8; 32] = hasher.finalize().into();
-                Ok(chain_hash)
-            })
+            .get_or_try_init(|| self.chain_hash_template()?.chain_hash(&self.chain_data))
             .copied()
     }
 
