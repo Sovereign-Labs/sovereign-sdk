@@ -5776,6 +5776,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-chain-config"
+version = "0.3.0"
+dependencies = [
+ "borsh",
+ "hex",
+ "serde",
+ "sha2 0.10.9",
+ "thiserror 2.0.18",
+ "toml",
+]
+
+[[package]]
 name = "sov-chain-state"
 version = "0.3.0"
 dependencies = [
@@ -5951,6 +5963,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2 0.10.9",
+ "sov-chain-config",
  "sov-metrics",
  "sov-modules-macros",
  "sov-rollup-interface",
@@ -5970,6 +5983,7 @@ dependencies = [
  "anyhow",
  "bech32",
  "blake2",
+ "borsh",
  "convert_case 0.6.0",
  "darling 0.21.3",
  "derive_more 2.1.1",
@@ -5978,6 +5992,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
+ "sov-chain-config",
  "sov-metrics",
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.114",
