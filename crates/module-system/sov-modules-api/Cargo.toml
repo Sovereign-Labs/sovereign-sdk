@@ -32,6 +32,7 @@ sov-state = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-shutdown = { workspace = true, optional = true }
 sov-modules-macros = { workspace = true }
+sov-chain-config = { workspace = true, features = ["toml"] }
 sov-universal-wallet = { workspace = true, features = ["serde", "macros"] }
 sov-db = { workspace = true, optional = true }
 sov-metrics = { workspace = true }
