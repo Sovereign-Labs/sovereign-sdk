@@ -5,7 +5,9 @@ pub mod capabilities;
 use std::io;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use capabilities::{HasCapabilities, HasKernel, TimelockPolicy, TransactionAuthenticator};
+use capabilities::{
+    HasCapabilities, HasKernel, HasSequencingData, TimelockPolicy, TransactionAuthenticator,
+};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
@@ -70,6 +72,7 @@ impl ModuleExecutionConfig for () {
 pub trait Runtime<S: Spec>:
     DispatchCall<Spec = S>
     + HasCapabilities<S>
+    + HasSequencingData<S>
     + HasKernel<S>
     + Genesis<Spec = S, Config = Self::GenesisConfig>
     + TxHooks<Spec = S>
@@ -188,6 +191,7 @@ pub fn decode_borsh_serialized_message<T: borsh::BorshDeserialize>(
 pub trait Runtime<S: Spec>:
     DispatchCall<Spec = S>
     + HasCapabilities<S>
+    + HasSequencingData<S>
     + HasKernel<S>
     + Genesis<Spec = S, Config = Self::GenesisConfig>
     + TxHooks<Spec = S>
@@ -254,13 +258,16 @@ pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'stat
 ) -> anyhow::Result<sov_universal_wallet::schema::Schema> {
     let schema = sov_universal_wallet::schema::Schema::of_rollup_types_with_chain_data::<
         crate::transaction::Transaction<R, S>,
-        crate::transaction::UnsignedTransaction<R, S>,
+        crate::transaction::TransactionSigningPayload<R, S>,
         R::Decodable,
         S::Address,
     >(sov_universal_wallet::schema::ChainData {
         chain_id: sov_modules_macros::config_value!("CHAIN_ID"),
         chain_name: sov_modules_macros::config_value!("CHAIN_NAME").to_string(),
     })?;
+    let overrides: &[ChainHashOverride] =
+        sov_modules_macros::config_value_private!("CHAIN_HASH_OVERRIDES");
+    validate_chain_hash_fragments(overrides, schema.chain_hash()?)?;
     Ok(schema)
 }
 
@@ -302,6 +309,58 @@ impl ChainHashOverride {
             && height >= self.end_height
             && height < self.end_height.saturating_add(self.grace_period)
     }
+}
+
+/// Rejects fragment collisions between distinct chain hashes that can be valid simultaneously.
+pub(crate) fn validate_chain_hash_fragments(
+    overrides: &[ChainHashOverride],
+    default_hash: [u8; 32],
+) -> anyhow::Result<()> {
+    for (index, first) in overrides.iter().enumerate() {
+        let first_valid_until = first.end_height.saturating_add(first.grace_period);
+        for second in &overrides[index + 1..] {
+            let second_valid_until = second.end_height.saturating_add(second.grace_period);
+            let validity_overlaps =
+                first.start_height < second_valid_until && second.start_height < first_valid_until;
+
+            if validity_overlaps {
+                ensure_distinct_chain_hash_fragments(first.chain_hash, second.chain_hash)?;
+            }
+        }
+    }
+
+    if let Some(last) = overrides.last() {
+        let default_start_height = last.end_height;
+        for hash_override in overrides {
+            let override_valid_until = hash_override
+                .end_height
+                .saturating_add(hash_override.grace_period);
+            if override_valid_until > default_start_height {
+                ensure_distinct_chain_hash_fragments(hash_override.chain_hash, default_hash)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_distinct_chain_hash_fragments(
+    first_hash: [u8; 32],
+    second_hash: [u8; 32],
+) -> anyhow::Result<()> {
+    let first_fragment = crate::transaction::chain_hash_fragment(&first_hash);
+    if first_hash != second_hash
+        && first_fragment == crate::transaction::chain_hash_fragment(&second_hash)
+    {
+        anyhow::bail!(
+            "Distinct chain hashes that are valid simultaneously share transaction fragment \
+             {first_fragment:#018x}. Adjust the grace period or slightly change the newer schema \
+             or chain metadata so its chain hash has a different fragment. Colliding hashes: \
+             {first_hash:02x?} and {second_hash:02x?}"
+        );
+    }
+
+    Ok(())
 }
 
 /// Resolved chain hashes for a given height.

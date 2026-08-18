@@ -99,7 +99,7 @@ async fn test_mixed_nonce_and_generation_transactions() {
 
     let construct_tx = |uniqueness: UniquenessData| {
         let unsigned_tx =
-            UnsignedTransaction::new_with_details(msg.clone(), uniqueness, details.clone());
+            UnsignedTransaction::new_with_details(msg.clone(), uniqueness, details.clone(), None);
         Transaction::<RT, TestSpec>::new_signed_tx(
             &test_user.private_key,
             &RT::CHAIN_HASH,

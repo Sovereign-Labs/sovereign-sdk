@@ -62,7 +62,6 @@ The `SolanaRegistration<S>` module is a Sovereign SDK module that implements the
 
 - **Selective Message Handling**: Only processes messages from the configured Solana domain and trusted program ID
 - **Account Linking**: Associates Solana embedded wallets with rollup addresses via the `sov-accounts` module
-- **Duplicate Prevention**: Rejects attempts to register an embedded wallet that's already linked to a different address
 - **Admin Controls**: Allows configuration updates via admin-only calls
 - **Fallback to Warp**: Non-Solana messages are forwarded to the underlying `Warp` module
 
@@ -132,7 +131,6 @@ pub enum Event<S: Spec> {
 
 The module defines several error types:
 
-- `AlreadyRegistered`: The embedded public key is already linked to a different address
 - `InvalidBodyLength`: The message body doesn't contain exactly 64 bytes
 - `ExtractPubKey`: Failed to parse public keys from the message body
 - `AdminNotFound`: Admin address not configured
@@ -146,9 +144,8 @@ See `src/lib.rs:196-213` for the `handle` implementation:
 2. Verify the sender matches the trusted Solana program ID
 3. Extract the two 32-byte public keys from the message body
 4. Convert the payer public key to a rollup address
-5. Use `sov-accounts` to resolve or create the address-credential mapping
-6. Reject if the embedded wallet is already linked to a different address
-7. Emit a `UserRegistered` event
+5. Authorize the embedded credential to act as the payer's address by recording `(payer, embedded)` in `sov-accounts`
+6. Emit a `UserRegistered` event
 
 ---
 
@@ -372,4 +369,3 @@ cargo test
 ```
 
 Program tests are located in `solana/program-tests/src/tests.rs`.
-

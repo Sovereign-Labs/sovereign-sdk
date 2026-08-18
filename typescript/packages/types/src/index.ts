@@ -11,8 +11,8 @@ export type TxDetails = {
   max_fee: string;
   /** Optional gas limit as byte array, null for unlimited */
   gas_limit: number[] | null;
-  /** Chain identifier for the target rollup network */
-  chain_id: number;
+  /** 64-bit fragment of the target rollup chain hash, as a decimal string */
+  chain_hash_fragment: string;
 };
 
 /** Timestamp-based uniqueness mechanism using milliseconds since epoch */
@@ -28,8 +28,7 @@ export type Window = { window: number };
 export type Uniqueness = Nonce | Generation | Window;
 
 /**
- * Base transaction structure before signing, containing the core transaction data.
- * Generic over RuntimeCall to support different rollup runtime call types.
+ * Consumer-facing unsigned transaction payload.
  */
 export type UnsignedTransaction<RuntimeCall> = {
   /** The specific runtime call/method being invoked on the rollup */
@@ -38,7 +37,42 @@ export type UnsignedTransaction<RuntimeCall> = {
   uniqueness: Uniqueness;
   /** Transaction execution details including fees and gas limits */
   details: TxDetails;
+  /** Optional address override for execution; null uses default routing */
+  address_override: string | null;
 };
+
+/**
+ * Version 0 transaction signing payload.
+ * Used internally to produce single-signature signing bytes.
+ */
+export type TransactionSigningPayloadV0<RuntimeCall> =
+  UnsignedTransaction<RuntimeCall> & {
+    /** Chain hash binding the signature to the rollup schema and metadata */
+    chain_hash: number[];
+  };
+
+/**
+ * Version 1 transaction signing payload.
+ * Used internally for multisig signing bytes and includes the credential commitment.
+ */
+export type TransactionSigningPayloadV1<
+  RuntimeCall,
+  CredentialAddress = unknown,
+> = TransactionSigningPayloadV0<RuntimeCall> & {
+  /** The multisig credential address in the rollup's native address format */
+  credential_address: CredentialAddress;
+};
+
+/**
+ * Versioned transaction signing payload envelope.
+ * This is the exact root object serialized for signing.
+ */
+export type TransactionSigningPayload<
+  RuntimeCall,
+  CredentialAddress = unknown,
+> =
+  | { V0: TransactionSigningPayloadV0<RuntimeCall> }
+  | { V1: TransactionSigningPayloadV1<RuntimeCall, CredentialAddress> };
 
 /**
  * Version 0 transaction format with single signature.

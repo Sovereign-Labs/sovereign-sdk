@@ -1,20 +1,33 @@
 import SovereignClient from "@sovereign-sdk/client";
+import type { Multisig } from "@sovereign-sdk/multisig";
 import { JsSerializer } from "@sovereign-sdk/serializers";
 import type {
   Transaction,
+  TransactionSigningPayload,
   TxDetails,
   UnsignedTransaction,
 } from "@sovereign-sdk/types";
 import { bytesToHex } from "@sovereign-sdk/utils";
+import { addressFromPublicKey } from "../addresses";
+import { VersionMismatchError } from "../errors";
 import type { DeepPartial } from "../utils";
 import {
+  assertChainHashFragment,
+  chainHashFragment,
+  refreshChainHashFragment,
+} from "./chain-hash";
+import {
+  type CredentialIdToAddress,
   Rollup,
   type RollupConfig,
   type SignerParams,
   type TransactionContext,
+  type TransactionSigningPayloadContext,
   type TypeBuilder,
   type UnsignedTransactionContext,
 } from "./rollup";
+
+export { chainHashFragment } from "./chain-hash";
 
 export type Dedup = {
   nonce: number;
@@ -22,10 +35,12 @@ export type Dedup = {
 
 export type StandardRollupContext = {
   defaultTxDetails: TxDetails;
+  credentialIdToAddress?: CredentialIdToAddress;
 };
 
 export type StandardRollupSpec<RuntimeCall> = {
   UnsignedTransaction: UnsignedTransaction<RuntimeCall>;
+  TransactionSigningPayload: TransactionSigningPayload<RuntimeCall>;
   Transaction: Transaction<RuntimeCall>;
   RuntimeCall: RuntimeCall;
   Dedup: Dedup;
@@ -52,7 +67,9 @@ export function standardTypeBuilder<
       context: UnsignedTransactionContext<S, StandardRollupContext>,
     ) {
       const { rollup, runtimeCall } = context;
-      const { uniqueness: _, ...overrides } = context.overrides;
+      const overrides = context.overrides as DeepPartial<
+        UnsignedTransaction<unknown>
+      > & { address_override?: string | null };
       const uniqueness = await useOrFetchUniqueness(context);
       const details: TxDetails = {
         ...rollup.context.defaultTxDetails,
@@ -63,6 +80,7 @@ export function standardTypeBuilder<
         runtime_call: runtimeCall,
         uniqueness,
         details,
+        address_override: overrides.address_override ?? null,
       } as S["UnsignedTransaction"];
     },
     async transaction({
@@ -76,24 +94,105 @@ export function standardTypeBuilder<
           signature: bytesToHex(signature),
           ...unsignedTx,
         },
-      };
+      } as S["Transaction"];
+    },
+    async transactionSigningPayload({
+      unsignedTx,
+      chainHash,
+    }: TransactionSigningPayloadContext<S, StandardRollupContext>) {
+      const normalizedUnsignedTx = refreshChainHashFragment(
+        unsignedTx,
+        chainHash,
+      );
+
+      return {
+        V0: {
+          ...normalizedUnsignedTx,
+          chain_hash: Array.from(chainHash),
+        },
+      } as S["TransactionSigningPayload"];
     },
   };
 }
 
 /**
  * The parameters for simulating a runtime call transaction.
+ *
+ * Adds `address_override` until `@sovereign-sdk/client` is republished with it.
+ * As of `0.1.0-alpha.39` the generated `RollupSimulateParams` is missing the
+ * field even though the Rust type and OpenAPI spec ship it (added in commit
+ * `6e7d22a52`). Once a newer client publishes `address_override` natively,
+ * drop this `Omit`-extension AND the `as SovereignClient.RollupSimulateParams`
+ * cast in `simulate()`.
  */
 export type SimulateParams = Omit<
   SovereignClient.RollupSimulateParams,
   "call" | "sender"
 > &
-  SignerParams;
+  SignerParams & { address_override?: string | null };
 
 export class StandardRollup<RuntimeCall> extends Rollup<
   StandardRollupSpec<RuntimeCall>,
   StandardRollupContext
 > {
+  private updateDefaultChainHashFragment(chainHash: Uint8Array): void {
+    this.context.defaultTxDetails.chain_hash_fragment =
+      chainHashFragment(chainHash);
+  }
+
+  private async credentialAddressFromId(
+    credentialId: Uint8Array,
+  ): Promise<string> {
+    if (this.context.credentialIdToAddress) {
+      const serializer = await this.serializer();
+      return this.context.credentialIdToAddress(
+        credentialId,
+        serializer.schema,
+      );
+    }
+
+    return addressFromPublicKey(credentialId, "sov");
+  }
+
+  async submitTransaction(
+    transaction: StandardRollupSpec<RuntimeCall>["Transaction"],
+    options?: SovereignClient.RequestOptions,
+  ): Promise<SovereignClient.Sequencer.TxCreateResponse> {
+    try {
+      return await super.submitTransaction(transaction, options);
+    } catch (error) {
+      if (error instanceof VersionMismatchError) {
+        this.updateDefaultChainHashFragment(await super.chainHash());
+      }
+      throw error;
+    }
+  }
+
+  async hydrate(): Promise<void> {
+    await super.hydrate();
+    this.updateDefaultChainHashFragment(await super.chainHash());
+  }
+
+  async multisigSigningBytes(
+    unsignedTx: UnsignedTransaction<RuntimeCall>,
+    multisig: Multisig,
+  ): Promise<Uint8Array> {
+    const serializer = await this.serializer();
+    const chainHash = await this.chainHash();
+    assertChainHashFragment(unsignedTx, chainHash);
+    const signingPayload: TransactionSigningPayload<RuntimeCall> = {
+      V1: {
+        ...unsignedTx,
+        chain_hash: Array.from(chainHash),
+        credential_address: await this.credentialAddressFromId(
+          multisig.getMultisigAddress(),
+        ),
+      },
+    };
+
+    return serializer.serializeSigningPayload(signingPayload);
+  }
+
   /**
    * Simulates a runtime call transaction.
    *
@@ -103,39 +202,41 @@ export class StandardRollup<RuntimeCall> extends Rollup<
    */
   async simulate(
     runtimeMessage: StandardRollupSpec<RuntimeCall>["RuntimeCall"],
-    { signer }: SimulateParams,
+    { signer, ...params }: SimulateParams,
   ): Promise<SovereignClient.Rollup.RollupSimulateResponse> {
     const publicKey = await signer.publicKey();
     const sender = bytesToHex(publicKey);
     const call = runtimeMessage as { [key: string]: unknown };
 
-    return this.rollup.simulate({ sender, call });
+    // Cast bridges the `address_override` extension; see SimulateParams JSDoc.
+    return this.rollup.simulate({
+      ...params,
+      sender,
+      call,
+    } as SovereignClient.RollupSimulateParams);
   }
 }
 
-export const DEFAULT_TX_DETAILS: Omit<TxDetails, "chain_id"> = {
+export const DEFAULT_TX_DETAILS: Omit<TxDetails, "chain_hash_fragment"> = {
   max_priority_fee_bips: 0,
   max_fee: "100000000",
   gas_limit: null,
 };
 
-async function buildContext<C extends StandardRollupContext>(
-  client: SovereignClient,
+function buildContext<C extends StandardRollupContext>(
   context?: DeepPartial<C>,
-): Promise<C> {
+  credentialIdToAddress?: CredentialIdToAddress,
+): C {
   const defaultTxDetails = {
     ...DEFAULT_TX_DETAILS,
     ...context?.defaultTxDetails,
   };
 
-  if (!defaultTxDetails.chain_id) {
-    const { chain_id } = await client.rollup.constants();
-
-    defaultTxDetails.chain_id = chain_id;
-  }
-
   return {
+    ...context,
     defaultTxDetails,
+    credentialIdToAddress:
+      credentialIdToAddress ?? context?.credentialIdToAddress,
   } as C;
 }
 
@@ -152,12 +253,12 @@ export async function createStandardRollup<
   const client = config.client ?? new SovereignClient({ baseURL: config.url });
   const getSerializer =
     config.getSerializer ?? ((schema) => new JsSerializer(schema));
-  const context = await buildContext<C>(client, config.context);
+  const context = buildContext<C>(config.context, config.credentialIdToAddress);
 
   // Default to the standard transaction submission endpoint
   const txSubmissionEndpoint = config.txSubmissionEndpoint ?? "/sequencer/txs";
 
-  return new StandardRollup<RuntimeCall>(
+  const rollup = new StandardRollup<RuntimeCall>(
     {
       ...config,
       client,
@@ -170,4 +271,10 @@ export async function createStandardRollup<
       ...typeBuilderOverrides,
     },
   );
+
+  if (!context.defaultTxDetails.chain_hash_fragment) {
+    await rollup.hydrate();
+  }
+
+  return rollup;
 }

@@ -53,7 +53,6 @@ If you touch fee context, validate all of these together:
 
 ### 1.5 Actual-fee projection invariants
 
-- Activation gate must stay shared via `src/sov_fee_and_gas_utils.rs:is_actual_fee_projection_height_active` for both receipt projection and RPC effective-gas-price projection.
 - Receipt-side gas projection must support non-uniform gas-price dimensions by computing `ceil(gas_value / gas_price[0])` with checked integer arithmetic.
 - Treat `GasInfo` as the source of truth: `gas_value` must equal `gas_used · gas_price`. Any divergence is a bug, not alternate fee semantics.
 - `gas_price[0]` is the canonical EVM gas price/base fee value. Block header `base_fee_per_gas` must represent the same value exactly (no clamping/truncation). Any mismatch is a bug.

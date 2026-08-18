@@ -17,8 +17,8 @@ use sov_modules_api::capabilities::{
 use sov_modules_api::macros::config_value;
 use sov_modules_api::runtime::capabilities::AuthenticationError;
 use sov_modules_api::transaction::{
-    AuthenticatedTransactionAndRawHash, AuthenticatedTransactionData, Credentials, PriorityFeeBips,
-    TxDetails,
+    chain_hash_fragment, AuthenticatedTransactionAndRawHash, AuthenticatedTransactionData,
+    Credentials, PriorityFeeBips, TxDetails,
 };
 use sov_modules_api::StateReader;
 use sov_modules_api::VersionReader;
@@ -106,7 +106,7 @@ fn build_authenticated_tx_data<
     S: Spec,
 >(
     tx_hash: TxHash,
-    tx_chain_id: u64,
+    chain_hash_fragment: u64,
     gas_limit: u64,
     user_max_fee_per_gas: u128,
     state: &mut Accessor,
@@ -138,7 +138,7 @@ fn build_authenticated_tx_data<
         ))?;
 
     let tx_details = TxDetails {
-        chain_id: tx_chain_id,
+        chain_hash_fragment,
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee,
         gas_limit: Some(gas_limit),
@@ -153,10 +153,11 @@ fn create_auth_tx_and_hash<
     S: Spec,
 >(
     tx: &TransactionSigned,
+    chain_hash: &[u8; 32],
     state: &mut Accessor,
 ) -> Result<AuthenticatedTransactionAndRawHash<S>, AuthenticationError> {
     let tx_hash = TxHash::new(**tx.hash());
-    let tx_chain_id = validate_chain_id(tx.chain_id(), tx_hash)?;
+    validate_chain_id(tx.chain_id(), tx_hash)?;
     if let Some(max_priority_fee) = tx.max_priority_fee_per_gas() {
         if max_priority_fee > tx.max_fee_per_gas() {
             return Err(AuthenticationError::FatalError(
@@ -166,9 +167,11 @@ fn create_auth_tx_and_hash<
         }
     }
 
+    // EVM signatures do not commit to this fragment; it populates the shared
+    // authenticated transaction details shape.
     let authenticated_tx = build_authenticated_tx_data::<_, S>(
         tx_hash,
-        tx_chain_id,
+        chain_hash_fragment(chain_hash),
         tx.gas_limit(),
         tx.max_fee_per_gas(),
         state,
@@ -219,9 +222,11 @@ where
     AuthorizationData {
         uniqueness: UniquenessData::Nonce(nonce),
         tx_hash,
+        non_malleable_hash: tx_hash,
         credential_id,
         credentials,
         default_address: S::Address::from_vm_address(ethereum_address),
+        address_override: None,
     }
 }
 
@@ -282,13 +287,12 @@ where
                 FatalError::Other("Missing gas price".into()),
                 sentinel_tx_hash,
             ))?;
-    let tx_chain_id = match request.chain_id {
-        Some(chain_id) => validate_chain_id(Some(chain_id), sentinel_tx_hash)?,
-        None => config_value!("CHAIN_ID"),
-    };
+    if let Some(chain_id) = request.chain_id {
+        validate_chain_id(Some(chain_id), sentinel_tx_hash)?;
+    }
     let authenticated_tx = build_authenticated_tx_data::<_, S>(
         sentinel_tx_hash,
-        tx_chain_id,
+        0,
         gas_limit,
         user_max_fee_per_gas,
         state,
@@ -309,6 +313,7 @@ pub fn authenticate<
     S: Spec,
 >(
     raw_tx: &[u8],
+    chain_hash: &[u8; 32],
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, CallMessage<S>>, AuthenticationError>
 where
@@ -319,7 +324,7 @@ where
     let (rlp, tx) = decode_evm_tx(raw_tx)
         .map_err(|e| fatal_deserialization_error::<Accessor, S, _>(raw_tx, e, state))?;
 
-    let tx_and_raw_hash = create_auth_tx_and_hash(&tx, state)?;
+    let tx_and_raw_hash = create_auth_tx_and_hash(&tx, chain_hash, state)?;
 
     let signer = recover_evm_signer(&tx, tx_and_raw_hash.raw_tx_hash)?;
 
@@ -438,7 +443,7 @@ where
         match input {
             EvmAuthenticatorInput::Evm(tx) => {
                 let (tx_and_raw_hash, auth_data, runtime_call) =
-                    authenticate::<_, _>(&tx.data, state)?;
+                    authenticate::<_, _>(&tx.data, &Rt::CHAIN_HASH, state)?;
 
                 Ok((
                     tx_and_raw_hash,
@@ -492,7 +497,7 @@ where
         {
             Self::Input::Evm(tx) => {
                 let (tx_and_raw_hash, auth_data, runtime_call) =
-                    authenticate::<_, _>(&tx.data, state)?;
+                    authenticate::<_, _>(&tx.data, &Rt::CHAIN_HASH, state)?;
                 Ok((
                     tx_and_raw_hash,
                     auth_data,

@@ -4,9 +4,8 @@ use demo_stf::runtime::{Runtime, RuntimeCall};
 use sov_bank::{CallMessage, Coins, TokenId};
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::sov_universal_wallet::schema::{ChainData, RollupRoots, Schema};
-use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
+use sov_modules_api::transaction::{Transaction, TransactionSigningPayload, UnsignedTransaction};
 use sov_modules_api::{Address, Amount, DispatchCall, PrivateKey, Spec};
-use sov_modules_macros::config_value;
 use sov_test_utils::{
     TestUser, TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
 };
@@ -31,11 +30,12 @@ fn make_unsigned_tx() -> UnsignedTransaction<Runtime<S>, S> {
     });
     UnsignedTransaction::<_, S>::new(
         msg,
-        config_value!("CHAIN_ID"),
+        CHAIN_HASH,
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Generation(0),
         Some(TEST_DEFAULT_GAS_LIMIT.into()),
+        None,
     )
 }
 
@@ -63,7 +63,7 @@ fn test_transfer_template() {
     }"#;
     let schema = Schema::of_rollup_types_with_chain_data::<
         Transaction<Runtime<S>, S>,
-        UnsignedTransaction<Runtime<S>, S>,
+        TransactionSigningPayload<Runtime<S>, S>,
         RuntimeCall<S>,
         Address,
     >(ChainData {
@@ -84,10 +84,9 @@ fn test_transfer_template() {
 #[test]
 fn test_display_unsigned_tx() {
     let unsigned_tx = make_unsigned_tx();
-    let unsigned_data = borsh::to_vec(&unsigned_tx).unwrap();
     let schema = Schema::of_rollup_types_with_chain_data::<
         Transaction<Runtime<S>, S>,
-        UnsignedTransaction<Runtime<S>, S>,
+        TransactionSigningPayload<Runtime<S>, S>,
         RuntimeCall<S>,
         Address,
     >(ChainData {
@@ -95,16 +94,17 @@ fn test_display_unsigned_tx() {
         chain_name: "TestChain".to_string(),
     })
     .unwrap();
+    let signing_payload_data = unsigned_tx.to_signing_bytes_v0(schema.chain_hash().unwrap());
     assert_eq!(
         schema
             .display(
                 schema
-                    .rollup_expected_index(RollupRoots::UnsignedTransaction)
+                    .rollup_expected_index(RollupRoots::TransactionSigningPayload)
                     .unwrap(),
-                &unsigned_data
+                &signing_payload_data
             )
             .unwrap(),
-        r#"{ runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, uniqueness: Generation(0), details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 } }"#
+        r#"V0 { runtime_call: Bank.Mint { coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }, uniqueness: Generation(0), details: { max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000] }, address_override: None }"#
     );
 }
 
@@ -117,7 +117,7 @@ fn test_display_signed_tx() {
     let signed_data = borsh::to_vec(&signed_tx).unwrap();
     let schema = Schema::of_rollup_types_with_chain_data::<
         Transaction<Runtime<S>, S>,
-        UnsignedTransaction<Runtime<S>, S>,
+        TransactionSigningPayload<Runtime<S>, S>,
         RuntimeCall<S>,
         Address,
     >(ChainData {
@@ -142,13 +142,15 @@ fn test_display_signed_tx() {
                 &signed_data
             )
             .unwrap(),
-        format!("V0 {{ signature: 0x{signature_display}, pub_key: 0x{pubkey_display}, runtime_call: Bank.Mint {{ coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }}, uniqueness: Generation(0), details: {{ max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000], chain_id: 4321 }} }}")
+        format!("V0 {{ signature: 0x{signature_display}, pub_key: 0x{pubkey_display}, runtime_call: Bank.Mint {{ coins: 0.01 coins of token ID token_1zut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzut3w9chzurq2akgf6, mint_to_address: sov1pv9skzctpv9skzctpv9skzctpv9skzctpv9skzctpv9skqm7ehv }}, uniqueness: Generation(0), details: {{ max_priority_fee_bips: 0, max_fee: 100000000000, gas_limit: [1000000000, 1000000000] }}, address_override: None }}")
     );
 }
 
-#[ignore = "Ignored for rapid schema iteration, re-enable when CI timebomb goes off"]
 #[test]
 fn detect_schema_has_breaking_change() {
-    let current_hash = [0u8; 32];
+    let current_hash: [u8; 32] = [
+        27, 211, 110, 96, 196, 84, 88, 92, 228, 130, 243, 34, 229, 207, 92, 97, 244, 96, 195, 68,
+        138, 207, 75, 75, 42, 144, 254, 100, 83, 209, 220, 135,
+    ];
     assert_eq!(CHAIN_HASH, current_hash, "The chain hash changed. Update the \"current_hash\" value in this test but be aware: this is a breaking change for any production rollups.");
 }

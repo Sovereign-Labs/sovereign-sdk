@@ -13,7 +13,8 @@ use thiserror::Error;
 
 use crate::capabilities::AuthorizationData;
 use crate::transaction::{
-    AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError, TxDetails,
+    chain_hash_fragment, AuthenticatedTransactionAndRawHash, Transaction,
+    TransactionVerificationError, TxDetails,
 };
 #[cfg(feature = "native")]
 use crate::CryptoSpecExt;
@@ -23,11 +24,6 @@ use crate::{
     MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher, ProvableStateReader,
     RawTx, Runtime, Spec, VersionReader,
 };
-
-/// The chain ID of the rollup.
-pub fn config_chain_id() -> u64 {
-    config_value_private!("CHAIN_ID")
-}
 
 /// Resolves all valid chain hashes for a given height using configured overrides.
 ///
@@ -248,6 +244,14 @@ pub type AuthenticationOutput<S, Decodable> = (
     Decodable,
 );
 
+/// The material from which a non-malleable transaction hash can be derived.
+pub enum ReplayHashMaterial<'a> {
+    /// The raw transaction hash is already non-malleable and can be used directly.
+    AlreadyNonMalleableHash(TxHash),
+    /// The verified message bytes are the non-malleable material and should be hashed.
+    VerifiedSignatureMessage(&'a [u8]),
+}
+
 /// Error variants that can be raised as a [`AuthenticationError::FatalError`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Error)]
 #[serde(rename_all = "snake_case")]
@@ -277,6 +281,14 @@ pub enum FatalError {
         expected: String,
         /// The actual chain id
         got: String,
+    },
+    /// The chain hash fragment in the transaction did not match any valid chain hash.
+    #[error("Invalid chain hash fragment: expected one of {expected:?}, got {got}")]
+    InvalidChainHashFragment {
+        /// The valid chain hash fragments.
+        expected: Vec<u64>,
+        /// The transaction-provided chain hash fragment.
+        got: u64,
     },
     /// The chain name was invalid. Not every type of transaction will be able to throw this (some
     /// will just implicitly fail signature checks).
@@ -347,21 +359,42 @@ impl From<AuthenticationError> for UnregisteredAuthenticationError {
     }
 }
 
-/// Verifies that the transaction has the correct chain ID.
-pub fn verify_chain_id<S: Spec>(
+/// Verifies that the transaction has the expected chain hash fragment.
+pub fn verify_chain_hash_fragment<S: Spec>(
     tx_details: &TxDetails<S>,
+    chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
 ) -> Result<(), AuthenticationError> {
-    if tx_details.chain_id != config_chain_id() {
-        return Err(AuthenticationError::FatalError(
-            FatalError::InvalidChainId {
-                expected: config_chain_id(),
-                got: tx_details.chain_id,
-            },
-            raw_tx_hash,
-        ));
+    select_chain_hash(
+        tx_details,
+        &crate::runtime::ResolvedChainHashes {
+            primary: *chain_hash,
+            grace_period_hashes: Vec::new(),
+        },
+        raw_tx_hash,
+    )
+    .map(|_| ())
+}
+
+/// Selects the full chain hash committed to by a transaction.
+pub fn select_chain_hash<S: Spec>(
+    tx_details: &TxDetails<S>,
+    resolved_hashes: &crate::runtime::ResolvedChainHashes,
+    raw_tx_hash: TxHash,
+) -> Result<[u8; 32], AuthenticationError> {
+    for chain_hash in resolved_hashes.iter() {
+        if tx_details.chain_hash_fragment == chain_hash_fragment(chain_hash) {
+            return Ok(*chain_hash);
+        }
     }
-    Ok(())
+
+    Err(AuthenticationError::FatalError(
+        FatalError::InvalidChainHashFragment {
+            expected: resolved_hashes.iter().map(chain_hash_fragment).collect(),
+            got: tx_details.chain_hash_fragment,
+        },
+        raw_tx_hash,
+    ))
 }
 
 /// Verifies the transaction signature.
@@ -370,13 +403,8 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
-) -> Result<(), AuthenticationError> {
-    let serialized_tx = tx.serialized_with_chain_hash(chain_hash).map_err(|e| {
-        AuthenticationError::FatalError(
-            FatalError::DeserializationFailed(e.to_string()),
-            raw_tx_hash,
-        )
-    })?;
+) -> Result<Vec<u8>, AuthenticationError> {
+    let serialized_tx = tx.to_signing_bytes(chain_hash);
 
     tx.charge_gas_for_signature(serialized_tx.len(), meter)
         .map_err(|e| match e {
@@ -391,7 +419,7 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
 
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&(raw_tx_hash, *chain_hash)) {
-        return known_result;
+        return known_result.map(|()| serialized_tx);
     }
 
     let res = tx
@@ -409,7 +437,20 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     #[cfg(feature = "native")]
     SIGNATURE_CACHE.insert((raw_tx_hash, *chain_hash), res.clone());
 
-    res
+    res.map(|()| serialized_tx)
+}
+
+/// Calculates the non-malleable hash to use for replay protection.
+pub fn calculate_non_malleable_hash_metered<G: GasMeter<Spec = S>, S: Spec>(
+    material: ReplayHashMaterial<'_>,
+    gas_meter: &mut G,
+) -> Result<TxHash, GasMeteringError<S::Gas>> {
+    match material {
+        ReplayHashMaterial::AlreadyNonMalleableHash(hash) => Ok(hash),
+        ReplayHashMaterial::VerifiedSignatureMessage(message) => {
+            calculate_hash_metered::<G, S>(message, gas_meter)
+        }
+    }
 }
 
 /// Authenticate and verify deserialized sov-tx. See `authenticate`.
@@ -434,7 +475,8 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
 ///
 /// This function resolves the appropriate chain hashes for the current block height
 /// using configured overrides (including grace periods), falling back to `default_chain_hash`
-/// when no override applies. It tries verification with each valid hash until one succeeds.
+/// when no override applies. It selects the hash matching the transaction's chain
+/// hash fragment before verifying the signature.
 ///
 /// # Errors
 /// Returns an error if gas runs out at any point, if deserialization or hashing fails, or if the
@@ -455,22 +497,24 @@ pub fn authenticate<
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
-    let tx =
-        match <Transaction<D, S> as MeteredBorshDeserialize<S>>::deserialize(&mut raw_tx, state) {
-            Ok(ok) => ok,
+    let tx = match <Transaction<D, S> as MeteredBorshDeserialize>::deserialize_from_slice(
+        &mut raw_tx,
+        state,
+    ) {
+        Ok(ok) => ok,
 
-            Err(MeteredBorshDeserializeError::GasError(e)) => {
-                return Err(AuthenticationError::OutOfGas(format!(
-                    "Transaction deserialization run out of gas {e}, tx hash {raw_tx_hash}"
-                )))
-            }
-            Err(MeteredBorshDeserializeError::IOError(e)) => {
-                return Err(AuthenticationError::FatalError(
-                    FatalError::DeserializationFailed(e.to_string()),
-                    raw_tx_hash,
-                ));
-            }
-        };
+        Err(MeteredBorshDeserializeError::GasError(e)) => {
+            return Err(AuthenticationError::OutOfGas(format!(
+                "Transaction deserialization run out of gas {e}, tx hash {raw_tx_hash}"
+            )))
+        }
+        Err(MeteredBorshDeserializeError::IOError(e)) => {
+            return Err(AuthenticationError::FatalError(
+                FatalError::DeserializationFailed(e.to_string()),
+                raw_tx_hash,
+            ));
+        }
+    };
 
     // Verify that the transaction is fully deserialized
     if !raw_tx.is_empty() {
@@ -488,54 +532,38 @@ pub fn authenticate<
 
 /// Authenticate and verify deserialized sov-tx with multiple chain hashes.
 ///
-/// Tries verification with the primary hash first, then any grace period hashes.
-/// Returns success on the first hash that verifies successfully.
+/// Selects the full chain hash by matching the transaction's chain hash fragment
+/// against the hashes valid for this height.
 fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     tx: Transaction<D, S>,
     resolved_hashes: crate::runtime::ResolvedChainHashes,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    // Extract auth_data and verify chain_id (these don't depend on chain_hash)
-    let (auth_data, details, runtime_call) = match &tx {
-        Transaction::V0(tx_v0) => {
-            let auth_data = tx_v0.auth_data(raw_tx_hash, meter)?;
-            (auth_data, &tx_v0.details, &tx_v0.runtime_call)
-        }
-        Transaction::V1(tx_v1) => {
-            let auth_data = tx_v1.auth_data(raw_tx_hash, meter)?;
-            (auth_data, &tx_v1.details, &tx_v1.runtime_call)
-        }
+    let (details, runtime_call) = match &tx {
+        Transaction::V0(tx_v0) => (&tx_v0.details, &tx_v0.runtime_call),
+        Transaction::V1(tx_v1) => (&tx_v1.details, &tx_v1.runtime_call),
     };
 
-    verify_chain_id(details, raw_tx_hash)?;
-
-    // Try signature verification with each valid chain hash
-    let mut last_error = None;
-    for chain_hash in resolved_hashes.iter() {
-        match verify_signature(&tx, chain_hash, raw_tx_hash, meter) {
-            Ok(()) => {
-                let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
-                    raw_tx_hash,
-                    authenticated_tx: details.clone().into(),
-                };
-                return Ok((tx_and_raw_hash, auth_data, runtime_call.clone()));
-            }
-            Err(AuthenticationError::FatalError(
-                FatalError::SigVerificationFailed(error),
-                hash,
-            )) => {
-                last_error = Some(AuthenticationError::FatalError(
-                    FatalError::SigVerificationFailed(error),
-                    hash,
-                ));
-            }
-            Err(e) => return Err(e),
-        }
-    }
-
-    // All chain hashes failed - return the last error
-    Err(last_error.expect("resolved_hashes always has at least one hash (the primary)"))
+    let chain_hash = select_chain_hash(details, &resolved_hashes, raw_tx_hash)?;
+    let serialized_tx = verify_signature(&tx, &chain_hash, raw_tx_hash, meter)?;
+    let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
+        match &tx {
+            Transaction::V0(_) => ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash),
+            Transaction::V1(_) => ReplayHashMaterial::VerifiedSignatureMessage(&serialized_tx),
+        },
+        meter,
+    )
+    .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+    let auth_data = match &tx {
+        Transaction::V0(tx_v0) => tx_v0.auth_data(raw_tx_hash, non_malleable_hash, meter)?,
+        Transaction::V1(tx_v1) => tx_v1.auth_data(raw_tx_hash, non_malleable_hash, meter)?,
+    };
+    let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
+        raw_tx_hash,
+        authenticated_tx: details.clone().into(),
+    };
+    Ok((tx_and_raw_hash, auth_data, runtime_call.clone()))
 }
 
 /// Authenticate raw unregistered sov-transaction.
@@ -570,9 +598,8 @@ pub fn decode_sov_tx<S: Spec, D: DispatchCall<Spec = S>>(
 pub fn decode_sov_tx_with_cryptospec<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
     mut raw_tx: &[u8],
 ) -> Result<D::Decodable, FatalError> {
-    let tx =
-        <Transaction<D, S, C> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
-            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+    let tx = <Transaction<D, S, C> as MeteredBorshDeserialize>::unmetered_deserialize(&mut raw_tx)
+        .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok(tx.into_runtime_call())
 }

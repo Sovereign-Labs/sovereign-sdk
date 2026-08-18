@@ -3,9 +3,31 @@ use sov_modules_api::{CryptoSpec, DaSpec, Module, Spec, StateCheckpoint};
 
 use crate::{Account, AccountConfig, AccountData, Accounts, CallMessage};
 
-impl<'a> Arbitrary<'a> for CallMessage {
+impl<'a, S> Arbitrary<'a> for CallMessage<S>
+where
+    S: Spec,
+    S::Address: Arbitrary<'a>,
+{
     fn arbitrary(u: &mut Unstructured<'a>) -> arbitrary::Result<Self> {
-        Ok(Self::InsertCredentialId(u.arbitrary()?))
+        match u.int_in_range(0..=4)? {
+            0 => Ok(Self::InsertCredentialId(u.arbitrary()?)),
+            1 => Ok(Self::AddCredentialToAddress {
+                address: u.arbitrary()?,
+                credential: u.arbitrary()?,
+            }),
+            2 => Ok(Self::RemoveCredentialFromAddress {
+                address: u.arbitrary()?,
+                credential: u.arbitrary()?,
+            }),
+            3 => Ok(Self::RotateCredentialOnAddress {
+                address: u.arbitrary()?,
+                old_credential: u.arbitrary()?,
+                new_credential: u.arbitrary()?,
+            }),
+            _ => Ok(Self::CreateSyntheticAddress {
+                salt: u.arbitrary()?,
+            }),
+        }
     }
 }
 
@@ -51,7 +73,7 @@ where
     <S::Da as DaSpec>::BlockHeader: Default,
     <S::CryptoSpec as CryptoSpec>::PublicKey: Arbitrary<'a>,
 {
-    /// Creates an arbitrary set of accounts and stores it under `state`.
+    /// Creates arbitrary genesis credential/address authorizations under `state`.
     pub fn arbitrary_workset(
         u: &mut Unstructured<'a>,
         state: &mut StateCheckpoint<S>,

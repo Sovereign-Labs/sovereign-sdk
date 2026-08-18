@@ -14,14 +14,13 @@ use sov_modules_api::capabilities::{
     AuthorizationData, ChainState, TransactionAuthorizer, UniquenessData,
 };
 use sov_modules_api::common::Amount;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::anyhow;
 use sov_modules_api::sov_universal_wallet::schema::{RollupRoots, SchemaError};
 use sov_modules_api::transaction::{Credentials, PriorityFeeBips, TxDetails};
 use sov_modules_api::{
     get_runtime_schema, AuthenticatedTransactionData, CredentialId, DaSpec, ErrorContext,
-    EventModuleName, FullyBakedTx, Gas, GasArray, HDTimestamp, HexHash, HexString, Runtime,
-    SequencerType, Spec, StateCheckpoint, StateProvider as _, WorkingSet,
+    EventModuleName, FullyBakedTx, Gas, GasArray, HexHash, HexString, Runtime, SequencerType, Spec,
+    StateCheckpoint, StateProvider as _, WorkingSet,
 };
 use sov_modules_stf_blueprint::{apply_tx, get_gas_used, ApplyTxResult};
 use sov_rest_utils::{json_obj, preconfigured_router_layers, ErrorObject};
@@ -271,7 +270,7 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
             .transpose()
             .map_err(|e| SimulateError::InvalidInput(format!("{e:?}")))?;
         Ok(TxDetails {
-            chain_id: config_value!("CHAIN_ID"),
+            chain_hash_fragment: 0,
             max_priority_fee_bips: partial
                 .max_priority_fee_bips
                 .unwrap_or(PriorityFeeBips::ZERO),
@@ -314,6 +313,14 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
         let credential_id = CredentialId::from_str(&params.sender).map_err(|e| {
             SimulateError::InvalidInput(format!("failed to parse sender credential id: {e}"))
         })?;
+        let address_override = params
+            .address_override
+            .as_deref()
+            .map(S::Address::from_str)
+            .transpose()
+            .map_err(|e| {
+                SimulateError::InvalidInput(format!("failed to parse address override: {e:?}"))
+            })?;
         let uniqueness = match params.uniqueness {
             Some(uniqueness) => uniqueness,
             None => {
@@ -326,10 +333,12 @@ impl<S: Spec, R: Runtime<S>> SovereignSimulate<S, R> {
 
         Ok(AuthorizationData {
             tx_hash: NULL_TX_HASH,
+            non_malleable_hash: NULL_TX_HASH,
             uniqueness,
             credential_id,
             default_address: credential_id.into(),
             credentials: Credentials::new(credential_id),
+            address_override,
         })
     }
 
@@ -412,6 +421,8 @@ pub struct SimulateParameters {
     /// Optional uniqueness data for the transaction.
     /// If not provided a valid uniqueness will be used.
     pub uniqueness: Option<UniquenessData>,
+    /// Optional address override for execution; null uses default routing.
+    pub address_override: Option<String>,
 }
 
 impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
@@ -442,8 +453,8 @@ impl<S: Spec, R: Runtime<S>> SimulateEndpoint for SovereignSimulate<S, R> {
             AuthenticatedTransactionData(state.tx_details(params.tx_details.unwrap_or_default())?);
 
         let mut scratchpad = accessor.to_tx_scratchpad();
-        // Create sequencing metadata for simulation so modules can access timestamp data
-        let sequencing_metadata = borsh::to_vec(&HDTimestamp::now()).ok().map(Into::into);
+        let sequencing_metadata =
+            Some(sov_modules_api::capabilities::new_tx_sequencing_data::<S, R>());
         let context = runtime
             .transaction_authorizer()
             .resolve_context(

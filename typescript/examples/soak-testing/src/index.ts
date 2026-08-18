@@ -36,7 +36,7 @@ const defaultTxDetails = {
   max_priority_fee_bips: 0,
   max_fee: "100000000",
   gas_limit: null,
-  chain_id: 4321,
+  chain_hash_fragment: "0",
 };
 
 /**
@@ -97,7 +97,7 @@ class BankTransferGenerator extends TransactionGenerator<S> {
       async onSubmitted(result) {
         assert(
           result.events?.length === 1,
-          "tranfer should only emit one event"
+          "tranfer should only emit one event",
         );
         const event = result.events[0]?.value;
 
@@ -117,7 +117,7 @@ class BankTransferGenerator extends TransactionGenerator<S> {
               },
             },
           },
-          "transfer event should include the expected fields"
+          "transfer event should include the expected fields",
         );
       },
     };
@@ -156,7 +156,7 @@ async function main(): Promise<void> {
   const rollup = await createStandardRollup<RuntimeCall>();
 
   const generator = new BasicGeneratorStrategy(
-    new BankTransferGenerator(keypairs)
+    new BankTransferGenerator(keypairs),
   );
   const runner = new TestRunner<S>({ rollup, generator });
 

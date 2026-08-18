@@ -2,6 +2,7 @@ mod bank;
 mod evm;
 mod external_mock_da;
 mod forced_sequencer_registration;
+mod migrations;
 mod prover;
 mod replica;
 mod rest_api;

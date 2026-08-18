@@ -605,7 +605,7 @@ fn test_granular_policies() {
                     max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
                     max_fee: TEST_DEFAULT_MAX_FEE,
                     gas_limit: None,
-                    chain_id: config_value!("CHAIN_ID"),
+                    chain_hash_fragment: 0,
                 },
             },
             assert: Box::new(|_, _| {}),
@@ -627,7 +627,7 @@ fn test_granular_policies() {
                     // This gas limit has to be high enough to cover the tx but low enough that gas_limit * gas_price
                     // is less than the payer's balance. If we adjust the gas costs of operations too much, this value may need adjustment.
                     gas_limit: Some([100_000, 100_000].into()),
-                    chain_id: config_value!("CHAIN_ID"),
+                    chain_hash_fragment: 0,
                 },
             },
             assert: Box::new(|result, _state| {
@@ -669,7 +669,7 @@ fn test_granular_policies() {
                     max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
                     max_fee: TEST_DEFAULT_MAX_FEE,
                     gas_limit: Some([u64::MAX, u64::MAX].into()),
-                    chain_id: config_value!("CHAIN_ID"),
+                    chain_hash_fragment: 0,
                 },
             },
             assert: Box::new(|_, _| {}),

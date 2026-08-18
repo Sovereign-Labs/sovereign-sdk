@@ -10,6 +10,11 @@ freeze = [1, 1]
 # We use the ID 4321 for demo purposes. Change this value before deploying!
 CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
+# The global on-chain Sovereign state version expected by this binary.
+# This must match the `sov_chain_state::state_version` value in the current on-disk state. The compiled
+# rollup will refuse to run if there is a mismatch.
+# Increment this whenever an SDK upgrade requires an out-of-band state migration.
+STATE_VERSION = 1
 
 # Chain hash overrides by rollup block height range.
 # When the rollup schema changes (e.g., adding a new transaction type), the CHAIN_HASH changes.
@@ -57,11 +62,6 @@ EVM_BLOCK_PRUNING_THRESHOLD = 10000
 EVM_GAS_METERING_MODE = "Rollup"
 # After this evm block height, the max_fee check will be enforced.
 EVM_MAX_FEE_CHECK_HEIGHT = 0
-# After this evm block height, RPC receipts derive effectiveGasPrice
-# from the actual fee charged by the Sovereign gas meter.
-EVM_RECEIPT_ACTUAL_FEE_HEIGHT = 0
-# Before this rollup height, custom EVM precompiles are disabled without reading their enabled set.
-ENABLE_EVM_CUSTOM_PRECOMPILES_AT = 0
 # How many rollup blocks to wait before terminating setup mode. While setup mode is enabled,
 # the rollup does not charge gas. This is useful when initializing the rollup with a bridged gas token.
 SETUP_MODE_TERMINATION_HEIGHT = 0 # Disable setup mode entirely by default.
@@ -157,25 +157,17 @@ PROCESS_TX_PRE_EXEC_GAS = [1, 1]
 PROCESS_TX_PRE_EXEC_GAS_PER_TX_BYTE = [1, 1]
 # --- End Gas parameters to specify how to charge gas for signature verification ---
 
-# The cost of deserializing a message using Borsh
-DEFAULT_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
+# --- Borsh deserialization gas constants ---
+# Entry bias charged once per borsh decode.
 BIAS_BORSH_DESERIALIZATION = [1, 1]
+# Per-byte cost charged inside `MeteredReader` and upfront against opaque payloads.
+BORSH_PER_BYTE_READ = [1, 1]
+# Per-read fixed cost charged inside `MeteredReader`.
+BORSH_PER_READ_BIAS = [0, 0]
 
-# The cost of deserializing a tx using Borsh
-TX_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
-TX_BIAS_BORSH_DESERIALIZATION = [1, 1]
-
-# The cost of deserializing a tx using JSON
+# --- JSON deserialization gas constants ---
 TX_GAS_TO_CHARGE_PER_BYTE_JSON_DESERIALIZATION = [1, 1]
 TX_BIAS_JSON_DESERIALIZATION = [1, 1]
-
-# The cost of deserializing a proof using Borsh
-PROOF_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
-PROOF_BIAS_BORSH_DESERIALIZATION = [1, 1]
-
-# The cost of deserializing a string using Borsh
-STRING_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION = [1, 1]
-STRING_BIAS_BORSH_DESERIALIZATION = [1, 1]
 
 # The percentage of the "base fee" that is burned when a transaction is processed.
 # The portion that is not burned is awarded to provers and/or attesters on the network.
@@ -187,10 +179,8 @@ GAS_TO_CHARGE_PER_PROOF_BYTE = [1, 1]
 FIXED_GAS_TO_CHARGE_PER_PROOF = [100, 100]
 
 # --- Gas fee adjustment parameters: See https://eips.ethereum.org/EIPS/eip-1559 for a detailed description ---
-# The initial gas limit of the rollup.
-INITIAL_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
-UPDATED_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
-CHANGE_GAS_LIMIT_AFTER_HEIGHT = 9223372036854775807
+# The gas limit applied to every rollup block.
+BLOCK_GAS_LIMIT = [100_000_000_000, 100_000_000_000]
 # The initial "base fee" that every transaction emits when executed.
 INITIAL_BASE_FEE_PER_GAS = [10, 10]
 # The maximum change denominator of the base fee.

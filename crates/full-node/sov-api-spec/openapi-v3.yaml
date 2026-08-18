@@ -1006,53 +1006,6 @@ components:
       items:
         type: integer
         format: uint64
-    PartialTransaction:
-      type: object
-      properties:
-        sender_pub_key:
-          type: string
-          format: byte
-        generation:
-          type: integer
-          format: uint64
-        gas_price:
-          $ref: "#/components/schemas/GasPrice"
-        sequencer:
-          type: string
-          format: byte
-        sequencer_rollup_address:
-          type: string
-          format: byte
-        encoded_call_message:
-          type: string
-          format: byte
-        details:
-          $ref: "#/components/schemas/TxDetails"
-      required:
-        - sender_pub_key
-        - generation
-        - encoded_call_message
-        - details
-    TxDetails:
-      type: object
-      properties:
-        max_priority_fee_bips:
-          type: integer
-          format: uint64
-        max_fee:
-          type: string
-          description: A decimal string representation of a u128 value
-          pattern: ^\d+$
-          example: "340282366920938463463374607431768211455"
-        gas_limit:
-          $ref: "#/components/schemas/GasUnit"
-        chain_id:
-          type: integer
-          format: uint64
-      required:
-        - max_priority_fee_bips
-        - max_fee
-        - chain_id
     SimulateExecutionResponse:
       type: object
       properties:
@@ -1224,6 +1177,10 @@ components:
           type: object
           description: Optional uniqueness data for the transaction
           additionalProperties: true
+        address_override:
+          type: string
+          nullable: true
+          description: Optional address override for execution; null uses default routing
       required:
         - sender
         - call

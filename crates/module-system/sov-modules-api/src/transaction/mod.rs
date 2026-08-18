@@ -1,14 +1,19 @@
 mod data;
 mod rewards;
 use std::fmt::Debug;
-use std::io;
 
+use crate::capabilities::UniquenessData;
 use crate::Multisig;
 use borsh::{BorshDeserialize, BorshSerialize};
-pub use data::{AuthenticatedTransactionData, Credentials, PriorityFeeBips, TxDetails};
+pub use data::{
+    chain_hash_fragment, AuthenticatedTransactionData, Credentials, PriorityFeeBips, TxDetails,
+};
 use derivative::Derivative;
 pub(crate) use rewards::transaction_consumption_helper;
 pub use rewards::{ProverReward, RemainingFunds, SequencerReward, TransactionConsumption};
+pub use signing_payload::{
+    TransactionSigningPayload, TransactionSigningPayloadV0, TransactionSigningPayloadV1,
+};
 #[cfg(feature = "native")]
 pub use sov_rollup_interface::crypto::PrivateKey;
 use sov_rollup_interface::crypto::{SigVerificationError, Signature};
@@ -23,12 +28,12 @@ pub use types::{
 };
 pub use unsigned::UnsignedTransaction;
 
-use crate::capabilities::UniquenessData;
 use crate::{
-    CryptoSpecExt, DispatchCall, Gas, GasMeter, GasMeteringError, GasSpec, MeteredBorshDeserialize,
-    MeteredBorshDeserializeError, MeteredSigVerificationError, MeteredSignature, Spec,
+    CryptoSpecExt, DispatchCall, Gas, GasMeter, GasMeteringError, MeteredSigVerificationError,
+    MeteredSignature, Spec,
 };
 
+mod signing_payload;
 #[cfg(test)]
 mod tests;
 mod types;
@@ -75,7 +80,7 @@ pub enum Transaction<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as S
             serialize = "<C as CryptoSpec>::Signature: BorshSerialize, <C as CryptoSpec>::PublicKey: BorshSerialize",
             deserialize = "<C as CryptoSpec>::Signature: BorshDeserialize, <C as CryptoSpec>::PublicKey: BorshDeserialize",
         ))]
-        Version0<R::Call, S, C>,
+        Version0<R, S, C>,
     ),
     /// A V1 (multisig) transaction.
     V1(
@@ -83,7 +88,7 @@ pub enum Transaction<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as S
             serialize = "<C as CryptoSpec>::Signature: BorshSerialize, <C as CryptoSpec>::PublicKey: BorshSerialize",
             deserialize = "<C as CryptoSpec>::Signature: BorshDeserialize, <C as CryptoSpec>::PublicKey: BorshDeserialize",
         ))]
-        Version1<R::Call, S, C>,
+        Version1<R, S, C>,
     ),
 }
 
@@ -98,18 +103,17 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         <S::CryptoSpec as CryptoSpec>::Hasher::digest(&data).into()
     }
 
-    /// Creates a new signed transaction using the provided private key.
+    /// Creates a new signed V0 transaction using the provided private key.
     pub fn new_signed_tx(
         priv_key: &C::PrivateKey,
         chain_hash: &[u8; 32],
-        unsigned_tx: UnsignedTransaction<R, S>,
+        mut unsigned_tx: UnsignedTransaction<R, S>,
     ) -> Self {
-        let mut utx_bytes: Vec<u8> = Vec::new();
-        BorshSerialize::serialize(&unsigned_tx, &mut utx_bytes).unwrap();
-        utx_bytes.extend_from_slice(chain_hash);
+        unsigned_tx.details.chain_hash_fragment = chain_hash_fragment(chain_hash);
+        let signing_bytes = unsigned_tx.to_signing_bytes_v0(*chain_hash);
 
         let pub_key = priv_key.pub_key();
-        let signature = priv_key.sign(&utx_bytes);
+        let signature = priv_key.sign(&signing_bytes);
 
         unsigned_tx.to_signed_tx(pub_key, signature)
     }
@@ -119,52 +123,6 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
     /// Convenience function to return the transaction bytes in the correct format ready for submission.
     pub fn tx_bytes(&self) -> Vec<u8> {
         borsh::to_vec(self).expect("Serialization should be never fail")
-    }
-
-    fn unmetered_deserialize_inner(buf: &mut &[u8]) -> Result<Self, io::Error> {
-        let this = <Transaction<R, S, C> as borsh::BorshDeserialize>::deserialize(buf)?;
-        tracing::trace!(transaction = ?this, "Deserialized transaction");
-        Ok(this)
-    }
-}
-
-/// Charge gas for deserializing a transaction.
-pub fn charge_tx_deserialization<S: Spec>(
-    meter: &mut impl GasMeter<Spec = S>,
-    len: usize,
-) -> Result<(), MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-    crate::charge_gas_to_deserialize(
-        S::tx_bias_borsh_deserialization(),
-        S::tx_gas_to_charge_per_byte_borsh_deserialization(),
-        len,
-        meter,
-    )
-}
-
-impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> MeteredBorshDeserialize<S>
-    for Transaction<R, S, C>
-{
-    #[cfg_attr(feature = "bench", crate::cycle_tracker)]
-    #[cfg_attr(
-        all(feature = "gas-constant-estimation", feature = "native"),
-        crate::track_gas_constants_usage
-    )]
-    fn deserialize(
-        buf: &mut &[u8],
-        meter: &mut impl GasMeter<Spec = S>,
-    ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-        charge_tx_deserialization(meter, buf.len())?;
-
-        Transaction::<R, S, C>::unmetered_deserialize_inner(buf)
-            .map_err(MeteredBorshDeserializeError::IOError)
-    }
-
-    #[cfg(feature = "native")]
-    fn unmetered_deserialize(
-        buf: &mut &[u8],
-    ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-        Transaction::<R, S, C>::unmetered_deserialize_inner(buf)
-            .map_err(MeteredBorshDeserializeError::IOError)
     }
 }
 
@@ -212,11 +170,11 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         }
     }
 
-    /// Returns the chain id.
-    pub fn chain_id(&self) -> u64 {
+    /// Returns the chain hash fragment.
+    pub fn chain_hash_fragment(&self) -> u64 {
         match &self {
-            Transaction::V0(inner) => inner.details.chain_id,
-            Transaction::V1(inner) => inner.details.chain_id,
+            Transaction::V0(inner) => inner.details.chain_hash_fragment,
+            Transaction::V1(inner) => inner.details.chain_hash_fragment,
         }
     }
 
@@ -227,6 +185,7 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         signature: C::Signature,
         uniqueness: UniquenessData,
         details: TxDetails<S>,
+        address_override: Option<S::Address>,
     ) -> Self {
         Self::V0(Version0 {
             signature,
@@ -234,20 +193,17 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
             runtime_call,
             uniqueness,
             details,
+            address_override,
         })
     }
 
-    /// Serialize the transaction, appending the runtime's chain_hash.
+    /// Serializes the transaction signing payload.
     /// This is the standard serialization for Sovereign signature signing.
-    pub fn serialized_with_chain_hash(
-        &self,
-        chain_hash: &[u8; 32],
-    ) -> Result<Vec<u8>, TransactionVerificationError<S::Gas>> {
-        let mut serialized_tx = borsh::to_vec(&self.to_unsigned_transaction()).map_err(|e| {
-            TransactionVerificationError::TransactionDeserializationError(e.to_string())
-        })?;
-        serialized_tx.extend_from_slice(chain_hash);
-        Ok(serialized_tx)
+    pub fn to_signing_bytes(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
+        match &self {
+            Transaction::V0(inner) => inner.to_signing_bytes(chain_hash),
+            Transaction::V1(inner) => inner.to_signing_bytes(chain_hash),
+        }
     }
 
     /// Charge gas for verifying the transaction signature against the given message.
@@ -301,19 +257,11 @@ impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Transaction<R, S, C> {
         Ok(())
     }
 
-    /// Converts the transaction to an unsigned transaction.
+    /// Converts the transaction to an unsigned transaction payload.
     pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
         match &self {
-            Transaction::V0(inner) => UnsignedTransaction::new_with_details(
-                inner.runtime_call.clone(),
-                inner.uniqueness,
-                inner.details.clone(),
-            ),
-            Transaction::V1(inner) => UnsignedTransaction::new_with_details(
-                inner.runtime_call.clone(),
-                inner.uniqueness,
-                inner.details.clone(),
-            ),
+            Transaction::V0(inner) => inner.to_unsigned_transaction(),
+            Transaction::V1(inner) => inner.to_unsigned_transaction(),
         }
     }
 }

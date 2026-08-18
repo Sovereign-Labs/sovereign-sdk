@@ -133,7 +133,7 @@ macro_rules! generate_runtime_without_capabilities {
                 use $crate::sov_rollup_apis::endpoints::schema::{SchemaEndpoint, StandardSchemaEndpoint};
                 use $crate::sov_universal_wallet::schema::{ChainData, Schema};
                 use ::sov_modules_api::macros::config_value;
-                use ::sov_modules_api::transaction::{Transaction, UnsignedTransaction};
+                use ::sov_modules_api::transaction::{Transaction, TransactionSigningPayload};
                 use ::sov_modules_api::rest::HasRestApi;
 
                 let axum_router = Self::default().rest_api(api_state.clone());
@@ -144,7 +144,7 @@ macro_rules! generate_runtime_without_capabilities {
 
                 let schema = Schema::of_rollup_types_with_chain_data::<
                 Transaction<Self, S>,
-                UnsignedTransaction<Self, S>,
+                TransactionSigningPayload<Self, S>,
                 <Self as ::sov_modules_api::DispatchCall>::Decodable,
                 S::Address,
                 >(ChainData {
@@ -285,7 +285,6 @@ macro_rules! generate_runtime {
             $($runtime_trait_impl_bounds)*
         {
             type Capabilities<'a> = $crate::runtime::StandardProvenRollupCapabilities<'a, S, &'a mut $gas_enforcer_ty>;
-            type SequencingData = ::sov_modules_api::HDTimestamp;
 
             fn capabilities(&mut self) -> ::sov_modules_api::capabilities::Guard<Self::Capabilities<'_>> {
                 ::sov_modules_api::capabilities::Guard::new(
@@ -304,6 +303,14 @@ macro_rules! generate_runtime {
             }
 
             $crate::__impl_runtime_timelock_capability!($($timelock_capability_expr)?);
+        }
+
+        impl<S> ::sov_modules_api::capabilities::HasSequencingData<S> for $id<S>
+        where
+            S: ::sov_modules_api::Spec,
+            $($runtime_trait_impl_bounds)*
+        {
+            type SequencingData = ();
         }
     };
     (
@@ -345,7 +352,6 @@ macro_rules! generate_runtime {
             $($runtime_trait_impl_bounds)*
         {
             type Capabilities<'a> = $crate::runtime::StandardProvenRollupCapabilities<'a, S>;
-            type SequencingData = ::sov_modules_api::HDTimestamp;
 
             fn capabilities(&mut self) -> ::sov_modules_api::capabilities::Guard<Self::Capabilities<'_>> {
                 ::sov_modules_api::capabilities::Guard::new(
@@ -364,6 +370,14 @@ macro_rules! generate_runtime {
             }
 
             $crate::__impl_runtime_timelock_capability!($($timelock_capability_expr)?);
+        }
+
+        impl<S> ::sov_modules_api::capabilities::HasSequencingData<S> for $id<S>
+        where
+            S: ::sov_modules_api::Spec,
+            $($runtime_trait_impl_bounds)*
+        {
+            type SequencingData = ();
         }
     }
 }

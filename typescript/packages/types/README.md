@@ -6,11 +6,11 @@ Core type definitions for Sovereign SDK blockchain interactions.
 
 This package provides TypeScript type definitions for working with "standard" Sovereign SDK rollups. While Sovereign SDK rollups are fully generic and can define custom types for transactions, blocks, and other primitives, this package contains the default type definitions used by the standard Sovereign SDK implementation.
 
-## Standard Types
-
+## Standard types
 While Sovereign SDK supports this level of customization, most rollups will use a common set of primitives. This package provides type definitions for these standard components (and more):
 
 - `UnsignedTransaction` - Standard unsigned transaction format
+- `TransactionSigningPayload` - Versioned payload serialized for signatures
 - `Transaction` - Standard signed transaction format
 
 These types work out-of-the-box with the default Sovereign SDK rollup configuration and are compatible with the other packages in this monorepo (`@sovereign-sdk/web3`, `@sovereign-sdk/signers`, etc.).
@@ -18,15 +18,38 @@ These types work out-of-the-box with the default Sovereign SDK rollup configurat
 ## Usage
 
 ```typescript
-import type { UnsignedTransaction, Transaction } from "@sovereign-sdk/types";
+import type {
+  Transaction,
+  TransactionSigningPayload,
+  UnsignedTransaction,
+} from "@sovereign-sdk/types";
 
-// Use the standard transaction types
-const unsignedTx: UnsignedTransaction = {
-  // Standard transaction fields
+const unsignedTx: UnsignedTransaction<YourRuntimeCall> = {
+  runtime_call: {
+    // Your rollup-specific call data
+  },
+  uniqueness: { nonce: 1 },
+  details: {
+    max_priority_fee_bips: 0,
+    max_fee: "1000000",
+    gas_limit: null,
+    chain_hash_fragment: "6654161651848106779",
+  },
 };
 
-const signedTx: Transaction = {
-  // Standard signed transaction fields
+const signingPayload: TransactionSigningPayload<YourRuntimeCall, string> = {
+  V0: {
+    ...unsignedTx,
+    chain_hash: Array.from(chainHash),
+  },
+};
+
+const signedTx: Transaction<YourRuntimeCall> = {
+  V0: {
+    pub_key: "deadbeef",
+    signature: "cafebabe",
+    ...unsignedTx,
+  },
 };
 ```
 
@@ -39,4 +62,3 @@ If your rollup uses custom transaction or block formats that differ from the sta
 3. Use the generic interfaces provided by other packages in this monorepo
 
 The Sovereign SDK's flexibility means you're never locked into these standard definitions if your use case requires something different.
-

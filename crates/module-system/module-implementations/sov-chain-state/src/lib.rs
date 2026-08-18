@@ -255,6 +255,12 @@ pub struct ChainState<S: Spec> {
     /// The current time in nanoseconds, as reported by the timing oracle.
     #[state]
     oracle_time_nanos: StateValue<u128>,
+
+    /// The global Sovereign SDK version of the rollup.
+    /// This value is incremented on hard forks of the Sovereign SDK. It is used to ensure that
+    /// versioned rollup binaries match the on-disk state corresponding to their consensus version.
+    #[state]
+    state_version: AccessoryStateValue<u64>,
 }
 
 impl<S: Spec> ChainState<S> {
@@ -464,6 +470,17 @@ impl<S: Spec> ChainState<S> {
         self.genesis_da_height.get(state)
     }
 
+    /// Return the global on-chain state schema version.
+    ///
+    /// Existing state created before this field was introduced defaults to version 0.
+    #[cfg(feature = "native")]
+    pub fn state_version<Accessor: StateReader<sov_state::Accessory>>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<u64, Accessor::Error> {
+        Ok(self.state_version.get(state)?.unwrap_or(0))
+    }
+
     /// Returns the last visible slot processed by the module.
     pub fn latest_visible_slot<Reader: VersionReader + StateReader<Kernel>>(
         &self,
@@ -616,13 +633,12 @@ impl<S: Spec> ChainState<S> {
             self.gas_info
                 .get(&stale_rollup_height, state)?
                 .unwrap_or(BlockGasInfo::new(
-                    S::gas_limit_for_height(stale_rollup_height),
+                    S::block_gas_limit(),
                     S::initial_base_fee_per_gas(),
                 ));
 
         Ok(Self::compute_base_fee_per_gas(
             prev_gas_info,
-            stale_rollup_height,
             provisional_visible_height_increase,
         ))
     }

@@ -11055,7 +11055,10 @@ dependencies = [
  "serde",
  "serde_with",
  "sov-accounts",
+ "sov-bank",
+ "sov-chain-state",
  "sov-modules-api",
+ "sov-rollup-interface",
  "sov-state",
  "sov-test-utils",
  "strum 0.28.0",
@@ -11504,6 +11507,7 @@ dependencies = [
  "sov-full-node-configs",
  "sov-hyperlane-integration",
  "sov-kernels",
+ "sov-migrations",
  "sov-mock-da",
  "sov-mock-zkvm",
  "sov-modules-api",
@@ -11566,6 +11570,7 @@ dependencies = [
  "jsonrpsee",
  "serde_json",
  "sov-address",
+ "sov-eip712-auth",
  "sov-modules-api",
  "sov-state",
  "sov-universal-wallet",
@@ -11933,6 +11938,23 @@ dependencies = [
  "tokio-metrics",
  "toml 0.8.23",
  "tracing",
+]
+
+[[package]]
+name = "sov-migrations"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "rockbound",
+ "serde",
+ "serde_json",
+ "sov-accounts",
+ "sov-chain-state",
+ "sov-db",
+ "sov-full-node-configs",
+ "sov-modules-api",
+ "sov-rollup-interface",
+ "sov-state",
 ]
 
 [[package]]
@@ -13326,6 +13348,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "bincode",
+ "borsh",
  "clap",
  "serde",
  "sov-celestia-adapter",

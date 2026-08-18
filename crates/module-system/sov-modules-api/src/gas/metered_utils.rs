@@ -199,21 +199,6 @@ fn charge_gas_for_sig_inner<GU: Gas, Meter: GasMeter<Spec: Spec<Gas = GU>>>(
         )
         .map_err(MeteredSigVerificationError::GasError)?;
 
-    meter
-        .charge_gas(<Meter::Spec as GasSpec>::gas_to_charge_hash_update())
-        .map_err(MeteredSigVerificationError::GasError)?;
-
-    meter
-        .charge_linear_gas(
-            <Meter::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
-            msg_len.try_into().map_err(|e: TryFromIntError| {
-                MeteredSigVerificationError::GasError(MeteringError::<Meter>::Overflow(
-                    e.to_string(),
-                ))
-            })?,
-        )
-        .map_err(MeteredSigVerificationError::GasError)?;
-
     Ok(())
 }
 
@@ -228,54 +213,55 @@ pub enum MeteredBorshDeserializeError<GU: Gas> {
     IOError(io::Error),
 }
 
-/// Charges gas for deserialization.
-pub trait MeteredBorshDeserialize<S: Spec>: Sized {
-    /// Deserializes a type from a byte slice with the provided gas meter. Charge the [`GasSpec::gas_to_charge_per_byte_borsh_deserialization`]
-    /// amount of gas for each byte of the struct to deserialize.
-    fn deserialize(
+/// Extension trait that charges gas for borsh deserialization as the decoder
+/// actually consumes bytes. Auto-implemented for every `T: borsh::BorshDeserialize`
+/// via the blanket impl below.
+///
+/// The gas spec comes from the meter passed into each method — the trait itself
+/// has no `Spec` parameter, so callers don't need to disambiguate it.
+pub trait MeteredBorshDeserialize: Sized + borsh::BorshDeserialize {
+    /// Decode `Self` from a metered reader. Every read against the reader charges
+    /// gas, so total cost tracks actual decode work rather than the input length.
+    /// Gas errors stashed inside the reader's `io::Error` are unwrapped and surfaced
+    /// as [`MeteredBorshDeserializeError::GasError`].
+    fn deserialize_reader<R: io::Read, M: GasMeter>(
+        reader: &mut crate::MeteredReader<'_, R, M>,
+    ) -> Result<Self, MeteredBorshDeserializeError<<M::Spec as Spec>::Gas>> {
+        <Self as borsh::BorshDeserialize>::deserialize_reader(reader).map_err(|io_err| {
+            match io_err.downcast::<GasMeteringError<<M::Spec as Spec>::Gas>>() {
+                Ok(gas_err) => MeteredBorshDeserializeError::GasError(gas_err),
+                Err(io_err) => MeteredBorshDeserializeError::IOError(io_err),
+            }
+        })
+    }
+
+    /// Slice-driven entry point. Charges [`GasSpec::bias_borsh_deserialization`],
+    /// wraps `buf` in a [`crate::MeteredReader`], delegates to `deserialize_reader`,
+    /// and advances `*buf` by the bytes consumed.
+    fn deserialize_from_slice<M: GasMeter>(
         buf: &mut &[u8],
-        meter: &mut impl GasMeter<Spec = S>,
-    ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>>;
+        meter: &mut M,
+    ) -> Result<Self, MeteredBorshDeserializeError<<M::Spec as Spec>::Gas>> {
+        meter
+            .charge_gas(<M::Spec as GasSpec>::bias_borsh_deserialization())
+            .map_err(MeteredBorshDeserializeError::GasError)?;
+
+        let mut cursor = io::Cursor::new(*buf);
+        let mut reader = crate::MeteredReader::new(&mut cursor, meter);
+        let value = <Self as MeteredBorshDeserialize>::deserialize_reader(&mut reader)?;
+        *buf = &buf[cursor.position() as usize..];
+        Ok(value)
+    }
 
     #[cfg(feature = "native")]
-    /// Deserialized a type without charging gas.
-    fn unmetered_deserialize(
-        buf: &mut &[u8],
-    ) -> Result<Self, MeteredBorshDeserializeError<<S as GasSpec>::Gas>>;
+    /// Deserialize without charging gas. Native-only escape hatch for places that
+    /// already paid for the work (e.g. CLI, test scaffolding).
+    fn unmetered_deserialize(buf: &mut &[u8]) -> Result<Self, io::Error> {
+        <Self as borsh::BorshDeserialize>::deserialize(buf)
+    }
 }
 
-/// Computes the cost to deserialize the given buffer, in `Gas`, and charges it to the provided
-/// `GasMeter`.
-///
-/// # Errors
-/// Returns an error if charging the gas for the deserialization operation fails.
-pub fn charge_gas_to_deserialize<S: Spec>(
-    bias_borsh_deserialization: <S as Spec>::Gas,
-    gas_to_charge_per_byte_borsh_deserialization: <S as Spec>::Gas,
-    buf_len: usize,
-    meter: &mut impl GasMeter<Spec = S>,
-) -> Result<(), MeteredBorshDeserializeError<<S as GasSpec>::Gas>> {
-    // This is safe to cast here. We won't have data bigger than 4GB.
-    let buf_len: u32 = as_u32_or_panic(buf_len);
-
-    // Custom gas costs to deserialize this data structure.
-    meter
-        .charge_gas(bias_borsh_deserialization)
-        .map_err(MeteredBorshDeserializeError::GasError)?;
-
-    meter
-        .charge_linear_gas(gas_to_charge_per_byte_borsh_deserialization, buf_len)
-        .map_err(MeteredBorshDeserializeError::GasError)?;
-
-    // Common gas costs to deserialize this data structure.
-    meter
-        .charge_gas(S::bias_borsh_deserialization())
-        .map_err(MeteredBorshDeserializeError::GasError)?;
-
-    meter
-        .charge_linear_gas(S::gas_to_charge_per_byte_borsh_deserialization(), buf_len)
-        .map_err(MeteredBorshDeserializeError::GasError)
-}
+impl<T: borsh::BorshDeserialize> MeteredBorshDeserialize for T {}
 
 /// Computes the cost to deserialize the given JSON buffer, in `Gas`, and charges it to the provided
 /// `GasMeter`.

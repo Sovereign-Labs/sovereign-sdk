@@ -17,7 +17,7 @@ use crate::preferred::sync_sequencer_state::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchSizeTracker;
 use crate::preferred::RollupBlockExecutorConfig;
-use crate::preferred::{comfortable_gas_limit_for_height, PreferredBlobToReplay};
+use crate::preferred::{comfortable_gas_limit, PreferredBlobToReplay};
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     is_lagging_less_than_ideal_amount, next_visible_slot_number_increase, BatchCreationError,
@@ -67,6 +67,10 @@ pub(crate) enum DoNewTxError<S: Spec> {
         current_batch_size: usize,
         max_batch_size: usize,
         tx_len: usize,
+    },
+    TxWithSequencingDataTooBig {
+        total_payload_len: usize,
+        max_payload_len: usize,
     },
     ExecutorError(RollupBlockExecutorError<S>),
     Shutdown,
@@ -410,19 +414,18 @@ where
         &mut self,
         remaining_slot_gas: <S as GasSpec>::Gas,
     ) {
-        let rollup_height = self.executor.checkpoint.rollup_height_to_access();
         // Check if we're close to the gas limit and close the batch if we are.
-        // We want to close when gas used is at least 95% of the initial gas limit.
-        let initial_gas_limit = <S as GasSpec>::gas_limit_for_height(rollup_height);
-        let comfortable_gas_limit = comfortable_gas_limit_for_height::<S>(rollup_height);
+        // We want to close when gas used is at least 95% of the block gas limit.
+        let block_gas_limit = <S as GasSpec>::block_gas_limit();
+        let comfortable_limit = comfortable_gas_limit::<S>();
 
-        let gas_used = initial_gas_limit
+        let gas_used = block_gas_limit
             .checked_sub(remaining_slot_gas)
-            .expect("remaining_lot_gas is always smaller than initial_gas_limit");
+            .expect("remaining_slot_gas is always smaller than block_gas_limit");
 
-        let close_to_gas_limit = comfortable_gas_limit.dim_is_less_or_eq(gas_used);
+        let close_to_gas_limit = comfortable_limit.dim_is_less_or_eq(gas_used);
         if close_to_gas_limit {
-            tracing::debug!(%comfortable_gas_limit, %gas_used, "Closing and publishing current batch because we're close to the gas limit");
+            tracing::debug!(%comfortable_limit, %gas_used, "Closing and publishing current batch because we're close to the gas limit");
             self.close_current_batch().await;
         }
 
@@ -797,6 +800,22 @@ where
                     current_batch_size: batch_size_tracker.current_batch_size,
                     max_batch_size: batch_size_tracker.max_batch_size,
                     tx_len,
+                }),
+                request_used,
+            );
+        }
+
+        // `MAX_FULLY_BAKED_TX_SIZE` is enforced by `FullyBakedTx`'s deserializers, so a tx that
+        // exceeds it once sequencing data is attached would execute and soft-confirm here, yet
+        // produce a blob that every node (including our own blob sender) rejects. Reject it up
+        // front instead. Note that pruning can only shrink the sequencing data, so this check
+        // is conservative.
+        let total_payload_len = baked_tx.payload_len();
+        if total_payload_len > sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE {
+            return (
+                Err(DoNewTxError::TxWithSequencingDataTooBig {
+                    total_payload_len,
+                    max_payload_len: sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE,
                 }),
                 request_used,
             );

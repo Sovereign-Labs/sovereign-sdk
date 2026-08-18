@@ -116,6 +116,15 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for SoftConfirmationsKer
         self.chain_state.finalize_chain_state(gas_used, state);
     }
 
+    fn update_oracle_time(
+        &mut self,
+        timestamp: sov_modules_api::HDTimestamp,
+        state: &mut impl sov_modules_api::TxState<S>,
+    ) -> anyhow::Result<()> {
+        self.chain_state
+            .update_oracle_time_from_sequencing_data(timestamp, state)
+    }
+
     fn is_setup_mode_enabled<
         Reader: VersionReader
             + StateReader<User, Error = Infallible>
@@ -138,15 +147,6 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for SoftConfirmationsKer
         state: &mut Reader,
     ) -> Option<<<Self::Spec as Spec>::Gas as Gas>::Price> {
         self.chain_state.base_fee_per_gas(state).unwrap_infallible()
-    }
-
-    fn block_gas_limit(
-        &self,
-        current_rollup_height: RollupHeight,
-        is_stale_height: bool,
-    ) -> S::Gas {
-        self.chain_state
-            .block_gas_limit(current_rollup_height, is_stale_height)
     }
 
     fn visible_hash_for(
@@ -225,6 +225,14 @@ impl<S: Spec> sov_modules_api::capabilities::ChainState for SoftConfirmationsKer
         self.chain_state
             .genesis_da_height(state)
             .unwrap_infallible()
+    }
+
+    #[cfg(feature = "native")]
+    fn state_version<Reader: StateReader<sov_state::Accessory, Error = Infallible>>(
+        &self,
+        state: &mut Reader,
+    ) -> u64 {
+        self.chain_state.state_version(state).unwrap_infallible()
     }
 
     #[cfg(feature = "native")]

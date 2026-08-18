@@ -15,32 +15,25 @@ type TestSpec = EvmTestSpec;
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "Account abstraction for the EVM is disabled"]
 async fn test_evm_account_abstraction() {
-    let (test_rollup, test_client, chain_id) = setup_with_simple_storage(0, EVM_EXTENSION).await;
+    let (test_rollup, test_client, _chain_id) = setup_with_simple_storage(0, EVM_EXTENSION).await;
 
     // Before executing the evm checks we need to insert the credentials in the `Accounts`.
-    send_insert_credentials(&test_client, test_client.address(), chain_id).await;
+    send_insert_credentials(&test_client, test_client.address()).await;
     // Execute the evm tests.
     execute_evm_tests(&test_client).await.unwrap();
 
     test_rollup.rollup_task.abort();
 }
 
-async fn send_insert_credentials(
-    test_client: &SimpleStorageClient,
-    from_addr: Address,
-    chain_id: u64,
-) {
-    let tx = create_insert_credentials(from_addr, chain_id);
+async fn send_insert_credentials(test_client: &SimpleStorageClient, from_addr: Address) {
+    let tx = create_insert_credentials(from_addr);
     test_client
         .send_transaction_and_wait_slot(&tx)
         .await
         .unwrap();
 }
 
-fn create_insert_credentials(
-    from_addr: Address,
-    chain_id: u64,
-) -> Transaction<TestRuntime<TestSpec>, TestSpec> {
+fn create_insert_credentials(from_addr: Address) -> Transaction<TestRuntime<TestSpec>, TestSpec> {
     let nonce = 0;
     let key_and_address = read_private_key::<TestSpec>("tx_signer_private_key.json");
     let key = key_and_address.private_key;
@@ -62,11 +55,12 @@ fn create_insert_credentials(
         &chain_hash,
         UnsignedTransaction::new(
             msg,
-            chain_id,
+            chain_hash,
             max_priority_fee_bips,
             max_fee,
             UniquenessData::Nonce(nonce),
             gas_limit,
+            None,
         ),
     )
 }

@@ -21,7 +21,6 @@ pub(crate) fn derive_cli_wallet(
 
     let mut module_json_parser_arms = vec![];
     let mut module_message_arms = vec![];
-    let mut tx_args_subcommand_match_arms_chain_id = vec![];
     let mut tx_args_subcommand_match_arms_max_priority_fee_bips = vec![];
     let mut tx_args_subcommand_match_arms_max_fee = vec![];
     let mut tx_args_subcommand_match_arms_gas_limit = vec![];
@@ -78,10 +77,6 @@ pub(crate) fn derive_cli_wallet(
 
         try_map_match_arms.push(quote! {
             RuntimeMessage::#field_name { contents } => RuntimeMessage::#field_name { contents: contents.try_into()? },
-        });
-
-        tx_args_subcommand_match_arms_chain_id.push(quote! {
-            RuntimeSubcommand::#field_name { contents } => <__Inner as ::sov_modules_api::cli::CliTxImportArg>::chain_id(&contents),
         });
 
         tx_args_subcommand_match_arms_max_priority_fee_bips.push(quote! {
@@ -206,13 +201,6 @@ pub(crate) fn derive_cli_wallet(
             }
 
             impl #impl_generics_with_inner ::sov_modules_api::cli::CliTxImportArg for RuntimeSubcommand #ty_generics_with_inner #where_clause_with_deserialize_bounds, __Inner: clap::Args + ::sov_modules_api::cli::CliTxImportArg {
-                fn chain_id(&self) -> u64 {
-                    match self {
-                        #( #tx_args_subcommand_match_arms_chain_id )*
-                        _ => unreachable!(),
-                    }
-                }
-
                 fn max_priority_fee_bips(&self) -> u64 {
                     match self {
                         #( #tx_args_subcommand_match_arms_max_priority_fee_bips )*

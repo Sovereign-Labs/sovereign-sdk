@@ -42,8 +42,19 @@ class Serializer:
         """
         ...
 
-    def serialize_unsigned_tx(self, unsigned_tx: "UnsignedTransaction") -> bytes:
-        """Serialize an unsigned transaction.
+    def chain_hash_fragment(self) -> int:
+        """Get the 64-bit chain hash fragment.
+
+        Returns:
+            Chain hash fragment as an integer
+
+        Raises:
+            ValueError: If chain hash cannot be computed
+        """
+        ...
+
+    def serialize_signing_payload(self, unsigned_tx: "UnsignedTransaction") -> bytes:
+        """Serialize an unsigned transaction signing payload.
 
         Args:
             unsigned_tx: Transaction to serialize
@@ -75,7 +86,7 @@ class TxDetails:
 
     def __init__(
         self,
-        chain_id: int,
+        chain_hash_fragment: int,
         max_fee: int = ...,
         max_priority_fee_bips: int = ...,
         gas_limit: Optional[List[int]] = None,
@@ -83,7 +94,7 @@ class TxDetails:
         """Create transaction details.
 
         Args:
-            chain_id: Chain identifier
+            chain_hash_fragment: 64-bit chain hash fragment
             max_fee: Maximum fee (default: DEFAULT_MAX_FEE)
             max_priority_fee_bips: Maximum priority fee in basis points (default: DEFAULT_MAX_PRIORITY_FEE_BIPS)
             gas_limit: Optional gas limit per module
@@ -91,13 +102,13 @@ class TxDetails:
         ...
 
     @property
-    def chain_id(self) -> int:
-        """Chain identifier."""
+    def chain_hash_fragment(self) -> int:
+        """64-bit chain hash fragment."""
         ...
 
-    @chain_id.setter
-    def chain_id(self, value: int) -> None:
-        """Set chain identifier."""
+    @chain_hash_fragment.setter
+    def chain_hash_fragment(self, value: int) -> None:
+        """Set the 64-bit chain hash fragment."""
         ...
 
     @property
@@ -179,6 +190,7 @@ class UnsignedTransaction:
         runtime_call: Dict[str, Any],
         details: TxDetails,
         uniqueness: Optional[UniquenessData] = None,
+        address_override: Optional[str] = None,
     ) -> None:
         """Create unsigned transaction.
 
@@ -186,6 +198,7 @@ class UnsignedTransaction:
             runtime_call: Runtime call data as dictionary
             details: Transaction details
             uniqueness: Optional uniqueness data (defaults to default uniqueness)
+            address_override: Optional explicit address override
 
         Raises:
             ValueError: If runtime_call cannot be converted to JSON or uniqueness creation fails
