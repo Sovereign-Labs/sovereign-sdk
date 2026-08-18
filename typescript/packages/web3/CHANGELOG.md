@@ -1,5 +1,25 @@
 # @sovereign-sdk/web3
 
+## 0.15.0
+
+### Minor Changes
+
+-   3208eb5: Internal transaction types have been renamed: `UnsignedTransaction` now refers to the user-constructed transaction data, and `TransactionSigningPayload{V0, V1}` is the version-dependent structure serialized for signing. Normal usage should be largely unaffected.
+-   3208eb5: Multisig rework.
+
+    -   Align unsigned transaction signing with Rust's versioned `UnsignedTransaction` enum, add first-class standard multisig helpers.
+    -   See the migration notes and README.md in `@sovereign-sdk/multisig` for detailed migration notes on multisigs. This affects both standard and solana-signable rollups.
+
+### Patch Changes
+
+-   Updated dependencies [3208eb5]
+-   Updated dependencies [3208eb5]
+    -   @sovereign-sdk/multisig@0.4.0
+    -   @sovereign-sdk/universal-wallet-wasm@0.8.0
+    -   @sovereign-sdk/serializers@0.3.0
+    -   @sovereign-sdk/signers@0.6.0
+    -   @sovereign-sdk/utils@0.1.0
+
 ## 0.14.1
 
 ### Patch Changes

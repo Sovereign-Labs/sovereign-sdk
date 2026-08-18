@@ -1,5 +1,17 @@
 # @sovereign-sdk/signers
 
+## 0.6.0
+
+### Minor Changes
+
+-   3208eb5: Internal transaction types have been renamed: `UnsignedTransaction` now refers to the user-constructed transaction data, and `TransactionSigningPayload{V0, V1}` is the version-dependent structure serialized for signing. Normal usage should be largely unaffected.
+
+### Patch Changes
+
+-   Updated dependencies [3208eb5]
+    -   @sovereign-sdk/universal-wallet-wasm@0.8.0
+    -   @sovereign-sdk/utils@0.1.0
+
 ## 0.5.3
 
 ### Patch Changes
