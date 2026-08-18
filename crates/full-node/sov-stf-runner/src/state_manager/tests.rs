@@ -30,6 +30,8 @@ use sov_shutdown::SecondaryShutdownController;
 use sov_state::nomt::prover_storage::NomtProverStorage;
 use sov_state::{ArrayWitness, NativeStorage, SlotKey, SlotValue, StateAccesses, Storage};
 
+use crate::processes::StfInfoResumeSource;
+
 use super::*;
 // We need a proof receipt type whose first and last generics are serializable, and middle two params are daspec and state root.
 // This is never constructed - just used to satisfy the type checker.
@@ -173,7 +175,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
         state_manager.ledger_db.clone(),
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
-        None,
+        StfInfoResumeSource::LatestAggregatedProof(None),
     )
     .await?;
     state_manager.stf_info_sender = Some(sender);
@@ -230,7 +232,7 @@ async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Res
         state_manager.ledger_db.clone(),
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
-        None,
+        StfInfoResumeSource::LatestAggregatedProof(None),
     )
     .await?;
     state_manager.stf_info_sender = Some(sender);
