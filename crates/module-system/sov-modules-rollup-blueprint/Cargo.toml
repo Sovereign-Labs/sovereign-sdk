@@ -43,7 +43,7 @@ tracing-subscriber = { workspace = true, features = ["env-filter"], optional = t
 tracing-appender = { workspace = true, optional = true }
 hex = { workspace = true, optional = true }
 opentelemetry = { version = "0.31", default-features = false, features = ["trace"], optional = true }
-opentelemetry_sdk = { version = "0.31", default-features = false, features = ["trace", "rt-tokio"], optional = true }
+opentelemetry_sdk = { version = "0.32", default-features = false, features = ["trace", "rt-tokio"], optional = true }
 opentelemetry-otlp = { version = "0.31", default-features = false, features = ["grpc-tonic", "trace", "logs"], optional = true }
 opentelemetry-appender-tracing = { version = "0.31", optional = true }
 opentelemetry-semantic-conventions = { version = "0.31", features = ["semconv_experimental"], optional = true }
