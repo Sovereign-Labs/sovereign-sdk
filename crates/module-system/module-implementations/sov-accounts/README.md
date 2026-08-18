@@ -146,18 +146,19 @@ The module used to have a separate `accounts` mapping with different semantics, 
 Chains whose genesis was before the `accounts` deprecation need to have a migration run at the upgrade height
 (including whenever resyncing from genesis).
 
-The migration ships as a CLI binary in `examples/demo-rollup`:
+The migration is part of the v1 state migration (`sov_migrations::v1`), which also bumps the
+stored chain-state `state_version`. A reference CLI binary ships in `examples/demo-rollup`:
 
 ```sh
 # Inspect what would change without committing.
-cargo run --features migration-script \
-    --bin legacy-accounts-migrate -- \
+cargo run --features mock_da \
+    --bin migrate_to_v1 -- \
     --rollup-config-path /path/to/rollup_config.toml \
     --dry-run
 
 # Commit the migration in-place at the current head version.
-cargo run --features migration-script \
-    --bin legacy-accounts-migrate -- \
+cargo run --features mock_da \
+    --bin migrate_to_v1 -- \
     --rollup-config-path /path/to/rollup_config.toml
 ```
 
@@ -191,4 +192,4 @@ The migration requires NOMT prefix iteration; JMT-backed deployments are not sup
 
 For non-demo rollups, copy `examples/demo-rollup/src/migrations/legacy_accounts.rs`
 and swap in your own runtime/spec types — the migration logic itself lives in
-`sov_accounts::migrations` and is reusable.
+`sov_migrations::v1` (which wraps the reusable `sov_accounts::migrations` helpers).

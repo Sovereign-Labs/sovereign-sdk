@@ -56,7 +56,7 @@ impl<C: CryptoSpecExt> PubKeyAndSignature<C> {
     Eq(bound = "R::Call: PartialEq + Eq")
 )]
 #[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
-/// A V1 (multisig) transaction. The number of signers is capped at 10.
+/// A V1 (multisig) transaction. The number of signers is capped at [`MAX_SIGNERS`].
 ///
 /// The credential ID for a multisig is hash(borsh(min_signers) || borsh(sort(pub_keys)))
 pub struct Version1<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
