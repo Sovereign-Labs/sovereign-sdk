@@ -1,4 +1,6 @@
 # 2026-08-17
+- #3053 `sov-node-client`: fixes `wait_for_tx_processing` potentially waiting indefinitely when the transaction-status WebSocket remains open but idle. The full subscription lifecycle is now covered by a hard timeout. This does not change state, consensus, or protocol behavior.
+
 ## #2892 Multisig and accounts hard fork - major breaking change
 This commit constitutes a hard fork of the SDK. Rollups existing before this commit will need to coordinate an upgrade to a new binary.
 
