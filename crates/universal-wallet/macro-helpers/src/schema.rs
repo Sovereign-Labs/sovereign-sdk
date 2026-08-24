@@ -379,6 +379,9 @@ fn derive_wallet_field(
                 )?,
                 Style::Tuple => build_tuple_type_scaffold(
                     &s.fields,
+                    // Virtual tuples representing enum variant contents stay anonymous; real
+                    // tuple structs record their type name in the schema.
+                    (!input.sov_virtual).then_some(ident),
                     template_tokens,
                     &mut where_clause,
                     &prefix,
@@ -622,6 +625,7 @@ pub fn build_struct_type_scaffold(
 /// ```
 pub fn build_tuple_type_scaffold(
     fields: &[InputField],
+    type_name: Option<&Ident>,
     template_string: TokenStream,
     where_clause: &mut Option<WhereClause>,
     prefix: &Option<syn::TypePath>,
@@ -665,8 +669,14 @@ pub fn build_tuple_type_scaffold(
         })
         .collect::<Result<Vec<_>, _>>()?;
 
+    let type_name_tokens = match type_name {
+        Some(ident) => quote! { Some(stringify!(#ident).to_string()) },
+        None => quote! { None },
+    };
+
     Ok(quote! {
         #prefix::sov_universal_wallet::schema::Item::<#prefix::sov_universal_wallet::schema::IndexLinking>::Container(#prefix::sov_universal_wallet::schema::Container::Tuple( #prefix::sov_universal_wallet::ty::Tuple {
+            type_name: #type_name_tokens,
             template: #template_string,
             peekable: #peekable,
             fields: vec![#(#fields),*],
@@ -896,6 +906,7 @@ fn build_virtual_tuple(
         #[allow(non_camel_case_types, dead_code)]
         #[automatically_derived]
         #[derive(#macro_name)]
+        #[sov_wallet(__sov_virtual)]
         #template_attribute
         struct #type_name #virt_impl_generics (
             #(#tuple_fields),*
@@ -936,6 +947,11 @@ pub struct Input {
     pub hide_tag: Option<bool>,
     #[darling(default)]
     pub template_inherit: SpannedValue<bool>,
+    /// Internal marker, set by the macro itself on the virtual types it generates to represent
+    /// enum variant contents. Not public API. Virtual tuples must stay anonymous in the schema,
+    /// unlike real tuple structs, whose type name is recorded.
+    #[darling(default, rename = "__sov_virtual")]
+    pub sov_virtual: bool,
 }
 
 #[derive(Debug, Clone, FromField)]
