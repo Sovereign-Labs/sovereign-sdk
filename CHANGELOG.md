@@ -1,3 +1,6 @@
+# 2026-08-24
+- #PR_NUMBER **Breaking Change (chain hash)** Universal wallet: tuple structs (e.g. newtypes) now record their type name in the schema, via a new `type_name: Option<String>` field on `Tuple` types (`None` for plain tuples and enum variant contents). The borsh encoding of schemas changes, and with it every chain hash; schema JSONs from older SDKs still parse. Display output, JSON-to-borsh parsing and EIP-712 encodings are unaffected.
+
 # 2026-08-17
 ## #2892 Multisig and accounts hard fork - major breaking change
 This commit constitutes a hard fork of the SDK. Rollups existing before this commit will need to coordinate an upgrade to a new binary.

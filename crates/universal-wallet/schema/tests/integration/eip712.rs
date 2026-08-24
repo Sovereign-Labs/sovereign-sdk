@@ -56,7 +56,7 @@ fn test_call_message() {
   "domain": {
     "chainId": "0x0",
     "name": "",
-    "salt": "0x7eb69c66ea4b5b2240aade5bbb135fccc00e4bce2fc20862222309ae97c542cc"
+    "salt": "0xc9c98a75b8cbb740abaed76daf72a96b82146e25da8efec6e08b09d69da39e5e"
   },
   "message": {
     "Transfer": {
@@ -127,7 +127,7 @@ fn test_unit_enums() {
   "domain": {
     "chainId": "0x0",
     "name": "",
-    "salt": "0x07b104a215fcba925e78c1ced02d15c3577b1fbce2b58daa5c5406beb6f99fcd"
+    "salt": "0x524b24ada88077ce1c1cc7bca861085b4f9dec7853ae4c912b4a37556671b661"
   },
   "message": {
     "m": "one",
@@ -188,7 +188,7 @@ fn test_enums_2() {
   "domain": {
     "chainId": "0x0",
     "name": "",
-    "salt": "0x07b104a215fcba925e78c1ced02d15c3577b1fbce2b58daa5c5406beb6f99fcd"
+    "salt": "0x524b24ada88077ce1c1cc7bca861085b4f9dec7853ae4c912b4a37556671b661"
   },
   "message": {
     "m": "two",
@@ -273,7 +273,7 @@ fn test_nested_enums() {
   "domain": {
     "chainId": "0x0",
     "name": "",
-    "salt": "0x07170be56d0d940836231cdae295585cd451c2cf74284bb07bd41317246f9be8"
+    "salt": "0xa12c34ba29f499946adb920d37cb2d8a4975b2c2ca233a6c7bf8e82665ad5433"
   },
   "message": {
     "m": "one",
@@ -332,7 +332,7 @@ fn test_nested_enums_2() {
   "domain": {
     "chainId": "0x0",
     "name": "",
-    "salt": "0x07170be56d0d940836231cdae295585cd451c2cf74284bb07bd41317246f9be8"
+    "salt": "0xa12c34ba29f499946adb920d37cb2d8a4975b2c2ca233a6c7bf8e82665ad5433"
   },
   "message": {
     "m": "two",
@@ -419,7 +419,7 @@ fn test_multielement_enums_1() {
   "domain": {
     "chainId": "0x0",
     "name": "",
-    "salt": "0xa0a9f6d015a69364793d27147f6a3ccec18bd99eff57689706804dbb944c7192"
+    "salt": "0x4def34b4d1ee8165ef24daa39fdf2bcda52a3278f7297fec9dfaa244e69599ce"
   },
   "message": {
     "m": "one",
@@ -491,7 +491,7 @@ fn test_multielement_enums_2() {
   "domain": {
     "chainId": "0x0",
     "name": "",
-    "salt": "0xa0a9f6d015a69364793d27147f6a3ccec18bd99eff57689706804dbb944c7192"
+    "salt": "0x4def34b4d1ee8165ef24daa39fdf2bcda52a3278f7297fec9dfaa244e69599ce"
   },
   "message": {
     "m": "two",
