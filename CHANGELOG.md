@@ -1,3 +1,24 @@
+# 2026-11-12
+- #3054 Patchable chain identity: the chain ID, chain name, and chain-hash override schedule are embedded in every binary (native and zkVM guest) as a dedicated section. A rollup binary's chain identity can be changed by patching its artifacts rather than rebuilding, to avoid requiring recompilation when using the same code for e.g. testnet and mainnet. 
+  * **Breaking Change** `Runtime::CHAIN_HASH: [u8; 32]` is replaced by `fn chain_hash() -> [u8; 32]`. Implement it with the memoizing SDK helper and the generated template:
+```rust
+static RUNTIME_CHAIN_HASH: LazyChainHash = LazyChainHash::new(&__generated::CHAIN_HASH_TEMPLATE_BORSH);
+
+impl<S> sov_modules_stf_blueprint::Runtime<S> for YourRuntime<S> {
+    /* ... */
+    fn chain_hash() -> [u8; 32] {
+        RUNTIME_CHAIN_HASH.get()
+    }
+}
+
+```
+Update call sites from `Rt::CHAIN_HASH` to `Rt::chain_hash()`. Remove any `__generated::CHAIN_HASH` re-exports and use `Runtime::chain_hash()`.
+  * `/rollup/schema`: `StandardSchemaEndpoint::new` now always serves the binary's embedded chain data, so a runtime that passes it the build-time `__generated::SCHEMA_JSON` schema needs no further change. Custom `SchemaEndpoint` implementations, and any other code handing a build-time schema to wallets, must rebind it with `schema.with_chain_data(sov_modules_api::chain_data())` so the schema matches the patched chain hash.
+  * `config_value!("CHAIN_ID")` / `config_value!("CHAIN_NAME")` reads still compile but return the build-time values; migrate them to the new `sov_modules_api::CHAIN_ID` / `CHAIN_NAME` accessors (`*CHAIN_ID`, `CHAIN_NAME.as_str()`) so patched values are observed.
+  * **Breaking Change** `config_value!("CHAIN_HASH_OVERRIDES")` is now a compile error; use `sov_modules_api::chain_hash_overrides()`, which returns the embedded (patchable) schedule.
+  * **Breaking Change** `CHAIN_HASH_OVERRIDES` entries in `constants.toml` reject unknown fields and reversed ranges (`start_height > end_height`).
+  * Optional patching flow on Linux: the `sov-chain-config-patcher` library copies the binaries, rewrites the embedded record from a `constants.toml` (only `CHAIN_ID`, `CHAIN_NAME`, and `CHAIN_HASH_OVERRIDES` are read), optionally patches and recommits SP1 guest ELFs (risc0 is currently not supported), and writes a bundle plus manifest. Add a bin target to your rollup by copying `examples/demo-rollup/sov-chain-config-patcher-cli`, or drive the library directly. Currently supports Linux ELF patching only.
+
 # 2026-11-02
 - #3106 Dependencies: Updated `quinn-proto` to 0.11.15 (GHSA-4w2j-m93h-cj5j), `rustls` to 0.23.45 (GHSA-2mjx-qc3c-rqvc), `serde_with` to 3.21.0 (GHSA-7gcf-g7xr-8hxj; the workspace now requires `serde_with = "3.21"`) and `pyo3` to 0.29 (`py_sovereign_web3` only). To apply the same updates to a rollup (e.g. rollup-starter), run these commands in the workspace root and again in each zkVM guest crate with `--manifest-path <guest>/Cargo.toml`, skipping any package that isn't in that lockfile:
     - `cargo update -p quinn-proto --precise 0.11.15`
