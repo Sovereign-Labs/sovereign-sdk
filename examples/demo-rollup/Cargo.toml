@@ -107,6 +107,7 @@ sov-accounts = { workspace = true, features = ["native"] }
 sov-api-spec = { workspace = true }
 sov-evm = { workspace = true, features = ["native"] }
 sov-hyperlane-integration = { workspace = true, features = ["evm"] }
+sov-chain-config-patcher = { path = "../../crates/utils/sov-chain-config-patcher" }
 sov-modules-macros = { workspace = true }
 sov-test-utils = { workspace = true }
 sov-evm-test-utils = { workspace = true }

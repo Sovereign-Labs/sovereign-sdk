@@ -51,7 +51,7 @@ async fn send_evm_runtime_config_update(
 ) -> anyhow::Result<()> {
     let msg = TestRuntimeCall::<EvmTestSpec>::Evm(CallMessage::UpdateRuntimeConfig(update));
     let chain_hash =
-        <TestRuntime<EvmTestSpec> as sov_modules_stf_blueprint::Runtime<EvmTestSpec>>::CHAIN_HASH;
+        <TestRuntime<EvmTestSpec> as sov_modules_stf_blueprint::Runtime<EvmTestSpec>>::chain_hash();
     let tx: Transaction<TestRuntime<EvmTestSpec>, EvmTestSpec> =
         default_test_signed_transaction_with_nonce(admin_key, &msg, 0, &chain_hash);
     rollup

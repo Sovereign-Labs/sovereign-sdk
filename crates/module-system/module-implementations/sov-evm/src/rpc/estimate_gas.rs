@@ -15,12 +15,11 @@ use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::capabilities::ChainState;
 use sov_modules_api::capabilities::TransactionAuthenticator;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::transaction::AuthenticatedTransactionAndRawHash;
 use sov_modules_api::{
     ApiStateAccessor, DispatchCall, GasMeter, GasSpec, GetGasPrice, InfallibleStateReaderAndWriter,
-    Runtime, SequencerType, Spec, StateAccessor, StateProvider,
+    Runtime, SequencerType, Spec, StateAccessor, StateProvider, CHAIN_ID,
 };
 use sov_rollup_interface::stf::RawTx;
 use sov_rollup_interface::TxHash;
@@ -326,7 +325,7 @@ where
         }
 
         if request.chain_id.is_none() {
-            request.chain_id = Some(config_value!("CHAIN_ID"));
+            request.chain_id = Some(*CHAIN_ID);
         }
     }
 
@@ -375,7 +374,7 @@ where
         let input = request.input.clone().into_input().unwrap_or_default();
         Ok(EthereumTxEnvelope::Eip1559(Signed::new_unchecked(
             TxEip1559 {
-                chain_id: request.chain_id.unwrap_or(config_value!("CHAIN_ID")),
+                chain_id: request.chain_id.unwrap_or(*CHAIN_ID),
                 nonce,
                 gas_limit,
                 max_fee_per_gas,

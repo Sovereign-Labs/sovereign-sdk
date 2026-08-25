@@ -1904,6 +1904,18 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "67b1b7a3b5fe4f1376887184045fcf45c69e92af734b7aaddc05fb777b6fbd03"
 
 [[package]]
+name = "sov-chain-config"
+version = "0.3.0"
+dependencies = [
+ "borsh",
+ "hex",
+ "serde",
+ "sha2",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
 name = "sov-db-types"
 version = "0.3.0"
 dependencies = [
@@ -1990,6 +2002,7 @@ dependencies = [
  "serde",
  "serde_json",
  "sha2",
+ "sov-chain-config",
  "sov-metrics",
  "sov-modules-macros",
  "sov-rollup-interface",
@@ -2009,6 +2022,7 @@ dependencies = [
  "anyhow",
  "bech32",
  "blake2",
+ "borsh",
  "convert_case 0.6.0",
  "darling 0.21.3",
  "derive_more",
@@ -2017,6 +2031,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
+ "sov-chain-config",
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.117",
  "toml",

@@ -73,7 +73,7 @@ impl<S: Spec> StandardSchemaEndpoint<S> {
     ///
     /// # Arguments
     /// * `schema` - The schema to return
-    /// * `default_chain_hash` - The default chain hash (from `Runtime::CHAIN_HASH`)
+    /// * `default_chain_hash` - The runtime's default chain hash
     /// * `checkpoint_receiver` - Receiver for state checkpoints to read current height
     pub fn new(
         schema: &Schema,

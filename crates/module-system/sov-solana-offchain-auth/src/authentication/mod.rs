@@ -253,7 +253,7 @@ where
 pub fn authenticate<Accessor, S, D>(
     raw_tx: &[u8],
     runtime_chain_hash: &[u8; 32],
-    runtime_chain_name: &'static str,
+    runtime_chain_name: &str,
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError>
 where

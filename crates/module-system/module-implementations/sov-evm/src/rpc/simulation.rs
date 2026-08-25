@@ -13,8 +13,7 @@ use revm::primitives::HashMap as RevmHashMap;
 use revm::state::{Account, AccountStatus, Bytecode, EvmStorageSlot};
 use revm::{Database, DatabaseCommit};
 use sov_address::{EthereumAddress, FromVmAddress};
-use sov_modules_api::macros::config_value;
-use sov_modules_api::{ApiStateAccessor, Spec};
+use sov_modules_api::{ApiStateAccessor, Spec, CHAIN_ID};
 use sov_rpc_eth_types::{invalid_params_rpc_err, EthApiError, RpcInvalidTransactionError};
 
 use super::maybe_archival_state::MaybeArchivalState;
@@ -410,7 +409,7 @@ pub(crate) fn get_cfg_env_template() -> CfgEnv {
     cfg_env.disable_block_gas_limit = false;
     cfg_env.disable_eip3607 = true;
     cfg_env.disable_base_fee = true;
-    cfg_env.chain_id = config_value!("CHAIN_ID");
+    cfg_env.chain_id = *CHAIN_ID;
     cfg_env.limit_contract_code_size = None;
     cfg_env.memory_limit = 50 * 1024 * 1024; // 50MB
     cfg_env

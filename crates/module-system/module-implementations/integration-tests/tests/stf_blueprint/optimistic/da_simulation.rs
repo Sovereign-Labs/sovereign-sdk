@@ -80,7 +80,7 @@ pub fn simulate_da_with_bad_serialization(key: TestPrivateKey) -> Vec<FullyBaked
     let create_token_message = bank_generator.create_default_messages().remove(0);
     let tx = Transaction::<IntegTestRuntime<S>, S>::new_signed_tx(
         &create_token_message.sender_key,
-        &IntegTestRuntime::<S>::CHAIN_HASH,
+        &IntegTestRuntime::<S>::chain_hash(),
         UnsignedTransaction::<IntegTestRuntime<S>, S>::new_with_details(
             <IntegTestRuntime<S> as EncodeCall<Bank<S>>>::to_decodable(
                 create_token_message.content,

@@ -1,4 +1,6 @@
 mod bank;
+#[cfg(target_os = "linux")]
+mod binary_patching;
 mod evm;
 mod external_mock_da;
 mod forced_sequencer_registration;

@@ -228,7 +228,7 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
 ) -> Transaction<RT, S> {
     let utx = UnsignedTransaction::<RT, S>::new(
         message,
-        RT::CHAIN_HASH,
+        RT::chain_hash(),
         max_priority_fee_bips,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(nonce),
@@ -236,7 +236,8 @@ pub fn create_tx_bad_sig<RT: Runtime<S>>(
         None,
     );
 
-    let signed_tx = Transaction::<RT, S>::new_signed_tx(&signer.private_key, &RT::CHAIN_HASH, utx);
+    let signed_tx =
+        Transaction::<RT, S>::new_signed_tx(&signer.private_key, &RT::chain_hash(), utx);
 
     // Create a signature for a different message so it won't verify in the stf.
     let bad_signature = signer.private_key.sign(&[1, 2, 3]);
@@ -310,7 +311,7 @@ pub fn create_tx_out_of_gas<RT: Runtime<S>>(
 ) -> Transaction<RT, S> {
     let utx = UnsignedTransaction::new(
         message,
-        RT::CHAIN_HASH,
+        RT::chain_hash(),
         max_priority_fee_bips,
         Amount::new(200_000),
         UniquenessData::Nonce(nonce),
@@ -318,7 +319,7 @@ pub fn create_tx_out_of_gas<RT: Runtime<S>>(
         None,
     );
 
-    Transaction::<RT, S>::new_signed_tx(signer.private_key(), &RT::CHAIN_HASH, utx)
+    Transaction::<RT, S>::new_signed_tx(signer.private_key(), &RT::chain_hash(), utx)
 }
 
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
@@ -342,7 +343,7 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                     generation,
                     max_priority_fee_bips,
                     admin,
-                    &RT::CHAIN_HASH,
+                    &RT::chain_hash(),
                     encode_message::<RT>(None),
                 );
                 txs.push(encode(tx));
@@ -356,14 +357,14 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                         0,
                         max_priority_fee_bips,
                         admin,
-                        &RT::CHAIN_HASH,
+                        &RT::chain_hash(),
                         encode_message::<RT>(None),
                     );
                     txs.push(encode(tx));
                 }
             }
             TxStatus::BadChainId => {
-                let mut bad_chain_hash = RT::CHAIN_HASH;
+                let mut bad_chain_hash = RT::chain_hash();
                 bad_chain_hash[0] ^= 1;
                 let tx = create_tx_valid::<RT>(
                     generation,
@@ -399,7 +400,7 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                     0,
                     max_priority_fee_bips,
                     not_admin,
-                    &RT::CHAIN_HASH,
+                    &RT::chain_hash(),
                     encode_message::<RT>(None),
                 );
                 txs.push(encode(tx));
@@ -413,7 +414,7 @@ pub fn create_txs<RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
                     0,
                     max_priority_fee_bips,
                     encode_message::<RT>(None),
-                    &RT::CHAIN_HASH,
+                    &RT::chain_hash(),
                 );
                 txs.push(encode(tx));
             }

@@ -14,6 +14,7 @@ pub struct TestStruct<S: Spec> {
 }
 
 #[rpc_gen(client, server, namespace = "test")]
+#[allow(dead_code)]
 impl<S: Spec> TestStruct<S> {
     #[rpc_method(name = "foo")]
     pub fn foo(&self) -> jsonrpsee::core::RpcResult<u32> {

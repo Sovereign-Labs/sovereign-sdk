@@ -3,7 +3,6 @@ use std::path::Path;
 use demo_stf::genesis_config::GenesisPaths;
 use demo_stf::runtime::Runtime;
 use demo_stf::runtime::RuntimeCall;
-pub use demo_stf::runtime::CHAIN_HASH;
 use sov_address::EthereumAddress;
 use sov_address::FromVmAddress;
 use sov_bank::Coins;
@@ -22,6 +21,10 @@ use sov_test_utils::default_test_tx_details;
 use sov_test_utils::test_rollup::GenesisSource;
 use sov_test_utils::test_signed_transaction;
 pub type DemoRollupSpec = <MockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
+
+pub static CHAIN_HASH: std::sync::LazyLock<[u8; 32]> = std::sync::LazyLock::new(|| {
+    <Runtime<DemoRollupSpec> as sov_modules_stf_blueprint::Runtime<DemoRollupSpec>>::chain_hash()
+});
 
 pub fn test_genesis_source<S: Spec>(operating_mode: OperatingMode) -> GenesisSource<S, Runtime<S>>
 where

@@ -76,7 +76,7 @@ pub fn build_tx<RT: Runtime<TestSpec>>(
         &setup.admin_private_key,
         call_message,
         generation,
-        &RT::CHAIN_HASH,
+        &RT::chain_hash(),
     );
 
     RawTx::new(borsh::to_vec(&tx).unwrap())
@@ -147,7 +147,7 @@ pub fn generate_paymaster_tx<RT: Runtime<TestSpec> + EncodeCall<Paymaster<TestSp
     TransactionType::<RT, TestSpec>::sign_and_serialize(
         <RT as EncodeCall<Paymaster<TestSpec>>>::to_decodable(message),
         key,
-        &<RT as Runtime<TestSpec>>::CHAIN_HASH,
+        &<RT as Runtime<TestSpec>>::chain_hash(),
         details,
         &mut Default::default(),
     )
@@ -402,7 +402,7 @@ pub fn encode_call_with_fee_and_uniqueness<RT: Runtime<TestSpec>>(
         key,
         call_message,
         uniqueness,
-        &<RT as Runtime<TestSpec>>::CHAIN_HASH,
+        &<RT as Runtime<TestSpec>>::chain_hash(),
         tx_details,
     );
 
@@ -464,7 +464,7 @@ pub(crate) fn encode_call<
         key,
         call_message,
         generation,
-        &RT::CHAIN_HASH,
+        &RT::chain_hash(),
     );
 
     RawTx::new(borsh::to_vec(&tx).unwrap())

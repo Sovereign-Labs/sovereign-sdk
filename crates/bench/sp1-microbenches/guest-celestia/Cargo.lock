@@ -2278,6 +2278,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-chain-config"
+version = "0.3.0"
+dependencies = [
+ "borsh",
+ "hex",
+ "serde",
+ "sha2 0.10.9",
+ "thiserror",
+ "toml",
+]
+
+[[package]]
 name = "sov-microbench-guest-celestia"
 version = "0.3.0"
 dependencies = [
@@ -2294,6 +2306,7 @@ dependencies = [
  "anyhow",
  "bech32",
  "blake2",
+ "borsh",
  "convert_case 0.6.0",
  "darling 0.21.3",
  "derive_more",
@@ -2302,6 +2315,7 @@ dependencies = [
  "proc-macro2",
  "quote",
  "serde",
+ "sov-chain-config",
  "sov-universal-wallet-macro-helpers",
  "syn 2.0.117",
  "toml",

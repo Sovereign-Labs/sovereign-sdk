@@ -7107,7 +7107,10 @@ version = "0.36.7"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "62948e14d923ea95ea2c7c86c71013138b66525b86bdc08d2dcc262bdb497b87"
 dependencies = [
+ "crc32fast",
  "flate2",
+ "hashbrown 0.15.5",
+ "indexmap 2.14.0",
  "memchr",
  "ruzstd 0.7.3",
 ]
@@ -11350,6 +11353,44 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-chain-config"
+version = "0.3.0"
+dependencies = [
+ "borsh",
+ "hex",
+ "serde",
+ "sha2 0.10.9",
+ "sov-chain-config",
+ "thiserror 2.0.18",
+ "toml 0.8.23",
+]
+
+[[package]]
+name = "sov-chain-config-patcher"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "object 0.36.7",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "sov-chain-config",
+ "sov-rollup-interface",
+ "sov-sp1-adapter",
+ "sov-universal-wallet",
+ "tempfile",
+]
+
+[[package]]
+name = "sov-chain-config-patcher-cli"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "clap",
+ "sov-chain-config-patcher",
+]
+
+[[package]]
 name = "sov-chain-state"
 version = "0.3.0"
 dependencies = [
@@ -11496,6 +11537,7 @@ dependencies = [
  "sov-bank",
  "sov-blob-storage",
  "sov-celestia-adapter",
+ "sov-chain-config-patcher",
  "sov-chain-state",
  "sov-cli",
  "sov-db",
@@ -12073,6 +12115,7 @@ dependencies = [
  "serde_yaml",
  "sha2 0.10.9",
  "sov-bank",
+ "sov-chain-config",
  "sov-db",
  "sov-metrics",
  "sov-mock-da",
@@ -12118,6 +12161,7 @@ dependencies = [
  "serde",
  "sov-address",
  "sov-bank",
+ "sov-chain-config",
  "sov-chain-state",
  "sov-metrics",
  "sov-modules-api",

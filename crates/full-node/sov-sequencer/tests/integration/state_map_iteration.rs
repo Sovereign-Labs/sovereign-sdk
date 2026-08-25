@@ -51,7 +51,7 @@ fn tx_modify_state_map(
         key,
         &msg,
         generation,
-        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
+        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::chain_hash(),
     );
 
     RawTx::new(borsh::to_vec(&tx).unwrap())

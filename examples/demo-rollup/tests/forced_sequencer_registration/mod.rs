@@ -111,7 +111,7 @@ fn build_register_sequencer_tx(
         &CHAIN_HASH,
         UnsignedTransaction::new(
             msg,
-            CHAIN_HASH,
+            *CHAIN_HASH,
             max_priority_fee_bips,
             max_fee,
             UniquenessData::Nonce(nonce),
@@ -493,7 +493,7 @@ fn build_state_heavy_tx(
         &CHAIN_HASH,
         UnsignedTransaction::new(
             msg,
-            CHAIN_HASH,
+            *CHAIN_HASH,
             max_priority_fee_bips,
             max_fee,
             UniquenessData::Nonce(nonce),

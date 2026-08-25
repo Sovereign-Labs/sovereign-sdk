@@ -164,18 +164,18 @@ fn send_tx_bad_generation_duplicate_with_malleated_v1_envelope() {
     )
     .to_multisig_tx(multisig);
     original_tx
-        .sign(&multisig_keys[0], &RT::CHAIN_HASH)
+        .sign(&multisig_keys[0], &RT::chain_hash())
         .unwrap();
     original_tx
-        .sign(&multisig_keys[1], &RT::CHAIN_HASH)
+        .sign(&multisig_keys[1], &RT::chain_hash())
         .unwrap();
 
     let mut malleated_tx = original_tx.clone();
     malleated_tx.unused_pub_keys.swap(0, 1);
 
     assert_eq!(
-        original_tx.to_signing_bytes(&RT::CHAIN_HASH),
-        malleated_tx.to_signing_bytes(&RT::CHAIN_HASH),
+        original_tx.to_signing_bytes(&RT::chain_hash()),
+        malleated_tx.to_signing_bytes(&RT::chain_hash()),
         "The signable payload should be unchanged by V1 envelope malleation"
     );
     assert_ne!(

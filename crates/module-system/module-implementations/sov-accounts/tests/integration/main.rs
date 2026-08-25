@@ -249,7 +249,7 @@ fn test_setup_multisig_and_act() {
 
     let sign = |tx: &mut Version1<RT, S>, key: &TestPrivateKey| {
         use sov_modules_api::Runtime;
-        let chain_hash = &<RT as Runtime<S>>::CHAIN_HASH;
+        let chain_hash = &<RT as Runtime<S>>::chain_hash();
         tx.sign(key, chain_hash).unwrap();
     };
 
@@ -329,7 +329,7 @@ fn test_setup_multisig_and_act() {
         {
             let non_member_key = TestPrivateKey::generate();
             let non_member_sig = tx
-                .sign_without_adding(&non_member_key, &<RT as Runtime<S>>::CHAIN_HASH)
+                .sign_without_adding(&non_member_key, &<RT as Runtime<S>>::chain_hash())
                 .unwrap();
             tx.signatures
                 .try_push(PubKeyAndSignature {
@@ -381,7 +381,7 @@ fn test_setup_multisig_and_act() {
         // Manually add a duplicate signature
         {
             let duplicate_sig = tx
-                .sign_without_adding(&multisig_keys[0], &<RT as Runtime<S>>::CHAIN_HASH)
+                .sign_without_adding(&multisig_keys[0], &<RT as Runtime<S>>::chain_hash())
                 .unwrap();
             tx.signatures
                 .try_push(PubKeyAndSignature {
@@ -577,7 +577,7 @@ fn make_v1_tx(
     let details = default_test_tx_details::<S>();
     UnsignedTransaction::<RT, S>::new(
         TestAccountsRuntimeCall::Accounts(CallMessage::InsertCredentialId(inner_credential)),
-        <RT as Runtime<S>>::CHAIN_HASH,
+        <RT as Runtime<S>>::chain_hash(),
         details.max_priority_fee_bips,
         details.max_fee,
         sov_modules_api::capabilities::UniquenessData::Generation(0),
@@ -614,7 +614,7 @@ fn make_v0_tx(
         default_test_tx_details::<S>(),
         address_override,
     );
-    utx.sign(sender.private_key(), &<RT as Runtime<S>>::CHAIN_HASH)
+    utx.sign(sender.private_key(), &<RT as Runtime<S>>::chain_hash())
 }
 
 fn make_v0_tx_with_call(
@@ -629,11 +629,11 @@ fn make_v0_tx_with_call(
         default_test_tx_details::<S>(),
         address_override,
     );
-    utx.sign(sender.private_key(), &<RT as Runtime<S>>::CHAIN_HASH)
+    utx.sign(sender.private_key(), &<RT as Runtime<S>>::chain_hash())
 }
 
 fn sign_v1(tx: &mut Version1<RT, S>, key: &TestPrivateKey) {
-    tx.sign(key, &<RT as Runtime<S>>::CHAIN_HASH).unwrap();
+    tx.sign(key, &<RT as Runtime<S>>::chain_hash()).unwrap();
 }
 
 #[test]

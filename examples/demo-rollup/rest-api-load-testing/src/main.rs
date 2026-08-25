@@ -174,7 +174,7 @@ mod helpers {
             key,
             &msg,
             nonce,
-            &Runtime::<TestSpec>::CHAIN_HASH,
+            &Runtime::<TestSpec>::chain_hash(),
         )
     }
 

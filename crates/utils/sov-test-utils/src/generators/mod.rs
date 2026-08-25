@@ -62,10 +62,10 @@ impl<S: Spec, Mod: Module> Message<S, Mod> {
     ) -> sov_modules_api::transaction::Transaction<RT, S> {
         Transaction::<RT, S>::new_signed_tx(
             &self.sender_key,
-            &RT::CHAIN_HASH,
+            &RT::chain_hash(),
             UnsignedTransaction::new(
                 <RT as EncodeCall<Mod>>::to_decodable(self.content),
-                RT::CHAIN_HASH,
+                RT::chain_hash(),
                 self.details.max_priority_fee_bips,
                 self.details.max_fee,
                 UniquenessData::Generation(self.generation),

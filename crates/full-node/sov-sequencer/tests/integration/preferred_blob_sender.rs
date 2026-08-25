@@ -229,7 +229,7 @@ fn encode_call(
         key,
         call_message,
         nonce,
-        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
+        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::chain_hash(),
     );
 
     RawTx::new(borsh::to_vec(&tx).unwrap())

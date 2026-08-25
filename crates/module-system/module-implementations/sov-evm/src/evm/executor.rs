@@ -16,7 +16,7 @@ use revm::{
 #[cfg(feature = "native")]
 use revm::{interpreter::interpreter::EthInterpreter, Inspector};
 use revm_database_interface::DBErrorMarker;
-use sov_modules_api::macros::config_value;
+use sov_modules_api::CHAIN_ID;
 
 /// The maximum contract code size is 512KiB by default.
 pub const DEFAULT_MAX_CONTRACT_CODE_SIZE: usize = 512 * 1024;
@@ -30,7 +30,7 @@ pub(crate) fn get_cfg_env(
     template_cfg: Option<CfgEnv>,
 ) -> CfgEnv {
     let mut cfg_env = template_cfg.unwrap_or_default();
-    cfg_env.chain_id = config_value!("CHAIN_ID");
+    cfg_env.chain_id = *CHAIN_ID;
     cfg_env.tx_chain_id_check = false;
     cfg_env.memory_limit = 50 * 1024 * 1024; // 50MiB
     cfg_env.limit_contract_code_size = Some(
@@ -153,7 +153,6 @@ fn rebate_gas(exec_result: &mut ExecResultAndState<ExecutionResult>, gas_to_reba
 mod tests {
     use alloy_primitives::U256;
     use revm::primitives::hardfork::SpecId;
-    use sov_modules_api::macros::config_value;
 
     use crate::ContractCreationPolicy;
 
@@ -181,7 +180,7 @@ mod tests {
         let cfg_env = get_cfg_env(&block_env, &cfg, Some(template_cfg_env));
 
         let mut expected_cfg_env = CfgEnv::default();
-        expected_cfg_env.chain_id = config_value!("CHAIN_ID");
+        expected_cfg_env.chain_id = *CHAIN_ID;
         expected_cfg_env.tx_chain_id_check = false;
         expected_cfg_env.disable_base_fee = true;
         expected_cfg_env.limit_contract_code_size = Some(100);

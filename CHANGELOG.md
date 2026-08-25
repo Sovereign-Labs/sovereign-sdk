@@ -1,3 +1,21 @@
+# 2026-08-24
+- #PR_NUMBER Patchable chain identity: the chain ID, chain name, and chain-hash override schedule are embedded in every binary (native and zkVM guest) as a dedicated section. A rollup binary's chain identity can be changed by patching its artifacts rather than rebuilding, to avoid requiring recompilation when using the same code for e.g. testnet and mainnet. 
+  * **Breaking Change** `Runtime::CHAIN_HASH: [u8; 32]` is replaced by `fn chain_hash() -> [u8; 32]`. Implement it with the memoizing SDK helper and the generated template:
+```rust
+static RUNTIME_CHAIN_HASH: LazyChainHash = LazyChainHash::new(&__generated::CHAIN_HASH_TEMPLATE_BORSH);
+
+impl<S> sov_modules_stf_blueprint::Runtime<S> for YourRuntime<S> {
+    /* ... */
+    fn chain_hash() -> [u8; 32] {
+        RUNTIME_CHAIN_HASH.get()
+    }
+}
+
+```
+Update call sites from `Rt::CHAIN_HASH` to `Rt::chain_hash()`. Remove any `__generated::CHAIN_HASH` re-exports and use `Runtime::chain_hash()`.
+  * `config_value!("CHAIN_ID")` / `config_value!("CHAIN_NAME")` reads still compile but return the build-time values; migrate them to the new `sov_modules_api::CHAIN_ID` / `CHAIN_NAME` accessors (`*CHAIN_ID`, `CHAIN_NAME.as_str()`) so patched values are observed.
+  * Optional patching flow on Linux: the `sov-chain-config-patcher` library copies the binaries, rewrites the embedded record from a `constants.toml` (only `CHAIN_ID`, `CHAIN_NAME`, and `CHAIN_HASH_OVERRIDES` are read), optionally patches and recommits SP1 guest ELFs (risc0 is currently not supported), and writes a bundle plus manifest. Add a bin target to your rollup by copying `examples/demo-rollup/sov-chain-config-patcher-cli`, or drive the library directly. Currently supports Linux ELF patching only.
+
 # 2026-08-17
 ## #2892 Multisig and accounts hard fork - major breaking change
 This commit constitutes a hard fork of the SDK. Rollups existing before this commit will need to coordinate an upgrade to a new binary.
@@ -59,7 +77,6 @@ since a fully default blanket implementation is not possible with the new traits
 
 # 2026-07-21
 - #3042 The `sequencer/unstable/events` REST endpoint changes behaviour when a negative event range is supplied (i.e. `end` < `start`): this previously silently returned an empty response, now it returns an explicit error since this can never be a valid range.
-
 # 2026-06-25
 - #3018 demo-rollup: split the example into two DA-layer Cargo features — `mock_da` (default; mock + SP1 zkVMs) and `celestia_da` (Risc0) — to cut compile time. The DA layer is selected at compile time while the zkVM stays a runtime `--zk-vm` choice within `mock_da`, so a build only compiles the selected DA's zkVM guests: a default `mock_da` build no longer pulls the Celestia/Risc0 adapters, and a `celestia_da` build skips the SP1 guests. When both DA features are enabled (`--all-features`), mock DA is selected by default. Also drops the unused SP1 Celestia guest build. Example crate only (`publish = false`) — no SDK API, state, or protocol change.
 # 2026-06-30

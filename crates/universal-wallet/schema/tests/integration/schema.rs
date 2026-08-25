@@ -8,7 +8,8 @@ use serde::{Deserialize, Serialize};
 use serde_with::{serde_as, DisplayFromStr};
 use sov_universal_wallet::schema::safe_string::SafeString;
 use sov_universal_wallet::schema::{
-    ChainData, IndexLinking, Item, Link, Primitive, RollupRoots, Schema, UniversalWallet,
+    ChainData, ChainHashTemplate, IndexLinking, Item, Link, Primitive, RollupRoots, Schema,
+    UniversalWallet,
 };
 use sov_universal_wallet::UniversalWallet;
 
@@ -1622,6 +1623,56 @@ fn test_multiobject_schema() {
             .unwrap(),
         reg_borsh_ser
     );
+}
+
+fn schema_with_original_chain_data() -> Schema {
+    Schema::of_rollup_types_with_chain_data::<Role, MinimalStruct, Registration, SimpleEnum>(
+        ChainData {
+            chain_id: 4321,
+            chain_name: "Original".to_string(),
+        },
+    )
+    .unwrap()
+}
+
+#[test]
+fn chain_hash_template_borsh_roundtrip() {
+    let template = schema_with_original_chain_data()
+        .chain_hash_template()
+        .unwrap();
+    let encoded = template.borsh_bytes().unwrap();
+    let decoded = ChainHashTemplate::from_borsh_bytes(&encoded).unwrap();
+
+    assert_eq!(decoded, template);
+}
+
+#[test]
+fn chain_hash_template_rejects_invalid_borsh() {
+    let template = schema_with_original_chain_data()
+        .chain_hash_template()
+        .unwrap();
+    let mut encoded = template.borsh_bytes().unwrap();
+    encoded.pop();
+
+    assert!(ChainHashTemplate::from_borsh_bytes(&encoded).is_err());
+}
+
+#[test]
+fn chain_hash_template_rebinds_chain_data() {
+    let schema = schema_with_original_chain_data();
+    let original_hash = schema.chain_hash().unwrap();
+    let template = schema.chain_hash_template().unwrap();
+    let new_chain_data = ChainData {
+        chain_id: 8765,
+        chain_name: "Rebound".to_string(),
+    };
+    let expected_hash = template.chain_hash(&new_chain_data).unwrap();
+    let schema = schema.with_chain_data(new_chain_data);
+
+    assert_ne!(original_hash, expected_hash);
+    assert_eq!(schema.chain_hash().unwrap(), expected_hash);
+    assert_eq!(schema.chain_data().chain_id, 8765);
+    assert_eq!(schema.chain_data().chain_name, "Rebound");
 }
 
 #[test]

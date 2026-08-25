@@ -27,8 +27,6 @@ use sov_metrics::RpcMetrics;
 use sov_modules_api::capabilities::{
     AuthenticationError, AuthorizationData, FatalError, HasKernel, TransactionAuthenticator,
 };
-#[cfg(feature = "local")]
-use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::AuthenticatedTransactionAndRawHash;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::CredentialId;
@@ -369,7 +367,7 @@ where
                 .chain_id(&mut state)
                 .expect("Failed to get chain id")
                 .map(|id| id.to())
-                .unwrap_or(config_value!("CHAIN_ID"));
+                .unwrap_or(*sov_modules_api::CHAIN_ID);
             transaction_request.chain_id = Some(chain_id);
         }
 

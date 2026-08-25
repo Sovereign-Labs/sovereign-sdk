@@ -126,7 +126,7 @@ pub use sov_state::{CompileTimeNamespace, Prefix, Storage};
 pub use state::*;
 pub use transaction::AuthenticatedTransactionData;
 pub use tx_receipt::*;
-pub use {schemars, sov_universal_wallet};
+pub use {schemars, sov_chain_config, sov_universal_wallet};
 
 pub use crate::common::ModuleError as Error;
 pub use crate::state::StateReaderAndWriter;

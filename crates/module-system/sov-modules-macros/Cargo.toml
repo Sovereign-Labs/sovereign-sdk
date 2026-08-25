@@ -25,6 +25,7 @@ path = "tests/integration/main.rs"
 anyhow = { workspace = true }
 bech32 = { workspace = true }
 blake2 = "0.10"
+borsh = { workspace = true }
 convert_case = { workspace = true }
 darling = { workspace = true }
 derive_more = { workspace = true, features = ["deref"] }
@@ -35,6 +36,7 @@ quote = { workspace = true }
 serde = { workspace = true }
 syn = { workspace = true, features = ["full"] }
 toml = { workspace = true }
+sov-chain-config = { workspace = true, features = ["toml"] }
 sov-universal-wallet-macro-helpers = { workspace = true }
 sov-metrics = { workspace = true, optional = true }
 
@@ -43,7 +45,6 @@ sov-metrics = { workspace = true, optional = true }
 sov-modules-macros = { path = ".", features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native", "test-utils"] }
 sov-chain-state = { workspace = true, features = ["native"] }
-borsh = { workspace = true }
 jsonrpsee = { workspace = true, default-features = false, features = ["client-core", "macros", "server-core"] }
 schemars = { workspace = true }
 serde = { workspace = true }

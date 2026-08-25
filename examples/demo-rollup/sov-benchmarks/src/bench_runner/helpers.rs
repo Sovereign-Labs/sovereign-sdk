@@ -227,12 +227,12 @@ impl BatchSender {
                     TransactionType::<RT, S>::sign(
                         output.message,
                         output.sender,
-                        &RT::CHAIN_HASH,
+                        &RT::chain_hash(),
                         TxDetails {
                             max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
                             max_fee: TEST_DEFAULT_MAX_FEE,
                             gas_limit: None,
-                            chain_hash_fragment: chain_hash_fragment(&RT::CHAIN_HASH),
+                            chain_hash_fragment: chain_hash_fragment(&RT::chain_hash()),
                         },
                         &mut self.generation_numbers,
                     ),
