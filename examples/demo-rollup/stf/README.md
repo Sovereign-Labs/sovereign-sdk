@@ -23,13 +23,13 @@ no matter which ones you pick.
 ## Overview
 
 To get a fully functional rollup, we recommend implementing the [State Transition Function
-interface](../../rollup-interface/specs/interfaces/stf.md) ("STF") trait, which specifies your rollup's abstract logic. Second, there's
+interface](../../../crates/rollup-interface/specs/interfaces/stf.md) ("STF") trait, which specifies your rollup's abstract logic. Second, there's
 a related struct called `State Transition Runner` ("STR") which tells a full node how to run your abstract STF on a concrete machine.
 
 ## Implementing State Transition _Function_
 
 As you recall, the Module System is primarily designed to help you implement the [State Transition Function
-interface](../../rollup-interface/specs/interfaces/stf.md).
+interface](../../../crates/rollup-interface/specs/interfaces/stf.md).
 
 That interface is quite high-level - the only notion
 that it surfaces is that of a `blob` of rollup data. In the Module System, we work at a much lower level - with
