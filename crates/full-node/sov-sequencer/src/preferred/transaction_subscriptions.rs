@@ -216,7 +216,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
             .await?;
 
         if let Some(first_cached_event) = cached_events.first() {
-            // If we had some any of these events in cache, then all of the preceeding events must have been present in the DB.
+            // If we had some any of these events in cache, then all of the preceding events must have been present in the DB.
             // Assert that this is the case. Note that this only holds if we aren't too aggressive about pruning the ledger DB.
             // If we add more aggressive pruning, we can safely remove this assertion.
             assert!(

@@ -298,7 +298,7 @@ where
                     if last_send_time.elapsed() >= Duration::from_millis(SYNTHETIC_NEW_HEADS_MAX_FREQUENCY_MS) {
                         let mut state = self.ethereum.api_state_accessor();
                         let pending_block = self.evm.get_newest_synthetic_header(&mut state);
-                        // Only send the notification if it's for a synthetic block. Real blocks are guaranteed to be handeld by the main state_change watcher.
+                        // Only send the notification if it's for a synthetic block. Real blocks are guaranteed to be handled by the main state_change watcher.
                         if let SyntheticBlockWatermarkAdvanceResult::NewSyntheticBlock = watermark.peek(&pending_block) {
                             watermark.advance(&pending_block);
                             let (rpc_header, _txs) = self.evm.get_synthetic_block_contents_slow(pending_block, &mut state)?;
