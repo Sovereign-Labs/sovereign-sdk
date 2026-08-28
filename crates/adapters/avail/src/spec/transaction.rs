@@ -51,8 +51,29 @@ impl AvailBlobTransaction {
     #[cfg(feature = "native")]
     pub fn new(unchecked_extrinsic: &AppUncheckedExtrinsic) -> anyhow::Result<Self> {
         let address = match &unchecked_extrinsic.signature {
-            //TODO: Handle other types of MultiAddress.
             Some((subxt::utils::MultiAddress::Id(id), _, _)) => AvailAddress::from(id.clone().0),
+            Some((subxt::utils::MultiAddress::Address32(addr), _, _)) => AvailAddress::from(*addr),
+            Some((subxt::utils::MultiAddress::Raw(raw), _, _)) => {
+                if raw.len() == 32 {
+                    let mut addr = [0u8; 32];
+                    addr.copy_from_slice(raw);
+                    AvailAddress::from(addr)
+                } else {
+                    return Err(anyhow!(
+                        "Raw MultiAddress must be 32 bytes to convert to AvailAddress."
+                    ));
+                }
+            }
+            Some((subxt::utils::MultiAddress::Index(_), _, _)) => {
+                return Err(anyhow!(
+                    "Index MultiAddress cannot be converted to AvailAddress without account lookup."
+                ))
+            }
+            Some((subxt::utils::MultiAddress::Address20(_), _, _)) => {
+                return Err(anyhow!(
+                    "Address20 MultiAddress cannot be converted to AvailAddress."
+                ))
+            }
             _ => {
                 return Err(anyhow!(
                     "Unsigned extrinsic being used to create AvailBlobTransaction."
