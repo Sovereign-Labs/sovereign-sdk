@@ -1,21 +1,24 @@
 include:
   - docker-compose.celestia.yml
-# Uncomment this if you want to test network delays/errors
+# Uncomment to test network delays/errors against the rollup (see ../scripts/chaos/README.md).
+# After `docker compose up -d toxiproxy`, populate the proxies from the host shell:
+#
+#   LISTEN_ADDR=0.0.0.0 POSTGRES_UPSTREAM=host.docker.internal:5432 \
+#     ../scripts/chaos/toxi_apply_config.sh
+#
+# Then apply scenarios with ../scripts/chaos/toxi_scenario.sh.
 #services:
 #  toxiproxy:
-#    image: shopify/toxiproxy:2.1.4
+#    image: ghcr.io/shopify/toxiproxy:2.12.0
 #    hostname: toxiproxy
 #    environment:
 #      LOG_LEVEL: "debug"
-#    depends_on:
-#      - sequencer-0
 #    ports:
-#      - "127.0.0.1:26659:26659"
-#      - "127.0.0.1:8474:8474"
-#  toxiproxy-config:
-#    image: curlimages/curl:8.9.1
-#    depends_on:
-#      - toxiproxy
-#    volumes:
-#      - ./toxiproxy:/opt/toxiproxy
-#    command: [ "/opt/toxiproxy/configure.sh" ]
+#      - "127.0.0.1:8474:8474"   # admin API
+#      - "127.0.0.1:5433:5433"   # postgres_1
+#      - "127.0.0.1:5434:5434"   # postgres_2
+#      - "127.0.0.1:5435:5435"   # postgres_3
+#      - "127.0.0.1:26678:26678" # celestia_rpc_1
+#      - "127.0.0.1:26679:26679" # celestia_rpc_2
+#      - "127.0.0.1:9091:9091"   # celestia_grpc_1
+#      - "127.0.0.1:9092:9092"   # celestia_grpc_2
