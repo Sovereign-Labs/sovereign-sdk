@@ -1,3 +1,9 @@
+//! JavaScript-compatible number types for fuzzing.
+//!
+//! This module provides wrapper types that serialize numbers in a way compatible with
+//! JavaScript's JSON handling. Large integers are serialized as strings to avoid
+//! precision loss, and floats are serialized as hex-encoded bytes.
+
 use arbitrary::Arbitrary;
 use borsh::{BorshDeserialize, BorshSerialize};
 use serde::{Deserialize, Deserializer, Serialize, Serializer};
@@ -57,8 +63,21 @@ macro_rules! impl_js_safe_unsigned {
     };
 }
 
-impl_js_safe_unsigned!(JsU64, u64);
-impl_js_safe_unsigned!(JsU128, u128);
+/// A wrapper for `u64` that serializes large values as strings for JS compatibility.
+///
+/// Values within JavaScript's safe integer range (`Number.MAX_SAFE_INTEGER`) are
+/// serialized as JSON numbers. Larger values are serialized as strings to prevent
+/// precision loss when interfacing with JavaScript implementations.
+pub type JsU64 = _JsU64;
+impl_js_safe_unsigned!(_JsU64, u64);
+
+/// A wrapper for `u128` that serializes large values as strings for JS compatibility.
+///
+/// Values within JavaScript's safe integer range (`Number.MAX_SAFE_INTEGER`) are
+/// serialized as JSON numbers. Larger values are serialized as strings to prevent
+/// precision loss when interfacing with JavaScript implementations.
+pub type JsU128 = _JsU128;
+impl_js_safe_unsigned!(_JsU128, u128);
 
 macro_rules! impl_js_safe_signed {
     ($wrapper:ident, $inner:ty) => {
@@ -110,8 +129,21 @@ macro_rules! impl_js_safe_signed {
     };
 }
 
-impl_js_safe_signed!(JsI64, i64);
-impl_js_safe_signed!(JsI128, i128);
+/// A wrapper for `i64` that serializes large values as strings for JS compatibility.
+///
+/// Values within JavaScript's safe integer range are serialized as JSON numbers.
+/// Values outside this range are serialized as strings to prevent precision loss
+/// when interfacing with JavaScript implementations.
+pub type JsI64 = _JsI64;
+impl_js_safe_signed!(_JsI64, i64);
+
+/// A wrapper for `i128` that serializes large values as strings for JS compatibility.
+///
+/// Values within JavaScript's safe integer range are serialized as JSON numbers.
+/// Values outside this range are serialized as strings to prevent precision loss
+/// when interfacing with JavaScript implementations.
+pub type JsI128 = _JsI128;
+impl_js_safe_signed!(_JsI128, i128);
 
 // Serialize floats as hex encoded bytes to avoid precision loss when converting to/from JSON.
 // Implements arbitrary that avoids NaN as this is not supported by borsh.
@@ -171,8 +203,21 @@ macro_rules! impl_js_safe_float {
     };
 }
 
-impl_js_safe_float!(JsF32, f32, 4);
-impl_js_safe_float!(JsF64, f64, 8);
+/// A wrapper for `f32` that serializes as hex-encoded bytes to avoid precision loss.
+///
+/// Floats are serialized as hex strings (e.g., `"0x..."`) to preserve exact bit
+/// representation when converting to/from JSON, avoiding precision issues that
+/// occur with standard JSON number serialization.
+pub type JsF32 = _JsF32;
+impl_js_safe_float!(_JsF32, f32, 4);
+
+/// A wrapper for `f64` that serializes as hex-encoded bytes to avoid precision loss.
+///
+/// Floats are serialized as hex strings (e.g., `"0x..."`) to preserve exact bit
+/// representation when converting to/from JSON, avoiding precision issues that
+/// occur with standard JSON number serialization.
+pub type JsF64 = _JsF64;
+impl_js_safe_float!(_JsF64, f64, 8);
 
 #[cfg(test)]
 mod tests {
@@ -180,8 +225,8 @@ mod tests {
 
     #[test]
     fn test_i128() {
-        let large = JsI128(i128::MAX);
-        let smaller = JsI128(JS_MIN_SAFE_INTEGER);
+        let large = _JsI128(i128::MAX);
+        let smaller = _JsI128(JS_MIN_SAFE_INTEGER);
 
         assert_eq!(
             &serde_json::to_string(&large).unwrap(),
@@ -195,8 +240,8 @@ mod tests {
 
     #[test]
     fn test_i64() {
-        let large = JsI64(i64::MAX);
-        let smaller = JsI64(-55i64);
+        let large = _JsI64(i64::MAX);
+        let smaller = _JsI64(-55i64);
 
         assert_eq!(
             &serde_json::to_string(&large).unwrap(),
@@ -210,8 +255,8 @@ mod tests {
 
     #[test]
     fn test_u128() {
-        let large = JsU128(u128::MAX);
-        let smaller = JsU128(JS_MAX_SAFE_INTEGER);
+        let large = _JsU128(u128::MAX);
+        let smaller = _JsU128(JS_MAX_SAFE_INTEGER);
 
         assert_eq!(
             &serde_json::to_string(&large).unwrap(),
@@ -225,8 +270,8 @@ mod tests {
 
     #[test]
     fn test_u64() {
-        let large = JsU64(u64::MAX);
-        let smaller = JsU64(1234u64);
+        let large = _JsU64(u64::MAX);
+        let smaller = _JsU64(1234u64);
 
         assert_eq!(
             &serde_json::to_string(&large).unwrap(),
