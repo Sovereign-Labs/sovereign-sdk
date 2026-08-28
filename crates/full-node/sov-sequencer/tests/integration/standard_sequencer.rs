@@ -8,6 +8,7 @@ use sov_modules_api::prelude::*;
 use sov_modules_api::{Address, BlobReaderTrait, DispatchCall, FullyBakedTx};
 use sov_rollup_interface::node::da::DaService;
 use sov_sequencer::standard::StdSequencerConfig;
+use sov_sequencer::Sequencer;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{config_gas_token_id, Coins, TestOptimisticRuntime};
 use sov_test_utils::sequencer::TestSequencerSetup;
@@ -16,6 +17,39 @@ use sov_test_utils::{TestSpec, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_USER_BALANCE};
 use crate::utils::{
     build_tx, generate_paymaster_tx, new_sequencer, valid_tx_bytes, wrap_with_auth, RT,
 };
+
+#[tokio::test(flavor = "multi_thread")]
+async fn pending_tx_count_tracks_mempool_through_accept_and_drain() {
+    let sequencer = new_sequencer().await;
+
+    // Empty mempool at start.
+    assert_eq!(sequencer.sequencer.pending_tx_count().await, 0);
+
+    let tx1 = valid_tx_bytes(&sequencer, 0, 0);
+    let tx2 = valid_tx_bytes(&sequencer, 1, 1);
+
+    sequencer
+        .client()
+        .accept_tx(&types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(&tx1),
+        })
+        .await
+        .unwrap();
+    assert_eq!(sequencer.sequencer.pending_tx_count().await, 1);
+
+    sequencer
+        .client()
+        .accept_tx(&types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(&tx2),
+        })
+        .await
+        .unwrap();
+    assert_eq!(sequencer.sequencer.pending_tx_count().await, 2);
+
+    // Producing a batch drains the mempool.
+    let _ = sequencer.sequencer.produce_and_submit_batch().await;
+    assert_eq!(sequencer.sequencer.pending_tx_count().await, 0);
+}
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_happy_path() {

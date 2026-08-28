@@ -147,6 +147,10 @@ since a fully default blanket implementation is not possible with the new traits
 # 2026-05-11
 - #2847 Removes bincode support from `sov-risc0-adapter`
 
+# 2026-05-09
+- #2838 Adds `Sequencer::pending_tx_count(&self) -> usize` as a default-`0` trait method, overridden on `StdSequencer` to expose mempool depth. Surfaced for operator observability (Prometheus `mempool_depth` gauges). Existing `Sequencer` impls that don't track a mempool are unaffected.
+
+
 # 2026-05-05
 - #2808 **Breaking config change**: Adds a required `sequencer.max_concurrent_proof_blobs` field to rollup TOML configs, capping the number of proof blobs in flight on the DA layer. When the cap is reached, the ZK aggregator triggers a rollup shutdown.
 # 2026-04-20
