@@ -15,7 +15,7 @@ full control over their application logic.
 Key features include...
 - Gasless transactions (via the Paymaster module)
 - Integrated bridging via Hyperlane
-- Wallet integrations (including Phantom, Privy, Metamask, and many more)
+- Wallet integrations (including Phantom, Privy, MetaMask, and many more)
 - Complete customizability (including transaction delays, hooks, and custom address types)
 - Out-of-the-box observability (via InfluxDB and Grafana)
 
