@@ -1,5 +1,4 @@
 //! Cryptography for general purpose use
-use std::hash::Hash;
 #[cfg(feature = "native")]
 use std::str::FromStr;
 
