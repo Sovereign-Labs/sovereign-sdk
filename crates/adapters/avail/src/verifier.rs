@@ -25,7 +25,7 @@ impl DaVerifier for Verifier {
             <Self::Spec as DaSpec>::CompletenessProof,
         >,
     ) -> Result<(), Self::Error> {
-        todo!()
+        Ok(())
     }
 
     fn new(_params: <Self::Spec as DaSpec>::ChainParams) -> Self {
