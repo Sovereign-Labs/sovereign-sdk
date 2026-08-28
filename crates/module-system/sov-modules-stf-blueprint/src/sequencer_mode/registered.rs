@@ -424,6 +424,8 @@ where
 
     let mut tx_receipts = Vec::with_capacity(batch_with_id.known_remaining_txs().unwrap_or(128));
     let mut ignored_tx_receipts = Vec::default();
+    let mut ignored_raw_txs_by_index: Vec<Option<FullyBakedTx>> =
+        vec![None; batch_with_id.known_remaining_txs().unwrap_or(0)];
 
     let mut accumulated_reward = Amount::ZERO;
     let mut accumulated_penalty = Amount::ZERO;
@@ -485,7 +487,7 @@ where
             clean_scratchpad,
             // Here we make sure that a tx can't use more gas that remaining gas in the slot gas meter.
             slot_gas_meter.remaining_slot_gas(sequencer_da_address),
-            raw_tx,
+            raw_tx.clone(),
             sequencer_da_address,
             sequencer_address,
             gas_price,
@@ -603,6 +605,10 @@ where
                     };
 
                     ignored_tx_receipts.push(ignored);
+                    // Save raw tx body for richer ignored tx logging
+                    if idx < ignored_raw_txs_by_index.len() {
+                        ignored_raw_txs_by_index[idx] = Some(raw_tx.clone());
+                    }
                 } else {
                     new_checkpoint.discard_revertable_storage_cache();
                 }
@@ -644,7 +650,7 @@ where
         sequencer_da_address,
         &mut checkpoint,
     );
-    apply_batch_logs(&batch_receipt, blob_idx);
+    apply_batch_logs::<S, RT>(&batch_receipt, blob_idx, Some(&ignored_raw_txs_by_index));
     span.exit();
     (batch_receipt, checkpoint)
 }
