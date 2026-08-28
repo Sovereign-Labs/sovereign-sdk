@@ -45,11 +45,11 @@ describe("Indexer", () => {
       indexer.setAndCheckHealth(new SovereignClient.APIConnectionError({}));
       expect(indexer.isRollupHealthy).toBe(false);
     });
-    it("should set isRollupHealthy flag to true if not connection error", () => {
+    it("should set isRollupHealthy flag to false for generic errors", () => {
       const indexer = new Indexer({} as any) as any;
 
       indexer.setAndCheckHealth(new Error());
-      expect(indexer.isRollupHealthy).toBe(true);
+      expect(indexer.isRollupHealthy).toBe(false);
     });
   });
   describe("handleRollupOffline", () => {
