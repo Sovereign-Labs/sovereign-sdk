@@ -18,6 +18,7 @@ axum = { workspace = true, features = ["http1", "http2", "ws", "json"] }
 borsh = { workspace = true }
 derive_more = { workspace = true, features = ["display"] }
 futures = { workspace = true }
+hex = { workspace = true }
 serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true, features = ["base64"] }

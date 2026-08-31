@@ -528,3 +528,79 @@ mod utils {
             .expect("Failed test; the API response can't be serialized as JSON... this is a bug")
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_events_by_key_paginates_by_event_number() {
+    use sov_test_utils::ledger_db::{REPEATED_EVENT_COUNT, REPEATED_EVENT_KEY};
+
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::RepeatedEventKey)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    let mut seen = Vec::new();
+    let mut url = format!(
+        "http://{addr}/ledger/events/by-key?key={REPEATED_EVENT_KEY}&page=first&page[size]=10"
+    );
+    loop {
+        let page: serde_json::Value = reqwest::get(&url).await.unwrap().json().await.unwrap();
+        for event in page["events"].as_array().unwrap() {
+            assert_eq!(event["key"].as_str(), Some(REPEATED_EVENT_KEY));
+            seen.push(event["number"].as_u64().unwrap());
+        }
+        match page["next"].as_str() {
+            Some(cursor) => {
+                url = format!(
+                    "http://{addr}/ledger/events/by-key?key={REPEATED_EVENT_KEY}\
+                     &page=next&page[cursor]={cursor}&page[size]=10"
+                );
+            }
+            None => break,
+        }
+    }
+
+    // Every event exactly once, in order, with no duplicates across pages.
+    assert_eq!(seen.len() as u64, REPEATED_EVENT_COUNT);
+    let mut sorted = seen.clone();
+    sorted.sort_unstable();
+    sorted.dedup();
+    assert_eq!(sorted, seen);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_events_by_key_rejects_empty_key_and_bad_cursor() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::RepeatedEventKey)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    let empty = reqwest::get(format!("http://{addr}/ledger/events/by-key?key="))
+        .await
+        .unwrap();
+    assert_eq!(empty.status(), 400);
+
+    let bad_cursor = reqwest::get(format!(
+        "http://{addr}/ledger/events/by-key?key=Repeated/Event&page=next&page[cursor]=abc"
+    ))
+    .await
+    .unwrap();
+    assert_eq!(bad_cursor.status(), 400);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_events_by_key_unknown_key_is_empty() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::RepeatedEventKey)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    let page: serde_json::Value =
+        reqwest::get(format!("http://{addr}/ledger/events/by-key?key=Nope/Nope"))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+    assert!(page["events"].as_array().unwrap().is_empty());
+    assert!(page["next"].is_null());
+}
