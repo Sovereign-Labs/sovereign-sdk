@@ -245,12 +245,70 @@ fn batch3_tx_receipts() -> Vec<TransactionReceipt<TestTxReceiptContents>> {
         .collect()
 }
 
+/// Number of events stored under the same key by
+/// [`LedgerTestServiceData::RepeatedEventKey`].
+pub const REPEATED_EVENT_COUNT: u64 = 25;
+/// The key those events share.
+pub const REPEATED_EVENT_KEY: &str = "Repeated/Event";
+
 /// The different types of data that can be used to test the [`LedgerDb`].
 pub enum LedgerTestServiceData {
     /// The data used to test the [`LedgerDb`] is simple.
     Simple,
     /// The data used to test the [`LedgerDb`] is complex.
     Complex,
+    /// Many events sharing a single key, spread over several transactions, for
+    /// exercising per-key cursor pagination.
+    RepeatedEventKey,
+}
+
+/// Persist [`REPEATED_EVENT_COUNT`] events that all share
+/// [`REPEATED_EVENT_KEY`], one per transaction.
+pub fn materialize_repeated_event_key_data(ledger_db: &LedgerDb) -> anyhow::Result<SchemaBatch> {
+    let mut block = MockBlock::default();
+    block.header.time = Time::from_secs(100);
+    let mut slot: SlotCommit<MockBlock, i32, TestTxReceiptContents> =
+        SlotCommit::new(block, Vec::default());
+
+    let tx_receipts = (0..REPEATED_EVENT_COUNT)
+        .map(|i| TransactionReceipt {
+            tx_hash: TxHash::new([i as u8; 32]),
+            body_to_save: Some(FullyBakedTx::new(format!("tx{i}").into_bytes())),
+            events: vec![StoredEvent::new(
+                REPEATED_EVENT_KEY.as_bytes(),
+                &borsh::to_vec(&repeated_event(i)).unwrap(),
+                [0; 32],
+            )],
+            receipt: TxEffect::Successful(0),
+        })
+        .collect();
+
+    slot.add_batch(BatchReceipt {
+        batch_hash: [11; 32],
+        tx_receipts,
+        ignored_tx_receipts: vec![],
+        inner: 0,
+    });
+
+    ledger_db.materialize_slot(slot, b"state-root")
+}
+
+fn repeated_event(number: u64) -> TestEvent {
+    let holder = TokenHolder::Module(ModuleId::from([0; 32]));
+    let token_id =
+        TokenId::from_str("token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6")
+            .unwrap();
+    TestEvent::Bank(sov_bank::event::Event::TokenCreated {
+        token_name: format!("token{number}"),
+        coins: Coins {
+            amount: Amount::ZERO,
+            token_id,
+        },
+        minter: holder.clone(),
+        mint_to_address: holder.clone(),
+        admins: vec![],
+        supply_cap: Amount::MAX,
+    })
 }
 
 /// Everything that one needs to run tests against the ledger APIs.
@@ -282,6 +340,11 @@ impl LedgerTestService {
             }
             LedgerTestServiceData::Complex => {
                 materialize_and_commit_complex_ledger_db_data(&ledger_db, &mut storage_manager)?;
+            }
+            LedgerTestServiceData::RepeatedEventKey => {
+                let ledger_data = materialize_repeated_event_key_data(&ledger_db)?;
+                ledger_db.send_notifications();
+                storage_manager.commit(&ledger_data);
             }
         };
 

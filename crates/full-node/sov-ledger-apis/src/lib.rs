@@ -32,7 +32,7 @@ use sov_rollup_interface::node::ledger_api::{
     FinalityStatus, IncludeChildren, ItemOrHash, LedgerStateProvider, QueryMode, SlotIdAndOffset,
     SlotIdentifier, SlotResponse, TxIdAndOffset, TxIdentifier, TxResponse,
 };
-use sov_rollup_interface::stf::TxReceiptContents;
+use sov_rollup_interface::stf::{EventKey, TxReceiptContents};
 use sov_shutdown::PrimaryShutdownController;
 
 type PathMap = Path<HashMap<String, NumberOrHash>>;
@@ -166,6 +166,7 @@ where
                 )),
             )
             .route("/events", get(Self::list_events))
+            .route("/events/by-key", get(Self::list_events_by_key))
             .route("/events/counts", get(Self::get_event_key_counts))
             .route("/events/latest", get(Self::get_latest_event))
             .nest(
@@ -348,6 +349,103 @@ where
             Ok(None) => Err(errors::not_found_404("Event", event_number)),
             Err(err) => Err(errors::database_error_response_500(err)),
         }
+    }
+
+    /// Events for one exact event key, oldest first.
+    ///
+    /// `EventByKey` is stored as `(EventKey, TxNumber, EventNumber)`, so an
+    /// exact key is a contiguous range: this seeks once and reads only the page
+    /// it returns. The `prefix` filter on `list_events` cannot do that — a
+    /// string prefix is not a contiguous range, because the encoded key starts
+    /// with its length — which is why that path needs a cursor bound and this
+    /// one does not.
+    ///
+    /// `page[cursor]` is an event number, exclusive: pass the `number` of the
+    /// last event you saw. Event numbers are unique and, for a fixed key, order
+    /// identically to `(TxNumber, EventNumber)`, so the cursor resolves to an
+    /// exact scan position — no rows are re-read and no transaction is split.
+    async fn list_events_by_key(
+        State(state): State<LedgerState<T>>,
+        pagination_opt: Option<Query<Pagination<String>>>,
+        Query(filter): Query<EventKeyFilter>,
+    ) -> ApiResult<EventPage<RuntimeEventResponse<E>>> {
+        let pagination = match pagination_opt {
+            Some(Query(pagination)) => pagination,
+            None => Default::default(),
+        };
+        let limit = pagination.size as usize;
+        if filter.key.is_empty() {
+            return Err(errors::bad_request_400(
+                "key must not be empty",
+                "pass the exact event key, e.g. key=Mailbox/DispatchId",
+            ));
+        }
+
+        let after =
+            match &pagination.selection {
+                PageSelection::First => None,
+                PageSelection::Last => return Err(errors::not_implemented_501()),
+                PageSelection::Next { cursor } => Some(cursor.parse::<u64>().map_err(|e| {
+                    errors::bad_request_400("page[cursor] must be an event number", e)
+                })?),
+            };
+
+        // The scan starts at a transaction boundary, so resuming needs the
+        // transaction that produced the cursor event.
+        let from_tx = match after {
+            None => 0,
+            Some(event_number) => {
+                let event = state
+                    .ledger
+                    .get_event_by_number::<RuntimeEventResponse<E>>(event_number)
+                    .await
+                    .map_err(errors::database_error_response_500)?
+                    .ok_or_else(|| errors::not_found_404("Event", event_number))?;
+                state
+                    .ledger
+                    .resolve_tx_identifier(&TxIdentifier::Hash(event.tx_hash.into()))
+                    .await
+                    .map_err(errors::database_error_response_500)?
+                    .ok_or_else(|| {
+                        errors::database_error_response_500(format!(
+                            "event {event_number} has no transaction"
+                        ))
+                    })?
+            }
+        };
+
+        // The scan can start at an exact `(key, tx, event)`, so the cursor
+        // resumes precisely rather than re-reading the transaction.
+        let resume_at = after
+            .map(|event_number| {
+                borsh::to_vec(&(
+                    EventKey::new(filter.key.as_bytes()),
+                    TxNumber(from_tx),
+                    EventNumber(event_number.saturating_add(1)),
+                ))
+                .map(hex::encode)
+            })
+            .transpose()
+            .map_err(errors::internal_server_error_response_500)?;
+
+        let page = state
+            .ledger
+            .get_events_by_key::<RuntimeEventResponse<E>>(
+                &filter.key,
+                None,
+                limit,
+                resume_at.as_deref(),
+            )
+            .await
+            .map_err(errors::database_error_response_500)?;
+
+        let events = page.events_response;
+        let next = page
+            .next
+            .and(events.last())
+            .map(|event| event.number.to_string());
+
+        Ok(EventPage { events, next }.into())
     }
 
     // TODO: we're going to want to start using range/iters
@@ -930,6 +1028,18 @@ impl ReportableWsError for WsLedgerError {
 #[derive(Deserialize)]
 struct EventFilter {
     prefix: String,
+}
+
+#[derive(Deserialize)]
+struct EventKeyFilter {
+    key: String,
+}
+
+/// A page of events plus the cursor for the following page (`None` at the end).
+#[derive(Debug, Clone, Serialize)]
+struct EventPage<E> {
+    events: Vec<E>,
+    next: Option<String>,
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
