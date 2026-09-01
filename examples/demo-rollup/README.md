@@ -395,7 +395,7 @@ By default, this implementation prints the state root and the number of blobs pr
 other data, you'll
 want to use our REST API server. You can configure its host and port in `rollup_config.toml`.
 
-You can get an overview of all available endpoints by reading the OpenAPI specification [here](../../crates/full-node/sov-ledger-apis/openapi-v3.yaml). Here's just a few example queries:
+You can get an overview of all available endpoints by reading the OpenAPI specification [here](../../crates/full-node/sov-api-spec/openapi-v3.yaml). Here's just a few example queries:
 
 - `http://localhost:12346/ledger/events/17`
 - `http://localhost:12346/ledger/txs/50/events/0`
