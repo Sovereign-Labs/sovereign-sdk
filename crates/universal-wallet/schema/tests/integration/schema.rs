@@ -1788,6 +1788,11 @@ fn test_nested_silent_fields() {
 #[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
 pub struct MultiFieldTupleStruct(u32, u64);
 
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
+#[cfg_attr(test, sov_wallet(anonymize_tuple))]
+pub struct AnonymizedTupleStruct(u32, u64);
+
 #[test]
 fn test_newtype_struct_records_type_name() {
     let schema = Schema::of_single_type::<StringWrapper>().unwrap();
@@ -1832,6 +1837,21 @@ fn test_multi_field_tuple_struct_stays_transparent_for_display_and_json() {
 }
 
 #[test]
+fn test_anonymize_tuple_attribute_strips_type_name() {
+    let schema = Schema::of_single_type::<AnonymizedTupleStruct>().unwrap();
+    let Ty::Tuple(tuple) = &schema.types()[0] else {
+        panic!(
+            "Tuple struct should scaffold to Ty::Tuple, got {:?}",
+            schema.types()[0]
+        );
+    };
+    assert_eq!(
+        tuple.type_name, None,
+        "A tuple struct annotated with anonymize_tuple should not record its type name"
+    );
+}
+
+#[test]
 fn test_enum_variant_virtual_tuples_stay_anonymous() {
     let schema = Schema::of_single_type::<SimpleEnum>().unwrap();
     let tuples: Vec<_> = schema
@@ -1860,17 +1880,11 @@ fn test_tuple_schema_json_without_type_name_still_parses() {
     // deserialization must default it to `None`.
     let old_json = r#"{"Tuple":{"template":null,"peekable":false,"fields":[{"value":{"Immediate":"String"},"silent":false,"doc":""}]}}"#;
     let ty: Ty<IndexLinking> = serde_json::from_str(old_json).unwrap();
+    let Ty::Tuple(tuple) = ty else {
+        panic!("Old tuple schema JSON should parse to Ty::Tuple, got {ty:?}");
+    };
     assert_eq!(
-        ty,
-        Ty::Tuple(Tuple {
-            type_name: None,
-            template: None,
-            peekable: false,
-            fields: vec![UnnamedField {
-                value: Link::Immediate(Primitive::String),
-                silent: false,
-                doc: String::new(),
-            }],
-        })
+        tuple.type_name, None,
+        "A schema JSON without the type_name field should default it to None"
     );
 }

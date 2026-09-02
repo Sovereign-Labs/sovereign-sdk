@@ -351,6 +351,14 @@ fn derive_wallet_field(
     let mut virtual_types: Vec<TokenStream> = vec![];
     let mut child_links: Vec<TokenStream> = vec![];
     let child_templates: TokenStream;
+    if *input.anonymize_tuple
+        && !matches!(&input.data, Data::Struct(s) if matches!(s.style, Style::Tuple))
+    {
+        return Err(syn::Error::new(
+            input.anonymize_tuple.span(),
+            "The #[sov_wallet(anonymize_tuple)] attribute can only be used on tuple structs.",
+        ));
+    }
     let container = match &input.data {
         Data::Struct(s) => {
             if input.hide_tag.is_some() {
@@ -379,9 +387,9 @@ fn derive_wallet_field(
                 )?,
                 Style::Tuple => build_tuple_type_scaffold(
                     &s.fields,
-                    // Virtual tuples representing enum variant contents stay anonymous; real
-                    // tuple structs record their type name in the schema.
-                    (!input.sov_virtual).then_some(ident),
+                    // Tuple structs record their type name in the schema unless anonymized;
+                    // the macro anonymizes the virtual tuples it generates for enum variants.
+                    (!*input.anonymize_tuple).then_some(ident),
                     template_tokens,
                     &mut where_clause,
                     &prefix,
@@ -614,15 +622,24 @@ pub fn build_struct_type_scaffold(
 
 /// Take a tuple type and return the appropriate scaffold for it. The scaffold is just
 /// ```text
-/// Item::Container(Container::Tuple(Tuple { fields: vec![
-///    UnnamedField {
-///      value: Link::Placeholder,
+/// Item::Container(Container::Tuple(Tuple {
+///    type_name: Some("MyTuple".to_string()), # or None
+///    fields: vec![
+///      UnnamedField {
+///        value: Link::Placeholder,
+///        # ...
+///      },
 ///      # ...
-///    },
+///    ],
 ///    # ...
-/// ]
 /// }))
 /// ```
+///
+/// `type_name` is the name recorded in the schema: `Some` for tuple structs (including
+/// newtypes), `None` for anonymous tuples (the virtual tuples generated for enum variant
+/// contents, and tuple structs annotated with `#[sov_wallet(anonymize_tuple)]`). The recorded
+/// name is committed to by the chain hash, so callers must mirror the derive macro's choice for
+/// equivalent types.
 pub fn build_tuple_type_scaffold(
     fields: &[InputField],
     type_name: Option<&Ident>,
@@ -906,7 +923,7 @@ fn build_virtual_tuple(
         #[allow(non_camel_case_types, dead_code)]
         #[automatically_derived]
         #[derive(#macro_name)]
-        #[sov_wallet(__sov_virtual)]
+        #[sov_wallet(anonymize_tuple)]
         #template_attribute
         struct #type_name #virt_impl_generics (
             #(#tuple_fields),*
@@ -947,11 +964,11 @@ pub struct Input {
     pub hide_tag: Option<bool>,
     #[darling(default)]
     pub template_inherit: SpannedValue<bool>,
-    /// Internal marker, set by the macro itself on the virtual types it generates to represent
-    /// enum variant contents. Not public API. Virtual tuples must stay anonymous in the schema,
-    /// unlike real tuple structs, whose type name is recorded.
-    #[darling(default, rename = "__sov_virtual")]
-    pub sov_virtual: bool,
+    /// Omits a tuple struct's type name from the schema, making its schema identical to that of
+    /// an anonymous tuple. Also set by the macro itself on the virtual tuples it generates to
+    /// represent enum variant contents, which always stay anonymous.
+    #[darling(default)]
+    pub anonymize_tuple: SpannedValue<bool>,
 }
 
 #[derive(Debug, Clone, FromField)]

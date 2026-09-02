@@ -153,4 +153,13 @@ pub extern crate bech32;
 /// let serialized = borsh::to_vec(&CelestiaAddress([1; 32])).unwrap();
 /// assert_eq!(Schema::of_single_type::<CelestiaAddress>().unwrap().display(0, &serialized).unwrap(), "celestia1qyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqszqgpqyqsagv2r7");
 /// ```
+///
+/// ## Attributes: `#[sov_wallet(anonymize_tuple)]`
+///
+/// Omits a tuple struct's type name from the schema, making its schema identical to that of an
+/// anonymous tuple. By default, tuple structs (including newtypes) record their type name in the
+/// schema. Note that the recorded name is committed to by the chain hash, so adding or removing
+/// this attribute (like renaming the type) is a chain-hash-breaking change.
+///
+/// This annotation may only be applied to tuple structs.
 pub use sov_universal_wallet_macros::UniversalWallet;
