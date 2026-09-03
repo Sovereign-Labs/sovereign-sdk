@@ -149,8 +149,8 @@ fn test_display_signed_tx() {
 #[test]
 fn detect_schema_has_breaking_change() {
     let current_hash: [u8; 32] = [
-        27, 211, 110, 96, 196, 84, 88, 92, 228, 130, 243, 34, 229, 207, 92, 97, 244, 96, 195, 68,
-        138, 207, 75, 75, 42, 144, 254, 100, 83, 209, 220, 135,
+        249, 12, 113, 196, 149, 245, 156, 79, 180, 75, 216, 39, 216, 93, 159, 2, 115, 163, 221,
+        163, 222, 247, 82, 34, 215, 56, 219, 104, 81, 251, 173, 113,
     ];
     assert_eq!(CHAIN_HASH, current_hash, "The chain hash changed. Update the \"current_hash\" value in this test but be aware: this is a breaking change for any production rollups.");
 }
