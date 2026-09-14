@@ -418,6 +418,10 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<Vec<u8>, AuthenticationError> {
+    // The chain hash is only used as part of the native signature cache key.
+    #[cfg(not(feature = "native"))]
+    let _ = chain_hash;
+
     tx.charge_gas_for_signature(serialized_tx.len(), meter)
         .map_err(|e| match e {
             TransactionVerificationError::GasError(_) => {
