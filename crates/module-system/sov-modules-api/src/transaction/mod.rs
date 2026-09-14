@@ -33,6 +33,7 @@ use crate::{
     MeteredSignature, Spec,
 };
 
+pub mod legacy_v0;
 mod signing_payload;
 #[cfg(test)]
 mod tests;

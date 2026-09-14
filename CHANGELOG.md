@@ -1,3 +1,6 @@
+# 2026-09-04
+- #PR_NUMBER Authentication: The standard authenticator accepts V0 transactions in the pre-fork wire format (no `address_override`, pre-fork signing payload, `chain_id` in place of `chain_hash_fragment`), authenticating them with the pre-fork rules (`CHAIN_ID` check, signature tried against every chain hash valid at the execution height). This lets clients lag behind the hard fork upgrade. Legacy envelopes are also decoded by `decode_sov_tx` for the sequencer's decode path.
+
 # 2026-08-17
 ## #2892 Multisig and accounts hard fork - major breaking change
 This commit constitutes a hard fork of the SDK. Rollups existing before this commit will need to coordinate an upgrade to a new binary.
