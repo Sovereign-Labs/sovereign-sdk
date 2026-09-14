@@ -294,12 +294,12 @@ Adding the following transaction to batch:
       }
     }
   },
-  "chain_hash": "0x1bd36e60c454585ce482f322e5cf5c61f460c3448acf4b4b2a90fe6453d1dc87",
+  "chain_hash": "0xf90c71c495f59c4fb44bd827d85d9f0273a3dda3def75222d738db6851fbad71",
   "details": {
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",
     "gas_limit": null,
-    "chain_hash_fragment": "6654161651848106779"
+    "chain_hash_fragment": "5736730048957844729"
   }
 }
 ```
