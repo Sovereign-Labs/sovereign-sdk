@@ -26,6 +26,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -260,6 +261,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -408,6 +410,7 @@
     },
     {
       "Tuple": {
+        "type_name": "Amount",
         "template": null,
         "peekable": false,
         "fields": [
@@ -460,6 +463,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -475,6 +479,7 @@
     },
     {
       "Tuple": {
+        "type_name": "AddressSchema",
         "template": null,
         "peekable": false,
         "fields": [
@@ -499,6 +504,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -514,6 +520,7 @@
     },
     {
       "Tuple": {
+        "type_name": "EthereumAddress",
         "template": null,
         "peekable": false,
         "fields": [
@@ -534,6 +541,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -549,6 +557,7 @@
     },
     {
       "Tuple": {
+        "type_name": "Base58Address",
         "template": null,
         "peekable": false,
         "fields": [
@@ -680,6 +689,7 @@
     },
     {
       "Tuple": {
+        "type_name": "TokenId",
         "template": null,
         "peekable": false,
         "fields": [
@@ -828,6 +838,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -908,6 +919,7 @@
     },
     {
       "Tuple": {
+        "type_name": "MockAddressSchema",
         "template": null,
         "peekable": false,
         "fields": [
@@ -987,6 +999,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1035,6 +1048,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1100,6 +1114,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1115,6 +1130,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1130,6 +1146,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1145,6 +1162,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1190,6 +1208,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1205,6 +1224,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1220,6 +1240,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1283,6 +1304,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1298,6 +1320,7 @@
     },
     {
       "Tuple": {
+        "type_name": "CredentialId",
         "template": null,
         "peekable": false,
         "fields": [
@@ -1313,6 +1336,7 @@
     },
     {
       "Tuple": {
+        "type_name": "HexString",
         "template": null,
         "peekable": false,
         "fields": [
@@ -1438,6 +1462,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1460,6 +1485,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1519,6 +1545,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1534,6 +1561,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1709,6 +1737,7 @@
     },
     {
       "Tuple": {
+        "type_name": "GasUnit",
         "template": null,
         "peekable": false,
         "fields": [
@@ -1788,6 +1817,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1832,6 +1862,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -1982,6 +2013,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -2050,6 +2082,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -2165,6 +2198,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -2274,6 +2308,7 @@
     },
     {
       "Tuple": {
+        "type_name": "HexString",
         "template": null,
         "peekable": false,
         "fields": [
@@ -2358,6 +2393,7 @@
     },
     {
       "Tuple": {
+        "type_name": "HexString",
         "template": null,
         "peekable": false,
         "fields": [
@@ -2378,6 +2414,7 @@
     },
     {
       "Tuple": {
+        "type_name": "HexString",
         "template": null,
         "peekable": false,
         "fields": [
@@ -2398,6 +2435,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -2637,6 +2675,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -2656,6 +2695,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -2814,6 +2854,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -3005,6 +3046,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -3241,6 +3283,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -3288,6 +3331,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -3324,6 +3368,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -3387,6 +3432,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -3525,6 +3571,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -3572,6 +3619,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -4051,6 +4099,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -4235,6 +4284,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -4255,6 +4305,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -4275,6 +4326,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -4341,6 +4393,7 @@
     },
     {
       "Tuple": {
+        "type_name": "PriorityFeeBips",
         "template": null,
         "peekable": false,
         "fields": [
@@ -4361,6 +4414,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -4524,6 +4578,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
@@ -4593,6 +4648,7 @@
     },
     {
       "Tuple": {
+        "type_name": null,
         "template": null,
         "peekable": false,
         "fields": [
