@@ -22,12 +22,13 @@ use sov_modules_api::transaction::{
 };
 use sov_modules_api::{
     Amount, CryptoSpec, DispatchCall, GasUnit, PrivateKey, PublicKey, RawTx, Runtime as _, Spec,
-    TxEffect,
+    TxEffect, VersionReader,
 };
+use sov_rollup_interface::da::Time;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
 use sov_test_utils::{
-    generate_optimistic_runtime, EncodeCall, TestSpec, TestUser, TransactionTestCase,
+    generate_optimistic_runtime, get_gas_used, EncodeCall, TestSpec, TestUser, TransactionTestCase,
     TransactionType, TxProcessingError, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
     TEST_DEFAULT_USER_BALANCE,
 };
@@ -424,6 +425,102 @@ fn legacy_transaction_signed_over_grace_period_chain_hash_is_accepted() {
     );
     execute_expecting(&mut runner, tx, Expectation::Success);
     env::remove_var("SOV_TEST_CONST_OVERRIDE_CHAIN_HASH_OVERRIDES");
+}
+
+/// A configured cutoff preserves historical execution, rejects legacy transactions starting at
+/// the cutoff, and leaves current-format transactions and historical decoding available.
+#[test]
+fn legacy_deactivation_height_preserves_historical_execution() {
+    let fixtures = Fixtures::load();
+    let mut runner = fixtures.runner();
+    runner.config.freeze_time = Some(Time::from_secs(1_000));
+    let first = fixtures.by_name("nonce_0_transfer");
+    let next = fixtures.by_name("nonce_1_transfer_with_gas_limit_and_priority_fee");
+
+    // Replay the same slot from the same state with and without a practical cutoff. Simulation
+    // does not commit, so both executions process the original signed bytes at height 1.
+    let (baseline, _, _) = runner.simulate(first.input());
+    env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT",
+        "2",
+    );
+    let (replayed, _, _) = runner.simulate(first.input());
+    assert!(baseline.batch_receipts[0].tx_receipts[0]
+        .receipt
+        .is_successful());
+    assert!(replayed.batch_receipts[0].tx_receipts[0]
+        .receipt
+        .is_successful());
+    assert_eq!(baseline.state_root, replayed.state_root);
+    assert_eq!(
+        get_gas_used(&baseline.batch_receipts[0].tx_receipts[0]),
+        get_gas_used(&replayed.batch_receipts[0].tx_receipts[0]),
+    );
+
+    execute_expecting(&mut runner, first, Expectation::Success);
+    runner.query_visible_state(|state| assert_eq!(state.rollup_height_to_access().get(), 1));
+
+    // The rejected transaction must not consume nonce 1, either at the cutoff or after it.
+    for height in [2, 3] {
+        runner.execute_transaction(TransactionTestCase {
+            input: next.input(),
+            assert: Box::new(move |result, state| {
+                assert_eq!(state.rollup_height_to_access().get(), height);
+                assert_authentication_failure(
+                    "legacy transaction at or after cutoff",
+                    &result.tx_receipt,
+                    &format!(
+                        "Legacy V0 transactions are disabled at rollup height {height} (cutoff 2)"
+                    ),
+                );
+            }),
+        });
+    }
+
+    let unsigned = UnsignedTransaction::<RT, S>::new(
+        fixtures.expected_call(next),
+        RT::CHAIN_HASH,
+        TEST_DEFAULT_MAX_PRIORITY_FEE,
+        TEST_DEFAULT_MAX_FEE,
+        UniquenessData::Nonce(1),
+        None,
+        None,
+    );
+    runner.execute_transaction(TransactionTestCase {
+        input: TransactionType::pre_signed(
+            unsigned,
+            &key_from_seed(next.sender_seed),
+            &RT::CHAIN_HASH,
+        ),
+        assert: Box::new(|result, _state| assert!(result.tx_receipt.is_successful())),
+    });
+
+    assert_eq!(
+        capabilities::decode_sov_tx::<S, RT>(&first.raw_tx()).unwrap(),
+        fixtures.expected_call(first),
+    );
+    env::remove_var("SOV_TEST_CONST_OVERRIDE_ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
+}
+
+#[test]
+fn legacy_deactivation_height_zero_rejects_legacy_transactions() {
+    env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT",
+        "0",
+    );
+    let fixtures = Fixtures::load();
+    let mut runner = fixtures.runner();
+    runner.execute_transaction(TransactionTestCase {
+        input: fixtures.by_name("nonce_0_transfer").input(),
+        assert: Box::new(|result, _state| {
+            assert_authentication_failure(
+                "legacy transaction with cutoff zero",
+                &result.tx_receipt,
+                "Legacy V0 transactions are disabled at rollup height 1 (cutoff 0)",
+            );
+        }),
+    });
+    env::remove_var("SOV_TEST_CONST_OVERRIDE_ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
 }
 
 /// Replaying a legacy transaction is caught by the uniqueness check like any other transaction.

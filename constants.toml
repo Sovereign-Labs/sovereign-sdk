@@ -27,6 +27,11 @@ STATE_VERSION = 1
 # Example: CHAIN_HASH_OVERRIDES = [{ start_height = 0, end_height = 1000, chain_hash = "0xabc...32_bytes_hex", grace_period = 100 }]
 CHAIN_HASH_OVERRIDES = []
 
+# Legacy V0 transactions are accepted only below this rollup execution height.
+# Preserve the cutoff for historical replay; all nodes and ZK guests must agree on it.
+# i64::MAX (the largest TOML integer) leaves acceptance enabled for practical chain lifetimes.
+ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT = 9223372036854775807
+
 # The namespace used by the rollup to store its data.
 # Using byte_string to convert "sov-test-b" to ASCII bytes
 # Should be 10 bytes long for Celestia

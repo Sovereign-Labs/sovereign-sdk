@@ -1,4 +1,4 @@
-//! Transitional support for the pre-fork ("legacy") V0 transaction encoding.
+//! Compatibility support for the pre-fork ("legacy") V0 transaction encoding.
 //!
 //! The multisig and accounts hard fork (#2892) changed the V0 wire format in ways that break
 //! borsh-encoded transactions produced by pre-fork clients:
@@ -18,10 +18,11 @@
 //! the execution height.
 //!
 //! Legacy decoding and authentication must be retained to replay historical transactions during
-//! resync, even after all clients have upgraded. A future deactivation height should gate legacy
-//! authentication using the rollup height being executed, preserving existing execution behavior
-//! (including gas charges) below that height. Decoding must remain available for historical data.
-//! No deactivation height is currently enforced.
+//! resync, even after all clients have upgraded. `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` gates legacy
+//! authentication using the rollup height being executed: legacy transactions are rejected at or
+//! above the cutoff, preserving existing execution behavior (including gas charges) below it.
+//! The repository defaults the cutoff to `i64::MAX`. Decoding remains available at all heights
+//! for historical data.
 
 use std::io;
 

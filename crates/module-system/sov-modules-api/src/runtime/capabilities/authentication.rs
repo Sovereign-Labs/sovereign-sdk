@@ -496,7 +496,7 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
 /// hash fragment before verifying the signature.
 ///
 /// Transactions in the pre-fork V0 encoding are also accepted and authenticated with the pre-fork
-/// rules; see [`crate::transaction::legacy_v0`].
+/// rules below `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT`; see [`crate::transaction::legacy_v0`].
 ///
 /// # Errors
 /// Returns an error if gas runs out at any point, if deserialization or hashing fails, or if the
@@ -544,6 +544,19 @@ pub fn authenticate<
             )),
             raw_tx_hash,
         ));
+    }
+
+    if matches!(&tx, DecodedTransaction::LegacyV0(_)) {
+        let cutoff: u64 = config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
+        if height.get() >= cutoff {
+            return Err(AuthenticationError::FatalError(
+                FatalError::Other(format!(
+                    "Legacy V0 transactions are disabled at rollup height {} (cutoff {cutoff})",
+                    height.get()
+                )),
+                raw_tx_hash,
+            ));
+        }
     }
 
     verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
@@ -623,9 +636,9 @@ fn verify_legacy_chain_id<S: Spec>(
 /// The legacy envelope has a single valid encoding (no optional trailing fields), so the raw
 /// transaction hash doubles as the non-malleable hash.
 ///
-/// This authentication path must be retained for historical replay during resync. A future
-/// deactivation height must preserve its existing behavior, including gas charges, for execution
-/// below that height. See [`crate::transaction::legacy_v0`] for the compatibility requirements.
+/// This authentication path must be retained for historical replay during resync. [`authenticate`]
+/// enforces `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` while preserving this behavior, including gas
+/// charges, below the cutoff. See [`crate::transaction::legacy_v0`] for the compatibility requirements.
 fn verify_and_decode_legacy_v0_tx<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     tx: Version0<D, S>,
