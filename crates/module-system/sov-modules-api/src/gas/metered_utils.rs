@@ -231,9 +231,9 @@ pub trait MeteredBorshDeserialize: Sized + borsh::BorshDeserialize {
             .map_err(unwrap_gas_error::<M::Spec>)
     }
 
-    /// Slice-driven entry point. Charges [`GasSpec::bias_borsh_deserialization`],
-    /// wraps `buf` in a [`crate::MeteredReader`], delegates to `deserialize_reader`,
-    /// and advances `*buf` by the bytes consumed.
+    /// Slice-driven entry point. Charges [`GasSpec::bias_borsh_deserialization`], runs the
+    /// derived decoder against a [`crate::MeteredReader`] over `buf` (see
+    /// [`metered_decode_from_slice`]), and advances `*buf` by the bytes consumed.
     fn deserialize_from_slice<M: GasMeter>(
         buf: &mut &[u8],
         meter: &mut M,

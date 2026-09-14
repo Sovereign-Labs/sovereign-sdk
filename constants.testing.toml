@@ -11,8 +11,10 @@ CHAIN_ID = 4321
 CHAIN_NAME = "TestChain"
 STATE_VERSION = 1
 CHAIN_HASH_OVERRIDES = []
-# Exclusive rollup execution height cutoff for legacy V0 transactions; defaults to i64::MAX.
-ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT = 9223372036854775807
+# Legacy V0 transactions are accepted only below this rollup execution height.
+# Note that rollup height obviously counts from genesis; so if the rollup upgrades at height N,
+# then to give M blocks of grace period for clients to update, set this to N + M.
+ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT = 0
 # The number of bytes a transaction can have.
 MAX_TX_SIZE=1_048_576
 

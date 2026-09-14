@@ -1,6 +1,6 @@
 # 2026-09-04
-- #PR_NUMBER Authentication: The standard authenticator accepts V0 transactions in the pre-fork wire format (no `address_override`, pre-fork signing payload, `chain_id` in place of `chain_hash_fragment`), authenticating them with the pre-fork rules (`CHAIN_ID` check, signature tried against every chain hash valid at the execution height). This lets clients lag behind the hard fork upgrade. 
-- Add `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` to `constants.toml`. Legacy V0 transactions are rejected at or above this rollup execution height.
+- #PR_NUMBER Authentication: The standard authenticator accepts certain V0 transactions in the pre-fork format, authenticating them with the pre-fork rules (`CHAIN_ID` check, signature tried against every chain hash valid at the execution height). This lets clients lag behind the hard fork upgrade. Accepted transactions must be V0, in the standard authenticator only, and not using account abstraction/mapping.
+    - Add `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` to `constants.toml`. Legacy V0 transactions are rejected at or above this rollup execution height.
 
 # 2026-08-17
 ## #2892 Multisig and accounts hard fork - major breaking change

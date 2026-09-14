@@ -17,12 +17,18 @@
 //! verify over the legacy payload ([`legacy_signing_bytes`]) for one of the chain hashes valid at
 //! the execution height.
 //!
+//! Only the standard authenticator accepts legacy transactions, and only for credentials without a
+//! custom account mapping: a legacy envelope carries no `address_override`, so it always executes
+//! as the canonical address of the signing credential. Credentials that were mapped to another
+//! account before the fork (`sov-accounts` `InsertCredentialId`) must upgrade to the current
+//! encoding, which can carry an `address_override`.
+//!
 //! Legacy decoding and authentication must be retained to replay historical transactions during
 //! resync, even after all clients have upgraded. `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` gates legacy
 //! authentication using the rollup height being executed: legacy transactions are rejected at or
 //! above the cutoff, preserving existing execution behavior (including gas charges) below it.
-//! The repository defaults the cutoff to `i64::MAX`. Decoding remains available at all heights
-//! for historical data.
+//! The repository ships a cutoff of 0, so legacy acceptance is off until a rollup sets a cutoff
+//! covering its upgrade window. Decoding remains available at all heights for historical data.
 
 use std::io;
 
@@ -86,23 +92,15 @@ where
             let uniqueness = UniquenessData::deserialize_reader(reader)?;
             let details = TxDetails::<S>::deserialize_reader(reader)?;
 
-            let Some(option_tag) = read_byte_or_eof(reader)? else {
-                return Ok(DecodedTransaction::LegacyV0(Version0 {
-                    signature,
-                    pub_key,
-                    runtime_call,
-                    uniqueness,
-                    details,
-                    address_override: None,
-                }));
-            };
-            // Mirrors borsh's `Option` decoding; its first byte has already been consumed above.
+            // A legacy envelope ends here. A current one continues with the `Option` tag of
+            // `address_override`, decoded exactly like borsh does.
+            let option_tag = read_byte_or_eof(reader)?;
             let address_override = match option_tag {
-                0 => None,
-                1 => Some(<S::Address as BorshDeserialize>::deserialize_reader(
+                None | Some(0) => None,
+                Some(1) => Some(<S::Address as BorshDeserialize>::deserialize_reader(
                     reader,
                 )?),
-                other => {
+                Some(other) => {
                     return Err(io::Error::new(
                         io::ErrorKind::InvalidData,
                         format!(
@@ -111,14 +109,18 @@ where
                     ))
                 }
             };
-            Ok(DecodedTransaction::Current(Transaction::V0(Version0 {
+            let tx = Version0 {
                 signature,
                 pub_key,
                 runtime_call,
                 uniqueness,
                 details,
                 address_override,
-            })))
+            };
+            Ok(match option_tag {
+                None => DecodedTransaction::LegacyV0(tx),
+                Some(_) => DecodedTransaction::Current(Transaction::V0(tx)),
+            })
         }
         1 => Ok(DecodedTransaction::Current(Transaction::V1(
             Version1::<R, S, C>::deserialize_reader(reader)?,
@@ -147,26 +149,25 @@ fn read_byte_or_eof(reader: &mut impl io::Read) -> io::Result<Option<u8>> {
 /// `borsh(runtime_call) ++ borsh(uniqueness) ++ borsh(details) ++ chain_hash`.
 ///
 /// Before the fork this was `borsh(UnsignedTransaction) ++ chain_hash`, with `UnsignedTransaction`
-/// consisting of exactly those three fields. The authenticator only verifies transactions decoded
-/// as [`DecodedTransaction::LegacyV0`] against this payload.
+/// consisting of exactly those three fields. The payload does not commit to `address_override`,
+/// which the legacy envelope cannot carry. The authenticator only verifies transactions decoded as
+/// [`DecodedTransaction::LegacyV0`] against this payload.
 pub fn legacy_signing_bytes<R: TransactionCallable, S: Spec, C: CryptoSpecExt>(
     tx: &Transaction<R, S, C>,
     chain_hash: &[u8; 32],
 ) -> Vec<u8> {
     let (runtime_call, uniqueness, details) = match tx {
-        Transaction::V0(tx) => (&tx.runtime_call, &tx.uniqueness, &tx.details),
+        Transaction::V0(tx) => {
+            debug_assert!(
+                tx.address_override.is_none(),
+                "the legacy signing payload does not commit to an address override"
+            );
+            (&tx.runtime_call, &tx.uniqueness, &tx.details)
+        }
         Transaction::V1(tx) => (&tx.runtime_call, &tx.uniqueness, &tx.details),
     };
     let mut bytes = Vec::new();
-    runtime_call
-        .serialize(&mut bytes)
-        .expect("Serialization to vec is infallible");
-    uniqueness
-        .serialize(&mut bytes)
-        .expect("Serialization to vec is infallible");
-    details
-        .serialize(&mut bytes)
-        .expect("Serialization to vec is infallible");
+    write_legacy_unsigned_fields::<R, S>(runtime_call, uniqueness, details, &mut bytes);
     bytes.extend_from_slice(chain_hash);
     bytes
 }
@@ -199,14 +200,25 @@ where
     tx.pub_key
         .serialize(&mut bytes)
         .expect("Serialization to vec is infallible");
-    tx.runtime_call
-        .serialize(&mut bytes)
-        .expect("Serialization to vec is infallible");
-    tx.uniqueness
-        .serialize(&mut bytes)
-        .expect("Serialization to vec is infallible");
-    tx.details
-        .serialize(&mut bytes)
-        .expect("Serialization to vec is infallible");
+    write_legacy_unsigned_fields::<R, S>(&tx.runtime_call, &tx.uniqueness, &tx.details, &mut bytes);
     bytes
+}
+
+/// Appends `borsh(runtime_call) ++ borsh(uniqueness) ++ borsh(details)` to `out`: the fields of
+/// the pre-fork `UnsignedTransaction`, shared by the legacy envelope and signing payload.
+fn write_legacy_unsigned_fields<R: TransactionCallable, S: Spec>(
+    runtime_call: &R::Call,
+    uniqueness: &UniquenessData,
+    details: &TxDetails<S>,
+    out: &mut Vec<u8>,
+) {
+    runtime_call
+        .serialize(out)
+        .expect("Serialization to vec is infallible");
+    uniqueness
+        .serialize(out)
+        .expect("Serialization to vec is infallible");
+    details
+        .serialize(out)
+        .expect("Serialization to vec is infallible");
 }

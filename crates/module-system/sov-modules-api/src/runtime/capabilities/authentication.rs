@@ -398,26 +398,15 @@ pub fn select_chain_hash<S: Spec>(
     ))
 }
 
-/// Verifies the transaction signature over its signing payload for `chain_hash`.
-fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
-    tx: &Transaction<D, S>,
-    chain_hash: &[u8; 32],
-    raw_tx_hash: TxHash,
-    meter: &mut impl GasMeter<Spec = S>,
-) -> Result<Vec<u8>, AuthenticationError> {
-    let serialized_tx = tx.to_signing_bytes(chain_hash);
-    verify_signature_over_message(tx, serialized_tx, chain_hash, raw_tx_hash, meter)
-}
-
 /// Charges gas for and verifies the transaction signature(s) over `serialized_tx`, which must be
-/// the signing payload for `chain_hash`. Returns the payload on success.
+/// the signing payload for `chain_hash`.
 fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
     tx: &Transaction<D, S>,
-    serialized_tx: Vec<u8>,
+    serialized_tx: &[u8],
     chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
-) -> Result<Vec<u8>, AuthenticationError> {
+) -> Result<(), AuthenticationError> {
     // The chain hash is only used as part of the native signature cache key.
     #[cfg(not(feature = "native"))]
     let _ = chain_hash;
@@ -435,11 +424,11 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
 
     #[cfg(feature = "native")]
     if let Some(known_result) = SIGNATURE_CACHE.get(&(raw_tx_hash, *chain_hash)) {
-        return known_result.map(|()| serialized_tx);
+        return known_result;
     }
 
     let res = tx
-        .verify_signature_unmetered(&serialized_tx)
+        .verify_signature_unmetered(serialized_tx)
         .map_err(|e| match e {
             TransactionVerificationError::GasError(_) => {
                 AuthenticationError::OutOfGas(e.to_string())
@@ -453,7 +442,7 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
     #[cfg(feature = "native")]
     SIGNATURE_CACHE.insert((raw_tx_hash, *chain_hash), res.clone());
 
-    res.map(|()| serialized_tx)
+    res
 }
 
 /// Calculates the non-malleable hash to use for replay protection.
@@ -484,12 +473,7 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
         primary: *chain_hash,
         grace_period_hashes: Vec::new(),
     };
-    verify_and_decode_tx_multi_hash(
-        raw_tx_hash,
-        DecodedTransaction::Current(tx),
-        resolved_hashes,
-        meter,
-    )
+    verify_and_decode_tx_multi_hash(raw_tx_hash, tx, resolved_hashes, meter)
 }
 
 /// Authenticate raw sov-transaction.
@@ -550,47 +534,44 @@ pub fn authenticate<
         ));
     }
 
-    if matches!(&tx, DecodedTransaction::LegacyV0(_)) {
-        let cutoff: u64 = config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
-        if height.get() >= cutoff {
-            return Err(AuthenticationError::FatalError(
-                FatalError::Other(format!(
-                    "Legacy V0 transactions are disabled at rollup height {} (cutoff {cutoff})",
-                    height.get()
-                )),
-                raw_tx_hash,
-            ));
+    match tx {
+        DecodedTransaction::Current(tx) => {
+            verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
+        }
+        DecodedTransaction::LegacyV0(tx_v0) => {
+            let cutoff: u64 = config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
+            if height.get() >= cutoff {
+                return Err(AuthenticationError::FatalError(
+                    FatalError::Other(format!(
+                        "Legacy V0 transactions are disabled at rollup height {} (cutoff {cutoff})",
+                        height.get()
+                    )),
+                    raw_tx_hash,
+                ));
+            }
+            verify_and_decode_legacy_v0_tx(raw_tx_hash, tx_v0, &resolved_hashes, state)
         }
     }
-
-    verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
 }
 
 /// Authenticate and verify deserialized sov-tx with multiple chain hashes.
 ///
 /// Selects the full chain hash by matching the transaction's chain hash fragment
-/// against the hashes valid for this height. Transactions in the pre-fork V0 encoding are
-/// dispatched to [`verify_and_decode_legacy_v0_tx`] instead.
+/// against the hashes valid for this height.
 fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
-    tx: DecodedTransaction<D, S>,
+    tx: Transaction<D, S>,
     resolved_hashes: crate::runtime::ResolvedChainHashes,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    let tx = match tx {
-        DecodedTransaction::Current(tx) => tx,
-        DecodedTransaction::LegacyV0(tx_v0) => {
-            return verify_and_decode_legacy_v0_tx(raw_tx_hash, tx_v0, &resolved_hashes, meter)
-        }
-    };
-
     let (details, runtime_call) = match &tx {
         Transaction::V0(tx_v0) => (&tx_v0.details, &tx_v0.runtime_call),
         Transaction::V1(tx_v1) => (&tx_v1.details, &tx_v1.runtime_call),
     };
 
     let chain_hash = select_chain_hash(details, &resolved_hashes, raw_tx_hash)?;
-    let serialized_tx = verify_signature(&tx, &chain_hash, raw_tx_hash, meter)?;
+    let serialized_tx = tx.to_signing_bytes(&chain_hash);
+    verify_signature_over_message(&tx, &serialized_tx, &chain_hash, raw_tx_hash, meter)?;
     let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
         match &tx {
             Transaction::V0(_) => ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash),
@@ -674,8 +655,8 @@ fn verify_legacy_signature_with_any_chain_hash<S: Spec, D: DispatchCall<Spec = S
     let mut last_error = None;
     for chain_hash in resolved_hashes.iter() {
         let message = legacy_v0::legacy_signing_bytes(tx, chain_hash);
-        match verify_signature_over_message(tx, message, chain_hash, raw_tx_hash, meter) {
-            Ok(_) => return Ok(()),
+        match verify_signature_over_message(tx, &message, chain_hash, raw_tx_hash, meter) {
+            Ok(()) => return Ok(()),
             Err(AuthenticationError::FatalError(
                 FatalError::SigVerificationFailed(error),
                 hash,

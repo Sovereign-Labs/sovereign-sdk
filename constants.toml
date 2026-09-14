@@ -28,9 +28,9 @@ STATE_VERSION = 1
 CHAIN_HASH_OVERRIDES = []
 
 # Legacy V0 transactions are accepted only below this rollup execution height.
-# Preserve the cutoff for historical replay; all nodes and ZK guests must agree on it.
-# i64::MAX (the largest TOML integer) leaves acceptance enabled for practical chain lifetimes.
-ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT = 9223372036854775807
+# Note that rollup height obviously counts from genesis; so if the rollup upgrades at height N,
+# then to give M blocks of grace period for clients to update, set this to N + M.
+ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT = 0
 
 # The namespace used by the rollup to store its data.
 # Using byte_string to convert "sov-test-b" to ASCII bytes

@@ -21,8 +21,8 @@ use sov_modules_api::transaction::{
     PriorityFeeBips, Transaction, TxDetails, UnsignedTransaction, Version0,
 };
 use sov_modules_api::{
-    Amount, CryptoSpec, DispatchCall, GasUnit, PrivateKey, PublicKey, RawTx, Runtime as _, Spec,
-    TxEffect, VersionReader,
+    Amount, CredentialId, CryptoSpec, DispatchCall, GasUnit, HexHash, HexString, PrivateKey,
+    PublicKey, RawTx, Runtime as _, Spec, TxEffect, VersionReader,
 };
 use sov_rollup_interface::da::Time;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
@@ -45,7 +45,7 @@ const FIXTURES_JSON: &str = include_str!("v0_fixtures.json");
 
 #[derive(Deserialize)]
 struct Fixtures {
-    chain_hash: String,
+    chain_hash: HexHash,
     chain_id: u64,
     recipient: Party,
     senders: Vec<Party>,
@@ -55,8 +55,8 @@ struct Fixtures {
 #[derive(Deserialize)]
 struct Party {
     seed: u8,
-    address: String,
-    credential_id: Option<String>,
+    address: <S as Spec>::Address,
+    credential_id: Option<CredentialId>,
 }
 
 #[derive(Deserialize)]
@@ -64,15 +64,15 @@ struct FixtureTx {
     name: String,
     sender_seed: u8,
     uniqueness: UniquenessData,
-    amount: String,
-    max_priority_fee_bips: u64,
-    max_fee: String,
-    gas_limit: Option<[u64; 2]>,
+    amount: Amount,
+    max_priority_fee_bips: PriorityFeeBips,
+    max_fee: Amount,
+    gas_limit: Option<GasUnit<2>>,
     chain_id: u64,
-    chain_hash: String,
+    chain_hash: HexHash,
     expect: Expectation,
-    signing_payload: String,
-    raw_tx: String,
+    signing_payload: HexString,
+    raw_tx: HexString,
 }
 
 /// How the post-fork rollup is expected to treat a fixture, without any chain hash overrides.
@@ -110,7 +110,7 @@ impl Fixtures {
         <RT as EncodeCall<Bank<S>>>::to_decodable(BankCallMessage::Transfer {
             to: self.recipient(),
             coins: Coins {
-                amount: Amount::new(tx.amount()),
+                amount: tx.amount,
                 token_id: config_gas_token_id(),
             },
         })
@@ -130,35 +130,19 @@ impl Fixtures {
 }
 
 impl FixtureTx {
-    fn raw_tx(&self) -> Vec<u8> {
-        hex::decode(&self.raw_tx).unwrap()
-    }
-
-    fn signing_payload(&self) -> Vec<u8> {
-        hex::decode(&self.signing_payload).unwrap()
-    }
-
-    fn chain_hash(&self) -> [u8; 32] {
-        hex32(&self.chain_hash)
-    }
-
-    fn amount(&self) -> u128 {
-        self.amount.parse().unwrap()
-    }
-
     /// The details the fixture was built from. Legacy transactions carry the chain id in the
     /// field that now holds the chain hash fragment.
     fn details(&self) -> TxDetails<S> {
         TxDetails {
-            max_priority_fee_bips: PriorityFeeBips::from(self.max_priority_fee_bips),
-            max_fee: Amount::new(self.max_fee.parse().unwrap()),
-            gas_limit: self.gas_limit.map(GasUnit::from),
+            max_priority_fee_bips: self.max_priority_fee_bips,
+            max_fee: self.max_fee,
+            gas_limit: self.gas_limit,
             chain_hash_fragment: self.chain_id,
         }
     }
 
     fn input(&self) -> TransactionType<RT, S> {
-        TransactionType::PreSigned(RawTx::new(self.raw_tx()))
+        TransactionType::PreSigned(RawTx::new(self.raw_tx.0.clone()))
     }
 }
 
@@ -173,11 +157,19 @@ fn address_from_seed(seed_byte: u8) -> <S as Spec>::Address {
     key_from_seed(seed_byte).pub_key().credential_id().into()
 }
 
-fn hex32(hex_str: &str) -> [u8; 32] {
-    hex::decode(hex_str)
-        .unwrap()
-        .try_into()
-        .expect("32-byte hex string")
+/// Overrides `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` for this test process. The repository ships a
+/// cutoff of 0, which disables legacy acceptance, so tests that exercise legacy authentication
+/// opt in explicitly. Every test runs in its own process under nextest, so nothing is restored.
+fn set_legacy_cutoff(cutoff: u64) {
+    env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT",
+        cutoff.to_string(),
+    );
+}
+
+/// Accepts legacy transactions at every height.
+fn accept_legacy_transactions() {
+    set_legacy_cutoff(u64::MAX);
 }
 
 fn decode(raw_tx: &[u8]) -> DecodedTransaction<RT, S> {
@@ -242,21 +234,16 @@ fn execute_expecting(runner: &mut TestRunner<RT, S>, tx: &FixtureTx, expect: Exp
 #[test]
 fn fixture_metadata_matches_this_runtime() {
     let fixtures = Fixtures::load();
+    let chain_id: u64 = config_value!("CHAIN_ID");
 
-    assert_eq!(hex32(&fixtures.chain_hash), RT::CHAIN_HASH);
-    assert_eq!(fixtures.chain_id, config_value!("CHAIN_ID"));
-    assert_eq!(fixtures.recipient().to_string(), fixtures.recipient.address);
+    assert_eq!(RT::CHAIN_HASH, fixtures.chain_hash.0);
+    assert_eq!(chain_id, fixtures.chain_id);
+    assert_eq!(fixtures.recipient(), fixtures.recipient.address);
     for sender in &fixtures.senders {
-        assert_eq!(address_from_seed(sender.seed).to_string(), sender.address);
+        assert_eq!(address_from_seed(sender.seed), sender.address);
         assert_eq!(
-            key_from_seed(sender.seed)
-                .pub_key()
-                .credential_id()
-                .to_string(),
-            sender
-                .credential_id
-                .clone()
-                .expect("senders list a credential id")
+            key_from_seed(sender.seed).pub_key().credential_id(),
+            sender.credential_id.expect("senders list a credential id")
         );
     }
 }
@@ -267,7 +254,7 @@ fn fixtures_decode_as_legacy_v0_envelopes() {
     let fixtures = Fixtures::load();
 
     for tx in &fixtures.transactions {
-        let decoded = decode_legacy(&tx.raw_tx());
+        let decoded = decode_legacy(&tx.raw_tx.0);
         assert_eq!(decoded.address_override, None, "{}", tx.name);
         assert_eq!(
             decoded.pub_key,
@@ -293,7 +280,7 @@ fn derived_decoder_rejects_legacy_fixtures() {
     let fixtures = Fixtures::load();
 
     for tx in &fixtures.transactions {
-        let error = borsh::from_slice::<Transaction<RT, S>>(&tx.raw_tx())
+        let error = borsh::from_slice::<Transaction<RT, S>>(&tx.raw_tx.0)
             .err()
             .unwrap_or_else(|| panic!("{}: derived decoder accepted a legacy envelope", tx.name));
         // Borsh reports the truncated input as "Unexpected length of input".
@@ -312,7 +299,7 @@ fn fixtures_decode_through_decode_sov_tx() {
     let fixtures = Fixtures::load();
 
     for tx in &fixtures.transactions {
-        let call = capabilities::decode_sov_tx::<S, RT>(&tx.raw_tx())
+        let call = capabilities::decode_sov_tx::<S, RT>(&tx.raw_tx.0)
             .unwrap_or_else(|e| panic!("{}: {e}", tx.name));
         assert_eq!(call, fixtures.expected_call(tx), "{}", tx.name);
     }
@@ -338,10 +325,9 @@ fn legacy_encoding_reproduces_v0_fixture_bytes() {
         };
 
         let payload =
-            legacy_v0::legacy_signing_bytes(&Transaction::V0(rebuilt.clone()), &tx.chain_hash());
+            legacy_v0::legacy_signing_bytes(&Transaction::V0(rebuilt.clone()), &tx.chain_hash.0);
         assert_eq!(
-            payload,
-            tx.signing_payload(),
+            payload, tx.signing_payload.0,
             "{}: legacy signing payload",
             tx.name
         );
@@ -349,7 +335,7 @@ fn legacy_encoding_reproduces_v0_fixture_bytes() {
         rebuilt.signature = key.sign(&payload);
         assert_eq!(
             legacy_v0::legacy_v0_envelope_bytes(&rebuilt),
-            tx.raw_tx(),
+            tx.raw_tx.0,
             "{}: legacy envelope",
             tx.name
         );
@@ -359,13 +345,14 @@ fn legacy_encoding_reproduces_v0_fixture_bytes() {
 /// Legacy transactions are authenticated, authorized and executed by the post-fork STF.
 #[test]
 fn legacy_transactions_execute_and_transfer_funds() {
+    accept_legacy_transactions();
     let fixtures = Fixtures::load();
     let mut runner = fixtures.runner();
 
     let mut expected_balance = 0u128;
     for tx in fixtures.successful() {
         execute_expecting(&mut runner, tx, Expectation::Success);
-        expected_balance += tx.amount();
+        expected_balance += tx.amount.0;
     }
 
     let recipient = fixtures.recipient();
@@ -383,6 +370,7 @@ fn legacy_transactions_execute_and_transfer_funds() {
 
 #[test]
 fn legacy_transaction_with_wrong_chain_id_is_rejected() {
+    accept_legacy_transactions();
     let fixtures = Fixtures::load();
     let mut runner = fixtures.runner();
 
@@ -395,6 +383,7 @@ fn legacy_transaction_with_wrong_chain_id_is_rejected() {
 
 #[test]
 fn legacy_transaction_with_unknown_chain_hash_is_rejected() {
+    accept_legacy_transactions();
     let fixtures = Fixtures::load();
     let mut runner = fixtures.runner();
 
@@ -410,6 +399,7 @@ fn legacy_transaction_with_unknown_chain_hash_is_rejected() {
 /// valid at the current height.
 #[test]
 fn legacy_transaction_signed_over_grace_period_chain_hash_is_accepted() {
+    accept_legacy_transactions();
     let fixtures = Fixtures::load();
     let tx = fixtures.by_name("grace_period_chain_hash");
     let mut runner = fixtures.runner();
@@ -419,7 +409,7 @@ fn legacy_transaction_signed_over_grace_period_chain_hash_is_accepted() {
     env::set_var(
         "SOV_TEST_CONST_OVERRIDE_CHAIN_HASH_OVERRIDES",
         format!(
-            r#"[{{ start_height = 0, end_height = 0, chain_hash = "0x{}", grace_period = 1000 }}]"#,
+            r#"[{{ start_height = 0, end_height = 0, chain_hash = "{}", grace_period = 1000 }}]"#,
             tx.chain_hash
         ),
     );
@@ -427,36 +417,43 @@ fn legacy_transaction_signed_over_grace_period_chain_hash_is_accepted() {
     env::remove_var("SOV_TEST_CONST_OVERRIDE_CHAIN_HASH_OVERRIDES");
 }
 
-/// A configured cutoff preserves historical execution, rejects legacy transactions starting at
-/// the cutoff, and leaves current-format transactions and historical decoding available.
+/// Below the cutoff, a legacy transaction executes exactly as it does on a rollup without one:
+/// same state root, same gas.
 #[test]
-fn legacy_deactivation_height_preserves_historical_execution() {
+fn legacy_deactivation_height_preserves_execution_below_cutoff() {
+    accept_legacy_transactions();
     let fixtures = Fixtures::load();
     let mut runner = fixtures.runner();
     runner.config.freeze_time = Some(Time::from_secs(1_000));
-    let first = fixtures.by_name("nonce_0_transfer");
-    let next = fixtures.by_name("nonce_1_transfer_with_gas_limit_and_priority_fee");
+    let tx = fixtures.by_name("nonce_0_transfer");
 
     // Replay the same slot from the same state with and without a practical cutoff. Simulation
     // does not commit, so both executions process the original signed bytes at height 1.
-    let (baseline, _, _) = runner.simulate(first.input());
-    env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT",
-        "2",
-    );
-    let (replayed, _, _) = runner.simulate(first.input());
-    assert!(baseline.batch_receipts[0].tx_receipts[0]
-        .receipt
-        .is_successful());
-    assert!(replayed.batch_receipts[0].tx_receipts[0]
-        .receipt
-        .is_successful());
-    assert_eq!(baseline.state_root, replayed.state_root);
-    assert_eq!(
-        get_gas_used(&baseline.batch_receipts[0].tx_receipts[0]),
-        get_gas_used(&replayed.batch_receipts[0].tx_receipts[0]),
-    );
+    let (baseline, _, _) = runner.simulate(tx.input());
+    set_legacy_cutoff(2);
+    let (with_cutoff, _, _) = runner.simulate(tx.input());
 
+    let baseline_receipt = &baseline.batch_receipts[0].tx_receipts[0];
+    let with_cutoff_receipt = &with_cutoff.batch_receipts[0].tx_receipts[0];
+    assert!(baseline_receipt.receipt.is_successful());
+    assert!(with_cutoff_receipt.receipt.is_successful());
+    assert_eq!(with_cutoff.state_root, baseline.state_root);
+    assert_eq!(
+        get_gas_used(with_cutoff_receipt),
+        get_gas_used(baseline_receipt)
+    );
+}
+
+/// From the cutoff on, legacy transactions are rejected without consuming their nonce, which stays
+/// available to a current-format transaction.
+#[test]
+fn legacy_deactivation_height_rejects_legacy_transactions_from_cutoff() {
+    let fixtures = Fixtures::load();
+    let mut runner = fixtures.runner();
+    let first = fixtures.by_name("nonce_0_transfer");
+    let next = fixtures.by_name("nonce_1_transfer_with_gas_limit_and_priority_fee");
+
+    set_legacy_cutoff(2);
     execute_expecting(&mut runner, first, Expectation::Success);
     runner.query_visible_state(|state| assert_eq!(state.rollup_height_to_access().get(), 1));
 
@@ -494,20 +491,23 @@ fn legacy_deactivation_height_preserves_historical_execution() {
         ),
         assert: Box::new(|result, _state| assert!(result.tx_receipt.is_successful())),
     });
+}
 
-    assert_eq!(
-        capabilities::decode_sov_tx::<S, RT>(&first.raw_tx()).unwrap(),
-        fixtures.expected_call(first),
-    );
-    env::remove_var("SOV_TEST_CONST_OVERRIDE_ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
+/// The cutoff only gates authentication: historical legacy transactions still decode above it.
+#[test]
+fn legacy_deactivation_height_does_not_affect_decoding() {
+    let fixtures = Fixtures::load();
+    let tx = fixtures.by_name("nonce_0_transfer");
+
+    set_legacy_cutoff(0);
+    let call = capabilities::decode_sov_tx::<S, RT>(&tx.raw_tx.0);
+
+    assert_eq!(call.unwrap(), fixtures.expected_call(tx));
 }
 
 #[test]
 fn legacy_deactivation_height_zero_rejects_legacy_transactions() {
-    env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT",
-        "0",
-    );
+    set_legacy_cutoff(0);
     let fixtures = Fixtures::load();
     let mut runner = fixtures.runner();
     runner.execute_transaction(TransactionTestCase {
@@ -520,12 +520,12 @@ fn legacy_deactivation_height_zero_rejects_legacy_transactions() {
             );
         }),
     });
-    env::remove_var("SOV_TEST_CONST_OVERRIDE_ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
 }
 
 /// Replaying a legacy transaction is caught by the uniqueness check like any other transaction.
 #[test]
 fn legacy_transaction_cannot_be_replayed() {
+    accept_legacy_transactions();
     let fixtures = Fixtures::load();
     let tx = fixtures.by_name("nonce_0_transfer");
     let mut runner = fixtures.runner();
@@ -559,7 +559,7 @@ fn legacy_transaction_cannot_be_replayed() {
 fn legacy_envelope_with_appended_address_override_is_rejected() {
     let fixtures = Fixtures::load();
     let tx = fixtures.by_name("nonce_0_transfer");
-    let mut raw_tx = tx.raw_tx();
+    let mut raw_tx = tx.raw_tx.0.clone();
     raw_tx.push(0); // `address_override = None` in the current encoding.
 
     let DecodedTransaction::Current(Transaction::V0(decoded)) = decode(&raw_tx) else {
@@ -584,6 +584,7 @@ fn legacy_envelope_with_appended_address_override_is_rejected() {
 /// legacy rules apply: the chain hash fragment is then read as a chain id and rejected.
 #[test]
 fn current_envelope_truncated_to_legacy_is_rejected() {
+    accept_legacy_transactions();
     let fixtures = Fixtures::load();
     let tx = fixtures.by_name("nonce_0_transfer");
     let unsigned = UnsignedTransaction::<RT, S>::new(
@@ -654,7 +655,7 @@ fn current_format_envelopes_decode_unchanged() {
 #[test]
 fn invalid_address_override_tag_is_rejected() {
     let fixtures = Fixtures::load();
-    let mut raw_tx = fixtures.by_name("nonce_0_transfer").raw_tx();
+    let mut raw_tx = fixtures.by_name("nonce_0_transfer").raw_tx.0.clone();
     raw_tx.push(2); // Neither `None` (0) nor `Some` (1).
 
     let error = legacy_v0::deserialize_transaction_reader::<RT, S, <S as Spec>::CryptoSpec, _>(
@@ -673,6 +674,7 @@ fn invalid_address_override_tag_is_rejected() {
 /// and share the same nonce sequence.
 #[test]
 fn current_format_transaction_follows_legacy_transactions() {
+    accept_legacy_transactions();
     let fixtures = Fixtures::load();
     let mut runner = fixtures.runner();
 
