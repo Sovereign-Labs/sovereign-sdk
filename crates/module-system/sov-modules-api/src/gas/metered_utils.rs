@@ -227,30 +227,20 @@ pub trait MeteredBorshDeserialize: Sized + borsh::BorshDeserialize {
     fn deserialize_reader<R: io::Read, M: GasMeter>(
         reader: &mut crate::MeteredReader<'_, R, M>,
     ) -> Result<Self, MeteredBorshDeserializeError<<M::Spec as Spec>::Gas>> {
-        <Self as borsh::BorshDeserialize>::deserialize_reader(reader).map_err(|io_err| {
-            match io_err.downcast::<GasMeteringError<<M::Spec as Spec>::Gas>>() {
-                Ok(gas_err) => MeteredBorshDeserializeError::GasError(gas_err),
-                Err(io_err) => MeteredBorshDeserializeError::IOError(io_err),
-            }
-        })
+        <Self as borsh::BorshDeserialize>::deserialize_reader(reader)
+            .map_err(unwrap_gas_error::<M::Spec>)
     }
 
-    /// Slice-driven entry point. Charges [`GasSpec::bias_borsh_deserialization`],
-    /// wraps `buf` in a [`crate::MeteredReader`], delegates to `deserialize_reader`,
-    /// and advances `*buf` by the bytes consumed.
+    /// Slice-driven entry point. Charges [`GasSpec::bias_borsh_deserialization`], runs the
+    /// derived decoder against a [`crate::MeteredReader`] over `buf` (see
+    /// [`metered_decode_from_slice`]), and advances `*buf` by the bytes consumed.
     fn deserialize_from_slice<M: GasMeter>(
         buf: &mut &[u8],
         meter: &mut M,
     ) -> Result<Self, MeteredBorshDeserializeError<<M::Spec as Spec>::Gas>> {
-        meter
-            .charge_gas(<M::Spec as GasSpec>::bias_borsh_deserialization())
-            .map_err(MeteredBorshDeserializeError::GasError)?;
-
-        let mut cursor = io::Cursor::new(*buf);
-        let mut reader = crate::MeteredReader::new(&mut cursor, meter);
-        let value = <Self as MeteredBorshDeserialize>::deserialize_reader(&mut reader)?;
-        *buf = &buf[cursor.position() as usize..];
-        Ok(value)
+        metered_decode_from_slice(buf, meter, |reader| {
+            <Self as borsh::BorshDeserialize>::deserialize_reader(reader)
+        })
     }
 
     #[cfg(feature = "native")]
@@ -262,6 +252,38 @@ pub trait MeteredBorshDeserialize: Sized + borsh::BorshDeserialize {
 }
 
 impl<T: borsh::BorshDeserialize> MeteredBorshDeserialize for T {}
+
+/// Runs `decode` against a [`crate::MeteredReader`] over `buf`, charging gas as bytes are
+/// consumed.
+///
+/// Charges [`GasSpec::bias_borsh_deserialization`] once up front and advances `*buf` past the
+/// bytes consumed by `decode`. Gas errors stashed inside an `io::Error` by the reader are unwrapped
+/// and surfaced as [`MeteredBorshDeserializeError::GasError`]. This is the building block behind
+/// [`MeteredBorshDeserialize::deserialize_from_slice`], for decoders that are not a plain derived
+/// `BorshDeserialize` impl.
+pub fn metered_decode_from_slice<T, M: GasMeter>(
+    buf: &mut &[u8],
+    meter: &mut M,
+    decode: impl FnOnce(&mut crate::MeteredReader<'_, &mut io::Cursor<&[u8]>, M>) -> io::Result<T>,
+) -> Result<T, MeteredBorshDeserializeError<<M::Spec as Spec>::Gas>> {
+    meter
+        .charge_gas(<M::Spec as GasSpec>::bias_borsh_deserialization())
+        .map_err(MeteredBorshDeserializeError::GasError)?;
+
+    let mut cursor = io::Cursor::new(*buf);
+    let mut reader = crate::MeteredReader::new(&mut cursor, meter);
+    let value = decode(&mut reader).map_err(unwrap_gas_error::<M::Spec>)?;
+    *buf = &buf[cursor.position() as usize..];
+    Ok(value)
+}
+
+/// Recovers a [`GasMeteringError`] stashed inside an `io::Error` by [`crate::MeteredReader`].
+fn unwrap_gas_error<S: Spec>(io_err: io::Error) -> MeteredBorshDeserializeError<S::Gas> {
+    match io_err.downcast::<GasMeteringError<S::Gas>>() {
+        Ok(gas_err) => MeteredBorshDeserializeError::GasError(gas_err),
+        Err(io_err) => MeteredBorshDeserializeError::IOError(io_err),
+    }
+}
 
 /// Computes the cost to deserialize the given JSON buffer, in `Gas`, and charges it to the provided
 /// `GasMeter`.
