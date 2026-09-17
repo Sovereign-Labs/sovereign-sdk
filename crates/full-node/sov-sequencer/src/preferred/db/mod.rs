@@ -516,26 +516,7 @@ impl From<BatchToStore> for StoredBlob {
     }
 }
 
-/// The role of the sequencer in a distributed setup.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
-pub enum SequencerRole {
-    /// Node that does not sync with the `BatchProducer` and relies on DA for updates.
-    DaOnlyReplica,
-    /// Node that syncs with the `BatchProducer` via PostgreSQL.
-    PgSyncReplica,
-    /// Node that accepts transactions and produces batches.
-    BatchProducer,
-}
-
-impl SequencerRole {
-    /// True when the node will operate as any kind of replica.
-    pub fn is_replica(self) -> bool {
-        matches!(
-            self,
-            SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica
-        )
-    }
-}
+pub use sov_rollup_interface::node::da::SequencerRole;
 
 pub(crate) struct PreferredSequencerDb {
     backend: Option<Box<dyn DbBackend>>,
