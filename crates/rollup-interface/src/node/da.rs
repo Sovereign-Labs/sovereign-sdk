@@ -102,6 +102,32 @@ pub struct SubmitBlobReceipt<T: Debug + Clone> {
     pub da_transaction_id: T,
 }
 
+/// The role of the sequencer in a distributed setup.
+///
+/// Resolved once at startup by the sequencer and handed to the [`DaService`] through
+/// [`DaService::set_sequencer_role`], so a DA service that has to coordinate with other
+/// nodes (for example one sharing a single store between a leader and its replicas) is
+/// told whether it is allowed to write rather than having to work that out itself.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum SequencerRole {
+    /// Node that does not sync with the `BatchProducer` and relies on DA for updates.
+    DaOnlyReplica,
+    /// Node that syncs with the `BatchProducer` via PostgreSQL.
+    PgSyncReplica,
+    /// Node that accepts transactions and produces batches.
+    BatchProducer,
+}
+
+impl SequencerRole {
+    /// True when the node will operate as any kind of replica.
+    pub fn is_replica(self) -> bool {
+        matches!(
+            self,
+            SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica
+        )
+    }
+}
+
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
 /// It is *not* part of the logic that is zk-proven.
 ///
@@ -243,6 +269,16 @@ pub trait DaService: Clone + Send + Sync + 'static {
     async fn take_background_join_handle(&self) -> Option<sov_shutdown::BackgroundHandle<()>> {
         None
     }
+
+    /// Tells the service which [`SequencerRole`] this node holds.
+    ///
+    /// Called by the full node once the sequencer has resolved its role, which is after the
+    /// service has been created and may already be serving reads. A service that only talks
+    /// to an external DA network can ignore this; one whose writes must be coordinated
+    /// between nodes should only write while the role is [`SequencerRole::BatchProducer`].
+    ///
+    /// May be called again if the role changes while the node is running.
+    async fn set_sequencer_role(&self, _role: SequencerRole) {}
 
     /// Returns a [`DaSpec::Address`] that signs blobs submitted by this instance of [`DaService`].
     /// If `None` means that instance of DaService is not capable of sending blobs and can be used only in node mode.
