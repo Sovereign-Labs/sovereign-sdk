@@ -1284,6 +1284,45 @@ dependencies = [
 ]
 
 [[package]]
+name = "asn1-rs"
+version = "0.7.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "b7f43a50ac4fdca5df8e885c21b835997f0a1cdee65494a6847694a98652d9d8"
+dependencies = [
+ "asn1-rs-derive",
+ "asn1-rs-impl",
+ "displaydoc",
+ "nom",
+ "num-traits",
+ "rusticata-macros",
+ "thiserror 2.0.18",
+ "time",
+]
+
+[[package]]
+name = "asn1-rs-derive"
+version = "0.6.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "3109e49b1e4909e9db6515a30c633684d68cdeaa252f215214cb4fa1a5bfee2c"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+ "synstructure",
+]
+
+[[package]]
+name = "asn1-rs-impl"
+version = "0.2.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7b18050c2cd6fe86c3a76584ef5e0baf286d038cda203eb6223df2cc413565f7"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
+]
+
+[[package]]
 name = "assert-json-diff"
 version = "2.0.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2501,9 +2540,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-client"
-version = "1.1.0-rc.1"
+version = "1.2.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "9c86dc81f594a9db8042434fc9b91b87e0957cdd0a555af4774009416aa54a2e"
+checksum = "48c8601b8346988aeb2bc455f129155e93f99a86a22fce68cd4308cf1d5c77a5"
 dependencies = [
  "async-stream",
  "blockstore",
@@ -2530,38 +2569,49 @@ dependencies = [
 
 [[package]]
 name = "celestia-fibre"
-version = "1.1.0-rc.1"
+version = "1.2.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "8722a0a33710d8fc983da1f35a5037a24c52135a04be5629da957f7421b3a367"
+checksum = "fff250c33c0af17c2614272dd0f64024c4f7d2b5a1ccd043c040fb7c1d6b6a49"
 dependencies = [
  "async-trait",
- "bech32",
+ "bytes",
  "celestia-grpc",
  "celestia-proto",
  "celestia-types",
  "chacha8rand",
+ "der",
  "ed25519-dalek",
  "futures",
+ "gloo-net",
  "hex",
+ "http 1.4.0",
+ "hyper",
+ "hyper-util",
  "k256",
  "lumina-utils",
  "prost 0.13.5",
  "rand 0.8.5",
+ "ring",
  "rsema1d",
+ "rustls-pki-types",
+ "send_wrapper 0.6.0",
  "sha2 0.10.9",
  "tendermint-proto",
  "thiserror 2.0.18",
  "tokio",
+ "tokio-rustls",
  "tokio-util",
  "tonic 0.13.1",
+ "tower 0.5.2",
  "tracing",
+ "x509-parser",
 ]
 
 [[package]]
 name = "celestia-grpc"
-version = "1.1.0-rc.1"
+version = "1.2.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7a0169afa8e804ba04b68dd1c4bf3c3bb05100dbd1ac0e49a691da34593aeaf4"
+checksum = "0c00c4cbc242b105610c153ff91be582a8c444a81e1b280d96b203e96df293e1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2599,9 +2649,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-grpc-macros"
-version = "1.1.0-rc.1"
+version = "1.2.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "04886baa1d6efcfc01532b4a3aa9dc341bd5a960a0a833e89df259f8ef1f7dc9"
+checksum = "05d072dde321d78d7421b61e3b544bad1fcf1a170ca35ccef81734aad3744d5c"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2610,9 +2660,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-proto"
-version = "1.1.0-rc.1"
+version = "1.2.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "4f86e61ab96fbc1b7813af01e7c6d7b961b4378f1ea8393004d283a2645e0a4d"
+checksum = "6d869e6393746ebe647b46bac84a456fb3bebece80ba2a614a986ec33fe7da23"
 dependencies = [
  "bytes",
  "prost 0.13.5",
@@ -2629,9 +2679,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-rpc"
-version = "1.1.0-rc.1"
+version = "1.2.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1ccd540a2075f1941dd5d6478390e50231b985e6c07221b40bf053d328bd68ba"
+checksum = "38e582ce8ce64e37e3170598b1b9567689847fb529dcc3f2ba8a14b9c0ff7a7e"
 dependencies = [
  "async-stream",
  "base64 0.22.1",
@@ -2657,9 +2707,9 @@ dependencies = [
 
 [[package]]
 name = "celestia-types"
-version = "1.1.0-rc.1"
+version = "1.2.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "5953f83018cece71231810e8c31fbcc754dde3c1bfeb50c56019a09875a46461"
+checksum = "61f5da49161e15a92e77bd0b79b04b91ea2e315520114035a35e77e227b5a57b"
 dependencies = [
  "base64 0.22.1",
  "bech32",
@@ -3691,8 +3741,34 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e7c1832837b905bbfb5101e07cc24c8deddf52f93225eee6ead5f4d63d53ddcb"
 dependencies = [
  "const-oid",
+ "der_derive",
  "pem-rfc7468",
  "zeroize",
+]
+
+[[package]]
+name = "der-parser"
+version = "10.0.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "07da5016415d5a3c4dd39b11ed26f915f52fc4e0dc197d87908bc916e51bc1a6"
+dependencies = [
+ "asn1-rs",
+ "displaydoc",
+ "nom",
+ "num-bigint 0.4.6",
+ "num-traits",
+ "rusticata-macros",
+]
+
+[[package]]
+name = "der_derive"
+version = "0.7.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8034092389675178f570469e6c3b0465d3d30b4505c294a6550db47f3c17ad18"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.117",
 ]
 
 [[package]]
@@ -6372,9 +6448,9 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 
 [[package]]
 name = "lumina-utils"
-version = "1.1.0-rc.1"
+version = "1.2.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fff132b51d68778adf4efe988f004421b4263e01ea317831b118b04a810e7c16"
+checksum = "47bbc7919d5bae0ca32085f2c5172ee41f75c53eeb044fea86cc0b38df46e762"
 dependencies = [
  "futures",
  "gloo-timers 0.3.0",
@@ -7124,6 +7200,15 @@ dependencies = [
  "indexmap 2.14.0",
  "memchr",
  "ruzstd 0.8.3",
+]
+
+[[package]]
+name = "oid-registry"
+version = "0.8.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "12f40cff3dde1b6087cc5d5f5d4d65712f34016a03ed60e9c08dcc392736b5b7"
+dependencies = [
+ "asn1-rs",
 ]
 
 [[package]]
@@ -9533,11 +9618,14 @@ dependencies = [
 
 [[package]]
 name = "rsema1d"
-version = "1.1.0-rc.1"
+version = "1.2.0-rc.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "304ca4123fa07f789f6271ab37b9d92676790ab695302cb14015cd8b972309e1"
+checksum = "3b421a881ce6e8a28a23f2903c9b28224b485e28370bcbb1d3d64a6f58fed20d"
 dependencies = [
+ "bytes",
  "hex",
+ "memmap2",
+ "num_cpus",
  "rayon",
  "reed-solomon-simd",
  "serde",
@@ -9673,6 +9761,15 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cfcb3a22ef46e85b45de6ee7e79d063319ebb6594faafcf1c225ea92ab6e9b92"
 dependencies = [
  "semver 1.0.28",
+]
+
+[[package]]
+name = "rusticata-macros"
+version = "4.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "faf0c4a6ece9950b9abdb62b1cfcf2a68b3b67a10ba445b3bb85be2a293d0632"
+dependencies = [
+ "nom",
 ]
 
 [[package]]
@@ -16507,6 +16604,23 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "05f360fc0b24296329c78fda852a1e9ae82de9cf7b27dae4b7f62f118f77b9ed"
 dependencies = [
  "tap",
+]
+
+[[package]]
+name = "x509-parser"
+version = "0.17.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "4569f339c0c402346d4a75a9e39cf8dad310e287eef1ff56d4c68e5067f53460"
+dependencies = [
+ "asn1-rs",
+ "data-encoding",
+ "der-parser",
+ "lazy_static",
+ "nom",
+ "oid-registry",
+ "rusticata-macros",
+ "thiserror 2.0.18",
+ "time",
 ]
 
 [[package]]
