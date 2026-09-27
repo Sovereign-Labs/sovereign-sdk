@@ -199,6 +199,34 @@ paths:
           $ref: "#/components/responses/LedgerEvent"
         "404":
           $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/events/by-key:
+    get:
+      tags:
+        - Ledger
+      summary: Lists the events stored under one exact event key, oldest first.
+      description: |
+        Unlike the `prefix` filter of `/ledger/events`, an exact key is a
+        contiguous range in storage, so each page costs only the rows it
+        returns. `page[cursor]` is opaque: pass back the `next_cursor` of the
+        previous page.
+      operationId: list_events_by_key
+      parameters:
+        - name: key
+          in: query
+          description: The exact event key, e.g. `Bank/TokenTransferred`.
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/pageType"
+        - $ref: "#/components/parameters/pageSize"
+        - $ref: "#/components/parameters/pageCursor"
+      responses:
+        "200":
+          $ref: "#/components/responses/PaginatedLedgerEvents"
+        "400":
+          $ref: "#/components/responses/ApiErrorResponse"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
   /ledger/events/counts:
     get:
       tags:

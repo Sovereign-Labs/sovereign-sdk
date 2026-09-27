@@ -11896,6 +11896,7 @@ dependencies = [
  "borsh",
  "derive_more 2.0.1",
  "futures",
+ "hex",
  "insta",
  "reqwest 0.13.3",
  "serde",
