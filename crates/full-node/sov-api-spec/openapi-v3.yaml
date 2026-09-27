@@ -207,9 +207,8 @@ paths:
       description: |
         Unlike the `prefix` filter of `/ledger/events`, an exact key is a
         contiguous range in storage, so each page costs only the rows it
-        returns. `page[cursor]` is an event number (inclusive): the page
-        starts at that event, and `next_cursor` is the value to pass for the
-        following page.
+        returns. `page[cursor]` is opaque: pass back the `next_cursor` of the
+        previous page.
       operationId: list_events_by_key
       parameters:
         - name: key

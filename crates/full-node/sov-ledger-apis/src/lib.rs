@@ -360,12 +360,9 @@ where
     /// with its length — which is why that path needs a cursor bound and this
     /// one does not.
     ///
-    /// `page[cursor]` is an event number, inclusive: the page starts at that
-    /// event, and `next_cursor` is the number to pass for the following page,
-    /// the same convention as `list_events`. Event numbers are unique and, for
-    /// a fixed key, order identically to `(TxNumber, EventNumber)`, so the
-    /// cursor resolves to an exact scan position: no rows are re-read and no
-    /// transaction is split.
+    /// `page[cursor]` is opaque: pass back the `next_cursor` of the previous
+    /// page. It is the storage position of the first row not yet served, so
+    /// resuming re-reads nothing and splits no transaction.
     async fn list_events_by_key(
         State(state): State<LedgerState<T>>,
         Query(query): Query<EventsByKeyQuery>,
@@ -379,63 +376,41 @@ where
         }
         let limit = pagination.size as usize;
 
-        let start =
-            match &pagination.selection {
-                PageSelection::First => None,
-                PageSelection::Last => return Err(errors::not_implemented_501()),
-                PageSelection::Next { cursor } => Some(cursor.parse::<u64>().map_err(|e| {
-                    errors::bad_request_400("page[cursor] must be an event number", e)
-                })?),
-            };
-
-        // The scan seeks to the exact `(key, tx, event)` of the cursor event.
-        // The transaction number for that composite key comes from the cursor
-        // event's own record.
-        let resume_at = match start {
-            None => None,
-            Some(event_number) => {
-                let event = state
-                    .ledger
-                    .get_event_by_number::<RuntimeEventResponse<E>>(event_number)
-                    .await
-                    .map_err(errors::database_error_response_500)?
-                    .ok_or_else(|| errors::not_found_404("Event", event_number))?;
-                let tx_number = state
-                    .ledger
-                    .resolve_tx_identifier(&TxIdentifier::Hash(event.tx_hash.into()))
-                    .await
-                    .map_err(errors::database_error_response_500)?
-                    .ok_or_else(|| {
-                        errors::internal_server_error_response_500(format!(
-                            "event {event_number} has no transaction"
-                        ))
-                    })?;
-                let seek_key = borsh::to_vec(&(
-                    EventKey::new(key.as_bytes()),
-                    TxNumber(tx_number),
-                    EventNumber(event_number),
-                ))
-                .map_err(errors::internal_server_error_response_500)?;
-                Some(hex::encode(seek_key))
+        let cursor = match pagination.selection {
+            PageSelection::First => None,
+            PageSelection::Last => return Err(errors::not_implemented_501()),
+            PageSelection::Next { cursor } => {
+                // The store reports an undecodable cursor as an internal error
+                // and answers a cursor issued for another key with an empty
+                // page, so check both here and reject with 400 instead.
+                const BAD_CURSOR: &str =
+                    "page[cursor] must be the next_cursor of a previous page for this key";
+                let bytes =
+                    hex::decode(&cursor).map_err(|e| errors::bad_request_400(BAD_CURSOR, e))?;
+                let (cursor_key, _, _): (EventKey, TxNumber, EventNumber) =
+                    BorshDeserialize::try_from_slice(&bytes)
+                        .map_err(|e| errors::bad_request_400(BAD_CURSOR, e))?;
+                if cursor_key.inner().as_slice() != key.as_bytes() {
+                    return Err(errors::bad_request_400(
+                        BAD_CURSOR,
+                        "the cursor was issued for a different key",
+                    ));
+                }
+                Some(cursor)
             }
         };
 
         let page = state
             .ledger
-            .get_events_by_key::<RuntimeEventResponse<E>>(&key, None, limit, resume_at.as_deref())
+            .get_events_by_key::<RuntimeEventResponse<E>>(&key, None, limit, cursor.as_deref())
             .await
             .map_err(errors::database_error_response_500)?;
 
-        let items = page.events_response;
-        // `page.next` is set only when another row for this key follows. Event
-        // numbers are dense, so the number after the last one served exists and
-        // resolves to a position at or before that row.
-        let next_cursor = page
-            .next
-            .and(items.last())
-            .map(|event| event.number.saturating_add(1).to_string());
-
-        Ok(PaginatedResponse { items, next_cursor }.into())
+        Ok(PaginatedResponse {
+            items: page.events_response,
+            next_cursor: page.next,
+        }
+        .into())
     }
 
     // TODO: we're going to want to start using range/iters
