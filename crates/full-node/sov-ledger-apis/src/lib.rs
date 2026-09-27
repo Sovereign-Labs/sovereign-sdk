@@ -24,7 +24,7 @@ use sov_rest_utils::errors::{
 };
 use sov_rest_utils::{
     json_obj, preconfigured_router_layers, serve_generic_ws_subscription, ApiResult, ErrorObject,
-    PageSelection, Pagination, Path, Query,
+    PageSelection, PaginatedResponse, Pagination, Path, Query,
 };
 use sov_rollup_interface::common::{HexHash, HexString, SlotNumber};
 use sov_rollup_interface::node::ledger_api::{
@@ -360,28 +360,26 @@ where
     /// with its length — which is why that path needs a cursor bound and this
     /// one does not.
     ///
-    /// `page[cursor]` is an event number, exclusive: pass the `number` of the
-    /// last event you saw. Event numbers are unique and, for a fixed key, order
-    /// identically to `(TxNumber, EventNumber)`, so the cursor resolves to an
-    /// exact scan position — no rows are re-read and no transaction is split.
+    /// `page[cursor]` is an event number, inclusive: the page starts at that
+    /// event, and `next_cursor` is the number to pass for the following page,
+    /// the same convention as `list_events`. Event numbers are unique and, for
+    /// a fixed key, order identically to `(TxNumber, EventNumber)`, so the
+    /// cursor resolves to an exact scan position: no rows are re-read and no
+    /// transaction is split.
     async fn list_events_by_key(
         State(state): State<LedgerState<T>>,
-        pagination_opt: Option<Query<Pagination<String>>>,
-        Query(filter): Query<EventKeyFilter>,
-    ) -> ApiResult<EventPage<RuntimeEventResponse<E>>> {
-        let pagination = match pagination_opt {
-            Some(Query(pagination)) => pagination,
-            None => Default::default(),
-        };
-        let limit = pagination.size as usize;
-        if filter.key.is_empty() {
+        Query(query): Query<EventsByKeyQuery>,
+    ) -> ApiResult<PaginatedResponse<RuntimeEventResponse<E>, String>> {
+        let EventsByKeyQuery { key, pagination } = query;
+        if key.is_empty() {
             return Err(errors::bad_request_400(
                 "key must not be empty",
-                "pass the exact event key, e.g. key=Mailbox/DispatchId",
+                "pass the exact event key, e.g. key=Bank/TokenTransferred",
             ));
         }
+        let limit = pagination.size as usize;
 
-        let after =
+        let start =
             match &pagination.selection {
                 PageSelection::First => None,
                 PageSelection::Last => return Err(errors::not_implemented_501()),
@@ -390,10 +388,11 @@ where
                 })?),
             };
 
-        // The scan starts at a transaction boundary, so resuming needs the
-        // transaction that produced the cursor event.
-        let from_tx = match after {
-            None => 0,
+        // The scan seeks to the exact `(key, tx, event)` of the cursor event.
+        // The transaction number for that composite key comes from the cursor
+        // event's own record.
+        let resume_at = match start {
+            None => None,
             Some(event_number) => {
                 let event = state
                     .ledger
@@ -401,51 +400,42 @@ where
                     .await
                     .map_err(errors::database_error_response_500)?
                     .ok_or_else(|| errors::not_found_404("Event", event_number))?;
-                state
+                let tx_number = state
                     .ledger
                     .resolve_tx_identifier(&TxIdentifier::Hash(event.tx_hash.into()))
                     .await
                     .map_err(errors::database_error_response_500)?
                     .ok_or_else(|| {
-                        errors::database_error_response_500(format!(
+                        errors::internal_server_error_response_500(format!(
                             "event {event_number} has no transaction"
                         ))
-                    })?
+                    })?;
+                let seek_key = borsh::to_vec(&(
+                    EventKey::new(key.as_bytes()),
+                    TxNumber(tx_number),
+                    EventNumber(event_number),
+                ))
+                .map_err(errors::internal_server_error_response_500)?;
+                Some(hex::encode(seek_key))
             }
         };
 
-        // The scan can start at an exact `(key, tx, event)`, so the cursor
-        // resumes precisely rather than re-reading the transaction.
-        let resume_at = after
-            .map(|event_number| {
-                borsh::to_vec(&(
-                    EventKey::new(filter.key.as_bytes()),
-                    TxNumber(from_tx),
-                    EventNumber(event_number.saturating_add(1)),
-                ))
-                .map(hex::encode)
-            })
-            .transpose()
-            .map_err(errors::internal_server_error_response_500)?;
-
         let page = state
             .ledger
-            .get_events_by_key::<RuntimeEventResponse<E>>(
-                &filter.key,
-                None,
-                limit,
-                resume_at.as_deref(),
-            )
+            .get_events_by_key::<RuntimeEventResponse<E>>(&key, None, limit, resume_at.as_deref())
             .await
             .map_err(errors::database_error_response_500)?;
 
-        let events = page.events_response;
-        let next = page
+        let items = page.events_response;
+        // `page.next` is set only when another row for this key follows. Event
+        // numbers are dense, so the number after the last one served exists and
+        // resolves to a position at or before that row.
+        let next_cursor = page
             .next
-            .and(events.last())
-            .map(|event| event.number.to_string());
+            .and(items.last())
+            .map(|event| event.number.saturating_add(1).to_string());
 
-        Ok(EventPage { events, next }.into())
+        Ok(PaginatedResponse { items, next_cursor }.into())
     }
 
     // TODO: we're going to want to start using range/iters
@@ -1030,16 +1020,36 @@ struct EventFilter {
     prefix: String,
 }
 
-#[derive(Deserialize)]
-struct EventKeyFilter {
+/// Query string of `list_events_by_key`: the exact event key plus pagination.
+///
+/// Pagination is parsed only when a `page*` parameter is present, so a bare
+/// `?key=...` gets the default first page while a malformed `page[size]` or a
+/// `page=next` without a cursor is rejected. `Option<Query<Pagination>>` cannot
+/// make that distinction: it maps every parse failure to `None`.
+struct EventsByKeyQuery {
     key: String,
+    pagination: Pagination<String>,
 }
 
-/// A page of events plus the cursor for the following page (`None` at the end).
-#[derive(Debug, Clone, Serialize)]
-struct EventPage<E> {
-    events: Vec<E>,
-    next: Option<String>,
+impl<'de> Deserialize<'de> for EventsByKeyQuery {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::{Error, IntoDeserializer};
+
+        let mut params = <HashMap<String, String> as Deserialize>::deserialize(deserializer)?;
+        let key = params
+            .remove("key")
+            .ok_or_else(|| D::Error::missing_field("key"))?;
+        let pagination = if params
+            .keys()
+            .any(|param| param == "page" || param.starts_with("page["))
+        {
+            <Pagination<String> as Deserialize>::deserialize(params.into_deserializer())
+                .map_err(|e: serde::de::value::Error| D::Error::custom(e))?
+        } else {
+            Pagination::default()
+        };
+        Ok(Self { key, pagination })
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

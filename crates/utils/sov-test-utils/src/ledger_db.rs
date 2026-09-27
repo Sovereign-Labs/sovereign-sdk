@@ -30,11 +30,6 @@ pub extern crate sov_api_spec;
 pub async fn materialize_simple_ledger_db_data(
     ledger_db: &LedgerDb,
 ) -> anyhow::Result<SchemaBatch> {
-    let mut block_a = MockBlock::default();
-    block_a.header.time = Time::from_secs(100); // Use a non-zero time to test that the time is serialized correctly, but hard-code it to make sure the test is deterministic.
-    let mut slot: SlotCommit<MockBlock, i32, TestTxReceiptContents> =
-        SlotCommit::new(block_a, Vec::default());
-
     let tx_receipts = vec![TransactionReceipt {
         tx_hash: TxHash::new([1; 32]),
         body_to_save: Some(FullyBakedTx::new(b"tx-body".to_vec())),
@@ -42,15 +37,8 @@ pub async fn materialize_simple_ledger_db_data(
         receipt: TxEffect::Successful(0),
     }];
 
-    slot.add_batch(BatchReceipt {
-        batch_hash: [10; 32],
-        tx_receipts,
-        ignored_tx_receipts: vec![],
-        inner: 0,
-    });
-
     let slot_num = ledger_db.get_next_items_numbers()?.slot_number;
-    let mut ledger_data = ledger_db.materialize_slot(slot, b"state-root")?;
+    let mut ledger_data = materialize_single_batch_slot(ledger_db, [10; 32], tx_receipts)?;
 
     ledger_data.merge(ledger_db.materialize_aggregated_proof(
         slot_num,
@@ -62,23 +50,35 @@ pub async fn materialize_simple_ledger_db_data(
     Ok(ledger_data)
 }
 
+/// Materializes one slot holding a single batch with the given transactions.
+fn materialize_single_batch_slot(
+    ledger_db: &LedgerDb,
+    batch_hash: [u8; 32],
+    tx_receipts: Vec<TransactionReceipt<TestTxReceiptContents>>,
+) -> anyhow::Result<SchemaBatch> {
+    let mut block = MockBlock::default();
+    // Use a non-zero time to test that the time is serialized correctly, but
+    // hard-code it to make sure the test is deterministic.
+    block.header.time = Time::from_secs(100);
+    let mut slot: SlotCommit<MockBlock, i32, TestTxReceiptContents> =
+        SlotCommit::new(block, Vec::default());
+
+    slot.add_batch(BatchReceipt {
+        batch_hash,
+        tx_receipts,
+        ignored_tx_receipts: vec![],
+        inner: 0,
+    });
+
+    ledger_db.materialize_slot(slot, b"state-root")
+}
+
+const TEST_TOKEN_ID: &str = "token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6";
+
 fn events(number: u64) -> Vec<StoredEvent> {
     let holder = TokenHolder::Module(ModuleId::from([0; 32]));
-    let token_id =
-        TokenId::from_str("token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6")
-            .unwrap();
+    let token_id = TokenId::from_str(TEST_TOKEN_ID).unwrap();
 
-    let event_value1 = TestEvent::Bank(sov_bank::event::Event::TokenCreated {
-        token_name: format!("token{number}"),
-        coins: Coins {
-            amount: Amount::ZERO,
-            token_id,
-        },
-        minter: holder.clone(),
-        mint_to_address: holder.clone(),
-        admins: vec![],
-        supply_cap: Amount::MAX,
-    });
     let event_value2 = TestEvent::Bank(sov_bank::event::Event::TokenFrozen {
         token_id,
         freezer: holder,
@@ -87,7 +87,7 @@ fn events(number: u64) -> Vec<StoredEvent> {
     vec![
         StoredEvent::new(
             format!("foo{number}").as_bytes(),
-            &borsh::to_vec(&event_value1).unwrap(),
+            &borsh::to_vec(&token_created_event(number)).unwrap(),
             [0; 32],
         ),
         StoredEvent::new(
@@ -96,6 +96,23 @@ fn events(number: u64) -> Vec<StoredEvent> {
             [0; 32],
         ),
     ]
+}
+
+/// A `TokenCreated` event whose token name embeds `number`, so that events
+/// are distinguishable from one another.
+fn token_created_event(number: u64) -> TestEvent {
+    let holder = TokenHolder::Module(ModuleId::from([0; 32]));
+    TestEvent::Bank(sov_bank::event::Event::TokenCreated {
+        token_name: format!("token{number}"),
+        coins: Coins {
+            amount: Amount::ZERO,
+            token_id: TokenId::from_str(TEST_TOKEN_ID).unwrap(),
+        },
+        minter: holder.clone(),
+        mint_to_address: holder,
+        admins: vec![],
+        supply_cap: Amount::MAX,
+    })
 }
 
 /// Materialize some complex data for the [`LedgerDb`]. Returns a [`SchemaBatch`] containing the description of the data to be stored.
@@ -250,6 +267,10 @@ fn batch3_tx_receipts() -> Vec<TransactionReceipt<TestTxReceiptContents>> {
 pub const REPEATED_EVENT_COUNT: u64 = 25;
 /// The key those events share.
 pub const REPEATED_EVENT_KEY: &str = "Repeated/Event";
+/// How many of those events each transaction emits. Tests pick page sizes
+/// that are not a multiple of this, so page boundaries fall inside a
+/// transaction and cursors have to resume mid-transaction.
+pub const REPEATED_EVENTS_PER_TX: u64 = 3;
 
 /// The different types of data that can be used to test the [`LedgerDb`].
 pub enum LedgerTestServiceData {
@@ -263,52 +284,33 @@ pub enum LedgerTestServiceData {
 }
 
 /// Persist [`REPEATED_EVENT_COUNT`] events that all share
-/// [`REPEATED_EVENT_KEY`], one per transaction.
+/// [`REPEATED_EVENT_KEY`], [`REPEATED_EVENTS_PER_TX`] per transaction (the
+/// last transaction takes the remainder).
 pub fn materialize_repeated_event_key_data(ledger_db: &LedgerDb) -> anyhow::Result<SchemaBatch> {
-    let mut block = MockBlock::default();
-    block.header.time = Time::from_secs(100);
-    let mut slot: SlotCommit<MockBlock, i32, TestTxReceiptContents> =
-        SlotCommit::new(block, Vec::default());
-
-    let tx_receipts = (0..REPEATED_EVENT_COUNT)
-        .map(|i| TransactionReceipt {
-            tx_hash: TxHash::new([i as u8; 32]),
-            body_to_save: Some(FullyBakedTx::new(format!("tx{i}").into_bytes())),
-            events: vec![StoredEvent::new(
-                REPEATED_EVENT_KEY.as_bytes(),
-                &borsh::to_vec(&repeated_event(i)).unwrap(),
-                [0; 32],
-            )],
+    let event_numbers = (0..REPEATED_EVENT_COUNT).collect::<Vec<_>>();
+    let tx_receipts = event_numbers
+        .chunks(REPEATED_EVENTS_PER_TX as usize)
+        .enumerate()
+        .map(|(i, numbers)| TransactionReceipt {
+            tx_hash: sha2::Sha256::digest(format!("repeated-tx{i}")).into(),
+            body_to_save: Some(FullyBakedTx::new(
+                format!("repeated-tx{i} body").into_bytes(),
+            )),
+            events: numbers
+                .iter()
+                .map(|number| {
+                    StoredEvent::new(
+                        REPEATED_EVENT_KEY.as_bytes(),
+                        &borsh::to_vec(&token_created_event(*number)).unwrap(),
+                        [0; 32],
+                    )
+                })
+                .collect(),
             receipt: TxEffect::Successful(0),
         })
         .collect();
 
-    slot.add_batch(BatchReceipt {
-        batch_hash: [11; 32],
-        tx_receipts,
-        ignored_tx_receipts: vec![],
-        inner: 0,
-    });
-
-    ledger_db.materialize_slot(slot, b"state-root")
-}
-
-fn repeated_event(number: u64) -> TestEvent {
-    let holder = TokenHolder::Module(ModuleId::from([0; 32]));
-    let token_id =
-        TokenId::from_str("token_1rwrh8gn2py0dl4vv65twgctmlwck6esm2as9dftumcw89kqqn3nqrduss6")
-            .unwrap();
-    TestEvent::Bank(sov_bank::event::Event::TokenCreated {
-        token_name: format!("token{number}"),
-        coins: Coins {
-            amount: Amount::ZERO,
-            token_id,
-        },
-        minter: holder.clone(),
-        mint_to_address: holder.clone(),
-        admins: vec![],
-        supply_cap: Amount::MAX,
-    })
+    materialize_single_batch_slot(ledger_db, [11; 32], tx_receipts)
 }
 
 /// Everything that one needs to run tests against the ledger APIs.
@@ -332,21 +334,22 @@ impl LedgerTestService {
         let reader = storage_manager.create_ledger_storage();
         let ledger_db = LedgerDb::with_reader(reader)?;
 
-        match data {
+        let uncommitted = match data {
             LedgerTestServiceData::Simple => {
-                let ledger_data = materialize_simple_ledger_db_data(&ledger_db).await?;
-                ledger_db.send_notifications();
-                storage_manager.commit(&ledger_data);
+                Some(materialize_simple_ledger_db_data(&ledger_db).await?)
+            }
+            LedgerTestServiceData::RepeatedEventKey => {
+                Some(materialize_repeated_event_key_data(&ledger_db)?)
             }
             LedgerTestServiceData::Complex => {
                 materialize_and_commit_complex_ledger_db_data(&ledger_db, &mut storage_manager)?;
-            }
-            LedgerTestServiceData::RepeatedEventKey => {
-                let ledger_data = materialize_repeated_event_key_data(&ledger_db)?;
-                ledger_db.send_notifications();
-                storage_manager.commit(&ledger_data);
+                None
             }
         };
+        if let Some(ledger_data) = uncommitted {
+            ledger_db.send_notifications();
+            storage_manager.commit(&ledger_data);
+        }
 
         let primary_shutdown = PrimaryShutdownController::new();
 
