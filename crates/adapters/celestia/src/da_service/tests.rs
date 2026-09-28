@@ -1119,13 +1119,20 @@ fn verification_succeeds_with_fibre_v2_in_batch_namespace() {
     assert!(share.signer().is_some());
 
     let relevant_blobs = extract_relevant_blobs(&block);
-    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    assert!(relevant_blobs.batch_blobs.is_empty());
+    assert!(relevant_blobs.proof_blobs.is_empty());
+    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    assert_eq!(relevant_proofs.batch.inclusion_proof.len(), 1);
     let verifier = CelestiaVerifier::new(rollup_params);
     if let Err(error) =
-        verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs.clone())
     {
         panic!("{error}");
     }
+    relevant_proofs.batch.inclusion_proof.clear();
+    assert!(verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .is_err());
 }
 
 #[test]
@@ -1156,14 +1163,104 @@ fn verification_succeeds_with_mixed_v1_v2_in_batch_namespace() {
         .collect::<Vec<_>>();
     assert_eq!(starts, [(1, 2_579_092), (2, 36)]);
 
-    let relevant_blobs = extract_relevant_blobs(&block);
-    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    let shares = block
+        .rollup_batch_data
+        .data
+        .rows()
+        .iter()
+        .flat_map(|row| &row.shares)
+        .collect::<Vec<_>>();
+    let expected_sender = CelestiaAddress(shares[0].signer().unwrap());
+    let expected_len = starts[0].1 as usize;
+    let expected_data = shares
+        .iter()
+        .flat_map(|share| share.payload().unwrap())
+        .copied()
+        .take(expected_len)
+        .collect::<Vec<_>>();
+
     let verifier = CelestiaVerifier::new(rollup_params);
-    if let Err(error) =
-        verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
-    {
-        panic!("{error}");
+    for read_len in [0, 1, expected_len] {
+        let mut relevant_blobs = extract_relevant_blobs(&block);
+        assert_eq!(relevant_blobs.batch_blobs.len(), 1);
+        assert!(relevant_blobs.proof_blobs.is_empty());
+        let blob = &mut relevant_blobs.batch_blobs[0];
+        assert_eq!(blob.sender(), expected_sender);
+        assert_eq!(blob.total_len(), expected_len);
+        blob.advance(read_len);
+        assert_eq!(blob.verified_data(), &expected_data[..read_len]);
+
+        let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+        assert_eq!(relevant_proofs.batch.inclusion_proof.len(), 2);
+        verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs.clone())
+            .unwrap();
+
+        let mut missing_v2_proof = relevant_proofs.clone();
+        missing_v2_proof.batch.inclusion_proof.pop();
+        assert!(verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, missing_v2_proof)
+            .is_err());
+
+        relevant_blobs.batch_blobs.clear();
+        assert!(verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+            .is_err());
     }
+}
+
+#[test]
+fn verification_rejects_skipped_proof_replayed_at_another_position() {
+    let block = with_mixed_v0_and_v1_blobs::filtered_block();
+    let verifier = CelestiaVerifier::new(with_mixed_v0_and_v1_blobs::ROLLUP_PARAMS);
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    assert_eq!(relevant_blobs.batch_blobs.len(), 1);
+    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs.clone())
+        .unwrap();
+
+    let proofs = &mut relevant_proofs.batch.inclusion_proof;
+    let v1_idx = proofs
+        .iter()
+        .position(|proof| proof.is_supported_blob().unwrap())
+        .unwrap();
+    let claimed_start = proofs[v1_idx].range_proofs[0].start_share_idx;
+    let mut replayed = proofs[v1_idx + 1].clone();
+    assert_eq!(
+        replayed
+            .first_share()
+            .unwrap()
+            .info_byte()
+            .unwrap()
+            .version(),
+        0
+    );
+    assert_eq!(replayed.range_proofs.len(), 1);
+    assert_eq!(replayed.range_proofs[0].shares.len(), 1);
+    assert_eq!(replayed.range_proofs[0].start_share_idx, claimed_start + 1);
+    assert_eq!(
+        block.header.calculate_row_number_for_share(claimed_start),
+        block
+            .header
+            .calculate_row_number_for_share(claimed_start + 1),
+    );
+    replayed.range_proofs[0].start_share_idx = claimed_start;
+    proofs[v1_idx] = replayed;
+    relevant_blobs.batch_blobs.clear();
+
+    let error = verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .unwrap_err();
+    assert!(matches!(
+        error,
+        crate::types::ValidationError::NamespaceValidationError {
+            error: crate::types::NamespaceValidationError::InvalidRowProof(
+                crate::types::RowProofError::WrongStartShareIndex { .. }
+            ),
+            ..
+        }
+    ));
 }
 
 /// A partially-read blob keeps exactly the bytes the STF saw across a witness round-trip,
