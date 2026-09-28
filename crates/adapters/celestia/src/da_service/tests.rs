@@ -1096,6 +1096,76 @@ async fn verification_succeeds_for_correct_blocks() {
     verification_for_correct_blocks(no_read, read_half).await;
 }
 
+#[test]
+fn verification_succeeds_with_fibre_v2_in_batch_namespace() {
+    let rollup_params = RollupParams {
+        rollup_batch_namespace: Namespace::const_v0(*b"sov-niko-a"),
+        rollup_proof_namespace: Namespace::const_v0([1; 10]),
+    };
+    let block = super::filtered_block_from_json_path(
+        rollup_params.rollup_batch_namespace,
+        rollup_params.rollup_proof_namespace,
+        &make_test_path("test_data/block_mocha_fibre_v2_1194000"),
+    )
+    .unwrap();
+
+    assert_eq!(block.header.height(), 1194000);
+    let rows = block.rollup_batch_data.data.rows();
+    assert_eq!(rows.len(), 1);
+    assert_eq!(rows[0].shares.len(), 1);
+    let share = &rows[0].shares[0];
+    assert_eq!(share.info_byte().unwrap().version(), 2);
+    assert_eq!(share.sequence_length(), Some(36));
+    assert!(share.signer().is_some());
+
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    let verifier = CelestiaVerifier::new(rollup_params);
+    if let Err(error) =
+        verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+    {
+        panic!("{error}");
+    }
+}
+
+#[test]
+fn verification_succeeds_with_mixed_v1_v2_in_batch_namespace() {
+    let rollup_params = RollupParams {
+        rollup_batch_namespace: Namespace::const_v0(*b"sov-niko-a"),
+        rollup_proof_namespace: Namespace::const_v0([1; 10]),
+    };
+    let block = super::filtered_block_from_json_path(
+        rollup_params.rollup_batch_namespace,
+        rollup_params.rollup_proof_namespace,
+        &make_test_path("test_data/block_mocha_mixed_v1_v2_1193993"),
+    )
+    .unwrap();
+
+    assert_eq!(block.header.height(), 1193993);
+    let starts = block
+        .rollup_batch_data
+        .data
+        .rows()
+        .iter()
+        .flat_map(|row| &row.shares)
+        .filter_map(|share| {
+            share
+                .sequence_length()
+                .map(|length| (share.info_byte().unwrap().version(), length))
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(starts, [(1, 2_579_092), (2, 36)]);
+
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    let verifier = CelestiaVerifier::new(rollup_params);
+    if let Err(error) =
+        verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+    {
+        panic!("{error}");
+    }
+}
+
 /// A partially-read blob keeps exactly the bytes the STF saw across a witness round-trip,
 /// even though the serialized form no longer carries the blob's shares.
 #[tokio::test(flavor = "multi_thread")]
