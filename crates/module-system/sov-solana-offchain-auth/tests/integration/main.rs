@@ -514,6 +514,162 @@ async fn test_submit_invalid_raw_signed_message_transaction() {
     );
 }
 
+/// Rewrites a current-format V0 payload into the pre-fork encoding (#2892): `details.chain_id`
+/// instead of `chain_hash_fragment`, and no `version` or `address_override` field.
+fn to_legacy_v0_json(json: &str, chain_id: u64) -> String {
+    let mut value: serde_json::Value = serde_json::from_str(json).unwrap();
+    let payload = value.as_object_mut().unwrap();
+    assert_eq!(payload.remove("version"), Some(serde_json::json!(0)));
+    payload.remove("address_override");
+    let details = payload["details"].as_object_mut().unwrap();
+    assert!(details.remove("chain_hash_fragment").is_some());
+    details.insert("chain_id".to_string(), serde_json::json!(chain_id));
+    serde_json::to_string(&value).unwrap()
+}
+
+/// Overrides `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` for this test process. The repository ships a
+/// cutoff of 0, which disables legacy acceptance, so tests that exercise it opt in explicitly.
+/// Every test runs in its own process under nextest, so nothing is restored.
+fn set_legacy_cutoff(cutoff: u64) {
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT",
+        cutoff.to_string(),
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_legacy_v0_raw_signed_message_transaction_below_cutoff() {
+    set_legacy_cutoff(u64::MAX);
+    let (test_rollup, admin) = create_test_rollup().await.expect("Failed to create rollup");
+    assert_eq!(
+        query_balance(&test_rollup.client, RECIPIENT_ADDRESS).await,
+        None
+    );
+
+    let legacy_json = to_legacy_v0_json(
+        &create_transfer_tx_json(Amount(10_000), RECIPIENT_ADDRESS),
+        config_value!("CHAIN_ID"),
+    );
+    let response =
+        submit_simple_json_tx(test_rollup.api_client(), legacy_json, admin.private_key()).await;
+    assert!(
+        response.status().is_success(),
+        "Expected legacy transaction to succeed below the cutoff. Response: {response:?}"
+    );
+    assert_eq!(
+        query_balance(&test_rollup.client, RECIPIENT_ADDRESS).await,
+        Some(Amount::new(10_000)),
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_legacy_v0_transaction_rejected_at_cutoff() {
+    set_legacy_cutoff(0);
+    let (test_rollup, admin) = create_test_rollup().await.expect("Failed to create rollup");
+
+    let legacy_json = to_legacy_v0_json(
+        &create_transfer_tx_json(Amount(10_000), RECIPIENT_ADDRESS),
+        config_value!("CHAIN_ID"),
+    );
+    let response =
+        submit_simple_json_tx(test_rollup.api_client(), legacy_json, admin.private_key()).await;
+    assert_eq!(
+        response.status(),
+        400,
+        "Expected legacy transaction to be rejected at the cutoff"
+    );
+    let response_text = response.text().await.expect("Failed to read response body");
+    assert!(
+        response_text.contains("Legacy V0 transactions are disabled"),
+        "Expected the legacy cutoff error, got: {response_text}"
+    );
+    assert_eq!(
+        query_balance(&test_rollup.client, RECIPIENT_ADDRESS).await,
+        None
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_submit_legacy_v0_transaction_with_wrong_chain_id_rejected() {
+    set_legacy_cutoff(u64::MAX);
+    let (test_rollup, admin) = create_test_rollup().await.expect("Failed to create rollup");
+
+    let wrong_chain_id: u64 = config_value!("CHAIN_ID") + 1;
+    let legacy_json = to_legacy_v0_json(
+        &create_transfer_tx_json(Amount(10_000), RECIPIENT_ADDRESS),
+        wrong_chain_id,
+    );
+    let response =
+        submit_simple_json_tx(test_rollup.api_client(), legacy_json, admin.private_key()).await;
+    assert_eq!(
+        response.status(),
+        400,
+        "Expected a wrong chain id to be rejected"
+    );
+    let response_text = response.text().await.expect("Failed to read response body");
+    assert!(
+        response_text.contains("Invalid chain id"),
+        "Expected the chain id error, got: {response_text}"
+    );
+    assert_eq!(
+        query_balance(&test_rollup.client, RECIPIENT_ADDRESS).await,
+        None
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_malformed_current_v0_payload_is_not_reinterpreted_as_legacy() {
+    set_legacy_cutoff(u64::MAX);
+    let (test_rollup, admin) = create_test_rollup().await.expect("Failed to create rollup");
+
+    let mut value: serde_json::Value =
+        serde_json::from_str(&create_transfer_tx_json(Amount(10_000), RECIPIENT_ADDRESS)).unwrap();
+    value["version"] = serde_json::json!(7);
+    let response = submit_simple_json_tx(
+        test_rollup.api_client(),
+        serde_json::to_string(&value).unwrap(),
+        admin.private_key(),
+    )
+    .await;
+    assert_eq!(
+        response.status(),
+        400,
+        "Expected an unknown payload version to be rejected"
+    );
+    let response_text = response.text().await.expect("Failed to read response body");
+    assert!(
+        response_text.contains("expected message version 0"),
+        "Expected the current-format parse error, got: {response_text}"
+    );
+}
+
+#[test]
+fn test_decode_legacy_v0_json_tx() {
+    let legacy_json = to_legacy_v0_json(
+        &create_transfer_tx_json(Amount(10_000), RECIPIENT_ADDRESS),
+        config_value!("CHAIN_ID"),
+    );
+    let signer = Ed25519PrivateKey::generate();
+    let signed_message = legacy_json.into_bytes();
+    let envelope = SolanaOffchainSimpleEnvelope::<S> {
+        signed_message: signed_message.clone(),
+        chain_hash: RT::CHAIN_HASH,
+        pubkey: signer.pub_key(),
+        signature: signer.sign(&signed_message),
+    };
+    let call = sov_solana_offchain_auth::authentication::decode_solana_json_tx::<S, RT>(
+        &borsh::to_vec(&envelope).unwrap(),
+    )
+    .expect("legacy payloads decode at every height");
+    assert!(
+        matches!(
+            call,
+            TestRuntimeCall::Bank(BankCallMessage::Transfer { .. })
+        ),
+        "unexpected call: {call:?}"
+    );
+}
+
 // Sanity check of the wrapper implementation
 #[test]
 fn test_auth_wrapper() {
