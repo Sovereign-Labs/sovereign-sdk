@@ -2541,8 +2541,7 @@ dependencies = [
 [[package]]
 name = "celestia-client"
 version = "1.2.0-rc.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "48c8601b8346988aeb2bc455f129155e93f99a86a22fce68cd4308cf1d5c77a5"
+source = "git+https://github.com/celestiaorg/lumina.git?rev=bfe0474dfe9d101c9c029125d20fc6189375ef93#bfe0474dfe9d101c9c029125d20fc6189375ef93"
 dependencies = [
  "async-stream",
  "blockstore",
@@ -2570,8 +2569,7 @@ dependencies = [
 [[package]]
 name = "celestia-fibre"
 version = "1.2.0-rc.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "fff250c33c0af17c2614272dd0f64024c4f7d2b5a1ccd043c040fb7c1d6b6a49"
+source = "git+https://github.com/celestiaorg/lumina.git?rev=bfe0474dfe9d101c9c029125d20fc6189375ef93#bfe0474dfe9d101c9c029125d20fc6189375ef93"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2610,8 +2608,7 @@ dependencies = [
 [[package]]
 name = "celestia-grpc"
 version = "1.2.0-rc.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0c00c4cbc242b105610c153ff91be582a8c444a81e1b280d96b203e96df293e1"
+source = "git+https://github.com/celestiaorg/lumina.git?rev=bfe0474dfe9d101c9c029125d20fc6189375ef93#bfe0474dfe9d101c9c029125d20fc6189375ef93"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2650,8 +2647,7 @@ dependencies = [
 [[package]]
 name = "celestia-grpc-macros"
 version = "1.2.0-rc.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "05d072dde321d78d7421b61e3b544bad1fcf1a170ca35ccef81734aad3744d5c"
+source = "git+https://github.com/celestiaorg/lumina.git?rev=bfe0474dfe9d101c9c029125d20fc6189375ef93#bfe0474dfe9d101c9c029125d20fc6189375ef93"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -2661,8 +2657,7 @@ dependencies = [
 [[package]]
 name = "celestia-proto"
 version = "1.2.0-rc.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "6d869e6393746ebe647b46bac84a456fb3bebece80ba2a614a986ec33fe7da23"
+source = "git+https://github.com/celestiaorg/lumina.git?rev=bfe0474dfe9d101c9c029125d20fc6189375ef93#bfe0474dfe9d101c9c029125d20fc6189375ef93"
 dependencies = [
  "bytes",
  "prost 0.13.5",
@@ -2680,8 +2675,7 @@ dependencies = [
 [[package]]
 name = "celestia-rpc"
 version = "1.2.0-rc.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "38e582ce8ce64e37e3170598b1b9567689847fb529dcc3f2ba8a14b9c0ff7a7e"
+source = "git+https://github.com/celestiaorg/lumina.git?rev=bfe0474dfe9d101c9c029125d20fc6189375ef93#bfe0474dfe9d101c9c029125d20fc6189375ef93"
 dependencies = [
  "async-stream",
  "base64 0.22.1",
@@ -2708,8 +2702,7 @@ dependencies = [
 [[package]]
 name = "celestia-types"
 version = "1.2.0-rc.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "61f5da49161e15a92e77bd0b79b04b91ea2e315520114035a35e77e227b5a57b"
+source = "git+https://github.com/celestiaorg/lumina.git?rev=bfe0474dfe9d101c9c029125d20fc6189375ef93#bfe0474dfe9d101c9c029125d20fc6189375ef93"
 dependencies = [
  "base64 0.22.1",
  "bech32",
@@ -6449,8 +6442,7 @@ checksum = "112b39cec0b298b6c1999fee3e31427f74f676e4cb9879ed1a121b43661a4154"
 [[package]]
 name = "lumina-utils"
 version = "1.2.0-rc.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "47bbc7919d5bae0ca32085f2c5172ee41f75c53eeb044fea86cc0b38df46e762"
+source = "git+https://github.com/celestiaorg/lumina.git?rev=bfe0474dfe9d101c9c029125d20fc6189375ef93#bfe0474dfe9d101c9c029125d20fc6189375ef93"
 dependencies = [
  "futures",
  "gloo-timers 0.3.0",
@@ -9619,8 +9611,7 @@ dependencies = [
 [[package]]
 name = "rsema1d"
 version = "1.2.0-rc.1"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "3b421a881ce6e8a28a23f2903c9b28224b485e28370bcbb1d3d64a6f58fed20d"
+source = "git+https://github.com/celestiaorg/lumina.git?rev=bfe0474dfe9d101c9c029125d20fc6189375ef93#bfe0474dfe9d101c9c029125d20fc6189375ef93"
 dependencies = [
  "bytes",
  "hex",
