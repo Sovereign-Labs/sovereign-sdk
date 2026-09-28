@@ -8,14 +8,15 @@ use sov_modules_api::capabilities::{
     calculate_hash_metered, calculate_non_malleable_hash_metered, verify_chain_hash_fragment,
     AuthenticationError, AuthenticationOutput, FatalError, ReplayHashMaterial, UniquenessData,
 };
-use sov_modules_api::transaction::AuthenticatedTransactionAndRawHash;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::Credentials;
 use sov_modules_api::transaction::{v1::MAX_SIGNERS, PubKeyAndSignature};
+use sov_modules_api::transaction::{AuthenticatedTransactionAndRawHash, UnsignedTransaction};
 use sov_modules_api::SafeVec;
 use sov_modules_api::{
     charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, GasSpec,
     MeteredSigVerificationError, MeteredSignature, Multisig, ProvableStateReader, Signature, Spec,
-    TxHash,
+    TxHash, VersionReader,
 };
 
 #[cfg(feature = "native")]
@@ -37,7 +38,10 @@ pub use self::parsing::spec_compliant::{
     RawSolanaOffchainMessagePreamble, SolanaOffchainSpecCompliantEnvelope,
     SolanaOffchainSpecCompliantMultisigEnvelope,
 };
-pub use self::payload::{SolanaOffchainSigningPayloadV0, SolanaOffchainSigningPayloadV1};
+pub use self::payload::{
+    LegacySolanaOffchainSigningPayloadV0, LegacyTxDetails, SolanaOffchainSigningPayloadV0,
+    SolanaOffchainSigningPayloadV1,
+};
 
 fn charge_sig_gas<S: Spec>(
     signature: &<S::CryptoSpec as CryptoSpec>::Signature,
@@ -225,6 +229,83 @@ fn verify_multisig_commitment<S: Spec>(
     Ok(())
 }
 
+/// A parsed single-signer payload.
+struct ParsedV0Payload<D: DispatchCall<Spec = S>, S: Spec> {
+    chain_name: String,
+    unsigned_tx: UnsignedTransaction<D, S>,
+    /// Whether the payload used the pre-fork encoding; see
+    /// [`LegacySolanaOffchainSigningPayloadV0`].
+    legacy: bool,
+}
+
+/// Parses a single-signer JSON payload, falling back to the pre-fork encoding.
+///
+/// The current format is tried first. If it does not parse, the bytes are tried as a legacy V0
+/// payload; if that fails too, the current-format error is returned so callers see the error for
+/// the format clients are expected to use.
+fn parse_v0_payload<S, D>(json_bytes: &[u8]) -> Result<ParsedV0Payload<D, S>, serde_json::Error>
+where
+    S: Spec,
+    D: DispatchCall<Spec = S>,
+    <D as DispatchCall>::Decodable: Serialize + DeserializeOwned,
+{
+    let current_err =
+        match SolanaOffchainSigningPayloadV0::<D, S>::unmetered_deserialize(json_bytes) {
+            Ok(tx) => {
+                return Ok(ParsedV0Payload {
+                    chain_name: tx.chain_name.to_string(),
+                    unsigned_tx: tx.into_unsigned_transaction(),
+                    legacy: false,
+                })
+            }
+            Err(e) => e,
+        };
+    match LegacySolanaOffchainSigningPayloadV0::<D, S>::unmetered_deserialize(json_bytes) {
+        Ok(tx) => Ok(ParsedV0Payload {
+            chain_name: tx.chain_name.to_string(),
+            unsigned_tx: tx.into_unsigned_transaction(),
+            legacy: true,
+        }),
+        Err(_) => Err(current_err),
+    }
+}
+
+/// Rejects legacy V0 payloads at or above `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT`.
+///
+/// The gate uses the rollup height being executed, so replaying historical blocks within the
+/// acceptance window keeps producing the same result after all clients have upgraded.
+fn ensure_legacy_v0_accepted(height: u64, raw_tx_hash: TxHash) -> Result<(), AuthenticationError> {
+    let cutoff: u64 = config_value!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
+    if height >= cutoff {
+        return Err(AuthenticationError::FatalError(
+            FatalError::Other(format!(
+                "Legacy V0 transactions are disabled at rollup height {height} (cutoff {cutoff})"
+            )),
+            raw_tx_hash,
+        ));
+    }
+    Ok(())
+}
+
+/// Verifies that a legacy V0 payload committed to the rollup's `CHAIN_ID`, which
+/// [`LegacySolanaOffchainSigningPayloadV0::into_unsigned_transaction`] carries in
+/// `chain_hash_fragment`. Together with the envelope chain-hash check this is exactly the
+/// pre-fork rule.
+fn verify_legacy_chain_id<S: Spec>(
+    tx_details: &sov_modules_api::transaction::TxDetails<S>,
+    raw_tx_hash: TxHash,
+) -> Result<(), AuthenticationError> {
+    let expected: u64 = config_value!("CHAIN_ID");
+    let got = tx_details.chain_hash_fragment;
+    if got != expected {
+        return Err(AuthenticationError::FatalError(
+            FatalError::InvalidChainId { expected, got },
+            raw_tx_hash,
+        ));
+    }
+    Ok(())
+}
+
 /// Decode bytes as a Sovereign SDK transaction, returning the message and tx info.
 pub fn decode_solana_json_tx<S, D>(raw_tx: &[u8]) -> Result<D::Decodable, FatalError>
 where
@@ -237,9 +318,9 @@ where
     let deser_err = |e: serde_json::Error| FatalError::DeserializationFailed(e.to_string());
     let unsigned_tx = match &unpacked_message {
         UnpackedSolanaMessage::V0 { .. } => {
-            SolanaOffchainSigningPayloadV0::<D, S>::unmetered_deserialize(json_bytes)
+            parse_v0_payload::<S, D>(json_bytes)
                 .map_err(deser_err)?
-                .into_unsigned_transaction()
+                .unsigned_tx
         }
         UnpackedSolanaMessage::V1 { .. } => {
             SolanaOffchainSigningPayloadV1::<D, S>::unmetered_deserialize(json_bytes)
@@ -250,6 +331,14 @@ where
     Ok(unsigned_tx.runtime_call().clone())
 }
 
+/// Authenticates a Solana offchain envelope.
+///
+/// Single-signer (V0) payloads are also accepted in the pre-fork encoding below
+/// `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` (see [`LegacySolanaOffchainSigningPayloadV0`]), verified
+/// with the pre-fork rules: the envelope chain hash must equal `runtime_chain_hash` and the signed
+/// `chain_id` must equal `CHAIN_ID`. Signature bytes, gas charges and replay hashes are the same
+/// for both encodings, so this only changes parsing and the chain check. Multisig (V1) payloads are
+/// never accepted in a legacy encoding.
 pub fn authenticate<Accessor, S, D>(
     raw_tx: &[u8],
     runtime_chain_hash: &[u8; 32],
@@ -257,11 +346,12 @@ pub fn authenticate<Accessor, S, D>(
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError>
 where
-    Accessor: ProvableStateReader<sov_state::User, Spec = S>,
+    Accessor: ProvableStateReader<sov_state::User, Spec = S> + VersionReader,
     S: Spec,
     D: DispatchCall<Spec = S>,
     <D as DispatchCall>::Decodable: Serialize + DeserializeOwned,
 {
+    let height = state.rollup_height_to_access().get();
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
@@ -283,15 +373,18 @@ where
             raw_tx_hash,
         )
     };
-    let (provided_chain_name, address_override, unsigned_tx) = match &unpacked_message {
+    let (provided_chain_name, address_override, unsigned_tx, legacy) = match &unpacked_message {
         UnpackedSolanaMessage::V0 { .. } => {
-            let tx = SolanaOffchainSigningPayloadV0::<D, S>::unmetered_deserialize(json_slice)
-                .map_err(deser_err)?;
-            let address_override = tx.address_override;
+            let parsed = parse_v0_payload::<S, D>(json_slice).map_err(deser_err)?;
+            if parsed.legacy {
+                ensure_legacy_v0_accepted(height, raw_tx_hash)?;
+            }
+            let address_override = parsed.unsigned_tx.address_override;
             (
-                tx.chain_name.to_string(),
+                parsed.chain_name,
                 address_override,
-                tx.into_unsigned_transaction(),
+                parsed.unsigned_tx,
+                parsed.legacy,
             )
         }
         UnpackedSolanaMessage::V1 {
@@ -314,6 +407,7 @@ where
                 tx.chain_name.to_string(),
                 address_override,
                 tx.into_unsigned_transaction(),
+                false,
             )
         }
     };
@@ -339,7 +433,11 @@ where
         ));
     }
 
-    verify_chain_hash_fragment(unsigned_tx.details(), runtime_chain_hash, raw_tx_hash)?;
+    if legacy {
+        verify_legacy_chain_id::<S>(unsigned_tx.details(), raw_tx_hash)?;
+    } else {
+        verify_chain_hash_fragment(unsigned_tx.details(), runtime_chain_hash, raw_tx_hash)?;
+    }
 
     // Verify signatures (branches internally for single-sig vs multisig)
     verify_signatures::<S>(&unpacked_message, raw_tx_hash, state)?;

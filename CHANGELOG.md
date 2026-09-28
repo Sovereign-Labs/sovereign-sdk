@@ -1,3 +1,6 @@
+# 2026-09-28
+- Solana offchain authenticator: single-signer (V0) envelopes are also accepted with the pre-fork JSON payload (`details.chain_id` instead of `chain_hash_fragment`, no `version`/`address_override`) below `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT`, authenticated with the pre-fork rules (`CHAIN_ID` check, envelope chain hash as selected by the caller). This mirrors #3063 for the standard authenticator so Solana-wallet clients can lag behind the hard fork. Multisig (V1) payloads are not accepted in a legacy encoding. `decode_solana_json_tx` decodes legacy payloads at every height. `authentication::authenticate` now requires `Accessor: VersionReader`.
+
 # 2026-09-04
 - #3063 Authentication: The standard authenticator accepts certain V0 transactions in the pre-fork format, authenticating them with the pre-fork rules (`CHAIN_ID` check, signature tried against every chain hash valid at the execution height). This lets clients lag behind the hard fork upgrade. Accepted transactions must be V0, in the standard authenticator only, and not using account abstraction/mapping.
     - Add `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` to `constants.toml`. Legacy V0 transactions are rejected at or above this rollup execution height.

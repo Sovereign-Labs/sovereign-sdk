@@ -4,8 +4,10 @@ use serde::de::DeserializeOwned;
 use serde::{Deserialize, Serialize};
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::UniversalWallet;
-use sov_modules_api::transaction::{TransactionCallable, TxDetails, UnsignedTransaction};
-use sov_modules_api::{SafeString, Spec};
+use sov_modules_api::transaction::{
+    PriorityFeeBips, TransactionCallable, TxDetails, UnsignedTransaction,
+};
+use sov_modules_api::{Amount, SafeString, Spec};
 
 /// The V0 Solana-specific payload that wallets sign as JSON.
 ///
@@ -135,5 +137,69 @@ where
 
     pub(super) fn unmetered_deserialize(buf: &[u8]) -> Result<Self, serde_json::Error> {
         serde_json::from_slice::<SolanaOffchainSigningPayloadV1<R, S>>(buf)
+    }
+}
+
+/// The pre-fork (state version 0) single-signer payload.
+///
+/// It differs from [`SolanaOffchainSigningPayloadV0`] in exactly the ways #2892 changed the V0
+/// format: `details` carries the rollup `chain_id` instead of a `chain_hash_fragment`, and there is
+/// no `version` or `address_override` field. The authenticator accepts it below
+/// `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` so that wallets can lag behind the hard fork; see
+/// [`super::authenticate`]. `deny_unknown_fields` ensures a malformed current-format payload is
+/// never reinterpreted as a legacy one.
+#[derive(Debug, Deserialize)]
+#[serde(deny_unknown_fields, bound = "R::Call: serde::de::DeserializeOwned")]
+pub struct LegacySolanaOffchainSigningPayloadV0<R: TransactionCallable, S: Spec> {
+    /// The runtime call
+    pub runtime_call: R::Call,
+    /// The uniqueness identifier
+    pub uniqueness: UniquenessData,
+    /// Pre-fork fee and gas details.
+    pub details: LegacyTxDetails<S>,
+    /// The chain name; see [`SolanaOffchainSigningPayloadV0::chain_name`].
+    pub chain_name: SafeString,
+}
+
+/// The pre-fork [`TxDetails`], which committed to the rollup's `CHAIN_ID` rather than to a fragment
+/// of the chain hash.
+#[derive(Debug, Deserialize)]
+#[serde(bound = "S: Spec")]
+pub struct LegacyTxDetails<S: Spec> {
+    /// See [`TxDetails::max_priority_fee_bips`].
+    pub max_priority_fee_bips: PriorityFeeBips,
+    /// See [`TxDetails::max_fee`].
+    pub max_fee: Amount,
+    /// See [`TxDetails::gas_limit`].
+    pub gas_limit: Option<S::Gas>,
+    /// The rollup chain id the signer committed to.
+    pub chain_id: u64,
+}
+
+impl<R, S> LegacySolanaOffchainSigningPayloadV0<R, S>
+where
+    S: Spec,
+    R: TransactionCallable,
+    <R as TransactionCallable>::Call: DeserializeOwned,
+{
+    /// Converts into the current transaction shape. Like the standard authenticator's legacy
+    /// decoding, the signed `chain_id` is carried in `chain_hash_fragment` so it can be checked
+    /// against `CHAIN_ID`; a legacy payload never carries an address override.
+    pub(super) fn into_unsigned_transaction(self) -> UnsignedTransaction<R, S> {
+        UnsignedTransaction {
+            runtime_call: self.runtime_call,
+            uniqueness: self.uniqueness,
+            details: TxDetails {
+                max_priority_fee_bips: self.details.max_priority_fee_bips,
+                max_fee: self.details.max_fee,
+                gas_limit: self.details.gas_limit,
+                chain_hash_fragment: self.details.chain_id,
+            },
+            address_override: None,
+        }
+    }
+
+    pub(super) fn unmetered_deserialize(buf: &[u8]) -> Result<Self, serde_json::Error> {
+        serde_json::from_slice::<LegacySolanaOffchainSigningPayloadV0<R, S>>(buf)
     }
 }
