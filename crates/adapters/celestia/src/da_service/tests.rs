@@ -5,7 +5,10 @@ use std::time::Duration;
 use crate::da_service::{extract_relevant_blobs, get_extraction_proof};
 use crate::test_helper::files::*;
 use crate::test_helper::{ADDR_1, ROLLUP_PARAMS_DEV};
-use crate::types::{BlobWithSender, FilteredCelestiaBlock};
+use crate::types::{
+    BlobDataError, BlobWithSender, FilteredCelestiaBlock, IncompleteNamespaceError, NamespaceType,
+    NamespaceValidationError, ProofError, ValidationError,
+};
 use crate::verifier::address::CelestiaAddress;
 use crate::verifier::{CelestiaVerifier, RollupParams};
 use crate::CelestiaService;
@@ -1096,8 +1099,7 @@ async fn verification_succeeds_for_correct_blocks() {
     verification_for_correct_blocks(no_read, read_half).await;
 }
 
-#[test]
-fn verification_succeeds_with_fibre_v2_in_batch_namespace() {
+fn mocha_fibre_fixture(path: &str) -> (FilteredCelestiaBlock, CelestiaVerifier) {
     let rollup_params = RollupParams {
         rollup_batch_namespace: Namespace::const_v0(*b"sov-niko-a"),
         rollup_proof_namespace: Namespace::const_v0([1; 10]),
@@ -1105,9 +1107,15 @@ fn verification_succeeds_with_fibre_v2_in_batch_namespace() {
     let block = super::filtered_block_from_json_path(
         rollup_params.rollup_batch_namespace,
         rollup_params.rollup_proof_namespace,
-        &make_test_path("test_data/block_mocha_fibre_v2_1194000"),
+        &make_test_path(path),
     )
     .unwrap();
+    (block, CelestiaVerifier::new(rollup_params))
+}
+
+#[test]
+fn verification_succeeds_with_fibre_v2_in_batch_namespace() {
+    let (block, verifier) = mocha_fibre_fixture("test_data/block_mocha_fibre_v2_1194000");
 
     assert_eq!(block.header.height(), 1194000);
     let rows = block.rollup_batch_data.data.rows();
@@ -1121,32 +1129,18 @@ fn verification_succeeds_with_fibre_v2_in_batch_namespace() {
     let relevant_blobs = extract_relevant_blobs(&block);
     assert!(relevant_blobs.batch_blobs.is_empty());
     assert!(relevant_blobs.proof_blobs.is_empty());
-    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
     assert_eq!(relevant_proofs.batch.inclusion_proof.len(), 1);
-    let verifier = CelestiaVerifier::new(rollup_params);
     if let Err(error) =
-        verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs.clone())
+        verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
     {
         panic!("{error}");
     }
-    relevant_proofs.batch.inclusion_proof.clear();
-    assert!(verifier
-        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
-        .is_err());
 }
 
 #[test]
 fn verification_succeeds_with_mixed_v1_v2_in_batch_namespace() {
-    let rollup_params = RollupParams {
-        rollup_batch_namespace: Namespace::const_v0(*b"sov-niko-a"),
-        rollup_proof_namespace: Namespace::const_v0([1; 10]),
-    };
-    let block = super::filtered_block_from_json_path(
-        rollup_params.rollup_batch_namespace,
-        rollup_params.rollup_proof_namespace,
-        &make_test_path("test_data/block_mocha_mixed_v1_v2_1193993"),
-    )
-    .unwrap();
+    let (block, verifier) = mocha_fibre_fixture("test_data/block_mocha_mixed_v1_v2_1193993");
 
     assert_eq!(block.header.height(), 1193993);
     let starts = block
@@ -1179,7 +1173,6 @@ fn verification_succeeds_with_mixed_v1_v2_in_batch_namespace() {
         .take(expected_len)
         .collect::<Vec<_>>();
 
-    let verifier = CelestiaVerifier::new(rollup_params);
     for read_len in [0, 1, expected_len] {
         let mut relevant_blobs = extract_relevant_blobs(&block);
         assert_eq!(relevant_blobs.batch_blobs.len(), 1);
@@ -1193,20 +1186,88 @@ fn verification_succeeds_with_mixed_v1_v2_in_batch_namespace() {
         let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
         assert_eq!(relevant_proofs.batch.inclusion_proof.len(), 2);
         verifier
-            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs.clone())
-            .unwrap();
-
-        let mut missing_v2_proof = relevant_proofs.clone();
-        missing_v2_proof.batch.inclusion_proof.pop();
-        assert!(verifier
-            .verify_relevant_tx_list(&block.header, &relevant_blobs, missing_v2_proof)
-            .is_err());
-
-        relevant_blobs.batch_blobs.clear();
-        assert!(verifier
             .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
-            .is_err());
+            .unwrap();
     }
+}
+
+#[test]
+fn verification_rejects_fibre_v2_namespace_without_inclusion_proof() {
+    use nmt_rs::simple_merkle::error::RangeProofError;
+
+    let (block, verifier) = mocha_fibre_fixture("test_data/block_mocha_fibre_v2_1194000");
+    let relevant_blobs = extract_relevant_blobs(&block);
+    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    relevant_proofs.batch.inclusion_proof.clear();
+
+    let error = verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            ValidationError::NamespaceValidationError {
+                namespace: NamespaceType::Batch,
+                error: NamespaceValidationError::IncompleteNamespace(
+                    IncompleteNamespaceError::ProofError(ProofError::Invalid(
+                        RangeProofError::WrongAmountOfLeavesProvided
+                    ))
+                ),
+            }
+        ),
+        "Unexpected error: {error:?}"
+    );
+}
+
+#[test]
+fn verification_rejects_mixed_v1_v2_without_v2_proof() {
+    let (block, verifier) = mocha_fibre_fixture("test_data/block_mocha_mixed_v1_v2_1193993");
+    for read_len in [0, 1, 2_579_092] {
+        let mut relevant_blobs = extract_relevant_blobs(&block);
+        relevant_blobs.batch_blobs[0].advance(read_len);
+        let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+        relevant_proofs.batch.inclusion_proof.pop();
+
+        let error = verifier
+            .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+            .unwrap_err();
+        assert!(
+            matches!(
+                error,
+                ValidationError::NamespaceValidationError {
+                    namespace: NamespaceType::Batch,
+                    error: NamespaceValidationError::IncompleteNamespace(
+                        IncompleteNamespaceError::ProofError(ProofError::Corrupted)
+                    ),
+                }
+            ),
+            "Unexpected error: {error:?}"
+        );
+    }
+}
+
+#[test]
+fn verification_rejects_mixed_v1_v2_without_v1_blob() {
+    let (block, verifier) = mocha_fibre_fixture("test_data/block_mocha_mixed_v1_v2_1193993");
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    let relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+    relevant_blobs.batch_blobs.clear();
+
+    let error = verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .unwrap_err();
+    assert!(
+        matches!(
+            error,
+            ValidationError::NamespaceValidationError {
+                namespace: NamespaceType::Batch,
+                error: NamespaceValidationError::InvalidBlobData(
+                    BlobDataError::MoreProofsThanBlobs
+                ),
+            }
+        ),
+        "Unexpected error: {error:?}"
+    );
 }
 
 #[test]
