@@ -184,9 +184,10 @@ impl CelestiaVerifier {
                         .expect("Bug: caller didn't set last_validated_share_idx");
                     blob_row_proof.verify_continuity(last_from_previous_blob)?
                 };
-                // Continuity inside this blob proofs
+                // Continuity inside this blob proofs, and binding of every claimed
+                // `start_share_idx` to the NMT-authenticated in-row position.
                 blob_row_proof
-                    .enforce_continuity()
+                    .enforce_continuity(block_header.row_length())
                     .map_err(InvalidRowProof)?;
                 blob_proof_range_start
             };

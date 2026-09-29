@@ -1465,6 +1465,56 @@ async fn verification_fails_if_not_all_blobs_are_proven() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn verification_fails_if_blob_proof_positions_are_swapped_within_row() {
+    let block = with_several_small_rollup_batches::filtered_block();
+    let rollup_params = with_several_small_rollup_batches::ROLLUP_PARAMS;
+
+    let mut relevant_blobs = extract_relevant_blobs(&block);
+    let mut relevant_proofs = get_extraction_proof(&block, &relevant_blobs);
+
+    // Blob 0 is anchored to the row start by `verify_left_boundary`, so pick two later blobs
+    // of equal share occupancy that share a row.
+    let (i, j) = (1, 2);
+    let row_length = block.header.row_length();
+    {
+        let a = &relevant_proofs.batch.inclusion_proof[i].range_proofs;
+        let b = &relevant_proofs.batch.inclusion_proof[j].range_proofs;
+        assert_eq!(a.len(), 1, "fixture blob {i} must fit in one row");
+        assert_eq!(b.len(), 1, "fixture blob {j} must fit in one row");
+        assert_eq!(
+            a[0].shares.len(),
+            b[0].shares.len(),
+            "fixture blobs must have equal share occupancy"
+        );
+        assert_eq!(
+            a[0].start_share_idx / row_length,
+            b[0].start_share_idx / row_length,
+            "fixture blobs must be in the same row"
+        );
+    }
+
+    // Malicious prover: present blob j's shares and NMT proof at blob i's claimed position and
+    // vice versa. Swap the witness blobs too, so payload and signer checks still match.
+    let proofs = &mut relevant_proofs.batch.inclusion_proof;
+    let start_i = proofs[i].range_proofs[0].start_share_idx;
+    let start_j = proofs[j].range_proofs[0].start_share_idx;
+    proofs.swap(i, j);
+    proofs[i].range_proofs[0].start_share_idx = start_i;
+    proofs[j].range_proofs[0].start_share_idx = start_j;
+    relevant_blobs.batch_blobs.swap(i, j);
+
+    let verifier = CelestiaVerifier::new(rollup_params);
+    let error = verifier
+        .verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)
+        .expect_err("swapped in-row positions must be rejected");
+
+    assert!(
+        error.to_string().contains("WrongStartShareIndex"),
+        "Actual error: {error}"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn verification_fails_if_blob_total_len_is_forged() {
     use crate::shares::BlobIterator;
     use sov_rollup_interface::da::CountedBufReader;

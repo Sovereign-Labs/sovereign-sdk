@@ -24,7 +24,23 @@ impl BlobProof {
     // > The remaining SHARE_SIZE-NAMESPACE_SIZE-SHARE_INFO_BYTES-SEQUENCE_BYTES bytes are filled with 0
     // From
     // https://github.com/celestiaorg/celestia-app/blob/c10edd9c49db4f5cef5b6a59eea26add1342a2e7/specs/src/shares.md#L85-L95
-    pub(crate) fn enforce_continuity(&self) -> Result<(), RowProofError> {
+    //
+    // Security: `start_share_idx` is prover-supplied. The NMT proof only authenticates its shares
+    // at `proof.start_idx()` within the row, so every sub-proof's claimed index must be pinned to
+    // that in-row position. Otherwise a prover could present shares from elsewhere in the same
+    // row (reordering, duplicating, or splicing blobs) and still pass `verify_range`.
+    pub(crate) fn enforce_continuity(&self, row_length: usize) -> Result<(), RowProofError> {
+        for range_proof in &self.range_proofs {
+            // u64 on both sides so the comparison is exact on 32-bit zkVM targets.
+            let expected = (range_proof.start_share_idx % row_length) as u64;
+            let actual = u64::from(range_proof.proof.start_idx());
+            if actual != expected {
+                return Err(RowProofError::WrongStartShareIndex {
+                    expected: expected as usize,
+                    actual: actual as usize,
+                });
+            }
+        }
         for i in 1..self.range_proofs.len() {
             let left_idx = i
                 .checked_sub(1)

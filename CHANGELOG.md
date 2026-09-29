@@ -1,3 +1,6 @@
+# 2026-09-17
+- #PR_NUMBER Celestia: the verifier now pins every inclusion-proof range's prover-supplied `start_share_idx` to the in-row position authenticated by its NMT proof. Previously only the first blob's first range and the namespace end boundary were pinned, so a malicious prover could reorder, duplicate (censor), or splice blobs within a row while still producing a valid ZK proof. Honest proofs are unaffected; the guest verifier changes, so provers need a rebuilt ELF.
+
 # 2026-08-17
 ## #2892 Multisig and accounts hard fork - major breaking change
 This commit constitutes a hard fork of the SDK. Rollups existing before this commit will need to coordinate an upgrade to a new binary.
