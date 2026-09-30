@@ -225,6 +225,14 @@ pub struct Struct<L: LinkingScheme> {
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize)]
 #[cfg_attr(feature = "serde", derive(Serialize, Deserialize))]
 pub struct Tuple<L: LinkingScheme> {
+    /// The name of the tuple struct (e.g. newtype) this type was derived from, if any. `None` for
+    /// plain anonymous tuples and for the virtual tuples representing enum variant contents.
+    ///
+    /// Purely informational: visitors deliberately ignore it to keep display output, JSON
+    /// parsing and EIP-712 encodings identical to those of an anonymous tuple.
+    // `serde(default)` keeps schema JSONs generated before this field existed parseable.
+    #[cfg_attr(feature = "serde", serde(default))]
+    pub type_name: Option<String>,
     pub template: Option<String>,
     pub peekable: bool,
     pub fields: Vec<UnnamedField<L>>,

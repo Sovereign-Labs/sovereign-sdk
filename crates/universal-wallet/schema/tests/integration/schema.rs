@@ -10,6 +10,7 @@ use sov_universal_wallet::schema::safe_string::SafeString;
 use sov_universal_wallet::schema::{
     ChainData, IndexLinking, Item, Link, Primitive, RollupRoots, Schema, UniversalWallet,
 };
+use sov_universal_wallet::ty::{Tuple, Ty, UnnamedField};
 use sov_universal_wallet::UniversalWallet;
 
 #[derive(Debug, Serialize)]
@@ -1780,5 +1781,110 @@ fn test_nested_silent_fields() {
         WithSilentField<WithSilentField<i32>>,
         my_call,
         "{ int: 123, str: \"this should be included\" }"
+    );
+}
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
+pub struct MultiFieldTupleStruct(u32, u64);
+
+#[derive(Debug, PartialEq, Eq, Serialize, Deserialize, Clone)]
+#[cfg_attr(test, derive(UniversalWallet, BorshSerialize, BorshDeserialize))]
+#[cfg_attr(test, sov_wallet(anonymize_tuple))]
+pub struct AnonymizedTupleStruct(u32, u64);
+
+#[test]
+fn test_newtype_struct_records_type_name() {
+    let schema = Schema::of_single_type::<StringWrapper>().unwrap();
+    assert_eq!(
+        schema.types()[0],
+        Ty::Tuple(Tuple {
+            type_name: Some("StringWrapper".to_string()),
+            template: None,
+            peekable: false,
+            fields: vec![UnnamedField {
+                value: Link::Immediate(Primitive::String),
+                silent: false,
+                doc: String::new(),
+            }],
+        }),
+        "A newtype struct should be recorded as a single-field tuple carrying its type name"
+    );
+}
+
+#[test]
+fn test_newtype_struct_stays_transparent_for_display_and_json() {
+    let wrapper = StringWrapper("hello".to_string().try_into().unwrap());
+    encode_decode_tests!(StringWrapper, wrapper, "\"hello\"");
+}
+
+#[test]
+fn test_multi_field_tuple_struct_records_type_name() {
+    let schema = Schema::of_single_type::<MultiFieldTupleStruct>().unwrap();
+    let Ty::Tuple(tuple) = &schema.types()[0] else {
+        panic!(
+            "Tuple struct should scaffold to Ty::Tuple, got {:?}",
+            schema.types()[0]
+        );
+    };
+    assert_eq!(tuple.type_name.as_deref(), Some("MultiFieldTupleStruct"));
+}
+
+#[test]
+fn test_multi_field_tuple_struct_stays_transparent_for_display_and_json() {
+    let tuple_struct = MultiFieldTupleStruct(0x1234, 0x5678_9abc);
+    encode_decode_tests!(MultiFieldTupleStruct, tuple_struct, "(4660, 1450744508)");
+}
+
+#[test]
+fn test_anonymize_tuple_attribute_strips_type_name() {
+    let schema = Schema::of_single_type::<AnonymizedTupleStruct>().unwrap();
+    let Ty::Tuple(tuple) = &schema.types()[0] else {
+        panic!(
+            "Tuple struct should scaffold to Ty::Tuple, got {:?}",
+            schema.types()[0]
+        );
+    };
+    assert_eq!(
+        tuple.type_name, None,
+        "A tuple struct annotated with anonymize_tuple should not record its type name"
+    );
+}
+
+#[test]
+fn test_enum_variant_virtual_tuples_stay_anonymous() {
+    let schema = Schema::of_single_type::<SimpleEnum>().unwrap();
+    let tuples: Vec<_> = schema
+        .types()
+        .iter()
+        .filter_map(|ty| match ty {
+            Ty::Tuple(t) => Some(t),
+            _ => None,
+        })
+        .collect();
+    assert!(
+        !tuples.is_empty(),
+        "SimpleEnum's tuple variants should generate tuple types in the schema"
+    );
+    for tuple in tuples {
+        assert_eq!(
+            tuple.type_name, None,
+            "Virtual tuples generated for enum variant contents should not record a type name"
+        );
+    }
+}
+
+#[test]
+fn test_tuple_schema_json_without_type_name_still_parses() {
+    // Schema JSONs generated before `Tuple::type_name` existed lack the field entirely;
+    // deserialization must default it to `None`.
+    let old_json = r#"{"Tuple":{"template":null,"peekable":false,"fields":[{"value":{"Immediate":"String"},"silent":false,"doc":""}]}}"#;
+    let ty: Ty<IndexLinking> = serde_json::from_str(old_json).unwrap();
+    let Ty::Tuple(tuple) = ty else {
+        panic!("Old tuple schema JSON should parse to Ty::Tuple, got {ty:?}");
+    };
+    assert_eq!(
+        tuple.type_name, None,
+        "A schema JSON without the type_name field should default it to None"
     );
 }

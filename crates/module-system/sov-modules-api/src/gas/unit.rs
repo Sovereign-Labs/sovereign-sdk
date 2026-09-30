@@ -28,6 +28,7 @@ where
 {
     fn scaffold() -> Item<IndexLinking> {
         Item::Container(Container::Tuple(Tuple {
+            type_name: Some("GasUnit".to_string()),
             template: None,
             peekable: false,
             fields: vec![UnnamedField {
