@@ -1,6 +1,6 @@
 {
   "name": "@sovereign-sdk/serializers",
-  "version": "0.2.0",
+  "version": "0.3.0",
   "description": "A package providing serialization for types used by Sovereign SDK apps",
   "scripts": {
     "build": "tsup",
