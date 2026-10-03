@@ -191,6 +191,17 @@ impl CelestiaVerifier {
                 blob_proof_range_start
             };
 
+            for sub_proof in &blob_row_proof.range_proofs {
+                let expected = sub_proof.start_share_idx % block_header.row_length();
+                let actual = sub_proof.proof.start_idx() as usize;
+                if actual != expected {
+                    return Err(InvalidRowProof(RowProofError::WrongStartShareIndex {
+                        expected,
+                        actual,
+                    }));
+                }
+            }
+
             let shares_checked = if blob_row_proof.is_supported_blob()? {
                 let Some(blob) = blobs_iter.next() else {
                     return Err(InvalidBlobData(BlobDataError::MoreProofsThanBlobs));
