@@ -472,6 +472,14 @@ impl NamespaceRelevantData {
             {
                 share_seq.check_consistency();
             }
+            if share_seq.shares[0]
+                .info_byte()
+                .expect("blob must contain a data share")
+                .version()
+                != SUPPORTED_SHARE_VERSION
+            {
+                continue;
+            }
             // Commitment
             let commitment =
                 celestia_types::Commitment::from_shares(self.namespace, &share_seq.shares)
