@@ -498,6 +498,20 @@ where
         );
 
         let provisional_outcome = match outcome {
+            AuthAndProcessOutcome::RejectedByPreFlight => {
+                // Pre-flight rejections depend on the sequencer's local configuration, so they
+                // must never happen outside the sequencer, or execution becomes non-deterministic.
+                assert!(
+                    execution_context.is_sequencer(),
+                    "Transactions can only be rejected by pre-flight checks in the sequencer. This is a bug, please report it."
+                );
+                // The pre-flight hook has already responded for this transaction, so we skip
+                // `post_tx` and drop the transaction without affecting the batch.
+                let mut new_checkpoint = dirty_scratchpad.revert();
+                new_checkpoint.discard_revertable_storage_cache();
+                clean_scratchpad = new_checkpoint.to_tx_scratchpad();
+                continue;
+            }
             AuthAndProcessOutcome::IllegalSequencer { reason } => {
                 tracing::warn!(%reason, "Transaction could not be attempted due to sequencer error. If this error persists, check that your sequencer has sufficient funds");
                 ProvisionalSequencerOutcome::out_of_funds(
@@ -652,6 +666,9 @@ where
 enum AuthAndProcessOutcome<S: Spec> {
     /// The sequencer was not allowed to process this transaction
     IllegalSequencer { reason: OutOfFundsReason<S> },
+    /// The injected control flow rejected the transaction in its pre-flight hook. The
+    /// transaction is dropped as if it had never been submitted, and `post_tx` is not called.
+    RejectedByPreFlight,
     /// The transaction failed before execution started
     Skipped {
         error: TxProcessingError,
@@ -881,6 +898,13 @@ where
     let (tx_result, mut scratchpad, pre_exec_gas_meter) = process_tx_result;
 
     match tx_result {
+        // The pre-flight rejection is sequencer policy, not a property of the transaction, so
+        // the sequencer is not penalized and no receipt is created.
+        Err((TxProcessingError::RejectedByPreFlight, _)) => AuthAndProcessOutput {
+            outcome: AuthAndProcessOutcome::RejectedByPreFlight,
+            scratchpad,
+            gas_used: pre_exec_gas_meter.gas_info().gas_used,
+        },
         Err((error, raw_tx)) => {
             penalize_sequencer(
                 runtime,
