@@ -96,6 +96,10 @@ where
         )
         .await?;
 
+        // Tell the DA service whether this node may write before anything that submits
+        // blobs is started.
+        self.da.set_write_role(seq_role.da_write_role()).await;
+
         let (next_sequence_number, db_cache) = db.initial_data().await?;
         let mut handles = vec![];
 

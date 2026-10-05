@@ -102,30 +102,18 @@ pub struct SubmitBlobReceipt<T: Debug + Clone> {
     pub da_transaction_id: T,
 }
 
-/// The role of the sequencer in a distributed setup.
+/// Whether this node is the one allowed to submit blobs through the [`DaService`].
 ///
-/// Resolved once at startup by the sequencer and handed to the [`DaService`] through
-/// [`DaService::set_sequencer_role`], so a DA service that has to coordinate with other
-/// nodes (for example one sharing a single store between a leader and its replicas) is
-/// told whether it is allowed to write rather than having to work that out itself.
-#[derive(Copy, Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
-pub enum SequencerRole {
-    /// Node that does not sync with the `BatchProducer` and relies on DA for updates.
-    DaOnlyReplica,
-    /// Node that syncs with the `BatchProducer` via PostgreSQL.
-    PgSyncReplica,
-    /// Node that accepts transactions and produces batches.
-    BatchProducer,
-}
-
-impl SequencerRole {
-    /// True when the node will operate as any kind of replica.
-    pub fn is_replica(self) -> bool {
-        matches!(
-            self,
-            SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica
-        )
-    }
+/// Set at startup by the sequencer through [`DaService::set_write_role`], so a DA
+/// service that has to coordinate with other nodes (for example one sharing a single
+/// store between a leader and its replicas) is told whether it may write rather than
+/// having to work that out itself.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum DaWriteRole {
+    /// This node produces batches and submits them to the DA layer.
+    Writer,
+    /// This node only reads from the DA layer; another node is the writer.
+    ReadOnly,
 }
 
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
@@ -270,15 +258,20 @@ pub trait DaService: Clone + Send + Sync + 'static {
         None
     }
 
-    /// Tells the service which [`SequencerRole`] this node holds.
+    /// Tells the service whether this node is allowed to submit blobs.
     ///
-    /// Called by the full node once the sequencer has resolved its role, which is after the
-    /// service has been created and may already be serving reads. A service that only talks
-    /// to an external DA network can ignore this; one whose writes must be coordinated
-    /// between nodes should only write while the role is [`SequencerRole::BatchProducer`].
+    /// Called by the sequencer as soon as it has resolved its role, before any task that
+    /// submits blobs is started. The service has already been created by then and may be
+    /// serving reads. A service that only talks to an external DA network can ignore this;
+    /// one whose writes must be coordinated between nodes should only write while the role
+    /// is [`DaWriteRole::Writer`].
+    ///
+    /// The full node holds several clones of the service and makes this call on only one
+    /// of them, so an implementation must keep the role in state shared across clones
+    /// (for example behind an `Arc`) rather than in a per-clone field.
     ///
     /// May be called again if the role changes while the node is running.
-    async fn set_sequencer_role(&self, _role: SequencerRole) {}
+    async fn set_write_role(&self, _role: DaWriteRole) {}
 
     /// Returns a [`DaSpec::Address`] that signs blobs submitted by this instance of [`DaService`].
     /// If `None` means that instance of DaService is not capable of sending blobs and can be used only in node mode.

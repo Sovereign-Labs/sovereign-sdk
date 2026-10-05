@@ -26,7 +26,7 @@ use sov_rollup_full_node_interface::StateChannel;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
 use sov_rollup_interface::common::SlotNumber;
-use sov_rollup_interface::node::da::{DaService, SequencerRole, SlotData};
+use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_rollup_interface::ProvableHeightTracker;
@@ -303,7 +303,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
                     da_address,
-                    sequencer_role: SequencerRole::BatchProducer,
+                    is_replica: false,
                 })
             }
             SequencerKindConfig::Preferred(seq_config) => {
@@ -348,7 +348,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                     proof_sender: Arc::new(sequencer),
                     api_ledger_db: api_ledger_db.clone(),
                     da_address,
-                    sequencer_role: seq_role,
+                    is_replica: seq_role.is_replica(),
                 })
             }
         }
@@ -626,14 +626,8 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             .await
         );
 
-        // The DA service was created before the sequencer, so it only now learns whether
-        // this node is allowed to write.
-        da_service
-            .set_sequencer_role(sequencer.sequencer_role)
-            .await;
-
         let proof_pipeline_enabled =
-            should_enable_proof_pipeline(prover_config, sequencer.is_replica());
+            should_enable_proof_pipeline(prover_config, sequencer.is_replica);
 
         // The prover service validates the latest aggregated proof persisted in
         // the ledger DB and returns its `final_slot_number`. We pass this slot
@@ -1112,15 +1106,8 @@ pub struct SequencerCreationReceipt<S: Spec> {
     pub background_handles: Vec<BackgroundHandle<()>>,
     #[allow(missing_docs)]
     pub da_address: <S::Da as DaSpec>::Address,
-    /// The role the sequencer resolved at startup.
-    pub sequencer_role: SequencerRole,
-}
-
-impl<S: Spec> SequencerCreationReceipt<S> {
     /// Whether the resolved sequencer role is a replica role.
-    pub fn is_replica(&self) -> bool {
-        self.sequencer_role.is_replica()
-    }
+    pub is_replica: bool,
 }
 
 fn should_enable_proof_pipeline(prover_config: RollupProverConfig, is_replica: bool) -> bool {

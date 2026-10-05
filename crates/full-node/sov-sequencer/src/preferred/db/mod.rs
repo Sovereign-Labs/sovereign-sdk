@@ -28,6 +28,7 @@ use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, TxHash, VisibleSlotNumber,
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::node::da::DaWriteRole;
 use sov_shutdown::PrimaryShutdownController;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -516,7 +517,34 @@ impl From<BatchToStore> for StoredBlob {
     }
 }
 
-pub use sov_rollup_interface::node::da::SequencerRole;
+/// The role of the sequencer in a distributed setup.
+#[derive(Copy, Clone, Debug, PartialEq, Eq, serde::Serialize, serde::Deserialize)]
+pub enum SequencerRole {
+    /// Node that does not sync with the `BatchProducer` and relies on DA for updates.
+    DaOnlyReplica,
+    /// Node that syncs with the `BatchProducer` via PostgreSQL.
+    PgSyncReplica,
+    /// Node that accepts transactions and produces batches.
+    BatchProducer,
+}
+
+impl SequencerRole {
+    /// True when the node will operate as any kind of replica.
+    pub fn is_replica(self) -> bool {
+        matches!(
+            self,
+            SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica
+        )
+    }
+
+    /// The write permission this role grants on the DA service.
+    pub fn da_write_role(self) -> DaWriteRole {
+        match self {
+            SequencerRole::BatchProducer => DaWriteRole::Writer,
+            SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica => DaWriteRole::ReadOnly,
+        }
+    }
+}
 
 pub(crate) struct PreferredSequencerDb {
     backend: Option<Box<dyn DbBackend>>,
