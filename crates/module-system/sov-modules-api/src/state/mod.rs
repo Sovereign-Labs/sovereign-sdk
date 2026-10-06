@@ -14,7 +14,7 @@ pub use accessors::{
 #[cfg(feature = "native")]
 pub use accessors::{
     AccessoryStateCheckpoint, ApiStateAccessor, ApiStateAccessorError, ConcurrentStateCheckpoint,
-    EventEpoch, EventFrontier,
+    EventFrontier,
 };
 #[cfg(feature = "native")]
 use sov_rollup_interface::ProvableHeightTracker;

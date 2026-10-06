@@ -3,46 +3,11 @@ use std::sync::{Arc, PoisonError, RwLock};
 use sov_rollup_interface::common::{RollupHeight, SlotNumber, VisibleSlotNumber};
 use sov_state::{Namespace, NativeStorage, SlotKey, SlotValue, StateGetter};
 
-use crate::{Spec, StateCheckpoint, TxChangeSet};
+use crate::{EventEpoch, Spec, StateCheckpoint, TxChangeSet};
 
 /// A read transaction over a [`ConcurrentStateCheckpoint`]'s pending writes.
 type WritesReadTxn<'a> =
     concread::hashmap::HashMapReadTxn<'a, (SlotKey, Namespace), Option<SlotValue>>;
-
-/// Identifies a run of event numbering.
-///
-/// Event numbers are handed out by the sequencer before the node commits them, so a rollback
-/// can retract numbered events and hand the same numbers out again for different content. The
-/// number alone is therefore not a stable identifier: event 95 before a rollback and event 95
-/// after it are different events, and a rollback that retracts fewer events than it later
-/// re-emits is invisible to anyone watching only the number.
-///
-/// The epoch closes that hole. It changes whenever the numbering is reissued, so `(epoch,
-/// number)` *is* stable: two events agreeing on both are the same event.
-///
-/// It is an opaque token — compare it for equality and nothing else. It carries no ordering,
-/// and a fresh one is minted whenever the sequencer rewinds *or restarts*, so it never needs
-/// to be persisted.
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub struct EventEpoch(u128);
-
-impl EventEpoch {
-    /// Wraps an opaque token minted by whoever hands out event numbers.
-    pub fn new(token: u128) -> Self {
-        Self(token)
-    }
-
-    /// The raw token, for transport.
-    pub fn get(self) -> u128 {
-        self.0
-    }
-}
-
-impl std::fmt::Display for EventEpoch {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        write!(f, "{:032x}", self.0)
-    }
-}
 
 /// How far event numbering has progressed, and in which run of it.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
