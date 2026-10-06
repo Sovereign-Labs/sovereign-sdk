@@ -277,7 +277,11 @@ pub trait InjectedControlFlow<S: Spec> {
     /// before the main executor.
     fn try_warm_up_cache(&mut self, scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>);
 
-    /// Runs after authentication but before the transaction executes
+    /// Runs after authentication but before the transaction executes.
+    ///
+    /// Returning [`TxControlFlow::IgnoreTx`] drops the transaction as if it had never been
+    /// submitted: no receipt is created and [`Self::post_tx`] is *not* called for it. This is
+    /// only allowed in the sequencer, since it would make execution non-deterministic elsewhere.
     fn pre_flight<RT: Runtime<S>>(
         &self,
         runtime: &RT,
