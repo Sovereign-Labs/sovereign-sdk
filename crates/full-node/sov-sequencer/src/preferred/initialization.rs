@@ -83,6 +83,7 @@ where
 
         let (api_state, checkpoint_sender) = Self::api_state(
             latest_state_update.storage.clone(),
+            latest_state_update.next_event_number,
             primary_shutdown.clone(),
         );
 
@@ -338,6 +339,7 @@ where
 
     fn api_state(
         storage: S::Storage,
+        next_event_number: u64,
         primary_shutdown: PrimaryShutdownController,
     ) -> (
         ApiState<S>,
@@ -351,7 +353,14 @@ where
         let checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
         // Preferred sequencer deliberately treats the latest available slot as finalized
         // when initializing API state (soft-confirmation semantics).
-        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
+        // Seed the frontier from the node, so API readers can order a state snapshot against the
+        // event stream from the very first request, before the sequencer opens its first batch.
+        // A fresh epoch, because a restart loses any soft confirmations this sequencer had
+        // previously handed numbers out for.
+        let concurrent_checkpoint =
+            ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint).with_event_frontier(
+                EventFrontier::new(crate::common::new_event_epoch(), next_event_number),
+            );
         let (checkpoint_sender, checkpoint_receiver) =
             watch::channel(Arc::new(concurrent_checkpoint));
         let api_state = ApiState::build(

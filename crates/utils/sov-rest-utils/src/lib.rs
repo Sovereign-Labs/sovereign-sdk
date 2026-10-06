@@ -14,6 +14,18 @@
 //! - Query string parameters follow the bracket notation `foo[bar]` that was
 //!   popularized by [`qs`](https://github.com/ljharb/qs).
 //! - Pagination is cursor-based.
+//! - Replies that read the rollup's *latest* state carry `x-sov-last-event-number` and
+//!   `x-sov-event-epoch` headers (see [`LastEventNumberSink`]). Together they name the last
+//!   rollup event whose effects the reply reflects, so a client can take a state snapshot and
+//!   then apply exactly the events numbered above it from the event stream. Both headers are
+//!   absent when the request asked for a historical height, when the rollup has not emitted
+//!   any event yet, or when the endpoint does not read rollup state at all.
+//! - The epoch must be checked, not ignored. Event numbers are handed out before they are
+//!   committed, so a sequencer rollback retracts numbered events and reissues those numbers
+//!   for different content. The number alone cannot express that: a rollback that retracts
+//!   fewer events than it goes on to re-emit leaves the number *higher* than before. The
+//!   epoch changes whenever numbering is reissued, so numbers may only be compared across two
+//!   replies that agree on it; otherwise the client must resynchronise.
 //!
 //! # Missing features
 //! - Multi-column sorting (see <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/449>).
@@ -38,8 +50,8 @@ pub mod test_utils;
 mod ws_tests;
 use axum::body::Body;
 use axum::extract::ws::WebSocket;
-use axum::extract::Request;
-use axum::http::{HeaderName, StatusCode};
+use axum::extract::{FromRequestParts, Request};
+use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::{Error, Json, Router};
 pub use axum_extractors::{Path, Query};
@@ -51,7 +63,9 @@ pub use sealed_blocks_only::{SealedBlocksOnly, SEALED_BLOCKS_ONLY_HEADER};
 use serde::Serialize;
 pub use sorting::{Sorting, SortingOrder};
 use sov_shutdown::PrimaryShutdownController;
+use std::convert::Infallible;
 use std::fmt::Debug;
+use std::sync::{Arc, Mutex, PoisonError};
 use tower_http::cors::CorsLayer;
 use tower_http::propagate_header::PropagateHeaderLayer;
 use tower_http::trace::TraceLayer;
@@ -124,6 +138,119 @@ pub fn to_json_object<T: Serialize>(value: T) -> JsonObject {
     }
 }
 
+static LAST_EVENT_NUMBER: HeaderName = HeaderName::from_static("x-sov-last-event-number");
+static EVENT_EPOCH: HeaderName = HeaderName::from_static("x-sov-event-epoch");
+
+/// What a handler has recorded about the events its state read reflects.
+#[derive(Clone, Copy, Debug)]
+enum RecordedEvents {
+    /// Nothing recorded; the handler did not read rollup state.
+    Unset,
+    /// Every read so far agreed on the epoch, and reflects events up to `last_event_number`.
+    Recorded { epoch: u128, last_event_number: u64 },
+    /// Reads disagreed on the epoch, so no single number describes the reply.
+    EpochConflict,
+}
+
+/// A per-request slot for the rollup events reflected in the state a handler read.
+///
+/// Handlers do not build their own responses (they return [`ApiResult`]), and the frontier is
+/// only known inside the extractor that opens a state snapshot. So the extractor records it
+/// here and the layer installed by [`preconfigured_router_layers`] turns it into the
+/// `x-sov-last-event-number` and `x-sov-event-epoch` response headers.
+///
+/// Obtain one with the [`FromRequestParts`] impl, or clone it out of the request extensions.
+/// A sink that did not come from the layer is inert, so holders outside an HTTP request (the
+/// sequencer, JSON-RPC) are unaffected.
+#[derive(Clone, Default, Debug)]
+pub struct LastEventNumberSink(Option<Arc<Mutex<RecordedEvents>>>);
+
+impl LastEventNumberSink {
+    /// Records that the state read so far belongs to `epoch` and reflects every event up to
+    /// and including `last_event_number`.
+    ///
+    /// When a handler reads state more than once the reads may land on different snapshots:
+    ///
+    /// - Same epoch: keep the smallest number, the only one guaranteed to be reflected by all
+    ///   of them. Reporting a larger one would make a client skip events it never applied.
+    /// - Different epochs: the reply mixes two runs of numbering, so no single number
+    ///   describes it. Report nothing rather than something misleading.
+    pub fn record(&self, epoch: u128, last_event_number: u64) {
+        let Some(cell) = &self.0 else {
+            return;
+        };
+        let mut recorded = cell.lock().unwrap_or_else(PoisonError::into_inner);
+        *recorded = match *recorded {
+            RecordedEvents::Unset => RecordedEvents::Recorded {
+                epoch,
+                last_event_number,
+            },
+            RecordedEvents::Recorded {
+                epoch: seen_epoch,
+                last_event_number: seen,
+            } if seen_epoch == epoch => RecordedEvents::Recorded {
+                epoch,
+                last_event_number: seen.min(last_event_number),
+            },
+            RecordedEvents::Recorded { .. } | RecordedEvents::EpochConflict => {
+                RecordedEvents::EpochConflict
+            }
+        };
+    }
+
+    fn recorded(&self) -> Option<(u128, u64)> {
+        match *self
+            .0
+            .as_ref()?
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+        {
+            RecordedEvents::Recorded {
+                epoch,
+                last_event_number,
+            } => Some((epoch, last_event_number)),
+            RecordedEvents::Unset | RecordedEvents::EpochConflict => None,
+        }
+    }
+}
+
+impl<S: Send + Sync> FromRequestParts<S> for LastEventNumberSink {
+    type Rejection = Infallible;
+
+    async fn from_request_parts(
+        parts: &mut axum::http::request::Parts,
+        _state: &S,
+    ) -> Result<Self, Self::Rejection> {
+        Ok(parts.extensions.get::<Self>().cloned().unwrap_or_default())
+    }
+}
+
+/// Publishes whatever the handler recorded in its [`LastEventNumberSink`] as a response header.
+async fn attach_last_event_number(
+    mut request: Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let sink = LastEventNumberSink(Some(Arc::new(Mutex::new(RecordedEvents::Unset))));
+    request.extensions_mut().insert(sink.clone());
+
+    let mut response = next.run(request).await;
+
+    // A WebSocket stream outruns any frontier we could stamp on the handshake, so don't
+    // pretend otherwise.
+    if response.status() != StatusCode::SWITCHING_PROTOCOLS {
+        if let Some((epoch, number)) = sink.recorded() {
+            let headers = response.headers_mut();
+            headers.insert(&LAST_EVENT_NUMBER, number.into());
+            // Hex, fixed width, to make clear it is an opaque token and not a quantity.
+            if let Ok(epoch) = HeaderValue::from_str(&format!("{epoch:032x}")) {
+                headers.insert(&EVENT_EPOCH, epoch);
+            }
+        }
+    }
+
+    response
+}
+
 /// Customizes the given [`Router`] with a set of preconfigured "layers" that
 /// are a good starting point for building production-ready JSON APIs.
 pub fn preconfigured_router_layers<S>(router: Router<S>) -> Router<S>
@@ -162,6 +289,8 @@ where
                     "x-request-id",
                 ))),
         )
+        // Outermost, so it sees the final response of every route in this router.
+        .layer(axum::middleware::from_fn(attach_last_event_number))
 }
 
 /// A pre-configured [`CorsLayer`] with permissive configurations.

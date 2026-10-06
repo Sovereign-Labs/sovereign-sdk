@@ -59,12 +59,23 @@ where
     }
 
     /// Syncs [`ApiState`]s with the latest [`StateCheckpoint`].
+    ///
+    /// `next_event_number` must be the number one past the last event whose effects are
+    /// reflected in `checkpoint`, so that API readers can pair a state snapshot with the
+    /// event stream. It can move backwards when the sequencer discards soft confirmations and
+    /// adopts the node's state; [`event_frontier_after`] turns that regression into a fresh
+    /// epoch, so clients can tell a reissued number from a genuinely new one.
     #[tracing::instrument(skip_all, level = "trace")]
-    fn update_api_state(&self, checkpoint: StateCheckpoint<S>) {
+    fn update_api_state(&self, checkpoint: StateCheckpoint<S>, next_event_number: u64) {
+        let event_frontier = crate::common::event_frontier_after(
+            self.checkpoint_sender.borrow().event_frontier(),
+            next_event_number,
+        );
         // Preferred sequencer intentionally treats the latest available slot as finalized
         // for API state (soft-confirmation semantics). This differs from the standard
         // sequencer which passes the node's true finalized slot explicitly.
-        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
+        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint)
+            .with_event_frontier(event_frontier);
         if self
             .checkpoint_sender
             .send(Arc::new(concurrent_checkpoint))
@@ -111,9 +122,10 @@ where
         checkpoint: StateCheckpoint<S>,
         batch: ReadBatch,
         info_to_store: BatchToStore,
+        next_event_number: u64,
     ) -> Result<()> {
         self.db.terminate_batch(info_to_store).await?;
-        self.update_api_state(checkpoint);
+        self.update_api_state(checkpoint, next_event_number);
 
         // Publish the batch.
         self.blob_sender
@@ -188,8 +200,17 @@ where
 
                 let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
                 for contents in txs_to_insert {
+                    // The event numbers were assigned by the block executor when the receipt was
+                    // produced, so we read them off the transaction itself rather than off the
+                    // executor's counter, which has already run ahead of this queue.
+                    let next_event_number = contents
+                        .accepted_tx
+                        .confirmation
+                        .events
+                        .last()
+                        .map(|event| event.number + 1);
                     // Apply all updates in a single batch
-                    checkpoint_ref.apply_tx_changes(contents.tx_changes);
+                    checkpoint_ref.apply_tx_changes(contents.tx_changes, next_event_number);
                     oneshot_and_txs.push((contents.oneshot_sender, contents.accepted_tx));
                 }
                 // Send a notification that the checkpoint has been updated. The inner value is already concurrency safe, this just ensures that anyone
@@ -208,6 +229,7 @@ where
                 batch,
                 checkpoint,
                 forced_txs,
+                next_event_number,
             } => {
                 let info_to_store = BatchToStore {
                     blob_id: batch.blob_id,
@@ -215,8 +237,13 @@ where
                     visible_slot_number_after_increase: batch.visible_slot_number_after_increase,
                     visible_slots_to_advance: batch.visible_slots_to_advance,
                 };
-                self.close_and_publish_current_batch(checkpoint, batch, info_to_store)
-                    .await?;
+                self.close_and_publish_current_batch(
+                    checkpoint,
+                    batch,
+                    info_to_store,
+                    next_event_number,
+                )
+                .await?;
                 for tx in forced_txs {
                     self.transaction_cache.insert(tx).await;
                 }
@@ -227,6 +254,7 @@ where
                 sequence_number,
                 new_checkpoint,
                 blob_id,
+                next_event_number,
             } => {
                 self.db
                     .start_batch(
@@ -236,7 +264,7 @@ where
                         blob_id,
                     )
                     .await?;
-                self.update_api_state(new_checkpoint);
+                self.update_api_state(new_checkpoint, next_event_number);
             }
             ExecutorEvent::TriggerRecovery {
                 blobs_to_flush,
@@ -264,9 +292,9 @@ where
                     .publish_proof(data, sequence_number, blob_id)
                     .await?;
             }
-            ExecutorEvent::ForceUpdateApiState(new_checkpoint) => {
+            ExecutorEvent::ForceUpdateApiState(new_checkpoint, next_event_number) => {
                 Self::maybe_delay_api_state_update_for_tests().await;
-                self.update_api_state(new_checkpoint);
+                self.update_api_state(new_checkpoint, next_event_number);
             }
             ExecutorEvent::UpdateApiLedger {
                 ledger_reader,
@@ -285,9 +313,9 @@ where
             ExecutorEvent::PruneDb(sequence_number) => {
                 self.db.prune_db(sequence_number).await?;
             }
-            ExecutorEvent::UpdateStateForRecovery(checkpoint) => {
+            ExecutorEvent::UpdateStateForRecovery(checkpoint, next_event_number) => {
                 Self::maybe_delay_api_state_update_for_tests().await;
-                self.update_api_state(checkpoint);
+                self.update_api_state(checkpoint, next_event_number);
             }
             ExecutorEvent::FlushTransactionsCache {
                 next_tx_number,

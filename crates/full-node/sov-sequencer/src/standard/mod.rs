@@ -144,7 +144,11 @@ where
             ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
                 StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel()),
                 latest_state_update.latest_finalized_slot_number,
-            ),
+            )
+            .with_event_frontier(EventFrontier::new(
+                crate::common::new_event_epoch(),
+                latest_state_update.next_event_number,
+            )),
         );
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(checkpoint);
 
@@ -687,6 +691,7 @@ where
             slot_number,
             ledger_reader,
             latest_finalized_slot_number,
+            next_event_number,
             ..
         } = &state_update_info;
         let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel());
@@ -694,6 +699,13 @@ where
         tracing::debug!(
             %slot_number,
             "The sequencer received a new state. Notifying the subscribers."
+        );
+
+        // The node's own numbering can rewind on a DA reorg, so route this through the same
+        // regression check the preferred sequencer uses rather than assuming it only grows.
+        let event_frontier = crate::common::event_frontier_after(
+            self.checkpoint_sender.borrow().event_frontier(),
+            *next_event_number,
         );
 
         {
@@ -704,7 +716,10 @@ where
                     ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
                         checkpoint.clone_with_empty_witness_dropping_temp_cache(),
                         *latest_finalized_slot_number,
-                    ),
+                    )
+                    // The standard sequencer publishes node-committed state only, with no
+                    // soft-confirmation overlay, so the node's number is exact for it.
+                    .with_event_frontier(event_frontier),
                 ))
                 .ok();
             inner.checkpoint = Some(checkpoint);

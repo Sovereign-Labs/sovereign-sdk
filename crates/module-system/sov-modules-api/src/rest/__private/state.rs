@@ -23,7 +23,7 @@ use axum::extract::{FromRequestParts, State};
 use axum::routing::get;
 use serde::Serialize;
 use sov_rest_utils::errors::not_found_404;
-use sov_rest_utils::{ApiResult, ErrorObject, Path, Query};
+use sov_rest_utils::{ApiResult, ErrorObject, LastEventNumberSink, Path, Query};
 use sov_rollup_interface::common::SlotNumber;
 use sov_state::{
     CompileTimeNamespace, Kernel, Namespace, NativeStorage, SlotKey, StateCodec, StateItemCodec,
@@ -72,8 +72,15 @@ where
             .ok()
             .map(|q| q.0);
 
-        state
-            .api_state
+        // `state.api_state` is the router state built at startup, so its sink is inert; build
+        // through a copy carrying this request's sink so the handler's reply gets the header.
+        let api_state = state.api_state.clone().with_last_event_number_sink(
+            LastEventNumberSink::from_request_parts(parts, state)
+                .await
+                .unwrap_infallible(),
+        );
+
+        api_state
             .build_api_state_accessor(height_param)
             .map_err(|e| ErrorObject {
                 status: StatusCode::NOT_FOUND,
@@ -88,6 +95,7 @@ where
 struct StateMapItemsQuery {
     pagination: sov_rest_utils::Pagination<String>,
     historical_height_requested: bool,
+    last_event_number_sink: LastEventNumberSink,
 }
 
 impl<S> FromRequestParts<S> for StateMapItemsQuery
@@ -100,10 +108,15 @@ where
         parts: &mut axum::http::request::Parts,
         _state: &S,
     ) -> Result<Self, Self::Rejection> {
+        let last_event_number_sink = LastEventNumberSink::from_request_parts(parts, _state)
+            .await
+            .unwrap_infallible();
+
         if parts.uri.query().is_none() {
             return Ok(Self {
                 pagination: Default::default(),
                 historical_height_requested: false,
+                last_event_number_sink,
             });
         }
 
@@ -126,6 +139,7 @@ where
         Ok(Self {
             pagination,
             historical_height_requested,
+            last_event_number_sink,
         })
     }
 }
@@ -340,6 +354,8 @@ where
         let slot_prefix = SlotKey::singleton(&prefix);
         let accessor = state
             .api_state
+            .clone()
+            .with_last_event_number_sink(query.last_event_number_sink)
             .build_api_state_accessor(None)
             .map_err(|e| {
                 sov_rest_utils::errors::internal_server_error_response_500(format!(

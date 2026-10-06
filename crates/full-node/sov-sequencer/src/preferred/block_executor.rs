@@ -260,6 +260,15 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.rollup_block_task_state.is_some()
     }
 
+    /// The number the next event emitted by this executor will be given, i.e. one past the last
+    /// event reflected in [`Self::checkpoint`].
+    ///
+    /// Publish this alongside any checkpoint handed to the API so that readers can pair a state
+    /// snapshot with the event stream.
+    pub(crate) fn next_event_number(&self) -> u64 {
+        self.next_event_number
+    }
+
     #[tracing::instrument(skip_all, level = "trace")]
     pub async fn replace_state(&mut self, other: Self) {
         if self.primary_shutdown.is_triggered() {
