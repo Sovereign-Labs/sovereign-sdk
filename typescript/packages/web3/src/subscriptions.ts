@@ -91,6 +91,20 @@ export type EventPayload = {
     type: "moduleRef";
     name: string;
   };
+  /**
+   * The run of numbering `number` belongs to, when that numbering is speculative.
+   *
+   * Present on events from the sequencer, whose numbers are handed out before the node commits
+   * them and are reissued if the sequencer rolls back. Before applying this event to a state
+   * snapshot, check it against the `x-sov-event-epoch` header that snapshot came with: if they
+   * differ, the number refers to a run of events the snapshot knows nothing about and the
+   * client must resynchronise. Comparing `number` alone is not enough, because a rollback that
+   * re-emits past where it rewound leaves the number higher than before.
+   *
+   * Absent on events read back from the ledger, which are committed, so their numbering is
+   * canonical and never handed out again.
+   */
+  epoch?: string;
 };
 
 export interface SubscriptionToCallbackMap {

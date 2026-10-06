@@ -639,6 +639,7 @@ mod tests {
                 name: "ValueSetter".to_owned(),
             },
             tx_hash: HexString([event_number as u8; 32]),
+            epoch: None,
         }
     }
 

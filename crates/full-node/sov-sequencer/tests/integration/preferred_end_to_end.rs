@@ -1812,7 +1812,8 @@ async fn test_sequencer_getters() {
                 "Mismatch at tx number {i}. Found {new_response:?} \nbut expected {old_response:?}",
             );
             assert_eq!(
-                new_response.events, old_response.events,
+                strip_epochs(&new_response.events),
+                strip_epochs(&old_response.events),
                 "Mismatch at tx {i}",
             );
         }
@@ -1850,7 +1851,7 @@ async fn test_sequencer_getters() {
             .unwrap();
         let tx = tx_response.as_ref();
         assert_eq!(tx.id, response.id);
-        assert_eq!(tx.events, response.events);
+        assert_eq!(strip_epochs(&tx.events), strip_epochs(&response.events));
         assert_eq!(&tx.receipt, response.receipt.as_ref().unwrap());
         assert_eq!(&tx.tx_number, response.tx_number.as_ref().unwrap());
     }
@@ -4537,4 +4538,119 @@ async fn the_event_epoch_is_stable_while_the_sequencer_makes_progress() {
         numbers.windows(2).all(|w| w[0] <= w[1]),
         "Within one epoch the event number must only move forward, got {numbers:?}"
     );
+}
+
+/// The epoch on the state reply is only half the story: a client applying streamed events needs
+/// to know they belong to the same run of numbering its snapshot came from. So the events must
+/// carry it too, and the two must agree.
+#[tokio::test(flavor = "multi_thread")]
+async fn streamed_events_carry_the_same_epoch_as_the_state_reply() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let mut events = test_rollup
+        .api_client()
+        .subscribe_to_events()
+        .await
+        .unwrap();
+
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
+        })
+        .await
+        .unwrap();
+
+    let event = tokio::time::timeout(Duration::from_secs(5), events.next())
+        .await
+        .expect("Timed out waiting for an event")
+        .expect("Event stream ended")
+        .expect("Event stream errored");
+
+    let epoch_on_event = event
+        .epoch
+        .clone()
+        .expect("A soft-confirmed event must carry the epoch its number was handed out in");
+
+    let epoch_on_state = read_event_epoch(&test_rollup)
+        .await
+        .expect("A latest-state read should report an epoch once events exist");
+
+    assert_eq!(
+        epoch_on_event, epoch_on_state,
+        "The stream and the state reply must agree on the epoch, otherwise a client cannot tell \
+         whether the events it is applying belong to the snapshot it is holding"
+    );
+}
+
+/// The other half of the contract: a committed event's numbering is canonical and will never be
+/// handed out again, so it carries no epoch. Clients rely on the absence to tell the two apart.
+#[tokio::test(flavor = "multi_thread")]
+async fn committed_ledger_events_carry_no_epoch() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
+        })
+        .await
+        .unwrap();
+
+    // Drive the transaction all the way into the ledger.
+    test_rollup.force_close_batch().await.unwrap();
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_node_synced().await.unwrap();
+
+    let event = test_rollup
+        .api_client()
+        .get_latest_event()
+        .await
+        .expect("The rollup should have committed at least one event")
+        .into_inner();
+
+    assert_eq!(
+        event.epoch, None,
+        "A committed event's numbering is canonical, so stamping it with an epoch would imply \
+         it might be reissued"
+    );
+}
+
+/// Copies events with the epoch cleared, for comparing two reads of the same event.
+///
+/// The epoch reports whether the copy being served is still speculative, so a read answers
+/// from the sequencer's cache while the transaction is in it, and from the ledger (no epoch,
+/// because committed numbering is canonical) once it has been pruned. Which of the two a given
+/// read gets is a timing detail; everything else about the event must match either way.
+fn strip_epochs(events: &[api_types::LedgerEvent]) -> Vec<api_types::LedgerEvent> {
+    events
+        .iter()
+        .cloned()
+        .map(|mut event| {
+            event.epoch = None;
+            event
+        })
+        .collect()
 }

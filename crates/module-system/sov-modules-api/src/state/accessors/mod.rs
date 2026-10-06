@@ -38,7 +38,7 @@ pub use checkpoints::native::AccessoryStateCheckpoint;
 pub use checkpoints::{ChangeSet, StateCheckpoint};
 #[cfg(feature = "native")]
 pub use concurrent_state_checkpoint::{
-    ConcurrentStateCheckpoint, EventEpoch, EventFrontier, FinalizedSlotPolicy,
+    ConcurrentStateCheckpoint, EventFrontier, FinalizedSlotPolicy,
 };
 pub use genesis::GenesisStateAccessor;
 pub use internals::AccessoryDelta;

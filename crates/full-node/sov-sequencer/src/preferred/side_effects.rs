@@ -197,9 +197,15 @@ where
                     .await?;
 
                 let checkpoint_ref = self.checkpoint_sender.borrow().clone();
+                // The epoch these events are numbered in. `apply_tx_changes` only extends the
+                // numbering, so every transaction in this batch belongs to the epoch that is
+                // published right now.
+                let epoch = checkpoint_ref
+                    .event_frontier()
+                    .map(|frontier| frontier.epoch);
 
                 let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
-                for contents in txs_to_insert {
+                for mut contents in txs_to_insert {
                     // The event numbers were assigned by the block executor when the receipt was
                     // produced, so we read them off the transaction itself rather than off the
                     // executor's counter, which has already run ahead of this queue.
@@ -209,6 +215,12 @@ where
                         .events
                         .last()
                         .map(|event| event.number + 1);
+                    // Stamp the epoch on, so a subscriber can tell whether these numbers belong
+                    // to the same run of numbering as the state snapshot it is holding. Without
+                    // it a rollback that re-emits past where it rewound is undetectable.
+                    for event in contents.accepted_tx.confirmation.events.iter_mut() {
+                        event.epoch = epoch;
+                    }
                     // Apply all updates in a single batch
                     checkpoint_ref.apply_tx_changes(contents.tx_changes, next_event_number);
                     oneshot_and_txs.push((contents.oneshot_sender, contents.accepted_tx));
