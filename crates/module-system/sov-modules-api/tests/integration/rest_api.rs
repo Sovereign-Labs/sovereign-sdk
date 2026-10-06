@@ -8,8 +8,8 @@ use sov_modules_api::capabilities::mocks::MockKernel;
 use sov_modules_api::hooks::TxHooks;
 use sov_modules_api::rest::{utils::ErrorObject, ApiState, HasRestApi};
 use sov_modules_api::{
-    ConcurrentStateCheckpoint, Context, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
-    StateCheckpoint, StateValue, TxState,
+    ConcurrentStateCheckpoint, Context, EventEpoch, EventFrontier, Module, ModuleId, ModuleInfo,
+    ModuleRestApi, Spec, StateCheckpoint, StateValue, TxState,
 };
 use sov_test_utils::TestSpec;
 use utoipa::openapi::path::ParameterIn;
@@ -280,4 +280,136 @@ async fn rest_api_routes() {
         .expect("Invalid key response does not include parse error details");
     assert!(error_details.contains("not-a-u32"));
     assert!(error_details.contains("invalid digit found in string"));
+}
+
+/// Multi-byte, asymmetric values, so a byte-order mistake anywhere would show up.
+const NEXT_EVENT_NUMBER: u64 = 0x1234_5678;
+const EPOCH: u128 = 0x0123_4567_89ab_cdef_0123_4567_89ab_cdef;
+
+/// Serves `MyRuntime`'s REST API and returns a client, its base URL, and the checkpoint
+/// sender, which the caller must keep alive for as long as it makes requests.
+async fn serve_rest_api(
+    next_event_number: Option<u64>,
+) -> (
+    Client,
+    String,
+    tokio::sync::watch::Sender<Arc<ConcurrentStateCheckpoint<TestSpec>>>,
+) {
+    let storage_manager = sov_test_utils::storage::SimpleStorageManager::new();
+    let storage = storage_manager.create_storage();
+
+    let mut checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(StateCheckpoint::new(
+        storage,
+        &MockKernel::<TestSpec>::default(),
+    ));
+    if let Some(next_event_number) = next_event_number {
+        checkpoint = checkpoint.with_event_frontier(EventFrontier::new(
+            EventEpoch::new(EPOCH),
+            next_event_number,
+        ));
+    }
+
+    let (sender, receiver) = tokio::sync::watch::channel(Arc::new(checkpoint));
+
+    let router = MyRuntime::<TestSpec>::default().rest_api(ApiState::build(
+        Arc::new(()),
+        receiver,
+        Arc::new(MockKernel::default()),
+        None,
+        sov_shutdown::PrimaryShutdownController::new(),
+    ));
+
+    let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let rest_address = listener.local_addr().unwrap();
+    tokio::spawn(async move {
+        axum::serve(listener, router).await.unwrap();
+    });
+
+    (Client::new(), format!("http://{rest_address}"), sender)
+}
+
+const LAST_EVENT_NUMBER_HEADER: &str = "x-sov-last-event-number";
+const EVENT_EPOCH_HEADER: &str = "x-sov-event-epoch";
+
+fn header(response: &reqwest::Response, name: &str) -> Option<String> {
+    response
+        .headers()
+        .get(name)
+        .map(|value| value.to_str().unwrap().to_owned())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn state_reads_report_the_last_event_number() {
+    let (client, base, _sender) = serve_rest_api(Some(NEXT_EVENT_NUMBER)).await;
+
+    let response = client
+        .get(format!("{base}/modules/my-foo-module/state/value"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        header(&response, LAST_EVENT_NUMBER_HEADER),
+        Some((NEXT_EVENT_NUMBER - 1).to_string()),
+        "A latest-state read must tell the client which events its reply already reflects"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn state_reads_report_the_event_epoch() {
+    let (client, base, _sender) = serve_rest_api(Some(NEXT_EVENT_NUMBER)).await;
+
+    let response = client
+        .get(format!("{base}/modules/my-foo-module/state/value"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        header(&response, EVENT_EPOCH_HEADER),
+        Some(format!("{EPOCH:032x}")),
+        "Without the epoch a client cannot tell a reissued event number from a new one, so it          must be reported alongside the number"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn historical_state_reads_report_no_last_event_number() {
+    let (client, base, _sender) = serve_rest_api(Some(NEXT_EVENT_NUMBER)).await;
+
+    let response = client
+        .get(format!(
+            "{base}/modules/my-foo-module/state/value?rollup_height=0"
+        ))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (
+            header(&response, LAST_EVENT_NUMBER_HEADER),
+            header(&response, EVENT_EPOCH_HEADER),
+        ),
+        (None, None),
+        "The live frontier says nothing about a historical read, so it must not be reported"
+    );
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn state_reads_report_no_event_number_when_the_producer_tracks_none() {
+    let (client, base, _sender) = serve_rest_api(None).await;
+
+    let response = client
+        .get(format!("{base}/modules/my-foo-module/state/value"))
+        .send()
+        .await
+        .unwrap();
+
+    assert_eq!(
+        (
+            header(&response, LAST_EVENT_NUMBER_HEADER),
+            header(&response, EVENT_EPOCH_HEADER),
+        ),
+        (None, None),
+        "A checkpoint whose producer does not track event numbers must not report a frontier"
+    );
 }

@@ -8,7 +8,7 @@ use serde::Serialize;
 use sov_modules_api::prelude::anyhow;
 use sov_modules_api::rest::ApiState;
 use sov_modules_api::{ApiStateAccessor, Spec};
-use sov_rest_utils::{errors, preconfigured_router_layers, Query};
+use sov_rest_utils::{errors, preconfigured_router_layers, LastEventNumberSink, Query};
 use sov_rollup_interface::crypto::CredentialId;
 use sov_uniqueness::Uniqueness;
 
@@ -34,6 +34,15 @@ pub trait DeDupEndpoint<S: Spec>: Clone + Send + Sync + 'static {
     /// Provides rollup state to the handler.
     fn state(&self) -> ApiStateAccessor<S>;
 
+    /// Provides rollup state to the handler, reporting the event number it reads at to `sink`.
+    ///
+    /// The default ignores the sink, so replies carry no `x-sov-last-event-number` header.
+    /// Override it, as [`SovereignDeDupEndpoint`] does, to let clients order the reply against
+    /// the event stream.
+    fn state_reporting_to(&self, _sink: LastEventNumberSink) -> ApiStateAccessor<S> {
+        self.state()
+    }
+
     /// Returns a configured axum router for the dedup endpoint.
     ///
     /// Calls the implemented [`DeDupEndpoint::handler`] and returns the result.
@@ -51,8 +60,10 @@ pub trait DeDupEndpoint<S: Spec>: Clone + Send + Sync + 'static {
                 .route(
                     "/rollup/addresses/{address}/dedup",
                     get(
-                        |Path(address): Path<String>, State(state): State<Self>| async move {
-                            match Self::handler(address, state.state()) {
+                        |Path(address): Path<String>,
+                         State(state): State<Self>,
+                         sink: LastEventNumberSink| async move {
+                            match Self::handler(address, state.state_reporting_to(sink)) {
                                 Ok(data) => axum::Json(data).into_response(),
                                 Err(err) => errors::bad_request_400("Failed to dedup address", err),
                             }
@@ -166,6 +177,14 @@ impl<S: Spec> DeDupEndpoint<S> for SovereignDeDupEndpoint<S> {
         self.state.default_api_state_accessor()
     }
 
+    fn state_reporting_to(&self, sink: LastEventNumberSink) -> ApiStateAccessor<S> {
+        // Report through the request's sink so the reply carries `x-sov-last-event-number`.
+        self.state
+            .clone()
+            .with_last_event_number_sink(sink)
+            .default_api_state_accessor()
+    }
+
     fn axum_router(&self) -> Router<()> {
         preconfigured_router_layers(
             Router::new()
@@ -174,8 +193,13 @@ impl<S: Spec> DeDupEndpoint<S> for SovereignDeDupEndpoint<S> {
                     get(
                         |Path(credential_id): Path<String>,
                          State(state): State<Self>,
+                         sink: LastEventNumberSink,
                          Query(query): Query<DedupQuery>| async move {
-                            match Self::handler_with_query(credential_id, state.state(), query) {
+                            match Self::handler_with_query(
+                                credential_id,
+                                state.state_reporting_to(sink),
+                                query,
+                            ) {
                                 Ok(data) => axum::Json(data).into_response(),
                                 Err(err) => errors::bad_request_400("Failed to dedup address", err),
                             }

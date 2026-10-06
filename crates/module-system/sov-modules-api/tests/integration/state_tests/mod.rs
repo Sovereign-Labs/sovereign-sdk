@@ -4,6 +4,7 @@
 
 mod archival;
 mod compute_state_update;
+mod event_frontier;
 mod namespaces;
 mod structs;
 

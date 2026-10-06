@@ -348,8 +348,12 @@ where
         // Replace API state
         let mut rt = Rt::default();
         let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
+        // This checkpoint holds the node's state only, with none of the sequencer's soft
+        // confirmations, so the event frontier resets to the node's. It moves *backwards*
+        // whenever we discard soft-confirmed transactions, which is correct: their events are
+        // retracted along with their writes.
         self.executor_events_sender
-            .force_update_api_state(checkpoint)
+            .force_update_api_state(checkpoint, info.next_event_number)
             .await;
     }
 
@@ -746,6 +750,7 @@ where
                 self.executor
                     .checkpoint
                     .clone_with_empty_witness_dropping_temp_cache(),
+                self.executor.next_event_number(),
             )
             .await;
 
@@ -1047,8 +1052,11 @@ where
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache();
         self.sequence_number_of_open_batch = None;
+        // Read the counter after `end_rollup_block`, which assigns numbers to the forced
+        // transactions whose writes `checkpoint` already contains.
+        let next_event_number = self.executor.next_event_number();
         self.executor_events_sender
-            .close_batch(checkpoint, forced_txs)
+            .close_batch(checkpoint, forced_txs, next_event_number)
             .await;
     }
 

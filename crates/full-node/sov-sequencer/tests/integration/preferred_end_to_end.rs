@@ -4320,3 +4320,221 @@ mod tests_with_basic_kernel {
         .unwrap();
     }
 }
+
+const LAST_EVENT_NUMBER_HEADER: &str = "x-sov-last-event-number";
+const EVENT_EPOCH_HEADER: &str = "x-sov-event-epoch";
+
+/// Reads the ValueSetter's value together with the event number the reply says it reflects.
+///
+/// The value is `None` until something has been set.
+async fn read_value_and_last_event_number(
+    test_rollup: &TestRollup<TestBlueprint>,
+    query: &str,
+) -> (Option<u64>, Option<u64>) {
+    let (header, body) = test_rollup
+        .client
+        .http_get_with_header(
+            &format!("/modules/value-setter/state/value{query}"),
+            LAST_EVENT_NUMBER_HEADER,
+        )
+        .await
+        .unwrap();
+
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert!(
+        body.get("value").is_some(),
+        "Expected a state value reply, got {body:?}"
+    );
+
+    (
+        header.map(|header| header.parse().unwrap()),
+        body["value"].as_u64(),
+    )
+}
+
+/// Reads the event epoch the ValueSetter reply is stamped with.
+async fn read_event_epoch(test_rollup: &TestRollup<TestBlueprint>) -> Option<String> {
+    test_rollup
+        .client
+        .http_get_with_header("/modules/value-setter/state/value", EVENT_EPOCH_HEADER)
+        .await
+        .unwrap()
+        .0
+}
+
+/// A state reply must name the last event it reflects, so that a client holding both a snapshot
+/// and the event stream knows exactly which events are still to be applied.
+#[tokio::test(flavor = "multi_thread")]
+async fn state_reads_report_the_last_event_number_they_reflect() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let mut events = test_rollup
+        .api_client()
+        .subscribe_to_events()
+        .await
+        .unwrap();
+
+    let (before, _) = read_value_and_last_event_number(&test_rollup, "").await;
+
+    // Set a value. The transaction emits events, so the frontier must advance past them.
+    let value_to_set = 0x1234_5678;
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, value_to_set)),
+        })
+        .await
+        .unwrap();
+
+    // Collect the numbers the stream hands out for that transaction's events.
+    let mut streamed = Vec::new();
+    while let Ok(Some(Ok(event))) =
+        tokio::time::timeout(Duration::from_secs(5), events.next()).await
+    {
+        streamed.push(event.number);
+        // The sequencer applies a transaction's writes and advances the frontier together, so
+        // once the state shows the new value every event of that transaction has been counted.
+        let (reported, value) = read_value_and_last_event_number(&test_rollup, "").await;
+        if value == Some(value_to_set) {
+            assert_eq!(
+                reported,
+                streamed.last().copied(),
+                "A state read that already shows the transaction's writes must report that \
+                 transaction's last event number; reporting less would make a client re-apply \
+                 events it has already seen, reporting more would make it skip some"
+            );
+            break;
+        }
+    }
+
+    assert!(
+        !streamed.is_empty(),
+        "Setting a value should emit at least one event"
+    );
+    assert!(
+        before < streamed.last().copied(),
+        "The reported event number should advance as events are emitted; it was {before:?} \
+         before the transaction and the transaction's events were {streamed:?}"
+    );
+}
+
+/// The live frontier describes the sequencer's head, so it must not be stamped onto a reply
+/// that deliberately reads older state.
+#[tokio::test(flavor = "multi_thread")]
+async fn historical_state_reads_report_no_last_event_number() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    // Emit an event, so that there is a frontier to report in the first place.
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
+        })
+        .await
+        .unwrap();
+
+    let mut latest = None;
+    for _ in 0..50 {
+        latest = read_value_and_last_event_number(&test_rollup, "").await.0;
+        if latest.is_some() {
+            break;
+        }
+        sleep(Duration::from_millis(100)).await;
+    }
+    assert!(
+        latest.is_some(),
+        "A latest-state read should report an event number once the rollup has emitted events"
+    );
+
+    let (historical, _) = read_value_and_last_event_number(&test_rollup, "?rollup_height=1").await;
+    assert_eq!(
+        historical, None,
+        "A historical read must not be stamped with the live event number"
+    );
+}
+
+/// Normal operation extends the numbering rather than reissuing it, so the epoch must hold
+/// still. A client that resynchronised on every batch would be useless.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_event_epoch_is_stable_while_the_sequencer_makes_progress() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let mut epochs = Vec::new();
+    let mut numbers = Vec::new();
+
+    for generation in 0..3u64 {
+        test_rollup
+            .api_client()
+            .accept_tx(&api_types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(tx_set_value(
+                    &admin.private_key,
+                    generation,
+                    0x1234_5678 + generation,
+                )),
+            })
+            .await
+            .unwrap();
+
+        // Close the batch and let the node catch up, so the reads straddle a slot boundary and
+        // exercise the republish paths rather than just `apply_tx_changes`.
+        test_rollup.force_close_batch().await.unwrap();
+        test_rollup.produce_enough_finalized_slots().await;
+        test_rollup.wait_for_node_synced().await.unwrap();
+
+        if let Some(epoch) = read_event_epoch(&test_rollup).await {
+            epochs.push(epoch);
+            numbers.push(read_value_and_last_event_number(&test_rollup, "").await.0);
+        }
+    }
+
+    assert!(
+        epochs.len() >= 2,
+        "Expected several reads carrying an epoch, got {epochs:?}"
+    );
+    assert_eq!(
+        epochs
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        1,
+        "The epoch changed without a rollback, which would force clients to resynchronise for \
+         no reason: {epochs:?}"
+    );
+    assert!(
+        numbers.windows(2).all(|w| w[0] <= w[1]),
+        "Within one epoch the event number must only move forward, got {numbers:?}"
+    );
+}
