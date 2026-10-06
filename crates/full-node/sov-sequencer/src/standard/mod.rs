@@ -30,7 +30,7 @@ use sov_rest_utils::json_obj;
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
-use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::da::{DaService, DaWriteRole};
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use std::boxed::Box;
@@ -163,6 +163,10 @@ where
         let da_address = da.get_signer().await.context(
             "Standard sequencer require DaService to be configured with submitting support",
         )?;
+
+        // The standard sequencer is always the writer; tell the DA service before the
+        // blob sender is started.
+        da.set_write_role(DaWriteRole::Writer).await;
 
         let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
         let nb_of_concurrent_proof_blob_submissions = Arc::new(AtomicUsize::new(0));
