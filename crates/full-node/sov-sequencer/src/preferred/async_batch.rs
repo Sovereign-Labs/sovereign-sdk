@@ -227,6 +227,8 @@ impl<S: Spec> AsyncBatchResponder<S> {
         } else {
             let execution_time_micros =
                 self.execution_start.borrow().elapsed().as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
+            // This is the only response for this tx: the STF does not call `post_tx` for txs
+            // ignored by the pre-flight hook.
             self.send(
                 S::Gas::zero(),
                 execution_time_micros,

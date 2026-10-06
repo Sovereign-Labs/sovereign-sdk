@@ -3591,6 +3591,59 @@ async fn not_sequencer_safe_txs_are_restricted() {
     }
 }
 
+// Regression test: a tx rejected by the sequencer's admin pre-flight check must produce exactly
+// one result from the executor task. Otherwise the stale extra result is handed to the next tx,
+// shifting every subsequent result by one and eventually tripping the tx hash assertion.
+#[tokio::test(flavor = "multi_thread")]
+async fn txs_after_not_sequencer_safe_tx_get_their_own_results() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let client = test_rollup.api_client().clone();
+
+    let rejected_tx = generate_paymaster_tx::<TestRuntime<TestSpec>>(admin.private_key.clone());
+    let error = client
+        .send_raw_tx_to_sequencer(&rejected_tx)
+        .await
+        .expect_err("Sequencer accepted admin tx from non-admin sender");
+    assert!(
+        error
+            .to_string()
+            .contains("Only designated admins are allowed"),
+        "Unexpected error: {error}"
+    );
+
+    // With a duplicated result, this tx receives the rejected tx's (unsuccessful) result.
+    let first_tx = tx_set_value(&admin.private_key, 0, 1000);
+    client
+        .send_raw_tx_to_sequencer(&first_tx)
+        .await
+        .expect("First valid tx after the rejected one should be accepted");
+
+    // With a duplicated result, this tx receives the first tx's (successful) result, which trips
+    // the sequencer's tx hash assertion and crashes the rollup.
+    let second_tx = tx_set_value(&admin.private_key, 1, 1001);
+    client
+        .send_raw_tx_to_sequencer(&second_tx)
+        .await
+        .expect("Second valid tx after the rejected one should be accepted");
+
+    test_rollup
+        .shutdown()
+        .await
+        .expect("Rollup should shut down cleanly, without any crashed background tasks");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn restart_and_query_value() {
     let actions = vec![TestingAction::Restart, TestingAction::QuerySetValue];
