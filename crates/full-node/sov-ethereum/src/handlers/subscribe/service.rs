@@ -9,6 +9,7 @@ use serde::Serialize;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
 use sov_evm::Evm;
+use sov_evm::HeadView;
 use sov_evm::MaybeSealedBlock;
 use sov_evm::Receipt;
 use sov_evm::SyntheticBlockWithoutRootsAndBloom;
@@ -50,6 +51,7 @@ where
     sink: SubscriptionSink,
     ethereum: Arc<Ethereum<S, Seq>>,
     evm: Evm<S>,
+    head_view: HeadView,
 }
 
 /// Tracks what we've already notified subscribers about, so we don't send duplicate notifications
@@ -160,22 +162,27 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
-    pub fn new(sink: SubscriptionSink, ethereum: Arc<Ethereum<S, Seq>>) -> Self {
+    pub fn new(
+        sink: SubscriptionSink,
+        ethereum: Arc<Ethereum<S, Seq>>,
+        head_view: HeadView,
+    ) -> Self {
         Self {
             sink,
             ethereum,
             evm: Default::default(),
+            head_view,
         }
     }
 
     /// Stream new logs matching the provided filter to the subscriber.
     pub async fn logs(&self, filter: Box<Filter>) -> Result<(), Error> {
         let mut state = self.ethereum.api_state_accessor();
-        let pending_block = self.evm.get_newest_synthetic_header(&mut state);
-        let mut tx_watermark = Watermark::new(..pending_block.transactions.end);
+        let mut tx_watermark = Watermark::new(..self.visible_tx_end(&mut state));
 
         // Fetch the initial block. If it's stale, it will be replaced below.
-        let mut block = self.get_block(pending_block.block_number() - 1, &mut state)?;
+        let latest_sealed_number = *self.evm.block_numbers(&mut state).end();
+        let mut block = self.get_block(latest_sealed_number, &mut state)?;
 
         let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
         let primary_shutdown = self.ethereum.primary_shutdown.clone();
@@ -189,9 +196,9 @@ where
                     }
 
                     let mut state = self.ethereum.api_state_accessor();
-                    let pending_block = self.evm.get_newest_synthetic_header(&mut state);
+                    let visible_tx_end = self.visible_tx_end(&mut state);
 
-                    for tx_idx in tx_watermark.advance(..pending_block.transactions.end) {
+                    for tx_idx in tx_watermark.advance(..visible_tx_end) {
                         let (receipt, time) = self.get_receipt(tx_idx, &mut state)?;
 
                         if block.number() != receipt.block_number {
@@ -228,6 +235,10 @@ where
     /// Unfortunately, this approach means that we have a *lot* of new_heads notifications (one per tx, plus one per DA block. We expect that receivers will not be able
     /// to cope with notifications at a pace of several hundred per second, so we impose a throttle - we never notify more than once per 200ms.
     pub async fn new_heads(&self) -> Result<(), Error> {
+        if self.head_view == HeadView::SealedOnly {
+            return self.new_sealed_heads().await;
+        }
+
         // Pick up here
         // Long term todo: Refactor this into a long-running background task
 
@@ -256,9 +267,7 @@ where
 
                     // Send all of the notifications for new real blocks.
                     while let SyntheticBlockWatermarkAdvanceResult::NewRealBlock(block_number) = watermark.peek(&pending_block) {
-                        let sealed = self.evm.blocks.get(&block_number, &mut state).unwrap_infallible().expect("Block was notified but did not exist. This is a bug!");
-                        let rpc_header = Header::from_consensus(sealed.header, None, Some(U256::from(sealed.rlp_size)));
-                        self.send(&rpc_header).await?;
+                        self.send_sealed_header(block_number, &mut state).await?;
                         watermark.advance(&pending_block);
                         sent = true;
                     }
@@ -315,6 +324,38 @@ where
         }
         Ok(())
     }
+
+    /// Stream new block headers to the subscriber, for subscribers that asked for
+    /// [`HeadView::SealedOnly`]: notifies once for every sealed block, and never for synthetic blocks.
+    async fn new_sealed_heads(&self) -> Result<(), Error> {
+        let mut state = self.ethereum.api_state_accessor();
+        let latest_sealed_number = *self.evm.block_numbers(&mut state).end();
+        let mut block_watermark = Watermark::new(..latest_sealed_number + 1);
+
+        let mut state_updates = self.ethereum.sequencer.api_state().checkpoint_receiver();
+        let primary_shutdown = self.ethereum.primary_shutdown.clone();
+        loop {
+            tokio::select! {
+                result = state_updates.changed() => {
+                    if result.is_err() {
+                        tracing::debug!("Subscription state updates channel closed, terminating blocks subscription");
+                        break;
+                    }
+
+                    let mut state = self.ethereum.api_state_accessor();
+                    let latest_sealed_number = *self.evm.block_numbers(&mut state).end();
+                    for block_number in block_watermark.advance(..latest_sealed_number + 1) {
+                        self.send_sealed_header(block_number, &mut state).await?;
+                    }
+                }
+                _ = primary_shutdown.wait_for_shutdown() => {
+                    tracing::info!("Shutdown signal received, terminating blocks subscription gracefully");
+                    break;
+                }
+            }
+        }
+        Ok(())
+    }
 }
 
 // Helper methods
@@ -325,13 +366,48 @@ where
     S::Address: FromVmAddress<EthereumAddress>,
     Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
 {
+    /// Sends the header of the sealed block `number` to the subscriber.
+    /// Skips the block if it was already pruned, which can happen if the subscriber falls far behind.
+    async fn send_sealed_header(
+        &self,
+        number: u64,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Result<(), Error> {
+        let oldest_block_number = *self.evm.block_numbers(state).start();
+        if number < oldest_block_number {
+            tracing::warn!(
+                number,
+                oldest_block_number,
+                "Skipping new heads notification for a pruned block"
+            );
+            return Ok(());
+        }
+        let sealed = self
+            .evm
+            .blocks
+            .get(&number, state)
+            .unwrap_infallible()
+            .expect("Block was notified but did not exist. This is a bug!");
+        let rpc_header =
+            Header::from_consensus(sealed.header, None, Some(U256::from(sealed.rlp_size)));
+        Ok(self.send(&rpc_header).await?)
+    }
+
+    /// End of the range of transactions that this subscriber may be notified about.
+    fn visible_tx_end(&self, state: &mut ApiStateAccessor<S>) -> u64 {
+        match self.head_view {
+            HeadView::WithPending => self.evm.get_newest_synthetic_header(state).transactions.end,
+            HeadView::SealedOnly => self.evm.latest_block(state).transactions.end,
+        }
+    }
+
     fn get_block(
         &self,
         number: u64,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<MaybeSealedBlock, Error> {
         self.evm
-            .get_maybe_sealed_block(number, state)
+            .get_maybe_sealed_block(number, self.head_view, state)
             .ok_or(Error::BlockDoesNotExist)
             .inspect_err(|_| tracing::error!(number, "Block does not exist"))
     }

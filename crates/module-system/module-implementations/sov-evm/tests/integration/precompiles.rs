@@ -877,7 +877,7 @@ fn rpc_trace_paths_initialize_custom_precompiles() {
         let evm = Evm::<S, CompositePrecompiles<S>>::default();
         let opts = GethDebugTracingOptions::new_tracer(GethDebugBuiltInTracerType::CallTracer);
         let trace = evm
-            .debug_trace_transaction(second_tx_hash, Some(opts), state)
+            .debug_trace_transaction(&Default::default(), second_tx_hash, Some(opts), state)
             .expect("debug_traceTransaction should replay and trace custom precompiles");
         let GethTrace::CallTracer(frame) = trace else {
             panic!("expected call tracer output");

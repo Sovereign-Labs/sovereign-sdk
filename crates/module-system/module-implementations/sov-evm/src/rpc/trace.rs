@@ -15,6 +15,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{ApiStateAccessor, Spec};
 use sov_rpc_eth_types::EthApiError;
 
+use super::block_resolution::HeadView;
 use super::maybe_archival_state::MaybeArchivalState;
 use crate::conversions::replay_tx_env;
 use crate::db::EvmDb;
@@ -49,6 +50,7 @@ where
     pub(super) fn setup_trace_execution<'a>(
         &'a self,
         block_number: u64,
+        head_view: HeadView,
         state: &'a mut ApiStateAccessor<S>,
     ) -> Result<
         (
@@ -62,7 +64,7 @@ where
         // Get the block - could be pending or sealed
         // TODO(low priority): Skip fetching the whole block; we just need the block number
         let maybe_block = self
-            .get_maybe_sealed_block(block_number, state)
+            .get_maybe_sealed_block(block_number, head_view, state)
             .ok_or_else(|| EthApiError::HeaderNotFound(BlockId::number(block_number)))?;
 
         // Pre-load transactions to avoid borrow conflicts
@@ -89,13 +91,14 @@ where
         &self,
         block: BlockNumberOrTag,
         opts: GethDebugTracingOptions,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<Vec<TraceResult>, EthApiError> {
-        let block_number = self.resolve_block_number(block, state);
+        let block_number = self.resolve_block_number(block, head_view, state);
 
         // Setup execution environment (fetches block, preloads transactions, sets up state)
         let (mut state, txs_to_trace, block_env, cfg_env) =
-            self.setup_trace_execution(block_number, state)?;
+            self.setup_trace_execution(block_number, head_view, state)?;
         let mut evm_db = self.db(state.deref_mut());
         let precompiles = self
             .precompile_provider(None, evm_db.precompile_state_mut())
@@ -123,6 +126,7 @@ where
         &self,
         tx_hash: B256,
         opts: GethDebugTracingOptions,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<GethTrace, EthApiError> {
         // Get transaction - could be in pending_transactions or sealed blocks
@@ -132,10 +136,17 @@ where
         let traced_tx = self
             .transaction(tx_number, state)
             .ok_or(EthApiError::PrunedHistoryUnavailable)?;
+        // An unsealed tx is pending in this view, so there's nothing to trace yet: report it like
+        // an unknown tx rather than naming a block the client hasn't seen.
+        if head_view == HeadView::SealedOnly
+            && traced_tx.block_number > *self.block_numbers(state).end()
+        {
+            return Err(EthApiError::PrunedHistoryUnavailable);
+        }
 
         // Setup execution environment (fetches block, preloads transactions, sets up state)
         let (mut state, txs_to_replay, block_env, cfg_env) =
-            self.setup_trace_execution(traced_tx.block_number, state)?;
+            self.setup_trace_execution(traced_tx.block_number, head_view, state)?;
         let mut evm_db = self.db(state.deref_mut());
         let precompiles = self
             .precompile_provider(None, evm_db.precompile_state_mut())
