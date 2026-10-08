@@ -50,6 +50,8 @@ fn trybuild() {
 
     t.compile_fail("tests/integration/trybuild/rpc/derive_rpc_working_set_immutable_reference.rs");
     t.compile_fail("tests/integration/trybuild/rpc/derive_rpc_working_set_no_generic.rs");
+    t.compile_fail("tests/integration/trybuild/rpc/derive_rpc_extensions_mutable_reference.rs");
+    t.compile_fail("tests/integration/trybuild/rpc/derive_rpc_with_extensions_without_ext_arg.rs");
     t.compile_fail("tests/integration/trybuild/rpc/expose_rpc_associated_type_not_static.rs");
     t.compile_fail("tests/integration/trybuild/rpc/expose_rpc_first_generic_not_spec.rs");
 }
