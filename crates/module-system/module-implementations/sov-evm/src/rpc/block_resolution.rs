@@ -7,7 +7,7 @@ use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_primitives::{Address, BlockHash, BlockNumber, Bloom, Bytes, B256, B64, U256};
 use alloy_rpc_types::{
     Block, BlockTransactions, BlockTransactionsKind, Header, ReceiptEnvelope, Transaction,
-    TransactionReceipt,
+    TransactionInfo, TransactionReceipt,
 };
 use revm::context::BlockEnv;
 use sov_address::{EthereumAddress, FromVmAddress};
@@ -26,6 +26,30 @@ use crate::primitive_types::{
     SyntheticBlockWithoutRootsAndBloom,
 };
 use crate::{Evm, SealedBlock};
+
+/// Which block the `latest` and `pending` tags resolve to.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum HeadView {
+    /// The synthetic block of the in-progress batch, if it has any transactions.
+    WithPending,
+    /// The newest sealed block. Synthetic blocks are hidden, and their hashes are unknown:
+    /// transactions that are not sealed yet are reported as pending, and have no receipt or trace.
+    SealedOnly,
+}
+
+impl HeadView {
+    /// Reads the view requested by the client, see [`sov_modules_api::rest::utils::SealedBlocksOnly`].
+    pub fn from_extensions(ext: &jsonrpsee::Extensions) -> Self {
+        if ext
+            .get::<sov_modules_api::rest::utils::SealedBlocksOnly>()
+            .is_some()
+        {
+            Self::SealedOnly
+        } else {
+            Self::WithPending
+        }
+    }
+}
 
 /// Result of String => BlockNr conversion
 #[derive(Debug)]
@@ -95,10 +119,11 @@ where
         &self,
         block_id: Option<BlockId>,
         kind: BlockTransactionsKind,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<Option<Block>, EthApiError> {
         let block_id = block_id.unwrap_or_else(BlockId::latest);
-        let Some(block) = self.get_maybe_sealed_block_by_id(block_id, state)? else {
+        let Some(block) = self.get_maybe_sealed_block_by_id(block_id, head_view, state)? else {
             return Ok(None);
         };
         match block {
@@ -231,11 +256,21 @@ where
     pub(crate) fn get_transaction(
         &self,
         hash: B256,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<Transaction> {
         let tx_idx = self.tx_index(&hash, state)?;
         let tx = self.transaction(tx_idx, state)?;
-        let block = self.get_maybe_sealed_block(tx.block_number, state)?;
+        let Some(block) = self.get_maybe_sealed_block(tx.block_number, head_view, state) else {
+            // A tx in the in-progress batch is hidden in the sealed-only view: report it as pending.
+            let unsealed = tx.block_number > *self.block_numbers(state).end();
+            return (head_view == HeadView::SealedOnly && unsealed).then(|| {
+                let tx: alloy_consensus::transaction::Recovered<
+                    crate::evm::primitive_types::TransactionSigned,
+                > = tx.into();
+                Transaction::from_transaction(tx.convert(), TransactionInfo::default())
+            });
+        };
         let pos = tx_idx - block.transactions_start();
         let tx = self.build_tx_with_maybe_effective_gas_price(
             tx,
@@ -252,19 +287,21 @@ where
     pub(crate) fn get_receipt_by_hash(
         &self,
         hash: B256,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>> {
         let number = self.tx_index(&hash, state)?;
-        self.get_receipt_by_index(number, state)
+        self.get_receipt_by_index(number, head_view, state)
     }
 
     pub(crate) fn get_receipt_by_index(
         &self,
         number: u64,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>> {
         let tx = self.transaction(number, state)?;
-        let block = self.get_maybe_sealed_block(tx.block_number, state)?;
+        let block = self.get_maybe_sealed_block(tx.block_number, head_view, state)?;
         let (receipt, time) = self.receipt(number, state)?;
         let fee_paid = self.receipt_fee(number, state);
         Some(build_rpc_receipt(
@@ -289,13 +326,14 @@ where
     pub(crate) fn get_receipts(
         &self,
         block_id: Option<BlockId>,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<
         Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>,
         EthApiError,
     > {
         let block_id = block_id.unwrap_or_else(BlockId::latest);
-        let Some(block) = self.get_maybe_sealed_block_by_id(block_id, state)? else {
+        let Some(block) = self.get_maybe_sealed_block_by_id(block_id, head_view, state)? else {
             return Ok(None);
         };
         let mut receipts =
@@ -310,9 +348,11 @@ where
     }
 
     /// Retrieves a sealed block generated from an existing or pending block.
+    /// With [`HeadView::SealedOnly`], only sealed blocks are returned.
     pub fn get_maybe_sealed_block(
         &self,
         block_number: u64,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Option<MaybeSealedBlock> {
         // Check if the block is already sealed. Important: We must do this before checking the block env, because blocks are sealed in the finalize_hook.
@@ -322,6 +362,9 @@ where
         let block = self.blocks.get(&block_number, state).unwrap_infallible();
         if let Some(block) = block {
             return Some(MaybeSealedBlock::Sealed(block));
+        }
+        if head_view == HeadView::SealedOnly {
+            return None;
         }
 
         let block_env = self.block_env(state).unwrap_infallible();
@@ -345,6 +388,7 @@ where
     pub(crate) fn block_tag_to_pending_or_block(
         &self,
         block: BlockNumberOrTag,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> PendingOrBlock {
         match block {
@@ -353,7 +397,10 @@ where
                 PendingOrBlock::Number(*block_numbers.start())
             }
             // We treat latest and pending the same to avoid foundry issues
-            BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => PendingOrBlock::Pending,
+            BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => match head_view {
+                HeadView::WithPending => PendingOrBlock::Pending,
+                HeadView::SealedOnly => PendingOrBlock::Number(*self.block_numbers(state).end()),
+            },
             BlockNumberOrTag::Finalized | BlockNumberOrTag::Safe => {
                 PendingOrBlock::Number(self.finalized_block_number(state))
             }
@@ -361,13 +408,17 @@ where
         }
     }
 
+    /// Always uses [`HeadView::WithPending`]: this resolves the state for state reads, which include
+    /// the in-progress batch in every view. Don't use it to build block or tx responses.
     pub(crate) fn block_id_to_pending_or_block(
         &self,
         block_id: BlockId,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<PendingOrBlock, EthApiError> {
         Ok(match block_id {
-            BlockId::Number(tag) => self.block_tag_to_pending_or_block(tag, state),
+            BlockId::Number(tag) => {
+                self.block_tag_to_pending_or_block(tag, HeadView::WithPending, state)
+            }
             BlockId::Hash(hash) => {
                 if let Some((block_number, last_tx_idx)) = parse_synthetic_block_hash(&hash.into())
                 {
@@ -393,6 +444,7 @@ where
     pub fn resolve_block_number(
         &self,
         block: BlockNumberOrTag,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> BlockNumber {
         let block_numbers = self.block_numbers(state);
@@ -404,7 +456,7 @@ where
             BlockNumberOrTag::Number(nr) => nr,
             // We treat latest and pending the same to avoid foundry issues
             BlockNumberOrTag::Latest | BlockNumberOrTag::Pending => {
-                if self.has_pending_block(state) {
+                if head_view == HeadView::WithPending && self.has_pending_block(state) {
                     *block_numbers.end() + 1
                 } else {
                     *block_numbers.end()
@@ -419,13 +471,16 @@ where
     pub fn get_maybe_sealed_block_by_id(
         &self,
         block_id: BlockId,
+        head_view: HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<Option<MaybeSealedBlock>, EthApiError> {
         Ok(match block_id {
             BlockId::Number(tag) => {
-                let pending_or_block = self.block_tag_to_pending_or_block(tag, state);
+                let pending_or_block = self.block_tag_to_pending_or_block(tag, head_view, state);
                 match pending_or_block {
-                    PendingOrBlock::Number(number) => self.get_maybe_sealed_block(number, state),
+                    PendingOrBlock::Number(number) => {
+                        self.get_maybe_sealed_block(number, head_view, state)
+                    }
                     PendingOrBlock::Pending => match self.pending_block(None, state) {
                         Some(pending) => Some(MaybeSealedBlock::PendingSynthetic(pending)),
                         None => {
@@ -441,6 +496,10 @@ where
             BlockId::Hash(hash) => {
                 // If the hash is synthetic, handle that special case
                 if let Some((block_number, num_txs)) = parse_synthetic_block_hash(&hash.into()) {
+                    // Synthetic blocks are hidden in this view: treat their hashes like any unknown hash.
+                    if head_view == HeadView::SealedOnly {
+                        return Ok(None);
+                    }
                     // Prerequisite: Check that the synthetic block exists and is recent enough to still be saved.
                     // This ensures that any calls to "getBlockByHash" will succeed only if "eth_call" would succeed given the same hash.
                     {
@@ -492,7 +551,7 @@ where
                 self.block_hash_to_number
                     .get(&hash.block_hash, state)
                     .unwrap_infallible()
-                    .and_then(|number| self.get_maybe_sealed_block(number, state))
+                    .and_then(|number| self.get_maybe_sealed_block(number, head_view, state))
             }
         })
     }
@@ -717,6 +776,8 @@ where
         }
     }
 
+    /// Always uses [`HeadView::WithPending`]: this resolves the block env for calls, which include
+    /// the in-progress batch in every view. Don't use it to build block or tx responses.
     pub(crate) fn resolve_block_env_for_call(
         &self,
         block_id: Option<BlockId>,
@@ -724,7 +785,7 @@ where
     ) -> Result<BlockEnv, EthApiError> {
         let block_id = block_id.unwrap_or_else(BlockId::latest);
         let maybe_block = self
-            .get_maybe_sealed_block_by_id(block_id, state)?
+            .get_maybe_sealed_block_by_id(block_id, HeadView::WithPending, state)?
             .ok_or(EthApiError::UnknownBlock)?;
 
         let block_env = match maybe_block {

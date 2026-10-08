@@ -136,7 +136,8 @@ where
     fn get_receipt(tx_hash: B256, ethereum: Arc<Ethereum<S, Seq>>) -> RpcResult<Option<Receipt>> {
         let evm = Evm::<S>::default();
         let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
-        evm.get_transaction_receipt(tx_hash, state)
+        // Callers wait for the receipt of a just-executed tx, so it must include unsealed blocks.
+        evm.get_transaction_receipt(&jsonrpsee::Extensions::new(), tx_hash, state)
     }
 
     fn validate_request_stale_nonce_preflight(

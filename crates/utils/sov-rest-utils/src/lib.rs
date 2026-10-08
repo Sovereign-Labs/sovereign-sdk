@@ -25,6 +25,7 @@ mod axum_extractors;
 mod filter;
 mod get_ip;
 mod pagination;
+mod sealed_blocks_only;
 mod sorting;
 
 pub mod errors;
@@ -46,6 +47,7 @@ pub use filter::{Filter, FilterError, FilterQuery};
 use futures::{SinkExt, StreamExt};
 pub use get_ip::*;
 pub use pagination::{PageSelection, PaginatedResponse, Pagination};
+pub use sealed_blocks_only::{SealedBlocksOnly, SEALED_BLOCKS_ONLY_HEADER};
 use serde::Serialize;
 pub use sorting::{Sorting, SortingOrder};
 use sov_shutdown::PrimaryShutdownController;
