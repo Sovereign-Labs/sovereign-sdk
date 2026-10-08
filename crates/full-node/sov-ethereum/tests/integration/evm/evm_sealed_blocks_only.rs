@@ -236,7 +236,7 @@ async fn trace_of_unsealed_tx_is_tx_not_found() -> anyhow::Result<()> {
 
     assert_eq!(
         error.as_error_resp().map(|resp| resp.message.to_string()),
-        Some(EthApiError::PrunedHistoryUnavailable.to_string()),
+        Some(EthApiError::TransactionNotFound.to_string()),
         "an unsealed tx should be reported like an unknown tx"
     );
     Ok(())

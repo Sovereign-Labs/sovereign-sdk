@@ -130,18 +130,19 @@ where
         state: &mut ApiStateAccessor<S>,
     ) -> Result<GethTrace, EthApiError> {
         // Get transaction - could be in pending_transactions or sealed blocks
+        // Maybe this should return Not Found rather than Pruned?
         let tx_number = self
             .tx_index(&tx_hash, state)
             .ok_or(EthApiError::PrunedHistoryUnavailable)?;
         let traced_tx = self
             .transaction(tx_number, state)
             .ok_or(EthApiError::PrunedHistoryUnavailable)?;
-        // An unsealed tx is pending in this view, so there's nothing to trace yet: report it like
-        // an unknown tx rather than naming a block the client hasn't seen.
+        // An unsealed tx is pending in this view, so there's nothing to trace yet: report it as
+        // not found rather than naming a block the client hasn't seen.
         if head_view == HeadView::SealedOnly
             && traced_tx.block_number > *self.block_numbers(state).end()
         {
-            return Err(EthApiError::PrunedHistoryUnavailable);
+            return Err(EthApiError::TransactionNotFound);
         }
 
         // Setup execution environment (fetches block, preloads transactions, sets up state)
