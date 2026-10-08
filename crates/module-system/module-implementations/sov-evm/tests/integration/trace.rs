@@ -44,7 +44,7 @@ fn test_tracing() {
     runner.query_state(|state| {
         let opts = GethDebugTracingOptions::new_tracer(GethDebugBuiltInTracerType::CallTracer);
         let trace = evm
-            .debug_trace_transaction(tx_hash.unwrap(), Some(opts), state)
+            .debug_trace_transaction(&Default::default(), tx_hash.unwrap(), Some(opts), state)
             .unwrap();
         assert_eq!(
             trace,

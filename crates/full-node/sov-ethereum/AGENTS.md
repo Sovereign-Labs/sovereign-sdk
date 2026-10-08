@@ -26,6 +26,7 @@ These are by-design repo semantics. Do not flag as bugs unless a concrete toolin
 - `eth_maxPriorityFeePerGas` returns `0`.
 - `eth_call` accepts `state_overrides`/`block_overrides` but currently ignores them.
 - EIP-1898 `requireCanonical` is accepted but effectively a no-op in no-reorg semantics.
+- Exception: requests with the `x-sov-sealed-blocks-only: true` header (meant for indexers such as Blockscout) see the newest sealed block as `latest`/`pending` (including as `eth_feeHistory`'s newest block), and never see synthetic blocks in block, tx, receipt, log, trace or subscription responses: synthetic block hashes are unknown, unsealed txs are pending with no receipt or trace, and `newHeads`/`logs` only stream sealed blocks. Exceptions: state reads (`eth_call`, `eth_getBalance`, ...) are unaffected, and tx submission responses (`eth_sendRawTransactionSync`, `realtime_sendRawTransaction`) still return the soft-confirmed receipt. See `sov_evm::HeadView`.
 
 ## Wrapper Hotspots
 
