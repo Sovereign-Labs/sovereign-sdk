@@ -259,8 +259,9 @@ where
         let tx_idx = self.tx_index(&hash, state)?;
         let tx = self.transaction(tx_idx, state)?;
         let Some(block) = self.get_maybe_sealed_block(tx.block_number, head_view, state) else {
-            // The tx is in the in-progress batch, which is hidden in this view: report it as pending.
-            return (head_view == HeadView::SealedOnly).then(|| {
+            // A tx in the in-progress batch is hidden in the sealed-only view: report it as pending.
+            let unsealed = tx.block_number > *self.block_numbers(state).end();
+            return (head_view == HeadView::SealedOnly && unsealed).then(|| {
                 let tx: alloy_consensus::transaction::Recovered<
                     crate::evm::primitive_types::TransactionSigned,
                 > = tx.into();

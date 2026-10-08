@@ -373,21 +373,19 @@ where
         number: u64,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<(), Error> {
-        let oldest_block_number = *self.evm.block_numbers(state).start();
-        if number < oldest_block_number {
+        let Some(sealed) = self.evm.blocks.get(&number, state).unwrap_infallible() else {
+            let oldest_block_number = *self.evm.block_numbers(state).start();
+            assert!(
+                number < oldest_block_number,
+                "Block was notified but did not exist. This is a bug!"
+            );
             tracing::warn!(
                 number,
                 oldest_block_number,
                 "Skipping new heads notification for a pruned block"
             );
             return Ok(());
-        }
-        let sealed = self
-            .evm
-            .blocks
-            .get(&number, state)
-            .unwrap_infallible()
-            .expect("Block was notified but did not exist. This is a bug!");
+        };
         let rpc_header =
             Header::from_consensus(sealed.header, None, Some(U256::from(sealed.rlp_size)));
         Ok(self.send(&rpc_header).await?)
