@@ -28,8 +28,9 @@ mod rpc_metrics;
 use rpc_metrics::RpcMetricsLayer;
 use sov_rest_utils::get_client_ip;
 use sov_rest_utils::GetIPResult;
+use sov_rest_utils::SealedBlocksOnly;
 
-// Middleware to inject SocketAddr from axum's ConnectInfo into the request extensions
+// Middleware to inject SocketAddr from axum's ConnectInfo (and the `SealedBlocksOnly` marker) into the request extensions
 // so that jsonrpsee RPC handlers can access it via the Extensions parameter
 #[derive(Clone)]
 struct InjectSocketAddrLayer;
@@ -69,9 +70,14 @@ where
         let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>();
 
         let maybe_ip = get_client_ip(headers.clone(), connect_info);
+        let sealed_blocks_only = SealedBlocksOnly::from_headers(headers);
         req.extensions_mut().insert(GetIPResult {
             maybe_ip: Arc::new(maybe_ip),
         });
+        // Lets the EVM RPC handlers hide synthetic blocks from clients that ask for it.
+        if let Some(marker) = sealed_blocks_only {
+            req.extensions_mut().insert(marker);
+        }
 
         self.inner.call(req)
     }

@@ -10,12 +10,24 @@ struct RpcMethod {
     docs: Vec<Attribute>,
     rpc_attribute: RpcMethodAttribute,
     api_state_accessor_arg: Option<ApiStateAccessorArg>,
+    extensions_arg: Option<ExtensionsArg>,
 }
 
 impl RpcMethod {
     fn parse(method: &syn::ImplItemFn) -> syn::Result<Self> {
-        let rpc_attribute = RpcMethodAttribute::parse(method)?;
+        let mut rpc_attribute = RpcMethodAttribute::parse(method)?;
         let api_state_accessor_arg = ApiStateAccessorArg::parse(&method.sig)?;
+        let extensions_arg = ExtensionsArg::parse(&method.sig)?;
+        match (&extensions_arg, rpc_attribute.has_with_extensions()) {
+            (Some(_), _) => rpc_attribute.ensure_with_extensions(),
+            (None, true) => {
+                return Err(syn::Error::new_spanned(
+                    &method.sig,
+                    "`with_extensions` requires a `&jsonrpsee::Extensions` argument.",
+                ));
+            }
+            (None, false) => {}
+        }
 
         let docs = doc_attributes(&method.attrs);
 
@@ -24,6 +36,7 @@ impl RpcMethod {
             rpc_attribute,
             docs,
             api_state_accessor_arg,
+            extensions_arg,
         })
     }
 
@@ -47,12 +60,19 @@ impl RpcMethod {
     fn annotated_signature_for_rpc_trait(&self) -> TokenStream {
         let mut method_signature = self.method.sig.clone();
 
-        // Remove the working set argument from the method signature, if present.
-        if let Some(ApiStateAccessorArg { idx, .. }) = self.api_state_accessor_arg {
-            let mut inputs: Vec<FnArg> = method_signature.inputs.into_iter().collect();
-            inputs.remove(idx);
-            method_signature.inputs = inputs.into_iter().collect();
-        }
+        // Remove the working set and extensions arguments from the method signature, if present.
+        // jsonrpsee adds the extensions argument back to the server trait by itself.
+        let removed_idxs = [
+            self.api_state_accessor_arg.as_ref().map(|arg| arg.idx),
+            self.extensions_arg.as_ref().map(|arg| arg.idx),
+        ];
+        method_signature.inputs = method_signature
+            .inputs
+            .into_iter()
+            .enumerate()
+            .filter(|(i, _)| !removed_idxs.contains(&Some(*i)))
+            .map(|(_, arg)| arg)
+            .collect();
 
         let docs = &self.docs;
         let rpc_attribute = &self.rpc_attribute.attr;
@@ -78,39 +98,38 @@ impl RpcImplBlock {
         let method_name = &method.name();
         let module_type = &self.module_type;
 
-        if let Some(ApiStateAccessorArg {
-            idx,
-            ident: ref api_state_accessor_ident,
-            ..
-        }) = method.api_state_accessor_arg
-        {
-            let mut signature = method.signature().clone();
+        let state_idx = method.api_state_accessor_arg.as_ref().map(|arg| arg.idx);
+        let ext_idx = method.extensions_arg.as_ref().map(|arg| arg.idx);
 
-            signature.inputs = signature
-                .inputs
-                .into_iter()
-                .enumerate()
-                .filter(|(i, _)| *i != idx) // Drop the state checkpoint argument.
-                .map(|(_, arg)| arg)
-                .collect();
-
-            Ok(quote! {
-                #( #docs )*
-                #signature {
-                    let #api_state_accessor_ident = &mut Self::build_api_state_accessor(self, None).expect("Impossible to build a default api state accessor. This is a bug. Please report it.");
-                    <#module_type>::#method_name(#(#arg_names),*)
-                }
-            })
-        } else {
-            let signature = &method.signature();
-
-            Ok(quote! {
-                #( #docs )*
-                #signature {
-                    <#module_type>::#method_name(#(#arg_names),*)
-                }
-            })
+        let mut inputs: Vec<FnArg> = method
+            .signature()
+            .inputs
+            .iter()
+            .enumerate()
+            .filter(|(i, _)| Some(*i) != state_idx && Some(*i) != ext_idx) // Drop the state checkpoint and extensions arguments.
+            .map(|(_, arg)| arg.clone())
+            .collect();
+        if let Some(idx) = ext_idx {
+            // jsonrpsee's server trait expects the extensions argument right after `self`.
+            inputs.insert(1.min(inputs.len()), method.signature().inputs[idx].clone());
         }
+        let mut signature = method.signature().clone();
+        signature.inputs = inputs.into_iter().collect();
+
+        let build_api_state_accessor = method.api_state_accessor_arg.as_ref().map(|arg| {
+            let api_state_accessor_ident = &arg.ident;
+            quote! {
+                let #api_state_accessor_ident = &mut Self::build_api_state_accessor(self, None).expect("Impossible to build a default api state accessor. This is a bug. Please report it.");
+            }
+        });
+
+        Ok(quote! {
+            #( #docs )*
+            #signature {
+                #build_api_state_accessor
+                <#module_type>::#method_name(#(#arg_names),*)
+            }
+        })
     }
 
     /// If the state checkpoint type is not set, set it.
@@ -321,6 +340,37 @@ mod utils {
                 "Missing `#[rpc_method]` attribute to function",
             ))
         }
+
+        fn tokens(&self) -> &TokenStream {
+            let Meta::List(list) = &self.attr.meta else {
+                unreachable!("`RpcMethodAttribute::parse` only accepts list attributes");
+            };
+            &list.tokens
+        }
+
+        /// Whether the attribute sets jsonrpsee's `with_extensions` flag.
+        pub fn has_with_extensions(&self) -> bool {
+            self.tokens().clone().into_iter().any(|tt| {
+                matches!(tt, proc_macro2::TokenTree::Ident(ident) if ident == "with_extensions")
+            })
+        }
+
+        /// Adds jsonrpsee's `with_extensions` flag to the attribute, unless it's already there.
+        pub fn ensure_with_extensions(&mut self) {
+            if self.has_with_extensions() {
+                return;
+            }
+            let needs_comma = self.tokens().clone().into_iter().last().is_some_and(
+                |tt| !matches!(tt, proc_macro2::TokenTree::Punct(punct) if punct.as_char() == ','),
+            );
+            let Meta::List(list) = &mut self.attr.meta else {
+                unreachable!("`RpcMethodAttribute::parse` only accepts list attributes");
+            };
+            if needs_comma {
+                list.tokens.extend(quote! { , });
+            }
+            list.tokens.extend(quote! { with_extensions });
+        }
     }
 
     pub struct ApiStateAccessorArg {
@@ -392,6 +442,49 @@ mod utils {
                     ident,
                     idx,
                 }));
+            }
+            Ok(None)
+        }
+    }
+
+    /// The `&jsonrpsee::Extensions` argument of an `#[rpc_method]`-annotated function, whatever its name.
+    /// It receives the extensions of the JSON-RPC request, such as data inserted by HTTP middleware.
+    pub struct ExtensionsArg {
+        pub idx: usize,
+    }
+
+    impl ExtensionsArg {
+        pub fn parse(sig: &Signature) -> syn::Result<Option<Self>> {
+            for (idx, input) in sig.inputs.iter().enumerate() {
+                let FnArg::Typed(PatType { ty, .. }) = input else {
+                    continue;
+                };
+                // RPC parameters are deserialized into owned values, so a reference to a type
+                // named `Extensions` can only be the request extensions.
+                let syn::Type::Reference(syn::TypeReference {
+                    elem, mutability, ..
+                }) = ty.as_ref()
+                else {
+                    continue;
+                };
+                let syn::Type::Path(syn::TypePath { path, .. }) = elem.as_ref() else {
+                    continue;
+                };
+                if path
+                    .segments
+                    .last()
+                    .is_none_or(|segment| segment.ident != "Extensions")
+                {
+                    continue;
+                }
+                if mutability.is_some() {
+                    return Err(syn::Error::new_spanned(
+                        input,
+                        "The `Extensions` argument to the `#[rpc_method]`-annotated function must be a shared reference: `&jsonrpsee::Extensions`.",
+                    ));
+                }
+
+                return Ok(Some(Self { idx }));
             }
             Ok(None)
         }

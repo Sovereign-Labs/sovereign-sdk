@@ -41,6 +41,7 @@ where
         block_count: u64,
         newest_block: BlockNumberOrTag,
         reward_percentiles: Option<&[f64]>,
+        head_view: super::HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<FeeHistory, EthApiError> {
         if block_count == 0 {
@@ -64,9 +65,13 @@ where
             }
         }
 
-        let end_block_number = self.resolve_block_number(newest_block, state);
+        let end_block_number = self.resolve_block_number(newest_block, head_view, state);
         let start_block_number = end_block_number.saturating_sub(block_count - 1);
-        let pending_block = self.pending_block(None, state);
+        let pending_block = match head_view {
+            super::HeadView::WithPending => self.pending_block(None, state),
+            // The next block's base fee is still reported, estimated from the newest sealed block.
+            super::HeadView::SealedOnly => None,
+        };
         let sealed_block_numbers = self.block_numbers(state);
         let last_allowed_block_number = pending_block
             .as_ref()

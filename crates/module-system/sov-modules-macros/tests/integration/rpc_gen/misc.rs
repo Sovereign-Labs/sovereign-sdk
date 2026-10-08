@@ -105,6 +105,35 @@ where
 
         Ok((value, hashed_value))
     }
+
+    #[rpc_method(name = "withExtensions")]
+    // Test: extensions argument between `self` and the RPC parameters.
+    pub fn with_extensions(
+        &self,
+        ext: &jsonrpsee::Extensions,
+        value: D,
+        _state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<(D, bool)> {
+        Ok((value, ext.get::<u64>().is_some()))
+    }
+
+    #[rpc_method(name = "withExtensionsLast", blocking)]
+    // Test: extensions argument after the `ApiStateAccessor`, on a blocking method.
+    pub fn with_extensions_last(
+        &self,
+        value: D,
+        _state: &mut ApiStateAccessor<S>,
+        _ext: &jsonrpsee::Extensions,
+    ) -> RpcResult<D> {
+        Ok(value)
+    }
+
+    #[rpc_method(name = "withExtensionsFlag", with_extensions)]
+    // Test: `with_extensions` already present in the attribute, extensions argument with another
+    // name, no `ApiStateAccessor`.
+    pub fn with_extensions_flag(&self, extensions: &jsonrpsee::Extensions) -> RpcResult<bool> {
+        Ok(extensions.get::<u64>().is_some())
+    }
 }
 
 #[derive(Default, DispatchCall)]
