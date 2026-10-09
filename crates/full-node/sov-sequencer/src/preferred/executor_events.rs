@@ -146,6 +146,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         visible_slots_to_advance: NonZero<u8>,
         sequence_number: SequenceNumber,
         new_checkpoint: StateCheckpoint<S>,
+        next_event_number: u64,
     ) {
         let blob_id = self
             .cache
@@ -161,6 +162,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             sequence_number,
             new_checkpoint,
             blob_id,
+            next_event_number,
         })
         .await;
     }
@@ -169,12 +171,14 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         &mut self,
         checkpoint: StateCheckpoint<S>,
         forced_txs: Vec<AcceptedTx<Confirmation<S, Rt>>>,
+        next_event_number: u64,
     ) {
         let batch = self.cache.terminate_batch().await;
         self.send(ExecutorEvent::CloseBatch {
             batch,
             checkpoint,
             forced_txs,
+            next_event_number,
         })
         .await;
     }
@@ -185,10 +189,17 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .await;
     }
 
-    pub(crate) async fn force_update_api_state(&mut self, checkpoint: StateCheckpoint<S>) {
+    pub(crate) async fn force_update_api_state(
+        &mut self,
+        checkpoint: StateCheckpoint<S>,
+        next_event_number: u64,
+    ) {
         // No cache operation needed here - this is a side effect only.
-        self.send(ExecutorEvent::ForceUpdateApiState(checkpoint))
-            .await;
+        self.send(ExecutorEvent::ForceUpdateApiState(
+            checkpoint,
+            next_event_number,
+        ))
+        .await;
     }
 
     pub(crate) async fn update_api_ledger_from_info(&self, info: &StateUpdateInfo<S::Storage>) {
@@ -252,10 +263,17 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         .await;
     }
 
-    pub(crate) async fn update_state_for_recovery(&mut self, checkpoint: StateCheckpoint<S>) {
+    pub(crate) async fn update_state_for_recovery(
+        &mut self,
+        checkpoint: StateCheckpoint<S>,
+        next_event_number: u64,
+    ) {
         // No cache operation needed here - this is a side effect only.
-        self.send(ExecutorEvent::UpdateStateForRecovery(checkpoint))
-            .await;
+        self.send(ExecutorEvent::UpdateStateForRecovery(
+            checkpoint,
+            next_event_number,
+        ))
+        .await;
     }
 
     /// Fetches all proofs and any closed batches from the database that are greater than or equal to the given sequence number.
@@ -341,19 +359,27 @@ where
         new_checkpoint: StateCheckpoint<S>,
         #[allow(missing_docs)]
         blob_id: BlobInternalId,
+        /// The next event number reflected by `new_checkpoint`.
+        next_event_number: u64,
     },
     /// Close the current batch.
     CloseBatch {
         batch: ReadBatch,
         checkpoint: StateCheckpoint<S>,
         forced_txs: Vec<AcceptedTx<Confirmation<S, Rt>>>,
+        /// The next event number reflected by `checkpoint`.
+        next_event_number: u64,
     },
     /// Publish a proof blob.
     PublishProofBlob(BlobInternalId, PreferredProofDataBytes, SequenceNumber),
     /// Insert an accepted transaction into the database and send out the confirmation
     AcceptedTx(AcceptedTxEventContents<S, Rt>),
-    /// Update the API state to the given checkpoint without closing the current batch etc. Used during recovery
-    ForceUpdateApiState(StateCheckpoint<S>),
+    /// Update the API state to the given checkpoint without closing the current batch etc. Used during recovery.
+    ///
+    /// The `u64` is the next event number reflected by the checkpoint. It can move *backwards*
+    /// relative to the previously published checkpoint when the sequencer discards its
+    /// soft confirmations and adopts the node's state.
+    ForceUpdateApiState(StateCheckpoint<S>, u64),
     /// Update the ledger reader and send slot notifications for API/WebSocket consistency.
     UpdateApiLedger {
         ledger_reader: DeltaReader,
@@ -373,7 +399,10 @@ where
         batch_to_close: Option<ReadBatch>,
     },
     /// During recovery mode, we periodically update the state to the node's state.
-    UpdateStateForRecovery(StateCheckpoint<S>),
+    ///
+    /// The `u64` is the next event number reflected by the checkpoint; like
+    /// [`Self::ForceUpdateApiState`] it can move backwards.
+    UpdateStateForRecovery(StateCheckpoint<S>, u64),
     /// Flush transactions cache
     FlushTransactionsCache {
         next_tx_number: u64,

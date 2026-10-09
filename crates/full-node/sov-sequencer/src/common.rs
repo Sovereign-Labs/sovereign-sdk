@@ -138,6 +138,36 @@ pub(crate) type SequencerEventStream<Rt> = Pin<
     >,
 >;
 
+/// Mints a fresh [`EventEpoch`], marking a new run of event numbering.
+///
+/// UUIDv7 carries a millisecond timestamp in its leading bits, so epochs sort chronologically
+/// and the time of a rollback can be read straight out of the token. The trailing random bits
+/// keep two epochs distinct even on hosts with a coarse clock, or across one that steps
+/// backwards. Nothing persists it: a restarting sequencer mints a new one, which is correct,
+/// because its un-committed soft confirmations are lost and clients must resynchronise.
+pub fn new_event_epoch() -> EventEpoch {
+    EventEpoch::new(uuid::Uuid::now_v7().as_u128())
+}
+
+/// Decides the event frontier to publish next, given the one currently published.
+///
+/// Event numbers are speculative: a rollback retracts soft-confirmed events and hands their
+/// numbers out again for different content. Whenever that happens the new frontier sits
+/// *below* the current one, so a regression is exactly the signal that numbering has been
+/// reissued, and the new run gets a fresh [`EventEpoch`]. Deriving it from the regression
+/// rather than from the call site means a future publisher cannot forget to rotate.
+pub fn event_frontier_after(
+    published: Option<EventFrontier>,
+    next_event_number: u64,
+) -> EventFrontier {
+    match published {
+        Some(published) if next_event_number >= published.next_event_number => {
+            EventFrontier::new(published.epoch, next_event_number)
+        }
+        _ => EventFrontier::new(new_event_epoch(), next_event_number),
+    }
+}
+
 /// The [`Sequencer`] trait is responsible for accepting transactions and
 /// assembling them into batches.
 #[async_trait]
@@ -737,4 +767,71 @@ pub fn sender_is_allowed<RT: Runtime<S>, S: Spec>(
     let destination_module = <RT as DispatchCall>::module_info(runtime, call.discriminant());
     destination_module.is_safe_for_sequencer(call.contents(), sequencer_address)
         || admins.contains(sender)
+}
+
+#[cfg(test)]
+mod event_epoch_tests {
+    use super::*;
+
+    /// Multi-byte, asymmetric values, so a byte-order mistake anywhere would show up.
+    const PUBLISHED: u64 = 0x1234_5678;
+
+    fn published(next_event_number: u64) -> Option<EventFrontier> {
+        Some(EventFrontier::new(
+            EventEpoch::new(0xabcd),
+            next_event_number,
+        ))
+    }
+
+    #[test]
+    fn advancing_the_frontier_keeps_the_epoch() {
+        let next = event_frontier_after(published(PUBLISHED), PUBLISHED + 0x100);
+
+        assert_eq!(
+            next,
+            EventFrontier::new(EventEpoch::new(0xabcd), PUBLISHED + 0x100),
+            "Extending the numbering is not a reissue, so the epoch must be preserved"
+        );
+    }
+
+    #[test]
+    fn republishing_the_same_frontier_keeps_the_epoch() {
+        let next = event_frontier_after(published(PUBLISHED), PUBLISHED);
+
+        assert_eq!(
+            next.epoch,
+            EventEpoch::new(0xabcd),
+            "Publishing a checkpoint that emitted no new events is not a reissue"
+        );
+    }
+
+    #[test]
+    fn rewinding_the_frontier_rotates_the_epoch() {
+        let next = event_frontier_after(published(PUBLISHED), PUBLISHED - 0x100);
+
+        assert_eq!(next.next_event_number, PUBLISHED - 0x100);
+        assert_ne!(
+            next.epoch,
+            EventEpoch::new(0xabcd),
+            "A regression means soft-confirmed events were retracted and their numbers will be \
+             handed out again, so the new run needs its own epoch"
+        );
+    }
+
+    #[test]
+    fn the_first_frontier_gets_an_epoch() {
+        let next = event_frontier_after(None, PUBLISHED);
+
+        assert_eq!(next.next_event_number, PUBLISHED);
+    }
+
+    #[test]
+    fn each_rewind_gets_a_distinct_epoch() {
+        // Two rollbacks in quick succession must not collide, or a client that resynchronised
+        // on the first would silently accept the second's reissued numbers.
+        let first = event_frontier_after(published(PUBLISHED), PUBLISHED - 0x100);
+        let second = event_frontier_after(Some(first), first.next_event_number - 0x10);
+
+        assert_ne!(first.epoch, second.epoch);
+    }
 }

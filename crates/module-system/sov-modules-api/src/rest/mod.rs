@@ -31,10 +31,11 @@ use axum::extract::{FromRequestParts, State};
 use axum::http::StatusCode;
 use axum::routing::get;
 use serde::{Deserialize, Serialize};
-use sov_rest_utils::{json_obj, ErrorObject, Query};
+use sov_rest_utils::{json_obj, ErrorObject, LastEventNumberSink, Query};
 use sov_rollup_interface::common::SlotNumber;
 use sov_shutdown::PrimaryShutdownController;
 use tokio::sync::watch;
+use unwrap_infallible::UnwrapInfallible;
 use utoipa::openapi::OpenApi;
 
 use crate::capabilities::{KernelWithSlotMapping, RollupHeight};
@@ -177,6 +178,9 @@ pub struct ApiState<S: Spec, T = ()> {
     kernel: Arc<dyn KernelWithSlotMapping<S>>,
     /// The `height` query parameter extracted from the request, when applicable.
     requested_height: Option<HeightParam>,
+    /// Where to report the event number of the state this request reads. Only populated for
+    /// `ApiState`s produced by the request extractor; the construction-time one is inert.
+    last_event_number_sink: LastEventNumberSink,
     /// Signals node shutdown so long-lived handlers (e.g. WebSocket subscriptions)
     /// can terminate gracefully.
     primary_shutdown: PrimaryShutdownController,
@@ -198,6 +202,7 @@ impl<S: Spec, T> ApiState<S, T> {
             kernel,
             requested_height,
             primary_shutdown,
+            last_event_number_sink: LastEventNumberSink::default(),
         }
     }
 
@@ -209,7 +214,21 @@ impl<S: Spec, T> ApiState<S, T> {
             kernel: self.kernel,
             requested_height: self.requested_height,
             primary_shutdown: self.primary_shutdown,
+            last_event_number_sink: self.last_event_number_sink,
         }
+    }
+
+    /// Attaches the sink that [`Self::build_api_state_accessor`] reports the event number of
+    /// the state it opens to.
+    ///
+    /// Router states are built once at startup, so their sink is inert; extractors call this
+    /// on a clone to attach the current request's sink.
+    pub fn with_last_event_number_sink(
+        mut self,
+        last_event_number_sink: sov_rest_utils::LastEventNumberSink,
+    ) -> Self {
+        self.last_event_number_sink = last_event_number_sink;
+        self
     }
 
     /// Returns an [`ApiStateAccessor`] that you can use to read state from within REST API. This accessor
@@ -285,6 +304,16 @@ impl<S: Spec, T> ApiState<S, T> {
             }
         };
 
+        // Only a latest-state accessor reports a frontier; archival ones return `None`, so this
+        // needs no separate check against `height_param`. A frontier of 0 means the rollup has
+        // not emitted any event yet, so there is nothing to order against.
+        if let Some(frontier) = state.event_frontier() {
+            if let Some(last_event_number) = frontier.last_event_number() {
+                self.last_event_number_sink
+                    .record(frontier.epoch.get(), last_event_number);
+            }
+        }
+
         Ok(state)
     }
 
@@ -351,6 +380,9 @@ where
 
         let mut output = state.clone();
         output.requested_height = height_param;
+        output.last_event_number_sink = LastEventNumberSink::from_request_parts(parts, state)
+            .await
+            .unwrap_infallible();
         Ok(output)
     }
 }
@@ -370,6 +402,13 @@ where
             .await
             .ok()
             .map(|q| q.0);
+
+        // `state` is the router state, built once at startup, so its own sink is inert. Take
+        // the request's sink and build through a copy that carries it.
+        let mut state = state.clone();
+        state.last_event_number_sink = LastEventNumberSink::from_request_parts(parts, &state)
+            .await
+            .unwrap_infallible();
 
         state
             .build_api_state_accessor(height_param)

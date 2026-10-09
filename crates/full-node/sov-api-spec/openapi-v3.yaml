@@ -631,6 +631,31 @@ components:
       required: true
       schema:
         $ref: "#/components/schemas/TxHash"
+  headers:
+    EventEpoch:
+      description: >-
+        Identifies the run of event numbering that `x-sov-last-event-number` belongs to. Event
+        numbers are handed out before they are committed, so a sequencer rollback retracts
+        numbered events and reissues those numbers for different content; the number alone
+        cannot express that, because a rollback that retracts fewer events than it goes on to
+        re-emit leaves the number higher than before. Compare this token for equality only.
+        Numbers from two replies may be compared only if their epochs match; otherwise the
+        client must resynchronise.
+      required: false
+      schema:
+        type: string
+    LastEventNumber:
+      description: >-
+        The number of the last rollup event whose effects the returned state reflects. Apply
+        every event numbered above it, and none at or below it, to bring the state up to date.
+        Absent when the request asked for a historical height, when the rollup has not emitted
+        any event yet, or when the endpoint does not read rollup state. It is not monotonic
+        across requests: it moves backwards when the sequencer retracts soft confirmations.
+      required: false
+      schema:
+        type: integer
+        format: uint64
+        minimum: 0
   responses:
     AggregatedProof:
       description: Success
@@ -691,6 +716,11 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/AnyJsonValue"
+      headers:
+        x-sov-last-event-number:
+          $ref: "#/components/headers/LastEventNumber"
+        x-sov-event-epoch:
+          $ref: "#/components/headers/EventEpoch"
     Schema:
       description: Schema of the rollup.
       content:
@@ -905,6 +935,15 @@ components:
           $ref: "#/components/schemas/ModuleRef"
         tx_hash:
           $ref: "#/components/schemas/Hash"
+        epoch:
+          type: string
+          description: >-
+            The run of numbering `number` belongs to, when that numbering is speculative.
+            Present on events served from the sequencer, whose numbers are handed out before
+            the node commits them and are reissued if the sequencer rolls back; compare it
+            against the `x-sov-event-epoch` a state snapshot reported before applying this
+            event to that snapshot. Absent on events read back from the ledger, which are
+            committed, so their numbering is canonical and never handed out again.
       required:
         - type
         - number
