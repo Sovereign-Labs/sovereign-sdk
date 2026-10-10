@@ -471,7 +471,25 @@ where
     //     - If so, do a consistency check (each read needs to match the latest value)
     //        - If the check passes, apply the tx to the state
     //        - If the check fails, discard the result and execute the tx on the main thread
-    for (idx, (raw_tx, mut injected_control_flow)) in batch_with_id.enumerate() {
+    // When replaying a batch, all transactions are known up front: verify their signatures in
+    // parallel. Authentication below still charges the same gas, but reads the result from the cache.
+    let prefetched: Vec<_> = if execution_context.is_sequencer() {
+        Vec::new()
+    } else {
+        batch_with_id.by_ref().collect()
+    };
+    #[cfg(feature = "native")]
+    {
+        use rayon::prelude::*;
+        let rollup_height = clean_scratchpad.rollup_height_to_access().get();
+        let txs: Vec<&FullyBakedTx> = prefetched.iter().map(|(tx, _)| tx).collect();
+        txs.par_iter()
+            .for_each(|tx| RT::Auth::prewarm_signature_cache(tx, rollup_height));
+    }
+
+    for (idx, (raw_tx, mut injected_control_flow)) in
+        prefetched.into_iter().chain(batch_with_id).enumerate()
+    {
         injected_control_flow.try_warm_up_cache(&mut clean_scratchpad);
 
         // Authorize and process the transaction, handling sequencer rewards/penalties internally.
