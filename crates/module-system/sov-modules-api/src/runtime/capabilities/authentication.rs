@@ -465,39 +465,84 @@ fn verify_signature_unmetered<S: Spec, D: DispatchCall<Spec = S>>(
         })
 }
 
-/// Verifies the signature of a current-encoding sov-transaction and stores the result in the
-/// signature cache that [`authenticate`] reads after charging gas. Does not touch state or gas.
+/// A gas meter that sums every charge instead of applying it. `None` once the sum overflows.
 #[cfg(feature = "native")]
-pub fn prewarm_signature_cache<S: Spec, D: DispatchCall<Spec = S>>(
-    mut raw_tx: &[u8],
+struct SummingMeter<S: Spec>(Option<S::Gas>);
+
+#[cfg(feature = "native")]
+impl<S: Spec> GasMeter for SummingMeter<S> {
+    type Spec = S;
+
+    fn charge_gas(&mut self, amount: S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
+        self.0 = self
+            .0
+            .take()
+            .and_then(|total| crate::GasArray::checked_combine(total, amount));
+        Ok(())
+    }
+
+    fn charge_linear_gas(
+        &mut self,
+        amount: S::Gas,
+        parameter: u32,
+    ) -> Result<(), GasMeteringError<S::Gas>> {
+        match crate::GasArray::checked_scalar_product(amount, u64::from(parameter)) {
+            Some(amount) => self.charge_gas(amount),
+            None => {
+                self.0 = None;
+                Ok(())
+            }
+        }
+    }
+}
+
+/// A transaction decoded and verified ahead of time by [`prewarm_signature_cache`], together with
+/// the total gas that [`authenticate`] charges for this between hashing the raw transaction and
+/// extracting the authorization data.
+#[cfg(feature = "native")]
+struct PreparedTx<D: DispatchCall> {
+    tx: std::sync::Mutex<Option<Transaction<D, D::Spec>>>,
+    non_malleable_hash: TxHash,
+    gas: <D::Spec as Spec>::Gas,
+    rollup_height: u64,
+}
+
+#[cfg(feature = "native")]
+static PREPARED_TXS: std::sync::LazyLock<
+    quick_cache::sync::Cache<TxHash, std::sync::Arc<dyn std::any::Any + Send + Sync>>,
+> = std::sync::LazyLock::new(|| quick_cache::sync::Cache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
+
+/// Authenticates a sov-transaction ahead of [`authenticate`], off the critical path, and stores
+/// the output for [`authenticate`] to take after it charges the same gas. Does not touch state.
+#[cfg(feature = "native")]
+pub fn prewarm_signature_cache<S: Spec, D: DispatchCall<Spec = S> + 'static>(
+    raw_tx: &[u8],
     default_chain_hash: &[u8; 32],
     rollup_height: u64,
 ) {
     let raw_tx_hash = calculate_hash::<S>(raw_tx);
-    // Undecodable and legacy transactions are skipped: `authenticate` handles them without the cache.
-    let Ok(DecodedTransaction::Current(tx)) =
-        legacy_v0::deserialize_transaction_reader::<D, S, <S as Spec>::CryptoSpec, _>(&mut raw_tx)
+    let mut meter = SummingMeter::<S>(Some(<S::Gas as crate::Gas>::zero()));
+    // Failing and legacy transactions are skipped: `authenticate` handles them on its own.
+    let Ok(DecodedTransaction::Current(tx)) = decode_tx::<S, D>(raw_tx, raw_tx_hash, &mut meter)
     else {
         return;
     };
-    let details = match &tx {
-        Transaction::V0(tx_v0) => &tx_v0.details,
-        Transaction::V1(tx_v1) => &tx_v1.details,
-    };
     let resolved_hashes = resolve_chain_hashes_for_height(rollup_height, *default_chain_hash);
-    // A chain hash mismatch is reported by `authenticate` before it looks at the cache.
-    let Ok(chain_hash) = select_chain_hash(details, &resolved_hashes, raw_tx_hash) else {
+    let Ok(non_malleable_hash) =
+        verify_tx_multi_hash(raw_tx_hash, &tx, &resolved_hashes, &mut meter)
+    else {
         return;
     };
-    let key = (raw_tx_hash, chain_hash);
-    if SIGNATURE_CACHE.get(&key).is_some() {
+    let Some(gas) = meter.0 else {
         return;
-    }
-    let serialized_tx = tx.to_signing_bytes(&chain_hash);
-    SIGNATURE_CACHE.insert(
-        key,
-        verify_signature_unmetered(&tx, &serialized_tx, raw_tx_hash),
-    );
+    };
+    let prepared: PreparedTx<D> = PreparedTx {
+        tx: std::sync::Mutex::new(Some(tx)),
+        non_malleable_hash,
+        gas,
+        rollup_height,
+    };
+    PREPARED_TXS.insert(raw_tx_hash, std::sync::Arc::new(prepared));
 }
 
 /// Calculates the non-malleable hash to use for replay protection.
@@ -547,20 +592,80 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
 pub fn authenticate<
     Accessor: ProvableStateReader<User, Spec = S> + VersionReader,
     S: Spec,
-    D: DispatchCall<Spec = S>,
+    D: DispatchCall<Spec = S> + 'static,
 >(
-    mut raw_tx: &[u8],
+    raw_tx: &[u8],
     default_chain_hash: &[u8; 32],
     state: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    // Resolve all valid chain hashes for this height (including grace period hashes)
     let height = state.rollup_height_to_access();
-    let resolved_hashes = resolve_chain_hashes_for_height(height.get(), *default_chain_hash);
 
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
-    let tx = match metered_decode_from_slice(&mut raw_tx, state, |reader| {
+    // Use the transaction prepared by `prewarm_signature_cache` if there is one. Charging is linear and
+    // its checks are monotonic, so one charge of the total leaves the meter in the same state as
+    // the individual charges. A failed charge leaves the meter untouched, and the regular path
+    // below then fails at the same point and with the same error.
+    #[cfg(feature = "native")]
+    if !cfg!(feature = "gas-constant-estimation") {
+        if let Some(prepared) = PREPARED_TXS
+            .remove(&raw_tx_hash)
+            .and_then(|(_, prepared)| prepared.downcast::<PreparedTx<D>>().ok())
+        {
+            if prepared.rollup_height == height.get() && state.charge_gas(prepared.gas).is_ok() {
+                if let Some(tx) = prepared.tx.lock().expect("Lock is never poisoned").take() {
+                    return finish_authentication(
+                        raw_tx_hash,
+                        &tx,
+                        prepared.non_malleable_hash,
+                        state,
+                    );
+                }
+            }
+        }
+    }
+
+    authenticate_hashed_tx::<S, D>(raw_tx, raw_tx_hash, height.get(), default_chain_hash, state)
+}
+
+/// The part of [`authenticate`] after the raw transaction hash has been computed.
+fn authenticate_hashed_tx<S: Spec, D: DispatchCall<Spec = S>>(
+    raw_tx: &[u8],
+    raw_tx_hash: TxHash,
+    height: u64,
+    default_chain_hash: &[u8; 32],
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+    // Resolve all valid chain hashes for this height (including grace period hashes)
+    let resolved_hashes = resolve_chain_hashes_for_height(height, *default_chain_hash);
+
+    match decode_tx::<S, D>(raw_tx, raw_tx_hash, meter)? {
+        DecodedTransaction::Current(tx) => {
+            verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, meter)
+        }
+        DecodedTransaction::LegacyV0(tx_v0) => {
+            let cutoff: u64 = config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
+            if height >= cutoff {
+                return Err(AuthenticationError::FatalError(
+                    FatalError::Other(format!(
+                        "Legacy V0 transactions are disabled at rollup height {height} (cutoff {cutoff})"
+                    )),
+                    raw_tx_hash,
+                ));
+            }
+            verify_and_decode_legacy_v0_tx(raw_tx_hash, tx_v0, &resolved_hashes, meter)
+        }
+    }
+}
+
+/// Decodes a raw sov-transaction with metered gas, rejecting trailing bytes.
+fn decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
+    mut raw_tx: &[u8],
+    raw_tx_hash: TxHash,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<DecodedTransaction<D, S>, AuthenticationError> {
+    let tx = match metered_decode_from_slice(&mut raw_tx, meter, |reader| {
         legacy_v0::deserialize_transaction_reader::<D, S, <S as Spec>::CryptoSpec, _>(reader)
     }) {
         Ok(ok) => ok,
@@ -589,24 +694,7 @@ pub fn authenticate<
         ));
     }
 
-    match tx {
-        DecodedTransaction::Current(tx) => {
-            verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
-        }
-        DecodedTransaction::LegacyV0(tx_v0) => {
-            let cutoff: u64 = config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
-            if height.get() >= cutoff {
-                return Err(AuthenticationError::FatalError(
-                    FatalError::Other(format!(
-                        "Legacy V0 transactions are disabled at rollup height {} (cutoff {cutoff})",
-                        height.get()
-                    )),
-                    raw_tx_hash,
-                ));
-            }
-            verify_and_decode_legacy_v0_tx(raw_tx_hash, tx_v0, &resolved_hashes, state)
-        }
-    }
+    Ok(tx)
 }
 
 /// Authenticate and verify deserialized sov-tx with multiple chain hashes.
@@ -619,23 +707,47 @@ fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
     resolved_hashes: crate::runtime::ResolvedChainHashes,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
-    let (details, runtime_call) = match &tx {
-        Transaction::V0(tx_v0) => (&tx_v0.details, &tx_v0.runtime_call),
-        Transaction::V1(tx_v1) => (&tx_v1.details, &tx_v1.runtime_call),
+    let non_malleable_hash = verify_tx_multi_hash(raw_tx_hash, &tx, &resolved_hashes, meter)?;
+    finish_authentication(raw_tx_hash, &tx, non_malleable_hash, meter)
+}
+
+/// Verifies the signature of a deserialized sov-tx and returns its non-malleable hash.
+fn verify_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
+    raw_tx_hash: TxHash,
+    tx: &Transaction<D, S>,
+    resolved_hashes: &crate::runtime::ResolvedChainHashes,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<TxHash, AuthenticationError> {
+    let details = match tx {
+        Transaction::V0(tx_v0) => &tx_v0.details,
+        Transaction::V1(tx_v1) => &tx_v1.details,
     };
 
-    let chain_hash = select_chain_hash(details, &resolved_hashes, raw_tx_hash)?;
+    let chain_hash = select_chain_hash(details, resolved_hashes, raw_tx_hash)?;
     let serialized_tx = tx.to_signing_bytes(&chain_hash);
-    verify_signature_over_message(&tx, &serialized_tx, &chain_hash, raw_tx_hash, meter)?;
-    let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
-        match &tx {
+    verify_signature_over_message(tx, &serialized_tx, &chain_hash, raw_tx_hash, meter)?;
+    calculate_non_malleable_hash_metered::<_, S>(
+        match tx {
             Transaction::V0(_) => ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash),
             Transaction::V1(_) => ReplayHashMaterial::VerifiedSignatureMessage(&serialized_tx),
         },
         meter,
     )
-    .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
-    let auth_data = match &tx {
+    .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))
+}
+
+/// Extracts the authorization data of a verified sov-tx and builds the authentication output.
+fn finish_authentication<S: Spec, D: DispatchCall<Spec = S>>(
+    raw_tx_hash: TxHash,
+    tx: &Transaction<D, S>,
+    non_malleable_hash: TxHash,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+    let (details, runtime_call) = match tx {
+        Transaction::V0(tx_v0) => (&tx_v0.details, &tx_v0.runtime_call),
+        Transaction::V1(tx_v1) => (&tx_v1.details, &tx_v1.runtime_call),
+    };
+    let auth_data = match tx {
         Transaction::V0(tx_v0) => tx_v0.auth_data(raw_tx_hash, non_malleable_hash, meter)?,
         Transaction::V1(tx_v1) => tx_v1.auth_data(raw_tx_hash, non_malleable_hash, meter)?,
     };
