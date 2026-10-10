@@ -14,6 +14,7 @@ readme = "README.md"
 workspace = true
 
 [dependencies]
+rayon = { workspace = true, optional = true }
 anyhow = { workspace = true }
 thiserror = { workspace = true }
 borsh = { workspace = true }
@@ -34,6 +35,7 @@ bench = [
     "sov-state/bench",
 ]
 native = [
+    "dep:rayon",
     "sov-modules-api/native",
     "sov-rollup-interface/native",
     "sov-state/native",

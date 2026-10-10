@@ -12278,6 +12278,7 @@ dependencies = [
  "anyhow",
  "borsh",
  "hex",
+ "rayon",
  "serde",
  "sov-metrics",
  "sov-modules-api",

@@ -89,6 +89,11 @@ pub trait TransactionAuthenticator<S: Spec> {
     #[cfg(feature = "native")]
     fn decode_serialized_tx(tx: &FullyBakedTx) -> Result<Self::Decodable, FatalError>;
 
+    /// Verifies the signature of `tx` ahead of [`TransactionAuthenticator::authenticate`] and caches
+    /// the result, so that a batch can be pre-verified in parallel. Must not touch state or gas.
+    #[cfg(feature = "native")]
+    fn prewarm_signature_cache(_tx: &FullyBakedTx, _rollup_height: u64) {}
+
     /// Authenticates raw transaction that is submitted from unregistered sequencers for the
     /// purpose of forced registration (circumventing censorship by currently registered sequencers).
     ///
@@ -216,6 +221,14 @@ where
     fn compute_tx_hash(tx: &FullyBakedTx) -> anyhow::Result<TxHash> {
         let AuthenticatorInput::Standard(input) = borsh::from_slice(&tx.data)?;
         Ok(calculate_hash::<S>(&input.data))
+    }
+
+    #[cfg(feature = "native")]
+    fn prewarm_signature_cache(tx: &FullyBakedTx, rollup_height: u64) {
+        // Malformed input is ignored here: `authenticate` decodes it again and reports the error.
+        if let Ok(AuthenticatorInput::Standard(input)) = borsh::from_slice(&tx.data) {
+            prewarm_signature_cache::<S, Rt>(&input.data, &Rt::CHAIN_HASH, rollup_height);
+        }
     }
 
     fn authenticate_unregistered<
@@ -427,8 +440,20 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
         return known_result;
     }
 
-    let res = tx
-        .verify_signature_unmetered(serialized_tx)
+    let res = verify_signature_unmetered(tx, serialized_tx, raw_tx_hash);
+
+    #[cfg(feature = "native")]
+    SIGNATURE_CACHE.insert((raw_tx_hash, *chain_hash), res.clone());
+
+    res
+}
+
+fn verify_signature_unmetered<S: Spec, D: DispatchCall<Spec = S>>(
+    tx: &Transaction<D, S>,
+    serialized_tx: &[u8],
+    raw_tx_hash: TxHash,
+) -> Result<(), AuthenticationError> {
+    tx.verify_signature_unmetered(serialized_tx)
         .map_err(|e| match e {
             TransactionVerificationError::GasError(_) => {
                 AuthenticationError::OutOfGas(e.to_string())
@@ -437,12 +462,42 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
                 FatalError::SigVerificationFailed(e.to_string()),
                 raw_tx_hash,
             ),
-        });
+        })
+}
 
-    #[cfg(feature = "native")]
-    SIGNATURE_CACHE.insert((raw_tx_hash, *chain_hash), res.clone());
-
-    res
+/// Verifies the signature of a current-encoding sov-transaction and stores the result in the
+/// signature cache that [`authenticate`] reads after charging gas. Does not touch state or gas.
+#[cfg(feature = "native")]
+pub fn prewarm_signature_cache<S: Spec, D: DispatchCall<Spec = S>>(
+    mut raw_tx: &[u8],
+    default_chain_hash: &[u8; 32],
+    rollup_height: u64,
+) {
+    let raw_tx_hash = calculate_hash::<S>(raw_tx);
+    // Undecodable and legacy transactions are skipped: `authenticate` handles them without the cache.
+    let Ok(DecodedTransaction::Current(tx)) =
+        legacy_v0::deserialize_transaction_reader::<D, S, <S as Spec>::CryptoSpec, _>(&mut raw_tx)
+    else {
+        return;
+    };
+    let details = match &tx {
+        Transaction::V0(tx_v0) => &tx_v0.details,
+        Transaction::V1(tx_v1) => &tx_v1.details,
+    };
+    let resolved_hashes = resolve_chain_hashes_for_height(rollup_height, *default_chain_hash);
+    // A chain hash mismatch is reported by `authenticate` before it looks at the cache.
+    let Ok(chain_hash) = select_chain_hash(details, &resolved_hashes, raw_tx_hash) else {
+        return;
+    };
+    let key = (raw_tx_hash, chain_hash);
+    if SIGNATURE_CACHE.get(&key).is_some() {
+        return;
+    }
+    let serialized_tx = tx.to_signing_bytes(&chain_hash);
+    SIGNATURE_CACHE.insert(
+        key,
+        verify_signature_unmetered(&tx, &serialized_tx, raw_tx_hash),
+    );
 }
 
 /// Calculates the non-malleable hash to use for replay protection.

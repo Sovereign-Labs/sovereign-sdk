@@ -117,6 +117,20 @@ where
     }
 
     #[cfg(feature = "native")]
+    fn prewarm_signature_cache(tx: &FullyBakedTx, rollup_height: u64) {
+        // Malformed input is ignored here: `authenticate` decodes it again and reports the error.
+        if let Ok(EvmAndSolanaOffchainAuthenticatorInput::Standard(tx)) =
+            borsh::from_slice::<EvmAndSolanaOffchainAuthenticatorInput>(&tx.data)
+        {
+            capabilities::prewarm_signature_cache::<S, Rt>(
+                &tx.data,
+                &Rt::CHAIN_HASH,
+                rollup_height,
+            );
+        }
+    }
+
+    #[cfg(feature = "native")]
     fn compute_tx_hash(
         tx: &sov_modules_api::FullyBakedTx,
     ) -> anyhow::Result<sov_modules_api::TxHash> {
