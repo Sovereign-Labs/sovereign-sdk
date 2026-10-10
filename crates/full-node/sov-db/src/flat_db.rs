@@ -315,7 +315,24 @@ impl FlatStateDb {
             .and_then(|(v, _)| v.checked_add(1))
             .unwrap_or(0);
 
-        self.commit_internal(state_changes, version, true)
+        self.commit_internal(state_changes, version, true, || Ok(()))
+    }
+
+    /// Like [`Self::commit`], but runs `before_live` after the archival DB is written and
+    /// before the live DB is written. The live DB is the commit marker for crash recovery, so
+    /// callers use `before_live` to wait for every other store of the same slot to be
+    /// committed. If `before_live` fails, the live DB is not written.
+    pub(crate) fn commit_with_before_live(
+        &self,
+        state_changes: StateChanges,
+        before_live: impl FnOnce() -> anyhow::Result<()>,
+    ) -> anyhow::Result<FlatStateCommitMetric> {
+        let version = self
+            .latest_version_and_root_hash_live_db()?
+            .and_then(|(v, _)| v.checked_add(1))
+            .unwrap_or(0);
+
+        self.commit_internal(state_changes, version, true, before_live)
     }
 
     #[cfg(feature = "migration-script")]
@@ -345,7 +362,7 @@ impl FlatStateDb {
             );
         }
 
-        self.commit_internal(state_changes, current_latest, true)
+        self.commit_internal(state_changes, current_latest, true, || Ok(()))
     }
 
     fn commit_internal(
@@ -353,6 +370,7 @@ impl FlatStateDb {
         state_changes: StateChanges,
         version: u64,
         is_commit: bool,
+        before_live: impl FnOnce() -> anyhow::Result<()>,
     ) -> anyhow::Result<FlatStateCommitMetric> {
         let start_prepare = std::time::Instant::now();
         let prepare = start_prepare.elapsed();
@@ -416,6 +434,8 @@ impl FlatStateDb {
         crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingArchival
             .inject_fault_if_configured();
         self.archival_db.write_db_batch(archival_db_batch)?;
+
+        before_live()?;
 
         // rockbound requirement:  `store_committed_archival_version` has to be called before before writing `live_db_batch`.
         self.kernel.store_committed_archival_version(version);
@@ -510,7 +530,7 @@ impl FlatStateDb {
         };
 
         // We rollback only archival db.
-        self.commit_internal(state_changes, current_version_archival, false)?;
+        self.commit_internal(state_changes, current_version_archival, false, || Ok(()))?;
 
         Ok(())
     }
