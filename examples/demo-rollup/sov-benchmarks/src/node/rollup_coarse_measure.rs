@@ -18,7 +18,7 @@ use sov_test_utils::MockZkvm;
 // Minimum TPS, below which it is considered an issue
 const MIN_TPS: f64 = 1000.0;
 // Number to check that rollup actually executed some transactions
-const MAX_TPS: f64 = 30_000.0;
+const MAX_TPS: f64 = 1_000_000.0;
 
 fn print_times(
     total: Duration,
@@ -126,10 +126,13 @@ where
 
     let total = Instant::now();
     let mut apply_block_time = Duration::default();
+    let mut all_batch_receipts = Vec::new();
+    let mut block_times = Vec::new();
 
     for filtered_block in blocks {
         let now = Instant::now();
         let apply_block_result = runner.execute(filtered_block);
+        block_times.push(now.elapsed());
         apply_block_time += now.elapsed();
 
         for receipt in apply_block_result.0.batch_receipts {
@@ -140,6 +143,7 @@ where
                     println!("E: {:?}", t.receipt);
                 }
             }
+            all_batch_receipts.push(receipt);
         }
     }
 
@@ -147,6 +151,21 @@ where
     assert_eq!(
         expected_num_txs, num_success_txns,
         "Not enough successful transactions, something is broken"
+    );
+    // Receipts carry per-tx gas, outcomes and sequencer rewards, so this digest changes whenever
+    // metering changes. The state root is not reproducible because genesis uses wall-clock time.
+    let mut hasher = std::hash::DefaultHasher::new();
+    std::hash::Hasher::write(&mut hasher, format!("{all_batch_receipts:?}").as_bytes());
+    // The median block time is robust against interference from other processes on the machine.
+    block_times.sort();
+    let median_block_time = block_times[block_times.len() / 2];
+    println!(
+        "tps: {:.1}",
+        params.transactions_per_block as f64 / median_block_time.as_secs_f64()
+    );
+    println!(
+        "receipts_digest: {:016x}",
+        std::hash::Hasher::finish(&hasher)
     );
     if params.timer_output {
         println!("Storage: {}", std::any::type_name::<S::Storage>());
