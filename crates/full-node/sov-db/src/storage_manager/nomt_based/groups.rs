@@ -708,3 +708,117 @@ impl AllDBsStateRoots {
         );
     }
 }
+
+#[cfg(test)]
+mod tests {
+    use std::panic::AssertUnwindSafe;
+
+    use rockbound::SchemaBatch;
+    use sov_mock_da::{MockBlockHeader, MockDaSpec};
+    use sov_rollup_interface::common::SlotNumber;
+    use sov_rollup_interface::da::BlockHeaderTrait;
+    use sov_rollup_interface::storage::HierarchicalStorageManager;
+
+    use super::AllDBsStateRoots;
+    use crate::config::RollupDbConfig;
+    use crate::ledger_db::LedgerDb;
+    use crate::schema::types::{BatchNumber, DiscardedBlobNumber, StoredSlot};
+    use crate::storage_manager::tests::generic_tests::TestableStorage;
+    use crate::storage_manager::NomtStorageManager;
+    use crate::test_utils::{CommitFaultInjectionLocation, TestNomtStorage, H};
+
+    type Manager = NomtStorageManager<MockDaSpec, H, TestNomtStorage>;
+
+    /// Saves a change set for `height` (with a consistent ledger slot) and returns its state root.
+    fn save_slot(manager: &mut Manager, height: u64) -> [u8; 64] {
+        let header = MockBlockHeader::from_height(height);
+        let (storage, ledger_reader) = manager.create_state_for(&header).unwrap();
+        let values = vec![
+            (vec![1, 2, height as u8], Some(height.to_be_bytes().to_vec())),
+            (vec![3, 4, height as u8], Some(height.to_le_bytes().to_vec())),
+        ];
+        let (stf_changes, state_root) = storage.materialize_from_key_values(&values, height);
+
+        let ledger_db = LedgerDb::with_reader(ledger_reader).unwrap();
+        let slot_number = SlotNumber::new(height);
+        let mut ledger_change_set = SchemaBatch::new();
+        let slot = StoredSlot {
+            hash: header.hash().into(),
+            state_root: state_root.to_vec().into(),
+            extra_data: vec![].into(),
+            batches: BatchNumber(0)..BatchNumber(0),
+            discarded_blobs: DiscardedBlobNumber(0)..DiscardedBlobNumber(0),
+            timestamp: header.time(),
+        };
+        ledger_db
+            .put_slot(&slot, &slot_number, &mut ledger_change_set)
+            .unwrap();
+        ledger_change_set.merge(
+            ledger_db
+                .materialize_latest_finalize_slot(slot_number, slot_number)
+                .unwrap(),
+        );
+        manager
+            .save_change_set(&header, stf_changes, ledger_change_set)
+            .unwrap();
+        state_root
+    }
+
+    /// Crash recovery treats the live flat DB as the commit marker: every other store must
+    /// already hold the new version by the time the live DB is written. This crashes a commit
+    /// right before the live write and checks that all other stores are at the new root while
+    /// the live DB is still at the previous one.
+    #[test]
+    fn test_all_stores_are_committed_before_live_db() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let config = RollupDbConfig::default_in_path(tempdir.path().to_path_buf());
+        let mut manager = Manager::new(config, false).unwrap();
+
+        let root_1 = save_slot(&mut manager, 1);
+        manager.finalize(&MockBlockHeader::from_height(1)).unwrap();
+
+        let root_2 = save_slot(&mut manager, 2);
+        CommitFaultInjectionLocation::BeforeCommittingLive.set_crash_env();
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            manager.finalize(&MockBlockHeader::from_height(2))
+        }));
+        std::env::remove_var(crate::test_utils::CRASH_ON_COMMIT_ENV_NAME);
+        assert!(result.is_err(), "Commit should crash before the live write");
+
+        let group = &manager.db_group;
+        let roots = AllDBsStateRoots::from_dbs(
+            &group.merklized_state,
+            group.ledger.clone(),
+            group.accessory.clone(),
+            &group.flat_state,
+        )
+        .unwrap();
+
+        assert_eq!(
+            roots.root_hash_from_live_db, root_1,
+            "Live DB must not be written yet"
+        );
+        assert_eq!(
+            roots.root_hash_nomt.user,
+            root_2[..32],
+            "User NOMT must be committed before live"
+        );
+        assert_eq!(
+            roots.root_hash_nomt.kernel,
+            root_2[32..],
+            "Kernel NOMT must be committed before live"
+        );
+        assert_eq!(
+            roots.root_hash_from_ledger_db, root_2,
+            "Ledger must be committed before live"
+        );
+        assert_eq!(
+            roots.root_hash_from_accessory_db, root_2,
+            "Accessory must be committed before live"
+        );
+        assert_eq!(
+            roots.root_hash_from_archival_db, root_2,
+            "Archival must be committed before live"
+        );
+    }
+}
