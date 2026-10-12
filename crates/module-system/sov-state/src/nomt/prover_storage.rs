@@ -506,8 +506,12 @@ fn cmp_key_paths(a: &nomt::trie::KeyPath, b: &nomt::trie::KeyPath) -> std::cmp::
     prefix(a).cmp(&prefix(b)).then_with(|| a.cmp(b))
 }
 
+/// Pure reads do not affect the root, so they are only kept when `keep_reads` is set (witness generation),
+/// sparing NOMT a merkle seek per read. Reads of written keys are always kept as `ReadThenWrite`,
+/// because they give NOMT the prior value for the rollback log.
 fn to_nomt_accesses<S: MerkleProofSpec>(
     sov_accesses: &OrderedReadsAndWrites,
+    keep_reads: bool,
 ) -> anyhow::Result<Vec<(nomt::trie::KeyPath, nomt::KeyReadWrite)>> {
     let OrderedReadsAndWrites {
         ordered_reads,
@@ -548,6 +552,9 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
             (Some(read), Some(write)) => match read.0.cmp(&write.0) {
                 std::cmp::Ordering::Less => {
                     let (key, value) = reads.next().expect("peeked");
+                    if !keep_reads {
+                        continue;
+                    }
                     (key, nomt::KeyReadWrite::Read(value))
                 }
                 std::cmp::Ordering::Greater => {
@@ -565,6 +572,9 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
             },
             (Some(_), None) => {
                 let (key, value) = reads.next().expect("peeked");
+                if !keep_reads {
+                    continue;
+                }
                 (key, nomt::KeyReadWrite::Read(value))
             }
             (None, Some(_)) => {
@@ -729,8 +739,9 @@ where
         prev_state_root: Self::Root,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let start = std::time::Instant::now();
-        let nomt_accesses_user = to_nomt_accesses::<S>(&state_accesses.user)?;
-        let nomt_accesses_kernel = to_nomt_accesses::<S>(&state_accesses.kernel)?;
+        let keep_reads = self.witness_mode.is_witness_enabled();
+        let nomt_accesses_user = to_nomt_accesses::<S>(&state_accesses.user, keep_reads)?;
+        let nomt_accesses_kernel = to_nomt_accesses::<S>(&state_accesses.kernel, keep_reads)?;
         let accesses_build_time = start.elapsed();
         tracing::trace!(time = ?accesses_build_time, "Nomt accesses are computed");
 
