@@ -12821,6 +12821,7 @@ dependencies = [
  "sov-universal-wallet",
  "tempfile",
  "test-strategy",
+ "toml 0.8.23",
  "tracing",
 ]
 
