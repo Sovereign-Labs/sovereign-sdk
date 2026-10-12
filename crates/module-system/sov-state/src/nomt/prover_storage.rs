@@ -479,6 +479,26 @@ where
     }
 }
 
+/// Maps `items` in order, splitting large inputs into chunks processed on scoped threads.
+fn par_map<T: Sync, U: Send>(items: &[T], f: impl Fn(&T) -> U + Sync) -> Vec<U> {
+    const MIN_CHUNK: usize = 2048;
+    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(16));
+    let chunk = items.len().div_ceil(threads).max(MIN_CHUNK);
+    if items.len() <= chunk {
+        return items.iter().map(f).collect();
+    }
+    std::thread::scope(|scope| {
+        let handles: Vec<_> = items
+            .chunks(chunk)
+            .map(|chunk| scope.spawn(|| chunk.iter().map(&f).collect::<Vec<_>>()))
+            .collect();
+        handles
+            .into_iter()
+            .flat_map(|handle| handle.join().expect("hashing thread panicked"))
+            .collect()
+    })
+}
+
 fn to_nomt_accesses<S: MerkleProofSpec>(
     sov_accesses: &OrderedReadsAndWrites,
 ) -> anyhow::Result<Vec<(nomt::trie::KeyPath, nomt::KeyReadWrite)>> {
@@ -487,26 +507,22 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
         ordered_writes,
     } = sov_accesses;
 
-    let mut reads: Vec<(nomt::trie::KeyPath, Option<nomt::Value>)> = ordered_reads
-        .iter()
-        .map(|(key, read_node_leaf)| {
+    let mut reads: Vec<(nomt::trie::KeyPath, Option<nomt::Value>)> =
+        par_map(ordered_reads, |(key, read_node_leaf)| {
             (
                 S::Hasher::digest(key.as_ref()).into(),
                 read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size()),
             )
-        })
-        .collect();
-    let mut writes: Vec<(nomt::trie::KeyPath, Option<nomt::Value>)> = ordered_writes
-        .iter()
-        .map(|(key, original_write)| {
+        });
+    let mut writes: Vec<(nomt::trie::KeyPath, Option<nomt::Value>)> =
+        par_map(ordered_writes, |(key, original_write)| {
             (
                 S::Hasher::digest(key.as_ref()).into(),
                 original_write
                     .as_ref()
                     .map(|v| v.combine_val_hash_and_size::<S::Hasher>()),
             )
-        })
-        .collect();
+        });
     reads.sort_unstable_by(|a, b| a.0.cmp(&b.0));
     writes.sort_unstable_by(|a, b| a.0.cmp(&b.0));
     if let Some(w) = reads.windows(2).find(|w| w[0].0 == w[1].0) {
