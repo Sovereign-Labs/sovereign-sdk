@@ -499,6 +499,13 @@ fn par_map<T: Sync, U: Send>(items: &[T], f: impl Fn(&T) -> U + Sync) -> Vec<U> 
     })
 }
 
+/// Same order as `KeyPath::cmp`, but key paths are hashes, so comparing the first 8 bytes as an
+/// integer almost always decides it without a `memcmp` call.
+fn cmp_key_paths(a: &nomt::trie::KeyPath, b: &nomt::trie::KeyPath) -> std::cmp::Ordering {
+    let prefix = |k: &nomt::trie::KeyPath| u64::from_be_bytes(k[..8].try_into().expect("8 bytes"));
+    prefix(a).cmp(&prefix(b)).then_with(|| a.cmp(b))
+}
+
 fn to_nomt_accesses<S: MerkleProofSpec>(
     sov_accesses: &OrderedReadsAndWrites,
 ) -> anyhow::Result<Vec<(nomt::trie::KeyPath, nomt::KeyReadWrite)>> {
@@ -523,8 +530,8 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
                     .map(|v| v.combine_val_hash_and_size::<S::Hasher>()),
             )
         });
-    reads.sort_unstable_by(|a, b| a.0.cmp(&b.0));
-    writes.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    reads.sort_unstable_by(|a, b| cmp_key_paths(&a.0, &b.0));
+    writes.sort_unstable_by(|a, b| cmp_key_paths(&a.0, &b.0));
     if let Some(w) = reads.windows(2).find(|w| w[0].0 == w[1].0) {
         anyhow::bail!("Duplicate key read in state: {:?}", w[0].0);
     }
