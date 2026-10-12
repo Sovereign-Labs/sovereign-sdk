@@ -71,16 +71,25 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingKernelNomt
             .inject_fault_if_configured();
 
-        // 2.
-        let write_kernel = self.commit_kernel(kernel)?;
+        // 2. Kernel and user are independent NOMT instances, each rolled back on its own
+        // during crash recovery, so they are committed in parallel.
+        let (write_kernel, write_user) = std::thread::scope(|s| {
+            let user = s.spawn(move || {
+                // 3.
+                #[cfg(feature = "test-utils")]
+                crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingUserNomt
+                    .inject_fault_if_configured();
 
-        // 3.
-        #[cfg(feature = "test-utils")]
-        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingUserNomt
-            .inject_fault_if_configured();
-
-        // 4.
-        let write_user = self.commit_user(user)?;
+                // 4.
+                self.commit_user(user)
+            });
+            let write_kernel = self.commit_kernel(kernel);
+            let write_user = user
+                .join()
+                .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+            (write_kernel, write_user)
+        });
+        let (write_kernel, write_user) = (write_kernel?, write_user?);
 
         let total = start.elapsed();
         Ok(MerklizedCommitMetric {
