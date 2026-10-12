@@ -1,6 +1,4 @@
 //! Prover side of NOMT-based Storage implementation
-use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::io::Write;
 use std::time::{Duration, Instant};
@@ -484,56 +482,78 @@ where
 fn to_nomt_accesses<S: MerkleProofSpec>(
     sov_accesses: &OrderedReadsAndWrites,
 ) -> anyhow::Result<Vec<(nomt::trie::KeyPath, nomt::KeyReadWrite)>> {
-    let mut merged_accesses: BTreeMap<nomt::trie::KeyPath, nomt::KeyReadWrite> = BTreeMap::new();
-
     let OrderedReadsAndWrites {
         ordered_reads,
         ordered_writes,
     } = sov_accesses;
 
-    // First, put all the reads into merged accesses, so later we can distinguish `Write` from `ReadThenWrite`
-    for (key, read_node_leaf) in ordered_reads {
-        // Reads are warmed up during normal `get/get_leaf`
-        let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-
-        let combined_hash_and_size =
-            read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size());
-
-        let nomt_read = nomt::KeyReadWrite::Read(combined_hash_and_size);
-
-        if merged_accesses.insert(key_hash, nomt_read).is_some() {
-            anyhow::bail!("Duplicate key read in state: {:?}", key_hash);
-        };
+    let mut reads: Vec<(nomt::trie::KeyPath, Option<nomt::Value>)> = ordered_reads
+        .iter()
+        .map(|(key, read_node_leaf)| {
+            (
+                S::Hasher::digest(key.as_ref()).into(),
+                read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size()),
+            )
+        })
+        .collect();
+    let mut writes: Vec<(nomt::trie::KeyPath, Option<nomt::Value>)> = ordered_writes
+        .iter()
+        .map(|(key, original_write)| {
+            (
+                S::Hasher::digest(key.as_ref()).into(),
+                original_write
+                    .as_ref()
+                    .map(|v| v.combine_val_hash_and_size::<S::Hasher>()),
+            )
+        })
+        .collect();
+    reads.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    writes.sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    if let Some(w) = reads.windows(2).find(|w| w[0].0 == w[1].0) {
+        anyhow::bail!("Duplicate key read in state: {:?}", w[0].0);
+    }
+    if let Some(w) = writes.windows(2).find(|w| w[0].0 == w[1].0) {
+        anyhow::bail!("Duplicate key write in state: {:?}", w[0].0);
     }
 
-    // Writes
-    for (key, original_write) in ordered_writes {
-        let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-
-        let authenticated_write = original_write
-            .as_ref()
-            .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
-
-        match merged_accesses.entry(key_hash) {
-            Entry::Vacant(vacant) => {
-                // Also warming up all writes. `ReadThenWrite` has been warmed up during reads collection.
-                vacant.insert(nomt::KeyReadWrite::Write(authenticated_write));
-            }
-            Entry::Occupied(occupied) => match occupied.remove() {
-                nomt::KeyReadWrite::Read(read_value) => {
-                    merged_accesses.insert(
-                        key_hash,
-                        nomt::KeyReadWrite::ReadThenWrite(read_value, authenticated_write),
-                    );
+    // Merge-join the sorted reads and writes, so a key that is both read and written becomes `ReadThenWrite`.
+    let mut merged_accesses = Vec::with_capacity(reads.len() + writes.len());
+    let mut reads = reads.into_iter().peekable();
+    let mut writes = writes.into_iter().peekable();
+    loop {
+        let access = match (reads.peek(), writes.peek()) {
+            (Some(read), Some(write)) => match read.0.cmp(&write.0) {
+                std::cmp::Ordering::Less => {
+                    let (key, value) = reads.next().expect("peeked");
+                    (key, nomt::KeyReadWrite::Read(value))
                 }
-                _ => {
-                    anyhow::bail!("Duplicate key write in state: {:?}", key_hash);
+                std::cmp::Ordering::Greater => {
+                    let (key, value) = writes.next().expect("peeked");
+                    (key, nomt::KeyReadWrite::Write(value))
+                }
+                std::cmp::Ordering::Equal => {
+                    let (key, read_value) = reads.next().expect("peeked");
+                    let (_, write_value) = writes.next().expect("peeked");
+                    (
+                        key,
+                        nomt::KeyReadWrite::ReadThenWrite(read_value, write_value),
+                    )
                 }
             },
-        }
+            (Some(_), None) => {
+                let (key, value) = reads.next().expect("peeked");
+                (key, nomt::KeyReadWrite::Read(value))
+            }
+            (None, Some(_)) => {
+                let (key, value) = writes.next().expect("peeked");
+                (key, nomt::KeyReadWrite::Write(value))
+            }
+            (None, None) => break,
+        };
+        merged_accesses.push(access);
     }
 
-    Ok(merged_accesses.into_iter().collect())
+    Ok(merged_accesses)
 }
 
 fn compute_state_update_namespace<S: MerkleProofSpec>(
