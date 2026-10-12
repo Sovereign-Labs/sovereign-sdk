@@ -509,6 +509,31 @@ fn cmp_key_paths(a: &nomt::trie::KeyPath, b: &nomt::trie::KeyPath) -> std::cmp::
 /// Pure reads do not affect the root, so they are only kept when `keep_reads` is set (witness generation),
 /// sparing NOMT a merkle seek per read. Reads of written keys are always kept as `ReadThenWrite`,
 /// because they give NOMT the prior value for the rollback log.
+/// Sorts by key path. Key paths are uniformly distributed hashes, so bucketing by the top 4 bits
+/// gives 16 similar-sized buckets that are sorted on scoped threads and concatenated in order.
+fn par_sort_by_key_path<T: Send>(
+    items: Vec<(nomt::trie::KeyPath, T)>,
+) -> Vec<(nomt::trie::KeyPath, T)> {
+    const MIN_PARALLEL: usize = 4096;
+    if items.len() < MIN_PARALLEL {
+        let mut items = items;
+        items.sort_unstable_by(|a, b| cmp_key_paths(&a.0, &b.0));
+        return items;
+    }
+    let mut buckets: Vec<Vec<(nomt::trie::KeyPath, T)>> = (0..16)
+        .map(|_| Vec::with_capacity(items.len() / 12))
+        .collect();
+    for item in items {
+        buckets[usize::from(item.0[0] >> 4)].push(item);
+    }
+    std::thread::scope(|scope| {
+        for bucket in &mut buckets {
+            scope.spawn(|| bucket.sort_unstable_by(|a, b| cmp_key_paths(&a.0, &b.0)));
+        }
+    });
+    buckets.into_iter().flatten().collect()
+}
+
 fn to_nomt_accesses<S: MerkleProofSpec>(
     sov_accesses: &OrderedReadsAndWrites,
     keep_reads: bool,
@@ -518,7 +543,7 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
         ordered_writes,
     } = sov_accesses;
 
-    let mut writes: Vec<(nomt::trie::KeyPath, Option<nomt::Value>)> =
+    let writes: Vec<(nomt::trie::KeyPath, Option<nomt::Value>)> =
         par_map(ordered_writes, |(key, original_write)| {
             (
                 S::Hasher::digest(key.as_ref()).into(),
@@ -527,7 +552,7 @@ fn to_nomt_accesses<S: MerkleProofSpec>(
                     .map(|v| v.combine_val_hash_and_size::<S::Hasher>()),
             )
         });
-    writes.sort_unstable_by(|a, b| cmp_key_paths(&a.0, &b.0));
+    let writes = par_sort_by_key_path(writes);
     if let Some(w) = writes.windows(2).find(|w| w[0].0 == w[1].0) {
         anyhow::bail!("Duplicate key write in state: {:?}", w[0].0);
     }
