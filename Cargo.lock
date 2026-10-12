@@ -6888,6 +6888,7 @@ dependencies = [
 [[package]]
 name = "nomt"
 version = "1.0.5"
+source = "git+https://github.com/citizen-stig/nomt.git?rev=a418f972cde60b3872b4240172185f1069592ff6#a418f972cde60b3872b4240172185f1069592ff6"
 dependencies = [
  "anyhow",
  "bitvec",
@@ -6915,6 +6916,7 @@ dependencies = [
 [[package]]
 name = "nomt-core"
 version = "1.0.5"
+source = "git+https://github.com/citizen-stig/nomt.git?rev=a418f972cde60b3872b4240172185f1069592ff6#a418f972cde60b3872b4240172185f1069592ff6"
 dependencies = [
  "arrayvec",
  "bitvec",
