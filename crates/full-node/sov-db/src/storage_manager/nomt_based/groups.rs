@@ -753,8 +753,14 @@ mod tests {
         let header = MockBlockHeader::from_height(height);
         let (storage, ledger_reader) = manager.create_state_for(&header).unwrap();
         let values = vec![
-            (vec![1, 2, height as u8], Some(height.to_be_bytes().to_vec())),
-            (vec![3, 4, height as u8], Some(height.to_le_bytes().to_vec())),
+            (
+                vec![1, 2, height as u8],
+                Some(height.to_be_bytes().to_vec()),
+            ),
+            (
+                vec![3, 4, height as u8],
+                Some(height.to_le_bytes().to_vec()),
+            ),
         ];
         let (stf_changes, state_root) = storage.materialize_from_key_values(&values, height);
 
