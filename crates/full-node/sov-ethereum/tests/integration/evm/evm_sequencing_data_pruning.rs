@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, BTreeSet};
 use std::convert::Infallible;
 use std::marker::PhantomData;
 use std::str::FromStr;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, LazyLock, Mutex};
 use std::time::Duration;
 
@@ -61,6 +62,10 @@ const FINALIZATION_BLOCKS: u32 = 2;
 
 static ORACLE_DATA: LazyLock<Mutex<OracleSequencingData>> =
     LazyLock::new(|| Mutex::new(OracleSequencingData::default()));
+
+/// When set, `finalize_sequencing_data` grows the data instead of pruning it, emulating a buggy
+/// runtime implementation.
+static GROW_ON_FINALIZE: AtomicBool = AtomicBool::new(false);
 
 #[derive(Clone, Debug, Default, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
 pub struct OracleSequencingData(BTreeMap<u64, u64>);
@@ -224,6 +229,10 @@ impl<S: Spec> SequencingDataHandler<S> for PruningCapabilities<'_, S> {
         mut data: Self::SequencingData,
         scratchpad: Option<sov_rollup_interface::Bytes>,
     ) -> Self::SequencingData {
+        if GROW_ON_FINALIZE.load(Ordering::SeqCst) {
+            data.0.extend((0..64).map(|i| (u64::MAX - i, i)));
+            return data;
+        }
         let Some(scratchpad) = scratchpad else {
             return data;
         };
@@ -545,7 +554,85 @@ async fn evm_precompile_can_prune_sequencing_data_and_replay_from_da() -> anyhow
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn sequencer_rejects_tx_exceeding_max_size_with_sequencing_data() -> anyhow::Result<()> {
+    // The batch limit must not be what rejects the tx: only the per-tx limit should.
+    let test_rollup = setup_pruning_rollup_with_max_batch_size(
+        4 * sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE,
+    )
+    .await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await?;
+
+    let evm_client = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
+    let tester_address = deploy_precompile_tester(&evm_client).await?;
+
+    // Each entry serializes to 16 bytes, so the attached sequencing data alone exceeds the limit.
+    // The sequencer checks the size before execution, so the tx is rejected even though pruning
+    // would later shrink its sequencing data.
+    let oracle_entries = (0..sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE as u64 / 16 + 1)
+        .map(|key| (key, key + 1))
+        .collect::<BTreeMap<_, _>>();
+    set_oracle_data(oracle_entries.clone());
+
+    let err = assert_precompile_values(&evm_client, tester_address, &[0], &oracle_entries)
+        .await
+        .expect_err("a tx whose sequencing data makes it oversized must be rejected");
+    assert!(
+        err.to_string().contains(
+            "Transaction combined with its sequencing data exceeds the maximum transaction size"
+        ),
+        "unexpected rejection reason: {err}"
+    );
+
+    test_rollup.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn sequencer_publishes_original_sequencing_data_if_finalization_grows_it(
+) -> anyhow::Result<()> {
+    let test_rollup = setup_pruning_rollup().await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await?;
+
+    let evm_client = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
+    let tester_address = deploy_precompile_tester(&evm_client).await?;
+
+    let oracle_entries = BTreeMap::from([(11, 1_100), (22, 2_200)]);
+    set_oracle_data(oracle_entries.clone());
+    GROW_ON_FINALIZE.store(true, Ordering::SeqCst);
+
+    let tx_hash =
+        assert_precompile_values(&evm_client, tester_address, &[11], &oracle_entries).await?;
+    // The tx only read key 11, but the sequencer must publish the full original data it was
+    // executed with, rather than the grown data.
+    let expected_by_hash = BTreeMap::from([(
+        tx_hash_bytes(tx_hash),
+        oracle_entries.keys().copied().collect::<BTreeSet<_>>(),
+    )]);
+
+    let last_checked_height = test_rollup.da_service.get_head_block_header().await?.height;
+    test_rollup.force_close_batch().await?;
+    wait_for_pruned_txs_on_da(
+        &test_rollup,
+        &expected_by_hash,
+        &oracle_entries,
+        last_checked_height,
+    )
+    .await?;
+
+    test_rollup.shutdown().await?;
+    Ok(())
+}
+
 async fn setup_pruning_rollup() -> TestRollup<PruningBlueprint> {
+    setup_pruning_rollup_with_max_batch_size(sov_test_utils::TEST_MAX_BATCH_SIZE).await
+}
+
+async fn setup_pruning_rollup_with_max_batch_size(
+    max_batch_size_bytes: usize,
+) -> TestRollup<PruningBlueprint> {
     let (genesis, seq_da_address) = pruning_genesis();
     let storage = StoragePath::Tmp(Arc::new(tempfile::tempdir().expect("create tempdir")));
 
@@ -562,6 +649,7 @@ async fn setup_pruning_rollup() -> TestRollup<PruningBlueprint> {
     builder = builder
         .set_config(|c| {
             c.max_concurrent_batch_blobs = 65536;
+            c.max_batch_size_bytes = max_batch_size_bytes;
             c.rollup_prover_config = RollupProverConfig::Disabled;
             c.aggregated_proof_block_jump = 5;
             c.max_infos_in_db = 30;
