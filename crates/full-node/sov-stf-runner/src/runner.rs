@@ -31,7 +31,7 @@ use tracing::{debug, info, trace};
 
 use crate::da::{DaServiceWithCachedFinalizedHeaders, FinalizedBlocksBulkFetcher};
 use crate::http::HttpServerStart;
-use crate::processes::{new_stf_info_channel, Receiver};
+use crate::processes::{new_stf_info_channel, Receiver, StfInfoResumeSource};
 use crate::state_manager::{AggregatedProofs, BlockCandidateResolution, StateManager};
 use tokio::net::TcpListener;
 
@@ -190,7 +190,7 @@ where
         sync_state: Arc<DaSyncState>,
         da_service_with_cached_finalized_headers: DaServiceWithCachedFinalizedHeaders<Da>,
         genesis_da_height: u64,
-        latest_proof_final_slot: Option<SlotNumber>,
+        stf_info_resume_source: StfInfoResumeSource,
     ) -> anyhow::Result<Self> {
         error_if_tokio_runtime_is_not_multi_threaded()?;
         tracing::info!(config = ?runner_config, "Initializing StateTransitionRunner");
@@ -226,7 +226,7 @@ where
                 ledger_db.clone(),
                 config.max_number_of_transitions_in_memory,
                 config.max_number_of_transitions_in_db,
-                latest_proof_final_slot,
+                stf_info_resume_source,
             )
             .await?;
 
