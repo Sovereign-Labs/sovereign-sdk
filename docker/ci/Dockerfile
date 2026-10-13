@@ -38,9 +38,9 @@ ENV RUSTUP_HOME=/home/runner/.rustup \
     CARGO_HOME=/home/runner/.cargo \
     PATH=/home/runner/.cargo/bin:$PATH
 
-RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.93.0 --profile minimal \
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y --default-toolchain 1.96.0 --profile minimal \
     && . /home/runner/.cargo/env \
-    && rustup component add clippy rustfmt rust-src llvm-tools-preview --toolchain 1.93.0 \
+    && rustup component add clippy rustfmt rust-src llvm-tools-preview --toolchain 1.96.0 \
     && rustup target add wasm32-unknown-unknown
 
 # Configure cargo to use mold linker
@@ -102,7 +102,7 @@ RUN sudo mkdir -p /opt/risc0-zkrs \
 # Install SP1 toolchain (AMD64 only - SP1 doesn't support ARM64)
 RUN . /home/runner/.cargo/env \
         && curl -L https://sp1up.succinct.xyz | bash \
-        && /home/runner/.sp1/bin/sp1up --version 6.2.4 \
+        && /home/runner/.sp1/bin/sp1up --version 6.9.0 \
         && /home/runner/.sp1/bin/cargo-prove prove install-toolchain \
         && rm -rf /home/runner/.cargo/registry \
         && rm -rf /home/runner/.cargo/git

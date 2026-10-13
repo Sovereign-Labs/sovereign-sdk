@@ -221,7 +221,7 @@ where
                     inspector.set_transaction_gas_limit(gas_limit);
                     let frame = inspector
                         .geth_builder()
-                        .geth_call_traces(call_config, result.gas_used());
+                        .geth_call_traces(call_config, result.tx_gas_used());
 
                     Ok(frame.into())
                 }

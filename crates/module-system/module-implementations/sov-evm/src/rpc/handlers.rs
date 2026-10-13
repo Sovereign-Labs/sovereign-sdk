@@ -476,12 +476,13 @@ where
         .map_err(EthApiError::from)?;
 
         let (gas_used, error) = match execution.result {
-            ExecutionResult::Success { gas_used, .. } => (U256::from(gas_used), None),
-            ExecutionResult::Revert { gas_used, .. } => {
-                (U256::from(gas_used), Some("execution reverted".to_string()))
-            }
-            ExecutionResult::Halt { gas_used, reason } => {
-                (U256::from(gas_used), Some(format!("{reason:?}")))
+            ExecutionResult::Success { gas, .. } => (U256::from(gas.tx_gas_used()), None),
+            ExecutionResult::Revert { gas, .. } => (
+                U256::from(gas.tx_gas_used()),
+                Some("execution reverted".to_string()),
+            ),
+            ExecutionResult::Halt { gas, reason, .. } => {
+                (U256::from(gas.tx_gas_used()), Some(format!("{reason:?}")))
             }
         };
 

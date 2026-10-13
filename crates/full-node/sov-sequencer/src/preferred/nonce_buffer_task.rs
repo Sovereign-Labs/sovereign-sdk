@@ -734,10 +734,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
                                         self.execution_backend
                                             .get_current_nonce_for_user(&credential_id)
                                     });
-                                    loop {
-                                        let Some(head_entry) = queue.txs.first_entry() else {
-                                            break;
-                                        };
+                                    while let Some(head_entry) = queue.txs.first_entry() {
                                         match head_entry.key().cmp(&user_nonce) {
                                             CmpOrdering::Less => {
                                                 // Stale transaction in queue - evict and ignore.

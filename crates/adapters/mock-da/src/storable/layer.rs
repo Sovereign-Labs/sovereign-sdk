@@ -196,9 +196,8 @@ impl StorableMockDaLayer {
 
         // Compute finalization using what next_height will be after increment.
         let new_next_height = self.next_height + 1;
-        let next_finalized_height = new_next_height
-            .checked_sub(self.blocks_to_finality.saturating_add(1))
-            .unwrap_or_default();
+        let next_finalized_height =
+            new_next_height.saturating_sub(self.blocks_to_finality.saturating_add(1));
         // Meaning that "chain head - blocks to finalization" has moved beyond genesis block.
         let finalized_header =
             if next_finalized_height > 0 && next_finalized_height > self.last_finalized_height {

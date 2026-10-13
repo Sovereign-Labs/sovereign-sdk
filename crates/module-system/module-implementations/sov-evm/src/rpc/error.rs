@@ -6,7 +6,6 @@ use alloy_primitives::Bytes;
 use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
 use jsonrpsee::types::ErrorObjectOwned;
 use revm::context::result::{ExecutionResult, HaltReason};
-use sov_modules_api::StateAccessor;
 use sov_rpc_eth_types::{EthApiError, EthResult, RevertError, RpcInvalidTransactionError};
 
 use crate::evm::conversions::RlpConversionError;
@@ -31,14 +30,14 @@ pub(crate) fn ensure_success(result: ExecutionResult<HaltReason>) -> EthResult<B
         ExecutionResult::Revert { output, .. } => {
             Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
         }
-        ExecutionResult::Halt { reason, gas_used } => {
-            Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
+        ExecutionResult::Halt { reason, gas, .. } => {
+            Err(RpcInvalidTransactionError::halt(reason, gas.tx_gas_used()).into())
         }
     }
 }
 
-impl<Ws: StateAccessor> From<crate::db::Error<Ws>> for EthApiError {
-    fn from(err: crate::db::Error<Ws>) -> Self {
+impl<E: std::fmt::Display> From<crate::db::Error<E>> for EthApiError {
+    fn from(err: crate::db::Error<E>) -> Self {
         EthApiError::EvmCustom(format!("Database error: {err}"))
     }
 }
