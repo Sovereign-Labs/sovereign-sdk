@@ -117,9 +117,15 @@ impl NodeClient {
         );
         let response = self.http_client.get(&nonce_url).send().await?;
 
-        let nonce = match response.error_for_status() {
-            Ok(res) => res.json::<NonceResponse>().await?.value,
-            Err(_) => 0,
+        let nonce = match nonce_from_response_status(response.status())? {
+            Some(nonce) => nonce,
+            None => {
+                response
+                    .error_for_status()?
+                    .json::<NonceResponse>()
+                    .await?
+                    .value
+            }
         };
 
         tracing::debug!(url = nonce_url, ?nonce, "Queried nonce");
@@ -372,6 +378,18 @@ impl NodeClient {
     }
 }
 
+fn nonce_from_response_status(status: reqwest::StatusCode) -> anyhow::Result<Option<u64>> {
+    if status == reqwest::StatusCode::NOT_FOUND {
+        return Ok(Some(0));
+    }
+
+    if !status.is_success() {
+        anyhow::bail!("Unsuccessful nonce response status {status}");
+    }
+
+    Ok(None)
+}
+
 #[derive(serde::Deserialize)]
 struct ModuleInfo {
     #[allow(dead_code)]
@@ -397,4 +415,26 @@ async fn check_if_rollup_has_standard_modules(
         && module_response.modules.contains_key("accounts")
         && module_response.modules.contains_key("uniqueness")
         && module_response.modules.contains_key("sequencer-registry"))
+}
+
+#[cfg(test)]
+mod tests {
+    use reqwest::StatusCode;
+
+    use super::*;
+
+    #[test]
+    fn nonce_response_not_found_returns_zero() {
+        assert_eq!(
+            nonce_from_response_status(StatusCode::NOT_FOUND).unwrap(),
+            Some(0)
+        );
+    }
+
+    #[test]
+    fn nonce_response_server_error_returns_error() {
+        let err = nonce_from_response_status(StatusCode::INTERNAL_SERVER_ERROR).unwrap_err();
+
+        assert!(err.to_string().contains("500"));
+    }
 }
