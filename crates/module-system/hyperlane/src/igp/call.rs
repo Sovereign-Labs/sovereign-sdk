@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use anyhow::{bail, Context as _, Result};
 use schemars::JsonSchema;
@@ -71,8 +71,8 @@ impl<S: Spec> InterchainGasPaymaster<S> {
     /// Emits `SetRelayerConfig` and `OracleDataUpdated` events
     pub fn set_relayer_config(
         &mut self,
-        domain_oracle_data: HashMap<Domain, ExchangeRateAndGasPrice>,
-        domain_default_gas: HashMap<Domain, Amount>,
+        domain_oracle_data: BTreeMap<Domain, ExchangeRateAndGasPrice>,
+        domain_default_gas: BTreeMap<Domain, Amount>,
         default_gas: Amount,
         beneficiary: Option<S::Address>,
         context: &Context<S>,

@@ -2,7 +2,7 @@
 //!
 //! <https://docs.hyperlane.xyz/docs/protocol/interchain-gas-payment>
 
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use anyhow::{anyhow, bail, Context as _, Result};
 // reference https://github.com/many-things/cw-hyperlane/blob/main/contracts/igps
@@ -109,9 +109,9 @@ impl<S: Spec> Module for InterchainGasPaymaster<S> {
                     "Setting relayer config"
                 );
                 self.set_relayer_config(
-                    vec_to_hashmap(oracle_data_to_vec(domain_oracle_data))
+                    vec_to_btreemap(oracle_data_to_vec(domain_oracle_data))
                         .context("domain oracle data")?,
-                    vec_to_hashmap(default_gas_to_vec(domain_default_gas))
+                    vec_to_btreemap(default_gas_to_vec(domain_default_gas))
                         .context("domain default gas")?,
                     default_gas,
                     beneficiary,
@@ -242,11 +242,13 @@ fn oracle_data_to_vec<const MAX_SIZE: usize>(
     data.into_iter().map(|r| (r.domain, r.data_value)).collect()
 }
 
-fn vec_to_hashmap<K, V>(vec: Vec<(K, V)>) -> Result<HashMap<K, V>>
+/// Rejects duplicate keys. A `BTreeMap` (not `HashMap`) is required: the result is iterated
+/// by metered, early-exiting code, so its order must be deterministic across nodes.
+fn vec_to_btreemap<K, V>(vec: Vec<(K, V)>) -> Result<BTreeMap<K, V>>
 where
-    K: Eq + std::hash::Hash + std::fmt::Debug,
+    K: Ord + std::fmt::Debug,
 {
-    let mut map = HashMap::with_capacity(vec.len());
+    let mut map = BTreeMap::new();
 
     for (key, value) in vec {
         if map.contains_key(&key) {
