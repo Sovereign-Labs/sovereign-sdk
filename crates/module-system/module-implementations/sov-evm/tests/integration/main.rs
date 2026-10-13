@@ -1,6 +1,7 @@
 mod archival_state;
 mod bls_precompiles;
 mod config;
+mod contract_creation_allowlist;
 mod contracts;
 mod genesis;
 mod helpers;
