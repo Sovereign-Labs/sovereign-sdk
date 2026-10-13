@@ -1,12 +1,13 @@
 //! Contains a simple client to interact with sovereign rollup node
 
 use std::collections::HashMap;
-use std::time::{Duration, Instant};
+use std::future::Future;
+use std::time::Duration;
 
 use anyhow::Context;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use futures::StreamExt;
+use futures::{Stream, StreamExt};
 use sov_api_spec::types;
 use sov_api_spec::types::AcceptTxBody;
 use sov_bank::utils::TokenHolder;
@@ -278,27 +279,17 @@ impl NodeClient {
     pub async fn wait_for_tx_processing(&self, tx_hash: &types::TxHash) -> anyhow::Result<()> {
         let max_waiting_time = Duration::from_secs(300);
         tracing::info!(?max_waiting_time, "Going to wait for batch to be processed");
-        let start_wait = Instant::now();
 
-        let mut subscription = self
-            .client
-            .subscribe_to_tx_status_updates(tx_hash.parse()?)
-            .await?;
-
-        while start_wait.elapsed() < max_waiting_time {
-            if let Some(tx_info) = subscription.next().await.transpose()? {
-                if tx_info.status == types::TxStatus::Processed
-                    || tx_info.status == types::TxStatus::Finalized
-                {
-                    tracing::info!("Rollup has processed the submitted batch!");
-                    return Ok(());
-                }
-            }
-        }
-        anyhow::bail!(
-            "Giving up waiting for target batch to be published after {:?}",
-            start_wait.elapsed()
-        );
+        wait_for_tx_processing_with_timeout(
+            async {
+                self.client
+                    .subscribe_to_tx_status_updates(tx_hash.parse()?)
+                    .await
+                    .map_err(anyhow::Error::from)
+            },
+            max_waiting_time,
+        )
+        .await
     }
 
     /// Performs a get request at given URL on the REST API socket.
@@ -369,6 +360,66 @@ impl NodeClient {
             .context("Deserialization of `KnownSequencerResponse`")?;
 
         Ok(Some(response.value))
+    }
+}
+
+async fn wait_for_tx_processing_with_timeout<F, S>(
+    subscription: F,
+    max_waiting_time: Duration,
+) -> anyhow::Result<()>
+where
+    F: Future<Output = anyhow::Result<S>>,
+    S: Stream<Item = anyhow::Result<types::TxInfo>> + Unpin,
+{
+    let result = tokio::time::timeout(max_waiting_time, async {
+        let mut subscription = subscription.await?;
+
+        while let Some(tx_info) = subscription.next().await.transpose()? {
+            if tx_info.status == types::TxStatus::Processed
+                || tx_info.status == types::TxStatus::Finalized
+            {
+                tracing::info!("Rollup has processed the submitted batch!");
+                return Ok(());
+            }
+        }
+
+        anyhow::bail!(
+            "Transaction status subscription ended before the target batch was processed"
+        );
+    })
+    .await;
+
+    match result {
+        Ok(result) => result,
+        Err(_) => anyhow::bail!(
+            "Giving up waiting for target batch to be published after {:?}",
+            max_waiting_time
+        ),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use futures::stream;
+
+    #[tokio::test(start_paused = true)]
+    async fn idle_subscription_respects_timeout() {
+        let subscription =
+            std::future::ready(Ok(stream::pending::<anyhow::Result<types::TxInfo>>()));
+
+        let task = tokio::spawn(wait_for_tx_processing_with_timeout(
+            subscription,
+            Duration::from_millis(1),
+        ));
+        tokio::task::yield_now().await;
+        tokio::time::advance(Duration::from_millis(1)).await;
+
+        let error = task.await.unwrap().unwrap_err();
+
+        assert!(error
+            .to_string()
+            .contains("Giving up waiting for target batch"));
     }
 }
 
