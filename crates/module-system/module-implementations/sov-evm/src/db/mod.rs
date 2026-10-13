@@ -8,7 +8,7 @@ use revm::{database_interface::DBErrorMarker, Database};
 use serde::{Deserialize, Serialize};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{BorshSerializedSize, TxState};
-use sov_modules_api::{Spec, StateAccessor, StateMap, StateReader};
+use sov_modules_api::{Spec, StateMap, StateReader};
 use sov_state::codec::BcsCodec;
 use sov_state::User;
 
@@ -17,16 +17,19 @@ pub(crate) mod init;
 pub(crate) mod metrics;
 
 #[derive(thiserror::Error, Debug)]
-pub enum Error<Ws: StateAccessor> {
+pub enum Error<E> {
     #[error(transparent)]
-    State(<Ws as StateReader<User>>::Error),
+    State(E),
     #[error("selfdestruct unsupported")]
     SelfDestructUnsupported,
     #[error("No block hash for block {0}")]
     BlockHashNotFound(BlockNumber),
 }
 
-impl<Ws: StateAccessor> DBErrorMarker for Error<Ws> {}
+impl<E: std::error::Error + Send + Sync + 'static> DBErrorMarker for Error<E> {}
+
+/// [`Error`] produced by an [`EvmDb`] backed by the state accessor `Ws`.
+pub type WsError<Ws> = Error<<Ws as StateReader<User>>::Error>;
 
 /// Stores information about an EVM account and a corresponding account state.
 #[derive(Deserialize, Serialize, Debug, PartialEq, Clone, Default, Deref, Into)]
@@ -47,7 +50,7 @@ impl<'a, Ws: TxState<S>, S: Spec> Database for EvmDb<'a, Ws, S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    type Error = Error<Ws>;
+    type Error = WsError<Ws>;
 
     fn basic(&mut self, address: Address) -> Result<Option<AccountInfo>, Self::Error> {
         let maybe_account_info = self
@@ -140,9 +143,6 @@ pub(crate) struct CachedByteCode {
 
 impl BorshSerializedSize for CachedByteCode {
     fn serialized_size(&self) -> usize {
-        match &self.code {
-            Bytecode::Eip7702(bytes) => bytes.raw.len(),
-            Bytecode::LegacyAnalyzed(analyzed) => analyzed.bytecode().len(),
-        }
+        self.code.bytecode().len()
     }
 }

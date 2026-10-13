@@ -8,7 +8,7 @@ use revm::InspectEvm;
 use revm::{context::TxEnv, inspector::InspectorEvmTr};
 use revm::{
     context::{
-        result::{EVMError, ExecResultAndState, ExecutionResult},
+        result::{EVMError, ExecResultAndState, ExecutionResult, ResultGas},
         BlockEnv, CfgEnv, Context,
     },
     Database, MainContext,
@@ -43,7 +43,7 @@ pub(crate) fn get_cfg_env(
     // base-fee admission check for EIP-1559 validation in this execution mode.
     cfg_env.disable_base_fee = true;
     let spec = get_spec_id(&cfg.hardforks, block_env.number.to::<u64>());
-    cfg_env.with_spec(spec)
+    cfg_env.with_spec_and_mainnet_gas_params(spec)
 }
 
 /// Execute an Ethereum transaction and commit it to the database.
@@ -136,17 +136,12 @@ fn context<DB: Database<Error = E>, E: DBErrorMarker>(
 }
 
 fn rebate_gas(exec_result: &mut ExecResultAndState<ExecutionResult>, gas_to_rebate: u64) {
-    match &mut exec_result.result {
-        ExecutionResult::Success { gas_used, .. } => {
-            *gas_used = gas_used.saturating_sub(gas_to_rebate);
-        }
-        ExecutionResult::Revert { gas_used, .. } => {
-            *gas_used = gas_used.saturating_sub(gas_to_rebate);
-        }
-        ExecutionResult::Halt { gas_used, .. } => {
-            *gas_used = gas_used.saturating_sub(gas_to_rebate);
-        }
-    }
+    let (ExecutionResult::Success { gas, .. }
+    | ExecutionResult::Revert { gas, .. }
+    | ExecutionResult::Halt { gas, .. }) = &mut exec_result.result;
+    let gas_used = gas.tx_gas_used().saturating_sub(gas_to_rebate);
+    // Downstream only consumes `tx_gas_used`, so the rebated value is stored as the total with no refund or floor.
+    *gas = ResultGas::default().with_total_gas_spent(gas_used);
 }
 
 #[cfg(test)]
@@ -185,7 +180,7 @@ mod tests {
         expected_cfg_env.tx_chain_id_check = false;
         expected_cfg_env.disable_base_fee = true;
         expected_cfg_env.limit_contract_code_size = Some(100);
-        expected_cfg_env.spec = SpecId::CANCUN;
+        expected_cfg_env.set_spec_and_mainnet_gas_params(SpecId::CANCUN);
         expected_cfg_env.memory_limit = 50 * 1024 * 1024; // 50MB
 
         assert_eq!(expected_cfg_env, cfg_env);

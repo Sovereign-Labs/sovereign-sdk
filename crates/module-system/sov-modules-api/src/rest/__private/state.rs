@@ -323,6 +323,8 @@ where
     Codec::KeyCodec: StateItemCodec<K>,
     Codec::ValueCodec: StateItemCodec<V>,
 {
+    // The error is an axum `Response`, which is large by design.
+    #[allow(clippy::result_large_err)]
     async fn get_state_map_items_route(
         State(state): State<Self>,
         query: StateMapItemsQuery,

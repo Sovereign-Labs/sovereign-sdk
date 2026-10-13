@@ -509,13 +509,11 @@ impl Block {
         let mut blocks = vec![];
 
         // We start from 1 because genesis is already in the state.
-        let mut nr = 1;
-        for txs in transfers.chunks(batch_size) {
+        for (nr, txs) in (1..).zip(transfers.chunks(batch_size)) {
             blocks.push(Block {
                 nr,
                 transactions: txs.to_vec(),
             });
-            nr += 1;
         }
 
         blocks
