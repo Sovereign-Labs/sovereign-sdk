@@ -67,6 +67,10 @@ static ORACLE_DATA: LazyLock<Mutex<OracleSequencingData>> =
 /// runtime implementation.
 static GROW_ON_FINALIZE: AtomicBool = AtomicBool::new(false);
 
+/// When set, `finalize_sequencing_data` publishes the sequencing data unchanged, so the published
+/// tx keeps the full size it was executed with.
+static SKIP_PRUNING: AtomicBool = AtomicBool::new(false);
+
 #[derive(Clone, Debug, Default, PartialEq, Eq, BorshDeserialize, BorshSerialize)]
 pub struct OracleSequencingData(BTreeMap<u64, u64>);
 
@@ -231,6 +235,9 @@ impl<S: Spec> SequencingDataHandler<S> for PruningCapabilities<'_, S> {
     ) -> Self::SequencingData {
         if GROW_ON_FINALIZE.load(Ordering::SeqCst) {
             data.0.extend((0..64).map(|i| (u64::MAX - i, i)));
+            return data;
+        }
+        if SKIP_PRUNING.load(Ordering::SeqCst) {
             return data;
         }
         let Some(scratchpad) = scratchpad else {
@@ -626,6 +633,101 @@ async fn sequencer_publishes_original_sequencing_data_if_finalization_grows_it(
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn sequencer_rejects_tx_exceeding_max_batch_size_with_sequencing_data() -> anyhow::Result<()>
+{
+    const MAX_BATCH_SIZE: usize = 256 * 1024;
+    let test_rollup = setup_pruning_rollup_with_max_batch_size(MAX_BATCH_SIZE).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await?;
+
+    let evm_client = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
+    let tester_address = deploy_precompile_tester(&evm_client).await?;
+
+    // Each entry serializes to 16 bytes, so the attached sequencing data alone is twice the max
+    // batch size, while staying well under `MAX_FULLY_BAKED_TX_SIZE`: only the batch limit can
+    // reject this tx.
+    let oracle_entries = (0..2 * MAX_BATCH_SIZE as u64 / 16)
+        .map(|key| (key, key + 1))
+        .collect::<BTreeMap<_, _>>();
+    set_oracle_data(oracle_entries.clone());
+
+    let err = assert_precompile_values(&evm_client, tester_address, &[0], &oracle_entries)
+        .await
+        .expect_err("a tx whose sequencing data exceeds the max batch size must be rejected");
+    assert!(
+        err.to_string()
+            .contains("Transaction cannot be included in the batch due to batch size limitations"),
+        "unexpected rejection reason: {err}"
+    );
+
+    test_rollup.shutdown().await?;
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn rollup_accepts_tx_with_sequencing_data_just_under_max_size() -> anyhow::Result<()> {
+    use sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE;
+    /// Slack below `MAX_FULLY_BAKED_TX_SIZE`, in case the measured tx is a few bytes longer than
+    /// the probe tx (e.g. due to signature encoding).
+    const HEADROOM: usize = 16;
+
+    // The batch limit must not interfere: only the per-tx limit is under test.
+    let test_rollup = setup_pruning_rollup_with_max_batch_size(4 * MAX_FULLY_BAKED_TX_SIZE).await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await?;
+
+    let evm_client = create_simple_storage_client(test_rollup.http_addr, SENDER_PRIV_KEY).await;
+    let tester_address = deploy_precompile_tester(&evm_client).await?;
+    // Publish the full sequencing data, so that the tx on DA is as large as the one executed.
+    SKIP_PRUNING.store(true, Ordering::SeqCst);
+
+    // Measure the size of an equivalent tx without large sequencing data.
+    let probe_entries = BTreeMap::from([(0, 1)]);
+    set_oracle_data(probe_entries.clone());
+    let last_checked_height = test_rollup.da_service.get_head_block_header().await?.height;
+    let probe_hash =
+        assert_precompile_values(&evm_client, tester_address, &[0], &probe_entries).await?;
+    test_rollup.force_close_batch().await?;
+    let probe_tx = wait_for_published_tx(&test_rollup, probe_hash, last_checked_height).await?;
+
+    // Borsh encodes the map as a 4-byte length followed by 16 bytes per entry.
+    let entry_count = (MAX_FULLY_BAKED_TX_SIZE - HEADROOM - probe_tx.data.len() - 4) / 16;
+    let oracle_entries = (0..entry_count as u64)
+        .map(|key| (key, key + 1))
+        .collect::<BTreeMap<_, _>>();
+    set_oracle_data(oracle_entries.clone());
+
+    let last_checked_height = test_rollup.da_service.get_head_block_header().await?.height;
+    let tx_hash =
+        assert_precompile_values(&evm_client, tester_address, &[0], &oracle_entries).await?;
+    test_rollup.force_close_batch().await?;
+    let published_tx = wait_for_published_tx(&test_rollup, tx_hash, last_checked_height).await?;
+
+    let total_payload_len = published_tx.data.len()
+        + published_tx
+            .sequencing_data
+            .as_ref()
+            .expect("oracle tx should include sequencing data")
+            .len();
+    assert!(
+        total_payload_len <= MAX_FULLY_BAKED_TX_SIZE
+            && MAX_FULLY_BAKED_TX_SIZE - total_payload_len < 4 * HEADROOM,
+        "published tx payload should be just under the max size, got {total_payload_len}"
+    );
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_node_synced().await?;
+    let receipt = evm_client.wait_for_finalized_receipt(tx_hash).await;
+    assert!(
+        receipt.status(),
+        "a tx just under the max size should be finalized by the full node"
+    );
+
+    test_rollup.shutdown().await?;
+    Ok(())
+}
+
 async fn setup_pruning_rollup() -> TestRollup<PruningBlueprint> {
     setup_pruning_rollup_with_max_batch_size(sov_test_utils::TEST_MAX_BATCH_SIZE).await
 }
@@ -812,6 +914,37 @@ async fn wait_for_pruned_txs_on_da(
     })
     .await
     .expect("timed out waiting for oracle txs to be published")
+}
+
+/// Waits for the tx with the given hash to be published on DA, and returns it as published.
+async fn wait_for_published_tx(
+    test_rollup: &TestRollup<PruningBlueprint>,
+    tx_hash: TxHash,
+    mut last_checked_height: u64,
+) -> anyhow::Result<sov_modules_api::FullyBakedTx> {
+    let tx_hash = tx_hash_bytes(tx_hash);
+    tokio::time::timeout(Duration::from_secs(20), async {
+        loop {
+            test_rollup.da_service.produce_block_now().await?;
+            let head_height = test_rollup.da_service.get_head_block_header().await?.height;
+            for height in last_checked_height + 1..=head_height {
+                let mut block = test_rollup.da_service.get_block_at(height).await?;
+                for blob in block.batch_blobs.iter_mut() {
+                    let batch = PreferredBatchData::try_from_slice(blob.full_data())?;
+                    for tx in batch.data.iter() {
+                        let hash = <RT as RuntimeTrait<S>>::Auth::compute_tx_hash(tx)?;
+                        if <[u8; 32]>::from(hash) == tx_hash {
+                            return anyhow::Ok(tx.clone());
+                        }
+                    }
+                }
+            }
+            last_checked_height = head_height;
+            tokio::task::yield_now().await;
+        }
+    })
+    .await
+    .expect("timed out waiting for tx to be published")
 }
 
 async fn restart_from_scratch_on_same_da(
