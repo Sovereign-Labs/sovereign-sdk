@@ -343,7 +343,7 @@ fn test_eth_estimate_gas_historical_block_below_receipt_projection_height_skips_
 
     let (historical_estimate, latest_estimate) = runner.query_visible_state(|state| {
         let evm = Evm::<S>::default();
-        let live_block_number = evm.block_number(state).unwrap().to::<u64>();
+        let live_block_number = evm.block_number(&Default::default(), state).unwrap().to::<u64>();
         assert!(
             live_block_number > EVM_RECEIPT_ACTUAL_FEE_HEIGHT,
             "test precondition failed: live height {live_block_number} must be above EVM_RECEIPT_ACTUAL_FEE_HEIGHT={EVM_RECEIPT_ACTUAL_FEE_HEIGHT}"

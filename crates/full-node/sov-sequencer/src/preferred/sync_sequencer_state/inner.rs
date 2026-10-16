@@ -68,6 +68,10 @@ pub(crate) enum DoNewTxError<S: Spec> {
         max_batch_size: usize,
         tx_len: usize,
     },
+    TxWithSequencingDataTooBig {
+        total_payload_len: usize,
+        max_payload_len: usize,
+    },
     ExecutorError(RollupBlockExecutorError<S>),
     Shutdown,
 }
@@ -797,6 +801,26 @@ where
                     current_batch_size: batch_size_tracker.current_batch_size,
                     max_batch_size: batch_size_tracker.max_batch_size,
                     tx_len,
+                }),
+                request_used,
+            );
+        }
+
+        // `MAX_FULLY_BAKED_TX_SIZE` is enforced by `FullyBakedTx`'s deserializers, so a tx that
+        // exceeds it once sequencing data is attached would execute and soft-confirm here, yet
+        // produce a batch blob that every node rejects (slashing us). Reject it up front instead.
+        // Finalization is never allowed to grow the sequencing data (see
+        // `RollupBlockExecutor::finalize_tx_sequencing_data`), so this check is conservative.
+        // Saturating is correct here: a saturated sum still exceeds the limit and is rejected.
+        let total_payload_len = baked_tx
+            .data
+            .len()
+            .saturating_add(baked_tx.sequencing_data.as_ref().map_or(0, |d| d.len()));
+        if total_payload_len > sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE {
+            return (
+                Err(DoNewTxError::TxWithSequencingDataTooBig {
+                    total_payload_len,
+                    max_payload_len: sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE,
                 }),
                 request_used,
             );

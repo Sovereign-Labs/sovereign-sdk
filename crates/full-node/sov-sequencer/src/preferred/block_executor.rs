@@ -701,8 +701,21 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         let mut runtime = Rt::default();
         let mut handler = runtime.sequencing_data_handler();
-        let finalized = handler.finalize_sequencing_data(decoded, scratchpad);
-        tx.set_sequencing_metadata(&finalized);
+        let finalized = borsh::to_vec(&handler.finalize_sequencing_data(decoded, scratchpad))
+            .expect("Serialization to vec is infallible");
+        // The tx and batch size checks in `Inner::do_new_tx` were made against the original
+        // sequencing data, so publishing larger data could produce an oversized tx or batch that
+        // every node rejects. The original data is always safe to publish: it is exactly what the
+        // tx was executed with.
+        if finalized.len() > data.len() {
+            tracing::error!(
+                original_len = data.len(),
+                finalized_len = finalized.len(),
+                "Finalizing sequencing data grew it; publishing the original sequencing data instead. This is a bug in the runtime's `SequencingDataHandler::finalize_sequencing_data`"
+            );
+            return;
+        }
+        tx.sequencing_data = Some(finalized.into());
     }
 
     fn update_kernel_with_user_state_root(&mut self) {

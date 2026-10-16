@@ -1,6 +1,7 @@
 use alloy_consensus::constants::KECCAK_EMPTY;
 use alloy_primitives::{Address, B256};
 use anyhow::ensure;
+use itertools::Itertools;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
@@ -564,7 +565,10 @@ pub(crate) fn verify_contract_creation_allowlist<
     if cfg.contract_creation_policy.allows(signer) {
         return Ok(());
     }
-    for (address, account) in state_changes.iter() {
+    // Sort addresses to avoid non-determinism: the loop short-circuits on the first new contract,
+    // so the number of (gas-metered) `db.basic` reads depends on iteration order, and `HashMap`
+    // iteration order is randomized per process.
+    for (address, account) in state_changes.iter().sorted_by_key(|(address, _)| **address) {
         let is_contract = account
             .info
             .code

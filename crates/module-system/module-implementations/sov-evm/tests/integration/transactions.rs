@@ -175,7 +175,7 @@ fn test_receipt_uses_eip1559_formula_before_activation_height() {
         assert: Box::new(move |_ctx, state| {
             let sender_balance_after = evm.get_balance(from.address(), None, state).unwrap();
             let receipt = evm
-                .get_transaction_receipt(transfer.hash, state)
+                .get_transaction_receipt(&Default::default(), transfer.hash, state)
                 .unwrap()
                 .expect("receipt should exist");
 

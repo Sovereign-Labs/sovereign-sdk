@@ -1,4 +1,4 @@
-use std::collections::HashMap;
+use std::collections::BTreeMap;
 
 use serde::de::DeserializeOwned;
 use serde::ser::Serialize;
@@ -53,7 +53,7 @@ pub enum Event<S: Spec> {
         /// Relayer.
         relayer: S::Address,
         /// Custom gas per domain.
-        domain_custom_gas: HashMap<Domain, Amount>,
+        domain_custom_gas: BTreeMap<Domain, Amount>,
         /// Default (fallback) gas.
         default_gas: Amount,
         /// Beneficiary who can claim relayer rewards.
