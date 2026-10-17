@@ -1,14 +1,12 @@
 use crate::{Roles, RT};
 use demo_stf::MultiAddressEvmSolana;
 use sov_mock_da::{MockBlob, MockDaSpec};
-use sov_modules_api::{Amount, BatchSequencerReceipt, CryptoSpec, PublicKey, Spec};
-use sov_rollup_interface::crypto::PrivateKey;
+use sov_modules_api::{Amount, BatchSequencerReceipt, CryptoSpec, Spec};
+use sov_rollup_interface::crypto::CredentialId;
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_test_utils::runtime::{sov_bank, Bank, Coins, TestRunner, TokenId};
 use sov_test_utils::storage::ForklessStorageManager;
-use sov_test_utils::{
-    AsUser, MockZkvm, TestPrivateKey, TestUser, TransactionType, TxReceiptContents,
-};
+use sov_test_utils::{AsUser, MockZkvm, TestUser, TransactionType, TxReceiptContents};
 use std::collections::HashMap;
 
 type BatchReceipt<S> =
@@ -16,13 +14,18 @@ type BatchReceipt<S> =
 
 type BenchmarkMessages = Vec<RelevantBlobs<MockBlob>>;
 
-/// Builds a simple transfer transaction
-pub fn build_send_tx<S>(sender: &TestUser<S>, token_id: TokenId) -> TransactionType<RT<S>, S>
+/// Builds a simple transfer transaction to a fresh address derived from `recipient_seed`
+pub fn build_send_tx<S>(
+    sender: &TestUser<S>,
+    token_id: TokenId,
+    recipient_seed: u64,
+) -> TransactionType<RT<S>, S>
 where
     S: Spec<Address = MultiAddressEvmSolana>,
 {
-    let priv_key = TestPrivateKey::generate();
-    let to_address: <S as Spec>::Address = priv_key.pub_key().credential_id().into();
+    let mut credential = [0xab; 32];
+    credential[..8].copy_from_slice(&recipient_seed.to_le_bytes());
+    let to_address: <S as Spec>::Address = CredentialId::from_bytes(credential).into();
 
     sender.create_plain_message::<_, Bank<S>>(sov_bank::CallMessage::<S>::Transfer {
         to: to_address,
@@ -124,12 +127,14 @@ where
         Storage = Sm::Storage,
     >,
 {
+    let num_senders = roles.senders.len() as u64;
     let send_messages = (0..slots_to_process)
-        .map(|_| {
+        .map(|slot| {
             roles
                 .senders
                 .iter()
-                .map(|sender| build_send_tx(sender, token_id))
+                .enumerate()
+                .map(|(i, sender)| build_send_tx(sender, token_id, slot * num_senders + i as u64))
                 .collect::<Vec<_>>()
         })
         .collect::<Vec<_>>();

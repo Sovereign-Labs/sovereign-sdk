@@ -393,5 +393,6 @@ impl From<RollupDbConfig> for RollupDbConfigWithCustomizations {
 fn nomt_default_options() -> Options {
     let mut opts = Options::new();
     opts.metrics(true);
+    opts.io_workers(8);
     opts
 }
