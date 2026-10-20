@@ -1,3 +1,4 @@
+#![allow(clippy::float_arithmetic)]
 //! Measures `NomtStorageManager::finalize` (one `DbGroup::commit` per slot) under a
 //! production-like per-slot workload.
 //!
@@ -219,11 +220,7 @@ fn nomt_writes(writes: &Writes) -> Vec<(KeyPath, nomt::KeyReadWrite)> {
     out
 }
 
-fn ledger_commit(
-    height: u64,
-    txs: usize,
-    rng: &mut StdRng,
-) -> SlotCommit<MockBlock, (), ()> {
+fn ledger_commit(height: u64, txs: usize, rng: &mut StdRng) -> SlotCommit<MockBlock, (), ()> {
     let block = MockBlock {
         header: header(height),
         ..Default::default()
@@ -295,7 +292,11 @@ fn save_slot(manager: &mut Manager, height: u64, input: SlotInput, rng: &mut Std
         .materialize_slot(ledger_commit(height, input.txs, rng), &root)
         .unwrap();
     let slot = SlotNumber::new(height);
-    ledger.merge(ledger_db.materialize_latest_finalize_slot(slot, slot).unwrap());
+    ledger.merge(
+        ledger_db
+            .materialize_latest_finalize_slot(slot, slot)
+            .unwrap(),
+    );
 
     drop(storage);
     manager
