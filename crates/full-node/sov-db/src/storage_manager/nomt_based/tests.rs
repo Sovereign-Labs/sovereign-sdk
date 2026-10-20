@@ -181,6 +181,95 @@ impl TestableStorage for TestNomtStorage {
 
 type Sm = NomtStorageManager<MockDaSpec, H, TestNomtStorage>;
 
+#[test]
+fn independent_database_paths_survive_reopen() {
+    for (live_override, ledger_override, user_override) in [
+        (false, false, false),
+        (true, false, false),
+        (false, true, false),
+        (false, false, true),
+        (true, true, true),
+    ] {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let base_path = temp_dir.path().join("default");
+        let mut config = RollupDbConfig::default_in_path(base_path.clone());
+        config.live_db_path = live_override.then(|| temp_dir.path().join("live"));
+        config.ledger_db_path = ledger_override.then(|| temp_dir.path().join("ledger"));
+        config.user_nomt_db_path = user_override.then(|| temp_dir.path().join("user"));
+
+        let header = MockBlockHeader::from_height(1);
+        let slot_number = SlotNumber::new(header.height());
+        let key = vec![1, 0, 0];
+        let value = vec![42];
+        let state_root = {
+            let mut storage_manager = Sm::new(config.clone(), false).unwrap();
+            for (override_path, default_suffix, overridden) in [
+                (&config.live_db_path, "state-db", live_override),
+                (&config.ledger_db_path, "ledger", ledger_override),
+                (&config.user_nomt_db_path, "user_nomt_db", user_override),
+            ] {
+                let default_path = base_path.join(default_suffix);
+                let actual_path = override_path.as_ref().unwrap_or(&default_path);
+                assert!(actual_path.is_dir(), "{}", actual_path.display());
+                assert_eq!(default_path.exists(), !overridden);
+                if default_suffix != "user_nomt_db" {
+                    assert!(actual_path.join("CURRENT").is_file());
+                }
+                if overridden {
+                    assert!(!actual_path.join(default_suffix).exists());
+                }
+            }
+            for suffix in ["kernel_nomt_db", "accessory", "archival-state-db"] {
+                assert!(base_path.join(suffix).is_dir());
+            }
+
+            let (storage, ledger_reader) = storage_manager.create_state_for(&header).unwrap();
+            let (changes, state_root) =
+                storage.materialize_from_key_values(&[(key.clone(), Some(value.clone()))], 0);
+            let ledger = LedgerDb::with_reader(ledger_reader).unwrap();
+            let mut ledger_changes = SchemaBatch::new();
+            ledger
+                .put_slot(
+                    &StoredSlot {
+                        hash: header.hash().into(),
+                        state_root: state_root.to_vec().into(),
+                        extra_data: vec![].into(),
+                        batches: BatchNumber(0)..BatchNumber(0),
+                        discarded_blobs: DiscardedBlobNumber(0)..DiscardedBlobNumber(0),
+                        timestamp: header.time(),
+                    },
+                    &slot_number,
+                    &mut ledger_changes,
+                )
+                .unwrap();
+            ledger_changes.merge(
+                ledger
+                    .materialize_latest_finalize_slot(slot_number, slot_number)
+                    .unwrap(),
+            );
+            storage_manager
+                .save_change_set(&header, changes, ledger_changes)
+                .unwrap();
+            storage_manager.finalize(&header).unwrap();
+            state_root
+        };
+
+        let mut storage_manager = Sm::new(config, false).unwrap();
+        let (storage, ledger_reader) = storage_manager
+            .create_state_for(&MockBlockHeader::from_height(2))
+            .unwrap();
+        assert_eq!(storage.get_value(&key), Some(value));
+        let (_, reopened_root) = storage.materialize_from_key_values(&[], 1);
+        assert_eq!(reopened_root, state_root);
+        let ledger = LedgerDb::with_reader(ledger_reader).unwrap();
+        assert_eq!(ledger.get_head_slot().unwrap().unwrap().0, slot_number);
+        assert_eq!(
+            ledger.get_head_state_root().unwrap(),
+            Some(state_root.to_vec())
+        );
+    }
+}
+
 /// Awaits (up to 5s) any in-flight background pruner, yielding to the runtime between polls.
 /// Returns immediately if no pruner is running or it has already finished.
 async fn wait_for_background_pruner(storage_manager: &Sm) {

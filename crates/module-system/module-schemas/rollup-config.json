@@ -1005,14 +1005,21 @@
           ]
         },
         "ledger_db_path": {
-          "description": "Optional custom path for the ledger database.\n\nWhen set, ledger DB data is stored at this path. When not set, the ledger DB is stored\nunder [`RollupDbConfig::path`] (the existing behavior).",
+          "description": "Exact directory for the ledger database. Defaults to `path/ledger`.\nRelative paths are resolved from the process working directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "live_db_path": {
+          "description": "Exact directory for the live state database. Defaults to `path/state-db`.\nRelative paths are resolved from the process working directory.",
           "type": [
             "string",
             "null"
           ]
         },
         "path": {
-          "description": "Path where all databases are stored",
+          "description": "Default parent directory for databases without a path override.",
           "type": "string"
         },
         "pruner": {
@@ -1055,6 +1062,13 @@
           ],
           "format": "uint",
           "minimum": 0
+        },
+        "user_nomt_db_path": {
+          "description": "Exact directory for the user NOMT database. Defaults to `path/user_nomt_db`.\nRelative paths are resolved from the process working directory.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "user_page_cache_size": {
           "description": "Page cache size for user state.\nMore details at [`Options::page_cache_size`]",
