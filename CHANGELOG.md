@@ -1,6 +1,9 @@
 # 2026-10-20
 - #3077 Make benchmark inputs reproducible and report median-block TPS and a receipt digest.
 
+# 2026-10-13
+- #3075 Added a new config value: `runner.http_config.max_rpc_response_body_size`. This overrides the maximum response size for JSON-RPC requests (primarily used for the Ethereum RPC interface). When unset, keeps the old default of 10 MiB.
+
 # 2026-09-28
 - #3061 **Breaking Change (chain hash)** Universal wallet: tuple structs (e.g. newtypes) now record their type name in the schema, via a new `type_name: Option<String>` field on `Tuple` types (`None` for plain tuples and enum variant contents). A tuple struct can opt out of name recording with the new `#[sov_wallet(anonymize_tuple)]` attribute. The borsh encoding of schemas changes, and with it every chain hash; schema JSONs from older SDKs still parse. Display output, JSON-to-borsh parsing and EIP-712 encodings are unaffected (except for the changed chain hash). The `sov-universal-wallet`, `sov-universal-wallet-macros` and `sov-universal-wallet-macro-helpers` crates are bumped to 0.5.0.
 
