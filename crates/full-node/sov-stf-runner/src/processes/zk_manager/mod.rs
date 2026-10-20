@@ -94,8 +94,8 @@ where
 
             // Cursor handle is shared: the aggregator advances it after a
             // publish succeeds, and the intake advances it for slots that are
-            // intentionally skipped (e.g. the resync window). See module-level
-            // docs.
+            // intentionally skipped (e.g. the resync window). See the
+            // `IntakeTask` and `AggregatorTask` docs.
             let cursor = self.stf_info_receiver.cursor_handle();
 
             let aggregator = AggregatorTask {

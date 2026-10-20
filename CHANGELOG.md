@@ -1,4 +1,4 @@
-# 2026-06-24
+# 2026-07-02
 - #2443 DB: Moves proof-manager state out of `LedgerDb` into a dedicated `ProofManagerDb` (separate RocksDB) that persists only the re-provable `StateTransitionInfo` queue, keyed by `(slot, DA block hash)` so competing DA forks stay distinct. The receive cursor and finalized-visible cutoff are now in-memory and recomputed on startup from the ledger view, so the node re-proves the latest STF info after a restart rather than persisting cursors. Existing `LedgerDb` instances are unaffected (the legacy STF-info column families are retained for compatibility).
   * The zk proving pipeline now requires `--start-fresh-outer-proof-on-resync` when resuming from an existing outer proof; it errors at startup otherwise.
 # 2026-06-25

@@ -1,4 +1,3 @@
-#![allow(dead_code)]
 use std::marker::PhantomData;
 use std::num::NonZero;
 use std::sync::{Arc, Mutex};
@@ -41,10 +40,6 @@ impl<StateRoot, Witness, Da: DaSpec> StateTransitionInfo<StateRoot, Witness, Da>
 
     pub(crate) fn da_block_header(&self) -> &Da::BlockHeader {
         &self.data.da_block_header
-    }
-
-    pub(crate) fn initial_state_root(&self) -> &StateRoot {
-        &self.data.initial_state_root
     }
 
     pub(crate) fn witness(self) -> StateTransitionWitness<StateRoot, Witness, Da> {
@@ -226,8 +221,9 @@ pub struct Receiver<StateRoot, Witness, Da: DaSpec> {
 /// - If the number of entries in the Db exceeds `max_nb_of_infos_in_db`, the oldest data is pruned.
 ///
 /// The channel can only be created if `max_channel_size <= max_nb_of_infos_in_db`.
+#[cfg(test)]
 #[allow(clippy::type_complexity)]
-pub fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
+pub(crate) fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     proof_manager_db: ProofManagerDb,
     max_channel_size: NonZero<u64>,
     max_nb_of_infos_in_db: NonZero<u64>,
@@ -396,9 +392,7 @@ where
             });
         });
 
-        if height_to_notify >= next_height_to_send {
-            self.next_height_to_send = height_to_notify.saturating_add(1);
-        }
+        self.next_height_to_send = height_to_notify.saturating_add(1);
 
         Ok(())
     }
@@ -536,8 +530,12 @@ where
             // process the same height twice.
             if slot_number >= next_height_to_receive {
                 let stf_info = self.get(slot_number, da_block_hash)?.unwrap_or_else(|| {
-                    panic!("The `stf-info-manager` sender notified that the stf height {slot_number} (canonical fork) is available but the transition is missing from the proof manager DB.
-                    Please ensure that the `stf-info-manager` only notifies for heights up to the finalized-visible cutoff. This is a bug. Please report it")
+                    panic!(
+                        "The `stf-info-manager` sender notified that the stf height {slot_number} (canonical fork) \
+                         is available but the transition is missing from the proof manager DB. Please ensure that \
+                         the `stf-info-manager` only notifies for heights up to the finalized-visible cutoff. \
+                         This is a bug. Please report it"
+                    )
                 });
 
                 return Ok(Some(stf_info));
@@ -619,18 +617,65 @@ impl CursorHandle {
     }
 }
 
+/// Test fixtures shared by the stf-info-manager unit tests and other in-crate consumers of the
+/// channel (e.g. the attestation manager tests).
+#[cfg(test)]
+pub(crate) mod test_fixtures {
+    use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
+    use sov_modules_api::da::Time;
+    use sov_rollup_interface::common::SlotNumber;
+    use sov_rollup_interface::da::{DaProof, RelevantBlobs, RelevantProofs};
+    use sov_rollup_interface::zk::StateTransitionWitness;
+
+    use super::StateTransitionInfo;
+
+    /// Builds a `StateTransitionInfo` whose DA block hash is `[height as u8; 32]`.
+    pub(crate) fn make_stf_info(height: u64) -> StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec> {
+        make_stf_info_with_hash(height, [height as u8; 32])
+    }
+
+    pub(crate) fn make_stf_info_with_hash(
+        height: u64,
+        hash: [u8; 32],
+    ) -> StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec> {
+        StateTransitionInfo::new(StateTransitionWitness {
+            initial_state_root: vec![1, 2, 3],
+            final_state_root: vec![3, 4, 5],
+            da_block_header: MockBlockHeader {
+                prev_hash: [0; 32].into(),
+                hash: MockHash(hash),
+                height,
+                time: Time::now(),
+            },
+            relevant_proofs: RelevantProofs {
+                batch: DaProof {
+                    inclusion_proof: Default::default(),
+                    completeness_proof: Default::default(),
+                },
+                proof: DaProof {
+                    inclusion_proof: Default::default(),
+                    completeness_proof: Default::default(),
+                },
+            },
+            relevant_blobs: RelevantBlobs {
+                proof_blobs: vec![],
+                batch_blobs: vec![],
+            },
+            witness: vec![],
+            slot_number: SlotNumber::new(height),
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use std::path::Path;
 
-    use sov_mock_da::{MockBlockHeader, MockDaSpec, MockHash};
-    use sov_modules_api::da::Time;
+    use sov_mock_da::{MockDaSpec, MockHash};
     use sov_modules_api::provable_height_tracker::InfiniteHeight;
-    use sov_rollup_interface::da::{DaProof, RelevantBlobs, RelevantProofs};
-    use sov_rollup_interface::zk::StateTransitionWitness;
 
+    use super::test_fixtures::{make_stf_info, make_stf_info_with_hash};
     use super::*;
-    use crate::processes::StateTransitionInfo;
 
     type StateRoot = Vec<u8>;
     type Witness = Vec<u8>;
@@ -1116,41 +1161,5 @@ mod tests {
         }
         assert!(receiver.read_next().await.is_err());
         Ok(())
-    }
-
-    fn make_stf_info(height: u64) -> StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec> {
-        make_stf_info_with_hash(height, [height as u8; 32])
-    }
-
-    fn make_stf_info_with_hash(
-        height: u64,
-        hash: [u8; 32],
-    ) -> StateTransitionInfo<Vec<u8>, Vec<u8>, MockDaSpec> {
-        StateTransitionInfo::new(StateTransitionWitness {
-            initial_state_root: vec![1, 2, 3],
-            final_state_root: vec![3, 4, 5],
-            da_block_header: MockBlockHeader {
-                prev_hash: [0; 32].into(),
-                hash: MockHash(hash),
-                height,
-                time: Time::now(),
-            },
-            relevant_proofs: RelevantProofs {
-                batch: DaProof {
-                    inclusion_proof: Default::default(),
-                    completeness_proof: Default::default(),
-                },
-                proof: DaProof {
-                    inclusion_proof: Default::default(),
-                    completeness_proof: Default::default(),
-                },
-            },
-            relevant_blobs: RelevantBlobs {
-                proof_blobs: vec![],
-                batch_blobs: vec![],
-            },
-            witness: vec![],
-            slot_number: SlotNumber::new(height),
-        })
     }
 }

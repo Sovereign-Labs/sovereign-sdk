@@ -70,14 +70,6 @@ impl ProofManagerDb {
         self.db.get::<StfInfoByNumber>(&(slot, hash))
     }
 
-    /// Delete STF info for a specific `(slot, DA block hash)`.
-    pub fn delete_stf_info(&self, slot: SlotNumber, hash: DbHash) -> anyhow::Result<()> {
-        let mut batch = SchemaBatch::new();
-        batch.delete::<StfInfoByNumber>(&(slot, hash))?;
-        self.db.write_schemas(&batch)?;
-        Ok(())
-    }
-
     /// Oldest slot with any stored STF row (seek-first), if the queue is non-empty.
     pub fn oldest_present_slot(&self) -> anyhow::Result<Option<SlotNumber>> {
         Ok(self
@@ -106,9 +98,9 @@ impl ProofManagerDb {
 
     /// Prune every stored STF row strictly below the retention window, sweeping orphan forks.
     ///
-    /// Keeps the most recent `max_entries` finalized-visible slots. Never prunes at or above
-    /// `next_height_to_receive` (the consumer cursor), so unconsumed slots survive even if the
-    /// window would otherwise drop them.
+    /// Retains all slots at or above `finalized_visible_height - max_entries`. Never prunes at or
+    /// above `next_height_to_receive` (the consumer cursor), so unconsumed slots survive even if
+    /// the window would otherwise drop them.
     pub fn prune(
         &self,
         finalized_visible_height: SlotNumber,
@@ -256,10 +248,6 @@ mod tests {
         // Put and get.
         db.put_stf_info(slot, hash, &info).unwrap();
         assert_eq!(db.get_stf_info(slot, hash).unwrap(), Some(info));
-
-        // Delete.
-        db.delete_stf_info(slot, hash).unwrap();
-        assert_eq!(db.get_stf_info(slot, hash).unwrap(), None);
     }
 
     #[test]
