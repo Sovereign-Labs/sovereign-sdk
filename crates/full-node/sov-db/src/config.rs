@@ -4,7 +4,7 @@ use rockbound::{rocksdb, CfDescriptorBuilder};
 use schemars::JsonSchema;
 use std::num::{NonZeroU64, NonZeroUsize};
 use std::sync::Arc;
-
+use bincode::config;
 use crate::rocks_db_config;
 use crate::storage_manager::DEFAULT_MAX_PRUNING_BATCH_SIZE;
 
@@ -393,5 +393,8 @@ impl From<RollupDbConfig> for RollupDbConfigWithCustomizations {
 fn nomt_default_options() -> Options {
     let mut opts = Options::new();
     opts.metrics(true);
+    opts.io_workers(8);
+    // Load the permanently cached upper page levels at startup, so finalization never pays for them.
+    opts.prepopulate_page_cache(true);
     opts
 }
