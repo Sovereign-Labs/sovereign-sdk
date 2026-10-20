@@ -1150,6 +1150,7 @@ where
             1.0
         };
         let mut inner = self.get_inner_with_timing(reason).await;
+        let start = std::time::Instant::now();
 
         if inner.is_replica_role() {
             // The sequencer is running in replica mode and cannot accept transactions.
@@ -1213,9 +1214,11 @@ where
         // sequencing data creation.
         baked_tx.sequencing_data =
             Some(sov_modules_api::capabilities::new_tx_sequencing_data::<S, Rt>());
+        let pre_checks = start.elapsed();
         let (res, resource_used) = inner
             .do_new_tx(tx_hash, baked_tx, Some(ip_and_credential.credential_id))
             .await;
+        let post_checks_start = std::time::Instant::now();
 
         // Do not use `?` or return early here. We must always call `rate_limiter.update`
         // to ensure the limits are updated even for unsuccessful transactions.
@@ -1226,9 +1229,14 @@ where
             );
         }
         inner.rate_limiter.update(token, resource_used);
-        let (rx, remaining_slot_gas) = res?;
+        let (rx, remaining_slot_gas, mut timings) = res?;
 
         inner.close_batch_if_nearly_full(remaining_slot_gas).await;
+
+        timings.pre_checks = pre_checks;
+        timings.post_checks = post_checks_start.elapsed();
+        timings.total = start.elapsed();
+        sov_metrics::track_metrics(|t| t.submit(timings));
 
         Ok(rx)
     }

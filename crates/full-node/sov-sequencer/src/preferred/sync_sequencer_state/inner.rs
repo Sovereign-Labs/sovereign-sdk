@@ -1,8 +1,8 @@
 use anyhow::Context as _;
 
 use crate::metrics::{
-    track_sequence_number, track_sequence_number_delta, PreferredSequencerChannelMetrics,
-    PreferredSequencerChannelMetricsBatch,
+    track_sequence_number, track_sequence_number_delta, PreferredSequencerAcceptTxMetrics,
+    PreferredSequencerChannelMetrics, PreferredSequencerChannelMetricsBatch,
 };
 use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
@@ -762,11 +762,13 @@ where
             (
                 oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
                 <S as Spec>::Gas,
+                PreferredSequencerAcceptTxMetrics,
             ),
             DoNewTxError<S>,
         >,
         ResourceUsed<S::Gas>,
     ) {
+        let start = std::time::Instant::now();
         // Even if this method return early it uses 1 request slot.
         let request_used = ResourceUsed::new(1, 0, 0, <S as Spec>::Gas::zero());
 
@@ -822,6 +824,7 @@ where
         }
 
         let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone(), sequence_number);
+        let pre_apply = start.elapsed();
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
         let (
@@ -829,6 +832,7 @@ where
                 mut accepted_tx,
                 remaining_slot_gas,
                 execution_time_micros,
+                mut timings,
             },
             tx_changes,
         ) = match apply_tx_res {
@@ -856,12 +860,15 @@ where
         let resource_used = ResourceUsed::new(1, tx_len, execution_time_micros, gas_used);
         accepted_tx.credential_id = credential_id;
 
+        let send_start = std::time::Instant::now();
         batch_size_tracker.add_tx(finalized_tx_len, execution_time_micros);
         let rx = executor_events_sender
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;
+        timings.pre_apply = pre_apply;
+        timings.send_to_executor = send_start.elapsed();
 
-        (Ok((rx, remaining_slot_gas)), resource_used)
+        (Ok((rx, remaining_slot_gas, timings)), resource_used)
     }
 
     // Implements the I part of a PID controller for the batch size limit; we track our error rate over each batch and tune the bias

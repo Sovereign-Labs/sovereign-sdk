@@ -191,6 +191,56 @@ impl Metric for PreferredSequencerExecutorEventMetrics {
     }
 }
 
+/// Per-tx phase breakdown of an accepted tx on the sequencer actor (`process_accept_tx`).
+/// Emitted as `sov_rollup_preferred_sequencer_accept_tx`. Phases are sequential and sum to
+/// `total_ns` up to glue code; `stf_execution_us` is the part of `block_task_roundtrip_ns` the
+/// STF spends between its `pre_flight` and `post_tx` hooks, so the difference is the cross-thread
+/// handoff plus STF work outside those hooks (signature check and context resolution run before
+/// `pre_flight`).
+#[derive(Debug, Default)]
+pub struct PreferredSequencerAcceptTxMetrics {
+    /// Replica/readiness checks, batch start, rate limiter, load shedding, sequencing data.
+    pub pre_checks: std::time::Duration,
+    /// `do_new_tx` before execution: size checks and the cache warm-up hand-off.
+    pub pre_apply: std::time::Duration,
+    /// Decoding the call message on the actor.
+    pub decode: std::time::Duration,
+    /// From handing the tx to the block execution thread until its result is received.
+    pub block_task_roundtrip: std::time::Duration,
+    /// Execution time reported by the block execution thread (inside `block_task_roundtrip`).
+    pub stf_execution_micros: u64,
+    /// After the result is received: sequencing data finalization, checkpoint update, receipt.
+    pub post_execution: std::time::Duration,
+    /// Batch size accounting and handing the accepted tx to the side-effects executor.
+    pub send_to_executor: std::time::Duration,
+    /// Execution time estimate, rate limiter update and the batch-close check.
+    pub post_checks: std::time::Duration,
+    pub total: std::time::Duration,
+}
+
+impl Metric for PreferredSequencerAcceptTxMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_preferred_sequencer_accept_tx"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(
+            buffer,
+            "{} pre_checks_ns={},pre_apply_ns={},decode_ns={},block_task_roundtrip_ns={},stf_execution_us={},post_execution_ns={},send_to_executor_ns={},post_checks_ns={},total_ns={}",
+            self.measurement_name(),
+            self.pre_checks.as_nanos(),
+            self.pre_apply.as_nanos(),
+            self.decode.as_nanos(),
+            self.block_task_roundtrip.as_nanos(),
+            self.stf_execution_micros,
+            self.post_execution.as_nanos(),
+            self.send_to_executor.as_nanos(),
+            self.post_checks.as_nanos(),
+            self.total.as_nanos(),
+        )
+    }
+}
+
 #[derive(Debug)]
 pub struct PreferredSequencerFetchBatchesToReplayMetrics {
     pub duration: std::time::Duration,

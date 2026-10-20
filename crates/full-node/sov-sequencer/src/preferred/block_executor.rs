@@ -40,6 +40,7 @@ use super::{
 };
 use crate::common::AcceptedTx;
 use crate::common::ForcedTxBatchNotification;
+use crate::metrics::PreferredSequencerAcceptTxMetrics;
 use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{exit_rollup, PreferredProofToReplay};
@@ -53,6 +54,7 @@ where
     pub accepted_tx: AcceptedTx<Confirmation<S, Rt>>,
     pub remaining_slot_gas: <S as Spec>::Gas,
     pub execution_time_micros: u64,
+    pub timings: PreferredSequencerAcceptTxMetrics,
 }
 
 type BlockExecutionOutput<S> = (Vec<BatchReceipt<S>>, StateCheckpoint<S>);
@@ -297,7 +299,15 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
 
         match result {
-            Ok((receipt, tx, remaining_slot_gas, execution_time_micros, tx_changes)) => {
+            Ok((
+                receipt,
+                tx,
+                remaining_slot_gas,
+                execution_time_micros,
+                tx_changes,
+                mut timings,
+            )) => {
+                let receipt_start = std::time::Instant::now();
                 // Extract the HDTimestamp from the finalized (pruned) tx body, rather than from
                 // the pre-pruning bytes or the locally generated value, so the preferred
                 // sequencer and replicas derive confirmation metadata from the same published
@@ -309,11 +319,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
                     writer.insert(accepted_tx.clone()).await;
                 }
+                timings.post_execution += receipt_start.elapsed();
                 Ok((
                     AcceptedTxWithBudgetInfo {
                         accepted_tx,
                         remaining_slot_gas,
                         execution_time_micros,
+                        timings,
                     },
                     tx_changes,
                 ))
@@ -332,6 +344,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             <S as Spec>::Gas,
             u64,
             TxChangeSet,
+            PreferredSequencerAcceptTxMetrics,
         ),
         RollupBlockExecutorErrorWithBudget<S>,
     > {
@@ -339,6 +352,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
 
+        let decode_start = std::time::Instant::now();
         let call = Rt::Auth::decode_serialized_tx(&baked_tx.tx).map_err(|e| {
             RollupBlockExecutorErrorWithBudget {
                 execution_time_micros: 0,
@@ -347,7 +361,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             }
         })?;
         let call = Rt::wrap_call(call);
+        let decode = decode_start.elapsed();
 
+        let roundtrip_start = std::time::Instant::now();
         if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {
             return Err(RollupBlockExecutorErrorWithBudget {
                 execution_time_micros: 0,
@@ -365,6 +381,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 inner_err: RollupBlockExecutorError::UnexpectedFailure,
             });
         };
+        let block_task_roundtrip = roundtrip_start.elapsed();
 
         let AsyncBatchResult {
             execution_time_micros,
@@ -394,6 +411,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             });
         }
 
+        let post_execution_start = std::time::Instant::now();
         let mut tx = receipt
             .body_to_save
             .take()
@@ -402,12 +420,20 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         self.checkpoint.apply_tx_changes(tx_changes.clone());
 
+        let timings = PreferredSequencerAcceptTxMetrics {
+            decode,
+            block_task_roundtrip,
+            stf_execution_micros: execution_time_micros,
+            post_execution: post_execution_start.elapsed(),
+            ..Default::default()
+        };
         Ok((
             receipt,
             tx,
             remaining_slot_gas,
             execution_time_micros,
             tx_changes,
+            timings,
         ))
     }
 
