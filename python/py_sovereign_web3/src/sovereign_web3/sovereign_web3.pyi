@@ -54,7 +54,7 @@ class Serializer:
         ...
 
     def serialize_signing_payload(self, unsigned_tx: "UnsignedTransaction") -> bytes:
-        """Serialize an unsigned transaction signing payload.
+        """Serialize an unsigned transaction signing payload without a Commonware prefix.
 
         Args:
             unsigned_tx: Transaction to serialize
@@ -64,6 +64,13 @@ class Serializer:
 
         Raises:
             ValueError: If serialization fails
+        """
+        ...
+
+    def serialize_commonware_signing_payload(self, unsigned_tx: "UnsignedTransaction") -> bytes:
+        """Serialize a signing payload with Commonware's 0x00 prefix.
+
+        Sign these bytes directly with Ed25519; do not add another prefix.
         """
         ...
 
@@ -206,7 +213,7 @@ class UnsignedTransaction:
         ...
 
     def bytes_for_signing(self, serializer: Serializer) -> bytes:
-        """Get transaction bytes for signing.
+        """Get transaction bytes for signing without a Commonware prefix.
 
         Args:
             serializer: Serializer to use
@@ -216,6 +223,13 @@ class UnsignedTransaction:
 
         Raises:
             ValueError: If signing bytes cannot be generated
+        """
+        ...
+
+    def commonware_bytes_for_signing(self, serializer: Serializer) -> bytes:
+        """Get signing bytes with Commonware's 0x00 prefix.
+
+        Sign these bytes directly with Ed25519; do not add another prefix.
         """
         ...
 
