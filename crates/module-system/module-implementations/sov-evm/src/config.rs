@@ -406,8 +406,16 @@ mod tests {
     fn borsh_spec_id_keeps_legacy_wire_ids() {
         let cases = [
             (SpecId::FRONTIER, 0u8),
+            (SpecId::HOMESTEAD, 2),
+            (SpecId::TANGERINE, 4),
+            (SpecId::SPURIOUS_DRAGON, 5),
+            (SpecId::BYZANTIUM, 6),
             (SpecId::PETERSBURG, 8),
+            (SpecId::ISTANBUL, 9),
+            (SpecId::BERLIN, 11),
             (SpecId::LONDON, 12),
+            (SpecId::MERGE, 15),
+            (SpecId::SHANGHAI, 16),
             (SpecId::CANCUN, 17),
             (SpecId::PRAGUE, 18),
             (SpecId::OSAKA, 19),
