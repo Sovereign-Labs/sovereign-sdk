@@ -163,35 +163,32 @@ where
         // written, so after a crash each of them is at most one version ahead of live and can
         // be rolled back. Those stores are independent of each other and are committed in
         // parallel; the live DB is written only after all of them succeeded.
-        // Readers stay consistent because the caller holds the `nomt_snapshots` write lock
-        // for the whole commit, and `NomtProverStorage::get_with_proof` cross-checks roots.
-        let merklized_state = &self.merklized_state;
-        let ledger_db = &self.ledger;
-        let accessory_db = &self.accessory;
+        // Readers of ledger, accessory and flat archival can observe them in any order relative
+        // to each other and to NOMT. `NomtProverStorage::get_with_proof` stays consistent
+        // because it cross-checks the live root against the NOMT root and retries on mismatch.
         let root_hash_batch = historical_state.root_hash_batch.clone();
-        let flat_state = &self.flat_state;
 
         let (flat_metrics, others) = std::thread::scope(|s| {
-            let merklized = s.spawn(move || {
+            let merklized = s.spawn(|| {
                 tracing::trace!("Commiting NOMT DBs...");
-                merklized_state.commit(state)
+                self.merklized_state.commit(state)
             });
-            let ledger_commit = s.spawn(move || {
+            let ledger_commit = s.spawn(|| {
                 tracing::trace!("Committing Ledger DB...");
                 #[cfg(feature = "test-utils")]
                 crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLedger
                     .inject_fault_if_configured();
                 let ledger_start = std::time::Instant::now();
-                ledger_db.write_schemas(&ledger)?;
+                self.ledger.write_schemas(&ledger)?;
                 anyhow::Ok(ledger_start.elapsed())
             });
-            let accessory_commit = s.spawn(move || {
+            let accessory_commit = s.spawn(|| {
                 tracing::trace!("Commiting Accessory DB...");
                 #[cfg(feature = "test-utils")]
                 crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingAccessory
                     .inject_fault_if_configured();
                 let accessory_start = std::time::Instant::now();
-                AccessoryDb::commit(accessory_db, &accessory, &root_hash_batch)?;
+                AccessoryDb::commit(&self.accessory, &accessory, &root_hash_batch)?;
                 anyhow::Ok(accessory_start.elapsed())
             });
 
@@ -208,10 +205,12 @@ where
             #[cfg(feature = "migration-script")]
             let flat_metrics = if let Some(expected_latest) = expected_latest {
                 wait_for_others().and_then(|_| {
-                    flat_state.commit_at_latest_checked(historical_state, expected_latest)
+                    self.flat_state
+                        .commit_at_latest_checked(historical_state, expected_latest)
                 })
             } else {
-                flat_state.commit_with_before_live(historical_state, wait_for_others)
+                self.flat_state
+                    .commit_with_before_live(historical_state, wait_for_others)
             };
 
             #[cfg(not(feature = "migration-script"))]
@@ -220,7 +219,8 @@ where
                     expected_latest.is_none(),
                     "expected_latest must be none when not in migration script"
                 );
-                flat_state.commit_with_before_live(historical_state, wait_for_others)
+                self.flat_state
+                    .commit_with_before_live(historical_state, wait_for_others)
             };
             (flat_metrics, others)
         });
