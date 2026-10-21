@@ -21,7 +21,7 @@ use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 
 use crate::external_mock_da::ExternalDa;
-use crate::test_helpers::{test_genesis_paths, DemoRollupSpec};
+use crate::test_helpers::test_genesis_paths;
 
 type RollupSpec = <ExternalMockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 type ProofPublicData = AggregatedProofPublicData<
@@ -52,7 +52,7 @@ pub async fn start_test_rollup(
 
     let operating_mode = OperatingMode::Zk;
     let mut runtime_config =
-        create_genesis_config::<DemoRollupSpec>(&test_genesis_paths(operating_mode))?;
+        create_genesis_config::<RollupSpec>(&test_genesis_paths(operating_mode))?;
     runtime_config.chain_state.genesis_da_height = genesis_da_height;
     let genesis = GenesisSource::CustomParams(GenesisParams {
         runtime: runtime_config,

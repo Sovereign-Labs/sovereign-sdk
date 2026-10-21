@@ -1,8 +1,9 @@
 use std::path::PathBuf;
 
 use demo_stf::MultiAddressEvmSolana;
+use sov_commonware_crypto::CommonwareCryptoSpec;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
+use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_rollup_interface::da::DaSpec;
 use sov_rollup_interface::execution_mode::Native;
@@ -26,7 +27,7 @@ pub type MockDemoRollupSpec = ConfigurableSpec<
     MockZkvm,
     MultiAddressEvmSolana,
     Native,
-    MockZkvmCryptoSpec,
+    CommonwareCryptoSpec,
     MockNativeStorage,
 >;
 pub type DemoMockRT = demo_stf::runtime::Runtime<MockDemoRollupSpec>;

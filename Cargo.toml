@@ -5,6 +5,7 @@ members = [
     "crates/rollup-interface",
     "crates/adapters/mock-da",
     "crates/adapters/mock-zkvm",
+    "crates/adapters/commonware-crypto",
     "scripts/switcheroo",
     # Fuzzing
     "crates/fuzz",
@@ -150,6 +151,7 @@ sov-sp1-adapter = { path = "crates/adapters/sp1", default-features = false, vers
 sov-ethereum = { path = "crates/full-node/sov-ethereum", default-features = false, version = "0.3" }
 sov-mock-da = { path = "crates/adapters/mock-da", default-features = false, version = "0.3" }
 sov-mock-zkvm = { path = "crates/adapters/mock-zkvm", default-features = false, version = "0.3" }
+sov-commonware-crypto = { path = "crates/adapters/commonware-crypto", default-features = false, version = "0.3" }
 sov-bank = { path = "crates/module-system/module-implementations/sov-bank", default-features = false, version = "0.3" }
 sov-sequencer-registry = { path = "crates/module-system/module-implementations/sov-sequencer-registry", default-features = false, version = "0.3" }
 sov-node-client = { path = "crates/utils/sov-node-client", default-features = false, version = "0.3" }
@@ -250,6 +252,9 @@ derivative = { version = "2.2", features = ["use_core"] }
 digest = { version = "0.10.7", default-features = false, features = ["alloc"] }
 # Don't forget to upgrade zkVM patches if changing this one.
 ed25519-dalek = { version = "=2.1.1", default-features = false }
+# `std` enables the runtime-detected AVX-512 IFMA backend, which is where the speedup over dalek comes from.
+commonware-codec = { git = "https://github.com/commonwarexyz/monorepo", rev = "e7aa5b115243b39ab47df766094604a9874afea2", default-features = false, features = ["std"] }
+commonware-cryptography-curve25519 = { git = "https://github.com/commonwarexyz/monorepo", rev = "e7aa5b115243b39ab47df766094604a9874afea2", default-features = false, features = ["std"] }
 futures = { version = "0.3", default-features = false }
 hex = { version = "0.4.3" }
 insta = { version = "1.39", features = ["json"] }

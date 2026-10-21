@@ -8,7 +8,7 @@ use demo_stf::MultiAddressEvmSolana;
 use humantime::format_duration;
 use prettytable::{row, Table};
 use sov_benchmarks::node::{generate_transfers, prefill_state};
-use sov_benchmarks::{setup_with_runner_and_spec, NomtBenchSpec};
+use sov_benchmarks::{setup_with_runner_and_spec, NomtBenchSpec, NomtCommonwareBenchSpec};
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::prelude::anyhow;
 use sov_modules_api::Spec;
@@ -182,5 +182,13 @@ where
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    run_with_spec::<NomtBenchSpec, SimpleStorageManager<_>>().await
+    match env::var("SOV_BENCH_CRYPTO").as_deref() {
+        Ok("commonware") => {
+            run_with_spec::<NomtCommonwareBenchSpec, SimpleStorageManager<_>>().await
+        }
+        Ok("dalek") | Err(env::VarError::NotPresent) => {
+            run_with_spec::<NomtBenchSpec, SimpleStorageManager<_>>().await
+        }
+        other => panic!("Unknown SOV_BENCH_CRYPTO {other:?}, expected dalek/commonware"),
+    }
 }
