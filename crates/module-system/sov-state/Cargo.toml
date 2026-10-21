@@ -41,6 +41,12 @@ serde_json = { workspace = true }
 sov-db = { workspace = true, features = ["test-utils"] }
 sov-mock-da = { workspace = true, features = ["native"] }
 tempfile = { workspace = true }
+toml = { workspace = true }
+
+[[bench]]
+name = "finalization"
+harness = false
+required-features = ["native"]
 
 [features]
 arbitrary = [
