@@ -1,5 +1,5 @@
 import { Multisig } from "@sovereign-sdk/multisig";
-import { Ed25519Signer, type Signer } from "@sovereign-sdk/signers";
+import { CommonwareSigner, Ed25519Signer, type Signer } from "@sovereign-sdk/signers";
 import { bytesToHex } from "@sovereign-sdk/utils";
 import {
   DEFAULT_TX_DETAILS,
@@ -22,7 +22,7 @@ function generateSigners(count = 5): Signer[] {
   const signers = [];
 
   for (let i = 0; i < count; i++) {
-    signers.push(new Ed25519Signer(generatePrivateKey()));
+    signers.push(new CommonwareSigner(new Ed25519Signer(generatePrivateKey())));
   }
 
   return signers;

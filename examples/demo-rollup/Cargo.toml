@@ -28,6 +28,7 @@ sov-accounts = { workspace = true, features = ["native"] }
 sov-bank = { workspace = true, features = ["native"] }
 sov-blob-storage = { workspace = true, features = ["native"] }
 sov-chain-state = { workspace = true, features = ["native"] }
+sov-commonware-crypto = { workspace = true, features = ["native"] }
 sov-paymaster = { workspace = true, features = ["native"] }
 sov-sequencer-registry = { workspace = true, features = ["native"] }
 sov-cli = { workspace = true }
