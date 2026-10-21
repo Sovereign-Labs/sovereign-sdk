@@ -1,6 +1,8 @@
 # 2026-10-21
 - #3080 DB: Added optional `storage.live_db_path` and `storage.user_nomt_db_path` config values, which set exact directories for the live state DB and the user NOMT DB (alongside the existing `storage.ledger_db_path`). When unset, databases stay under `storage.path` as before. Relative paths are resolved from the process working directory.
     - **Breaking Change** Migrations: `migrate_to_v1` and `mockda-to-celestia-migrate` accept `--live-db-path`, `--ledger-db-path` and `--user-nomt-db-path` overrides. `--db-path` now refuses to run if the rollup config sets a per-DB path that isn't overridden too, because that DB would otherwise be migrated at its original location. `sov_migrations::MigrationArgs::db_path` is replaced by `db_paths: DbPathOverrides`, and `load_storage_config` takes `&DbPathOverrides`.
+# 2026-10-20
+- #3077 Make benchmark inputs reproducible and report median-block TPS and a receipt digest.
 
 # 2026-10-13
 - #3075 Added a new config value: `runner.http_config.max_rpc_response_body_size`. This overrides the maximum response size for JSON-RPC requests (primarily used for the Ethereum RPC interface). When unset, keeps the old default of 10 MiB.
