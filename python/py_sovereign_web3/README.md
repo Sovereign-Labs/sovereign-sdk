@@ -28,13 +28,15 @@ call = {"bank": {"create_token": {"token_name": "MyToken", "initial_balance": "1
 details = TxDetails(chain_hash_fragment=serializer.chain_hash_fragment())
 unsigned_tx = UnsignedTransaction(runtime_call=call, details=details)
 
-# Get bytes for signing
-tx_bytes = unsigned_tx.bytes_for_signing(serializer)
+# Get signing bytes for the Commonware demo rollup
+tx_bytes = unsigned_tx.commonware_bytes_for_signing(serializer)
 
 # Sign and create final transaction
 signed_tx = unsigned_tx.to_signed(pub_key=public_key, signature=signature)
 serialized = serializer.serialize_tx(signed_tx)
 ```
+
+`UnsignedTransaction.bytes_for_signing()` and `Serializer.serialize_signing_payload()` return the original unprefixed payload for existing Ed25519 rollups. For Commonware rollups, use `UnsignedTransaction.commonware_bytes_for_signing()` or `Serializer.serialize_commonware_signing_payload()`; these include the `0x00` signing prefix. Pass the returned bytes directly to your Ed25519 signer without adding another prefix. Transaction serialization is unchanged.
 
 ## Classes
 

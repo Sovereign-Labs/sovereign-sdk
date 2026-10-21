@@ -4,12 +4,13 @@ use async_trait::async_trait;
 use demo_stf::runtime::Runtime;
 use demo_stf::MultiAddressEvmSolana;
 use sov_address::{EthereumAddress, FromVmAddress};
+use sov_commonware_crypto::CommonwareCryptoSpec;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::storage_manager::NomtStorageManager;
 use sov_ethereum::EthRpcConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::MockDaSpec;
-use sov_mock_zkvm::{MockCodeCommitment, MockZkvm, MockZkvmCryptoSpec};
+use sov_mock_zkvm::{MockCodeCommitment, MockZkvm};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::{Native, WitnessGeneration};
 use sov_modules_api::{NodeEndpoints, Spec};
@@ -45,7 +46,7 @@ pub type MockRollupSpec<M> = ConfigurableSpec<
     MockZkvm,
     MultiAddressEvmSolana,
     M,
-    MockZkvmCryptoSpec,
+    CommonwareCryptoSpec,
     NativeStorage,
 >;
 
