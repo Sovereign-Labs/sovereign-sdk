@@ -8,6 +8,7 @@ use nomt::hasher::BinaryHasher;
 use nomt::proof::MultiProof;
 use nomt::FinishedSession;
 use nomt_core::trie::KeyPath;
+use rayon::prelude::*;
 use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::state_db_nomt::{HistoricalValueError, NomtSessionBuilder, SessionsContainer};
@@ -479,164 +480,81 @@ where
     }
 }
 
-/// Maps `items` in order, splitting large inputs into chunks processed on scoped threads.
-fn par_map<T: Sync, U: Send>(items: &[T], f: impl Fn(&T) -> U + Sync) -> Vec<U> {
-    const MIN_CHUNK: usize = 2048;
-    let threads = std::thread::available_parallelism().map_or(1, |n| n.get().min(16));
-    let chunk = items.len().div_ceil(threads).max(MIN_CHUNK);
-    if items.len() <= chunk {
-        return items.iter().map(f).collect();
-    }
-    std::thread::scope(|scope| {
-        let handles: Vec<_> = items
-            .chunks(chunk)
-            .map(|chunk| scope.spawn(|| chunk.iter().map(&f).collect::<Vec<_>>()))
-            .collect();
-        handles
-            .into_iter()
-            .flat_map(|handle| handle.join().expect("hashing thread panicked"))
-            .collect()
-    })
-}
-
-/// Same order as `KeyPath::cmp`, but key paths are hashes, so comparing the first 8 bytes as an
-/// integer almost always decides it without a `memcmp` call.
-fn cmp_key_paths(a: &nomt::trie::KeyPath, b: &nomt::trie::KeyPath) -> std::cmp::Ordering {
-    let prefix = |k: &nomt::trie::KeyPath| u64::from_be_bytes(k[..8].try_into().expect("8 bytes"));
-    prefix(a).cmp(&prefix(b)).then_with(|| a.cmp(b))
-}
-
 /// Pure reads do not affect the root, so they are only kept when `keep_reads` is set (witness generation),
 /// sparing NOMT a merkle seek per read. Reads of written keys are always kept as `ReadThenWrite`,
 /// because they give NOMT the prior value for the rollback log.
-/// Sorts by key path. Key paths are uniformly distributed hashes, so bucketing by the top 4 bits
-/// gives 16 similar-sized buckets that are sorted on scoped threads and concatenated in order.
-fn par_sort_by_key_path<T: Send>(
-    items: Vec<(nomt::trie::KeyPath, T)>,
-) -> Vec<(nomt::trie::KeyPath, T)> {
-    const MIN_PARALLEL: usize = 4096;
-    if items.len() < MIN_PARALLEL {
-        let mut items = items;
-        items.sort_unstable_by(|a, b| cmp_key_paths(&a.0, &b.0));
-        return items;
-    }
-    let mut buckets: Vec<Vec<(nomt::trie::KeyPath, T)>> = (0..16)
-        .map(|_| Vec::with_capacity(items.len() / 12))
-        .collect();
-    for item in items {
-        buckets[usize::from(item.0[0] >> 4)].push(item);
-    }
-    std::thread::scope(|scope| {
-        for bucket in &mut buckets {
-            scope.spawn(|| bucket.sort_unstable_by(|a, b| cmp_key_paths(&a.0, &b.0)));
-        }
-    });
-    buckets.into_iter().flatten().collect()
-}
-
 fn to_nomt_accesses<S: MerkleProofSpec>(
     sov_accesses: &OrderedReadsAndWrites,
     keep_reads: bool,
-) -> anyhow::Result<Vec<(nomt::trie::KeyPath, nomt::KeyReadWrite)>> {
+) -> anyhow::Result<Vec<(KeyPath, nomt::KeyReadWrite)>> {
     let OrderedReadsAndWrites {
         ordered_reads,
         ordered_writes,
     } = sov_accesses;
 
-    let writes: Vec<(nomt::trie::KeyPath, Option<nomt::Value>)> =
-        par_map(ordered_writes, |(key, original_write)| {
+    let mut writes: Vec<(KeyPath, Option<nomt::Value>)> = ordered_writes
+        .par_iter()
+        .map(|(key, original_write)| {
             (
                 S::Hasher::digest(key.as_ref()).into(),
                 original_write
                     .as_ref()
                     .map(|v| v.combine_val_hash_and_size::<S::Hasher>()),
             )
-        });
-    let writes = par_sort_by_key_path(writes);
+        })
+        .collect();
+    writes.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
     if let Some(w) = writes.windows(2).find(|w| w[0].0 == w[1].0) {
         anyhow::bail!("Duplicate key write in state: {:?}", w[0].0);
     }
 
-    if !keep_reads {
-        // Only reads of written keys matter: find each one's write instead of sorting all reads.
-        let read_then_writes = par_map(ordered_reads, |(key, read_node_leaf)| {
-            let key_path: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-            writes
-                .binary_search_by(|(write_path, _)| cmp_key_paths(write_path, &key_path))
-                .ok()
-                .map(|index| {
-                    (
-                        index,
-                        read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size()),
-                    )
-                })
-        });
-        let mut priors: Vec<Option<Option<nomt::Value>>> = vec![None; writes.len()];
-        for (index, prior) in read_then_writes.into_iter().flatten() {
-            if priors[index].replace(prior).is_some() {
-                anyhow::bail!("Duplicate key read in state: {:?}", writes[index].0);
-            }
-        }
-        return Ok(writes
-            .into_iter()
-            .zip(priors)
-            .map(|((key_path, value), prior)| match prior {
-                Some(prior) => (key_path, nomt::KeyReadWrite::ReadThenWrite(prior, value)),
-                None => (key_path, nomt::KeyReadWrite::Write(value)),
-            })
-            .collect());
-    }
-
-    let mut reads: Vec<(nomt::trie::KeyPath, Option<nomt::Value>)> =
-        par_map(ordered_reads, |(key, read_node_leaf)| {
+    let reads: Vec<(KeyPath, Option<usize>, Option<nomt::Value>)> = ordered_reads
+        .par_iter()
+        .map(|(key, read_node_leaf)| {
+            let key_path: KeyPath = S::Hasher::digest(key.as_ref()).into();
+            let write_index = writes
+                .binary_search_by(|(write_path, _)| write_path.cmp(&key_path))
+                .ok();
             (
-                S::Hasher::digest(key.as_ref()).into(),
+                key_path,
+                write_index,
                 read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size()),
             )
-        });
-    reads.sort_unstable_by(|a, b| cmp_key_paths(&a.0, &b.0));
-    if let Some(w) = reads.windows(2).find(|w| w[0].0 == w[1].0) {
-        anyhow::bail!("Duplicate key read in state: {:?}", w[0].0);
+        })
+        .collect();
+
+    let mut priors: Vec<Option<Option<nomt::Value>>> = vec![None; writes.len()];
+    let mut pure_reads = Vec::new();
+    for (key_path, write_index, value) in reads {
+        match write_index {
+            Some(index) => {
+                if priors[index].replace(value).is_some() {
+                    anyhow::bail!("Duplicate key read in state: {:?}", key_path);
+                }
+            }
+            None if keep_reads => pure_reads.push((key_path, nomt::KeyReadWrite::Read(value))),
+            None => {}
+        }
     }
 
-    // Merge-join the sorted reads and writes, so a key that is both read and written becomes `ReadThenWrite`.
-    let mut merged_accesses = Vec::with_capacity(reads.len() + writes.len());
-    let mut reads = reads.into_iter().peekable();
-    let mut writes = writes.into_iter().peekable();
-    loop {
-        let access = match (reads.peek(), writes.peek()) {
-            (Some(read), Some(write)) => match read.0.cmp(&write.0) {
-                std::cmp::Ordering::Less => {
-                    let (key, value) = reads.next().expect("peeked");
-                    (key, nomt::KeyReadWrite::Read(value))
-                }
-                std::cmp::Ordering::Greater => {
-                    let (key, value) = writes.next().expect("peeked");
-                    (key, nomt::KeyReadWrite::Write(value))
-                }
-                std::cmp::Ordering::Equal => {
-                    let (key, read_value) = reads.next().expect("peeked");
-                    let (_, write_value) = writes.next().expect("peeked");
-                    (
-                        key,
-                        nomt::KeyReadWrite::ReadThenWrite(read_value, write_value),
-                    )
-                }
-            },
-            (Some(_), None) => {
-                let (key, value) = reads.next().expect("peeked");
-                (key, nomt::KeyReadWrite::Read(value))
-            }
-            (None, Some(_)) => {
-                let (key, value) = writes.next().expect("peeked");
-                (key, nomt::KeyReadWrite::Write(value))
-            }
-            (None, None) => break,
-        };
-        merged_accesses.push(access);
+    let mut accesses: Vec<(KeyPath, nomt::KeyReadWrite)> = writes
+        .into_iter()
+        .zip(priors)
+        .map(|((key_path, value), prior)| match prior {
+            Some(prior) => (key_path, nomt::KeyReadWrite::ReadThenWrite(prior, value)),
+            None => (key_path, nomt::KeyReadWrite::Write(value)),
+        })
+        .collect();
+    if keep_reads {
+        accesses.extend(pure_reads);
+        accesses.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        // Writes are unique and pure reads exclude written keys, so any duplicate is a repeated read.
+        if let Some(w) = accesses.windows(2).find(|w| w[0].0 == w[1].0) {
+            anyhow::bail!("Duplicate key read in state: {:?}", w[0].0);
+        }
     }
 
-    Ok(merged_accesses)
+    Ok(accesses)
 }
 
 fn compute_state_update_namespace<S: MerkleProofSpec>(
