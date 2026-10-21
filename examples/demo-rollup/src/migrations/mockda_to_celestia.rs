@@ -58,6 +58,18 @@ struct Args {
     #[arg(long)]
     db_path: Option<PathBuf>,
 
+    /// Override `storage.live_db_path` from the rollup config.
+    #[arg(long)]
+    live_db_path: Option<PathBuf>,
+
+    /// Override `storage.ledger_db_path` from the rollup config.
+    #[arg(long)]
+    ledger_db_path: Option<PathBuf>,
+
+    /// Override `storage.user_nomt_db_path` from the rollup config.
+    #[arg(long)]
+    user_nomt_db_path: Option<PathBuf>,
+
     /// The new sequencer DA address on Celestia (bech32, e.g. celestia1...).
     /// Required for single-sequencer migration mode (when `--sequencer-map` is not used).
     #[arg(long)]
@@ -960,9 +972,13 @@ fn load_storage_config(args: &Args) -> anyhow::Result<RollupDbConfig> {
         })?;
 
     let mut storage = rollup_config.storage;
-    if let Some(db_path_override) = &args.db_path {
-        storage.path = db_path_override.clone();
+    sov_migrations::DbPathOverrides {
+        db_path: args.db_path.clone(),
+        live_db_path: args.live_db_path.clone(),
+        ledger_db_path: args.ledger_db_path.clone(),
+        user_nomt_db_path: args.user_nomt_db_path.clone(),
     }
+    .apply(&mut storage)?;
 
     Ok(storage)
 }

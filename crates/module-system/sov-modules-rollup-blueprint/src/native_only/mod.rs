@@ -805,6 +805,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let endpoints = NodeEndpointsContainer {
             inner: endpoints,
             cors_configuration: rollup_config.runner.http_config.cors,
+            max_rpc_response_body_size: rollup_config.runner.http_config.max_rpc_response_body_size,
         };
 
         background_handles.extend(sequencer.background_handles);
@@ -945,10 +946,11 @@ fn validate_heights(
     Ok(())
 }
 
-/// [`NodeEndpoints`] with `CORS` configuration.
+/// [`NodeEndpoints`] with `CORS` and JSON-RPC server configuration.
 pub struct NodeEndpointsContainer {
     inner: NodeEndpoints,
     cors_configuration: CorsConfiguration,
+    max_rpc_response_body_size: u32,
 }
 
 /// Dependencies needed to run the rollup.
@@ -993,6 +995,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
         let NodeEndpointsContainer {
             inner,
             cors_configuration,
+            max_rpc_response_body_size,
         } = endpoints;
         let NodeEndpoints {
             axum_router,
@@ -1004,6 +1007,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
                 axum_router,
                 jsonrpsee_module,
                 cors_configuration,
+                max_rpc_response_body_size,
                 rpc_aggregation_config,
             )
             .await

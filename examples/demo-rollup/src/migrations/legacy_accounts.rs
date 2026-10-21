@@ -24,6 +24,18 @@ struct Args {
     #[arg(long)]
     db_path: Option<PathBuf>,
 
+    /// Override `storage.live_db_path` from the rollup config.
+    #[arg(long)]
+    live_db_path: Option<PathBuf>,
+
+    /// Override `storage.ledger_db_path` from the rollup config.
+    #[arg(long)]
+    ledger_db_path: Option<PathBuf>,
+
+    /// Override `storage.user_nomt_db_path` from the rollup config.
+    #[arg(long)]
+    user_nomt_db_path: Option<PathBuf>,
+
     /// Compute the post-migration state root but do not commit changes.
     #[arg(long, default_value_t = false)]
     dry_run: bool,
@@ -46,7 +58,12 @@ fn run() -> anyhow::Result<()> {
     sov_migrations::v1::run::<RollupSpec, Hasher>(
         sov_migrations::MigrationArgs {
             rollup_config_path: args.rollup_config_path,
-            db_path: args.db_path,
+            db_paths: sov_migrations::DbPathOverrides {
+                db_path: args.db_path,
+                live_db_path: args.live_db_path,
+                ledger_db_path: args.ledger_db_path,
+                user_nomt_db_path: args.user_nomt_db_path,
+            },
             dry_run: args.dry_run,
         },
         &mut runtime_inner.accounts,

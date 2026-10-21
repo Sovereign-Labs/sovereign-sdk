@@ -153,13 +153,17 @@ pub fn default_max_pruning_batch_size() -> NonZeroUsize {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RollupDbConfig {
-    /// Path where all databases are stored
+    /// Default parent directory for databases without a path override.
     pub path: std::path::PathBuf,
-    /// Optional custom path for the ledger database.
-    ///
-    /// When set, ledger DB data is stored at this path. When not set, the ledger DB is stored
-    /// under [`RollupDbConfig::path`] (the existing behavior).
+    /// Exact directory for the live state database. Defaults to `path/state-db`.
+    /// Relative paths are resolved from the process working directory.
+    pub live_db_path: Option<std::path::PathBuf>,
+    /// Exact directory for the ledger database. Defaults to `path/ledger`.
+    /// Relative paths are resolved from the process working directory.
     pub ledger_db_path: Option<std::path::PathBuf>,
+    /// Exact directory for the user NOMT database. Defaults to `path/user_nomt_db`.
+    /// Relative paths are resolved from the process working directory.
+    pub user_nomt_db_path: Option<std::path::PathBuf>,
     /// The size of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB.
     /// A larger cache size can improve execution speed at the cost of more memory usage.
     pub state_cache_size: Option<usize>,
@@ -220,7 +224,9 @@ impl RollupDbConfig {
     pub fn default_in_path(path: std::path::PathBuf) -> Self {
         Self {
             path,
+            live_db_path: None,
             ledger_db_path: None,
+            user_nomt_db_path: None,
             state_cache_size: Some(1_000_000), // Use a 1MB state cache for tests
             user_commit_concurrency: Some(2),
             user_hashtable_buckets: Some(if cfg!(debug_assertions) {
@@ -309,7 +315,11 @@ impl RollupDbConfig {
             opts.page_cache_upper_levels(page_cache_upper_levels);
         }
 
-        opts.path(self.path.join("user_nomt_db"));
+        opts.path(
+            self.user_nomt_db_path
+                .clone()
+                .unwrap_or_else(|| self.path.join("user_nomt_db")),
+        );
         opts
     }
 
@@ -394,4 +404,35 @@ fn nomt_default_options() -> Options {
     let mut opts = Options::new();
     opts.metrics(true);
     opts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RollupDbConfig;
+    use std::path::PathBuf;
+
+    #[test]
+    fn database_paths_deserialize_when_omitted() {
+        let config: RollupDbConfig = serde_json::from_str(r#"{"path":"data"}"#).unwrap();
+        assert_eq!(config.path, PathBuf::from("data"));
+        assert_eq!(config.live_db_path, None);
+        assert_eq!(config.ledger_db_path, None);
+        assert_eq!(config.user_nomt_db_path, None);
+    }
+
+    #[test]
+    fn database_paths_deserialize_exact_overrides() {
+        let config: RollupDbConfig = serde_json::from_str(
+            r#"{
+                "path":"data",
+                "live_db_path":"relative/live",
+                "ledger_db_path":"/mnt/ledger",
+                "user_nomt_db_path":"/mnt/user"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(config.live_db_path, Some(PathBuf::from("relative/live")));
+        assert_eq!(config.ledger_db_path, Some(PathBuf::from("/mnt/ledger")));
+        assert_eq!(config.user_nomt_db_path, Some(PathBuf::from("/mnt/user")));
+    }
 }
