@@ -1,5 +1,7 @@
 # 2026-10-20
 - #3077 Make benchmark inputs reproducible and report median-block TPS and a receipt digest.
+# 2026-10-21
+- #3085 State: Faster NOMT finalization state-root computation. NOMT accesses are built with parallel hashing and a sort + merge-join, pure reads are dropped when no witness is generated, and NOMT now prepopulates its upper page cache levels on startup.
 
 # 2026-10-13
 - #3075 Added a new config value: `runner.http_config.max_rpc_response_body_size`. This overrides the maximum response size for JSON-RPC requests (primarily used for the Ethereum RPC interface). When unset, keeps the old default of 10 MiB.
