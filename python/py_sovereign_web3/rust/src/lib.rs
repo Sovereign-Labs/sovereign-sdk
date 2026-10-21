@@ -53,6 +53,15 @@ impl PySerializer {
         Ok(bytes)
     }
 
+    fn serialize_commonware_signing_payload(
+        &self,
+        unsigned_tx: &PyUnsignedTransaction,
+    ) -> PyResult<Vec<u8>> {
+        let mut bytes = self.serialize_signing_payload(unsigned_tx)?;
+        bytes.insert(0, 0);
+        Ok(bytes)
+    }
+
     fn serialize_tx(&self, tx: &PyTransaction) -> PyResult<Vec<u8>> {
         let bytes = self
             .inner
@@ -159,6 +168,12 @@ impl PyUnsignedTransaction {
             .inner
             .bytes_for_signing(&serializer.inner)
             .map_err(|e| PyValueError::new_err(format!("Failed to get signing bytes: {e}")))?;
+        Ok(bytes)
+    }
+
+    fn commonware_bytes_for_signing(&self, serializer: &PySerializer) -> PyResult<Vec<u8>> {
+        let mut bytes = self.bytes_for_signing(serializer)?;
+        bytes.insert(0, 0);
         Ok(bytes)
     }
 

@@ -88,6 +88,20 @@ pub type NomtBenchSpec = ConfigurableSpec<
     >,
 >;
 
+/// [`NomtBenchSpec`] with [`sov_commonware_crypto::CommonwareCryptoSpec`] signatures
+pub type NomtCommonwareBenchSpec = ConfigurableSpec<
+    MockDaSpec,
+    MockZkvm,
+    MockZkvm,
+    MultiAddressEvmSolana,
+    Native,
+    sov_commonware_crypto::CommonwareCryptoSpec,
+    NomtProverStorage<
+        DefaultStorageSpec<<sov_commonware_crypto::CommonwareCryptoSpec as CryptoSpec>::Hasher>,
+        <MockDaSpec as DaSpec>::SlotHash,
+    >,
+>;
+
 type RT<S> = Runtime<S>;
 
 /// Benchmark user roles
