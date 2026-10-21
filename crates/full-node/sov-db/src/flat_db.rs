@@ -87,11 +87,11 @@ impl FlatStateDb {
                     rocks_db_config::gen_rocksdb_options(&Default::default(), false)
                 });
 
-            let live = Self::get_rockbound_options(live_columns)
-                .setup_db_in_path_with_column_descriptors_with_options(
-                    path.clone(),
-                    &live_db_options,
-                )?;
+            let live_path = custom_config
+                .and_then(|config| config.config().live_db_path.clone())
+                .unwrap_or_else(|| path.join(Self::DB_PATH_SUFFIX));
+            let live =
+                DB::open_with_cfds(&live_db_options, live_path, Self::DB_NAME, live_columns)?;
             Arc::new(live)
         };
 

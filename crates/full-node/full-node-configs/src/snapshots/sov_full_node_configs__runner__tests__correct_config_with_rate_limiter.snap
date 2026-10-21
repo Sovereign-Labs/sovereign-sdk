@@ -5,7 +5,9 @@ expression: config
 {
   "storage": {
     "path": "/tmp",
+    "live_db_path": null,
     "ledger_db_path": null,
+    "user_nomt_db_path": null,
     "state_cache_size": null,
     "user_commit_concurrency": null,
     "user_hashtable_buckets": null,
