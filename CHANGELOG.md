@@ -2,6 +2,7 @@
 - #3077 Make benchmark inputs reproducible and report median-block TPS and a receipt digest.
 # 2026-10-21
 - #3085 State: Faster NOMT finalization state-root computation. NOMT accesses are built with parallel hashing and a sort + merge-join, pure reads are dropped when no witness is generated, and NOMT now prepopulates its upper page cache levels on startup.
+- #3084 State: `nomt`/`nomt-core` now come from the `citizen-stig/nomt` git fork, which resolves a seek's own leaf without a beatree fetch, compacts actuals in parallel, and overlaps rollback delta building with the merkle update. NOMT also prepopulates its leaf cache on startup.
 
 # 2026-10-13
 - #3075 Added a new config value: `runner.http_config.max_rpc_response_body_size`. This overrides the maximum response size for JSON-RPC requests (primarily used for the Ethereum RPC interface). When unset, keeps the old default of 10 MiB.
