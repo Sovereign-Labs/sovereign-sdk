@@ -393,5 +393,7 @@ impl From<RollupDbConfig> for RollupDbConfigWithCustomizations {
 fn nomt_default_options() -> Options {
     let mut opts = Options::new();
     opts.metrics(true);
+    // Load the permanently cached upper page levels at startup, so finalization never pays for them.
+    opts.prepopulate_page_cache(true);
     opts
 }
