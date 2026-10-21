@@ -310,12 +310,7 @@ impl FlatStateDb {
 
     /// Commit the `state_changes`.
     pub fn commit(&self, state_changes: StateChanges) -> anyhow::Result<FlatStateCommitMetric> {
-        let version = self
-            .latest_version_and_root_hash_live_db()?
-            .and_then(|(v, _)| v.checked_add(1))
-            .unwrap_or(0);
-
-        self.commit_internal(state_changes, version, true, || Ok(()))
+        self.commit_with_before_live(state_changes, || Ok(()))
     }
 
     /// Like [`Self::commit`], but runs `before_live` after the archival DB is written and

@@ -610,7 +610,6 @@ impl AllDBsStateRoots {
         let root_hash_from_live_db = match flat_state_db.root_hash_from_live_db()? {
             Some(root_hash_from_live_db) => root_hash_from_live_db,
             None => {
-                // The merklized_state is committed first:
                 // root_hash_from_live_db == None and root_hash_nomt is empty. This indicates that the rollup is being run for the first time.
                 if root_hash_nomt.is_empty() {
                     pre_genesis_root()
@@ -753,8 +752,14 @@ mod tests {
         let header = MockBlockHeader::from_height(height);
         let (storage, ledger_reader) = manager.create_state_for(&header).unwrap();
         let values = vec![
-            (vec![1, 2, height as u8], Some(height.to_be_bytes().to_vec())),
-            (vec![3, 4, height as u8], Some(height.to_le_bytes().to_vec())),
+            (
+                vec![1, 2, height as u8],
+                Some(height.to_be_bytes().to_vec()),
+            ),
+            (
+                vec![3, 4, height as u8],
+                Some(height.to_le_bytes().to_vec()),
+            ),
         ];
         let (stf_changes, state_root) = storage.materialize_from_key_values(&values, height);
 
