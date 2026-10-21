@@ -12809,6 +12809,7 @@ dependencies = [
  "nomt",
  "nomt-core",
  "proptest",
+ "rayon",
  "serde",
  "serde-big-array",
  "serde_json",
