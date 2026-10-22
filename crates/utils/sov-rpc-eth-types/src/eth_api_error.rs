@@ -3,6 +3,7 @@ use alloy_rpc_types::error::EthRpcErrorCode;
 use alloy_rpc_types::request::TransactionInputError;
 use revm::context::result::InvalidTransaction;
 use revm::context_interface::result::{EVMError, InvalidHeader};
+use revm::database_interface::bal::EvmDatabaseError;
 use sov_modules_api::ApiStateAccessorError;
 use std::convert::Infallible;
 use std::num::ParseIntError;
@@ -154,6 +155,16 @@ where
             EVMError::Header(err) => err.into(),
             EVMError::Database(err) => err.into(),
             EVMError::Custom(err) => Self::EvmCustom(err),
+            EVMError::CustomAny(err) => Self::EvmCustom(err.to_string()),
+        }
+    }
+}
+
+impl<E: Into<Self>> From<EvmDatabaseError<E>> for EthApiError {
+    fn from(err: EvmDatabaseError<E>) -> Self {
+        match err {
+            EvmDatabaseError::Bal(err) => Self::EvmCustom(err.to_string()),
+            EvmDatabaseError::Database(err) => err.into(),
         }
     }
 }

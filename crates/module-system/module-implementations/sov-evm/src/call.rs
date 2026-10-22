@@ -4,8 +4,7 @@ use anyhow::ensure;
 use revm::context::result::{EVMError, ExecResultAndState, ExecutionResult};
 use revm::context::{BlockEnv, CfgEnv, TxEnv};
 use revm::primitives::hardfork::SpecId;
-use revm::primitives::HashMap;
-use revm::state::Account;
+use revm::state::EvmState;
 use revm::Database;
 use revm_database_interface::DBErrorMarker;
 use revm_database_interface::TryDatabaseCommit;
@@ -18,7 +17,7 @@ use sov_modules_api::{Context, GasSpec, Spec, StateAccessor, TxState};
 use std::convert::Infallible;
 
 use crate::conversions::{convert_to_tx_signed, create_tx_env};
-use crate::db::{self, metrics::MetricsDb};
+use crate::db::metrics::MetricsDb;
 use crate::evm::primitive_types::{Receipt, TxSignedAndRecovered};
 #[cfg(feature = "native")]
 use crate::execution_config::EVM_EXECUTION_CONFIG;
@@ -328,7 +327,7 @@ where
         #[cfg(feature = "native")]
         let db_metrics = db.metrics();
 
-        let gas_used = result.gas_used();
+        let gas_used = result.tx_gas_used();
         start_timer!(receipt_t);
         let receipt = self.create_receipt(&tx, pending_len, result, state)?;
         save_elapsed!(receipt_time SINCE receipt_t);
@@ -463,7 +462,7 @@ where
                 .expect("We should never have more than u64::MAX logs")
         });
         let is_success = result.is_success();
-        let gas_used = result.gas_used()
+        let gas_used = result.tx_gas_used()
             + match gas_metering_mode() {
                 GasMeteringMode::Rollup => self.sequencer_gas_used(state),
                 GasMeteringMode::Evm => 0,
@@ -556,7 +555,7 @@ pub(crate) fn verify_contract_creation_allowlist<
     DB: Database<Error = E>,
     E: DBErrorMarker + std::fmt::Display,
 >(
-    state_changes: &HashMap<Address, Account>,
+    state_changes: &EvmState,
     signer: &Address,
     cfg: &EvmRuntimeConfig,
     db: &mut DB,
@@ -589,10 +588,7 @@ pub(crate) fn verify_contract_creation_allowlist<
     Ok(())
 }
 
-fn on_error<S: Spec>(
-    hash: B256,
-    err: EVMError<db::Error<impl TxState<S>>>,
-) -> Result<(), anyhow::Error> {
+fn on_error<E: std::fmt::Debug>(hash: B256, err: EVMError<E>) -> Result<(), anyhow::Error> {
     tracing::debug!(
         tx_hash = hex::encode(hash),
         error = ?err,
@@ -616,7 +612,7 @@ fn on_revert<S: Spec>(
     let preferred_sequencer_publish_reverted_txs = false;
     tracing::debug!(
         hash = hex::encode(hash),
-        gas_used = result.gas_used(),
+        gas_used = result.tx_gas_used(),
         ?result,
         publish = %preferred_sequencer_publish_reverted_txs,
         "EVM execution error"
@@ -656,10 +652,10 @@ mod tests {
 
     #[test]
     fn spec_id_lookup() {
-        let spec = vec![(0, SpecId::CONSTANTINOPLE), (2, SpecId::BERLIN)];
+        let spec = vec![(0, SpecId::PETERSBURG), (2, SpecId::BERLIN)];
 
-        assert_eq!(get_spec_id(&spec, 0), SpecId::CONSTANTINOPLE);
-        assert_eq!(get_spec_id(&spec, 1), SpecId::CONSTANTINOPLE);
+        assert_eq!(get_spec_id(&spec, 0), SpecId::PETERSBURG);
+        assert_eq!(get_spec_id(&spec, 1), SpecId::PETERSBURG);
         assert_eq!(get_spec_id(&spec, 2), SpecId::BERLIN);
         assert_eq!(get_spec_id(&spec, 3), SpecId::BERLIN);
     }

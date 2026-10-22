@@ -3,7 +3,7 @@ use revm::{
         result::{EVMError, HaltReason, InvalidTransaction},
         Transaction,
     },
-    context_interface::{ContextTr, JournalTr},
+    context_interface::{journaled_state::account::JournaledAccountTr, ContextTr, JournalTr},
     handler::{
         evm::FrameTr, instructions::InstructionProvider, EvmTr, FrameResult, Handler,
         PrecompileProvider,
@@ -47,15 +47,18 @@ where
     #[inline]
     fn validate(&self, evm: &mut Self::Evm) -> Result<InitialAndFloorGas, Self::Error> {
         self.validate_env(evm)?;
-        match gas_metering_mode() {
-            GasMeteringMode::Rollup => Ok(InitialAndFloorGas::new(0, 0)), // We disable charging initial gas
-            GasMeteringMode::Evm => self.validate_initial_tx_gas(evm),
-        }
+        let mut init_and_floor_gas = match gas_metering_mode() {
+            GasMeteringMode::Rollup => InitialAndFloorGas::new(0, 0), // We disable charging initial gas
+            GasMeteringMode::Evm => self.validate_initial_tx_gas(evm)?,
+        };
+        self.validate_against_state_and_deduct_caller(evm, &mut init_and_floor_gas)?;
+        Ok(init_and_floor_gas)
     }
 
     fn validate_against_state_and_deduct_caller(
         &self,
         evm: &mut Self::Evm,
+        _init_and_floor_gas: &mut InitialAndFloorGas,
     ) -> Result<(), Self::Error> {
         let context = evm.ctx();
         let (tx, journal) = context.tx_journal_mut();
@@ -69,7 +72,7 @@ where
         }
 
         // Touch account so we know it is changed.
-        journal.touch_account(tx.caller());
+        caller.touch();
 
         Ok(())
     }

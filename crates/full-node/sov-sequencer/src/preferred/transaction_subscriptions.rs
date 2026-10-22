@@ -240,7 +240,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         Ok(db_event_opts
             .into_iter()
             .flatten()
-            .chain(cached_events.into_iter())
+            .chain(cached_events)
             .collect())
     }
 

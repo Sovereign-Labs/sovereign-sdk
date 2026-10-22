@@ -292,8 +292,8 @@ fn generate_where_clause_template_parsing_bound(
 ) -> Vec<WherePredicate> {
     template
         .template
-        .iter()
-        .filter_map(|(_, iov)| match iov {
+        .values()
+        .filter_map(|iov| match iov {
             InputOrValue::Input(_) | InputOrValue::FieldNameInput | InputOrValue::BytesValue(_) => {
                 None
             }

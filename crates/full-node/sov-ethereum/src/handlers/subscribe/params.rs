@@ -14,6 +14,8 @@ pub enum Error {
     BlockOptionParam,
     #[error("Boolean parameters are not supported in LOG subscriptions")]
     BoolParam,
+    #[error("Transaction receipts parameters are not supported in LOG subscriptions")]
+    TransactionReceiptsParam,
     #[error("Only LOG and newHeads subscriptions are supported")]
     OnlyLogAndNewHeadsSubscription,
     #[error("newHeads subscription does not accept parameters")]
@@ -60,6 +62,7 @@ pub fn validate(kind: SubscriptionKind, params: Params) -> Result<SubscriptionRe
                     }
                 }
                 Params::Bool(_) => return Err(Error::BoolParam),
+                Params::TransactionReceipts(_) => return Err(Error::TransactionReceiptsParam),
                 Params::None => Default::default(),
             };
             Ok(SubscriptionRequest::Logs(filter))

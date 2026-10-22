@@ -46,14 +46,13 @@ fn build_hardfork_schedule(
     }
 
     push_block_fork(&mut schedule, config.byzantium_block, "BYZANTIUM");
-    push_block_fork(&mut schedule, config.constantinople_block, "CONSTANTINOPLE");
+    // revm folds Constantinople into Petersburg and does not model the difficulty-bomb-only
+    // glacier forks, so those have no `SpecId` of their own.
+    push_block_fork(&mut schedule, config.constantinople_block, "PETERSBURG");
     push_block_fork(&mut schedule, config.petersburg_block, "PETERSBURG");
     push_block_fork(&mut schedule, config.istanbul_block, "ISTANBUL");
-    push_block_fork(&mut schedule, config.muir_glacier_block, "MUIR_GLACIER");
     push_block_fork(&mut schedule, config.berlin_block, "BERLIN");
     push_block_fork(&mut schedule, config.london_block, "LONDON");
-    push_block_fork(&mut schedule, config.arrow_glacier_block, "ARROW_GLACIER");
-    push_block_fork(&mut schedule, config.gray_glacier_block, "GRAY_GLACIER");
     push_block_fork(&mut schedule, config.merge_netsplit_block, "MERGE");
 
     push_time_fork(

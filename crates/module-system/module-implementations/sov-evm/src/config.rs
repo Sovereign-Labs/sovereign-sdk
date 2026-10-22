@@ -138,7 +138,25 @@ pub struct BorshSpecId(#[schemars(with = "String")] pub SpecId);
 
 impl BorshSerialize for BorshSpecId {
     fn serialize<W: std::io::Write>(&self, writer: &mut W) -> Result<(), std::io::Error> {
-        let id = self.0 as u8;
+        // Discriminants of revm's `SpecId` before revm 43 dropped the forks that did not change
+        // EVM behaviour. Hardcoded so the wire format does not depend on revm's enum layout.
+        let id: u8 = match self.0 {
+            SpecId::FRONTIER => 0,
+            SpecId::HOMESTEAD => 2,
+            SpecId::TANGERINE => 4,
+            SpecId::SPURIOUS_DRAGON => 5,
+            SpecId::BYZANTIUM => 6,
+            SpecId::PETERSBURG => 8,
+            SpecId::ISTANBUL => 9,
+            SpecId::BERLIN => 11,
+            SpecId::LONDON => 12,
+            SpecId::MERGE => 15,
+            SpecId::SHANGHAI => 16,
+            SpecId::CANCUN => 17,
+            SpecId::PRAGUE => 18,
+            SpecId::OSAKA => 19,
+            SpecId::AMSTERDAM => 20,
+        };
         id.serialize(writer)
     }
 }
@@ -146,9 +164,30 @@ impl BorshSerialize for BorshSpecId {
 impl BorshDeserialize for BorshSpecId {
     fn deserialize_reader<R: std::io::Read>(reader: &mut R) -> Result<Self, std::io::Error> {
         let id = u8::deserialize_reader(reader)?;
-        Ok(Self(SpecId::try_from(id).map_err(|e| {
-            std::io::Error::new(std::io::ErrorKind::InvalidData, e)
-        })?))
+        let spec_id = match id {
+            0 => SpecId::FRONTIER,
+            2 => SpecId::HOMESTEAD,
+            4 => SpecId::TANGERINE,
+            5 => SpecId::SPURIOUS_DRAGON,
+            6 => SpecId::BYZANTIUM,
+            8 => SpecId::PETERSBURG,
+            9 => SpecId::ISTANBUL,
+            11 => SpecId::BERLIN,
+            12 => SpecId::LONDON,
+            15 => SpecId::MERGE,
+            16 => SpecId::SHANGHAI,
+            17 => SpecId::CANCUN,
+            18 => SpecId::PRAGUE,
+            19 => SpecId::OSAKA,
+            20 => SpecId::AMSTERDAM,
+            _ => {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!("Unsupported SpecId: {id}"),
+                ))
+            }
+        };
+        Ok(Self(spec_id))
     }
 }
 
@@ -361,5 +400,39 @@ mod tests {
 
         let parsed_config: EvmGenesisConfig<TestSpec> = serde_json::from_str(data).unwrap();
         assert_eq!(config, parsed_config);
+    }
+
+    #[test]
+    fn borsh_spec_id_keeps_legacy_wire_ids() {
+        let cases = [
+            (SpecId::FRONTIER, 0u8),
+            (SpecId::HOMESTEAD, 2),
+            (SpecId::TANGERINE, 4),
+            (SpecId::SPURIOUS_DRAGON, 5),
+            (SpecId::BYZANTIUM, 6),
+            (SpecId::PETERSBURG, 8),
+            (SpecId::ISTANBUL, 9),
+            (SpecId::BERLIN, 11),
+            (SpecId::LONDON, 12),
+            (SpecId::MERGE, 15),
+            (SpecId::SHANGHAI, 16),
+            (SpecId::CANCUN, 17),
+            (SpecId::PRAGUE, 18),
+            (SpecId::OSAKA, 19),
+            (SpecId::AMSTERDAM, 20),
+        ];
+        for (spec_id, wire_id) in cases {
+            let encoded = borsh::to_vec(&crate::BorshSpecId(spec_id)).unwrap();
+            assert_eq!(encoded, vec![wire_id], "{spec_id:?} must keep its wire id");
+            let decoded: crate::BorshSpecId = borsh::from_slice(&[wire_id]).unwrap();
+            assert_eq!(decoded.0, spec_id);
+        }
+    }
+
+    #[test]
+    fn borsh_spec_id_rejects_removed_forks() {
+        // 7 was CONSTANTINOPLE, which revm no longer models.
+        let result = borsh::from_slice::<crate::BorshSpecId>(&[7]);
+        assert!(result.is_err());
     }
 }

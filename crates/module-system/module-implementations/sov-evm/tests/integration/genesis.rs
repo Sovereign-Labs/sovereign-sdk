@@ -34,6 +34,7 @@ fn test_genesis_data() {
                 code_hash: account.code_hash,
                 nonce: 0,
                 code: None,
+                account_id: None,
             }
         );
     });
