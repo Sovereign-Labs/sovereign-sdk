@@ -35,7 +35,9 @@ sov-commonware-crypto = { path = ".", features = ["native"] }
 default = []
 native = ["rand", "sov-commonware-crypto/native", "sov-rollup-interface/native"]
 arbitrary = [
-    "dep:arbitrary",
-    "sov-commonware-crypto/arbitrary",
-    "sov-rollup-interface/arbitrary",
+	"dep:arbitrary",
+	"sov-commonware-crypto/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"commonware-codec/arbitrary",
+	"commonware-cryptography-curve25519/arbitrary"
 ]
