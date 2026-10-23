@@ -2993,12 +2993,15 @@ name = "commonware-codec"
 version = "2026.9.0"
 source = "git+https://github.com/commonwarexyz/monorepo?rev=e7aa5b115243b39ab47df766094604a9874afea2#e7aa5b115243b39ab47df766094604a9874afea2"
 dependencies = [
+ "arbitrary",
  "bytes",
  "cfg-if",
  "commonware-codec-macros",
+ "commonware-conformance",
  "commonware-macros",
  "paste",
  "rand_chacha 0.10.0",
+ "rand_core 0.10.1",
  "thiserror 2.0.18",
 ]
 
@@ -3014,12 +3017,37 @@ dependencies = [
 ]
 
 [[package]]
+name = "commonware-conformance"
+version = "2026.9.0"
+source = "git+https://github.com/commonwarexyz/monorepo?rev=e7aa5b115243b39ab47df766094604a9874afea2#e7aa5b115243b39ab47df766094604a9874afea2"
+dependencies = [
+ "commonware-conformance-macros",
+ "commonware-formatting",
+ "commonware-macros",
+ "futures",
+ "serde",
+ "sha2 0.11.1",
+ "toml 1.1.8+spec-1.1.0",
+]
+
+[[package]]
+name = "commonware-conformance-macros"
+version = "2026.9.0"
+source = "git+https://github.com/commonwarexyz/monorepo?rev=e7aa5b115243b39ab47df766094604a9874afea2#e7aa5b115243b39ab47df766094604a9874afea2"
+dependencies = [
+ "proc-macro2",
+ "quote",
+ "syn 2.0.119",
+]
+
+[[package]]
 name = "commonware-cryptography"
 version = "2026.9.0"
 source = "git+https://github.com/commonwarexyz/monorepo?rev=e7aa5b115243b39ab47df766094604a9874afea2#e7aa5b115243b39ab47df766094604a9874afea2"
 dependencies = [
  "ahash",
  "anyhow",
+ "arbitrary",
  "aws-lc-rs",
  "blake3",
  "blst",
@@ -3060,6 +3088,7 @@ name = "commonware-cryptography-curve25519"
 version = "2026.9.0"
 source = "git+https://github.com/commonwarexyz/monorepo?rev=e7aa5b115243b39ab47df766094604a9874afea2#e7aa5b115243b39ab47df766094604a9874afea2"
 dependencies = [
+ "arbitrary",
  "bytes",
  "commonware-codec",
  "commonware-cryptography",
@@ -3081,6 +3110,19 @@ source = "git+https://github.com/commonwarexyz/monorepo?rev=e7aa5b115243b39ab47d
 dependencies = [
  "commonware-macros",
  "const-hex",
+]
+
+[[package]]
+name = "commonware-invariants"
+version = "2026.9.0"
+source = "git+https://github.com/commonwarexyz/monorepo?rev=e7aa5b115243b39ab47df766094604a9874afea2#e7aa5b115243b39ab47df766094604a9874afea2"
+dependencies = [
+ "arbitrary",
+ "commonware-formatting",
+ "commonware-macros",
+ "rand 0.10.3",
+ "rand_chacha 0.10.0",
+ "rand_core 0.10.1",
 ]
 
 [[package]]
@@ -3109,8 +3151,10 @@ name = "commonware-math"
 version = "2026.9.0"
 source = "git+https://github.com/commonwarexyz/monorepo?rev=e7aa5b115243b39ab47df766094604a9874afea2#e7aa5b115243b39ab47df766094604a9874afea2"
 dependencies = [
+ "arbitrary",
  "bytes",
  "commonware-codec",
+ "commonware-invariants",
  "commonware-macros",
  "commonware-parallel",
  "commonware-utils",
@@ -3135,6 +3179,7 @@ version = "2026.9.0"
 source = "git+https://github.com/commonwarexyz/monorepo?rev=e7aa5b115243b39ab47df766094604a9874afea2#e7aa5b115243b39ab47df766094604a9874afea2"
 dependencies = [
  "ahash",
+ "arbitrary",
  "bytes",
  "commonware-codec",
  "commonware-formatting",
@@ -7390,6 +7435,7 @@ version = "0.4.8"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "c89e69e7e0f03bea5ef08013795c25018e101932225a656383bd384495ecc367"
 dependencies = [
+ "arbitrary",
  "num-integer",
  "num-traits",
 ]
