@@ -1,3 +1,4 @@
+mod preferred_and_standard;
 mod preferred_blob_sender;
 mod preferred_end_to_end;
 mod preferred_tx_nonce_queue;
