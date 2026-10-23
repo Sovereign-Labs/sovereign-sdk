@@ -31,6 +31,7 @@ sov-metrics = { workspace = true, default-features = false }
 
 sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
+sov-commonware-crypto = { workspace = true, features = ["arbitrary", "native"] }
 sov-stf-runner = { workspace = true }
 
 demo-stf = { workspace = true, features = ["test-utils", "arbitrary"] }
