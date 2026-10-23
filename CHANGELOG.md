@@ -1,3 +1,6 @@
+# 2026-10-23
+- #PR_NUMBER **Breaking Change** EVM RPC: `eth_estimateGas` now executes the runtime's custom EVM precompiles. Previously its revert pre-check and its fallback estimator (used for requests without `from`, or with state/block overrides) simulated without them, so calls into custom precompiles could fail or be mis-estimated. `sov_ethereum::get_ethereum_rpc` now requires the runtime to implement the new `sov_evm::HasEvm<S>` trait: set `type EvmPrecompiles` to the precompile set `P` of the runtime's `Evm<S, P>` module, and return that module field from `evm()` (which makes the compiler check that the two match). Not state- or chain-hash-breaking.
+
 # 2026-10-13
 - #3075 Added a new config value: `runner.http_config.max_rpc_response_body_size`. This overrides the maximum response size for JSON-RPC requests (primarily used for the Ethereum RPC interface). When unset, keeps the old default of 10 MiB.
 
