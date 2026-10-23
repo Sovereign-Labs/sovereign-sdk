@@ -834,6 +834,17 @@ impl<Da: DaService, FM: FinalizationManager> TaskState<Da, FM> {
                         }
                         // Resubmit if discarded for any reason except `SequenceNumberTooLow`
                         Some(BlobSelectorStatus::Discarded(reason)) => {
+                            if nb_of_retries_attempted >= MAX_NB_OF_BLOB_SUBMISSION_RETRIES {
+                                tracing::error!(
+                                    nb_of_retries_attempted,
+                                    MAX_NB_OF_BLOB_SUBMISSION_RETRIES,
+                                    ?reason,
+                                    %blob_id,
+                                    "Shutting down the rollup. BlobSelector keeps discarding the blob."
+                                );
+                                self.primary_shutdown.shutdown();
+                                return;
+                            }
                             trace!(%blob_id, %receipt, ?reason, "Blob was discarded. Setting status to MustSubmit.");
                             blob_status = BlobExecutionStatus {
                                 blob_submission_status: BlobSubmissionStatus::MustSubmit,
