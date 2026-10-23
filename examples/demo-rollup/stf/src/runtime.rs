@@ -11,7 +11,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "native")]
 pub use sov_attester_incentives::BondingProofServiceImpl;
 use sov_capabilities::StandardProvenRollupCapabilities as StandardCapabilities;
-use sov_evm::EthereumAuthenticator;
+use sov_evm::{EthereumAuthenticator, HasEvm};
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 #[cfg(feature = "native")]
 use sov_modules_api::capabilities::KernelWithSlotMapping;
@@ -192,6 +192,17 @@ where
 {
     fn add_ethereum_auth(tx: RawTx) -> <Self::Auth as TransactionAuthenticator<S>>::Input {
         EvmAndSolanaOffchainAuthenticatorInput::Evm(tx)
+    }
+}
+
+impl<S: Spec> HasEvm<S> for Runtime<S>
+where
+    S::Address: FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
+{
+    type EvmPrecompiles = demo_stf_declaration::DemoEvmPrecompiles<S>;
+
+    fn evm(&self) -> &sov_evm::Evm<S, Self::EvmPrecompiles> {
+        &self.0.evm
     }
 }
 

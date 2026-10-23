@@ -200,6 +200,17 @@ where
     }
 }
 
+impl<S: Spec> sov_evm::HasEvm<S> for PruningRuntime<S>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    type EvmPrecompiles = OraclePrecompiles<S>;
+
+    fn evm(&self) -> &Evm<S, Self::EvmPrecompiles> {
+        &self.evm
+    }
+}
+
 type S = EvmTestSpec;
 type RT = PruningRuntime<S>;
 type PruningBlueprint = RtAgnosticBlueprintWithApis<S, RT, EvmAdditionalApis>;
