@@ -25,9 +25,7 @@
 //!   for different content. The number alone cannot express that: a rollback that retracts
 //!   fewer events than it goes on to re-emit leaves the number *higher* than before. The
 //!   epoch changes whenever numbering is reissued, so numbers may only be compared across two
-//!   replies that agree on it; otherwise the client must resynchronise. The epoch is per
-//!   sequencer instance, not per cluster, so a failover or a redirect to another instance also
-//!   shows up as an epoch change; read state and stream events from the same instance.
+//!   replies that agree on it; otherwise the client must resynchronise.
 //!
 //! # Missing features
 //! - Multi-column sorting (see <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/449>).
@@ -147,8 +145,12 @@ static EVENT_EPOCH: HeaderName = HeaderName::from_static("x-sov-event-epoch");
 enum RecordedEvents {
     /// Nothing recorded; the handler did not read rollup state.
     Unset,
-    /// Every read so far reflects exactly the events up to `last_event_number` in `epoch`.
-    Recorded { epoch: u128, last_event_number: u64 },
+    /// Every read so far reflects exactly the events up to `last_event_number` in `epoch`;
+    /// `None` before the first event is emitted.
+    Recorded {
+        epoch: u128,
+        last_event_number: Option<u64>,
+    },
     /// Reads disagreed, so no single `(epoch, number)` describes the reply.
     Conflict,
 }
@@ -163,9 +165,13 @@ tokio::task_local! {
 }
 
 /// Records that the state read by the current HTTP request belongs to `epoch` and reflects
-/// every event up to and including `last_event_number`. The layer installed by
-/// [`preconfigured_router_layers`] turns this into the `x-sov-last-event-number` and
-/// `x-sov-event-epoch` response headers.
+/// every event up to and including `last_event_number`, or no event yet when that is `None`.
+/// The layer installed by [`preconfigured_router_layers`] turns this into the
+/// `x-sov-last-event-number` and `x-sov-event-epoch` response headers, which are omitted when
+/// there is no event to report.
+///
+/// A read that predates the first event must still be recorded: a later read in the same
+/// handler may reflect events it does not, and the reply must then carry neither header.
 ///
 /// Outside such a request (the sequencer, JSON-RPC, a task spawned by the handler) this does
 /// nothing.
@@ -175,7 +181,7 @@ tokio::task_local! {
 /// smaller number would make a client double-apply events already reflected in the later
 /// snapshot, and the larger would make it skip events missing from the earlier one. So the
 /// reply then carries neither header.
-pub fn record_last_event_number(epoch: u128, last_event_number: u64) {
+pub fn record_last_event_number(epoch: u128, last_event_number: Option<u64>) {
     let recorded = RecordedEvents::Recorded {
         epoch,
         last_event_number,
@@ -211,7 +217,7 @@ async fn attach_last_event_number(
     if response.status() != StatusCode::SWITCHING_PROTOCOLS {
         if let RecordedEvents::Recorded {
             epoch,
-            last_event_number,
+            last_event_number: Some(last_event_number),
         } = recorded
         {
             let headers = response.headers_mut();
@@ -673,7 +679,10 @@ mod tests {
 
     /// Serves one request to a handler that records each `(epoch, number)` in `reads`, as a
     /// handler reading state once per entry would, and returns the response headers.
-    fn headers_after_recording(reads: &'static [(u128, u64)], request: Request) -> HeaderMap {
+    fn headers_after_recording(
+        reads: &'static [(u128, Option<u64>)],
+        request: Request,
+    ) -> HeaderMap {
         let router: Router = preconfigured_router_layers(Router::new().route(
             "/",
             axum::routing::get(move || async move {
@@ -707,7 +716,8 @@ mod tests {
 
     #[test]
     fn reads_that_agree_produce_headers() {
-        let headers = headers_after_recording(&[(EPOCH, NUMBER), (EPOCH, NUMBER)], get_root());
+        let headers =
+            headers_after_recording(&[(EPOCH, Some(NUMBER)), (EPOCH, Some(NUMBER))], get_root());
 
         assert_eq!(
             event_headers(&headers),
@@ -716,9 +726,33 @@ mod tests {
     }
 
     #[test]
+    fn reads_before_the_first_event_produce_no_headers() {
+        let headers = headers_after_recording(&[(EPOCH, None)], get_root());
+
+        assert_eq!(
+            event_headers(&headers),
+            (None, None),
+            "There is no event to order the reply against yet"
+        );
+    }
+
+    #[test]
+    fn a_read_before_the_first_event_conflicts_with_a_later_one() {
+        let headers = headers_after_recording(&[(EPOCH, None), (EPOCH, Some(NUMBER))], get_root());
+
+        assert_eq!(
+            event_headers(&headers),
+            (None, None),
+            "Part of the reply predates every event, so no number describes all of it"
+        );
+    }
+
+    #[test]
     fn reads_with_different_numbers_produce_no_headers() {
-        let headers =
-            headers_after_recording(&[(EPOCH, NUMBER), (EPOCH, NUMBER + 0x100)], get_root());
+        let headers = headers_after_recording(
+            &[(EPOCH, Some(NUMBER)), (EPOCH, Some(NUMBER + 0x100))],
+            get_root(),
+        );
 
         assert_eq!(
             event_headers(&headers),
@@ -729,8 +763,10 @@ mod tests {
 
     #[test]
     fn reads_with_different_epochs_produce_no_headers() {
-        let headers =
-            headers_after_recording(&[(EPOCH, NUMBER), (OTHER_EPOCH, NUMBER)], get_root());
+        let headers = headers_after_recording(
+            &[(EPOCH, Some(NUMBER)), (OTHER_EPOCH, Some(NUMBER))],
+            get_root(),
+        );
 
         assert_eq!(
             event_headers(&headers),
