@@ -64,7 +64,9 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StateMapInfo"
-      headers:
+      # Defined once and aliased by the other state responses: utoipa cannot represent
+      # `components/headers` or a `$ref` to a header, so a YAML anchor is the only way to share it.
+      headers: &state_reply_headers
         x-sov-last-event-number:
           description: >-
             The number of the last rollup event whose effects the returned state reflects.
@@ -92,112 +94,28 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/StateMapElement"
-      headers:
-        x-sov-last-event-number:
-          description: >-
-            The number of the last rollup event whose effects the returned state reflects.
-            Apply every event numbered above it, and none at or below it, to bring the state up
-            to date. Absent when the request asked for a historical height, or when the rollup
-            has not emitted any event yet. It is not monotonic across requests: it moves
-            backwards when the sequencer retracts soft confirmations.
-          schema:
-            type: integer
-            format: uint64
-        x-sov-event-epoch:
-          description: >-
-            Identifies the run of event numbering that `x-sov-last-event-number` belongs to.
-            Event numbers are handed out before they are committed, so a sequencer rollback
-            retracts numbered events and reissues those numbers for different content; the
-            number alone cannot express that, because a rollback that retracts fewer events
-            than it goes on to re-emit leaves the number higher than before. Compare this
-            token for equality only. Numbers from two replies may be compared only if their
-            epochs match; otherwise the client must resynchronise.
-          schema:
-            type: string
+      headers: *state_reply_headers
     StateVecInfoResponse:
       description: Contains meta information about StateVec.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/StateVecInfo"
-      headers:
-        x-sov-last-event-number:
-          description: >-
-            The number of the last rollup event whose effects the returned state reflects.
-            Apply every event numbered above it, and none at or below it, to bring the state up
-            to date. Absent when the request asked for a historical height, or when the rollup
-            has not emitted any event yet. It is not monotonic across requests: it moves
-            backwards when the sequencer retracts soft confirmations.
-          schema:
-            type: integer
-            format: uint64
-        x-sov-event-epoch:
-          description: >-
-            Identifies the run of event numbering that `x-sov-last-event-number` belongs to.
-            Event numbers are handed out before they are committed, so a sequencer rollback
-            retracts numbered events and reissues those numbers for different content; the
-            number alone cannot express that, because a rollback that retracts fewer events
-            than it goes on to re-emit leaves the number higher than before. Compare this
-            token for equality only. Numbers from two replies may be compared only if their
-            epochs match; otherwise the client must resynchronise.
-          schema:
-            type: string
+      headers: *state_reply_headers
     StateVecElementResponse:
       description: containing the value of a `StateVec` element.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/StateVecElement"
-      headers:
-        x-sov-last-event-number:
-          description: >-
-            The number of the last rollup event whose effects the returned state reflects.
-            Apply every event numbered above it, and none at or below it, to bring the state up
-            to date. Absent when the request asked for a historical height, or when the rollup
-            has not emitted any event yet. It is not monotonic across requests: it moves
-            backwards when the sequencer retracts soft confirmations.
-          schema:
-            type: integer
-            format: uint64
-        x-sov-event-epoch:
-          description: >-
-            Identifies the run of event numbering that `x-sov-last-event-number` belongs to.
-            Event numbers are handed out before they are committed, so a sequencer rollback
-            retracts numbered events and reissues those numbers for different content; the
-            number alone cannot express that, because a rollback that retracts fewer events
-            than it goes on to re-emit leaves the number higher than before. Compare this
-            token for equality only. Numbers from two replies may be compared only if their
-            epochs match; otherwise the client must resynchronise.
-          schema:
-            type: string
+      headers: *state_reply_headers
     StateValueResponse:
       description: Response containing the `StateValue`.
       content:
         application/json:
           schema:
             $ref: "#/components/schemas/StateValue"
-      headers:
-        x-sov-last-event-number:
-          description: >-
-            The number of the last rollup event whose effects the returned state reflects.
-            Apply every event numbered above it, and none at or below it, to bring the state up
-            to date. Absent when the request asked for a historical height, or when the rollup
-            has not emitted any event yet. It is not monotonic across requests: it moves
-            backwards when the sequencer retracts soft confirmations.
-          schema:
-            type: integer
-            format: uint64
-        x-sov-event-epoch:
-          description: >-
-            Identifies the run of event numbering that `x-sov-last-event-number` belongs to.
-            Event numbers are handed out before they are committed, so a sequencer rollback
-            retracts numbered events and reissues those numbers for different content; the
-            number alone cannot express that, because a rollback that retracts fewer events
-            than it goes on to re-emit leaves the number higher than before. Compare this
-            token for equality only. Numbers from two replies may be compared only if their
-            epochs match; otherwise the client must resynchronise.
-          schema:
-            type: string
+      headers: *state_reply_headers
     StateNotFound:
       description: The requested resource was not found.
       content:
