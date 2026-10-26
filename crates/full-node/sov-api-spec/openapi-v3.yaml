@@ -642,7 +642,9 @@ components:
         Numbers from two replies may be compared only if their epochs match; otherwise the
         client must resynchronise. A publisher that never reissues numbers, such as the
         standard sequencer, which serves node-committed state only, reports an all-zero epoch
-        that never changes.
+        that never changes. The epoch is per sequencer instance, not per cluster: a failover
+        or a redirect to another instance shows up as an epoch change and costs one
+        resynchronisation, so read state and stream events from the same instance.
       required: false
       schema:
         type: string
@@ -653,6 +655,8 @@ components:
         Absent when the request asked for a historical height, when the rollup has not emitted
         any event yet, or when the endpoint does not read rollup state. It is not monotonic
         across requests: it moves backwards when the sequencer retracts soft confirmations.
+        Within one epoch that only means the state reflects fewer events than before; numbers
+        already seen keep their meaning.
       required: false
       schema:
         type: integer
@@ -944,8 +948,10 @@ components:
             Present on events served from the sequencer, whose numbers are handed out before
             the node commits them and are reissued if the sequencer rolls back; compare it
             against the `x-sov-event-epoch` a state snapshot reported before applying this
-            event to that snapshot. Absent on events read back from the ledger, which are
-            committed, so their numbering is canonical and never handed out again.
+            event to that snapshot. Absent on events read back from the ledger, which were
+            numbered by the node and are not reissued by a sequencer rollback. On a DA layer
+            without instant finality, a DA reorg can still renumber events in non-finalized
+            slots; an absent epoch does not guard against that.
       required:
         - type
         - number

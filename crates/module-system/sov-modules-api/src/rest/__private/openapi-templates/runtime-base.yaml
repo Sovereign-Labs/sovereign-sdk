@@ -73,7 +73,9 @@ components:
             Apply every event numbered above it, and none at or below it, to bring the state up
             to date. Absent when the request asked for a historical height, or when the rollup
             has not emitted any event yet. It is not monotonic across requests: it moves
-            backwards when the sequencer retracts soft confirmations.
+            backwards when the sequencer retracts soft confirmations. Within one epoch that only
+            means the state reflects fewer events than before; numbers already seen keep their
+            meaning.
           schema:
             type: integer
             format: uint64
@@ -87,7 +89,10 @@ components:
             token for equality only. Numbers from two replies may be compared only if their
             epochs match; otherwise the client must resynchronise. A publisher that never
             reissues numbers, such as the standard sequencer, which serves node-committed
-            state only, reports an all-zero epoch that never changes.
+            state only, reports an all-zero epoch that never changes. The epoch is per
+            sequencer instance, not per cluster: a failover or a redirect to another instance
+            shows up as an epoch change and costs one resynchronisation, so read state and
+            stream events from the same instance.
           schema:
             type: string
     StateMapElementResponse:

@@ -15,6 +15,10 @@ use sov_rollup_interface::stf::TxReceiptContents;
 /// served (on recovery or resync), so it never needs to be persisted. This is conservative:
 /// the epoch can change even though the events that follow turn out identical.
 ///
+/// It is minted per sequencer instance, not per cluster: a leader and its replicas each have
+/// their own, so a failover or a redirect to another instance shows up as an epoch change and
+/// costs the client one resynchronisation. State and events must be read from one instance.
+///
 /// A publisher whose numbers are never speculative has nothing to rotate and reports
 /// [`Self::ZERO`] instead, so that the absence of reissues is visible on the wire.
 ///
@@ -135,8 +139,11 @@ pub struct RuntimeEventResponse<E> {
     /// epoch a state snapshot reported before applying this event to that snapshot: if they
     /// differ, the number refers to a run of events the snapshot knows nothing about.
     ///
-    /// Absent on events read back from the ledger. Those are committed, so their numbering is
-    /// canonical and is never handed out again.
+    /// Absent on events read back from the ledger. Those were numbered by the node when it
+    /// executed them, so a sequencer rollback does not reissue them. On a DA layer without
+    /// instant finality (Celestia has it), a DA reorg can still make the node re-execute
+    /// non-finalized slots and renumber their events; the absence of an epoch does not guard
+    /// against that.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub epoch: Option<EventEpoch>,
 }
@@ -170,8 +177,9 @@ where
             value: runtime_event,
             module: ModuleRef { name: module_name },
             tx_hash: HexHash::from(*stored_event.tx_hash()),
-            // Read back from the ledger, so committed: the numbering is canonical and will
-            // never be handed out again, which is exactly what an absent epoch means.
+            // Read back from the ledger, so numbered by the node rather than speculatively by
+            // the sequencer, which is what an absent epoch means. See the field's docs for the
+            // DA-reorg caveat.
             epoch: None,
         })
     }

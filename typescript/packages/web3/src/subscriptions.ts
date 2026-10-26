@@ -101,8 +101,9 @@ export type EventPayload = {
    * client must resynchronise. Comparing `number` alone is not enough, because a rollback that
    * re-emits past where it rewound leaves the number higher than before.
    *
-   * Absent on events read back from the ledger, which are committed, so their numbering is
-   * canonical and never handed out again.
+   * Absent on events read back from the ledger, which were numbered by the node and are not
+   * reissued by a sequencer rollback. On a DA layer without instant finality, a DA reorg can
+   * still renumber events in non-finalized slots; an absent epoch does not guard against that.
    */
   epoch?: string;
 };
