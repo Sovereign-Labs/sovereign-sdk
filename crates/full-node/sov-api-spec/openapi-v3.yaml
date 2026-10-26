@@ -640,7 +640,9 @@ components:
         cannot express that, because a rollback that retracts fewer events than it goes on to
         re-emit leaves the number higher than before. Compare this token for equality only.
         Numbers from two replies may be compared only if their epochs match; otherwise the
-        client must resynchronise.
+        client must resynchronise. A publisher that never reissues numbers, such as the
+        standard sequencer, which serves node-committed state only, reports an all-zero epoch
+        that never changes.
       required: false
       schema:
         type: string

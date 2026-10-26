@@ -12,6 +12,9 @@ use sov_rollup_interface::stf::TxReceiptContents;
 /// The epoch closes that hole. It changes whenever the numbering is reissued, so `(epoch,
 /// number)` *is* stable: two events agreeing on both are the same event.
 ///
+/// A publisher whose numbers are never speculative has nothing to rotate and reports
+/// [`Self::ZERO`] instead, so that the absence of reissues is visible on the wire.
+///
 /// It is an opaque token — compare it for equality and nothing else. It carries no ordering,
 /// and a fresh one is minted whenever the sequencer rewinds *or restarts*, so it never needs
 /// to be persisted. On the wire it is a fixed-width lowercase hex string.
@@ -21,6 +24,12 @@ use sov_rollup_interface::stf::TxReceiptContents;
 pub struct EventEpoch(u128);
 
 impl EventEpoch {
+    /// The epoch of a publisher that only ever serves node-committed events, whose numbers are
+    /// never reissued, such as the standard sequencer. It never changes, so a client holding a
+    /// snapshot from such a publisher never has to resynchronise over an epoch mismatch. All
+    /// zeros on the wire, to make it obvious that no rotation is happening.
+    pub const ZERO: Self = Self(0);
+
     /// Wraps an opaque token minted by whoever hands out event numbers.
     pub fn new(token: u128) -> Self {
         Self(token)

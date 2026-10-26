@@ -4638,6 +4638,73 @@ async fn committed_ledger_events_carry_no_epoch() {
     );
 }
 
+/// The standard sequencer publishes node-committed state only, so its replies must name the
+/// node's last committed event, under the constant zero epoch.
+#[tokio::test(flavor = "multi_thread")]
+async fn standard_sequencer_state_reads_report_the_nodes_last_event() {
+    let dir = tempdir_inside_codebase_dir();
+    let (mut genesis_params, admin) = create_genesis_params();
+    let sequencer_config = &mut genesis_params.runtime.sequencer_registry.sequencer_config;
+    sequencer_config.is_preferred_sequencer = false;
+    let seq_da_address = sequencer_config.seq_da_address;
+
+    let test_rollup = RollupBuilder::<TestBlueprint>::new(
+        GenesisSource::CustomParams(genesis_params),
+        BlockProducingConfig::Manual,
+        0,
+    )
+    .set_config(|c| {
+        c.storage = StoragePath::Tmp(dir);
+        c.rollup_prover_config = RollupProverConfig::Disabled;
+        c.automatic_batch_production = true;
+    })
+    .set_da_config(|c| c.sender_address = seq_da_address)
+    .with_standard_sequencer()
+    .start()
+    .await
+    .unwrap();
+
+    let mut slots = test_rollup.api_client().subscribe_slots().await.unwrap();
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
+        })
+        .await
+        .unwrap();
+
+    // The sequencer submits its batch when it sees the next slot, and the node executes it in
+    // the slot after; produce slots until the value is committed.
+    let mut last_event_number = None;
+    for _ in 0..10 {
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        slots.next().await.unwrap().unwrap();
+        let (number, value) = read_value_and_last_event_number(&test_rollup, "").await;
+        if value == Some(0x1234_5678) {
+            last_event_number = number;
+            break;
+        }
+    }
+
+    let latest_event = test_rollup
+        .api_client()
+        .get_latest_event()
+        .await
+        .expect("The value-setting transaction should have committed an event")
+        .into_inner();
+    assert_eq!(
+        last_event_number,
+        Some(latest_event.number),
+        "A reply from the standard sequencer must name the node's last committed event"
+    );
+    assert_eq!(
+        read_event_epoch(&test_rollup).await,
+        Some(sov_modules_api::EventEpoch::ZERO.to_string()),
+        "A publisher that never reissues numbers reports the zero epoch, so its clients never \
+         have to resynchronise over an epoch change"
+    );
+}
+
 /// Copies events with the epoch cleared, for comparing two reads of the same event.
 ///
 /// The epoch reports whether the copy being served is still speculative, so a read answers

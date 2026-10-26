@@ -145,8 +145,12 @@ where
                 StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel()),
                 latest_state_update.latest_finalized_slot_number,
             )
+            // The standard sequencer only publishes node-committed state, whose event numbers
+            // are never reissued, so it has no epoch to rotate; see `EventEpoch::ZERO`. A DA
+            // reorg on a DA layer without instant finality can still renumber events;
+            // `EventEpoch` documents that gap.
             .with_event_frontier(EventFrontier::new(
-                crate::common::new_event_epoch(),
+                EventEpoch::ZERO,
                 latest_state_update.next_event_number,
             )),
         );
@@ -701,13 +705,6 @@ where
             "The sequencer received a new state. Notifying the subscribers."
         );
 
-        // The node's own numbering can rewind on a DA reorg, so route this through the same
-        // regression check the preferred sequencer uses rather than assuming it only grows.
-        let event_frontier = crate::common::event_frontier_after(
-            self.checkpoint_sender.borrow().event_frontier(),
-            *next_event_number,
-        );
-
         {
             let mut inner = self.inner.lock().await;
             self.checkpoint_sender
@@ -719,7 +716,7 @@ where
                     )
                     // The standard sequencer publishes node-committed state only, with no
                     // soft-confirmation overlay, so the node's number is exact for it.
-                    .with_event_frontier(event_frontier),
+                    .with_event_frontier(EventFrontier::new(EventEpoch::ZERO, *next_event_number)),
                 ))
                 .ok();
             inner.checkpoint = Some(checkpoint);
