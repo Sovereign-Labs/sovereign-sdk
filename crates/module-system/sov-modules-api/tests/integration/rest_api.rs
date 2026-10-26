@@ -367,8 +367,9 @@ async fn state_reads_report_the_event_epoch() {
 
     assert_eq!(
         header(&response, EVENT_EPOCH_HEADER),
-        Some(format!("{EPOCH:032x}")),
-        "Without the epoch a client cannot tell a reissued event number from a new one, so it          must be reported alongside the number"
+        Some(EventEpoch::new(EPOCH).to_string()),
+        "Without the epoch a client cannot tell a reissued event number from a new one, so it \
+         must be reported, in the same format the events on the stream carry it in"
     );
 }
 
