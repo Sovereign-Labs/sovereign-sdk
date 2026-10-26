@@ -4388,45 +4388,52 @@ async fn state_reads_report_the_last_event_number_they_reflect() {
 
     let (before, _) = read_value_and_last_event_number(&test_rollup, "").await;
 
-    // Set a value. The transaction emits events, so the frontier must advance past them.
+    // Set a value. The transaction emits events, so the frontier must advance past them. The
+    // sequencer applies the transaction's writes and advances the frontier before it answers
+    // the submitter, so by the time this returns a state read must show both.
     let value_to_set = 0x1234_5678;
-    test_rollup
+    let response = test_rollup
         .api_client()
         .accept_tx(&api_types::AcceptTxBody {
             body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, value_to_set)),
         })
         .await
-        .unwrap();
+        .unwrap()
+        .into_inner();
+    let tx_event_numbers: Vec<u64> = response.events.iter().map(|event| event.number).collect();
+    let last_tx_event_number = tx_event_numbers
+        .last()
+        .copied()
+        .expect("Setting a value should emit at least one event");
 
-    // Collect the numbers the stream hands out for that transaction's events.
-    let mut streamed = Vec::new();
-    while let Ok(Some(Ok(event))) =
-        tokio::time::timeout(Duration::from_secs(5), events.next()).await
-    {
-        streamed.push(event.number);
-        // The sequencer applies a transaction's writes and advances the frontier together, so
-        // once the state shows the new value every event of that transaction has been counted.
-        let (reported, value) = read_value_and_last_event_number(&test_rollup, "").await;
-        if value == Some(value_to_set) {
-            assert_eq!(
-                reported,
-                streamed.last().copied(),
-                "A state read that already shows the transaction's writes must report that \
-                 transaction's last event number; reporting less would make a client re-apply \
-                 events it has already seen, reporting more would make it skip some"
-            );
-            break;
-        }
-    }
-
-    assert!(
-        !streamed.is_empty(),
-        "Setting a value should emit at least one event"
+    let (reported, value) = read_value_and_last_event_number(&test_rollup, "").await;
+    assert_eq!(value, Some(value_to_set));
+    assert_eq!(
+        reported,
+        Some(last_tx_event_number),
+        "A state read that already shows the transaction's writes must report that \
+         transaction's last event number; reporting less would make a client re-apply events \
+         it has already seen, reporting more would make it skip some"
     );
     assert!(
-        before < streamed.last().copied(),
+        before < reported,
         "The reported event number should advance as events are emitted; it was {before:?} \
-         before the transaction and the transaction's events were {streamed:?}"
+         before the transaction and {reported:?} after"
+    );
+
+    // The numbers the stream hands out are the ones the frontier was measured against.
+    let mut streamed = Vec::with_capacity(tx_event_numbers.len());
+    for _ in &tx_event_numbers {
+        let event = tokio::time::timeout(Duration::from_secs(5), events.next())
+            .await
+            .expect("Timed out waiting for the transaction's events on the stream")
+            .unwrap()
+            .unwrap();
+        streamed.push(event.number);
+    }
+    assert_eq!(
+        streamed, tx_event_numbers,
+        "The stream must hand out the same numbers the submitter was told about"
     );
 }
 
@@ -4447,6 +4454,12 @@ async fn historical_state_reads_report_no_last_event_number() {
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
+    let mut events = test_rollup
+        .api_client()
+        .subscribe_to_events()
+        .await
+        .unwrap();
+
     // Emit an event, so that there is a frontier to report in the first place.
     test_rollup
         .api_client()
@@ -4456,14 +4469,14 @@ async fn historical_state_reads_report_no_last_event_number() {
         .await
         .unwrap();
 
-    let mut latest = None;
-    for _ in 0..50 {
-        latest = read_value_and_last_event_number(&test_rollup, "").await.0;
-        if latest.is_some() {
-            break;
-        }
-        sleep(Duration::from_millis(100)).await;
-    }
+    // The sequencer advances the frontier before it streams the transaction's events, so once
+    // one arrives a latest-state read must report it.
+    tokio::time::timeout(Duration::from_secs(5), events.next())
+        .await
+        .expect("The transaction's events should be streamed")
+        .expect("The event stream should not end")
+        .unwrap();
+    let (latest, _) = read_value_and_last_event_number(&test_rollup, "").await;
     assert!(
         latest.is_some(),
         "A latest-state read should report an event number once the rollup has emitted events"
