@@ -9,15 +9,17 @@ use sov_rollup_interface::stf::TxReceiptContents;
 /// after it are different events, and a rollback that retracts fewer events than it later
 /// re-emits is invisible to anyone watching only the number.
 ///
-/// The epoch closes that hole. It changes whenever the numbering is reissued, so `(epoch,
-/// number)` *is* stable: two events agreeing on both are the same event.
+/// The epoch closes that hole. It changes whenever the numbering may be reissued, so `(epoch,
+/// number)` *is* stable: two events agreeing on both are the same event. The sequencer mints a
+/// fresh one when it restarts and whenever it discards the soft-confirmed events it has
+/// served (on recovery or resync), so it never needs to be persisted. This is conservative:
+/// the epoch can change even though the events that follow turn out identical.
 ///
 /// A publisher whose numbers are never speculative has nothing to rotate and reports
 /// [`Self::ZERO`] instead, so that the absence of reissues is visible on the wire.
 ///
-/// It is an opaque token — compare it for equality and nothing else. It carries no ordering,
-/// and a fresh one is minted whenever the sequencer rewinds *or restarts*, so it never needs
-/// to be persisted. On the wire it is a fixed-width lowercase hex string.
+/// It is an opaque token — compare it for equality and nothing else. It carries no ordering.
+/// On the wire it is a fixed-width lowercase hex string.
 #[derive(
     Debug, Clone, Copy, PartialEq, Eq, Hash, borsh::BorshDeserialize, borsh::BorshSerialize,
 )]

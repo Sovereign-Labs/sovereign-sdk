@@ -138,17 +138,6 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
         self
     }
 
-    /// How far event numbering has progressed *right now*.
-    ///
-    /// Use this to decide what to publish next: a new frontier below this one means the
-    /// numbering rewound and must be given a fresh [`EventEpoch`].
-    pub fn event_frontier(&self) -> Option<EventFrontier> {
-        *self
-            .event_frontier
-            .read()
-            .unwrap_or_else(PoisonError::into_inner)
-    }
-
     /// Returns the event frontier paired with a read transaction over `writes`.
     ///
     /// The returned frontier is *exact* for the returned snapshot: the snapshot reflects the

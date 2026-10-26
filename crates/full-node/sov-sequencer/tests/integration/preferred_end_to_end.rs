@@ -4594,6 +4594,44 @@ async fn streamed_events_carry_the_same_epoch_as_the_state_reply() {
     );
 }
 
+/// The submitter's own reply is sent before the transaction reaches the event stream, so its
+/// events are labelled separately from the stream's. They must still carry the same epoch.
+#[tokio::test(flavor = "multi_thread")]
+async fn submitted_tx_reply_events_carry_the_same_epoch_as_the_state_reply() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let response = test_rollup
+        .api_client()
+        .send_raw_tx_to_sequencer(&tx_set_value(&admin.private_key, 0, 0x1234_5678))
+        .await
+        .unwrap();
+    let event = response
+        .events
+        .first()
+        .expect("Setting a value emits an event");
+
+    let epoch_on_state = read_event_epoch(&test_rollup)
+        .await
+        .expect("A latest-state read should report an epoch once events exist");
+
+    assert_eq!(
+        event.epoch.as_deref(),
+        Some(epoch_on_state.as_str()),
+        "The submitter's reply must carry the epoch its events were numbered in, like the stream"
+    );
+}
+
 /// The other half of the contract: a committed event's numbering is canonical and will never be
 /// handed out again, so it carries no epoch. Clients rely on the absence to tell the two apart.
 #[tokio::test(flavor = "multi_thread")]

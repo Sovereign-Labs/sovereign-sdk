@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::Result;
-use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
+use sov_modules_api::{ConcurrentStateCheckpoint, EventFrontier, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use std::sync::Arc;
@@ -62,15 +62,12 @@ where
     ///
     /// `next_event_number` must be the number one past the last event whose effects are
     /// reflected in `checkpoint`, so that API readers can pair a state snapshot with the
-    /// event stream. It can move backwards when the sequencer discards soft confirmations and
-    /// adopts the node's state; [`event_frontier_after`] turns that regression into a fresh
-    /// epoch, so clients can tell a reissued number from a genuinely new one.
+    /// event stream. It is paired with the transaction cache's current epoch, which is the
+    /// run of numbering the cache's events are labelled with.
     #[tracing::instrument(skip_all, level = "trace")]
-    fn update_api_state(&self, checkpoint: StateCheckpoint<S>, next_event_number: u64) {
-        let event_frontier = crate::common::event_frontier_after(
-            self.checkpoint_sender.borrow().event_frontier(),
-            next_event_number,
-        );
+    async fn update_api_state(&self, checkpoint: StateCheckpoint<S>, next_event_number: u64) {
+        let event_frontier =
+            EventFrontier::new(self.transaction_cache.epoch().await, next_event_number);
         // Preferred sequencer intentionally treats the latest available slot as finalized
         // for API state (soft-confirmation semantics). This differs from the standard
         // sequencer which passes the node's true finalized slot explicitly.
@@ -125,7 +122,7 @@ where
         next_event_number: u64,
     ) -> Result<()> {
         self.db.terminate_batch(info_to_store).await?;
-        self.update_api_state(checkpoint, next_event_number);
+        self.update_api_state(checkpoint, next_event_number).await;
 
         // Publish the batch.
         self.blob_sender
@@ -197,12 +194,10 @@ where
                     .await?;
 
                 let checkpoint_ref = self.checkpoint_sender.borrow().clone();
-                // The epoch these events are numbered in. `apply_tx_changes` only extends the
-                // numbering, so every transaction in this batch belongs to the epoch that is
-                // published right now.
-                let epoch = checkpoint_ref
-                    .event_frontier()
-                    .map(|frontier| frontier.epoch);
+                // `insert` labels events with the cache's epoch too, but the submitter's response
+                // below is sent before that, so it needs the label up front. Only this task
+                // rotates the epoch, so it cannot change before the insertion.
+                let epoch = self.transaction_cache.epoch().await;
 
                 let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
                 for mut contents in txs_to_insert {
@@ -215,11 +210,8 @@ where
                         .events
                         .last()
                         .map(|event| event.number + 1);
-                    // Stamp the epoch on, so a subscriber can tell whether these numbers belong
-                    // to the same run of numbering as the state snapshot it is holding. Without
-                    // it a rollback that re-emits past where it rewound is undetectable.
                     for event in contents.accepted_tx.confirmation.events.iter_mut() {
-                        event.epoch = epoch;
+                        event.epoch = Some(epoch);
                     }
                     // Apply all updates in a single batch
                     checkpoint_ref.apply_tx_changes(contents.tx_changes, next_event_number);
@@ -276,7 +268,8 @@ where
                         blob_id,
                     )
                     .await?;
-                self.update_api_state(new_checkpoint, next_event_number);
+                self.update_api_state(new_checkpoint, next_event_number)
+                    .await;
             }
             ExecutorEvent::TriggerRecovery {
                 blobs_to_flush,
@@ -306,7 +299,8 @@ where
             }
             ExecutorEvent::ForceUpdateApiState(new_checkpoint, next_event_number) => {
                 Self::maybe_delay_api_state_update_for_tests().await;
-                self.update_api_state(new_checkpoint, next_event_number);
+                self.update_api_state(new_checkpoint, next_event_number)
+                    .await;
             }
             ExecutorEvent::UpdateApiLedger {
                 ledger_reader,
@@ -327,15 +321,22 @@ where
             }
             ExecutorEvent::UpdateStateForRecovery(checkpoint, next_event_number) => {
                 Self::maybe_delay_api_state_update_for_tests().await;
-                self.update_api_state(checkpoint, next_event_number);
+                self.update_api_state(checkpoint, next_event_number).await;
             }
             ExecutorEvent::FlushTransactionsCache {
                 next_tx_number,
+                checkpoint,
+                next_event_number,
                 oneshot_sender,
             } => {
+                // Discarding the cache may rotate the epoch, so the published state must be
+                // re-stamped in the same step: the replayed events inserted next carry the new
+                // epoch, and a snapshot still labelled with the old one would send every client
+                // into a resynchronisation loop until the replay completes.
                 self.transaction_cache
                     .clean_and_overwrite_next_tx_number(next_tx_number)
                     .await;
+                self.update_api_state(checkpoint, next_event_number).await;
                 let _ = oneshot_sender.send(());
             }
         }

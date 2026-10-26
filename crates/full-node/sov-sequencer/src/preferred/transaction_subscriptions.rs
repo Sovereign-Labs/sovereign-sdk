@@ -8,7 +8,7 @@ use futures::task::Poll;
 use futures::{Future, FutureExt, Stream, StreamExt};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::get_timestamp_from_sequencing_data;
-use sov_modules_api::{HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
+use sov_modules_api::{EventEpoch, HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
 use sov_rollup_interface::node::ledger_api::{EventIdentifier, LedgerStateProvider, QueryMode};
 use tokio::sync::{broadcast, RwLock};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
@@ -60,8 +60,12 @@ impl<S: Spec, Rt: Runtime<S>> Clone for TxResultWriter<S, Rt> {
 type ArcInner<S, Rt> = Arc<tokio::sync::RwLock<TransactionCacheInner<S, Rt>>>;
 
 impl<S: Spec, Rt: Runtime<S>> TxResultWriter<S, Rt> {
-    pub async fn insert(&self, tx: AcceptedTx<Confirmation<S, Rt>>) {
+    /// Inserts a transaction, labelling its events with the cache's current [`EventEpoch`].
+    pub async fn insert(&self, mut tx: AcceptedTx<Confirmation<S, Rt>>) {
         let mut transaction_cache = self.inner.write().await;
+        for event in tx.confirmation.events.iter_mut() {
+            event.epoch = Some(transaction_cache.epoch);
+        }
         assert_eq!(
             tx.confirmation.tx_number, transaction_cache.next_tx_number,
             "Transactions must be inserted in order"
@@ -92,12 +96,23 @@ impl<S: Spec, Rt: Runtime<S>> TxResultWriter<S, Rt> {
         let _ = transaction_cache.tx_response_sender.send(tx); // We don't care if there are no listeners
     }
 
+    /// The run of event numbering that events inserted from now on belong to.
+    pub async fn epoch(&self) -> EventEpoch {
+        self.inner.read().await.epoch
+    }
+
+    /// Discards the cache, so that the transactions from `tx_number` onwards can be inserted again.
+    ///
+    /// The events re-inserted afterwards may reuse numbers that were already handed out for
+    /// different content, so this starts a new [`EventEpoch`]. That is conservative: a flush
+    /// that re-inserts identical events, or one on a cache that never numbered any, rotates too.
     pub async fn clean_and_overwrite_next_tx_number(&self, tx_number: u64) {
         tracing::debug!(
             "Cleaning and overwriting transaction cache up to {}",
             tx_number
         );
         let mut transaction_cache = self.inner.write().await;
+        transaction_cache.epoch = crate::common::new_event_epoch();
         transaction_cache.next_tx_number = tx_number;
         transaction_cache.cache.clear();
         transaction_cache.tx_hash_index.clear();
@@ -160,6 +175,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
                 next_tx_number,
                 tx_hash_index: HashMap::new(),
                 event_numbers_index: BTreeMap::new(),
+                epoch: crate::common::new_event_epoch(),
             })),
             ledger_db,
             tx_response_receiver,
@@ -608,6 +624,8 @@ pub(crate) struct TransactionCacheInner<S: Spec, Rt: Runtime<S>> {
     // A map of tx hashes to tx numbers
     tx_hash_index: HashMap<TxHash, TxNumber>,
     event_numbers_index: BTreeMap<EventNumber, TxNumber>,
+    // The run of numbering that inserted events belong to. Rotated when the cache is discarded.
+    epoch: EventEpoch,
 }
 
 #[cfg(test)]
@@ -713,6 +731,40 @@ mod tests {
         ledger_db.replace_reader(storage_manager.create_ledger_storage());
 
         (temp_dir, TransactionCache::new(ledger_db, 1, 100))
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn inserted_events_are_labelled_with_the_cache_epoch() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+        let writer = cache.write_handle();
+        let mut stream = cache.subscribe_events();
+        writer
+            .insert(build_mock_confirmation_with_events(1, 3..5))
+            .await;
+
+        let epoch = writer.epoch().await;
+        for _ in 3..5 {
+            let event = stream.next().await.unwrap().unwrap();
+            assert_eq!(event.epoch, Some(epoch));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn discarding_numbered_events_starts_a_new_epoch() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+        let writer = cache.write_handle();
+        writer
+            .insert(build_mock_confirmation_with_events(1, 3..5))
+            .await;
+        let epoch = writer.epoch().await;
+
+        writer.clean_and_overwrite_next_tx_number(1).await;
+
+        assert_ne!(
+            writer.epoch().await,
+            epoch,
+            "Events 3 and 4 may be reissued for different content, so they need a new epoch"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

@@ -107,11 +107,18 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         receiver
     }
 
-    pub(crate) async fn flush_transactions_cache(&self, next_tx_number: u64) {
+    /// Discards the soft confirmations served so far: the transaction cache is emptied and the
+    /// API state falls back to the node's state in `info`, in one step, so that the events a
+    /// client streams and the state snapshot it reads never disagree on the epoch.
+    pub(crate) async fn flush_transactions_cache(&self, info: &StateUpdateInfo<S::Storage>) {
         // Note: we don't need to update the db cache here - this call is purely for the side effects task
         let (sender, receiver) = oneshot::channel();
+        // Built ahead of the send, so that the kernel temporary does not live across the await.
+        let checkpoint = StateCheckpoint::new(info.storage.clone(), &Rt::default().kernel());
         self.send(ExecutorEvent::FlushTransactionsCache {
-            next_tx_number,
+            next_tx_number: info.next_tx_number,
+            checkpoint,
+            next_event_number: info.next_event_number,
             oneshot_sender: sender,
         })
         .await;
@@ -403,9 +410,14 @@ where
     /// The `u64` is the next event number reflected by the checkpoint; like
     /// [`Self::ForceUpdateApiState`] it can move backwards.
     UpdateStateForRecovery(StateCheckpoint<S>, u64),
-    /// Flush transactions cache
+    /// Flush the transactions cache and publish the node's state it is being rebuilt from.
+    ///
+    /// The `u64` is the next event number reflected by the checkpoint; like
+    /// [`Self::ForceUpdateApiState`] it can move backwards.
     FlushTransactionsCache {
         next_tx_number: u64,
+        checkpoint: StateCheckpoint<S>,
+        next_event_number: u64,
         oneshot_sender: oneshot::Sender<()>,
     },
 }

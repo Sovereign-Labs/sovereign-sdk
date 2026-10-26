@@ -165,37 +165,6 @@ fn an_open_accessor_keeps_the_frontier_of_the_snapshot_it_opened() {
 }
 
 #[test]
-fn a_reissued_number_is_distinguishable_by_its_epoch() {
-    let mut storage_manager = SimpleStorageManager::new();
-    let kernel = MockKernel::<TestSpec>::default();
-
-    // A rollback retracts events and then re-emits past where it started, so the number alone
-    // only ever moves forward. The epoch is the only thing that reveals the reissue.
-    let before = Arc::new(
-        checkpoint(&mut storage_manager, &kernel)
-            .with_event_frontier(EventFrontier::new(epoch(0xabcd), FIRST_NEXT_EVENT_NUMBER)),
-    );
-    let after = Arc::new(
-        checkpoint(&mut storage_manager, &kernel)
-            .with_event_frontier(EventFrontier::new(epoch(0x1234), SECOND_NEXT_EVENT_NUMBER)),
-    );
-
-    let before = accessor(before, &kernel).event_frontier().unwrap();
-    let after = accessor(after, &kernel).event_frontier().unwrap();
-
-    assert!(
-        after.next_event_number > before.next_event_number,
-        "This is the case the number cannot catch: it went up across the rollback"
-    );
-    assert_ne!(
-        after.epoch, before.epoch,
-        "The epoch must differ, otherwise a client would apply events {}.. onto a state built \
-         from events that no longer exist",
-        before.next_event_number
-    );
-}
-
-#[test]
 fn archival_accessors_report_no_frontier() {
     let mut storage_manager = SimpleStorageManager::new();
     let kernel = MockKernel::<TestSpec>::default();
