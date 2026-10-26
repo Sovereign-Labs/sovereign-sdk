@@ -129,10 +129,11 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
     /// Call this on a freshly built checkpoint, before publishing it, to state which events
     /// its contents already reflect. Checkpoints that are never published, or whose producer
     /// does not track event numbers, can leave it unset.
-    pub fn with_event_frontier(self, event_frontier: EventFrontier) -> Self {
+    pub fn with_event_frontier(mut self, event_frontier: EventFrontier) -> Self {
+        // Owned, so the lock is uncontended and `get_mut` cannot fail.
         *self
             .event_frontier
-            .write()
+            .get_mut()
             .unwrap_or_else(PoisonError::into_inner) = Some(event_frontier);
         self
     }
@@ -152,7 +153,7 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
     ///
     /// The returned frontier is *exact* for the returned snapshot: the snapshot reflects the
     /// effects of every event below `next_event_number`, and of no event at or above it. See
-    /// the lock-ordering note on [`Self::apply_tx_changes`].
+    /// the locking note on [`Self::apply_tx_changes`].
     pub(crate) fn event_frontier_with_read_txn(
         &self,
     ) -> (Option<EventFrontier>, WritesReadTxn<'_>) {
@@ -172,19 +173,20 @@ impl<S: Spec> ConcurrentStateCheckpoint<S> {
     /// This only ever moves the frontier forward within the current [`EventEpoch`]; rewinding
     /// the numbering is done by publishing a new checkpoint, not from here.
     ///
-    /// The frontier write guard is taken *before* the `writes` write guard and released
-    /// *after* the commit, so a concurrent reader can never observe the committed writes
-    /// paired with the stale frontier (or vice versa). Do not reorder these acquisitions: the
-    /// global lock order is `event_frontier` -> `writes`.
+    /// The frontier write guard is held across the commit and the frontier update, so a
+    /// concurrent reader, which holds the frontier read guard while it takes its snapshot,
+    /// can never observe the committed writes paired with the stale frontier (or vice versa).
+    /// It is taken only after the (potentially large) changeset has been staged, so readers
+    /// are blocked for the duration of the commit alone. Taking a snapshot never waits on the
+    /// `writes` writer, so holding the frontier guard while snapshotting cannot deadlock.
     pub fn apply_tx_changes(&self, changeset: TxChangeSet, new_next_event_number: Option<u64>) {
+        let mut writer = self.writes.write();
+        writer.extend(changeset.writes.into_iter().map(|(k, v)| (k, v.clone())));
+
         let mut frontier = self
             .event_frontier
             .write()
             .unwrap_or_else(PoisonError::into_inner);
-
-        let mut writer = self.writes.write();
-        writer.extend(changeset.writes.into_iter().map(|(k, v)| (k, v.clone())));
-
         writer.commit();
 
         // A transaction that emitted no events leaves the frontier where it was: the state it
