@@ -1812,8 +1812,7 @@ async fn test_sequencer_getters() {
                 "Mismatch at tx number {i}. Found {new_response:?} \nbut expected {old_response:?}",
             );
             assert_eq!(
-                strip_epochs(&new_response.events),
-                strip_epochs(&old_response.events),
+                new_response.events, old_response.events,
                 "Mismatch at tx {i}",
             );
         }
@@ -1851,7 +1850,7 @@ async fn test_sequencer_getters() {
             .unwrap();
         let tx = tx_response.as_ref();
         assert_eq!(tx.id, response.id);
-        assert_eq!(strip_epochs(&tx.events), strip_epochs(&response.events));
+        assert_eq!(tx.events, response.events);
         assert_eq!(&tx.receipt, response.receipt.as_ref().unwrap());
         assert_eq!(&tx.tx_number, response.tx_number.as_ref().unwrap());
     }
@@ -4645,8 +4644,8 @@ async fn submitted_tx_reply_events_carry_the_same_epoch_as_the_state_reply() {
     );
 }
 
-/// The other half of the contract: a committed event's numbering is canonical and will never be
-/// handed out again, so it carries no epoch. Clients rely on the absence to tell the two apart.
+/// The node's ledger API has no epoch, so the events it serves carry none; an absent epoch
+/// counts as zero. Only the sequencer labels the ledger-backed copies it serves itself.
 #[tokio::test(flavor = "multi_thread")]
 async fn committed_ledger_events_carry_no_epoch() {
     let (test_rollup, admin) = create_test_rollup(
@@ -4684,8 +4683,7 @@ async fn committed_ledger_events_carry_no_epoch() {
 
     assert_eq!(
         event.epoch, None,
-        "A committed event's numbering is canonical, so stamping it with an epoch would imply \
-         it might be reissued"
+        "The node's ledger API knows no epoch, so it must not invent one"
     );
 }
 
@@ -4754,21 +4752,4 @@ async fn standard_sequencer_state_reads_report_the_nodes_last_event() {
         "A publisher that never reissues numbers reports the zero epoch, so its clients never \
          have to resynchronise over an epoch change"
     );
-}
-
-/// Copies events with the epoch cleared, for comparing two reads of the same event.
-///
-/// The epoch reports whether the copy being served is still speculative, so a read answers
-/// from the sequencer's cache while the transaction is in it, and from the ledger (no epoch,
-/// because committed numbering is canonical) once it has been pruned. Which of the two a given
-/// read gets is a timing detail; everything else about the event must match either way.
-fn strip_epochs(events: &[api_types::LedgerEvent]) -> Vec<api_types::LedgerEvent> {
-    events
-        .iter()
-        .cloned()
-        .map(|mut event| {
-            event.epoch = None;
-            event
-        })
-        .collect()
 }

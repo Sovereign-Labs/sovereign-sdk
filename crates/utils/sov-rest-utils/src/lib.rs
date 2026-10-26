@@ -25,7 +25,9 @@
 //!   for different content. The number alone cannot express that: a rollback that retracts
 //!   fewer events than it goes on to re-emit leaves the number *higher* than before. The
 //!   epoch changes whenever numbering is reissued, so numbers may only be compared across two
-//!   replies that agree on it; otherwise the client must resynchronise. The epoch is per
+//!   replies that agree on it; otherwise the client must resynchronise. An event that carries
+//!   no epoch counts as the all-zero epoch, which only a publisher that never reissues
+//!   numbers reports. The epoch is per
 //!   sequencer instance, not per cluster, so a failover or a redirect to another instance also
 //!   shows up as an epoch change; read state and stream events from the same instance.
 //!

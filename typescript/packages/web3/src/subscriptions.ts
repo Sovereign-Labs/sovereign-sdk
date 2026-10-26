@@ -92,18 +92,19 @@ export type EventPayload = {
     name: string;
   };
   /**
-   * The run of numbering `number` belongs to, when that numbering is speculative.
+   * The run of numbering this copy of the event is served under.
    *
-   * Present on events from the sequencer, whose numbers are handed out before the node commits
-   * them and are reissued if the sequencer rolls back. Before applying this event to a state
-   * snapshot, check it against the `x-sov-event-epoch` header that snapshot came with: if they
-   * differ, the number refers to a run of events the snapshot knows nothing about and the
-   * client must resynchronise. Comparing `number` alone is not enough, because a rollback that
-   * re-emits past where it rewound leaves the number higher than before.
+   * Present on every event served by the sequencer, from its cache or read back from the
+   * ledger: the sequencer's epoch at the time of serving. Before applying this event to a
+   * state snapshot, check it against the `x-sov-event-epoch` header that snapshot came with:
+   * if they differ, the sequencer has discarded soft confirmations since the snapshot was
+   * taken and the client must resynchronise. Comparing `number` alone is not enough, because
+   * a rollback that re-emits past where it rewound leaves the number higher than before.
    *
-   * Absent on events read back from the ledger, which were numbered by the node and are not
-   * reissued by a sequencer rollback. On a DA layer without instant finality, a DA reorg can
-   * still renumber events in non-finalized slots; an absent epoch does not guard against that.
+   * Absent on events from the node's ledger API, which has no epoch. An absent epoch counts
+   * as the all-zero epoch, which only a publisher that never reissues numbers, such as the
+   * standard sequencer, reports. On a DA layer without instant finality, a DA reorg can still
+   * renumber events in non-finalized slots; no epoch guards against that.
    */
   epoch?: string;
 };

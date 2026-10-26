@@ -20,7 +20,9 @@ use sov_rollup_interface::stf::TxReceiptContents;
 /// costs the client one resynchronisation. State and events must be read from one instance.
 ///
 /// A publisher whose numbers are never speculative has nothing to rotate and reports
-/// [`Self::ZERO`] instead, so that the absence of reissues is visible on the wire.
+/// [`Self::ZERO`] instead, so that the absence of reissues is visible on the wire. An event
+/// that carries no epoch at all counts as [`Self::ZERO`], so there is a single rule for
+/// clients: compare for equality, and resynchronise on a mismatch.
 ///
 /// It is an opaque token — compare it for equality and nothing else. It carries no ordering.
 /// On the wire it is a fixed-width lowercase hex string.
@@ -132,18 +134,20 @@ pub struct RuntimeEventResponse<E> {
     pub module: ModuleRef,
     /// The hash of the transaction that emitted this event, in hex format
     pub tx_hash: HexHash,
-    /// The run of numbering [`Self::number`] belongs to, when that numbering is speculative.
+    /// The run of numbering this copy of the event is served under.
     ///
-    /// Present on events served from the sequencer, whose numbers are handed out before the
-    /// node commits them and are reissued if the sequencer rolls back. Compare it against the
-    /// epoch a state snapshot reported before applying this event to that snapshot: if they
-    /// differ, the number refers to a run of events the snapshot knows nothing about.
+    /// Present on every event served by the sequencer, whether from its cache or read back
+    /// from the ledger: it is the sequencer's epoch at the time of serving. Compare it against
+    /// the epoch a state snapshot reported before applying this event to that snapshot. If
+    /// they differ, the sequencer has discarded soft confirmations since the snapshot was
+    /// taken, so the snapshot may reflect retracted events and the client must resynchronise,
+    /// even though a committed event is itself never reissued.
     ///
-    /// Absent on events read back from the ledger. Those were numbered by the node when it
-    /// executed them, so a sequencer rollback does not reissue them. On a DA layer without
+    /// Absent on events served by the node's ledger API, which has no epoch. An absent epoch
+    /// counts as [`EventEpoch::ZERO`]: it matches a snapshot from a publisher that never
+    /// reissues numbers, such as the standard sequencer, and no other. On a DA layer without
     /// instant finality (Celestia has it), a DA reorg can still make the node re-execute
-    /// non-finalized slots and renumber their events; the absence of an epoch does not guard
-    /// against that.
+    /// non-finalized slots and renumber their events; no epoch guards against that.
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub epoch: Option<EventEpoch>,
 }
@@ -177,9 +181,9 @@ where
             value: runtime_event,
             module: ModuleRef { name: module_name },
             tx_hash: HexHash::from(*stored_event.tx_hash()),
-            // Read back from the ledger, so numbered by the node rather than speculatively by
-            // the sequencer, which is what an absent epoch means. See the field's docs for the
-            // DA-reorg caveat.
+            // The ledger stores no epoch. The node's ledger API serves the event like this,
+            // which counts as `EventEpoch::ZERO`; the sequencer labels the copies it serves
+            // with its current epoch. See the field's docs.
             epoch: None,
         })
     }

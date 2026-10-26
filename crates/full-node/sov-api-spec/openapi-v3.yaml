@@ -944,14 +944,15 @@ components:
         epoch:
           type: string
           description: >-
-            The run of numbering `number` belongs to, when that numbering is speculative.
-            Present on events served from the sequencer, whose numbers are handed out before
-            the node commits them and are reissued if the sequencer rolls back; compare it
-            against the `x-sov-event-epoch` a state snapshot reported before applying this
-            event to that snapshot. Absent on events read back from the ledger, which were
-            numbered by the node and are not reissued by a sequencer rollback. On a DA layer
-            without instant finality, a DA reorg can still renumber events in non-finalized
-            slots; an absent epoch does not guard against that.
+            The run of numbering this copy of the event is served under. Present on every
+            event served by the sequencer, from its cache or read back from the ledger: the
+            sequencer's epoch at the time of serving. Compare it against the
+            `x-sov-event-epoch` a state snapshot reported before applying this event to that
+            snapshot; on a mismatch the sequencer has discarded soft confirmations since the
+            snapshot was taken and the client must resynchronise. Absent on events from the
+            node's ledger API, which has no epoch; an absent epoch counts as the all-zero
+            epoch. On a DA layer without instant finality, a DA reorg can still renumber
+            events in non-finalized slots; no epoch guards against that.
       required:
         - type
         - number
