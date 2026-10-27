@@ -16,6 +16,7 @@ use celestia_client::api::fibre::BlobID;
 use crate::fibre::{FIBRE_HEADER_LEN, FIBRE_MAX_BLOB_SIZE};
 
 const HTTP_TIMEOUT: Duration = Duration::from_secs(60);
+const MAX_ARCHIVED_LEN: u64 = (FIBRE_MAX_BLOB_SIZE - FIBRE_HEADER_LEN) as u64;
 
 /// A store of Fibre blob data keyed by [`BlobID`].
 #[async_trait]
@@ -47,6 +48,18 @@ impl FsArchive {
 impl FibreArchive for FsArchive {
     async fn get(&self, id: &BlobID) -> anyhow::Result<Option<Bytes>> {
         let path = self.dir.join(id_hex(id));
+        let len = match tokio::fs::metadata(&path).await {
+            Ok(meta) => meta.len(),
+            Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+            Err(e) => {
+                return Err(anyhow::Error::new(e).context(format!("reading {}", path.display())))
+            }
+        };
+        anyhow::ensure!(
+            len <= MAX_ARCHIVED_LEN,
+            "archive file {} exceeds the maximum Fibre blob size",
+            path.display()
+        );
         match tokio::fs::read(&path).await {
             Ok(data) => Ok(Some(data.into())),
             Err(e) if e.kind() == std::io::ErrorKind::NotFound => Ok(None),
@@ -85,6 +98,7 @@ impl FibreArchive for FsArchive {
 pub struct HttpFallbackArchive {
     urls: Vec<String>,
     client: reqwest::Client,
+    max_len: u64,
 }
 
 impl HttpFallbackArchive {
@@ -95,26 +109,34 @@ impl HttpFallbackArchive {
             .into_iter()
             .map(|u| u.trim_end_matches('/').to_string())
             .collect();
-        Ok(Self { urls, client })
+        Ok(Self {
+            urls,
+            client,
+            max_len: MAX_ARCHIVED_LEN,
+        })
     }
 
     async fn get_from(&self, base: &str, name: &str) -> anyhow::Result<Option<Bytes>> {
-        let max_len = (FIBRE_MAX_BLOB_SIZE - FIBRE_HEADER_LEN) as u64;
         let response = self.client.get(format!("{base}/{name}")).send().await?;
         if response.status() == reqwest::StatusCode::NOT_FOUND {
             return Ok(None);
         }
-        let response = response.error_for_status()?;
+        let mut response = response.error_for_status()?;
         anyhow::ensure!(
-            response.content_length().is_none_or(|len| len <= max_len),
+            response
+                .content_length()
+                .is_none_or(|len| len <= self.max_len),
             "archive response from {base} exceeds the maximum Fibre blob size"
         );
-        let data = response.bytes().await?;
-        anyhow::ensure!(
-            data.len() as u64 <= max_len,
-            "archive response from {base} exceeds the maximum Fibre blob size"
-        );
-        Ok(Some(data))
+        let mut data = Vec::new();
+        while let Some(chunk) = response.chunk().await? {
+            anyhow::ensure!(
+                (data.len() + chunk.len()) as u64 <= self.max_len,
+                "archive response from {base} exceeds the maximum Fibre blob size"
+            );
+            data.extend_from_slice(&chunk);
+        }
+        Ok(Some(data.into()))
     }
 }
 
@@ -272,5 +294,113 @@ mod tests {
         assert!(chain.put(&id, &data).await.is_err());
 
         assert_eq!(fs.get(&id).await.unwrap(), Some(Bytes::from(data)));
+    }
+
+    /// Serves one canned raw HTTP response per request, selected by request path, then returns the base URL.
+    fn spawn_mirror(routes: Vec<(&'static str, String)>) -> String {
+        use std::io::{Read, Write};
+
+        let listener = std::net::TcpListener::bind("127.0.0.1:0").unwrap();
+        let base = format!("http://{}", listener.local_addr().unwrap());
+        std::thread::spawn(move || {
+            for stream in listener.incoming() {
+                let mut stream = stream.unwrap();
+                let mut buf = [0u8; 2048];
+                let n = stream.read(&mut buf).unwrap();
+                let request = String::from_utf8_lossy(&buf[..n]).to_string();
+                let path = request.split_whitespace().nth(1).unwrap_or_default();
+                let response = routes
+                    .iter()
+                    .find(|(p, _)| *p == path)
+                    .map(|(_, r)| r.clone())
+                    .unwrap_or_else(|| {
+                        "HTTP/1.1 404 Not Found\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                            .to_string()
+                    });
+                stream.write_all(response.as_bytes()).unwrap();
+            }
+        });
+        base
+    }
+
+    fn ok_response(body: &str) -> String {
+        format!(
+            "HTTP/1.1 200 OK\r\nContent-Length: {}\r\nConnection: close\r\n\r\n{body}",
+            body.len()
+        )
+    }
+
+    #[tokio::test]
+    async fn http_archive_returns_body_and_trims_trailing_slash() {
+        let (id, _) = blob_with_id(1);
+        let path: &'static str = Box::leak(format!("/{}", id_hex(&id)).into_boxed_str());
+        let base = spawn_mirror(vec![(path, ok_response("blob-bytes"))]);
+        let archive = HttpFallbackArchive::new(vec![format!("{base}/")]).unwrap();
+
+        assert_eq!(
+            archive.get(&id).await.unwrap(),
+            Some(Bytes::from_static(b"blob-bytes"))
+        );
+    }
+
+    #[tokio::test]
+    async fn http_archive_maps_404_to_none() {
+        let (id, _) = blob_with_id(1);
+        let base = spawn_mirror(vec![]);
+        let archive = HttpFallbackArchive::new(vec![base]).unwrap();
+
+        assert_eq!(archive.get(&id).await.unwrap(), None);
+    }
+
+    #[tokio::test]
+    async fn http_archive_skips_erroring_mirror() {
+        let (id, _) = blob_with_id(1);
+        let path: &'static str = Box::leak(format!("/{}", id_hex(&id)).into_boxed_str());
+        let broken = spawn_mirror(vec![(
+            path,
+            "HTTP/1.1 500 Internal Server Error\r\nContent-Length: 0\r\nConnection: close\r\n\r\n"
+                .to_string(),
+        )]);
+        let healthy = spawn_mirror(vec![(path, ok_response("blob-bytes"))]);
+        let archive = HttpFallbackArchive::new(vec![broken, healthy]).unwrap();
+
+        assert_eq!(
+            archive.get(&id).await.unwrap(),
+            Some(Bytes::from_static(b"blob-bytes"))
+        );
+    }
+
+    #[tokio::test]
+    async fn http_archive_rejects_oversized_content_length() {
+        let (id, _) = blob_with_id(1);
+        let path: &'static str = Box::leak(format!("/{}", id_hex(&id)).into_boxed_str());
+        let base = spawn_mirror(vec![(path, ok_response("0123456789"))]);
+        let mut archive = HttpFallbackArchive::new(vec![base.clone()]).unwrap();
+        archive.max_len = 4;
+
+        assert!(archive.get_from(&base, &id_hex(&id)).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn http_archive_rejects_oversized_chunked_body() {
+        let (id, _) = blob_with_id(1);
+        let path: &'static str = Box::leak(format!("/{}", id_hex(&id)).into_boxed_str());
+        let chunked = "HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\nConnection: close\r\n\r\n5\r\n01234\r\n5\r\n56789\r\n0\r\n\r\n".to_string();
+        let base = spawn_mirror(vec![(path, chunked)]);
+        let mut archive = HttpFallbackArchive::new(vec![base.clone()]).unwrap();
+        archive.max_len = 8;
+
+        assert!(archive.get_from(&base, &id_hex(&id)).await.is_err());
+    }
+
+    #[tokio::test]
+    async fn fs_archive_rejects_oversized_file() {
+        let dir = tempfile::tempdir().unwrap();
+        let archive = FsArchive::new(dir.path().to_path_buf());
+        let (id, _) = blob_with_id(1);
+        let file = std::fs::File::create(dir.path().join(id_hex(&id))).unwrap();
+        file.set_len(MAX_ARCHIVED_LEN + 1).unwrap();
+
+        assert!(archive.get(&id).await.is_err());
     }
 }
