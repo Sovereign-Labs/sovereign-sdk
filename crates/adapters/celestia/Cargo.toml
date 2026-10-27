@@ -67,6 +67,8 @@ sov-test-utils = { workspace = true, features = ["arbitrary"] }
 rustls = { workspace = true, features = ["ring"] }
 postcard = { version = "1", features = ["use-std"] }
 reltester = { workspace = true }
+rsema1d = "1.2.0"
+sha2 = { workspace = true }
 test-strategy = { workspace = true }
 tokio = { workspace = true, features = [
     "test-util",
