@@ -145,6 +145,21 @@ impl FibreBlobData {
         }
     }
 
+    /// Creates the blob from data already encoded and checked against the pointer commitment.
+    #[cfg(feature = "native")]
+    pub(crate) fn with_encoded(
+        share_idx_in_ns: usize,
+        data: Bytes,
+        encoded: crate::fibre::FibreEncoded,
+    ) -> Self {
+        Self {
+            share_idx_in_ns,
+            commitment: HexHash::new(encoded.commitment),
+            data,
+            encoded: OnceLock::from(encoded),
+        }
+    }
+
     #[cfg(feature = "native")]
     pub(crate) fn encoded(&self) -> &crate::fibre::FibreEncoded {
         self.encoded.get_or_init(|| {

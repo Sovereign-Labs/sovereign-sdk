@@ -163,3 +163,50 @@ impl Metric for CelestiaAdapterStateMeasurement {
         )
     }
 }
+
+/// Fetch of the off-chain data behind one Fibre pointer, from the archive or from validators.
+#[derive(Debug)]
+pub(crate) struct FibreDownloadMeasurement {
+    pub bytes: usize,
+    pub response_time: std::time::Duration,
+    pub is_success: bool,
+    pub from_archive: bool,
+}
+
+impl Metric for FibreDownloadMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_fibre_download"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let from_archive = self.from_archive;
+        let bytes = self.bytes;
+        let response_time_us = self.response_time.as_micros();
+        let is_success = self.is_success as u8;
+        write!(
+            buffer,
+            "{name},from_archive={from_archive} bytes={bytes},response_time_us={response_time_us},is_success={is_success}"
+        )
+    }
+}
+
+/// Re-encoding of downloaded Fibre data to recover its commitment and proof material.
+#[derive(Debug)]
+pub(crate) struct FibreEncodeMeasurement {
+    pub bytes: usize,
+    pub time: std::time::Duration,
+}
+
+impl Metric for FibreEncodeMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_fibre_encode"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let bytes = self.bytes;
+        let time_us = self.time.as_micros();
+        write!(buffer, "{name} bytes={bytes},time_us={time_us}")
+    }
+}
