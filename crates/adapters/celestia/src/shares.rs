@@ -128,6 +128,19 @@ impl BlobIterator {
             blob: Blob(Vec::new()),
         }
     }
+
+    /// An iterator over a flat byte buffer rather than a sequence of shares, used for Fibre blobs
+    /// whose data is held off-chain. It reads like a single-share blob that has no continuation.
+    #[cfg(feature = "native")]
+    pub(crate) fn from_bytes(bytes: Bytes) -> Self {
+        BlobIterator {
+            sequence_len: bytes.len(),
+            consumed: 0,
+            current: bytes,
+            current_idx: 0,
+            blob: Blob(Vec::new()),
+        }
+    }
 }
 
 impl Iterator for BlobIterator {
@@ -462,6 +475,23 @@ mod tests {
         // `remaining()` == 100 - 10 == 90, with no backing shares.
         let mut placeholder = BlobIterator::verified_placeholder(100, 10);
         let _ = placeholder.next();
+    }
+
+    #[test]
+    fn from_bytes_reads_whole_buffer_through_counted_reader() {
+        let data: Vec<u8> = (0..1000u32).map(|i| (i * 7 + i / 256) as u8).collect();
+        let mut blob = CountedBufReader::new(BlobIterator::from_bytes(Bytes::from(data.clone())));
+        assert_eq!(blob.total_len(), data.len());
+        blob.advance(10);
+        assert_eq!(blob.accumulator(), &data[..10]);
+        blob.advance(data.len() - 10);
+        assert_eq!(blob.accumulator(), data.as_slice());
+    }
+
+    #[test]
+    fn from_bytes_iterates_bytes_in_order() {
+        let iter = BlobIterator::from_bytes(Bytes::from_static(&[1, 2, 3]));
+        assert_eq!(iter.collect::<Vec<_>>(), vec![1, 2, 3]);
     }
 
     prop_compose! {

@@ -12,6 +12,7 @@ pub use error::*;
 use serde::{Deserialize, Serialize};
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{BlobReaderTrait, BlockHashTrait, CountedBufReader};
+use sov_rollup_interface::Bytes;
 use sov_universal_wallet::schema::OverrideSchema;
 use sov_universal_wallet::UniversalWallet;
 
@@ -100,6 +101,64 @@ impl From<[u8; 32]> for TmHash {
     }
 }
 
+/// How a blob is stored on Celestia.
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum BlobKind {
+    /// A share version 1 blob holding its data in the shares.
+    Pfb,
+    /// A share version 2 pointer to off-chain Fibre data with this RSEMA1D commitment.
+    Fibre { commitment: [u8; 32] },
+}
+
+/// Off-chain data of a Fibre blob, which the shares only point to.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub(crate) struct FibreBlobData {
+    /// Index of the pointer share within the batch namespace.
+    pub(crate) share_idx_in_ns: usize,
+    pub(crate) commitment: HexHash,
+    #[serde(with = "tendermint_proto::serializers::bytes::base64string")]
+    pub(crate) data: Bytes,
+    /// Row commitment data recomputed from `data` on first use; never serialized.
+    #[cfg(feature = "native")]
+    #[serde(skip)]
+    encoded: OnceLock<crate::fibre::FibreEncoded>,
+}
+
+// The lazily filled `encoded` cache is derived from `data`, so it does not take part in equality.
+impl PartialEq for FibreBlobData {
+    fn eq(&self, other: &Self) -> bool {
+        self.share_idx_in_ns == other.share_idx_in_ns
+            && self.commitment == other.commitment
+            && self.data == other.data
+    }
+}
+
+#[allow(dead_code)]
+impl FibreBlobData {
+    pub(crate) fn new(share_idx_in_ns: usize, commitment: [u8; 32], data: Bytes) -> Self {
+        Self {
+            share_idx_in_ns,
+            commitment: HexHash::new(commitment),
+            data,
+            #[cfg(feature = "native")]
+            encoded: OnceLock::new(),
+        }
+    }
+
+    #[cfg(feature = "native")]
+    pub(crate) fn encoded(&self) -> &crate::fibre::FibreEncoded {
+        self.encoded.get_or_init(|| {
+            let encoded = crate::fibre::encode_for_proofs(&self.data)
+                .expect("bug: Fibre data cannot be encoded");
+            assert_eq!(
+                encoded.commitment, self.commitment.0,
+                "bug: Fibre data does not match its commitment"
+            );
+            encoded
+        })
+    }
+}
+
 #[derive(Clone, Debug, Deserialize)]
 #[serde(try_from = "BlobWithSenderWire<'static>")]
 pub struct BlobWithSender {
@@ -108,6 +167,7 @@ pub struct BlobWithSender {
     pub(crate) range_in_namespace: Range<usize>,
     pub(crate) sender: CelestiaAddress,
     pub hash: HexHash,
+    pub(crate) kind: BlobKind,
 
     /// Interior, serde-skipped cache of the blob's envelope classification.
     ///
@@ -167,6 +227,7 @@ struct BlobWithSenderWire<'a> {
     range_in_namespace: Cow<'a, Range<usize>>,
     sender: Cow<'a, CelestiaAddress>,
     hash: Cow<'a, HexHash>,
+    kind: BlobKind,
 }
 
 /// Error returned when a [`BlobWithSenderWire`] cannot describe a valid blob.
@@ -186,6 +247,9 @@ enum PrunedBlobError {
         accumulator_len: usize,
         total_len: u64,
     },
+    /// A Fibre blob is identified by its commitment, so `hash` cannot be anything else.
+    #[error("pruned Fibre blob hash {hash} differs from its commitment")]
+    FibreHashMismatch { hash: HexHash },
 }
 
 impl Serialize for BlobWithSender {
@@ -196,6 +260,7 @@ impl Serialize for BlobWithSender {
             range_in_namespace: Cow::Borrowed(&self.range_in_namespace),
             sender: Cow::Borrowed(&self.sender),
             hash: Cow::Borrowed(&self.hash),
+            kind: self.kind,
         }
         .serialize(serializer)
     }
@@ -213,6 +278,13 @@ impl<'a> TryFrom<BlobWithSenderWire<'a>> for BlobWithSender {
             u32::try_from(wire.total_len).map_err(|_| PrunedBlobError::TotalLenExceedsDaLimit {
                 total_len: wire.total_len,
             })? as usize;
+        if let BlobKind::Fibre { commitment } = wire.kind {
+            if wire.hash.0 != commitment {
+                return Err(PrunedBlobError::FibreHashMismatch {
+                    hash: wire.hash.into_owned(),
+                });
+            }
+        }
         let accumulator = wire.accumulator.into_owned();
         // Reject a malformed witness up front so `remaining()` cannot underflow later.
         if accumulator.len() > total_len {
@@ -234,6 +306,7 @@ impl<'a> TryFrom<BlobWithSenderWire<'a>> for BlobWithSender {
             range_in_namespace: wire.range_in_namespace.into_owned(),
             sender: wire.sender.into_owned(),
             hash: wire.hash.into_owned(),
+            kind: wire.kind,
             envelope_state: OnceLock::new(),
         })
     }
@@ -462,8 +535,14 @@ impl NamespaceRelevantData {
         Self { namespace, data }
     }
 
+    /// Extracts the blobs of this namespace. Share version 2 (Fibre) pointers are only read when
+    /// `fibre_active`, with their data taken from `fibre_blobs`; otherwise they are skipped.
     #[cfg(feature = "native")]
-    pub(crate) fn get_blobs_with_sender(&self) -> Vec<BlobWithSender> {
+    pub(crate) fn get_blobs_with_sender(
+        &self,
+        fibre_active: bool,
+        fibre_blobs: &[FibreBlobData],
+    ) -> Vec<BlobWithSender> {
         let mut output = Vec::new();
         let ns_iterator = crate::shares::NamespaceDataIterator::new(&self.data);
 
@@ -472,27 +551,54 @@ impl NamespaceRelevantData {
             {
                 share_seq.check_consistency();
             }
-            if share_seq.shares[0]
+            let version = share_seq.shares[0]
                 .info_byte()
                 .expect("blob must contain a data share")
-                .version()
-                != SUPPORTED_SHARE_VERSION
-            {
-                continue;
-            }
-            // Commitment
-            let commitment =
-                celestia_types::Commitment::from_shares(self.namespace, &share_seq.shares)
-                    .expect("blob must be valid");
-            let hash = HexHash::new(*commitment.hash());
-
+                .version();
             let range_in_namespace = share_seq.range_in_ns.clone();
-            let Ok(blob) = crate::shares::Blob::try_from(share_seq) else {
-                tracing::warn!("Failed to create blob from share sequence. Only can happen if support for share version above 1 is not added yet.");
-                continue;
-            };
-            let Some(sender) = blob.signer() else {
-                tracing::debug!("Blob without a signer, happens if blob is version 0");
+            let (iter, sender, hash, kind) = if version == crate::fibre::FIBRE_SHARE_VERSION
+                && fibre_active
+            {
+                let share = &share_seq.shares[0];
+                let pointer = crate::fibre::parse_v2_pointer(share)
+                    .expect("bug: malformed Fibre pointer should have been rejected when fetching the block");
+                let fibre_blob = fibre_blobs
+                    .iter()
+                    .find(|blob| blob.share_idx_in_ns == range_in_namespace.start)
+                    .expect("bug: Fibre data missing for pointer");
+                assert_eq!(
+                    fibre_blob.commitment.0, pointer.commitment,
+                    "bug: Fibre data does not match the pointer commitment"
+                );
+                let sender = share
+                    .signer()
+                    .map(CelestiaAddress)
+                    .expect("bug: Fibre pointer without a signer");
+                (
+                    BlobIterator::from_bytes(fibre_blob.data.clone()),
+                    sender,
+                    fibre_blob.commitment,
+                    BlobKind::Fibre {
+                        commitment: pointer.commitment,
+                    },
+                )
+            } else if version == SUPPORTED_SHARE_VERSION {
+                // Commitment
+                let commitment =
+                    celestia_types::Commitment::from_shares(self.namespace, &share_seq.shares)
+                        .expect("blob must be valid");
+                let hash = HexHash::new(*commitment.hash());
+
+                let Ok(blob) = crate::shares::Blob::try_from(share_seq) else {
+                    tracing::warn!("Failed to create blob from share sequence. Only can happen if support for share version above 1 is not added yet.");
+                    continue;
+                };
+                let Some(sender) = blob.signer() else {
+                    tracing::debug!("Blob without a signer, happens if blob is version 0");
+                    continue;
+                };
+                (blob.into_iter(), sender, hash, BlobKind::Pfb)
+            } else {
                 continue;
             };
             // Peek the first share's payload (without consuming) to detect an
@@ -506,7 +612,6 @@ impl NamespaceRelevantData {
             // false negative would cache `Legacy` on first access while the guest
             // reclassifies the full accumulator as `Envelope` — a silent native/guest
             // divergence. Pinned by `first_share_chunk_exposes_envelope_magic`.
-            let iter = blob.into_iter();
             let is_envelope = crate::envelope::has_magic_prefix(prost::bytes::Buf::chunk(&iter));
             let mut reader = CountedBufReader::new(iter);
             if is_envelope {
@@ -517,6 +622,7 @@ impl NamespaceRelevantData {
                 range_in_namespace,
                 sender,
                 hash,
+                kind,
                 envelope_state: OnceLock::new(),
             };
             output.push(blob_tx);
@@ -532,6 +638,9 @@ pub struct FilteredCelestiaBlock {
     pub(crate) rollup_batch_data: NamespaceRelevantData,
     /// Proof related data.
     pub(crate) rollup_proof_data: NamespaceRelevantData,
+    /// Off-chain data of the Fibre pointers in the batch namespace, ordered by `share_idx_in_ns`.
+    #[serde(default)]
+    pub(crate) fibre_blobs: Vec<FibreBlobData>,
 }
 
 #[cfg(feature = "native")]
@@ -572,6 +681,7 @@ impl FilteredCelestiaBlock {
             header,
             rollup_batch_data,
             rollup_proof_data,
+            fibre_blobs: Vec::new(),
         })
     }
 }
@@ -622,11 +732,13 @@ pub mod tests {
 
     use sov_rollup_interface::da::BlobReaderTrait;
 
-    use super::BlobWithSender;
+    use super::{BlobKind, BlobWithSender, FibreBlobData};
     use crate::envelope::{classify_and_decode, EnvelopeState};
     use crate::test_helper::files::*;
     use crate::test_helper::ROLLUP_BATCH_NAMESPACE;
     use crate::types::{NamespaceData, NamespaceRelevantData, TmHash};
+    use crate::verifier::address::CelestiaAddress;
+    use sov_rollup_interface::common::HexHash;
 
     fn test_serialize_roundtrip(raw: [u8; 32]) {
         let tm_hash = TmHash::from(raw);
@@ -711,7 +823,7 @@ pub mod tests {
 
         let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
 
-        let blobs = ns_data.get_blobs_with_sender();
+        let blobs = ns_data.get_blobs_with_sender(false, &[]);
         assert_eq!(1, blobs.len());
         let blob = &blobs[0];
 
@@ -728,7 +840,7 @@ pub mod tests {
 
         let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
 
-        let mut blob = ns_data.get_blobs_with_sender().remove(0);
+        let mut blob = ns_data.get_blobs_with_sender(false, &[]).remove(0);
 
         // For raw (uncompressed) blobs the DA and rollup views are identical,
         // both before and after a partial read.
@@ -747,7 +859,7 @@ pub mod tests {
         let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
         let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
 
-        let mut blob = ns_data.get_blobs_with_sender().remove(0);
+        let mut blob = ns_data.get_blobs_with_sender(false, &[]).remove(0);
 
         // Drive the live read path over the whole frame; this fills the
         // serde-skipped classification cache via the real accessors (no manual set).
@@ -785,7 +897,7 @@ pub mod tests {
         let path = make_test_path(with_rollup_batch_data::DATA_PATH);
         let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
         let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
-        let blob = ns_data.get_blobs_with_sender().remove(0);
+        let blob = ns_data.get_blobs_with_sender(false, &[]).remove(0);
 
         // A `total_len` wider than the DA `sequence_length` (`u32`) is rejected at
         // deserialization on every target, not silently truncated on the 32-bit guest.
@@ -805,7 +917,7 @@ pub mod tests {
         let path = make_test_path(with_rollup_batch_data::DATA_PATH);
         let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
         let ns_data = NamespaceRelevantData::new(ROLLUP_BATCH_NAMESPACE, rows);
-        let mut blob = ns_data.get_blobs_with_sender().remove(0);
+        let mut blob = ns_data.get_blobs_with_sender(false, &[]).remove(0);
 
         // Read a real prefix so the accumulator is non-empty, then forge a `total_len` smaller
         // than it: the verified prefix can never exceed the declared total length.
@@ -818,6 +930,116 @@ pub mod tests {
             err.to_string().contains("exceeds total length"),
             "Actual error: {err}"
         );
+    }
+
+    const FIBRE_FIXTURE_PATH: &str = "test_data/block_mocha_fibre_v2_1194000";
+
+    fn fibre_fixture_ns_data() -> NamespaceRelevantData {
+        let path = make_test_path(FIBRE_FIXTURE_PATH);
+        let rows: NamespaceData = load_from_file(&path, ROLLUP_BATCH_ROWS_JSON).unwrap();
+        NamespaceRelevantData::new(
+            celestia_types::nmt::Namespace::const_v0(*b"sov-niko-a"),
+            rows,
+        )
+    }
+
+    fn fibre_fixture_pointer(ns_data: &NamespaceRelevantData) -> crate::fibre::FibrePointer {
+        crate::fibre::parse_v2_pointer(&ns_data.data.rows()[0].shares[0]).unwrap()
+    }
+
+    fn fibre_data() -> Vec<u8> {
+        (0..1000u32).map(|i| (i * 13 + i / 256) as u8).collect()
+    }
+
+    #[test]
+    fn fibre_pointer_is_skipped_when_inactive() {
+        let ns_data = fibre_fixture_ns_data();
+        assert!(ns_data.get_blobs_with_sender(false, &[]).is_empty());
+    }
+
+    #[test]
+    fn fibre_pointer_is_read_from_off_chain_data_when_active() {
+        let ns_data = fibre_fixture_ns_data();
+        let pointer = fibre_fixture_pointer(&ns_data);
+        let data = fibre_data();
+        let fibre_blob = FibreBlobData::new(0, pointer.commitment, data.clone().into());
+
+        let mut blobs = ns_data.get_blobs_with_sender(true, &[fibre_blob]);
+
+        assert_eq!(blobs.len(), 1);
+        let blob = &mut blobs[0];
+        assert_eq!(
+            blob.kind,
+            BlobKind::Fibre {
+                commitment: pointer.commitment
+            }
+        );
+        assert_eq!(blob.hash, HexHash::new(pointer.commitment));
+        assert_eq!(
+            Some(blob.sender),
+            ns_data.data.rows()[0].shares[0]
+                .signer()
+                .map(CelestiaAddress)
+        );
+        assert_eq!(blob.range_in_namespace, 0..1);
+        assert_eq!(blob.total_len(), data.len());
+        assert_eq!(blob.full_data(), data.as_slice());
+    }
+
+    #[test]
+    #[should_panic(expected = "Fibre data missing for pointer")]
+    fn fibre_pointer_without_data_panics_when_active() {
+        fibre_fixture_ns_data().get_blobs_with_sender(true, &[]);
+    }
+
+    #[test]
+    #[should_panic(expected = "does not match the pointer commitment")]
+    fn fibre_pointer_with_mismatching_data_panics() {
+        let fibre_blob = FibreBlobData::new(0, [7; 32], fibre_data().into());
+        fibre_fixture_ns_data().get_blobs_with_sender(true, &[fibre_blob]);
+    }
+
+    fn fibre_blob_with_sender() -> BlobWithSender {
+        let ns_data = fibre_fixture_ns_data();
+        let commitment = fibre_fixture_pointer(&ns_data).commitment;
+        let fibre_blob = FibreBlobData::new(0, commitment, fibre_data().into());
+        ns_data.get_blobs_with_sender(true, &[fibre_blob]).remove(0)
+    }
+
+    #[test]
+    fn fibre_blob_kind_survives_wire_round_trip() {
+        let mut blob = fibre_blob_with_sender();
+        blob.advance(10);
+
+        let restored: BlobWithSender =
+            serde_json::from_str(&serde_json::to_string(&blob).unwrap()).unwrap();
+
+        assert_eq!(restored.kind, blob.kind);
+        crate::test_helper::compare_equality(&restored, &blob);
+    }
+
+    #[test]
+    fn serde_rejects_fibre_hash_differing_from_commitment() {
+        let blob = fibre_blob_with_sender();
+        let mut serialized = serde_json::to_value(&blob).unwrap();
+        serialized["hash"] = serde_json::to_value(HexHash::new([9; 32])).unwrap();
+
+        let err = serde_json::from_value::<BlobWithSender>(serialized).unwrap_err();
+        assert!(
+            err.to_string().contains("differs from its commitment"),
+            "Actual error: {err}"
+        );
+    }
+
+    #[test]
+    fn fibre_blob_data_json_round_trips_with_base64_data() {
+        let fibre_blob = FibreBlobData::new(3, [0xAB; 32], fibre_data().into());
+
+        let json = serde_json::to_value(&fibre_blob).unwrap();
+        assert!(json["data"].is_string());
+        let restored: FibreBlobData = serde_json::from_value(json).unwrap();
+
+        assert_eq!(restored, fibre_blob);
     }
 
     /// Build a [`BlobWithSender`] carrying `da_payload` as its on-DA payload, the same
@@ -850,6 +1072,7 @@ pub mod tests {
             range_in_namespace: 0..share_count,
             sender: signer,
             hash: HexHash::new([0u8; 32]),
+            kind: super::BlobKind::Pfb,
             envelope_state: std::sync::OnceLock::new(),
         }
     }
