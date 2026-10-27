@@ -20,6 +20,8 @@ type NomtStorage = NomtVerifierStorage<DefaultStorageSpec<sha2::Sha256>>;
 pub const ROLLUP_BATCH_NAMESPACE: Namespace = Namespace::const_v0(config_value!("BATCH_NAMESPACE"));
 pub const ROLLUP_PROOF_NAMESPACE: Namespace = Namespace::const_v0(config_value!("PROOF_NAMESPACE"));
 
+const FIBRE_ACTIVATION_HEIGHT: u64 = config_value!("FIBRE_ACTIVATION_HEIGHT");
+
 risc0_zkvm::guest::entry!(main);
 
 pub fn main() {
@@ -41,7 +43,7 @@ pub fn main() {
     let rollup_params = sov_celestia_adapter::verifier::RollupParams {
         rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
         rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
-        fibre_activation_height: None,
+        fibre_activation_height: (FIBRE_ACTIVATION_HEIGHT != 0).then_some(FIBRE_ACTIVATION_HEIGHT),
     };
 
     let stf_verifier = StfVerifier::new(stf, CelestiaVerifier::new(rollup_params));

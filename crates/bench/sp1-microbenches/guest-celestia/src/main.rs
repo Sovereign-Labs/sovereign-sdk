@@ -28,6 +28,7 @@ pub fn main() {
     let rollup_params = RollupParams {
         rollup_batch_namespace: Namespace::const_v0(batch_ns_id),
         rollup_proof_namespace: Namespace::const_v0(proof_ns_id),
+        // Fibre is intentionally not benchmarked: this guest has no constants manifest.
         fibre_activation_height: None,
     };
 
