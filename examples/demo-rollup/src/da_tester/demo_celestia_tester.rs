@@ -44,6 +44,7 @@ async fn main() -> anyhow::Result<()> {
         RollupParams {
             rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
             rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
+            fibre_activation_height: None,
         },
         &secondary_shutdown_controller,
     )

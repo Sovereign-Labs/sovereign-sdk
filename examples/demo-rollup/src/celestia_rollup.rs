@@ -120,6 +120,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             RollupParams {
                 rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
                 rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
+                fibre_activation_height: None,
             },
             secondary_shutdown_controller,
         )
@@ -172,6 +173,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
         let rollup_params = RollupParams {
             rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
             rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
+            fibre_activation_height: None,
         };
 
         let da_verifier = CelestiaVerifier::new(rollup_params);

@@ -497,6 +497,7 @@ impl CelestiaService {
             RollupParams {
                 rollup_batch_namespace: self.rollup_batch_namespace,
                 rollup_proof_namespace: self.rollup_proof_namespace,
+                fibre_activation_height: None,
             },
         )
     }
@@ -698,6 +699,7 @@ pub fn get_extraction_proof(
             &block.header,
             &block.rollup_batch_data,
             &blobs.batch_blobs,
+            &[],
         );
 
         DaProof {
@@ -714,6 +716,7 @@ pub fn get_extraction_proof(
             &block.header,
             &block.rollup_proof_data,
             &blobs.proof_blobs,
+            &[],
         );
 
         DaProof {

@@ -41,6 +41,7 @@ pub fn main() {
     let rollup_params = sov_celestia_adapter::verifier::RollupParams {
         rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
         rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
+        fibre_activation_height: None,
     };
 
     let stf_verifier = StfVerifier::new(stf, CelestiaVerifier::new(rollup_params));
