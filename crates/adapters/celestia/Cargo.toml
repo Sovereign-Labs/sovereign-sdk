@@ -27,6 +27,8 @@ tendermint-proto = { version = "0.40.4" }
 nmt-rs = { workspace = true, features = ["serde", "borsh"] }
 sha2 = { workspace = true }
 rsema1d = { version = "1.2.0", optional = true }
+bytes = { workspace = true, optional = true }
+reqwest = { workspace = true, optional = true }
 
 # Convenience
 anyhow = { workspace = true }
@@ -52,7 +54,7 @@ serde = { workspace = true, default-features = false, features = [
 serde_json = { workspace = true, features = ["alloc"] }
 
 thiserror = { workspace = true }
-tokio = { workspace = true, optional = true, features = ["sync"] }
+tokio = { workspace = true, optional = true, features = ["sync", "fs"] }
 tracing = { workspace = true }
 # Used by the checker.
 rand = { workspace = true, optional = true }
@@ -67,6 +69,7 @@ sov-universal-wallet = { workspace = true, features = ["macros"] }
 sov-celestia-adapter = { path = ".", features = ["native", "arbitrary"] }
 sov-test-utils = { workspace = true, features = ["arbitrary"] }
 rustls = { workspace = true, features = ["ring"] }
+tempfile = { workspace = true }
 postcard = { version = "1", features = ["use-std"] }
 reltester = { workspace = true }
 test-strategy = { workspace = true }
@@ -90,6 +93,8 @@ native = [
     "tendermint/default",
     "dep:celestia-client",
     "dep:rsema1d",
+    "dep:bytes",
+    "dep:reqwest",
     "dep:futures",
     "dep:tokio",
     "sov-celestia-adapter/native",
