@@ -210,3 +210,49 @@ impl Metric for FibreEncodeMeasurement {
         write!(buffer, "{name} bytes={bytes},time_us={time_us}")
     }
 }
+
+/// One attempt to upload a batch blob through Fibre and broadcast its `MsgPayForFibre`.
+#[derive(Debug)]
+pub(crate) struct SubmitPayForFibreMeasurement {
+    pub bytes: usize,
+    pub time: std::time::Duration,
+    pub is_success: bool,
+}
+
+impl Metric for SubmitPayForFibreMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_submit_pay_for_fibre"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let bytes = self.bytes;
+        let time_us = self.time.as_micros();
+        let is_success = self.is_success as u8;
+        write!(
+            buffer,
+            "{name} bytes={bytes},time_us={time_us},is_success={is_success}"
+        )
+    }
+}
+
+#[cfg(test)]
+mod submit_pay_for_fibre_tests {
+    use super::SubmitPayForFibreMeasurement;
+    use sov_metrics::Metric;
+
+    #[test]
+    fn submit_pay_for_fibre_serializes_for_telegraf() {
+        let measurement = SubmitPayForFibreMeasurement {
+            bytes: 1234,
+            time: std::time::Duration::from_micros(5678),
+            is_success: true,
+        };
+        let mut buffer = Vec::new();
+        measurement.serialize_for_telegraf(&mut buffer).unwrap();
+        assert_eq!(
+            String::from_utf8(buffer).unwrap(),
+            "sov_celestia_adapter_submit_pay_for_fibre bytes=1234,time_us=5678,is_success=1"
+        );
+    }
+}

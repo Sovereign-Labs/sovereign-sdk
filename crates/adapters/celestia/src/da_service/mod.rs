@@ -12,6 +12,7 @@ use crate::metrics::client::{
 use crate::metrics::full::{
     BlobCompressionMeasurement, BlobSubmitMeasurement, CelestiaAdapterStateMeasurement,
     FibreDownloadMeasurement, FibreEncodeMeasurement, GetBlockMeasurement, NamespaceDataMetrics,
+    SubmitPayForFibreMeasurement,
 };
 use crate::metrics::RollupNamespace;
 use crate::types::{
@@ -78,6 +79,8 @@ pub struct CelestiaService {
     fibre_activation_height: Option<u64>,
     fibre_download_timeout: Duration,
     fibre_archive: Option<FibreArchiveHandle>,
+    /// Set only when `fibre.submit` is enabled: batch blobs are then submitted through Fibre.
+    fibre_signing_key: Option<celestia_client::tx::SigningKey>,
 }
 
 impl CelestiaService {
@@ -99,6 +102,7 @@ impl CelestiaService {
         fibre_activation_height: Option<u64>,
         fibre_download_timeout: Duration,
         fibre_archive: Option<FibreArchiveHandle>,
+        fibre_signing_key: Option<celestia_client::tx::SigningKey>,
     ) -> Self {
         Self {
             client: Arc::new(client),
@@ -116,12 +120,18 @@ impl CelestiaService {
             fibre_activation_height,
             fibre_download_timeout,
             fibre_archive,
+            fibre_signing_key,
         }
     }
 
     fn fibre_active(&self, height: u64) -> bool {
         self.fibre_activation_height
             .is_some_and(|activation| height >= activation)
+    }
+
+    /// Whether batch blobs are submitted through Fibre instead of `MsgPayForBlob`.
+    pub(crate) fn submits_through_fibre(&self) -> bool {
+        self.fibre_signing_key.is_some()
     }
 
     fn rollup_namespace(&self, namespace: &Namespace) -> RollupNamespace {
@@ -178,6 +188,12 @@ impl CelestiaService {
         };
         let bytes = da_payload.len();
         tracing::debug!(rollup_len, bytes, namespace = ?ns, "Sending data to Celestia");
+
+        if let (RollupNamespace::Batch, Some(signing_key)) = (ns, &self.fibre_signing_key) {
+            return self
+                .submit_fibre_blob(signing_key, namespace, da_payload, start)
+                .await;
+        }
 
         let blob =
             JsonBlob::new(namespace, da_payload, Some(signer.0)).expect("Bug in CelestiaAdapter");
@@ -247,6 +263,84 @@ impl CelestiaService {
             da_transaction_id: tx_hash,
         })
     }
+
+    /// Submits a batch payload through Fibre. The blob hash is the Fibre commitment, which is
+    /// also what the verifier reports as the hash of the resulting blob.
+    async fn submit_fibre_blob(
+        &self,
+        signing_key: &celestia_client::tx::SigningKey,
+        namespace: Namespace,
+        da_payload: Vec<u8>,
+        start: std::time::Instant,
+    ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
+        let bytes = da_payload.len();
+        let (da_payload, encoded) = tokio::task::spawn_blocking(move || {
+            let encoded = encode_for_proofs(&da_payload);
+            (da_payload, encoded)
+        })
+        .await?;
+        let commitment = encoded.context("Failed to encode Fibre blob")?.commitment;
+        let blob_hash = HexHash::new(commitment);
+        let fibre = self.client.fibre().ok_or_else(|| {
+            anyhow::anyhow!(
+                "`fibre.submit` is enabled but the Celestia client has no Fibre support"
+            )
+        })?;
+        tracing::debug!(commitment = %blob_hash, bytes, "Submitting a Fibre blob");
+
+        let start_submit = std::time::Instant::now();
+        let submitted = run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || async {
+                let start = std::time::Instant::now();
+                let result = tokio::time::timeout(
+                    self.request_timeout,
+                    fibre.put(signing_key, namespace, &da_payload),
+                )
+                .await;
+                let result = flatten_timeout(result);
+                let measurement = SubmitPayForFibreMeasurement {
+                    bytes,
+                    time: start.elapsed(),
+                    is_success: result.is_ok(),
+                };
+                sov_metrics::track_metrics(|tracker| tracker.submit(measurement));
+                result
+            },
+            "submit_fibre_blob",
+        )
+        .await?;
+        // `MsgPayForFibre` is already broadcast here, so confirmation is deliberately not
+        // retried: re-running `put` would pay for and post the same batch twice.
+        let tx_info = tokio::time::timeout(self.request_timeout, submitted.confirm())
+            .await
+            .context("Timed out confirming the Fibre transaction")?
+            .context("Failed to confirm the Fibre transaction")?;
+        let submit_time = start_submit.elapsed();
+
+        if let Some(archive) = &self.fibre_archive {
+            let id = BlobID::new(0, commitment);
+            if let Err(error) = archive.0.put(&id, &da_payload).await {
+                tracing::warn!(?id, ?error, "Failed to archive submitted Fibre blob");
+            }
+        }
+
+        let tx_hash = TmHash(tx_info.hash);
+        tracing::info!(
+            da_height = tx_info.height,
+            tx_hash = %tx_hash,
+            blob_hash = %blob_hash,
+            bytes,
+            ?submit_time,
+            total_time = ?start.elapsed(),
+            "Fibre blob has been submitted to Celestia"
+        );
+
+        Ok(SubmitBlobReceipt {
+            blob_hash,
+            da_transaction_id: tx_hash,
+        })
+    }
 }
 
 impl CelestiaService {
@@ -296,6 +390,8 @@ impl CelestiaService {
         }
 
         let (fibre_download_timeout, fibre_archive) = build_fibre_archive(&config);
+        let fibre_signing_key =
+            build_fibre_signing_key(&config, chain_params.fibre_activation_height);
 
         Self::with_client(
             client,
@@ -313,8 +409,35 @@ impl CelestiaService {
             chain_params.fibre_activation_height,
             fibre_download_timeout,
             fibre_archive,
+            fibre_signing_key,
         )
     }
+}
+
+/// Returns the key Fibre submissions are signed with, if `fibre.submit` is enabled.
+///
+/// Panics when submission is enabled without a Fibre activation height: the verifier skips
+/// share-version-2 blobs, so every submitted batch would be paid for and then ignored.
+fn build_fibre_signing_key(
+    config: &CelestiaConfig,
+    fibre_activation_height: Option<u64>,
+) -> Option<celestia_client::tx::SigningKey> {
+    if !config.fibre.as_ref().is_some_and(|fibre| fibre.submit) {
+        return None;
+    }
+    assert!(
+        fibre_activation_height.is_some(),
+        "`fibre.submit` requires `fibre_activation_height` to be set in the rollup params;          enable it only once the activation height is reached"
+    );
+    let key_hex = config
+        .signer_private_key
+        .as_ref()
+        .expect("`fibre.submit` requires `signer_private_key`, checked by config validation");
+    let key_bytes = hex::decode(key_hex).expect("`signer_private_key` is not valid hex");
+    Some(
+        celestia_client::tx::SigningKey::from_slice(&key_bytes)
+            .expect("`signer_private_key` is not a valid secp256k1 key"),
+    )
 }
 
 /// Returns the Fibre download timeout and the archive built from `config.fibre`.
@@ -1084,4 +1207,41 @@ async fn gather_stat(
         gas_price,
         sync_distance,
     })
+}
+
+#[cfg(test)]
+mod fibre_submit_tests {
+    use super::build_fibre_signing_key;
+    use crate::config::{CelestiaConfig, FibreConfig};
+
+    const KEY_HEX: &str = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+
+    fn config(submit: bool, key: Option<&str>) -> CelestiaConfig {
+        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
+        config.signer_private_key = key.map(str::to_string);
+        config.fibre = Some(FibreConfig {
+            submit,
+            ..Default::default()
+        });
+        config
+    }
+
+    #[test]
+    fn no_signing_key_when_fibre_submit_is_disabled() {
+        let key = build_fibre_signing_key(&config(false, Some(KEY_HEX)), Some(1));
+        assert_eq!(key, None);
+    }
+
+    #[test]
+    fn signing_key_is_built_from_configured_hex() {
+        let key = build_fibre_signing_key(&config(true, Some(KEY_HEX)), Some(1))
+            .expect("fibre.submit is enabled");
+        assert_eq!(key.to_bytes().as_slice(), hex::decode(KEY_HEX).unwrap());
+    }
+
+    #[test]
+    #[should_panic(expected = "requires `fibre_activation_height`")]
+    fn fibre_submit_without_activation_height_is_rejected() {
+        build_fibre_signing_key(&config(true, Some(KEY_HEX)), None);
+    }
 }

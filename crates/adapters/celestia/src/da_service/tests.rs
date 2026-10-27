@@ -293,6 +293,43 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+#[ignore = "needs a devnet image with celestia-app >= v10 (Fibre) and a funded escrow for the signer; \
+            the pinned v8.0.1 image has no Fibre"]
+async fn test_submit_blob_through_fibre_correct() -> anyhow::Result<()> {
+    let rollup_params = RollupParams {
+        fibre_activation_height: Some(0),
+        ..ROLLUP_PARAMS_DEV
+    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
+    let mut config = dev_node.get_config().await?;
+    config.fibre = Some(crate::config::FibreConfig {
+        submit: true,
+        ..Default::default()
+    });
+    let secondary_shutdown_controller = SecondaryShutdownController::new();
+    let da_service =
+        CelestiaService::new(config, rollup_params, &secondary_shutdown_controller).await;
+    let signer = da_service
+        .get_signer()
+        .await
+        .expect("Should be configured with signer");
+
+    let blob = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+    let height_before = da_service.get_head_block_header().await?.height();
+    let response = da_service.send_transaction(&blob).await.await??;
+
+    let (collected_batch_blobs, collected_proof_blobs) =
+        collect_all_blobs_between(&da_service, height_before).await?;
+
+    assert!(
+        collected_proof_blobs.is_empty(),
+        "Proof should not appear when sending batch blobs"
+    );
+    assert_single_blob(collected_batch_blobs, signer, response.blob_hash, &blob);
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn test_submit_compressed_batch_round_trips() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
     let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
