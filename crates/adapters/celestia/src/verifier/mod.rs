@@ -8,7 +8,7 @@ use sov_rollup_interface::da::{self, BlockHeaderTrait, DaSpec, RelevantBlobs, Re
 
 use self::address::CelestiaAddress;
 use self::proofs::*;
-use crate::fibre::{parse_v2_pointer, verify_fibre_prefix, FIBRE_SHARE_VERSION};
+use crate::fibre::{parse_v2_pointer, verify_fibre_prefix, FIBRE_HEADER_LEN, FIBRE_SHARE_VERSION};
 use crate::shares::shares_needed_for_bytes_with_signer;
 use crate::types::NamespaceValidationError::{
     IncompleteNamespace, InvalidBlobData, InvalidRowProof,
@@ -576,6 +576,19 @@ fn authenticate_fibre_blob(
         blob.compressed_total_len(),
     )
     .map_err(|e| InvalidBlobData(e.into()))?;
+
+    // Mirrors `authenticate_blob_data`: the classification of the blob (envelope vs. legacy)
+    // is decided by the first bytes, so the verified prefix must cover the envelope header
+    // whenever the committed data starts with the magic. The rows are authenticated by now.
+    let total_len = blob.compressed_total_len();
+    let committed_head = &rows_proof.rows[FIBRE_HEADER_LEN..];
+    let committed_head = &committed_head[..committed_head.len().min(total_len)];
+    if crate::envelope::has_magic_prefix(committed_head) {
+        let required_prefix_len = crate::envelope::ENVELOPE_HEADER_LEN.min(total_len);
+        if blob.compressed_verified_data().len() < required_prefix_len {
+            return Err(InvalidBlobData(BlobDataError::NonMatchingShare));
+        }
+    }
 
     Ok(1)
 }

@@ -50,8 +50,9 @@ use tracing::instrument;
 
 type BoxError = anyhow::Error;
 
-/// Fibre blobs of a block downloaded at the same time; each can be up to 128 MiB.
-const FIBRE_DOWNLOAD_CONCURRENCY: usize = 4;
+/// Fibre blobs of a block downloaded and encoded at the same time. Encoding a blob of up to
+/// 128 MiB holds several times its size in memory, so blobs are processed one at a time.
+const FIBRE_DOWNLOAD_CONCURRENCY: usize = 1;
 
 #[derive(Clone)]
 struct FibreArchiveHandle(Arc<dyn FibreArchive>);
@@ -286,32 +287,39 @@ impl CelestiaService {
                 "`fibre.submit` is enabled but the Celestia client has no Fibre support"
             )
         })?;
+        let head_height = sov_rollup_interface::da::BlockHeaderTrait::height(
+            &self.get_head_block_header().await?,
+        );
+        anyhow::ensure!(
+            self.fibre_active(head_height.saturating_add(1)),
+            "Fibre activation height {:?} has not been reached (DA head is {head_height}): \
+             the verifier would ignore this batch",
+            self.fibre_activation_height,
+        );
         tracing::debug!(commitment = %blob_hash, bytes, "Submitting a Fibre blob");
 
         let start_submit = std::time::Instant::now();
-        let submitted = run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || async {
-                let start = std::time::Instant::now();
-                let result = tokio::time::timeout(
-                    self.request_timeout,
-                    fibre.put(signing_key, namespace, &da_payload),
-                )
-                .await;
-                let result = flatten_timeout(result);
-                let measurement = SubmitPayForFibreMeasurement {
-                    bytes,
-                    time: start.elapsed(),
-                    is_success: result.is_ok(),
-                };
-                sov_metrics::track_metrics(|tracker| tracker.submit(measurement));
-                result
-            },
-            "submit_fibre_blob",
+        // Not retried: a timeout can fire after `MsgPayForFibre` is broadcast, and re-running
+        // `put` would then pay for and post the same batch twice.
+        let result = tokio::time::timeout(
+            self.request_timeout,
+            fibre.put(signing_key, namespace, &da_payload),
         )
-        .await?;
+        .await;
+        let result = match result {
+            Ok(result) => result.map_err(anyhow::Error::from),
+            Err(_) => Err(anyhow::anyhow!("await timeout")),
+        };
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(SubmitPayForFibreMeasurement {
+                bytes,
+                time: start_submit.elapsed(),
+                is_success: result.is_ok(),
+            })
+        });
+        let submitted = result.context("Failed to submit the Fibre blob")?;
         // `MsgPayForFibre` is already broadcast here, so confirmation is deliberately not
-        // retried: re-running `put` would pay for and post the same batch twice.
+        // retried either.
         let tx_info = tokio::time::timeout(self.request_timeout, submitted.confirm())
             .await
             .context("Timed out confirming the Fibre transaction")?

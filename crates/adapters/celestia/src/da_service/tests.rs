@@ -2614,111 +2614,6 @@ async fn test_rpc_startup_with_primary_down_uses_secondary() -> anyhow::Result<(
     Ok(())
 }
 
-/// Phase 0 spike: offline checks of Fibre assumptions A, B, C and E.
-mod fibre_spike {
-    use nmt_rs::simple_merkle::db::MemDb;
-    use nmt_rs::simple_merkle::tree::MerkleTree;
-    use nmt_rs::TmSha2Hasher;
-    use rand::{RngCore, SeedableRng};
-
-    const K: usize = 4096;
-    const N: usize = 12288;
-
-    type Tree = MerkleTree<MemDb<[u8; 32]>, TmSha2Hasher>;
-
-    fn encode_random(len: usize) -> (rsema1d::ExtendedData, Vec<u8>) {
-        let mut data = vec![0u8; len];
-        rand::rngs::SmallRng::seed_from_u64(7).fill_bytes(&mut data);
-        // 5-byte Fibre header: version 0, u32 BE data size.
-        let mut buf = vec![0u8; 5 + len];
-        buf[1..5].copy_from_slice(&(len as u32).to_be_bytes());
-        buf[5..].copy_from_slice(&data);
-        let row_size = buf.len().div_ceil(K).next_multiple_of(64);
-        buf.resize(row_size * K, 0);
-        let params = rsema1d::Parameters::new(K, N, row_size).unwrap();
-        let rows = rsema1d::RowMatrix::with_shape(buf, K, row_size).unwrap();
-        (rsema1d::encode(&rows, &params).unwrap().0, data)
-    }
-
-    // Assumptions A and B.
-    #[test]
-    #[ignore = "spike"]
-    fn rsema1d_row_tree_matches_nmt_rs_simple_merkle() {
-        let (ext, _) = encode_random(300 * 1024);
-        let rows = ext.rows();
-
-        let mut tree = Tree::new();
-        for i in 0..K + N {
-            tree.push_raw_leaf(ext.row(i).unwrap());
-        }
-        assert_eq!(
-            tree.root(),
-            ext.row_root(),
-            "row root over K+N contiguous leaves"
-        );
-
-        let mut hasher = <sha2::Sha256 as sha2::Digest>::new();
-        sha2::Digest::update(&mut hasher, ext.row_root());
-        sha2::Digest::update(&mut hasher, ext.rlc_root());
-        let commitment: [u8; 32] = sha2::Digest::finalize(hasher).into();
-        assert_eq!(commitment, ext.commitment());
-        assert_eq!(rows.rows(), K + N);
-
-        // Single-leaf proof siblings, original and parity row.
-        for idx in [0usize, 1, K - 1, K, K + N - 1] {
-            let theirs = ext.generate_row_proof(idx).unwrap();
-            let ours = tree.build_range_proof(idx..idx + 1);
-            let mut siblings = ours.siblings().clone();
-            siblings.reverse();
-            println!(
-                "idx {idx}: nmt order == rsema order: {}",
-                ours.siblings() == &theirs.row_proof
-            );
-            assert_eq!(siblings.len(), theirs.row_proof.len());
-        }
-    }
-
-    #[test]
-    #[ignore = "spike"]
-    fn nmt_rs_range_proof_verifies_prefix_against_row_root() {
-        let (ext, _) = encode_random(300 * 1024);
-        let mut tree = Tree::new();
-        for i in 0..K + N {
-            tree.push_raw_leaf(ext.row(i).unwrap());
-        }
-        let m = 3;
-        let proof = tree.build_range_proof(0..m);
-        let leaves: Vec<[u8; 32]> = (0..m)
-            .map(|i| {
-                let mut h = <sha2::Sha256 as sha2::Digest>::new();
-                sha2::Digest::update(&mut h, [0u8]);
-                sha2::Digest::update(&mut h, ext.row(i).unwrap());
-                sha2::Digest::finalize(h).into()
-            })
-            .collect();
-        proof.verify_range(&ext.row_root(), &leaves).unwrap();
-        println!("prefix proof siblings: {}", proof.siblings().len());
-    }
-
-    // Assumption C: names re-exported by celestia_client.
-    #[test]
-    #[ignore = "spike"]
-    fn celestia_client_reexports_fibre_types() {
-        use celestia_client::api::fibre::{
-            BlobConfig, BlobID, DownloadOptions, EncodedFibreBlob, FibreClient, FibreClientConfig,
-        };
-        let _: Option<(
-            BlobID,
-            DownloadOptions,
-            EncodedFibreBlob,
-            FibreClient,
-            BlobConfig,
-        )> = None;
-        // Assumption E: the config only needs the chain id string.
-        FibreClientConfig::new("mocha-4").unwrap();
-    }
-}
-
 /// Fibre blocks are built in memory: a real square is encoded around a pointer share whose
 /// commitment is computed from known data, so the header, namespace rows and proofs are genuine.
 mod fibre_blocks {
@@ -2779,12 +2674,15 @@ mod fibre_blocks {
 
     /// Builds a block whose batch namespace holds an optional v1 blob followed by one Fibre pointer.
     fn fibre_block(with_v1: bool) -> FibreBlock {
+        fibre_block_with_data(with_v1, random_bytes(FIBRE_DATA_LEN, 1))
+    }
+
+    fn fibre_block_with_data(with_v1: bool, fibre_data: Vec<u8>) -> FibreBlock {
         let (template, _) = mocha_fibre_fixture(TEMPLATE_PATH);
         let pointer_template = &template.rollup_batch_data.data.rows()[0].shares[0];
         let signer = pointer_template.signer().unwrap();
         let params = rollup_params(None);
 
-        let fibre_data = random_bytes(FIBRE_DATA_LEN, 1);
         let v1_data = if with_v1 {
             random_bytes(V1_DATA_LEN, 2)
         } else {
@@ -3194,6 +3092,33 @@ mod fibre_blocks {
             .verify_relevant_tx_list(&fibre_block.block.header, &blobs, relevant_proofs)
             .unwrap_err();
         assert_eq!(fibre_error(error), FibreProofError::PrefixMismatch);
+    }
+
+    #[test]
+    fn fibre_rejects_envelope_blob_with_unverified_header() {
+        let envelope = crate::envelope::encode_chunked(
+            &random_bytes(FIBRE_DATA_LEN, 3),
+            crate::envelope::CODEC_RAW_ESCAPE,
+            1_000,
+        );
+        let fibre_block = fibre_block_with_data(false, envelope.clone());
+        let mut blobs = extract_with_fibre(&fibre_block.block);
+        blobs.batch_blobs[0].blob =
+            CountedBufReader::new(BlobIterator::from_bytes(envelope.into()));
+        let relevant_proofs = prove_with_fibre(&fibre_block.block, &blobs);
+
+        let error = fibre_block
+            .verifier
+            .verify_relevant_tx_list(&fibre_block.block.header, &blobs, relevant_proofs)
+            .unwrap_err();
+        let ValidationError::NamespaceValidationError {
+            namespace: NamespaceType::Batch,
+            error: NamespaceValidationError::InvalidBlobData(error),
+        } = error
+        else {
+            panic!("Unexpected error: {error:?}");
+        };
+        assert_eq!(format!("{error:?}"), "NonMatchingShare");
     }
 
     #[test]
