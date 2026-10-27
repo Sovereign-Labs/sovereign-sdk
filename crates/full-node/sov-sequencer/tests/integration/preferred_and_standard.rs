@@ -260,7 +260,6 @@ async fn run_side_by_side() -> SideBySide {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "preferred sequencer panics replaying a registered non-preferred batch; fixed later in the PR stack"]
 async fn txs_from_both_sequencers_succeed_on_both_nodes() {
     let run = run_side_by_side().await;
 
@@ -282,7 +281,6 @@ async fn txs_from_both_sequencers_succeed_on_both_nodes() {
 /// node's, panicking on mismatch. Both happen when it processes the node's state update, which can
 /// be after the node's ledger already shows the transaction, so wait for that update explicitly.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "preferred sequencer panics replaying a registered non-preferred batch; fixed later in the PR stack"]
 async fn preferred_sequencer_stays_ready_after_non_preferred_batch() {
     let run = run_side_by_side().await;
     let target_slot = slot_number_containing(&run.preferred, &run.standard_tx_hash).await;
