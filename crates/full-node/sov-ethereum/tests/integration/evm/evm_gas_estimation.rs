@@ -2,9 +2,15 @@ use alloy::providers::Provider;
 use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, Bytes, U256, U64};
 use serde_json::json;
-use sov_evm_test_utils::SimpleStorage;
+use sov_evm::precompiles::BANK_BALANCE_PRECOMPILE_ADDRESS;
+use sov_evm_test_utils::{PrecompileTester, SimpleStorage, SolCall};
+use sov_test_utils::test_rollup::TestRollup;
 
-use crate::common::{alloy_client, setup_test_rollup, EVM_EXTENSION, SENDER_PRIV_KEY};
+use crate::common::{
+    alloy_client, setup_test_rollup, setup_test_rollup_with_enabled_custom_precompiles,
+    DEFAULT_FUNDED_EVM_ACCOUNTS, EVM_EXTENSION, SENDER_PRIV_KEY,
+};
+use crate::runtime::EvmBlueprint;
 
 const SIM_MAX_FEE_PER_GAS: &str = "0x100";
 const SIM_MAX_PRIORITY_FEE_PER_GAS: &str = "0x1";
@@ -172,5 +178,107 @@ async fn eth_call_omitted_nonce_matches_explicit_nonce_for_create() -> anyhow::R
         "omitted nonce should match explicit nonce behavior for eth_call CREATE simulation"
     );
 
+    Ok(())
+}
+
+/// Starts a rollup with the bank-balance precompile enabled and deploys a [`PrecompileTester`].
+/// Returns the tester address and calldata asserting that the precompile returns the gas-token
+/// balance of a funded account that never transacts in these tests.
+///
+/// If `eth_estimateGas` simulates without the runtime's custom precompiles, the precompile
+/// address looks like an empty account and the assertion reverts.
+async fn setup_bank_precompile_assertion(
+) -> anyhow::Result<(TestRollup<EvmBlueprint>, Address, Bytes)> {
+    let rollup = setup_test_rollup_with_enabled_custom_precompiles(
+        0,
+        EVM_EXTENSION,
+        &[BANK_BALANCE_PRECOMPILE_ADDRESS],
+    )
+    .await;
+    rollup.wait_for_rollup_height_advance_by(1).await;
+
+    let client = alloy_client(rollup.http_addr);
+    let tester = PrecompileTester::deploy(client.clone()).await?;
+    let balance_holder: Address = DEFAULT_FUNDED_EVM_ACCOUNTS[3].parse()?;
+    let balance = client.get_balance(balance_holder).await?;
+    assert_ne!(balance, U256::ZERO, "balance holder should be funded");
+
+    let call = PrecompileTester::assertPrecompileResultCall {
+        precompile: BANK_BALANCE_PRECOMPILE_ADDRESS,
+        input: Bytes::copy_from_slice(balance_holder.as_slice()),
+        expectedOutput: Bytes::from(balance.to_be_bytes::<32>()),
+    };
+    Ok((rollup, *tester.address(), Bytes::from(call.abi_encode())))
+}
+
+async fn estimate_gas(
+    rollup: &TestRollup<EvmBlueprint>,
+    params: serde_json::Value,
+) -> anyhow::Result<U64> {
+    Ok(alloy_client(rollup.http_addr)
+        .client()
+        .request("eth_estimateGas", &params)
+        .await?)
+}
+
+/// With a sender and no overrides, `eth_estimateGas` runs the revert pre-check simulation and
+/// then re-executes through the runtime. Both must see the runtime's custom precompiles.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_estimate_gas_with_sender_executes_custom_precompiles() -> anyhow::Result<()> {
+    let (rollup, tester, input) = setup_bank_precompile_assertion().await?;
+
+    let params = json!([{
+        "from": sender_address()?,
+        "to": tester,
+        "maxFeePerGas": SIM_MAX_FEE_PER_GAS,
+        "maxPriorityFeePerGas": SIM_MAX_PRIORITY_FEE_PER_GAS,
+        "data": input,
+    }, "latest"]);
+    let estimate = estimate_gas(&rollup, params)
+        .await
+        .expect("estimate should succeed when the custom precompile is enabled");
+
+    assert_ne!(estimate, U64::ZERO);
+    Ok(())
+}
+
+/// Without a sender, `eth_estimateGas` uses the simulation-only fallback estimator, which must
+/// also see the runtime's custom precompiles.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_estimate_gas_without_sender_executes_custom_precompiles() -> anyhow::Result<()> {
+    let (rollup, tester, input) = setup_bank_precompile_assertion().await?;
+
+    let params = json!([{ "to": tester, "data": input }, "latest"]);
+    let estimate = estimate_gas(&rollup, params)
+        .await
+        .expect("estimate should succeed when the custom precompile is enabled");
+
+    assert_ne!(estimate, U64::ZERO);
+    Ok(())
+}
+
+/// With a sender and a state override, `eth_estimateGas` also uses the simulation-only fallback
+/// estimator, which must see the runtime's custom precompiles.
+#[tokio::test(flavor = "multi_thread")]
+async fn eth_estimate_gas_with_state_override_executes_custom_precompiles() -> anyhow::Result<()> {
+    let (rollup, tester, input) = setup_bank_precompile_assertion().await?;
+
+    // Override an account that is unrelated to the call, so that only the estimation path
+    // changes, not the precompile's expected output.
+    let unrelated_account = Address::repeat_byte(0x42);
+    let params = json!([{
+        "from": sender_address()?,
+        "to": tester,
+        "maxFeePerGas": SIM_MAX_FEE_PER_GAS,
+        "maxPriorityFeePerGas": SIM_MAX_PRIORITY_FEE_PER_GAS,
+        "data": input,
+    }, "latest", {
+        unrelated_account.to_string(): { "balance": "0x1234" },
+    }]);
+    let estimate = estimate_gas(&rollup, params)
+        .await
+        .expect("estimate should succeed when the custom precompile is enabled");
+
+    assert_ne!(estimate, U64::ZERO);
     Ok(())
 }

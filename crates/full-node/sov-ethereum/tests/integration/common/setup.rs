@@ -167,6 +167,19 @@ pub async fn setup_test_rollup_with_allowlist(
     start_node_with_genesis(test_genesis, finalization_blocks, Some(extension), None, 3).await
 }
 
+/// Sets up a test rollup with the given custom EVM precompiles enabled at genesis.
+pub async fn setup_test_rollup_with_enabled_custom_precompiles(
+    finalization_blocks: u32,
+    extension: SeqConfigExtension,
+    enabled_custom_precompiles: &[alloy_primitives::Address],
+) -> TestRollup<EvmBlueprint> {
+    let test_genesis = build_genesis(GenesisOptions {
+        enabled_custom_precompiles: enabled_custom_precompiles.iter().copied().collect(),
+        ..GenesisOptions::default()
+    });
+    start_node_with_genesis(test_genesis, finalization_blocks, Some(extension), None, 3).await
+}
+
 pub async fn setup_test_rollup_with_selective_paymaster(
     finalization_blocks: u32,
     extension: SeqConfigExtension,

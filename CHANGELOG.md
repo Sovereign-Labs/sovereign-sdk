@@ -3,6 +3,8 @@
     - **Breaking Change** Migrations: `migrate_to_v1` and `mockda-to-celestia-migrate` accept `--live-db-path`, `--ledger-db-path` and `--user-nomt-db-path` overrides. `--db-path` now refuses to run if the rollup config sets a per-DB path that isn't overridden too, because that DB would otherwise be migrated at its original location. `sov_migrations::MigrationArgs::db_path` is replaced by `db_paths: DbPathOverrides`, and `load_storage_config` takes `&DbPathOverrides`.
 # 2026-10-20
 - #3077 Make benchmark inputs reproducible and report median-block TPS and a receipt digest.
+# 2026-10-23
+- #PR_NUMBER **Breaking Change** EVM RPC: `eth_estimateGas` now executes the runtime's custom EVM precompiles. Previously its revert pre-check and its fallback estimator (used for requests without `from`, or with state/block overrides) simulated without them, so calls into custom precompiles could fail or be mis-estimated. `sov_ethereum::get_ethereum_rpc` now requires the runtime to implement the new `sov_evm::HasEvm<S>` trait: set `type EvmPrecompiles` to the precompile set `P` of the runtime's `Evm<S, P>` module, and return that module field from `evm()` (which makes the compiler check that the two match). Not state- or chain-hash-breaking.
 
 # 2026-10-13
 - #3075 Added a new config value: `runner.http_config.max_rpc_response_body_size`. This overrides the maximum response size for JSON-RPC requests (primarily used for the Ethereum RPC interface). When unset, keeps the old default of 10 MiB.
