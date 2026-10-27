@@ -11,6 +11,9 @@ mod metrics;
 // path is pure and ungated so the guest verifier shares identical logic; only the
 // encoder is `native`-gated.
 mod envelope;
+// Callers are wired in by the verifier/types changes; remove once they land.
+#[allow(dead_code)]
+mod fibre;
 pub mod shares;
 #[cfg(test)]
 mod test_helper;

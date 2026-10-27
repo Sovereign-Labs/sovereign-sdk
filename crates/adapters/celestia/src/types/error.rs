@@ -60,6 +60,32 @@ pub enum BlobDataError {
     WrongSender,
     #[error("Blob claims total length {actual} but the sequence length proven from its first share is {expected}")]
     MismatchedBlobLength { expected: u64, actual: u64 },
+    #[error("Invalid Fibre blob: {0}")]
+    Fibre(#[from] FibreProofError),
+}
+
+#[derive(Debug, PartialEq, thiserror::Error)]
+pub enum FibreProofError {
+    #[error("Share is not a valid Fibre pointer")]
+    InvalidPointer,
+    #[error("Unsupported Fibre blob version {0}")]
+    UnsupportedBlobVersion(u32),
+    #[error("Invalid Fibre row size {0}")]
+    RowSizeInvalid(u32),
+    #[error("Expected {expected} Fibre rows, got {actual}")]
+    RowCountMismatch { expected: usize, actual: usize },
+    #[error("Invalid Fibre row range proof: {0:?}")]
+    RangeProofInvalid(nmt_rs::simple_merkle::error::RangeProofError),
+    #[error("Fibre rows do not match the commitment")]
+    CommitmentMismatch,
+    #[error("Invalid Fibre blob header")]
+    HeaderInvalid,
+    #[error("Fibre blob claims data size {actual} but {expected} was expected")]
+    DataSizeMismatch { expected: u64, actual: u64 },
+    #[error("Fibre rows do not contain the claimed data prefix")]
+    PrefixMismatch,
+    #[error("Fibre rows proof is missing")]
+    MissingProof,
 }
 
 #[derive(Debug, thiserror::Error)]
