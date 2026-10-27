@@ -14,9 +14,7 @@ mod envelope;
 // Callers are wired in by the verifier/types changes; remove once they land.
 #[allow(dead_code)]
 mod fibre;
-// Wired into the DA service by the native read path; remove once it lands.
 #[cfg(feature = "native")]
-#[allow(dead_code)]
 mod fibre_archive;
 pub mod shares;
 #[cfg(test)]

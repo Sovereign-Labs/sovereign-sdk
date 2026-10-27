@@ -2881,7 +2881,9 @@ mod fibre_blocks {
 
     #[test]
     fn fibre_v2_is_skipped_in_mixed_block_before_activation() {
-        let fibre_block = fibre_block(true);
+        let mut fibre_block = fibre_block(true);
+        // The service only fetches Fibre data once Fibre is active.
+        fibre_block.block.fibre_blobs.clear();
         let height = fibre_block.block.header.height();
         for activation in [None, Some(height + 1)] {
             let verifier = CelestiaVerifier::new(rollup_params(activation));
@@ -2951,6 +2953,42 @@ mod fibre_blocks {
                 .verify_relevant_tx_list(&block.header, &blobs, relevant_proofs)
                 .unwrap();
         }
+    }
+
+    #[test]
+    fn fibre_service_extraction_roundtrip_verifies_for_read_lengths() {
+        let FibreBlock {
+            block,
+            fibre_data,
+            commitment,
+            verifier,
+            ..
+        } = fibre_block(false);
+
+        for read_len in read_lengths(FIBRE_DATA_LEN) {
+            let mut blobs = extract_relevant_blobs(&block);
+            assert_eq!(blobs.batch_blobs.len(), 1);
+            assert_eq!(blobs.batch_blobs[0].kind, BlobKind::Fibre { commitment });
+            blobs.batch_blobs[0].advance(read_len);
+            assert_eq!(
+                blobs.batch_blobs[0].verified_data(),
+                &fibre_data[..read_len]
+            );
+
+            let relevant_proofs = get_extraction_proof(&block, &blobs);
+            verifier
+                .verify_relevant_tx_list(&block.header, &blobs, relevant_proofs)
+                .unwrap();
+        }
+    }
+
+    #[test]
+    fn verify_on_fetch_accepts_fibre_block() {
+        let FibreBlock { block, .. } = fibre_block(true);
+        let height = block.header.height();
+
+        super::super::verify_block_integrity_for_params(&block, rollup_params(Some(height)))
+            .unwrap();
     }
 
     #[test]
