@@ -81,6 +81,32 @@ signer_private_key = "aec34bb1cfae6e906594dc106af4057a9046f769e2eeed67d040f0107e
 # Default: 2000
 #tx_status_polling_millis = 2000
 
+# Celestia Fibre (off-chain DA, share version 2). Optional; omit the whole section to disable.
+# Reading Fibre batch blobs only takes effect from `FIBRE_ACTIVATION_HEIGHT` in constants.toml
+# (0 = disabled); submitting with `submit = true` additionally requires that constant to be non-zero.
+# Validators keep Fibre shards only for a limited retention period (4 hours by default), so a node
+# that must sync or re-prove older blocks needs `archive_dir` and/or `archive_fallback_urls`.
+#[da.fibre]
+# Submit batch blobs through Fibre (`MsgPayForFibre`) instead of `MsgPayForBlobs`.
+# Requires `signer_private_key`, and the signer's Fibre escrow account must be funded beforehand
+# (withdrawals from escrow have a 24 hour delay). The proof namespace never uses Fibre.
+# Default: false
+#submit = false
+# gRPC endpoint of the Fibre client.
+# Default: the top-level `grpc_url`
+#grpc_url = "http://127.0.0.1:9090"
+# Token for `grpc_url`, sent as x-token metadata.
+# Default: the top-level `grpc_auth_token` when `grpc_url` is not overridden.
+#grpc_auth_token = ""
+# Timeout for a single Fibre blob download, in seconds.
+# Default: 120
+#download_timeout_secs = 120
+# Directory where downloaded or submitted blobs are archived, so they stay readable after validators
+# drop their shards. Archived bytes are always re-checked against the on-chain commitment.
+#archive_dir = "demo_data/fibre_archive"
+# Base URLs queried as `GET {url}/{blob_id_hex}` when a blob is not in the local archive.
+#archive_fallback_urls = ["https://archive.example.com/fibre"]
+
 # Interval for background statistics collection (in seconds).
 # Set to 0 to disable the background stat collection task.
 # Default: 30

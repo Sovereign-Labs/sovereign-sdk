@@ -34,6 +34,13 @@ use sov_stf_runner::RollupConfig;
 use crate::solana_offchain_endpoint::solana_offchain_router;
 use crate::{eth_dev_signer, ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
 
+/// First DA height at which Celestia Fibre batch blobs are read (`FIBRE_ACTIVATION_HEIGHT` in
+/// constants.toml). `0` in the constants file means Fibre is disabled.
+pub fn fibre_activation_height() -> Option<u64> {
+    let height: u64 = sov_modules_api::macros::config_value!("FIBRE_ACTIVATION_HEIGHT");
+    (height != 0).then_some(height)
+}
+
 /// Rollup with CelestiaDa
 #[derive(Default, Clone, Copy)]
 pub struct CelestiaDemoRollup<M> {
@@ -120,7 +127,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
             RollupParams {
                 rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
                 rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
-                fibre_activation_height: None,
+                fibre_activation_height: fibre_activation_height(),
             },
             secondary_shutdown_controller,
         )
@@ -173,7 +180,7 @@ impl FullNodeBlueprint<Native> for CelestiaDemoRollup<Native> {
         let rollup_params = RollupParams {
             rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
             rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
-            fibre_activation_height: None,
+            fibre_activation_height: fibre_activation_height(),
         };
 
         let da_verifier = CelestiaVerifier::new(rollup_params);

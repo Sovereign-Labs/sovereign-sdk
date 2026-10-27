@@ -3,7 +3,7 @@ use clap::Parser;
 use demo_stf::MultiAddressEvmSolana;
 use sov_celestia_adapter::verifier::RollupParams;
 use sov_celestia_adapter::CelestiaService;
-use sov_demo_rollup::{ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
+use sov_demo_rollup::{fibre_activation_height, ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
 use sov_modules_rollup_blueprint::logging::initialize_logging;
 use sov_shutdown::SecondaryShutdownController;
 use sov_stf_runner::{from_toml_path, RollupConfig};
@@ -44,7 +44,7 @@ async fn main() -> anyhow::Result<()> {
         RollupParams {
             rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
             rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
-            fibre_activation_height: None,
+            fibre_activation_height: fibre_activation_height(),
         },
         &secondary_shutdown_controller,
     )
