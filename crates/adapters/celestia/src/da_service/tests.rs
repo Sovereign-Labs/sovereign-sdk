@@ -2568,3 +2568,108 @@ async fn test_rpc_startup_with_primary_down_uses_secondary() -> anyhow::Result<(
     drop(dev_node);
     Ok(())
 }
+
+/// Phase 0 spike: offline checks of Fibre assumptions A, B, C and E.
+mod fibre_spike {
+    use nmt_rs::simple_merkle::db::MemDb;
+    use nmt_rs::simple_merkle::tree::MerkleTree;
+    use nmt_rs::TmSha2Hasher;
+    use rand::{RngCore, SeedableRng};
+
+    const K: usize = 4096;
+    const N: usize = 12288;
+
+    type Tree = MerkleTree<MemDb<[u8; 32]>, TmSha2Hasher>;
+
+    fn encode_random(len: usize) -> (rsema1d::ExtendedData, Vec<u8>) {
+        let mut data = vec![0u8; len];
+        rand::rngs::SmallRng::seed_from_u64(7).fill_bytes(&mut data);
+        // 5-byte Fibre header: version 0, u32 BE data size.
+        let mut buf = vec![0u8; 5 + len];
+        buf[1..5].copy_from_slice(&(len as u32).to_be_bytes());
+        buf[5..].copy_from_slice(&data);
+        let row_size = buf.len().div_ceil(K).next_multiple_of(64);
+        buf.resize(row_size * K, 0);
+        let params = rsema1d::Parameters::new(K, N, row_size).unwrap();
+        let rows = rsema1d::RowMatrix::with_shape(buf, K, row_size).unwrap();
+        (rsema1d::encode(&rows, &params).unwrap().0, data)
+    }
+
+    // Assumptions A and B.
+    #[test]
+    #[ignore = "spike"]
+    fn rsema1d_row_tree_matches_nmt_rs_simple_merkle() {
+        let (ext, _) = encode_random(300 * 1024);
+        let rows = ext.rows();
+
+        let mut tree = Tree::new();
+        for i in 0..K + N {
+            tree.push_raw_leaf(ext.row(i).unwrap());
+        }
+        assert_eq!(
+            tree.root(),
+            ext.row_root(),
+            "row root over K+N contiguous leaves"
+        );
+
+        let mut hasher = <sha2::Sha256 as sha2::Digest>::new();
+        sha2::Digest::update(&mut hasher, ext.row_root());
+        sha2::Digest::update(&mut hasher, ext.rlc_root());
+        let commitment: [u8; 32] = sha2::Digest::finalize(hasher).into();
+        assert_eq!(commitment, ext.commitment());
+        assert_eq!(rows.rows(), K + N);
+
+        // Single-leaf proof siblings, original and parity row.
+        for idx in [0usize, 1, K - 1, K, K + N - 1] {
+            let theirs = ext.generate_row_proof(idx).unwrap();
+            let ours = tree.build_range_proof(idx..idx + 1);
+            let mut siblings = ours.siblings().clone();
+            siblings.reverse();
+            println!(
+                "idx {idx}: nmt order == rsema order: {}",
+                ours.siblings() == &theirs.row_proof
+            );
+            assert_eq!(siblings.len(), theirs.row_proof.len());
+        }
+    }
+
+    #[test]
+    #[ignore = "spike"]
+    fn nmt_rs_range_proof_verifies_prefix_against_row_root() {
+        let (ext, _) = encode_random(300 * 1024);
+        let mut tree = Tree::new();
+        for i in 0..K + N {
+            tree.push_raw_leaf(ext.row(i).unwrap());
+        }
+        let m = 3;
+        let proof = tree.build_range_proof(0..m);
+        let leaves: Vec<[u8; 32]> = (0..m)
+            .map(|i| {
+                let mut h = <sha2::Sha256 as sha2::Digest>::new();
+                sha2::Digest::update(&mut h, [0u8]);
+                sha2::Digest::update(&mut h, ext.row(i).unwrap());
+                sha2::Digest::finalize(h).into()
+            })
+            .collect();
+        proof.verify_range(&ext.row_root(), &leaves).unwrap();
+        println!("prefix proof siblings: {}", proof.siblings().len());
+    }
+
+    // Assumption C: names re-exported by celestia_client.
+    #[test]
+    #[ignore = "spike"]
+    fn celestia_client_reexports_fibre_types() {
+        use celestia_client::api::fibre::{
+            BlobConfig, BlobID, DownloadOptions, EncodedFibreBlob, FibreClient, FibreClientConfig,
+        };
+        let _: Option<(
+            BlobID,
+            DownloadOptions,
+            EncodedFibreBlob,
+            FibreClient,
+            BlobConfig,
+        )> = None;
+        // Assumption E: the config only needs the chain id string.
+        FibreClientConfig::new("mocha-4").unwrap();
+    }
+}
