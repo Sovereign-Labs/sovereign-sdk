@@ -144,7 +144,15 @@ where
             ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
                 StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel()),
                 latest_state_update.latest_finalized_slot_number,
-            ),
+            )
+            // The standard sequencer only publishes node-committed state, whose event numbers
+            // are never reissued, so it has no epoch to rotate; see `EventEpoch::ZERO`. A DA
+            // reorg on a DA layer without instant finality can still renumber events;
+            // `EventEpoch` documents that gap.
+            .with_event_frontier(EventFrontier::new(
+                EventEpoch::ZERO,
+                latest_state_update.next_event_number,
+            )),
         );
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(checkpoint);
 
@@ -687,6 +695,7 @@ where
             slot_number,
             ledger_reader,
             latest_finalized_slot_number,
+            next_event_number,
             ..
         } = &state_update_info;
         let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel());
@@ -704,7 +713,10 @@ where
                     ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
                         checkpoint.clone_with_empty_witness_dropping_temp_cache(),
                         *latest_finalized_slot_number,
-                    ),
+                    )
+                    // The standard sequencer publishes node-committed state only, with no
+                    // soft-confirmation overlay, so the node's number is exact for it.
+                    .with_event_frontier(EventFrontier::new(EventEpoch::ZERO, *next_event_number)),
                 ))
                 .ok();
             inner.checkpoint = Some(checkpoint);
