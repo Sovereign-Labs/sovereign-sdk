@@ -1,0 +1,51 @@
+name: sovereign-bank
+plugins:
+  - name: sov-bank
+data:
+  tx:
+    type: plugin
+    source: sov-bank
+    config:
+      url: http://127.0.0.1:12346
+      keys_path: /absolute/path/to/keys.json
+      crypto: ed25519
+      max_fee: "100000000"
+      runtime_call:
+        bank:
+          transfer:
+            to: { Standard: sov1REPLACE_WITH_RECIPIENT }
+            coins:
+              amount: "1"
+              token_id: token_REPLACE_WITH_TOKEN
+scenarios:
+  bank:
+    executor: constant-arrival-rate
+    rate: 100
+    time_unit: 1s
+    duration: 30s
+    pre_allocated_vus: 16
+    max_vus: 32
+    flow:
+      - request:
+          name: nonce
+          method: GET
+          url: ${data.tx.url}
+          assert:
+            - { type: status, equals: 200, on_failure: abort_iteration }
+            - { type: jsonpath, expression: "$.nonce", exists: true, on_failure: abort_iteration }
+      - request:
+          name: transfer
+          method: POST
+          url: ${data.tx.url}
+          headers:
+            content-type: application/json
+          body: ${data.tx.body}
+          assert:
+            - { type: status, equals: 200 }
+            - { type: jsonpath, expression: "$.receipt.result", equals: successful }
+          checks:
+            - { type: jsonpath, name: transfer executed, expression: "$.receipt.result", equals: successful }
+thresholds:
+  checks: ["rate==1"]
+  http_req_failed: ["rate==0"]
+  dropped_iterations: ["count==0"]

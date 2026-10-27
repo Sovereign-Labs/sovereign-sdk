@@ -1,0 +1,8 @@
+[plugin]
+name = "sov-bank"
+version = "0.1.0"
+kind = "service"
+type = "native"
+entry = "libsov_loadr.so"
+description = "Schema-driven Sovereign bank transfers with Ed25519 or secp256k1 signatures"
+capabilities = ["data_source"]
