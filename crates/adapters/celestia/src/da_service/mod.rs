@@ -681,8 +681,8 @@ impl DaService for CelestiaService {
 }
 
 pub fn extract_relevant_blobs(block: &FilteredCelestiaBlock) -> RelevantBlobs<BlobWithSender> {
-    let proof_blobs = block.rollup_proof_data.get_blobs_with_sender();
-    let batch_blobs = block.rollup_batch_data.get_blobs_with_sender();
+    let proof_blobs = block.rollup_proof_data.get_blobs_with_sender(false, &[]);
+    let batch_blobs = block.rollup_batch_data.get_blobs_with_sender(false, &[]);
     RelevantBlobs {
         proof_blobs,
         batch_blobs,
