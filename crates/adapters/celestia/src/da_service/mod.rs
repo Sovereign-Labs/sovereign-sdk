@@ -289,14 +289,14 @@ impl CelestiaService {
         tracing::debug!(commitment = %blob_hash, bytes, "Submitting a Fibre blob");
 
         let start_submit = std::time::Instant::now();
-        let tx_info = run_maybe_retryable_async_fn_with_retries(
+        let submitted = run_maybe_retryable_async_fn_with_retries(
             self.backoff_policy,
             || async {
                 let start = std::time::Instant::now();
-                let result = tokio::time::timeout(self.request_timeout, async {
-                    let submitted = fibre.put(signing_key, namespace, &da_payload).await?;
-                    Ok(submitted.confirm().await?)
-                })
+                let result = tokio::time::timeout(
+                    self.request_timeout,
+                    fibre.put(signing_key, namespace, &da_payload),
+                )
                 .await;
                 let result = flatten_timeout(result);
                 let measurement = SubmitPayForFibreMeasurement {
@@ -310,6 +310,12 @@ impl CelestiaService {
             "submit_fibre_blob",
         )
         .await?;
+        // `MsgPayForFibre` is already broadcast here, so confirmation is deliberately not
+        // retried: re-running `put` would pay for and post the same batch twice.
+        let tx_info = tokio::time::timeout(self.request_timeout, submitted.confirm())
+            .await
+            .context("Timed out confirming the Fibre transaction")?
+            .context("Failed to confirm the Fibre transaction")?;
         let submit_time = start_submit.elapsed();
 
         if let Some(archive) = &self.fibre_archive {
@@ -384,7 +390,8 @@ impl CelestiaService {
         }
 
         let (fibre_download_timeout, fibre_archive) = build_fibre_archive(&config);
-        let fibre_signing_key = build_fibre_signing_key(&config);
+        let fibre_signing_key =
+            build_fibre_signing_key(&config, chain_params.fibre_activation_height);
 
         Self::with_client(
             client,
@@ -408,10 +415,20 @@ impl CelestiaService {
 }
 
 /// Returns the key Fibre submissions are signed with, if `fibre.submit` is enabled.
-fn build_fibre_signing_key(config: &CelestiaConfig) -> Option<celestia_client::tx::SigningKey> {
+///
+/// Panics when submission is enabled without a Fibre activation height: the verifier skips
+/// share-version-2 blobs, so every submitted batch would be paid for and then ignored.
+fn build_fibre_signing_key(
+    config: &CelestiaConfig,
+    fibre_activation_height: Option<u64>,
+) -> Option<celestia_client::tx::SigningKey> {
     if !config.fibre.as_ref().is_some_and(|fibre| fibre.submit) {
         return None;
     }
+    assert!(
+        fibre_activation_height.is_some(),
+        "`fibre.submit` requires `fibre_activation_height` to be set in the rollup params;          enable it only once the activation height is reached"
+    );
     let key_hex = config
         .signer_private_key
         .as_ref()
@@ -1190,4 +1207,41 @@ async fn gather_stat(
         gas_price,
         sync_distance,
     })
+}
+
+#[cfg(test)]
+mod fibre_submit_tests {
+    use super::build_fibre_signing_key;
+    use crate::config::{CelestiaConfig, FibreConfig};
+
+    const KEY_HEX: &str = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
+
+    fn config(submit: bool, key: Option<&str>) -> CelestiaConfig {
+        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
+        config.signer_private_key = key.map(str::to_string);
+        config.fibre = Some(FibreConfig {
+            submit,
+            ..Default::default()
+        });
+        config
+    }
+
+    #[test]
+    fn no_signing_key_when_fibre_submit_is_disabled() {
+        let key = build_fibre_signing_key(&config(false, Some(KEY_HEX)), Some(1));
+        assert_eq!(key, None);
+    }
+
+    #[test]
+    fn signing_key_is_built_from_configured_hex() {
+        let key = build_fibre_signing_key(&config(true, Some(KEY_HEX)), Some(1))
+            .expect("fibre.submit is enabled");
+        assert_eq!(key.to_bytes().as_slice(), hex::decode(KEY_HEX).unwrap());
+    }
+
+    #[test]
+    #[should_panic(expected = "requires `fibre_activation_height`")]
+    fn fibre_submit_without_activation_height_is_rejected() {
+        build_fibre_signing_key(&config(true, Some(KEY_HEX)), None);
+    }
 }
