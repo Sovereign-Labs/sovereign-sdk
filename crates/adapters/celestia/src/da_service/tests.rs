@@ -2741,11 +2741,11 @@ mod fibre_blocks {
     }
 
     /// Builds a block whose batch namespace holds an optional v1 blob followed by one Fibre pointer.
-    fn fibre_block(with_v1: bool, fibre_activation_height: Option<u64>) -> FibreBlock {
+    fn fibre_block(with_v1: bool) -> FibreBlock {
         let (template, _) = mocha_fibre_fixture(TEMPLATE_PATH);
         let pointer_template = &template.rollup_batch_data.data.rows()[0].shares[0];
         let signer = pointer_template.signer().unwrap();
-        let params = rollup_params(fibre_activation_height);
+        let params = rollup_params(None);
 
         let fibre_data = random_bytes(FIBRE_DATA_LEN, 1);
         let v1_data = if with_v1 {
@@ -2810,13 +2810,8 @@ mod fibre_blocks {
             v1_data,
             commitment,
             sender: CelestiaAddress(signer),
-            verifier: CelestiaVerifier::new(params),
+            verifier: CelestiaVerifier::new(rollup_params(Some(height))),
         }
-    }
-
-    fn active_fibre_block(with_v1: bool) -> FibreBlock {
-        let height = fibre_block(with_v1, None).block.header.height();
-        fibre_block(with_v1, Some(height))
     }
 
     fn extract_with_fibre(block: &FilteredCelestiaBlock) -> RelevantBlobs<BlobWithSender> {
@@ -2886,7 +2881,7 @@ mod fibre_blocks {
 
     #[test]
     fn fibre_v2_is_skipped_in_mixed_block_before_activation() {
-        let fibre_block = fibre_block(true, None);
+        let fibre_block = fibre_block(true);
         let height = fibre_block.block.header.height();
         for activation in [None, Some(height + 1)] {
             let verifier = CelestiaVerifier::new(rollup_params(activation));
@@ -2907,32 +2902,119 @@ mod fibre_blocks {
     }
 
     #[test]
-    fn fibre_roundtrip_verifies_for_read_lengths() {
+    fn fibre_blob_takes_identity_from_pointer_share() {
         let FibreBlock {
             block,
-            fibre_data,
             commitment,
             sender,
-            verifier,
             ..
-        } = active_fibre_block(false);
+        } = fibre_block(false);
+
+        let blobs = extract_with_fibre(&block);
+        assert_eq!(blobs.batch_blobs.len(), 1);
+        let blob = &blobs.batch_blobs[0];
+        assert_eq!(blob.kind, BlobKind::Fibre { commitment });
+        assert_eq!(blob.sender(), sender);
+        assert_eq!(blob.hash, HexHash::new(commitment));
+        assert_eq!(blob.total_len(), FIBRE_DATA_LEN);
+    }
+
+    #[test]
+    fn fibre_blob_exposes_read_prefix_of_off_chain_data() {
+        let FibreBlock {
+            block, fibre_data, ..
+        } = fibre_block(false);
 
         for read_len in read_lengths(FIBRE_DATA_LEN) {
             let mut blobs = extract_with_fibre(&block);
-            assert_eq!(blobs.batch_blobs.len(), 1);
-            let blob = &mut blobs.batch_blobs[0];
-            assert_eq!(blob.kind, BlobKind::Fibre { commitment });
-            assert_eq!(blob.sender(), sender);
-            assert_eq!(blob.hash, HexHash::new(commitment));
-            assert_eq!(blob.total_len(), FIBRE_DATA_LEN);
-            blob.advance(read_len);
-            assert_eq!(blob.verified_data(), &fibre_data[..read_len]);
+            blobs.batch_blobs[0].advance(read_len);
+            assert_eq!(
+                blobs.batch_blobs[0].verified_data(),
+                &fibre_data[..read_len]
+            );
+        }
+    }
+
+    #[test]
+    fn fibre_roundtrip_verifies_for_read_lengths() {
+        let FibreBlock {
+            block, verifier, ..
+        } = fibre_block(false);
+
+        for read_len in read_lengths(FIBRE_DATA_LEN) {
+            let mut blobs = extract_with_fibre(&block);
+            blobs.batch_blobs[0].advance(read_len);
 
             let relevant_proofs = prove_with_fibre(&block, &blobs);
             assert_eq!(relevant_proofs.batch.inclusion_proof.len(), 1);
             verifier
                 .verify_relevant_tx_list(&block.header, &blobs, relevant_proofs)
                 .unwrap();
+        }
+    }
+
+    #[test]
+    #[should_panic(expected = "Fibre data missing for pointer")]
+    fn fibre_extraction_panics_when_off_chain_data_is_missing() {
+        let FibreBlock { block, .. } = fibre_block(false);
+
+        block.rollup_batch_data.get_blobs_with_sender(true, &[]);
+    }
+
+    /// Digests of the blobs and `range_proofs` produced for the real Mocha blocks by the adapter
+    /// before Fibre support existed, at `[0, 1, 100_000]` bytes read.
+    const PRE_FIBRE_DIGESTS: [(&str, [&str; 3]); 2] = [
+        (
+            "test_data/block_mocha_fibre_v2_1194000",
+            [
+                "44cb5890447fab56ded0d6a40d23cfea4b7823976ef5d32b1589e1e4955a019b",
+                "44cb5890447fab56ded0d6a40d23cfea4b7823976ef5d32b1589e1e4955a019b",
+                "44cb5890447fab56ded0d6a40d23cfea4b7823976ef5d32b1589e1e4955a019b",
+            ],
+        ),
+        (
+            "test_data/block_mocha_mixed_v1_v2_1193993",
+            [
+                "0aa99616647d68556d24932c1ab4fa7f40d5c945e793bbee80cc33e4f2c0e1ef",
+                "3c1ab471e7b23e9b4746858106958829f53c185b8eea676a571c5718dbf32492",
+                "48ddafd44b913bf3a30eb1823b42eb4a2f3ef8aea0909852ab016bf44e1c0c9c",
+            ],
+        ),
+    ];
+
+    fn pre_activation_digest(path: &str, read_len: usize) -> String {
+        use sha2::Digest;
+
+        let (block, _) = mocha_fibre_fixture(path);
+        let mut blobs = extract_relevant_blobs(&block);
+        let mut hasher = sha2::Sha256::new();
+        for blob in &mut blobs.batch_blobs {
+            blob.advance(read_len);
+            hasher.update(blob.total_len().to_be_bytes());
+            hasher.update(blob.verified_data());
+        }
+        let relevant_proofs = get_extraction_proof(&block, &blobs);
+        for proofs in [
+            &relevant_proofs.batch.inclusion_proof,
+            &relevant_proofs.proof.inclusion_proof,
+        ] {
+            for proof in proofs {
+                hasher.update(bincode::serialize(&proof.range_proofs).unwrap());
+            }
+        }
+        hex::encode(hasher.finalize())
+    }
+
+    #[test]
+    fn fibre_v2_blobs_and_proofs_are_byte_identical_to_pre_fibre_adapter() {
+        for (path, digests) in PRE_FIBRE_DIGESTS {
+            for (read_len, expected) in [0, 1, 100_000].into_iter().zip(digests) {
+                assert_eq!(
+                    pre_activation_digest(path, read_len),
+                    expected,
+                    "{path} read_len {read_len}"
+                );
+            }
         }
     }
 
@@ -2945,7 +3027,7 @@ mod fibre_blocks {
             sender,
             verifier,
             ..
-        } = active_fibre_block(true);
+        } = fibre_block(true);
 
         for (v1_read, fibre_read) in [
             (0, 0),
@@ -2982,7 +3064,7 @@ mod fibre_blocks {
         RelevantBlobs<BlobWithSender>,
         CelestiaRelevantProofs,
     ) {
-        let fibre_block = active_fibre_block(false);
+        let fibre_block = fibre_block(false);
         let mut blobs = extract_with_fibre(&fibre_block.block);
         blobs.batch_blobs[0].advance(read_len);
         let relevant_proofs = prove_with_fibre(&fibre_block.block, &blobs);
@@ -3011,21 +3093,19 @@ mod fibre_blocks {
             .verifier
             .verify_relevant_tx_list(&fibre_block.block.header, &blobs, relevant_proofs)
             .unwrap_err();
-        assert!(
-            matches!(
-                error,
-                ValidationError::NamespaceValidationError {
-                    namespace: NamespaceType::Batch,
-                    error: NamespaceValidationError::InvalidBlobData(BlobDataError::WrongSender),
-                }
-            ),
-            "Unexpected error: {error:?}"
-        );
+        let ValidationError::NamespaceValidationError {
+            namespace: NamespaceType::Batch,
+            error: NamespaceValidationError::InvalidBlobData(error),
+        } = error
+        else {
+            panic!("Unexpected error: {error:?}");
+        };
+        assert_eq!(format!("{error:?}"), "WrongSender");
     }
 
     #[test]
     fn fibre_rejects_tampered_prefix() {
-        let fibre_block = active_fibre_block(false);
+        let fibre_block = fibre_block(false);
         let mut blobs = extract_with_fibre(&fibre_block.block);
         let mut tampered = fibre_block.fibre_data.clone();
         tampered[0] ^= 1;
@@ -3059,7 +3139,7 @@ mod fibre_blocks {
     fn fibre_witness_round_trips_through_bincode_and_verifies() {
         let FibreBlock {
             block, verifier, ..
-        } = active_fibre_block(true);
+        } = fibre_block(true);
         let mut blobs = extract_with_fibre(&block);
         blobs.batch_blobs[0].advance(1);
         blobs.batch_blobs[1].advance(PARTIAL_READ);
@@ -3093,7 +3173,7 @@ mod fibre_blocks {
 
     #[test]
     fn fibre_witness_round_trips_through_risc0_serde() {
-        let FibreBlock { block, .. } = active_fibre_block(false);
+        let FibreBlock { block, .. } = fibre_block(false);
         let mut blobs = extract_with_fibre(&block);
         blobs.batch_blobs[0].advance(PARTIAL_READ);
         let relevant_proofs = prove_with_fibre(&block, &blobs);
