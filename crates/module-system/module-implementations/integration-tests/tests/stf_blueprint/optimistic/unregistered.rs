@@ -5,7 +5,6 @@ use sov_attester_incentives::AttesterIncentives;
 use sov_bank::IntoPayable;
 use sov_mock_da::{MockAddress, MockBlob};
 use sov_modules_api::capabilities::TransactionAuthenticator;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
 use sov_modules_api::{
     Amount, ApiStateAccessor, DaSpec, FullyBakedTx, Gas, GasArray, ModuleInfo, RawTx, Rewards,
@@ -246,15 +245,15 @@ mod helpers {
     fn create_tx_bad_sender(
         nonce: u64,
         max_priority_fee_bips: PriorityFeeBips,
-        chain_id: u64,
         message: IntegTestRuntimeCall<S>,
     ) -> Transaction<IntegTestRuntime<S>, S> {
         let utx = UnsignedTransaction::new(
             message,
-            chain_id,
+            IntegTestRuntime::<S>::CHAIN_HASH,
             max_priority_fee_bips,
             Amount::new(200_000),
             UniquenessData::Nonce(nonce),
+            None,
             None,
         );
 
@@ -272,7 +271,6 @@ mod helpers {
         max_priority_fee_bips: PriorityFeeBips,
         signer: &TestUser<S>,
         da_address: <<S as Spec>::Da as DaSpec>::Address,
-        chain_id: u64,
     ) -> Transaction<IntegTestRuntime<S>, S> {
         // Here, we attempt to bond more funds than are available for a given user, causing the transaction to be reverted.
         let encoded_message = encode_message(
@@ -285,10 +283,11 @@ mod helpers {
 
         let utx = UnsignedTransaction::new(
             encoded_message,
-            chain_id,
+            IntegTestRuntime::<S>::CHAIN_HASH,
             max_priority_fee_bips,
             TEST_DEFAULT_MAX_FEE,
             UniquenessData::Nonce(nonce),
+            None,
             None,
         );
 
@@ -323,22 +322,25 @@ mod helpers {
                 0,
                 max_priority_fee_bips,
                 &potential_seq.user,
-                config_value!("CHAIN_ID"),
+                &IntegTestRuntime::<S>::CHAIN_HASH,
                 encode_message(potential_seq.da_address, BOND_AMOUNT),
             )),
             TxStatus::BadGeneration => panic!("Unregistered blobs send one transaction per user, any generation number is valid for a user's first transaction"),
-            TxStatus::BadChainId => encode_tx(create_tx_valid::<IntegTestRuntime<S>>(
-                0,
-                max_priority_fee_bips,
-                &potential_seq.user,
-                config_value!("CHAIN_ID") + 1,
-                encode_message(potential_seq.da_address, BOND_AMOUNT),
-            )),
+            TxStatus::BadChainId => {
+                let mut bad_chain_hash = IntegTestRuntime::<S>::CHAIN_HASH;
+                bad_chain_hash[0] ^= 1;
+                encode_tx(create_tx_valid::<IntegTestRuntime<S>>(
+                    0,
+                    max_priority_fee_bips,
+                    &potential_seq.user,
+                    &bad_chain_hash,
+                    encode_message(potential_seq.da_address, BOND_AMOUNT),
+                ))
+            }
             TxStatus::BadSignature => encode_tx(create_tx_bad_sig(
                 0,
                 max_priority_fee_bips,
                 &potential_seq.user,
-                config_value!("CHAIN_ID"),
                 encode_message(potential_seq.da_address, BOND_AMOUNT),
             )),
             TxStatus::BadSerialization => <IntegTestRuntime<S> as Runtime<S>>::Auth::encode_with_standard_auth(RawTx {
@@ -348,7 +350,6 @@ mod helpers {
                 0,
                 max_priority_fee_bips,
                 &potential_seq.user,
-                config_value!("CHAIN_ID"),
                 encode_message(potential_seq.da_address, BOND_AMOUNT),
             )),
             TxStatus::Reverted => encode_tx(create_tx_reverted(
@@ -356,12 +357,10 @@ mod helpers {
                 max_priority_fee_bips,
                 &potential_seq.user,
                 potential_seq.da_address,
-                config_value!("CHAIN_ID"),
             )),
             TxStatus::SignerDoesNotExist => encode_tx(create_tx_bad_sender(
                 0,
                 max_priority_fee_bips,
-                config_value!("CHAIN_ID"),
                 encode_message(potential_seq.da_address, BOND_AMOUNT),
             )),
         };

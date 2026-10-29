@@ -22,7 +22,7 @@ use serde::Deserialize;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
 use sov_evm::RlpEvmTransaction;
-use sov_evm::{Evm, TransactionSigned};
+use sov_evm::{Evm, HasEvm, TransactionSigned};
 use sov_metrics::RpcMetrics;
 use sov_modules_api::capabilities::{
     AuthenticationError, AuthorizationData, FatalError, HasKernel, TransactionAuthenticator,
@@ -66,7 +66,7 @@ where
     S: Spec,
     Seq: Sequencer<Spec = S>,
     S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
+    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + HasEvm<S> + Default + Send + Sync + 'static,
 {
     pub async fn eth_send_raw_transaction(
         parameters: JRpcParams<'static>,
@@ -136,7 +136,8 @@ where
     fn get_receipt(tx_hash: B256, ethereum: Arc<Ethereum<S, Seq>>) -> RpcResult<Option<Receipt>> {
         let evm = Evm::<S>::default();
         let state = &mut ethereum.sequencer.api_state().default_api_state_accessor();
-        evm.get_transaction_receipt(tx_hash, state)
+        // Callers wait for the receipt of a just-executed tx, so it must include unsealed blocks.
+        evm.get_transaction_receipt(&jsonrpsee::Extensions::new(), tx_hash, state)
     }
 
     fn validate_request_stale_nonce_preflight(

@@ -119,7 +119,7 @@ pub fn plain_tx_with_default_details<R: Runtime<S>>(
             max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
             max_fee: TEST_DEFAULT_MAX_FEE,
             gas_limit: None,
-            chain_id: R::chain_id(),
+            chain_hash_fragment: 0,
         },
     }
 }

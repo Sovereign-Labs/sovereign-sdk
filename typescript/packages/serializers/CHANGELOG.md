@@ -1,5 +1,16 @@
 # @sovereign-sdk/serializers
 
+## 0.2.0
+
+### Minor Changes
+
+-   8c28feb: Update to sov-universal-wallet 0.4.1, which adds the `FromSiblingFieldWithOverride` fixed-point display variant. Rebuilds the wasm bindings so schemas using the new variant can be parsed, and adds the variant to the `FixedPointDisplay` type in the serializers package.
+
+### Patch Changes
+
+-   Updated dependencies [8c28feb]
+    -   @sovereign-sdk/universal-wallet-wasm@0.7.0
+
 ## 0.1.3
 
 ### Patch Changes

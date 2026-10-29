@@ -5,13 +5,12 @@ use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_modules_api::capabilities::AuthorizationData;
 use sov_modules_api::capabilities::{
-    calculate_hash_metered, verify_chain_id, AuthenticationError, AuthenticationOutput, FatalError,
-    UniquenessData,
+    calculate_hash_metered, calculate_non_malleable_hash_metered, verify_chain_hash_fragment,
+    AuthenticationError, AuthenticationOutput, FatalError, ReplayHashMaterial, UniquenessData,
 };
 use sov_modules_api::transaction::AuthenticatedTransactionAndRawHash;
 use sov_modules_api::transaction::Credentials;
 use sov_modules_api::transaction::{v1::MAX_SIGNERS, PubKeyAndSignature};
-use sov_modules_api::Runtime;
 use sov_modules_api::SafeVec;
 use sov_modules_api::{
     charge_gas_to_deserialize_json, CryptoSpec, DispatchCall, GasMeter, GasSpec,
@@ -29,14 +28,16 @@ static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<()>> =
     std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
 pub use self::parsing::simple::MULTISIG_SIMPLE_DISCRIMINATOR;
-pub use self::parsing::simple::{SolanaOffchainSimpleMessage, SolanaOffchainSimpleMultisigMessage};
+pub use self::parsing::simple::{
+    SolanaOffchainSimpleEnvelope, SolanaOffchainSimpleMultisigEnvelope,
+};
 pub(crate) use self::parsing::spec_compliant::format_constants as spec_compliant_constants;
 pub use self::parsing::spec_compliant::SPEC_COMPLIANT_DISCRIMINATOR;
 pub use self::parsing::spec_compliant::{
-    RawSolanaOffchainMessagePreamble, SolanaOffchainSpecCompliantMessage,
-    SolanaOffchainSpecCompliantMultisigMessage,
+    RawSolanaOffchainMessagePreamble, SolanaOffchainSpecCompliantEnvelope,
+    SolanaOffchainSpecCompliantMultisigEnvelope,
 };
-pub use self::payload::{SolanaOffchainUnsignedTransactionV0, SolanaOffchainUnsignedTransactionV1};
+pub use self::payload::{SolanaOffchainSigningPayloadV0, SolanaOffchainSigningPayloadV1};
 
 fn charge_sig_gas<S: Spec>(
     signature: &<S::CryptoSpec as CryptoSpec>::Signature,
@@ -126,9 +127,23 @@ fn verify_signatures<S: Spec>(
 fn build_auth_data<S: Spec>(
     unpacked: &UnpackedSolanaMessage<S>,
     uniqueness: UniquenessData,
+    address_override: Option<S::Address>,
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthorizationData<S>, AuthenticationError> {
+    let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
+        match unpacked {
+            UnpackedSolanaMessage::V0 { .. } => {
+                ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash)
+            }
+            UnpackedSolanaMessage::V1 { .. } => {
+                ReplayHashMaterial::VerifiedSignatureMessage(unpacked.signed_bytes())
+            }
+        },
+        meter,
+    )
+    .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+
     match unpacked {
         UnpackedSolanaMessage::V0 { pub_key, .. } => {
             let credential_id =
@@ -138,9 +153,11 @@ fn build_auth_data<S: Spec>(
             Ok(AuthorizationData {
                 uniqueness,
                 tx_hash: raw_tx_hash,
+                non_malleable_hash,
                 credential_id,
                 credentials: Credentials::new(pub_key.clone()),
                 default_address: credential_id.into(),
+                address_override,
             })
         }
         UnpackedSolanaMessage::V1 {
@@ -165,9 +182,11 @@ fn build_auth_data<S: Spec>(
             Ok(AuthorizationData {
                 uniqueness,
                 tx_hash: raw_tx_hash,
+                non_malleable_hash,
                 credential_id,
                 credentials: Credentials::new(multisig),
                 default_address: credential_id.into(),
+                address_override,
             })
         }
     }
@@ -218,17 +237,17 @@ where
     let deser_err = |e: serde_json::Error| FatalError::DeserializationFailed(e.to_string());
     let unsigned_tx = match &unpacked_message {
         UnpackedSolanaMessage::V0 { .. } => {
-            SolanaOffchainUnsignedTransactionV0::<D, S>::unmetered_deserialize(json_bytes)
+            SolanaOffchainSigningPayloadV0::<D, S>::unmetered_deserialize(json_bytes)
                 .map_err(deser_err)?
-                .into_unsigned_tx()
+                .into_unsigned_transaction()
         }
         UnpackedSolanaMessage::V1 { .. } => {
-            SolanaOffchainUnsignedTransactionV1::<D, S>::unmetered_deserialize(json_bytes)
+            SolanaOffchainSigningPayloadV1::<D, S>::unmetered_deserialize(json_bytes)
                 .map_err(deser_err)?
-                .into_unsigned_tx()
+                .into_unsigned_transaction()
         }
     };
-    Ok(unsigned_tx.call())
+    Ok(unsigned_tx.runtime_call().clone())
 }
 
 pub fn authenticate<Accessor, S, D>(
@@ -240,7 +259,7 @@ pub fn authenticate<Accessor, S, D>(
 where
     Accessor: ProvableStateReader<sov_state::User, Spec = S>,
     S: Spec,
-    D: Runtime<S>,
+    D: DispatchCall<Spec = S>,
     <D as DispatchCall>::Decodable: Serialize + DeserializeOwned,
 {
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
@@ -249,7 +268,7 @@ where
     let unpacked_message = unpack_solana_message::<S>(raw_tx)
         .map_err(|e| AuthenticationError::FatalError(e, raw_tx_hash))?;
 
-    // Deserialize the JSON unsigned transaction.
+    // Deserialize the Solana JSON signing payload.
     // V0 (single-sig) and V1 (multisig) use different structs; for V1, we also verify
     // that the credential_id committed to in the signed message matches the envelope.
     let json_slice = unpacked_message.json_bytes();
@@ -264,11 +283,16 @@ where
             raw_tx_hash,
         )
     };
-    let (provided_chain_name, unsigned_tx) = match &unpacked_message {
+    let (provided_chain_name, address_override, unsigned_tx) = match &unpacked_message {
         UnpackedSolanaMessage::V0 { .. } => {
-            let tx = SolanaOffchainUnsignedTransactionV0::<D, S>::unmetered_deserialize(json_slice)
+            let tx = SolanaOffchainSigningPayloadV0::<D, S>::unmetered_deserialize(json_slice)
                 .map_err(deser_err)?;
-            (tx.chain_name.to_string(), tx.into_unsigned_tx())
+            let address_override = tx.address_override;
+            (
+                tx.chain_name.to_string(),
+                address_override,
+                tx.into_unsigned_transaction(),
+            )
         }
         UnpackedSolanaMessage::V1 {
             signatures,
@@ -276,7 +300,7 @@ where
             min_signers,
             ..
         } => {
-            let tx = SolanaOffchainUnsignedTransactionV1::<D, S>::unmetered_deserialize(json_slice)
+            let tx = SolanaOffchainSigningPayloadV1::<D, S>::unmetered_deserialize(json_slice)
                 .map_err(deser_err)?;
             verify_multisig_commitment::<S>(
                 tx.multisig_id,
@@ -285,7 +309,12 @@ where
                 *min_signers,
                 raw_tx_hash,
             )?;
-            (tx.chain_name.to_string(), tx.into_unsigned_tx())
+            let address_override = tx.address_override;
+            (
+                tx.chain_name.to_string(),
+                address_override,
+                tx.into_unsigned_transaction(),
+            )
         }
     };
 
@@ -310,7 +339,7 @@ where
         ));
     }
 
-    verify_chain_id::<S, D>(&unsigned_tx.details, raw_tx_hash)?;
+    verify_chain_hash_fragment(unsigned_tx.details(), runtime_chain_hash, raw_tx_hash)?;
 
     // Verify signatures (branches internally for single-sig vs multisig)
     verify_signatures::<S>(&unpacked_message, raw_tx_hash, state)?;
@@ -318,20 +347,21 @@ where
     // Build authorization data (branches internally for single-sig vs multisig)
     let authorization_data = build_auth_data::<S>(
         &unpacked_message,
-        unsigned_tx.uniqueness,
+        unsigned_tx.uniqueness(),
+        address_override,
         raw_tx_hash,
         state,
     )?;
 
     let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
         raw_tx_hash,
-        authenticated_tx: unsigned_tx.details.into(),
+        authenticated_tx: unsigned_tx.details().clone().into(),
     };
 
     Ok((
         tx_and_raw_hash,
         authorization_data,
-        unsigned_tx.runtime_call,
+        unsigned_tx.runtime_call().clone(),
     ))
 }
 
@@ -363,7 +393,7 @@ pub mod test {
         signed_message.extend_from_slice(&preamble);
         signed_message.extend_from_slice(message);
 
-        let envelope = SolanaOffchainSpecCompliantMessage::<TestSpec> {
+        let envelope = SolanaOffchainSpecCompliantEnvelope::<TestSpec> {
             signed_message_with_preamble: signed_message.clone(),
             signature: signature.clone(),
         };
@@ -395,7 +425,7 @@ pub mod test {
         let pubkey = Ed25519PrivateKey::generate().pub_key();
         let signature: Ed25519Signature = [4u8; 64].as_slice().try_into().unwrap();
 
-        let raw_message = SolanaOffchainSimpleMessage::<TestSpec> {
+        let raw_message = SolanaOffchainSimpleEnvelope::<TestSpec> {
             signed_message: message.to_vec(),
             chain_hash: TEST_CHAIN_HASH,
             pubkey: pubkey.clone(),
@@ -434,7 +464,7 @@ pub mod test {
         let sig1: Ed25519Signature = [1u8; 64].as_slice().try_into().unwrap();
         let sig2: Ed25519Signature = [2u8; 64].as_slice().try_into().unwrap();
 
-        let envelope = SolanaOffchainSimpleMultisigMessage::<TestSpec> {
+        let envelope = SolanaOffchainSimpleMultisigEnvelope::<TestSpec> {
             wire_bytes,
             chain_hash: TEST_CHAIN_HASH,
             signatures: vec![
@@ -500,7 +530,7 @@ pub mod test {
         signed_message.extend_from_slice(&header);
         signed_message.extend_from_slice(message);
 
-        let envelope = SolanaOffchainSpecCompliantMessage::<TestSpec> {
+        let envelope = SolanaOffchainSpecCompliantEnvelope::<TestSpec> {
             signed_message_with_preamble: signed_message,
             signature: signature.clone(),
         };
@@ -535,7 +565,7 @@ pub mod test {
         signed_message.extend_from_slice(json_message);
 
         // Signers 0 and 2 signed (bitfield = 0b101 = 5), signer 1 did not
-        let envelope = SolanaOffchainSpecCompliantMultisigMessage::<TestSpec> {
+        let envelope = SolanaOffchainSpecCompliantMultisigEnvelope::<TestSpec> {
             signed_message_with_preamble: signed_message.clone(),
             signatures: vec![sig1.clone(), sig3.clone()].try_into().unwrap(),
             signer_bitfield: 0b101,
@@ -593,7 +623,7 @@ pub mod test {
         signed_message.extend_from_slice(json_message);
 
         // 1 signature but bitfield says 2 signers (0b11)
-        let envelope = SolanaOffchainSpecCompliantMultisigMessage::<TestSpec> {
+        let envelope = SolanaOffchainSpecCompliantMultisigEnvelope::<TestSpec> {
             signed_message_with_preamble: signed_message,
             signatures: vec![sig1].try_into().unwrap(),
             signer_bitfield: 0b11,
@@ -630,7 +660,7 @@ pub mod test {
         signed_message.extend_from_slice(json_message);
 
         // Bit 2 is set but there are only 2 signers (indices 0 and 1)
-        let envelope = SolanaOffchainSpecCompliantMultisigMessage::<TestSpec> {
+        let envelope = SolanaOffchainSpecCompliantMultisigEnvelope::<TestSpec> {
             signed_message_with_preamble: signed_message,
             signatures: vec![sig1].try_into().unwrap(),
             signer_bitfield: 0b100,

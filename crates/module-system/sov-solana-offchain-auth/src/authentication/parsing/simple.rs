@@ -18,8 +18,8 @@ pub const MULTISIG_SIMPLE_DISCRIMINATOR: u8 = 0x80;
 /// start with an ASCII character (normally, '{'), allowing us to unambiguously differentiate them.
 /// Without the preamble present, we need to include the pubkey explicitly.
 #[derive(BorshSerialize, BorshDeserialize)]
-pub struct SolanaOffchainSimpleMessage<S: Spec> {
-    /// The message is a JSON-serialized SolanaOffchainUnsignedTransaction, unaltered.
+pub struct SolanaOffchainSimpleEnvelope<S: Spec> {
+    /// The message is a JSON-serialized SolanaOffchainSigningPayloadV0, unaltered.
     pub signed_message: Vec<u8>,
     pub chain_hash: [u8; 32],
     pub pubkey: <S::CryptoSpec as CryptoSpec>::PublicKey,
@@ -29,8 +29,8 @@ pub struct SolanaOffchainSimpleMessage<S: Spec> {
 /// The envelope for a multisig "simple" (preamble-less) solana offchain message.
 /// Each signer independently signs the JSON payload (the bytes after the discriminator prefix).
 #[derive(BorshSerialize, BorshDeserialize)]
-pub struct SolanaOffchainSimpleMultisigMessage<S: Spec> {
-    /// Wire format: `[0x80][JSON-serialized SolanaOffchainUnsignedTransactionV1]`.
+pub struct SolanaOffchainSimpleMultisigEnvelope<S: Spec> {
+    /// Wire format: `[0x80][JSON-serialized SolanaOffchainSigningPayloadV1]`.
     /// The `0x80` prefix is a parsing discriminator only — the signed content is the JSON
     /// portion (everything after the first byte).
     pub wire_bytes: Vec<u8>,
@@ -55,7 +55,7 @@ pub struct SolanaOffchainSimpleMultisigMessage<S: Spec> {
 pub(super) fn unpack_simple_message<S: Spec>(
     raw_tx: &[u8],
 ) -> Result<UnpackedSolanaMessage<S>, FatalError> {
-    let raw_message: SolanaOffchainSimpleMessage<S> =
+    let raw_message: SolanaOffchainSimpleEnvelope<S> =
         borsh::from_slice(raw_tx).map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     Ok(UnpackedSolanaMessage::V0 {
@@ -70,7 +70,7 @@ pub(super) fn unpack_simple_message<S: Spec>(
 pub(super) fn unpack_multisig_simple_message<S: Spec>(
     raw_tx: &[u8],
 ) -> Result<UnpackedSolanaMessage<S>, FatalError> {
-    let msg: SolanaOffchainSimpleMultisigMessage<S> =
+    let msg: SolanaOffchainSimpleMultisigEnvelope<S> =
         borsh::from_slice(raw_tx).map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     if msg.wire_bytes.first() != Some(&MULTISIG_SIMPLE_DISCRIMINATOR) {

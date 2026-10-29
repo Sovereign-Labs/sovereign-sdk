@@ -1,0 +1,164 @@
+{
+  "chain_hash": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+  "chain_id": 4321,
+  "gas_token_id": "token_1nyl0e0yweragfsatygt24zmd8jrr2vqtvdfptzjhxkguz2xxx3vs0y07u7",
+  "key_derivation": "ed25519 seed bytes are seed, seed + 1, ..., seed + 31",
+  "recipient": {
+    "address": "sov1y4pmjtl3p923z3m2mjpknkmdmjfnvedpr9udmg2qfmssv8kyp6l",
+    "seed": 64
+  },
+  "runtime": "sov_test_utils::generate_optimistic_runtime!(LegacyV0FixtureRuntime <= )",
+  "senders": [
+    {
+      "address": "sov1wamwsu9exd209g9jfs3l9gmvcn5qug3jrrqmj7fxlhgpsjprgsh",
+      "credential_id": "0x7776e870b93354f2a0b24c23f2a36cc4e80e223218c1b97926fdd018396a2b9b",
+      "genesis_balance": "1000000000000000",
+      "seed": 16
+    },
+    {
+      "address": "sov19xkt4c2phn90pv3wr22dxngtcumpu5ndp0lp9jyhjj7fxgq7u6p",
+      "credential_id": "0x29acbae141bccaf0b22e1a94d34d0bc7361e526d0bfe12c89794bc9322966dd7",
+      "genesis_balance": "1000000000000000",
+      "seed": 32
+    },
+    {
+      "address": "sov13wcyu8qms0wa7vglt0xa7lzsah3upqp0glk8jm32zvw0grclgrr",
+      "credential_id": "0x8bb04e1c1b83dddf311f5bcddf7c50ede3c0802f47ec796e2a131cf41298d9f3",
+      "genesis_balance": "1000000000000000",
+      "seed": 48
+    },
+    {
+      "address": "sov18ams3404es4uvva4n54n5tke9e68jgsvduy2mcsgh67dszvqy6k",
+      "credential_id": "0x3f7708d5f5cc2bc633b59d2b3a2ed92e7479220c6f08ade208bebcd8580ab93b",
+      "genesis_balance": "1000000000000000",
+      "seed": 80
+    }
+  ],
+  "source_branch": "v0",
+  "source_commit": "17b2d658a93f2a2cc424bde074beada30a565250",
+  "spec": "sov_test_utils::TestSpec",
+  "transactions": [
+    {
+      "amount": "1000",
+      "chain_hash": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "chain_id": 4321,
+      "description": "Plain gas token transfer with default test details and nonce 0.",
+      "expect": "success",
+      "gas_limit": null,
+      "max_fee": "100000000000",
+      "max_priority_fee_bips": 0,
+      "name": "nonce_0_transfer",
+      "raw_tx": "002120001601d50db60212b15d99af50582fd4af23b4fae42329d0c73c9dee0fbafdba2cfe1a8eaf2757276a54e6ecba14b58d65e16657f2ee9cd2c2170f0b28087776e870b93354f2a0b24c23f2a36cc4e80e223218c1b97926fdd018396a2b9b01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee106e8030000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459000000000000000000000000000000000000e8764817000000000000000000000000e110000000000000",
+      "sender_seed": 16,
+      "signing_payload": "01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee106e8030000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459000000000000000000000000000000000000e8764817000000000000000000000000e1100000000000000b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "uniqueness": {
+        "nonce": 0
+      }
+    },
+    {
+      "amount": "305419896",
+      "chain_hash": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "chain_id": 4321,
+      "description": "Transfer with nonce 1, an explicit asymmetric gas limit, a non-zero priority fee and a multi-byte amount.",
+      "expect": "success",
+      "gas_limit": [
+        1000000000,
+        2000000000
+      ],
+      "max_fee": "100000000000",
+      "max_priority_fee_bips": 1000,
+      "name": "nonce_1_transfer_with_gas_limit_and_priority_fee",
+      "raw_tx": "00b44154660bbbd334a93279e0620ee54a1baef99ecb4f47b738e8e7866bb6830e7e98fcb4b7436e602100985ee2eadc9e41ce7138e1189fd03fda853c8860c7067776e870b93354f2a0b24c23f2a36cc4e80e223218c1b97926fdd018396a2b9b01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10678563412000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459000100000000000000e80300000000000000e876481700000000000000000000000100ca9a3b000000000094357700000000e110000000000000",
+      "sender_seed": 16,
+      "signing_payload": "01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10678563412000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459000100000000000000e80300000000000000e876481700000000000000000000000100ca9a3b000000000094357700000000e1100000000000000b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "uniqueness": {
+        "nonce": 1
+      }
+    },
+    {
+      "amount": "777",
+      "chain_hash": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "chain_id": 4321,
+      "description": "Transfer using generation-based uniqueness from a fresh account.",
+      "expect": "success",
+      "gas_limit": null,
+      "max_fee": "100000000000",
+      "max_priority_fee_bips": 0,
+      "name": "generation_transfer",
+      "raw_tx": "00c2f373126ce9a1f39cec59d94548c726f95e7ca6357d6566d5c21b589f179e97a0001edb49ac773f370f784994cc9704a0be525449a1dd74737514a0cb30100429acbae141bccaf0b22e1a94d34d0bc7361e526d0bfe12c89794bc9322966dd701012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10609030000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459017856341290010000000000000000000000e8764817000000000000000000000000e110000000000000",
+      "sender_seed": 32,
+      "signing_payload": "01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10609030000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459017856341290010000000000000000000000e8764817000000000000000000000000e1100000000000000b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "uniqueness": {
+        "generation": 1718292338296
+      }
+    },
+    {
+      "amount": "4242",
+      "chain_hash": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "chain_id": 4321,
+      "description": "Transfer using window-based uniqueness from a fresh account.",
+      "expect": "success",
+      "gas_limit": null,
+      "max_fee": "100000000000",
+      "max_priority_fee_bips": 0,
+      "name": "window_transfer",
+      "raw_tx": "00d1fddfd8f4e1509ad1abebb656b728c4558b2adf217bd95910a62122ff9b5da0c03b0ac127128463367580b0b7e0afc8540bf58d1b1cb3f837dbf17aa7f81f0b8bb04e1c1b83dddf311f5bcddf7c50ede3c0802f47ec796e2a131cf41298d9f301012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10692100000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459020300000000000000000000000000000000e8764817000000000000000000000000e110000000000000",
+      "sender_seed": 48,
+      "signing_payload": "01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10692100000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459020300000000000000000000000000000000e8764817000000000000000000000000e1100000000000000b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "uniqueness": {
+        "window": 3
+      }
+    },
+    {
+      "amount": "1",
+      "chain_hash": "0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "chain_id": 4322,
+      "description": "Valid signature, but the chain id does not match the rollup's CHAIN_ID constant.",
+      "expect": "invalid_chain_id",
+      "gas_limit": null,
+      "max_fee": "100000000000",
+      "max_priority_fee_bips": 0,
+      "name": "wrong_chain_id",
+      "raw_tx": "001b72f24d5699f4a6003f4567eb5165438f3ac0b71f49698120f82b9a5d9c2c1f6e6af7b4b534f5eae4c045fab6a27ff408d96e8a7703f8a70f7a3aaaa05c350b7776e870b93354f2a0b24c23f2a36cc4e80e223218c1b97926fdd018396a2b9b01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10601000000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459000200000000000000000000000000000000e8764817000000000000000000000000e210000000000000",
+      "sender_seed": 16,
+      "signing_payload": "01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10601000000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459000200000000000000000000000000000000e8764817000000000000000000000000e2100000000000000b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "uniqueness": {
+        "nonce": 2
+      }
+    },
+    {
+      "amount": "1",
+      "chain_hash": "0a0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "chain_id": 4321,
+      "description": "Correct chain id, but signed over a chain hash the rollup does not accept.",
+      "expect": "invalid_signature",
+      "gas_limit": null,
+      "max_fee": "100000000000",
+      "max_priority_fee_bips": 0,
+      "name": "wrong_chain_hash",
+      "raw_tx": "0022955e98d2d772bc66011d305521585bb8496ff5963a756393be735176c2dd28b798960be9fb4ba174f974553765d21202fbe9caad90ca5f17f7c6550382070b7776e870b93354f2a0b24c23f2a36cc4e80e223218c1b97926fdd018396a2b9b01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10601000000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459000200000000000000000000000000000000e8764817000000000000000000000000e110000000000000",
+      "sender_seed": 16,
+      "signing_payload": "01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10601000000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459000200000000000000000000000000000000e8764817000000000000000000000000e1100000000000000a0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b0b",
+      "uniqueness": {
+        "nonce": 2
+      }
+    },
+    {
+      "amount": "55",
+      "chain_hash": "2222222222222222222222222222222222222222222222222222222222222222",
+      "chain_id": 4321,
+      "description": "Correct chain id, signed over a chain hash that is only valid if configured as a grace-period override.",
+      "expect": "invalid_signature",
+      "gas_limit": null,
+      "max_fee": "100000000000",
+      "max_priority_fee_bips": 0,
+      "name": "grace_period_chain_hash",
+      "raw_tx": "00338e038727ee9572f1a88584cac5db4401bfe04d2565f7eed649e6fdf27d05068cf840a6e2a5609d6e84faca7475eb7010788f9e64265397b1a5d029b7d2350b3f7708d5f5cc2bc633b59d2b3a2ed92e7479220c6f08ade208bebcd8580ab93b01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10637000000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459000000000000000000000000000000000000e8764817000000000000000000000000e110000000000000",
+      "sender_seed": 80,
+      "signing_payload": "01012543b92ff1095511476adc8369db6ddc933665a11978dda1404ee10637000000000000000000000000000000993efcbc8ec8fa84c3ab2216aa8b6d3c8635300b6352158a573591c128c63459000000000000000000000000000000000000e8764817000000000000000000000000e1100000000000002222222222222222222222222222222222222222222222222222222222222222",
+      "uniqueness": {
+        "nonce": 0
+      }
+    }
+  ]
+}

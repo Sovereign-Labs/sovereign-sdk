@@ -1,0 +1,5 @@
+error: `with_extensions` requires a `&jsonrpsee::Extensions` argument.
+  --> tests/integration/trybuild/rpc/derive_rpc_with_extensions_without_ext_arg.rs:16:9
+   |
+16 |     pub fn foo(&self) -> jsonrpsee::core::RpcResult<u32> {
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

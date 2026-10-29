@@ -417,6 +417,10 @@ impl<L: LinkingScheme, M> TypeVisitor<L, M> for Eip712Visitor<'_, '_> {
         schema: &impl TypeResolver<LinkingScheme = L>,
         context: Context,
     ) -> Self::ReturnType {
+        // NOTE: `t.type_name` is deliberately ignored here. Using it (e.g. as the base name of
+        // the generated solidity type) would change the EIP-712 encodings, and therefore the
+        // signing hashes, of every message containing a named tuple.
+
         // Trivial tuple (single field) - always transparent
         // The magic happens in visit_enum when it sees a virtual context
         if t.fields.len() == 1 {

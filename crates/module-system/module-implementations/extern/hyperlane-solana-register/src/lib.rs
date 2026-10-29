@@ -53,11 +53,6 @@ where
 pub enum SolanaRegistrationError {
     #[error("Core module error: {0}")]
     CoreModuleError(#[from] CoreModuleError),
-    #[error("Embedded pubkey already registered to different address. Attempted: {attempted_address}, Registered: {registered_address}")]
-    AlreadyRegistered {
-        attempted_address: String,
-        registered_address: String,
-    },
     #[error("Invalid body length. Expected {expected}, found {found}")]
     InvalidBodyLength { expected: usize, found: usize },
     #[error("Failed to extract public key from body")]
@@ -297,26 +292,19 @@ where
         let (user_pubkey, embedded_pubkey) = self.unpack_body(body.as_ref())?;
         let credential_id = CredentialId::from(embedded_pubkey);
         let address = S::Address::try_from(&user_pubkey).map_err(CoreModuleError::from)?;
-        let resolved_address = self
-            .accounts
-            .resolve_sender_address(&address, &credential_id, state)
+
+        self.accounts
+            .authorize_credential(&address, &credential_id, state)
             .map_err(CoreModuleError::state_write)?;
 
-        if address != resolved_address {
-            Err(SolanaRegistrationError::AlreadyRegistered {
-                attempted_address: address.to_string(),
-                registered_address: resolved_address.to_string(),
-            })
-        } else {
-            self.emit_event(
-                state,
-                Event::UserRegistered {
-                    address,
-                    credential_id,
-                },
-            );
-            Ok(())
-        }
+        self.emit_event(
+            state,
+            Event::UserRegistered {
+                address,
+                credential_id,
+            },
+        );
+        Ok(())
     }
 
     pub fn admin(

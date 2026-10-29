@@ -1,5 +1,7 @@
 use crate::capabilities::{AuthenticationError, AuthorizationData, UniquenessData};
-use crate::transaction::{Credentials, Transaction, TransactionCallable, TxDetails};
+use crate::transaction::{
+    Credentials, Transaction, TransactionCallable, TxDetails, UnsignedTransaction,
+};
 use crate::{CryptoSpecExt, GasMeter, GasSpec, Multisig, Spec, TxHash};
 use borsh::{BorshDeserialize, BorshSerialize};
 use derivative::Derivative;
@@ -50,14 +52,14 @@ impl<C: CryptoSpecExt> PubKeyAndSignature<C> {
     UniversalWallet,
 )]
 #[derivative(
-    PartialEq(bound = "Call: PartialEq + Eq"),
-    Eq(bound = "Call: PartialEq + Eq")
+    PartialEq(bound = "R::Call: PartialEq + Eq"),
+    Eq(bound = "R::Call: PartialEq + Eq")
 )]
-#[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
-/// A V1 (multisig) transaction. The number of signers is capped at 10.
+#[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
+/// A V1 (multisig) transaction. The number of signers is capped at [`MAX_SIGNERS`].
 ///
 /// The credential ID for a multisig is hash(borsh(min_signers) || borsh(sort(pub_keys)))
-pub struct Version1<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
+pub struct Version1<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     /// The signatures of the transaction.
     #[borsh(bound(
         serialize = "PubKeyAndSignature<C>: BorshSerialize",
@@ -78,39 +80,88 @@ pub struct Version1<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     // This is used to compute the credential ID statelessly.
     pub min_signers: u8,
     /// The runtime call of the transaction.
-    #[sov_wallet(bound = "Call: sov_universal_wallet::schema::UniversalWallet")]
-    pub runtime_call: Call,
+    #[sov_wallet(bound = "R::Call: sov_universal_wallet::schema::UniversalWallet")]
+    pub runtime_call: R::Call,
     /// Uniqueness identifier of this transaction. see [`UniquenessData`] for more details.
     pub uniqueness: UniquenessData,
-    /// The transaction metadata. Contains gas parameters and the chain ID.
+    /// The transaction metadata. Contains gas parameters and the chain hash fragment.
     pub details: TxDetails<S>,
+    /// Signer-declared address override.
+    /// See [`crate::capabilities::AuthorizationData::address_override`] for routing semantics.
+    #[serde(default)]
+    pub address_override: Option<S::Address>,
 }
 
-impl<Call: BorshSerialize, S: Spec, C: CryptoSpecExt> Version1<Call, S, C> {
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
+    /// Computes the multisig credential address from the transaction's multisig parameters.
+    /// This is the single source of truth for the derivation used in both signing and verification.
+    pub fn credential_address(&self) -> S::Address {
+        let all_keys: Vec<_> = self
+            .signatures
+            .iter()
+            .map(|s| s.pub_key.clone())
+            .chain(self.unused_pub_keys.iter().cloned())
+            .collect();
+        Multisig::new(self.min_signers, all_keys)
+            .credential_id::<<S::CryptoSpec as CryptoSpec>::Hasher>()
+            .into()
+    }
+
+    /// Extracts the unsigned transaction payload from this signed envelope.
+    pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
+        UnsignedTransaction::new_with_details(
+            self.runtime_call.clone(),
+            self.uniqueness,
+            self.details.clone(),
+            self.address_override,
+        )
+    }
+
+    /// Serializes the V1 transaction signing payload for this signed envelope.
+    pub fn to_signing_bytes(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
+        self.to_unsigned_transaction()
+            .signing_payload_v1_with_credential(self.credential_address(), *chain_hash)
+            .to_bytes()
+    }
+}
+
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version1<R, S, C> {
     /// Signs the transaction with the given key but does not add the signature to the list in the transaction.
+    ///
+    /// Returns an error if the supplied chain hash does not match the fragment stored in the
+    /// transaction details.
     #[cfg(feature = "native")]
-    pub fn sign_without_adding(&self, key: &C::PrivateKey, chain_hash: &[u8; 32]) -> C::Signature {
-        key.sign(&self.serialize_for_signing(chain_hash))
+    pub fn sign_without_adding(
+        &self,
+        key: &C::PrivateKey,
+        chain_hash: &[u8; 32],
+    ) -> anyhow::Result<C::Signature> {
+        self.details.ensure_matches_chain_hash(chain_hash)?;
+        Ok(key.sign(&self.to_signing_bytes(chain_hash)))
     }
 
     /// Signs and adds the signature to the transaction.
     #[cfg(feature = "native")]
     pub fn sign(&mut self, key: &C::PrivateKey, chain_hash: &[u8; 32]) -> anyhow::Result<()> {
-        let signature = self.sign_without_adding(key, chain_hash);
-        self.add_signature(signature, key.pub_key())
-    }
+        if !self.signatures.is_empty() {
+            let signature = self.sign_without_adding(key, chain_hash)?;
+            return self.add_signature(signature, key.pub_key());
+        }
 
-    /// Serializes only the `UnsignedTransaction` part of the transaction and appens the chain_hash
-    pub fn serialize_for_signing(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
-        let mut out = Vec::with_capacity(64); // Preallocate a little capacity to avoid excessive reallocations
-        BorshSerialize::serialize(&self.runtime_call, &mut out)
-            .expect("Serialization to vec is infallible");
-        BorshSerialize::serialize(&self.uniqueness, &mut out)
-            .expect("Serialization to vec is infallible");
-        BorshSerialize::serialize(&self.details, &mut out)
-            .expect("Serialization to vec is infallible");
-        out.extend_from_slice(chain_hash);
-        out
+        let mut updated = Self {
+            signatures: self.signatures.clone(),
+            unused_pub_keys: self.unused_pub_keys.clone(),
+            min_signers: self.min_signers,
+            runtime_call: self.runtime_call.clone(),
+            uniqueness: self.uniqueness,
+            details: self.details.clone(),
+            address_override: self.address_override,
+        };
+        updated.details.chain_hash_fragment = crate::transaction::chain_hash_fragment(chain_hash);
+        let signature = updated.sign_without_adding(key, chain_hash)?;
+        updated.add_signature(signature, key.pub_key())?;
+        *self = updated;
+        Ok(())
     }
 
     /// Adds a signature to the signing set of the multisig, removing the public key from the set of unused pub keys.
@@ -140,6 +191,7 @@ impl<Call: BorshSerialize, S: Spec, C: CryptoSpecExt> Version1<Call, S, C> {
     pub fn auth_data<M: GasMeter<Spec = S>>(
         &self,
         raw_tx_hash: TxHash,
+        non_malleable_hash: TxHash,
         meter: &mut M,
     ) -> Result<AuthorizationData<S>, AuthenticationError> {
         // Charge gas; We charge for credential ID calculation based on the number of keys in the multisig
@@ -161,15 +213,83 @@ impl<Call: BorshSerialize, S: Spec, C: CryptoSpecExt> Version1<Call, S, C> {
         Ok(AuthorizationData {
             uniqueness: self.uniqueness,
             tx_hash: raw_tx_hash,
+            non_malleable_hash,
             credential_id,
             credentials: Credentials::new(multisig),
             default_address: credential_id.into(),
+            address_override: self.address_override,
         })
     }
 }
 
-impl<R: TransactionCallable, S: Spec> From<Version1<R::Call, S>> for Transaction<R, S> {
-    fn from(value: Version1<R::Call, S>) -> Self {
+impl<R: TransactionCallable, S: Spec> From<Version1<R, S>> for Transaction<R, S> {
+    fn from(value: Version1<R, S>) -> Self {
         Transaction::V1(value)
+    }
+}
+
+#[cfg(all(test, feature = "native"))]
+mod tests {
+    use super::*;
+    use crate::capabilities::UniquenessData;
+    use crate::transaction::{chain_hash_fragment, PriorityFeeBips};
+    use crate::Amount;
+    use sov_mock_da::MockDaSpec;
+    use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
+    use sov_rollup_interface::execution_mode::Native;
+
+    type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
+    type TestPrivateKey = <MockZkvmCryptoSpec as CryptoSpec>::PrivateKey;
+
+    struct TestRuntime;
+
+    impl TransactionCallable for TestRuntime {
+        type Call = u64;
+    }
+
+    fn unsigned_transaction(chain_hash: [u8; 32]) -> UnsignedTransaction<TestRuntime, TestSpec> {
+        UnsignedTransaction::new(
+            7,
+            chain_hash,
+            PriorityFeeBips::ZERO,
+            Amount::new(1),
+            UniquenessData::Generation(0),
+            None,
+            None,
+        )
+    }
+
+    #[test]
+    fn failed_first_signature_does_not_change_chain_hash_fragment() {
+        let member = TestPrivateKey::generate();
+        let non_member = TestPrivateKey::generate();
+        let original_chain_hash = [0; 32];
+        let signing_chain_hash = [1; 32];
+        let mut transaction = unsigned_transaction(original_chain_hash)
+            .to_multisig_tx(Multisig::new(1, vec![member.pub_key()]));
+
+        let error = transaction
+            .sign(&non_member, &signing_chain_hash)
+            .unwrap_err();
+
+        assert!(error.to_string().contains("Public key is not a member"));
+        assert_eq!(
+            transaction.details.chain_hash_fragment,
+            chain_hash_fragment(&original_chain_hash)
+        );
+        assert!(transaction.signatures.is_empty());
+    }
+
+    #[test]
+    fn unsigned_v1_signing_bytes_reject_mismatched_chain_hash() {
+        let member = TestPrivateKey::generate();
+        let multisig = Multisig::new(1, vec![member.pub_key()]);
+        let transaction = unsigned_transaction([0; 32]);
+
+        let error = transaction
+            .to_signing_bytes_v1(&multisig, [1; 32])
+            .unwrap_err();
+
+        assert!(error.to_string().contains("Chain hash fragment mismatch"));
     }
 }

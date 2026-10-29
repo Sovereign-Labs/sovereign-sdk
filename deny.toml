@@ -456,6 +456,11 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-migrations"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "universal-wallet-fuzz"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []

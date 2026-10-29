@@ -1,5 +1,4 @@
 use sov_modules_api::{Amount, Gas, GasArray, GasPrice, GasSpec, Spec};
-use sov_rollup_interface::common::RollupHeight;
 use sov_test_utils::TestSpec;
 
 use crate::{BlockGasInfo, ChainState};
@@ -14,14 +13,12 @@ const GAS_DELTA_FRACTION: u64 = 2;
 /// Helper function that initializes the gas elasticity tests for the multidimensional case. It computes the new base fee per gas
 /// given the amount of gas used, the initial gas limit and the initial base fee per gas.
 fn test_helper(gas_used: &<TestSpec as Spec>::Gas) -> <<TestSpec as Spec>::Gas as Gas>::Price {
-    let mut parent_gas_info = BlockGasInfo::new(
-        TestSpec::initial_gas_limit(),
-        INITIAL_BASE_FEE_PER_GAS.into(),
-    );
+    let mut parent_gas_info =
+        BlockGasInfo::new(TestSpec::block_gas_limit(), INITIAL_BASE_FEE_PER_GAS.into());
 
     parent_gas_info.update_gas_used(*gas_used);
 
-    ChainState::<TestSpec>::compute_base_fee_per_gas(parent_gas_info, RollupHeight::GENESIS, 1)
+    ChainState::<TestSpec>::compute_base_fee_per_gas(parent_gas_info, 1)
 }
 
 /// Checks that the `base_fee_per_gas` does not change when the gas used is the same as the gas target.

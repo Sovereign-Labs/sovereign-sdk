@@ -25,7 +25,7 @@ serializer = Serializer.from_url("http://localhost:12346/rollup/schema")
 
 # Create transaction
 call = {"bank": {"create_token": {"token_name": "MyToken", "initial_balance": "1000"}}}
-details = TxDetails(chain_id=4321)
+details = TxDetails(chain_hash_fragment=serializer.chain_hash_fragment())
 unsigned_tx = UnsignedTransaction(runtime_call=call, details=details)
 
 # Get bytes for signing
@@ -40,5 +40,5 @@ serialized = serializer.serialize_tx(signed_tx)
 
 - `Serializer`: Schema-based transaction serialization
 - `UnsignedTransaction`: Unsigned transaction with runtime calls
-- `TxDetails`: Transaction metadata (chain ID, fees, gas)
+- `TxDetails`: Transaction metadata (chain hash fragment, fees, gas)
 - `UniquenessData`: Transaction uniqueness (nonce, generation, or window)

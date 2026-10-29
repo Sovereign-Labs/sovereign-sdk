@@ -23,7 +23,6 @@ export default defineConfig({
     reuseExistingServer: !process.env.CI,
     env: {
       VITE_ROLLUP_URL: process.env.VITE_ROLLUP_URL || "http://localhost:12346",
-      VITE_CHAIN_ID: process.env.VITE_CHAIN_ID || "4321",
       VITE_SOLANA_ENDPOINT:
         process.env.VITE_SOLANA_ENDPOINT ||
         "/sequencer/accept-solana-offchain-tx",

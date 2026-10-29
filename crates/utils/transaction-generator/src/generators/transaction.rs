@@ -259,7 +259,7 @@ where
                 max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
                 max_fee: TEST_DEFAULT_MAX_FEE,
                 gas_limit: None,
-                chain_id: RT::chain_id(),
+                chain_hash_fragment: 0,
             },
         };
 

@@ -28,6 +28,7 @@ use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, TxHash, VisibleSlotNumber,
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::node::da::DaWriteRole;
 use sov_shutdown::PrimaryShutdownController;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -534,6 +535,14 @@ impl SequencerRole {
             self,
             SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica
         )
+    }
+
+    /// The write permission this role grants on the DA service.
+    pub fn da_write_role(self) -> DaWriteRole {
+        match self {
+            SequencerRole::BatchProducer => DaWriteRole::Writer,
+            SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica => DaWriteRole::ReadOnly,
+        }
     }
 }
 

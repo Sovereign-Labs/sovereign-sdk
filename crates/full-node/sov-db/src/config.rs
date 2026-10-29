@@ -153,13 +153,17 @@ pub fn default_max_pruning_batch_size() -> NonZeroUsize {
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize, Eq, PartialEq, JsonSchema)]
 #[serde(deny_unknown_fields)]
 pub struct RollupDbConfig {
-    /// Path where all databases are stored
+    /// Default parent directory for databases without a path override.
     pub path: std::path::PathBuf,
-    /// Optional custom path for the ledger database.
-    ///
-    /// When set, ledger DB data is stored at this path. When not set, the ledger DB is stored
-    /// under [`RollupDbConfig::path`] (the existing behavior).
+    /// Exact directory for the live state database. Defaults to `path/state-db`.
+    /// Relative paths are resolved from the process working directory.
+    pub live_db_path: Option<std::path::PathBuf>,
+    /// Exact directory for the ledger database. Defaults to `path/ledger`.
+    /// Relative paths are resolved from the process working directory.
     pub ledger_db_path: Option<std::path::PathBuf>,
+    /// Exact directory for the user NOMT database. Defaults to `path/user_nomt_db`.
+    /// Relative paths are resolved from the process working directory.
+    pub user_nomt_db_path: Option<std::path::PathBuf>,
     /// The size of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB.
     /// A larger cache size can improve execution speed at the cost of more memory usage.
     pub state_cache_size: Option<usize>,
@@ -168,7 +172,7 @@ pub struct RollupDbConfig {
     /// More details at [`Options::commit_concurrency`]
     pub user_commit_concurrency: Option<usize>,
     /// Value is determined by the expected size of the state. Recommended to start with 15_000_000.
-    /// Cannot be changed for the existing database.
+    /// Can be increased for an existing database, but cannot be decreased.
     /// More details at [`Options::hashtable_buckets`]
     pub user_hashtable_buckets: Option<u32>,
     /// Sets whether to preallocate the hashtable file for user db.
@@ -188,7 +192,7 @@ pub struct RollupDbConfig {
     /// Number of concurrent commit workers for the kernel state.
     /// More details at [`Options::commit_concurrency`]
     pub kernel_commit_concurrency: Option<usize>,
-    /// Cannot be changed for the existing database.
+    /// Can be increased for an existing database, but cannot be decreased.
     /// More details at [`Options::hashtable_buckets`]
     pub kernel_hashtable_buckets: Option<u32>,
     /// Sets whether to preallocate the hashtable file for kernel db.
@@ -220,7 +224,9 @@ impl RollupDbConfig {
     pub fn default_in_path(path: std::path::PathBuf) -> Self {
         Self {
             path,
+            live_db_path: None,
             ledger_db_path: None,
+            user_nomt_db_path: None,
             state_cache_size: Some(1_000_000), // Use a 1MB state cache for tests
             user_commit_concurrency: Some(2),
             user_hashtable_buckets: Some(if cfg!(debug_assertions) {
@@ -253,15 +259,7 @@ impl RollupDbConfig {
             self.kernel_commit_concurrency
                 .expect("`kernel_commit_concurrency` concurrency must be set"),
         );
-        if let Some(hashtable_buckets) = self.kernel_hashtable_buckets {
-            opts.hashtable_buckets(hashtable_buckets);
-        } else if cfg!(debug_assertions) {
-            // 2MB
-            opts.hashtable_buckets(500);
-        } else {
-            // 1000MB
-            opts.hashtable_buckets(self.kernel_hashtable_buckets.unwrap_or(256_000));
-        }
+        opts.hashtable_buckets(self.kernel_hashtable_buckets());
 
         if let Some(preallocate_ht) = self.kernel_preallocate_ht {
             opts.preallocate_ht(preallocate_ht);
@@ -282,6 +280,18 @@ impl RollupDbConfig {
         opts
     }
 
+    pub(crate) fn kernel_hashtable_buckets(&self) -> u32 {
+        self.kernel_hashtable_buckets.unwrap_or({
+            if cfg!(debug_assertions) {
+                // 2MB
+                500
+            } else {
+                // 1000MB
+                256_000
+            }
+        })
+    }
+
     pub(crate) fn get_user_options(&self) -> Options {
         let mut opts = nomt_default_options();
         // Enabling rollback for user space too, to be able to sync with the historical state.
@@ -291,10 +301,7 @@ impl RollupDbConfig {
             self.user_commit_concurrency
                 .expect("`user_commit_concurrency` must be set"),
         );
-        opts.hashtable_buckets(
-            self.user_hashtable_buckets
-                .expect("`user_hashtable_buckets` must be set"),
-        );
+        opts.hashtable_buckets(self.user_hashtable_buckets());
         if let Some(preallocate_ht) = self.user_preallocate_ht {
             opts.preallocate_ht(preallocate_ht);
         }
@@ -308,8 +315,17 @@ impl RollupDbConfig {
             opts.page_cache_upper_levels(page_cache_upper_levels);
         }
 
-        opts.path(self.path.join("user_nomt_db"));
+        opts.path(
+            self.user_nomt_db_path
+                .clone()
+                .unwrap_or_else(|| self.path.join("user_nomt_db")),
+        );
         opts
+    }
+
+    pub(crate) fn user_hashtable_buckets(&self) -> u32 {
+        self.user_hashtable_buckets
+            .expect("`user_hashtable_buckets` must be set")
     }
 
     pub(crate) fn pruner(&self) -> PrunerConfig {
@@ -388,4 +404,35 @@ fn nomt_default_options() -> Options {
     let mut opts = Options::new();
     opts.metrics(true);
     opts
+}
+
+#[cfg(test)]
+mod tests {
+    use super::RollupDbConfig;
+    use std::path::PathBuf;
+
+    #[test]
+    fn database_paths_deserialize_when_omitted() {
+        let config: RollupDbConfig = serde_json::from_str(r#"{"path":"data"}"#).unwrap();
+        assert_eq!(config.path, PathBuf::from("data"));
+        assert_eq!(config.live_db_path, None);
+        assert_eq!(config.ledger_db_path, None);
+        assert_eq!(config.user_nomt_db_path, None);
+    }
+
+    #[test]
+    fn database_paths_deserialize_exact_overrides() {
+        let config: RollupDbConfig = serde_json::from_str(
+            r#"{
+                "path":"data",
+                "live_db_path":"relative/live",
+                "ledger_db_path":"/mnt/ledger",
+                "user_nomt_db_path":"/mnt/user"
+            }"#,
+        )
+        .unwrap();
+        assert_eq!(config.live_db_path, Some(PathBuf::from("relative/live")));
+        assert_eq!(config.ledger_db_path, Some(PathBuf::from("/mnt/ledger")));
+        assert_eq!(config.user_nomt_db_path, Some(PathBuf::from("/mnt/user")));
+    }
 }

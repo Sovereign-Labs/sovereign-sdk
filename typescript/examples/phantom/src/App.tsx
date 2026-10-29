@@ -14,7 +14,6 @@ type TxResponse = SovereignClient.SovereignSDK.Sequencer.TxCreateResponse;
 const ROLLUP_URL = import.meta.env.VITE_ROLLUP_URL || "http://localhost:12346";
 const SOLANA_ENDPOINT =
   import.meta.env.VITE_SOLANA_ENDPOINT || "/sequencer/accept-solana-offchain-tx";
-const CHAIN_ID_FROM_ENV = Number(import.meta.env.VITE_CHAIN_ID || "4321");
 
 const DEFAULT_TX = {
   bank: {
@@ -136,18 +135,8 @@ export default function App() {
       const parsedTx: RuntimeCall = JSON.parse(txString);
 
       // Create rollup client and Phantom signer
-      const rollupConfig = Number.isInteger(CHAIN_ID_FROM_ENV)
-        ? {
-            url: ROLLUP_URL,
-            context: {
-              defaultTxDetails: {
-                chain_id: CHAIN_ID_FROM_ENV,
-              },
-            },
-          }
-        : { url: ROLLUP_URL };
       const rollup = await createSolanaSignableRollup<RuntimeCall>(
-        rollupConfig,
+        { url: ROLLUP_URL },
         SOLANA_ENDPOINT,
       );
       const signer = new PhantomSigner(walletProvider);

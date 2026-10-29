@@ -332,7 +332,9 @@ fn chain_hash_override_array_override_logic() -> TokenStream {
 
         // Intermediate struct for deserialization with string chain_hash
         #[derive(serde::Deserialize)]
-        #[serde(default)]
+        // Point the derive at the re-exported serde, so crates without a direct
+        // `serde` dependency (e.g. build scripts) can read this constant.
+        #[serde(default, crate = "sov_modules_api::prelude::serde")]
         struct RawChainHashOverride {
             start_height: u64,
             end_height: u64,

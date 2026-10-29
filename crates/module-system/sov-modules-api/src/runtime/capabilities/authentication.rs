@@ -6,21 +6,24 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::Digest;
 use serde::{Deserialize, Serialize};
+use sov_modules_macros::config_value_private;
 use sov_rollup_interface::TxHash;
 use sov_state::User;
 use thiserror::Error;
 
 use crate::capabilities::AuthorizationData;
+use crate::transaction::legacy_v0::{self, DecodedTransaction};
 use crate::transaction::{
-    AuthenticatedTransactionAndRawHash, Transaction, TransactionVerificationError, TxDetails,
+    chain_hash_fragment, AuthenticatedTransactionAndRawHash, Transaction,
+    TransactionVerificationError, TxDetails, Version0,
 };
 #[cfg(feature = "native")]
 use crate::CryptoSpecExt;
 use crate::GetGasPrice;
 use crate::{
-    capabilities, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter, GasMeteringError,
-    MeteredBorshDeserialize, MeteredBorshDeserializeError, MeteredHasher, ProvableStateReader,
-    RawTx, Runtime, Spec, VersionReader,
+    capabilities, metered_decode_from_slice, CryptoSpec, DispatchCall, FullyBakedTx, GasMeter,
+    GasMeteringError, MeteredBorshDeserializeError, MeteredHasher, ProvableStateReader, RawTx,
+    Runtime, Spec, VersionReader,
 };
 
 /// A batch sent by an unregistered sequencer contains only one transaction.
@@ -224,6 +227,14 @@ pub type AuthenticationOutput<S, Decodable> = (
     Decodable,
 );
 
+/// The material from which a non-malleable transaction hash can be derived.
+pub enum ReplayHashMaterial<'a> {
+    /// The raw transaction hash is already non-malleable and can be used directly.
+    AlreadyNonMalleableHash(TxHash),
+    /// The verified message bytes are the non-malleable material and should be hashed.
+    VerifiedSignatureMessage(&'a [u8]),
+}
+
 /// Error variants that can be raised as a [`AuthenticationError::FatalError`].
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Error)]
 #[serde(rename_all = "snake_case")]
@@ -253,6 +264,14 @@ pub enum FatalError {
         expected: String,
         /// The actual chain id
         got: String,
+    },
+    /// The chain hash fragment in the transaction did not match any valid chain hash.
+    #[error("Invalid chain hash fragment: expected one of {expected:?}, got {got}")]
+    InvalidChainHashFragment {
+        /// The valid chain hash fragments.
+        expected: Vec<u64>,
+        /// The transaction-provided chain hash fragment.
+        got: u64,
     },
     /// The chain name was invalid. Not every type of transaction will be able to throw this (some
     /// will just implicitly fail signature checks).
@@ -323,38 +342,56 @@ impl From<AuthenticationError> for UnregisteredAuthenticationError {
     }
 }
 
-/// Verifies that the transaction has the chain ID configured by the runtime
-/// (see [`Runtime::chain_id`]).
-pub fn verify_chain_id<S: Spec, Rt: Runtime<S>>(
+/// Verifies that the transaction has the expected chain hash fragment.
+pub fn verify_chain_hash_fragment<S: Spec>(
     tx_details: &TxDetails<S>,
+    chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
 ) -> Result<(), AuthenticationError> {
-    let expected = Rt::chain_id();
-    if tx_details.chain_id != expected {
-        return Err(AuthenticationError::FatalError(
-            FatalError::InvalidChainId {
-                expected,
-                got: tx_details.chain_id,
-            },
-            raw_tx_hash,
-        ));
-    }
-    Ok(())
+    select_chain_hash(
+        tx_details,
+        &crate::runtime::ResolvedChainHashes {
+            primary: *chain_hash,
+            grace_period_hashes: Vec::new(),
+        },
+        raw_tx_hash,
+    )
+    .map(|_| ())
 }
 
-/// Verifies the transaction signature.
-fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
+/// Selects the full chain hash committed to by a transaction.
+pub fn select_chain_hash<S: Spec>(
+    tx_details: &TxDetails<S>,
+    resolved_hashes: &crate::runtime::ResolvedChainHashes,
+    raw_tx_hash: TxHash,
+) -> Result<[u8; 32], AuthenticationError> {
+    for chain_hash in resolved_hashes.iter() {
+        if tx_details.chain_hash_fragment == chain_hash_fragment(chain_hash) {
+            return Ok(*chain_hash);
+        }
+    }
+
+    Err(AuthenticationError::FatalError(
+        FatalError::InvalidChainHashFragment {
+            expected: resolved_hashes.iter().map(chain_hash_fragment).collect(),
+            got: tx_details.chain_hash_fragment,
+        },
+        raw_tx_hash,
+    ))
+}
+
+/// Charges gas for and verifies the transaction signature(s) over `serialized_tx`, which must be
+/// the signing payload for `chain_hash`.
+fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
     tx: &Transaction<D, S>,
+    serialized_tx: &[u8],
     chain_hash: &[u8; 32],
     raw_tx_hash: TxHash,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<(), AuthenticationError> {
-    let serialized_tx = tx.serialized_with_chain_hash(chain_hash).map_err(|e| {
-        AuthenticationError::FatalError(
-            FatalError::DeserializationFailed(e.to_string()),
-            raw_tx_hash,
-        )
-    })?;
+    // The chain hash is only used as part of the native signature cache key.
+    #[cfg(not(feature = "native"))]
+    let _ = chain_hash;
 
     tx.charge_gas_for_signature(serialized_tx.len(), meter)
         .map_err(|e| match e {
@@ -373,7 +410,7 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     }
 
     let res = tx
-        .verify_signature_unmetered(&serialized_tx)
+        .verify_signature_unmetered(serialized_tx)
         .map_err(|e| match e {
             TransactionVerificationError::GasError(_) => {
                 AuthenticationError::OutOfGas(e.to_string())
@@ -390,12 +427,46 @@ fn verify_signature<S: Spec, D: DispatchCall<Spec = S>>(
     res
 }
 
+/// Calculates the non-malleable hash to use for replay protection.
+pub fn calculate_non_malleable_hash_metered<G: GasMeter<Spec = S>, S: Spec>(
+    material: ReplayHashMaterial<'_>,
+    gas_meter: &mut G,
+) -> Result<TxHash, GasMeteringError<S::Gas>> {
+    match material {
+        ReplayHashMaterial::AlreadyNonMalleableHash(hash) => Ok(hash),
+        ReplayHashMaterial::VerifiedSignatureMessage(message) => {
+            calculate_hash_metered::<G, S>(message, gas_meter)
+        }
+    }
+}
+
+/// Authenticate and verify deserialized sov-tx. See `authenticate`.
+///
+/// # Errors
+/// Returns an error if gas runs out at any point, if deserialization or hashing fails, or if the
+/// signature cannot be verified.
+pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
+    raw_tx_hash: TxHash,
+    tx: Transaction<D, S>,
+    chain_hash: &[u8; 32],
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+    let resolved_hashes = crate::runtime::ResolvedChainHashes {
+        primary: *chain_hash,
+        grace_period_hashes: Vec::new(),
+    };
+    verify_and_decode_tx_multi_hash(raw_tx_hash, tx, resolved_hashes, meter)
+}
+
 /// Authenticate raw sov-transaction.
 ///
 /// This function resolves the appropriate chain hashes for the current block height
 /// using the runtime's configured overrides (including grace periods), falling back to
-/// [`Runtime::CHAIN_HASH`] when no override applies. It tries verification with each
-/// valid hash until one succeeds.
+/// [`Runtime::CHAIN_HASH`] when no override applies. It selects the hash matching the
+/// transaction's chain hash fragment before verifying the signature.
+///
+/// Transactions in the pre-fork V0 encoding are also accepted and authenticated with the pre-fork
+/// rules below `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT`; see [`crate::transaction::legacy_v0`].
 ///
 /// # Errors
 /// Returns an error if gas runs out at any point, if deserialization or hashing fails, or if the
@@ -419,22 +490,23 @@ pub fn authenticate<
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
-    let tx =
-        match <Transaction<Rt, S> as MeteredBorshDeserialize<S>>::deserialize(&mut raw_tx, state) {
-            Ok(ok) => ok,
+    let tx = match metered_decode_from_slice(&mut raw_tx, state, |reader| {
+        legacy_v0::deserialize_transaction_reader::<Rt, S, <S as Spec>::CryptoSpec, _>(reader)
+    }) {
+        Ok(ok) => ok,
 
-            Err(MeteredBorshDeserializeError::GasError(e)) => {
-                return Err(AuthenticationError::OutOfGas(format!(
-                    "Transaction deserialization run out of gas {e}, tx hash {raw_tx_hash}"
-                )))
-            }
-            Err(MeteredBorshDeserializeError::IOError(e)) => {
-                return Err(AuthenticationError::FatalError(
-                    FatalError::DeserializationFailed(e.to_string()),
-                    raw_tx_hash,
-                ));
-            }
-        };
+        Err(MeteredBorshDeserializeError::GasError(e)) => {
+            return Err(AuthenticationError::OutOfGas(format!(
+                "Transaction deserialization run out of gas {e}, tx hash {raw_tx_hash}"
+            )))
+        }
+        Err(MeteredBorshDeserializeError::IOError(e)) => {
+            return Err(AuthenticationError::FatalError(
+                FatalError::DeserializationFailed(e.to_string()),
+                raw_tx_hash,
+            ));
+        }
+    };
 
     // Verify that the transaction is fully deserialized
     if !raw_tx.is_empty() {
@@ -447,44 +519,132 @@ pub fn authenticate<
         ));
     }
 
-    verify_and_decode_tx_multi_hash::<S, Rt>(raw_tx_hash, tx, resolved_hashes, state)
+    match tx {
+        DecodedTransaction::Current(tx) => {
+            verify_and_decode_tx_multi_hash::<S, Rt>(raw_tx_hash, tx, resolved_hashes, state)
+        }
+        DecodedTransaction::LegacyV0(tx_v0) => {
+            let cutoff: u64 = config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
+            if height.get() >= cutoff {
+                return Err(AuthenticationError::FatalError(
+                    FatalError::Other(format!(
+                        "Legacy V0 transactions are disabled at rollup height {} (cutoff {cutoff})",
+                        height.get()
+                    )),
+                    raw_tx_hash,
+                ));
+            }
+            verify_and_decode_legacy_v0_tx(
+                raw_tx_hash,
+                tx_v0,
+                Rt::chain_id(),
+                &resolved_hashes,
+                state,
+            )
+        }
+    }
 }
 
 /// Authenticate and verify deserialized sov-tx with multiple chain hashes.
 ///
-/// Tries verification with the primary hash first, then any grace period hashes.
-/// Returns success on the first hash that verifies successfully.
-fn verify_and_decode_tx_multi_hash<S: Spec, Rt: Runtime<S>>(
+/// Selects the full chain hash by matching the transaction's chain hash fragment
+/// against the hashes valid for this height.
+fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
-    tx: Transaction<Rt, S>,
+    tx: Transaction<D, S>,
     resolved_hashes: crate::runtime::ResolvedChainHashes,
     meter: &mut impl GasMeter<Spec = S>,
-) -> Result<AuthenticationOutput<S, Rt::Decodable>, AuthenticationError> {
-    // Extract auth_data and verify chain_id (these don't depend on chain_hash)
-    let (auth_data, details, runtime_call) = match &tx {
-        Transaction::V0(tx_v0) => {
-            let auth_data = tx_v0.auth_data(raw_tx_hash, meter)?;
-            (auth_data, &tx_v0.details, &tx_v0.runtime_call)
-        }
-        Transaction::V1(tx_v1) => {
-            let auth_data = tx_v1.auth_data(raw_tx_hash, meter)?;
-            (auth_data, &tx_v1.details, &tx_v1.runtime_call)
-        }
+) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+    let (details, runtime_call) = match &tx {
+        Transaction::V0(tx_v0) => (&tx_v0.details, &tx_v0.runtime_call),
+        Transaction::V1(tx_v1) => (&tx_v1.details, &tx_v1.runtime_call),
     };
 
-    verify_chain_id::<S, Rt>(details, raw_tx_hash)?;
+    let chain_hash = select_chain_hash(details, &resolved_hashes, raw_tx_hash)?;
+    let serialized_tx = tx.to_signing_bytes(&chain_hash);
+    verify_signature_over_message(&tx, &serialized_tx, &chain_hash, raw_tx_hash, meter)?;
+    let non_malleable_hash = calculate_non_malleable_hash_metered::<_, S>(
+        match &tx {
+            Transaction::V0(_) => ReplayHashMaterial::AlreadyNonMalleableHash(raw_tx_hash),
+            Transaction::V1(_) => ReplayHashMaterial::VerifiedSignatureMessage(&serialized_tx),
+        },
+        meter,
+    )
+    .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
+    let auth_data = match &tx {
+        Transaction::V0(tx_v0) => tx_v0.auth_data(raw_tx_hash, non_malleable_hash, meter)?,
+        Transaction::V1(tx_v1) => tx_v1.auth_data(raw_tx_hash, non_malleable_hash, meter)?,
+    };
+    let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
+        raw_tx_hash,
+        authenticated_tx: details.clone().into(),
+    };
+    Ok((tx_and_raw_hash, auth_data, runtime_call.clone()))
+}
 
-    // Try signature verification with each valid chain hash
+/// Verifies that a legacy V0 transaction carries the rollup's chain id ([`Runtime::chain_id`]).
+/// Pre-fork transactions commit to it in the details field that now holds the chain hash
+/// fragment, so it is still required to authenticate legacy V0 transactions.
+fn verify_legacy_chain_id<S: Spec>(
+    tx_details: &TxDetails<S>,
+    expected: u64,
+    raw_tx_hash: TxHash,
+) -> Result<(), AuthenticationError> {
+    let got = tx_details.chain_hash_fragment;
+    if got != expected {
+        return Err(AuthenticationError::FatalError(
+            FatalError::InvalidChainId { expected, got },
+            raw_tx_hash,
+        ));
+    }
+    Ok(())
+}
+
+/// Authenticates a V0 transaction in the pre-fork encoding with the pre-fork rules: the
+/// authorization data is extracted, the chain id is checked against `expected_chain_id`, and the
+/// signature is verified over the legacy signing payload against every chain hash valid at this
+/// height, in order, until one succeeds.
+///
+/// The legacy envelope has a single valid encoding (no optional trailing fields), so the raw
+/// transaction hash doubles as the non-malleable hash.
+///
+/// This authentication path must be retained for historical replay during resync. [`authenticate`]
+/// enforces `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT` while preserving this behavior, including gas
+/// charges, below the cutoff. See [`crate::transaction::legacy_v0`] for the compatibility requirements.
+fn verify_and_decode_legacy_v0_tx<S: Spec, D: DispatchCall<Spec = S>>(
+    raw_tx_hash: TxHash,
+    tx: Version0<D, S>,
+    expected_chain_id: u64,
+    resolved_hashes: &crate::runtime::ResolvedChainHashes,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+    let auth_data = tx.auth_data(raw_tx_hash, raw_tx_hash, meter)?;
+    verify_legacy_chain_id(&tx.details, expected_chain_id, raw_tx_hash)?;
+    let details = tx.details.clone();
+
+    let tx = Transaction::V0(tx);
+    verify_legacy_signature_with_any_chain_hash(&tx, resolved_hashes, raw_tx_hash, meter)?;
+
+    let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
+        raw_tx_hash,
+        authenticated_tx: details.into(),
+    };
+    Ok((tx_and_raw_hash, auth_data, tx.into_runtime_call()))
+}
+
+/// Tries the legacy signature check against every valid chain hash (primary first), returning the
+/// last signature failure if none matches.
+fn verify_legacy_signature_with_any_chain_hash<S: Spec, D: DispatchCall<Spec = S>>(
+    tx: &Transaction<D, S>,
+    resolved_hashes: &crate::runtime::ResolvedChainHashes,
+    raw_tx_hash: TxHash,
+    meter: &mut impl GasMeter<Spec = S>,
+) -> Result<(), AuthenticationError> {
     let mut last_error = None;
     for chain_hash in resolved_hashes.iter() {
-        match verify_signature(&tx, chain_hash, raw_tx_hash, meter) {
-            Ok(()) => {
-                let tx_and_raw_hash = AuthenticatedTransactionAndRawHash {
-                    raw_tx_hash,
-                    authenticated_tx: details.clone().into(),
-                };
-                return Ok((tx_and_raw_hash, auth_data, runtime_call.clone()));
-            }
+        let message = legacy_v0::legacy_signing_bytes(tx, chain_hash);
+        match verify_signature_over_message(tx, &message, chain_hash, raw_tx_hash, meter) {
+            Ok(()) => return Ok(()),
             Err(AuthenticationError::FatalError(
                 FatalError::SigVerificationFailed(error),
                 hash,
@@ -497,8 +657,6 @@ fn verify_and_decode_tx_multi_hash<S: Spec, Rt: Runtime<S>>(
             Err(e) => return Err(e),
         }
     }
-
-    // All chain hashes failed - return the last error
     Err(last_error.expect("resolved_hashes always has at least one hash (the primary)"))
 }
 
@@ -534,11 +692,10 @@ pub fn decode_sov_tx<S: Spec, D: DispatchCall<Spec = S>>(
 pub fn decode_sov_tx_with_cryptospec<S: Spec, D: DispatchCall<Spec = S>, C: CryptoSpecExt>(
     mut raw_tx: &[u8],
 ) -> Result<D::Decodable, FatalError> {
-    let tx =
-        <Transaction<D, S, C> as MeteredBorshDeserialize<S>>::unmetered_deserialize(&mut raw_tx)
-            .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
+    let tx = legacy_v0::deserialize_transaction_reader::<D, S, C, _>(&mut raw_tx)
+        .map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
-    Ok(tx.into_runtime_call())
+    Ok(tx.into_transaction().into_runtime_call())
 }
 
 /// Calculates the hash of `data` and charges gas.

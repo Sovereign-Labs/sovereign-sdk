@@ -32,6 +32,9 @@ pub struct ChainStateConfig<S: Spec> {
     /// The height of the first DA block.
     pub genesis_da_height: u64,
 
+    /// The version of Sovereign SDK consensus the rollup will run at genesis.
+    pub state_version: u64,
+
     /// The admin address. This address is allowed to terminate setup mode early.
     #[serde(default)]
     pub admin: Option<S::Address>,
@@ -48,6 +51,7 @@ impl<S: Spec> ChainState<S> {
             current_time = ?config.current_time,
             operating_mode = ?config.operating_mode,
             genesis_da_height = %config.genesis_da_height,
+            state_version = %config.state_version,
             inner_code_commitment = ?config.inner_code_commitment,
             outer_code_commitment = ?config.outer_code_commitment,
             admin = ?config.admin,
@@ -88,6 +92,8 @@ impl<S: Spec> ChainState<S> {
 
         self.genesis_da_height
             .set(&config.genesis_da_height, state)?;
+
+        self.state_version.set(&config.state_version, state)?;
 
         self.slots.set_true_current(
             &SlotInformation::new(

@@ -19,8 +19,8 @@ where
 pub enum KnownTypeId {
     /// The type id of the transaction.
     Transaction = 0,
-    /// The type id of the unsigned transaction.
-    UnsignedTransaction = 1,
+    /// The type id of the transaction signing payload.
+    TransactionSigningPayload = 1,
     /// The type id of the runtime call.
     RuntimeCall = 2,
 }
@@ -29,7 +29,7 @@ impl From<KnownTypeId> for RollupRoots {
     fn from(value: KnownTypeId) -> Self {
         match value {
             KnownTypeId::Transaction => RollupRoots::Transaction,
-            KnownTypeId::UnsignedTransaction => RollupRoots::UnsignedTransaction,
+            KnownTypeId::TransactionSigningPayload => RollupRoots::TransactionSigningPayload,
             KnownTypeId::RuntimeCall => RollupRoots::RuntimeCall,
         }
     }

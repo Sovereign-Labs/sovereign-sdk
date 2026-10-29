@@ -53,7 +53,12 @@ fn test_block_updates() {
             assert_eq!(txs.start, 0);
             assert_eq!(txs.end, 1);
             let block_height = evm
-                .get_block_by_hash(current_block.header().hash(), None, state)
+                .get_block_by_hash(
+                    &Default::default(),
+                    current_block.header().hash(),
+                    None,
+                    state,
+                )
                 .unwrap()
                 .unwrap()
                 .number();

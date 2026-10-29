@@ -46,6 +46,19 @@ export function bytesToHex(bytes: Uint8Array): HexString {
 }
 
 /**
+ * Normalizes a hexadecimal string to the canonical form returned by {@link bytesToHex}.
+ *
+ * This strips an optional `0x` prefix, validates the input, and lowercases all digits.
+ *
+ * @param hex - The hexadecimal string to normalize.
+ * @returns The normalized lowercase hexadecimal string without a `0x` prefix.
+ * @throws {Error} If the input is not valid hexadecimal.
+ */
+export function normalizeHexString(hex: HexString): HexString {
+  return bytesToHex(hexToBytes(hex));
+}
+
+/**
  * Ensures the input is a Uint8Array. If a hex string is provided, it is converted to bytes.
  *
  * @param input - The input value, either a hex string or Uint8Array.

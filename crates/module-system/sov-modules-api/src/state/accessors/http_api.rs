@@ -2,6 +2,7 @@ use std::collections::{BTreeMap, HashMap};
 use std::sync::Arc;
 
 use super::FinalizedSlotPolicy;
+use crate::state::accessors::EventFrontier;
 use crate::ConcurrentStateCheckpoint;
 use crate::GasMeteringError;
 use concread::hashmap::HashMapReadTxn;
@@ -212,13 +213,18 @@ struct CheckpointAndReadTxn<S: Spec> {
     // IMPORTANT: Do not re-order the checkpoint before the read_txn - otherwise the read_txn will potentially  be invalidated for a split second on drop.
     // This is undefined behavior
     state_checkpoint: Arc<ConcurrentStateCheckpoint<S>>,
+    /// The event frontier paired with `read_txn`, captured atomically with it. `None` when the
+    /// checkpoint's producer does not track event numbers.
+    event_frontier: Option<EventFrontier>,
 }
 
 impl<S: Spec> CheckpointAndReadTxn<S> {
     pub fn new(state_checkpoint: Arc<ConcurrentStateCheckpoint<S>>) -> Self {
+        let (event_frontier, read_txn) = state_checkpoint.event_frontier_with_read_txn();
         Self {
-            read_txn: Arc::new(unsafe { Self::lengthen_lifetime(state_checkpoint.writes.read()) }),
+            read_txn: Arc::new(unsafe { Self::lengthen_lifetime(read_txn) }),
             state_checkpoint,
+            event_frontier,
         }
     }
 
@@ -267,6 +273,10 @@ pub struct ApiStateAccessor<S: Spec> {
     // will cause any state *before* 4 to be visible. (Assume that the state checkpoint the accessor is based on contains all the state *of* 4 in memory)
     safe_true_slot_number_to_use: Option<SlotNumber>,
     encountered_pruning_error: Option<anyhow::Error>,
+    // Set only by `ApiStateAccessor::new`, i.e. for reads of the rollup's *latest* state. The
+    // frontier describes the live checkpoint, so it says nothing about an archival or
+    // slot-pinned read; those report `None`.
+    event_frontier: Option<EventFrontier>,
     pub(crate) metrics: StateMetrics,
 }
 
@@ -720,13 +730,34 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         kernel: Arc<dyn KernelWithSlotMapping<S>>,
     ) -> Self {
         let rollup_height = state_checkpoint.rollup_height_to_access();
-        Self::new_with_price_and_state_to_access(
+        let mut accessor = Self::new_with_price_and_state_to_access(
             state_checkpoint,
             kernel,
             StateToAccess::RollupHeight(rollup_height),
             <S::Gas as Gas>::Price::ZEROED,
         )
-        .expect("Creating an ApiStateCheckpoint without specifying a height is infallible")
+        .expect("Creating an ApiStateCheckpoint without specifying a height is infallible");
+        // The frontier was captured atomically with the read transaction, so it is exact for
+        // the state this accessor reads.
+        accessor.event_frontier = accessor.checkpoint_and_read_txn.event_frontier;
+        accessor
+    }
+
+    /// How far event numbering has progressed in the state this accessor reads.
+    ///
+    /// Every event below [`EventFrontier::next_event_number`] is reflected in that state and
+    /// every event at or above it is not — the frontier is captured atomically with the
+    /// accessor's state snapshot, so the pairing is exact.
+    ///
+    /// The [`EventFrontier::epoch`] matters as much as the number: event numbers are reissued when the
+    /// sequencer rewinds, so a number is only meaningful against the epoch it was handed out
+    /// in. Callers comparing a number against a previously observed one must check that the
+    /// epochs match first.
+    ///
+    /// Returns `None` when the accessor does not read the rollup's latest state (archival and
+    /// slot-pinned reads), or when the checkpoint's producer does not track event numbers.
+    pub fn event_frontier(&self) -> Option<EventFrontier> {
+        self.event_frontier
     }
 
     /// Creates a new [`ApiStateAccessor`] which queries all state at the provided slot number.
@@ -858,6 +889,7 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             state_to_access,
             visible_slot_number: None,
             safe_true_slot_number_to_use: None,
+            event_frontier: None,
             encountered_pruning_error: None,
             metrics: StateMetrics::default(),
         };
@@ -917,6 +949,9 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             // permissions vs state confusion in our current design of VersionReader - see the comment inline in get_cached for more details.
             visible_slot_number: Some(VisibleSlotNumber::MAX),
             encountered_pruning_error: None,
+            // Only `ApiStateAccessor::new` reads the rollup's latest state, so only it reports
+            // a frontier; every accessor built from here is archival or slot-pinned.
+            event_frontier: None,
             metrics: StateMetrics::default(),
         }
     }
@@ -1063,6 +1098,8 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
             visible_slot_number: self.visible_slot_number,
             safe_true_slot_number_to_use: self.safe_true_slot_number_to_use,
             encountered_pruning_error: None,
+            // The clone shares `checkpoint_and_read_txn`, so it reads the same snapshot.
+            event_frontier: self.event_frontier,
             metrics: StateMetrics::default(),
         }
     }

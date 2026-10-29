@@ -152,30 +152,41 @@ impl<C: CryptoHelper> CryptoSpecExt for C {}
 /// Sequencer-provided data plus native-only execution scratchpad.
 #[derive(Clone, Debug)]
 pub struct SequencingContext {
+    /// Timestamp attached by the preferred sequencer.
+    timestamp: Option<crate::HDTimestamp>,
+    /// Serialized format-specific data payload.
     data: Option<Bytes>,
     #[cfg(feature = "native")]
     scratchpad: SequencingScratchpad,
 }
 
 impl SequencingContext {
-    /// Creates a new sequencing context.
+    /// Creates a new sequencing context, decoding the raw sequencing data attached to the
+    /// transaction. Undecodable sequencing data is treated as absent; this keeps execution
+    /// deterministic across all node types for garbage submitted by a malicious sequencer.
     #[must_use]
-    pub fn new(data: Option<Bytes>) -> Self {
+    pub(crate) fn new(raw_data: Option<Bytes>) -> Self {
+        let decoded = raw_data.and_then(|bytes| match crate::SequencingData::decode(&bytes) {
+            Ok(decoded) => Some(decoded),
+            Err(error) => {
+                tracing::warn!(%error, "Failed to decode sequencing data; treating it as absent");
+                None
+            }
+        });
+        let (timestamp, data) = decoded
+            .map(|decoded| (decoded.timestamp, decoded.data))
+            .unwrap_or_default();
         Self {
+            timestamp,
             data,
             #[cfg(feature = "native")]
             scratchpad: SequencingScratchpad::default(),
         }
     }
-
-    /// Returns the sequencing data.
-    pub fn data(&self) -> &Option<Bytes> {
-        &self.data
-    }
 }
 
 #[cfg(feature = "native")]
-pub use native_sequencing::SequencingScratchpad;
+pub use native_sequencing::{SequencingScratchpad, SequencingScratchpadContents};
 
 /// The context in which a transaction executes
 
@@ -215,9 +226,50 @@ impl<S: Spec> Context<S> {
         &self.sequencer_da_address
     }
 
-    /// Returns the sequencing data
-    pub fn sequencing_data(&self) -> &Option<Bytes> {
-        self.sequencing.data()
+    /// Returns `true` if the transaction carries sequencing data, i.e. a timestamp or a data
+    /// payload.
+    ///
+    /// Only preferred-sequencer transactions carry sequencing data; data attached by any other
+    /// sequencer is discarded at context construction. There is deliberately no accessor for
+    /// the raw sequencing data: in-execution reads of the data payload must go through the
+    /// access-recording [`Self::sequencing_data_view`], since unrecorded reads are invisible
+    /// to sequencing data pruning and would make the published transaction replay differently
+    /// on other nodes.
+    pub fn has_sequencing_data(&self) -> bool {
+        self.sequencing.timestamp.is_some() || self.sequencing.data.is_some()
+    }
+
+    /// Returns the timestamp the sequencer attached to the transaction, if any.
+    pub fn sequencing_timestamp(&self) -> Option<crate::HDTimestamp> {
+        self.sequencing.timestamp
+    }
+
+    /// Returns a typed view over the format-specific sequencing data.
+    ///
+    /// `F` must be the runtime's configured
+    /// [`HasSequencingData::SequencingData`](crate::capabilities::HasSequencingData::SequencingData)
+    /// format. Recorded accesses are decoded with that format when the sequencer prunes the
+    /// published transaction, so reads through a view with any other format break pruning: the
+    /// sequencer then publishes the full unpruned payload (and logs a warning) on every
+    /// transaction whose scratchpad contains a foreign key.
+    pub fn sequencing_data_view<F>(&self) -> crate::capabilities::SequencingDataView<'_, F>
+    where
+        F: crate::capabilities::SequencingDataFormat,
+    {
+        let data = self.sequencing.data.as_ref();
+
+        #[cfg(feature = "native")]
+        {
+            crate::capabilities::SequencingDataView::with_scratchpad(
+                data,
+                self.sequencing.scratchpad(),
+            )
+        }
+
+        #[cfg(not(feature = "native"))]
+        {
+            crate::capabilities::SequencingDataView::new(data)
+        }
     }
 
     /// Returns the rollup address which will receive any gas refund from the transaction.
@@ -278,6 +330,17 @@ impl<S: Spec> Context<S> {
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
     ) -> Self {
+        // Sequencing data is only trusted from the preferred sequencer; discard it for every
+        // other sequencer type so that neither pre-dispatch hooks nor in-transaction reads
+        // (e.g. precompiles) can observe untrusted sequencing data. This is deterministic
+        // across all node types: `sequencer_type` is derived from the on-chain sequencer
+        // registry, so replaying nodes classify each batch identically to the sequencer that
+        // published it.
+        let sequencing_data = match sequencer_type {
+            SequencerType::Preferred => sequencing_data,
+            SequencerType::NonPreferred => None,
+        };
+
         Self {
             sender_credentials,
             sender,
@@ -300,50 +363,53 @@ impl<S: Spec> Context<S> {
 mod native_sequencing {
     use std::sync::{Arc, Mutex};
 
-    use sov_rollup_interface::Bytes;
+    /// Native-only scratchpad contents for sequencing data access tracking.
+    pub type SequencingScratchpadContents = std::collections::BTreeSet<Vec<u8>>;
 
-    /// Native-only scratchpad for recording data while finalizing sequencing metadata.
+    /// Native-only scratchpad for recording sequencing data keys accessed during execution.
     #[derive(Clone, Debug, Default)]
     pub struct SequencingScratchpad {
-        inner: Arc<Mutex<Option<Bytes>>>,
+        inner: Arc<Mutex<SequencingScratchpadContents>>,
     }
 
     impl SequencingScratchpad {
-        /// Replaces the scratchpad contents.
-        pub fn set(&self, value: Bytes) {
-            self.with_value(|slot| *slot = Some(value));
-        }
-
-        /// Takes the scratchpad contents, leaving it empty.
-        pub fn take(&self) -> Option<Bytes> {
-            self.with_value(Option::take)
-        }
-
-        /// Mutates the scratchpad contents under the scratchpad lock.
-        pub fn with_value<R>(&self, f: impl FnOnce(&mut Option<Bytes>) -> R) -> R {
+        /// Records a serialized sequencing data key.
+        pub(crate) fn insert(&self, value: Vec<u8>) {
             let mut guard = self
                 .inner
                 .lock()
                 .expect("sequencing scratchpad mutex was poisoned");
-            f(&mut guard)
+            guard.insert(value);
+        }
+
+        /// Takes the scratchpad contents, leaving it empty.
+        pub(crate) fn take(&self) -> SequencingScratchpadContents {
+            let mut guard = self
+                .inner
+                .lock()
+                .expect("sequencing scratchpad mutex was poisoned");
+            std::mem::take(&mut *guard)
         }
     }
 
     impl super::SequencingContext {
         /// Returns the native sequencing scratchpad.
-        pub fn scratchpad(&self) -> super::SequencingScratchpad {
+        pub(crate) fn scratchpad(&self) -> super::SequencingScratchpad {
             self.scratchpad.clone()
         }
     }
 
     impl<S: super::Spec> super::Context<S> {
-        /// Returns the native sequencing scratchpad.
-        pub fn sequencing_scratchpad(&self) -> super::SequencingScratchpad {
-            self.sequencing.scratchpad()
-        }
-
-        /// Takes the native sequencing scratchpad contents.
-        pub fn take_sequencing_scratchpad(&self) -> Option<Bytes> {
+        /// Takes the native sequencing scratchpad contents, i.e. the record of sequencing data
+        /// keys accessed so far during this transaction's execution.
+        ///
+        /// This is an SDK-internal API: the STF blueprint calls it exactly once, after the
+        /// transaction has executed, to drive sequencing data pruning. Calling it from anywhere
+        /// else erases the access record mid-execution, which causes the sequencer to prune
+        /// data its own execution actually read and to diverge from nodes replaying the
+        /// published transaction.
+        #[doc(hidden)]
+        pub fn take_sequencing_scratchpad(&self) -> super::SequencingScratchpadContents {
             self.sequencing.scratchpad().take()
         }
     }

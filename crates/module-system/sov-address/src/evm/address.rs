@@ -155,7 +155,30 @@ mod tests {
     use sov_test_utils::{MockDaSpec, MockZkvm};
 
     use super::*;
+
     type S = ConfigurableSpec<MockDaSpec, MockZkvm, MockZkvm, MultiAddressEvm, Native>;
+
+    #[test]
+    fn credential_from_evm_address_stays_standard() {
+        let eth_addr =
+            EthereumAddress::from_str("0x71334bf1710D12c9f689cC819476fA589F08C64C").unwrap();
+        let cred = eth_addr.as_credential_id();
+        let back: MultiAddressEvm = cred.into();
+        assert_eq!(
+            back,
+            MultiAddressEvm::Standard(sov_modules_api::Address::from(cred))
+        );
+    }
+
+    #[test]
+    fn credential_from_native_hash_stays_standard() {
+        let cred = CredentialId::from_bytes([0x42; 32]);
+        let back: MultiAddressEvm = cred.into();
+        assert_eq!(
+            back,
+            MultiAddressEvm::Standard(sov_modules_api::Address::from(cred))
+        );
+    }
 
     #[test]
     fn test_serde_json_multi_address_evm_vm() {

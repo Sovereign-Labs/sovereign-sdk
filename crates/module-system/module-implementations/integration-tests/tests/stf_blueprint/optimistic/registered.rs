@@ -1,7 +1,6 @@
 use std::env;
 
 use sov_mock_da::MockBlob;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::PriorityFeeBips;
 use sov_modules_api::{
     BlobReaderTrait, Gas, GasArray, GasSpec, GasUnit, Rewards, Spec, TransactionReceipt, TxEffect,
@@ -36,7 +35,7 @@ fn check_txs(tx_statuses: Vec<TxStatus>, priority_fee_bips: PriorityFeeBips) {
         runner.config.sequencer_da_address,
     );
     // The gas amount burned by the sequencer to submit the blob. See #2491
-    let seq_burn_gas = <S as GasSpec>::gas_to_charge_per_byte_borsh_deserialization()
+    let seq_burn_gas = <S as GasSpec>::gas_to_charge_per_byte_borsh_read()
         .checked_scalar_product(mock_blob.total_len() as u64)
         .unwrap();
 
@@ -203,7 +202,7 @@ fn non_existing_seq_da_tests() {
 #[test]
 fn sequencer_run_out_of_gas() {
     env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_DEFAULT_GAS_TO_CHARGE_PER_BYTE_BORSH_DESERIALIZATION",
+        "SOV_TEST_CONST_OVERRIDE_BORSH_PER_BYTE_READ",
         "[100000, 100000]",
     );
 
@@ -216,7 +215,7 @@ fn sequencer_run_out_of_gas() {
 #[test]
 fn slot_out_of_gas_tests() {
     env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_INITIAL_GAS_LIMIT",
+        "SOV_TEST_CONST_OVERRIDE_BLOCK_GAS_LIMIT",
         "[10000000000, 10000000000]",
     );
     let priority_fee_bips = PriorityFeeBips::from_percentage(5);
@@ -235,7 +234,7 @@ fn slot_out_of_gas_tests() {
         10,
         priority_fee_bips,
         &actors.admin_account,
-        config_value!("CHAIN_ID"),
+        &<IntegTestRuntime<S> as sov_modules_api::Runtime<S>>::CHAIN_HASH,
         encode_message::<IntegTestRuntime<S>>(Some(gas)),
     );
 

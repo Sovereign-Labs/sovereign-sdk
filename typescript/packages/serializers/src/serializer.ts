@@ -9,8 +9,8 @@ export type RollupSchema = Record<string, any>;
 export enum KnownTypeId {
   /** The type id of the transaction. */
   Transaction = 0,
-  /** The type id of the unsigned transaction. */
-  UnsignedTransaction = 1,
+  /** The type id of the transaction signing payload. */
+  TransactionSigningPayload = 1,
   /** The type id of the runtime call. */
   RuntimeCall = 2,
 }
@@ -75,15 +75,15 @@ export abstract class Serializer {
   }
 
   /**
-   * Serialize an unsigned transaction to Borsh bytes.
+   * Serialize a transaction signing payload to Borsh bytes.
    *
-   * @param input - The unsigned transaction to serialize.
+   * @param input - The transaction signing payload to serialize.
    * @returns The serialized Borsh bytes.
    */
-  serializeUnsignedTx(input: unknown): Uint8Array {
+  serializeSigningPayload(input: unknown): Uint8Array {
     return this.serialize(
       input,
-      this.lookupKnownTypeIndex(KnownTypeId.UnsignedTransaction),
+      this.lookupKnownTypeIndex(KnownTypeId.TransactionSigningPayload),
     );
   }
 

@@ -2,8 +2,8 @@ use pyo3::exceptions::PyValueError;
 use pyo3::types::PyDict;
 use pyo3::{prelude::*, types::PyType};
 use sovereign_web3::schema::{
-    default_uniqueness, Serializer, Transaction, TxDetails, UniquenessData, UnsignedTransaction,
-    DEFAULT_MAX_FEE, DEFAULT_MAX_PRIORITY_FEE_BIPS,
+    chain_hash_fragment, default_uniqueness, Serializer, Transaction, TxDetails, UniquenessData,
+    UnsignedTransaction, DEFAULT_MAX_FEE, DEFAULT_MAX_PRIORITY_FEE_BIPS,
 };
 
 #[pyclass(name = "Serializer")]
@@ -35,12 +35,20 @@ impl PySerializer {
         Ok(hash.to_vec())
     }
 
-    fn serialize_unsigned_tx(&self, unsigned_tx: &PyUnsignedTransaction) -> PyResult<Vec<u8>> {
-        let bytes = self
+    fn chain_hash_fragment(&self) -> PyResult<u64> {
+        let hash = self
             .inner
-            .serialize_unsigned_tx(&unsigned_tx.inner)
+            .chain_hash()
+            .map_err(|e| PyValueError::new_err(format!("Failed to get chain hash: {e}")))?;
+        Ok(chain_hash_fragment(&hash))
+    }
+
+    fn serialize_signing_payload(&self, unsigned_tx: &PyUnsignedTransaction) -> PyResult<Vec<u8>> {
+        let bytes = unsigned_tx
+            .inner
+            .bytes_for_signing(&self.inner)
             .map_err(|e| {
-                PyValueError::new_err(format!("Failed to serialize unsigned transaction: {e}"))
+                PyValueError::new_err(format!("Failed to serialize signing payload: {e}"))
             })?;
         Ok(bytes)
     }
@@ -62,9 +70,9 @@ struct PyTxDetails {
 #[pymethods]
 impl PyTxDetails {
     #[new]
-    #[pyo3(signature = (chain_id, max_fee=DEFAULT_MAX_FEE, max_priority_fee_bips=DEFAULT_MAX_PRIORITY_FEE_BIPS, gas_limit=None))]
+    #[pyo3(signature = (chain_hash_fragment, max_fee=DEFAULT_MAX_FEE, max_priority_fee_bips=DEFAULT_MAX_PRIORITY_FEE_BIPS, gas_limit=None))]
     fn new(
-        chain_id: u64,
+        chain_hash_fragment: u64,
         max_fee: u128,
         max_priority_fee_bips: u64,
         gas_limit: Option<Vec<u64>>,
@@ -74,19 +82,19 @@ impl PyTxDetails {
                 max_priority_fee_bips,
                 max_fee,
                 gas_limit,
-                chain_id,
+                chain_hash_fragment,
             },
         }
     }
 
     #[getter]
-    fn get_chain_id(&self) -> u64 {
-        self.inner.chain_id
+    fn get_chain_hash_fragment(&self) -> u64 {
+        self.inner.chain_hash_fragment
     }
 
     #[setter]
-    fn set_chain_id(&mut self, chain_id: u64) {
-        self.inner.chain_id = chain_id;
+    fn set_chain_hash_fragment(&mut self, chain_hash_fragment: u64) {
+        self.inner.chain_hash_fragment = chain_hash_fragment;
     }
 
     #[getter]
@@ -118,11 +126,12 @@ struct PyUnsignedTransaction {
 #[pymethods]
 impl PyUnsignedTransaction {
     #[new]
-    #[pyo3(signature = (runtime_call, details, uniqueness=None))]
+    #[pyo3(signature = (runtime_call, details, uniqueness=None, address_override=None))]
     fn new(
         runtime_call: &Bound<'_, PyDict>,
         details: &PyTxDetails,
         uniqueness: Option<&PyUniquenessData>,
+        address_override: Option<String>,
     ) -> PyResult<Self> {
         let call: serde_json::Value = pythonize::depythonize(runtime_call).map_err(|e| {
             PyValueError::new_err(format!("Failed to convert runtime_call dict to JSON: {e}"))
@@ -139,6 +148,7 @@ impl PyUnsignedTransaction {
             runtime_call: call,
             uniqueness,
             details: details.inner.clone(),
+            address_override,
         };
 
         Ok(PyUnsignedTransaction { inner: unsigned_tx })

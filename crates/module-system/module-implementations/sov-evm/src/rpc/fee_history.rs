@@ -41,6 +41,7 @@ where
         block_count: u64,
         newest_block: BlockNumberOrTag,
         reward_percentiles: Option<&[f64]>,
+        head_view: super::HeadView,
         state: &mut ApiStateAccessor<S>,
     ) -> Result<FeeHistory, EthApiError> {
         if block_count == 0 {
@@ -64,9 +65,13 @@ where
             }
         }
 
-        let end_block_number = self.resolve_block_number(newest_block, state);
+        let end_block_number = self.resolve_block_number(newest_block, head_view, state);
         let start_block_number = end_block_number.saturating_sub(block_count - 1);
-        let pending_block = self.pending_block(None, state);
+        let pending_block = match head_view {
+            super::HeadView::WithPending => self.pending_block(None, state),
+            // The next block's base fee is still reported, estimated from the newest sealed block.
+            super::HeadView::SealedOnly => None,
+        };
         let sealed_block_numbers = self.block_numbers(state);
         let last_allowed_block_number = pending_block
             .as_ref()
@@ -125,9 +130,6 @@ where
         let mut gas_limits = Vec::with_capacity(block_count);
         let mut used_pending_block = false;
         for n in start_block..=end_block {
-            // The gas limits for each block can be computed statically since they don't depend on the gas used.
-            gas_limits.push(S::gas_limit_for_height(RollupHeight::new(n)).as_ref()[0]);
-
             // For all the blocks in the requested range that are already sealed, we can just take the base fee and gas used from the block.
             if sealed_block_numbers.contains(&n) {
                 let block = self
@@ -136,6 +138,10 @@ where
                     .expect("Block was checked to be in range and doesn't exist. This is a bug.");
                 base_fees.push(block.base_fee());
                 gas_used.push(block.gas_used());
+                // Use the block's own stored gas limit (the value `eth_getBlockByNumber` reports) so
+                // that `gasUsedRatio` stays correct for historical blocks even if the gas limit ever
+                // differs from the current one.
+                gas_limits.push(block.header.gas_limit);
                 continue;
             }
 
@@ -167,10 +173,12 @@ where
                 0
             };
             gas_used.push(pending_gas_used);
+            gas_limits.push(pending_block.partial_header().gas_limit);
         }
 
         // Finally, eth_feeHistory always returns info for one block after the last one requested, so we need to compute the base fee for the next block.
-        let gas_limit: u64 = S::gas_limit_for_height(RollupHeight::new(end_block)).as_ref()[0];
+        // This is the *next* (not-yet-produced) block, so the current gas limit is the right value to estimate with.
+        let gas_limit: u64 = S::block_gas_limit().as_ref()[0];
         let actual_parent_gas_usage = gas_used
             .last()
             .expect("At least one gas used must have been collected");

@@ -102,6 +102,20 @@ pub struct SubmitBlobReceipt<T: Debug + Clone> {
     pub da_transaction_id: T,
 }
 
+/// Whether this node is the one allowed to submit blobs through the [`DaService`].
+///
+/// Set at startup by the sequencer through [`DaService::set_write_role`], so a DA
+/// service that has to coordinate with other nodes (for example one sharing a single
+/// store between a leader and its replicas) is told whether it may write rather than
+/// having to work that out itself.
+#[derive(Copy, Clone, Debug, PartialEq, Eq)]
+pub enum DaWriteRole {
+    /// This node produces batches and submits them to the DA layer.
+    Writer,
+    /// This node only reads from the DA layer; another node is the writer.
+    ReadOnly,
+}
+
 /// A DaService is the local side of an RPC connection talking to a node of the DA layer
 /// It is *not* part of the logic that is zk-proven.
 ///
@@ -243,6 +257,21 @@ pub trait DaService: Clone + Send + Sync + 'static {
     async fn take_background_join_handle(&self) -> Option<sov_shutdown::BackgroundHandle<()>> {
         None
     }
+
+    /// Tells the service whether this node is allowed to submit blobs.
+    ///
+    /// Called by the sequencer as soon as it has resolved its role, before any task that
+    /// submits blobs is started. The service has already been created by then and may be
+    /// serving reads. A service that only talks to an external DA network can ignore this;
+    /// one whose writes must be coordinated between nodes should only write while the role
+    /// is [`DaWriteRole::Writer`].
+    ///
+    /// The full node holds several clones of the service and makes this call on only one
+    /// of them, so an implementation must keep the role in state shared across clones
+    /// (for example behind an `Arc`) rather than in a per-clone field.
+    ///
+    /// May be called again if the role changes while the node is running.
+    async fn set_write_role(&self, _role: DaWriteRole) {}
 
     /// Returns a [`DaSpec::Address`] that signs blobs submitted by this instance of [`DaService`].
     /// If `None` means that instance of DaService is not capable of sending blobs and can be used only in node mode.

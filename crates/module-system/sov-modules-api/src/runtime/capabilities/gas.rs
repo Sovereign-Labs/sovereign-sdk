@@ -63,7 +63,7 @@ pub trait GasEnforcer<S: Spec> {
     fn reward_prover(
         &mut self,
         prover_rewards: &ProverReward,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         tx_scratchpad: &mut impl InfallibleStateAccessor,
     );
 
@@ -92,7 +92,7 @@ pub trait GasEnforcer<S: Spec> {
         &mut self,
         funds_used: Amount,
         sequencer: &S::Address,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         tx_scratchpad: &mut impl InfallibleStateAccessor,
     ) -> anyhow::Result<()>;
 

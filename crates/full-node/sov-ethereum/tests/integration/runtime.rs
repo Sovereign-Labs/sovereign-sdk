@@ -2,6 +2,7 @@
 use std::str::FromStr;
 
 use sov_address::{EthereumAddress, FromVmAddress, MultiAddressEvm};
+use sov_evm::precompiles::BankBalancePrecompile;
 use sov_evm::{Evm, EvmAuthenticatorInput};
 use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::capabilities::TransactionAuthenticator;
@@ -29,9 +30,11 @@ pub type EvmTestSpec = ConfigurableSpec<
     TestStorage,
 >;
 
+// The EVM includes a custom precompile so RPC paths can be tested against the runtime's
+// precompile set. It is only enabled if the genesis config enables it.
 generate_runtime! {
     name: TestRuntime,
-    modules: [evm: Evm<S>, paymaster: Paymaster<S>],
+    modules: [evm: Evm<S, BankBalancePrecompile<S>>, paymaster: Paymaster<S>],
     operating_mode: OperatingMode::Optimistic,
     minimal_genesis_config_type: sov_test_utils::runtime::genesis::optimistic::MinimalOptimisticGenesisConfig<S>,
     gas_enforcer: paymaster: Paymaster<S>,
@@ -54,6 +57,17 @@ where
     }
 }
 
+impl<S: Spec> sov_evm::HasEvm<S> for TestRuntime<S>
+where
+    S::Address: FromVmAddress<EthereumAddress>,
+{
+    type EvmPrecompiles = BankBalancePrecompile<S>;
+
+    fn evm(&self) -> &Evm<S, Self::EvmPrecompiles> {
+        &self.evm
+    }
+}
+
 /// Injects EVM JSON-RPC endpoints (eth_*) into the test rollup.
 #[derive(Default)]
 pub struct EvmAdditionalApis;
@@ -65,6 +79,7 @@ where
     R: RuntimeTrait<S>
         + sov_modules_api::capabilities::HasKernel<S>
         + sov_evm::EthereumAuthenticator<S>
+        + sov_evm::HasEvm<S>
         + Default
         + Send
         + Sync

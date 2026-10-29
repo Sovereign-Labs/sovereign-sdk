@@ -141,6 +141,7 @@ where
         AcceptedTx {
             tx,
             tx_hash,
+            credential_id: None,
             confirmation: EmptyConfirmation {},
         }
     }

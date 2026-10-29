@@ -207,6 +207,24 @@ pub struct Evm<S: Spec, P: precompiles::EvmPrecompileSet<S> = precompiles::NoCus
     pub(crate) enabled_custom_precompiles: StateValue<BTreeSet<Address>, BcsCodec>,
 }
 
+/// Implemented by runtimes that include the EVM module, exposing its custom precompile set.
+///
+/// Node components outside the runtime (e.g. `sov-ethereum`'s RPC handlers) use this to
+/// simulate EVM execution with the same custom precompile set as the runtime.
+pub trait HasEvm<S: Spec> {
+    /// The custom precompile set of the runtime's EVM module, i.e. `P` in its `Evm<S, P>` field.
+    type EvmPrecompiles: precompiles::EvmPrecompileSet<S>;
+
+    /// Returns the runtime's EVM module field.
+    ///
+    /// This method is not called by the SDK. It exists so that implementing it (by returning
+    /// the runtime's EVM module field) fails to compile unless [`Self::EvmPrecompiles`] matches
+    /// the precompile set the runtime actually executes with. A mismatch would otherwise compile
+    /// silently and make RPC simulations (e.g. `eth_estimateGas`) run without the runtime's
+    /// custom precompiles.
+    fn evm(&self) -> &Evm<S, Self::EvmPrecompiles>;
+}
+
 /// The top-level error type for all EVM module operations.
 ///
 /// This enum wraps all specific error types that can occur during different
@@ -306,6 +324,8 @@ where
     where
         Reader: StateReader<User, Error = E>,
     {
+        // Keep this read unconditional so changing the compiled precompile set does not change gas.
+        // Its cost depends only on the enabled set stored in state.
         let enabled_custom_precompiles = self.enabled_custom_precompile_addresses(state)?;
         Ok(precompiles::SovPrecompileProvider::new(
             P::default(),
@@ -321,15 +341,6 @@ where
     where
         Reader: StateReader<User, Error = E>,
     {
-        // When the runtime has no compiled-in custom precompiles, the enabled set can never have
-        // any effect: a custom precompile is only ever activated if it is also present in
-        // `P::ADDRESSES` (see `SovPrecompileProvider::custom_precompile_enabled`). Skip the state
-        // read entirely in that case.
-        // This both avoids a tiny bit of extra gas usage for rollups not using custom precompiles,
-        // and provides backwards compatibility for existing pre-precompile rollups.
-        if P::ADDRESSES.is_empty() {
-            return Ok(BTreeSet::new());
-        }
         Ok(self
             .enabled_custom_precompiles
             .get(state)?

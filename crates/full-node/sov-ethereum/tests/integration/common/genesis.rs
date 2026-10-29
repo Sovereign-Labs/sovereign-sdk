@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::str::FromStr;
 
 use alloy::signers::local::PrivateKeySigner;
@@ -66,6 +67,8 @@ pub struct GenesisOptions {
     /// Initial base fee for the first EVM block. Defaults to 10 (mirrors `evm.json`).
     pub initial_base_fee: u64,
     pub paymaster_kind: PaymasterKind,
+    /// Custom EVM precompiles to enable at genesis. Defaults to none.
+    pub enabled_custom_precompiles: BTreeSet<Address>,
 }
 
 impl Default for GenesisOptions {
@@ -75,6 +78,7 @@ impl Default for GenesisOptions {
             contract_creation_policy: None,
             initial_base_fee: 10,
             paymaster_kind: PaymasterKind::None,
+            enabled_custom_precompiles: BTreeSet::new(),
         }
     }
 }
@@ -137,7 +141,7 @@ pub fn build_genesis(opts: GenesisOptions) -> TestGenesis {
             .contract_creation_policy
             .clone()
             .unwrap_or(ContractCreationPolicy::Everyone),
-        enabled_custom_precompiles: Default::default(),
+        enabled_custom_precompiles: opts.enabled_custom_precompiles.clone(),
         admin: admin_address,
     };
 

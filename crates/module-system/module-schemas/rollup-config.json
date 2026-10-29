@@ -291,6 +291,13 @@
           "$ref": "#/$defs/CorsConfiguration",
           "default": "permissive"
         },
+        "max_rpc_response_body_size": {
+          "description": "Maximum size in bytes of a single JSON-RPC response. Requests whose response would\nexceed this fail with a \"Response is too big\" error. Defaults to 10 MiB.",
+          "type": "integer",
+          "format": "uint32",
+          "default": 10485760,
+          "minimum": 0
+        },
         "public_address": {
           "description": "The fully qualified public name of the server, in case the rollup node is running behind a proxy.\nFor instance:\n```toml\npublic_address = \"https://rollup.example.com\"\n```",
           "type": [
@@ -955,7 +962,7 @@
           "minimum": 0
         },
         "kernel_hashtable_buckets": {
-          "description": "Cannot be changed for the existing database.\nMore details at [`Options::hashtable_buckets`]",
+          "description": "Can be increased for an existing database, but cannot be decreased.\nMore details at [`Options::hashtable_buckets`]",
           "type": [
             "integer",
             "null"
@@ -998,14 +1005,21 @@
           ]
         },
         "ledger_db_path": {
-          "description": "Optional custom path for the ledger database.\n\nWhen set, ledger DB data is stored at this path. When not set, the ledger DB is stored\nunder [`RollupDbConfig::path`] (the existing behavior).",
+          "description": "Exact directory for the ledger database. Defaults to `path/ledger`.\nRelative paths are resolved from the process working directory.",
+          "type": [
+            "string",
+            "null"
+          ]
+        },
+        "live_db_path": {
+          "description": "Exact directory for the live state database. Defaults to `path/state-db`.\nRelative paths are resolved from the process working directory.",
           "type": [
             "string",
             "null"
           ]
         },
         "path": {
-          "description": "Path where all databases are stored",
+          "description": "Default parent directory for databases without a path override.",
           "type": "string"
         },
         "pruner": {
@@ -1032,7 +1046,7 @@
           "minimum": 0
         },
         "user_hashtable_buckets": {
-          "description": "Value is determined by the expected size of the state. Recommended to start with 15_000_000.\nCannot be changed for the existing database.\nMore details at [`Options::hashtable_buckets`]",
+          "description": "Value is determined by the expected size of the state. Recommended to start with 15_000_000.\nCan be increased for an existing database, but cannot be decreased.\nMore details at [`Options::hashtable_buckets`]",
           "type": [
             "integer",
             "null"
@@ -1048,6 +1062,13 @@
           ],
           "format": "uint",
           "minimum": 0
+        },
+        "user_nomt_db_path": {
+          "description": "Exact directory for the user NOMT database. Defaults to `path/user_nomt_db`.\nRelative paths are resolved from the process working directory.",
+          "type": [
+            "string",
+            "null"
+          ]
         },
         "user_page_cache_size": {
           "description": "Page cache size for user state.\nMore details at [`Options::page_cache_size`]",
@@ -1079,12 +1100,6 @@
       "required": [
         "path"
       ]
-    },
-    "RollupHeight": {
-      "description": "A rollup \"block number\". Rollup heights increase in order (1, 2, 3, ...),\nregardless of what happens on the underlying DA layer.",
-      "type": "integer",
-      "format": "uint64",
-      "minimum": 0
     },
     "RpcAggregationConfig": {
       "description": "Configuration for in-process aggregation of JSON-RPC call statistics.",
@@ -1295,10 +1310,6 @@
         "default_limits": {
           "description": "Default limits.",
           "$ref": "#/$defs/Limits"
-        },
-        "height_for_gas_limit_computation": {
-          "description": "Rate limiting on gas is currently disabled, so this param has no impact on runtime behavior.\n\nThis height is used to statically compute the gas limit for the rate limiter. (If this value is less than or equal to CHANGE_GAS_LIMIT_AFTER_HEIGHT in constants.toml,\nthe gas limit will *always* be computed using the initial gas limit for rate limiting. If it is greater, the gas limit will be computed using the updated gas limit.)\nEven after rate limiting based on gas is enabled, you can safely change this param at any time since it only impacts off-chain code.",
-          "$ref": "#/$defs/RollupHeight"
         },
         "ip_custom_limits": {
           "description": "Per-network rate limits. Accepts CIDR notation (`10.0.0.0/8`) or a bare\nIP address (`192.168.1.5`); a bare address is treated as a host network\n(`/32` for IPv4, `/128` for IPv6).",

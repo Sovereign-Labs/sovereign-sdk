@@ -6,7 +6,7 @@ use crate::config::RollupDbConfig;
 use crate::metrics::nomt::{MerklizedCommitMetric, NomtBeginSessionMetric, NomtDbMetric};
 use anyhow::Context;
 use nomt::hasher::BinaryHasher;
-use nomt::{Nomt, Overlay, SessionParams, WitnessMode};
+use nomt::{Nomt, Options, Overlay, SessionParams, WitnessMode};
 pub use rockbound::versioned_db::HistoricalValueError;
 use sov_rollup_interface::reexports::digest;
 
@@ -25,15 +25,38 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
     pub fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         tracing::debug!(options = ?config, "Opening NOMT");
 
-        let kernel = {
-            let opts = config.get_kernel_options();
-            Nomt::<BinaryHasher<H>>::open(opts)?
-        };
+        let kernel = Nomt::<BinaryHasher<H>>::open(config.get_kernel_options())?;
+        let user = Nomt::<BinaryHasher<H>>::open(config.get_user_options())?;
 
-        let user = {
-            let opts = config.get_user_options();
-            Nomt::<BinaryHasher<H>>::open(opts)?
-        };
+        let kernel_buckets =
+            check_nomt_hashtable_buckets(KERNEL, &kernel, config.kernel_hashtable_buckets())?;
+        let user_buckets =
+            check_nomt_hashtable_buckets(USER, &user, config.user_hashtable_buckets())?;
+
+        if kernel_buckets.needs_growth() || user_buckets.needs_growth() {
+            drop(kernel);
+            drop(user);
+
+            if kernel_buckets.needs_growth() {
+                grow_nomt_hashtable(KERNEL, kernel_buckets, config.get_kernel_options())?;
+            }
+            if user_buckets.needs_growth() {
+                grow_nomt_hashtable(USER, user_buckets, config.get_user_options())?;
+            }
+
+            let kernel = open_nomt_after_hashtable_growth(
+                KERNEL,
+                config.kernel_hashtable_buckets(),
+                config.get_kernel_options(),
+            )?;
+            let user = open_nomt_after_hashtable_growth(
+                USER,
+                config.user_hashtable_buckets(),
+                config.get_user_options(),
+            )?;
+
+            return Ok(Self { user, kernel });
+        }
 
         Ok(Self { user, kernel })
     }
@@ -116,6 +139,80 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
             tracker.submit(kernel_metrics);
         });
     }
+}
+
+#[derive(Debug, Clone, Copy)]
+struct NomtHashtableBuckets {
+    current: usize,
+    configured: usize,
+}
+
+impl NomtHashtableBuckets {
+    fn needs_growth(&self) -> bool {
+        self.current < self.configured
+    }
+}
+
+fn check_nomt_hashtable_buckets<H>(
+    db: &'static str,
+    nomt: &Nomt<BinaryHasher<H>>,
+    configured_buckets: u32,
+) -> anyhow::Result<NomtHashtableBuckets>
+where
+    H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
+{
+    let buckets = NomtHashtableBuckets {
+        current: nomt.hash_table_utilization().capacity,
+        configured: configured_buckets as usize,
+    };
+
+    anyhow::ensure!(
+        buckets.current <= buckets.configured,
+        "configured NOMT hashtable bucket count for {db} ({}) is smaller than the existing on-disk bucket count ({}); shrinking is not supported",
+        buckets.configured,
+        buckets.current,
+    );
+
+    Ok(buckets)
+}
+
+fn grow_nomt_hashtable(
+    db: &'static str,
+    buckets: NomtHashtableBuckets,
+    options: Options,
+) -> anyhow::Result<()> {
+    tracing::info!(
+        %db,
+        current_buckets = buckets.current,
+        configured_buckets = buckets.configured,
+        "Growing NOMT hashtable to match configured bucket count"
+    );
+
+    nomt::grow_hashtable(&options).with_context(|| {
+        format!(
+            "failed to grow NOMT hashtable for {db} from {} to {} buckets",
+            buckets.current, buckets.configured
+        )
+    })
+}
+
+fn open_nomt_after_hashtable_growth<H>(
+    db: &'static str,
+    configured_buckets: u32,
+    options: Options,
+) -> anyhow::Result<Nomt<BinaryHasher<H>>>
+where
+    H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
+{
+    let nomt = Nomt::<BinaryHasher<H>>::open(options)?;
+    let buckets = check_nomt_hashtable_buckets(db, &nomt, configured_buckets)?;
+    anyhow::ensure!(
+        !buckets.needs_growth(),
+        "NOMT hashtable for {db} has {} buckets after growth, expected {}",
+        buckets.current,
+        buckets.configured,
+    );
+    Ok(nomt)
 }
 
 #[derive(Debug)]
@@ -358,6 +455,8 @@ where
 
 #[cfg(test)]
 mod tests {
+    use std::path::PathBuf;
+
     use nomt::trie::KeyPath;
     use sha2::Digest;
 
@@ -369,6 +468,77 @@ mod tests {
         let raw_data = key.to_be_bytes();
         let key_path: KeyPath = H::digest(raw_data).into();
         (key_path, Some(raw_data.to_vec()))
+    }
+
+    fn config_with_buckets(path: PathBuf, buckets: u32) -> RollupDbConfig {
+        let mut config = RollupDbConfig::default_in_path(path);
+        config.user_hashtable_buckets = Some(buckets);
+        config.kernel_hashtable_buckets = Some(buckets);
+        config
+    }
+
+    fn commit_value(state_db: &NomtStateDb<H>, key: u64) {
+        let (key_path, data) = from_key(key);
+        let writes = vec![(key_path, nomt::KeyReadWrite::Write(data))];
+
+        let user_session = state_db.user.begin_session(SessionParams::default());
+        let finished_user_session = user_session.finish(writes.clone()).unwrap();
+
+        let kernel_session = state_db.kernel.begin_session(SessionParams::default());
+        let finished_kernel_session = kernel_session.finish(writes).unwrap();
+
+        let overlay = StateFinishedSession::new(finished_user_session, finished_kernel_session)
+            .into_state_overlay();
+        state_db.commit(overlay).unwrap();
+    }
+
+    fn assert_value(state_db: &NomtStateDb<H>, key: u64) {
+        let (key_path, expected_value) = from_key(key);
+        let user_session = state_db.user.begin_session(SessionParams::default());
+        assert_eq!(user_session.read(key_path).unwrap(), expected_value);
+
+        let kernel_session = state_db.kernel.begin_session(SessionParams::default());
+        assert_eq!(kernel_session.read(key_path).unwrap(), expected_value);
+    }
+
+    #[test]
+    fn opening_existing_db_grows_hashtable_to_configured_bucket_count() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().to_path_buf();
+
+        let state_db = NomtStateDb::<H>::new(config_with_buckets(db_path.clone(), 4096)).unwrap();
+        commit_value(&state_db, 7);
+        let roots_before_growth = state_db.get_root_hashes();
+        drop(state_db);
+
+        let state_db = NomtStateDb::<H>::new(config_with_buckets(db_path, 8192)).unwrap();
+
+        assert_eq!(state_db.user.hash_table_utilization().capacity, 8192);
+        assert_eq!(state_db.kernel.hash_table_utilization().capacity, 8192);
+        assert_eq!(state_db.get_root_hashes().user, roots_before_growth.user);
+        assert_eq!(
+            state_db.get_root_hashes().kernel,
+            roots_before_growth.kernel
+        );
+        assert_value(&state_db, 7);
+    }
+
+    #[test]
+    fn opening_existing_db_rejects_smaller_configured_bucket_count() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let db_path = temp_dir.path().to_path_buf();
+
+        let state_db = NomtStateDb::<H>::new(config_with_buckets(db_path.clone(), 8192)).unwrap();
+        drop(state_db);
+
+        let err = match NomtStateDb::<H>::new(config_with_buckets(db_path, 4096)) {
+            Ok(_) => panic!("opening with fewer NOMT hashtable buckets should fail"),
+            Err(err) => err,
+        };
+        let err = format!("{err:#}");
+
+        assert!(err.contains("shrinking is not supported"), "{err}");
+        assert!(err.contains("kernel_state"), "{err}");
     }
 
     #[test]

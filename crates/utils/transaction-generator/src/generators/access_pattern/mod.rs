@@ -551,8 +551,8 @@ impl<S: Spec> AccessPatternMessageGenerator<S> {
                     .map(|_| rand_ascii_char(u))
                     .collect::<Result<String, _>>()?;
 
-                let serialized_string = borsh::to_vec(&MeteredBorshDeserializeString(input))
-                    .expect("Impossible to serialize string");
+                let serialized_string =
+                    borsh::to_vec(&input).expect("Impossible to serialize string");
 
                 Ok(GeneratedMessage {
                     message: AccessPatternMessages::DeserializeCustomString {
@@ -569,8 +569,8 @@ impl<S: Spec> AccessPatternMessageGenerator<S> {
                     .map(|_| rand_ascii_char(u))
                     .collect::<Result<String, _>>()?;
 
-                let serialized_string = borsh::to_vec(&MeteredBorshDeserializeString(input))
-                    .expect("Impossible to serialize string");
+                let serialized_string =
+                    borsh::to_vec(&input).expect("Impossible to serialize string");
 
                 Ok(GeneratedMessage {
                     message: AccessPatternMessages::StoreSerializedString {

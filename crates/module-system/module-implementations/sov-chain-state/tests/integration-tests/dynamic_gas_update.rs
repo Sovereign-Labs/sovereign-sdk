@@ -50,7 +50,7 @@ fn setup_dynamic_gas_update_tests() -> (TestData<S>, TestRunner<TestChainStateRu
         },
     );
 
-    let gas_limit = <S as Spec>::Gas::from(config_value!("INITIAL_GAS_LIMIT"));
+    let gas_limit = <S as Spec>::Gas::from(config_value!("BLOCK_GAS_LIMIT"));
     let gas_target = gas_limit.scalar_division(2);
 
     let runtime = TestChainStateRuntime::<S>::default();

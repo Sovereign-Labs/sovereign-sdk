@@ -145,6 +145,7 @@ fn associated_types() {
         inner_code_commitment: Default::default(),
         outer_code_commitment: Default::default(),
         genesis_da_height: 0,
+        state_version: 1,
         admin: None,
     };
     let config = GenesisConfig::new(chain_state_config, 22);

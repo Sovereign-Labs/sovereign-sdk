@@ -13,7 +13,7 @@ use sov_rollup_interface::reexports::digest;
 ///
 /// **Diagnostic signals:**
 /// - Occupancy > 0.9 → NOMT emits a warning log; hash collisions start to degrade lookups
-///   and inserts. Remediation: resync the database with a larger `hash_table_capacity`.
+///   and inserts. Remediation: increase the NOMT hashtable bucket config and restart.
 /// - `page_cache_misses / page_requests` rising → working set has outgrown the page cache.
 ///   Remediation: raise the NOMT page-cache size or add RAM.
 /// - `avg_page_fetch_time_ns` spiking while miss ratio is flat → underlying disk is saturated
@@ -43,7 +43,7 @@ impl NomtDbMetric {
             tracing::warn!(
                 %db,
                 rate = hash_table_utilization.occupancy_rate(),
-                "Occupancy rate for NOMT hashtable is too high. Please update buckets size and resync database");
+                "Occupancy rate for NOMT hashtable is too high. Please increase the configured bucket count and restart the node to resize the hashtable (note that this can take some time on the next startup).");
         }
         let metrics = nomt.metrics();
         Self {

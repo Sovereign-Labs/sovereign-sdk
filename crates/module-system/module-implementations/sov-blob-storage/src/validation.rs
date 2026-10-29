@@ -4,7 +4,7 @@ use sov_modules_api::digest::Digest;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{
     as_u32_or_panic, Amount, BatchWithId, BlobDataWithId, CryptoSpec, DaSpec, Gas, GasArray,
-    GasSpec, KernelStateAccessor, ModuleInfo, PrivilegedKernelAccessor, Spec, VersionReader,
+    GasSpec, KernelStateAccessor, ModuleInfo, PrivilegedKernelAccessor, Spec,
 };
 
 use crate::{BlobStorage, Escrow, ValidatedBlob};
@@ -119,14 +119,7 @@ impl<S: Spec> BlobStorage<S> {
         let best_gas_price_estimate = self.get_new_gas_price(visible_height_increase, state);
 
         let gas_needed_for_pre_exec_checks = <S as GasSpec>::max_tx_check_costs();
-        // Disable preferred sequencer escrow after the gas limit change height.
-        let funds_needed = if state.checkpoint.rollup_height_to_access()
-            > <S as GasSpec>::change_gas_limit_after_height()
-        {
-            Amount::ZERO
-        } else {
-            gas_needed_for_pre_exec_checks.checked_value(best_gas_price_estimate)?
-        };
+        let funds_needed = gas_needed_for_pre_exec_checks.checked_value(best_gas_price_estimate)?;
 
         if funds_needed > available_balance {
             return None;
@@ -218,12 +211,11 @@ impl<S: Spec> BlobStorage<S> {
                     WORST_CASE_GAS_PRICE_INCREASE as u64 * estimated_bytes_with_key_size,
                 )?,
             )?
-            // We also charge borsh deserialization cost because we need to deserialize the blob
+            // We also charge per-byte borsh decode cost because we need to deserialize the blob.
             .checked_combine(
-                <S as GasSpec>::gas_to_charge_per_byte_borsh_deserialization()
-                    .checked_scalar_product(
-                        WORST_CASE_GAS_PRICE_INCREASE as u64 * (estimated_bytes_to_store as u64),
-                    )?,
+                <S as GasSpec>::gas_to_charge_per_byte_borsh_read().checked_scalar_product(
+                    WORST_CASE_GAS_PRICE_INCREASE as u64 * (estimated_bytes_to_store as u64),
+                )?,
             )?
             .checked_value(current_gas_price)?;
         let tokens_needed_for_retrieval =

@@ -1,7 +1,7 @@
 //! Integration tests for the preferred sequencer that use [`RollupBuilder`] and
 //! thus test sequencer + node interactions.
 
-use crate::utils::{encode_call, tx_set_value_nonce, EventEmitterModule};
+use crate::utils::{encode_call, EventEmitterModule};
 use crate::utils::{
     generate_paymaster_tx, generate_txs, new_test_rollup, new_test_rollup_with_pruning,
     pause_update_state, tempdir_inside_codebase_dir, tx_set_value_with_gas,
@@ -24,7 +24,9 @@ use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::prelude::*;
-use sov_modules_api::{Amount, DispatchCall, Gas, GasArray, GasPrice, GasUnit, RawTx, Runtime};
+use sov_modules_api::{
+    Amount, DispatchCall, Gas, GasArray, GasPrice, GasUnit, PrivateKey, PublicKey, RawTx, Runtime,
+};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_node_client::NodeClient;
 use sov_paymaster::{Paymaster, PaymasterConfig};
@@ -892,8 +894,9 @@ impl Default for TestState {
         Self {
             value_by_slot_number: Default::default(),
             _current_slot_number: Default::default(),
-            // initialize to a higher generation so that "invalid generation" actions are always possible
-            next_generation: config_value!("PAST_TRANSACTION_GENERATIONS") + 10,
+            // Start at the pruning boundary so that "too old" generation actions
+            // are possible without exceeding the forward-generation cap during setup.
+            next_generation: config_value!("PAST_TRANSACTION_GENERATIONS"),
             current_value: Default::default(),
         }
     }
@@ -1117,7 +1120,7 @@ async fn sequencer_filled_up_block() {
         .map(|x| (x * 10) / 9)
         .collect::<Vec<_>>();
     std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_INITIAL_GAS_LIMIT",
+        "SOV_TEST_CONST_OVERRIDE_BLOCK_GAS_LIMIT",
         format!("{gas_limit_array:?}"),
     );
     // Set very high initial balance for the admin.
@@ -1533,7 +1536,7 @@ async fn seq_out_of_gas_for_pre_checks() {
     let gas_limit = gas_limit.scalar_division(2);
     let gas_limit_array = gas_limit.as_ref();
     std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_INITIAL_GAS_LIMIT",
+        "SOV_TEST_CONST_OVERRIDE_BLOCK_GAS_LIMIT",
         format!("{gas_limit_array:?}"),
     );
     let price_array = config_value!("INITIAL_BASE_FEE_PER_GAS");
@@ -1728,6 +1731,67 @@ async fn test_sequencer_getters() {
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     let mut responses: Vec<TxInfoWithConfirmation> = Vec::new();
     let mut tx_number = 0;
+
+    // The credential is available on the live stream, cache-backed historical stream, and
+    // cache-backed REST response for a newly authenticated transaction.
+    let expected_credential_id = admin
+        .private_key
+        .pub_key()
+        .credential_id()
+        .to_string()
+        .parse::<types::Hash>()
+        .unwrap();
+    let mut live_tx_ws = test_rollup
+        .api_client()
+        .subscribe_to_txs(None)
+        .await
+        .unwrap();
+    let tx = tx_set_value(&admin.private_key, tx_number, tx_number);
+    let response = test_rollup
+        .api_client()
+        .send_raw_tx_to_sequencer_with_retry(&tx)
+        .await
+        .unwrap()
+        .into_inner();
+    let live_response = tokio::time::timeout(Duration::from_millis(500), live_tx_ws.next())
+        .await
+        .unwrap()
+        .unwrap()
+        .unwrap();
+    assert_eq!(
+        live_response.credential_id.as_ref(),
+        Some(&expected_credential_id)
+    );
+
+    let cached_response = test_rollup
+        .api_client()
+        .sequencer_get_tx(&response.id)
+        .await
+        .unwrap()
+        .into_inner();
+    assert_eq!(
+        cached_response.credential_id.as_ref(),
+        Some(&expected_credential_id)
+    );
+
+    let mut cached_tx_ws = test_rollup
+        .api_client()
+        .subscribe_to_txs(Some(tx_number))
+        .await
+        .unwrap();
+    let cached_stream_response =
+        tokio::time::timeout(Duration::from_millis(500), cached_tx_ws.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+    assert_eq!(
+        cached_stream_response.credential_id.as_ref(),
+        Some(&expected_credential_id)
+    );
+    responses.push(response);
+    tx_number += 1;
+
     // Create a helper function to check that the tx endpoint responds with the expected txs.
     let check_responses = |starting_from: usize,
                            responses: Vec<TxInfoWithConfirmation>,
@@ -2595,183 +2659,6 @@ async fn seq_many_invalid_txs() {
     let _ = tokio::time::timeout(TEST_NORMAL_SHUTDOWN_TIMEOUT, test_rollup.shutdown())
         .await
         .expect("Rollup shutdown properly");
-}
-
-/// Run a test gas limit update.
-///
-/// This test runs the rollup for ~20 blocks with the gas limit update scheduled for block 12.
-/// We update the limit to a tiny value (50_000) and send expensive txs so that we can observe the gas dynamics
-/// after the update.
-///
-/// A big part of this test is simply running the upgrade with state root assertions enabled (they're enabled by default in test_rollup).
-/// That assertion would catch the most likely issues with node-sequencer disagreement, and the successful execution of the test guarantees
-/// that we haven't hit any panics. The assertions we run here are just extra sanity checks.
-#[tokio::test(flavor = "multi_thread")]
-async fn test_gas_limit_update() {
-    // 1. Configure gas price update timing and params
-    const UPDATED_GAS_LIMIT: [u64; 2] = [50_000, 50_000];
-    const CHANGE_GAS_LIMIT_AFTER_HEIGHT: u32 = 12;
-    std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_UPDATED_GAS_LIMIT",
-        format!("{:?}", UPDATED_GAS_LIMIT),
-    );
-    std::env::set_var(
-        "SOV_TEST_CONST_OVERRIDE_CHANGE_GAS_LIMIT_AFTER_HEIGHT",
-        CHANGE_GAS_LIMIT_AFTER_HEIGHT.to_string(),
-    );
-
-    // 2. Boilerplate test setup
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
-    test_rollup.produce_enough_finalized_slots().await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    // 3. Setup - initialize empty arrays/values for tracking data. Subscribe to slot notifications
-    let mut sequencer_receipts = vec![];
-    let mut ledger_receipts = vec![];
-    let mut rollup_height;
-    let mut nonce = 0;
-    let mut max_base_fee_per_gas_observed_after_update = 0;
-    let mut slot_subscription = test_rollup
-        .client
-        .client
-        .subscribe_slots_with_children(IncludeChildren::new(true))
-        .await
-        .unwrap();
-
-    // 4. Main loop Submit a tx and save the receipt. Then, force close the batch and produce a block.
-    for i in 0..20_u64 {
-        // 4.1 Submit a tx and save the receipt. Use the retrying client so that transient
-        //     `WaitingOnBlobSender` 503s from blob-sender backpressure are retried with backoff
-        //     instead of failing the test outright (one historical Mode-C failure mode).
-        let receipt = test_rollup
-            .api_client()
-            .send_raw_tx_to_sequencer_with_retry(&tx_set_value_nonce::<TestRuntime<TestSpec>>(
-                &admin.private_key,
-                nonce,
-                i,
-                Some(GasUnit::from_dimensions([33_000, 33_000])),
-            ))
-            .await;
-
-        if let Err(e) = &receipt {
-            panic!("Tx {i} failed with error: {e}");
-        } else {
-            nonce += 1;
-            sequencer_receipts.push(receipt.unwrap());
-        }
-
-        // 4.2 Force close the batch and produce a block.
-        let _ = test_rollup.force_close_batch().await;
-        test_rollup.tenderly_produce_blocks(1).await.unwrap();
-        let slot = slot_subscription.next().await.unwrap().unwrap();
-        for batch in slot.batches {
-            for tx in batch.txs {
-                ledger_receipts.push(tx);
-            }
-        }
-
-        // 4.3 Query the rollup hight. After the transition, save the largest base fee value that we observe.
-        rollup_height = test_rollup.height().await.get();
-        if rollup_height > CHANGE_GAS_LIMIT_AFTER_HEIGHT as u64 {
-            let base_fee_per_gas = test_rollup
-                .client
-                .http_get("/rollup/base-fee-per-gas/latest")
-                .await
-                .unwrap();
-            // Parse the integer price from a string like "[10, 10]"
-            let current_base_fee = base_fee_per_gas
-                .trim()
-                .trim_start_matches(r#"{"base_fee_per_gas":[""#)
-                .split('"')
-                .next()
-                .unwrap()
-                .parse::<u64>()
-                .unwrap_or_else(|_| panic!("Failed to parse base fee per gas: {base_fee_per_gas}"));
-            if current_base_fee > max_base_fee_per_gas_observed_after_update {
-                max_base_fee_per_gas_observed_after_update = current_base_fee;
-            }
-        }
-
-        // 4.4 Once we've observed several blocks after the transition, break the loop.
-        if rollup_height.saturating_sub(5) > CHANGE_GAS_LIMIT_AFTER_HEIGHT as u64 {
-            break;
-        }
-    }
-
-    // 5. Drain the blob-sender pipeline: produce DA blocks until every sequencer-accepted tx has
-    //    appeared in a slot, or we've produced an unreasonable number of blocks. Under load, the
-    //    `force_close_batch + produce_block` pattern in the loop can produce empty DA blocks while
-    //    the just-closed batch is still on its way to DA, so the tx appears in a later block.
-    //    Observe the base fee along the way too — when previously-pending batches finally land, the
-    //    gas_used in those rollup blocks pushes the base fee above 7, and we may only see that rise
-    //    during the drain (not the main loop).
-    let expected_tx_count = sequencer_receipts.len();
-    let mut drain_blocks = 0u32;
-    while ledger_receipts.len() < expected_tx_count {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        drain_blocks += 1;
-        let slot = slot_subscription.next().await.unwrap().unwrap();
-        for batch in slot.batches {
-            for tx in batch.txs {
-                ledger_receipts.push(tx);
-            }
-        }
-        let drain_height = test_rollup.height().await.get();
-        if drain_height > CHANGE_GAS_LIMIT_AFTER_HEIGHT as u64 {
-            let base_fee_per_gas = test_rollup
-                .client
-                .http_get("/rollup/base-fee-per-gas/latest")
-                .await
-                .unwrap();
-            let current_base_fee = base_fee_per_gas
-                .trim()
-                .trim_start_matches(r#"{"base_fee_per_gas":[""#)
-                .split('"')
-                .next()
-                .unwrap()
-                .parse::<u64>()
-                .unwrap_or_else(|_| panic!("Failed to parse base fee per gas: {base_fee_per_gas}"));
-            if current_base_fee > max_base_fee_per_gas_observed_after_update {
-                max_base_fee_per_gas_observed_after_update = current_base_fee;
-            }
-        }
-        if drain_blocks > 60 {
-            panic!(
-                "Produced 60 drain blocks but only collected {} of {} expected txs in the ledger",
-                ledger_receipts.len(),
-                expected_tx_count
-            );
-        }
-    }
-
-    // 6. Assertions
-    // 6.1 Check that the gas price rose after the update. This verifies that our attempted change really did take effect.
-
-    // Before we update the gas limit, the gas price falls to the minimum possible value (7). After the update, assuming all went well,
-    // the price should start rising rapidly since our blocks are always full. Sanity check that.
-    assert!(
-        max_base_fee_per_gas_observed_after_update > 7,
-        "Max observed base fee per gas after update must be greater than 7"
-    );
-
-    // 6.2 Sanity check that the ledger DB agrees with the sequencer on the tx results.
-    assert_eq!(sequencer_receipts.len(), ledger_receipts.len());
-    for (sequencer_receipt, ledger_receipt) in sequencer_receipts
-        .into_iter()
-        .zip(ledger_receipts.into_iter())
-    {
-        let sequencer_receipt = sequencer_receipt.as_ref().receipt.as_ref().unwrap();
-        assert_eq!(sequencer_receipt.result, ledger_receipt.receipt.result);
-        assert_eq!(sequencer_receipt.data, ledger_receipt.receipt.data);
-    }
 }
 
 /// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.
@@ -3704,6 +3591,59 @@ async fn not_sequencer_safe_txs_are_restricted() {
     }
 }
 
+// Regression test: a tx rejected by the sequencer's admin pre-flight check must produce exactly
+// one result from the executor task. Otherwise the stale extra result is handed to the next tx,
+// shifting every subsequent result by one and eventually tripping the tx hash assertion.
+#[tokio::test(flavor = "multi_thread")]
+async fn txs_after_not_sequencer_safe_tx_get_their_own_results() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let client = test_rollup.api_client().clone();
+
+    let rejected_tx = generate_paymaster_tx::<TestRuntime<TestSpec>>(admin.private_key.clone());
+    let error = client
+        .send_raw_tx_to_sequencer(&rejected_tx)
+        .await
+        .expect_err("Sequencer accepted admin tx from non-admin sender");
+    assert!(
+        error
+            .to_string()
+            .contains("Only designated admins are allowed"),
+        "Unexpected error: {error}"
+    );
+
+    // With a duplicated result, this tx receives the rejected tx's (unsuccessful) result.
+    let first_tx = tx_set_value(&admin.private_key, 0, 1000);
+    client
+        .send_raw_tx_to_sequencer(&first_tx)
+        .await
+        .expect("First valid tx after the rejected one should be accepted");
+
+    // With a duplicated result, this tx receives the first tx's (successful) result, which trips
+    // the sequencer's tx hash assertion and crashes the rollup.
+    let second_tx = tx_set_value(&admin.private_key, 1, 1001);
+    client
+        .send_raw_tx_to_sequencer(&second_tx)
+        .await
+        .expect("Second valid tx after the rejected one should be accepted");
+
+    test_rollup
+        .shutdown()
+        .await
+        .expect("Rollup should shut down cleanly, without any crashed background tasks");
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn restart_and_query_value() {
     let actions = vec![TestingAction::Restart, TestingAction::QuerySetValue];
@@ -4379,4 +4319,437 @@ mod tests_with_basic_kernel {
         .await
         .unwrap();
     }
+}
+
+const LAST_EVENT_NUMBER_HEADER: &str = "x-sov-last-event-number";
+const EVENT_EPOCH_HEADER: &str = "x-sov-event-epoch";
+
+/// Reads the ValueSetter's value together with the event number the reply says it reflects.
+///
+/// The value is `None` until something has been set.
+async fn read_value_and_last_event_number(
+    test_rollup: &TestRollup<TestBlueprint>,
+    query: &str,
+) -> (Option<u64>, Option<u64>) {
+    let (header, body) = test_rollup
+        .client
+        .http_get_with_header(
+            &format!("/modules/value-setter/state/value{query}"),
+            LAST_EVENT_NUMBER_HEADER,
+        )
+        .await
+        .unwrap();
+
+    let body: serde_json::Value = serde_json::from_str(&body).unwrap();
+    assert!(
+        body.get("value").is_some(),
+        "Expected a state value reply, got {body:?}"
+    );
+
+    (
+        header.map(|header| header.parse().unwrap()),
+        body["value"].as_u64(),
+    )
+}
+
+/// Reads the event epoch the ValueSetter reply is stamped with.
+async fn read_event_epoch(test_rollup: &TestRollup<TestBlueprint>) -> Option<String> {
+    test_rollup
+        .client
+        .http_get_with_header("/modules/value-setter/state/value", EVENT_EPOCH_HEADER)
+        .await
+        .unwrap()
+        .0
+}
+
+/// A state reply must name the last event it reflects, so that a client holding both a snapshot
+/// and the event stream knows exactly which events are still to be applied.
+#[tokio::test(flavor = "multi_thread")]
+async fn state_reads_report_the_last_event_number_they_reflect() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let mut events = test_rollup
+        .api_client()
+        .subscribe_to_events()
+        .await
+        .unwrap();
+
+    let (before, _) = read_value_and_last_event_number(&test_rollup, "").await;
+
+    // Set a value. The transaction emits events, so the frontier must advance past them. The
+    // sequencer applies the transaction's writes and advances the frontier before it answers
+    // the submitter, so by the time this returns a state read must show both.
+    let value_to_set = 0x1234_5678;
+    let response = test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, value_to_set)),
+        })
+        .await
+        .unwrap()
+        .into_inner();
+    let tx_event_numbers: Vec<u64> = response.events.iter().map(|event| event.number).collect();
+    let last_tx_event_number = tx_event_numbers
+        .last()
+        .copied()
+        .expect("Setting a value should emit at least one event");
+
+    let (reported, value) = read_value_and_last_event_number(&test_rollup, "").await;
+    assert_eq!(value, Some(value_to_set));
+    assert_eq!(
+        reported,
+        Some(last_tx_event_number),
+        "A state read that already shows the transaction's writes must report that \
+         transaction's last event number; reporting less would make a client re-apply events \
+         it has already seen, reporting more would make it skip some"
+    );
+    assert!(
+        before < reported,
+        "The reported event number should advance as events are emitted; it was {before:?} \
+         before the transaction and {reported:?} after"
+    );
+
+    // The numbers the stream hands out are the ones the frontier was measured against.
+    let mut streamed = Vec::with_capacity(tx_event_numbers.len());
+    for _ in &tx_event_numbers {
+        let event = tokio::time::timeout(Duration::from_secs(5), events.next())
+            .await
+            .expect("Timed out waiting for the transaction's events on the stream")
+            .unwrap()
+            .unwrap();
+        streamed.push(event.number);
+    }
+    assert_eq!(
+        streamed, tx_event_numbers,
+        "The stream must hand out the same numbers the submitter was told about"
+    );
+}
+
+/// The live frontier describes the sequencer's head, so it must not be stamped onto a reply
+/// that deliberately reads older state.
+#[tokio::test(flavor = "multi_thread")]
+async fn historical_state_reads_report_no_last_event_number() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let mut events = test_rollup
+        .api_client()
+        .subscribe_to_events()
+        .await
+        .unwrap();
+
+    // Emit an event, so that there is a frontier to report in the first place.
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
+        })
+        .await
+        .unwrap();
+
+    // The sequencer advances the frontier before it streams the transaction's events, so once
+    // one arrives a latest-state read must report it.
+    tokio::time::timeout(Duration::from_secs(5), events.next())
+        .await
+        .expect("The transaction's events should be streamed")
+        .expect("The event stream should not end")
+        .unwrap();
+    let (latest, _) = read_value_and_last_event_number(&test_rollup, "").await;
+    assert!(
+        latest.is_some(),
+        "A latest-state read should report an event number once the rollup has emitted events"
+    );
+
+    let (historical, _) = read_value_and_last_event_number(&test_rollup, "?rollup_height=1").await;
+    assert_eq!(
+        historical, None,
+        "A historical read must not be stamped with the live event number"
+    );
+}
+
+/// Normal operation extends the numbering rather than reissuing it, so the epoch must hold
+/// still. A client that resynchronised on every batch would be useless.
+#[tokio::test(flavor = "multi_thread")]
+async fn the_event_epoch_is_stable_while_the_sequencer_makes_progress() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let mut epochs = Vec::new();
+    let mut numbers = Vec::new();
+
+    for generation in 0..3u64 {
+        test_rollup
+            .api_client()
+            .accept_tx(&api_types::AcceptTxBody {
+                body: BASE64_STANDARD.encode(tx_set_value(
+                    &admin.private_key,
+                    generation,
+                    0x1234_5678 + generation,
+                )),
+            })
+            .await
+            .unwrap();
+
+        // Close the batch and let the node catch up, so the reads straddle a slot boundary and
+        // exercise the republish paths rather than just `apply_tx_changes`.
+        test_rollup.force_close_batch().await.unwrap();
+        test_rollup.produce_enough_finalized_slots().await;
+        test_rollup.wait_for_node_synced().await.unwrap();
+
+        if let Some(epoch) = read_event_epoch(&test_rollup).await {
+            epochs.push(epoch);
+            numbers.push(read_value_and_last_event_number(&test_rollup, "").await.0);
+        }
+    }
+
+    assert!(
+        epochs.len() >= 2,
+        "Expected several reads carrying an epoch, got {epochs:?}"
+    );
+    assert_eq!(
+        epochs
+            .iter()
+            .collect::<std::collections::HashSet<_>>()
+            .len(),
+        1,
+        "The epoch changed without a rollback, which would force clients to resynchronise for \
+         no reason: {epochs:?}"
+    );
+    assert!(
+        numbers.windows(2).all(|w| w[0] <= w[1]),
+        "Within one epoch the event number must only move forward, got {numbers:?}"
+    );
+}
+
+/// The epoch on the state reply is only half the story: a client applying streamed events needs
+/// to know they belong to the same run of numbering its snapshot came from. So the events must
+/// carry it too, and the two must agree.
+#[tokio::test(flavor = "multi_thread")]
+async fn streamed_events_carry_the_same_epoch_as_the_state_reply() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let mut events = test_rollup
+        .api_client()
+        .subscribe_to_events()
+        .await
+        .unwrap();
+
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
+        })
+        .await
+        .unwrap();
+
+    let event = tokio::time::timeout(Duration::from_secs(5), events.next())
+        .await
+        .expect("Timed out waiting for an event")
+        .expect("Event stream ended")
+        .expect("Event stream errored");
+
+    let epoch_on_event = event
+        .epoch
+        .clone()
+        .expect("A soft-confirmed event must carry the epoch its number was handed out in");
+
+    let epoch_on_state = read_event_epoch(&test_rollup)
+        .await
+        .expect("A latest-state read should report an epoch once events exist");
+
+    assert_eq!(
+        epoch_on_event, epoch_on_state,
+        "The stream and the state reply must agree on the epoch, otherwise a client cannot tell \
+         whether the events it is applying belong to the snapshot it is holding"
+    );
+}
+
+/// The submitter's own reply is sent before the transaction reaches the event stream, so its
+/// events are labelled separately from the stream's. They must still carry the same epoch.
+#[tokio::test(flavor = "multi_thread")]
+async fn submitted_tx_reply_events_carry_the_same_epoch_as_the_state_reply() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    let response = test_rollup
+        .api_client()
+        .send_raw_tx_to_sequencer(&tx_set_value(&admin.private_key, 0, 0x1234_5678))
+        .await
+        .unwrap();
+    let event = response
+        .events
+        .first()
+        .expect("Setting a value emits an event");
+
+    let epoch_on_state = read_event_epoch(&test_rollup)
+        .await
+        .expect("A latest-state read should report an epoch once events exist");
+
+    assert_eq!(
+        event.epoch.as_deref(),
+        Some(epoch_on_state.as_str()),
+        "The submitter's reply must carry the epoch its events were numbered in, like the stream"
+    );
+}
+
+/// The node's ledger API has no epoch, so the events it serves carry none; an absent epoch
+/// counts as zero. Only the sequencer labels the ledger-backed copies it serves itself.
+#[tokio::test(flavor = "multi_thread")]
+async fn committed_ledger_events_carry_no_epoch() {
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::Manual,
+    )
+    .await;
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
+        })
+        .await
+        .unwrap();
+
+    // Drive the transaction all the way into the ledger.
+    test_rollup.force_close_batch().await.unwrap();
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_node_synced().await.unwrap();
+
+    let event = test_rollup
+        .api_client()
+        .get_latest_event()
+        .await
+        .expect("The rollup should have committed at least one event")
+        .into_inner();
+
+    assert_eq!(
+        event.epoch, None,
+        "The node's ledger API knows no epoch, so it must not invent one"
+    );
+}
+
+/// The standard sequencer publishes node-committed state only, so its replies must name the
+/// node's last committed event, under the constant zero epoch.
+#[tokio::test(flavor = "multi_thread")]
+async fn standard_sequencer_state_reads_report_the_nodes_last_event() {
+    let dir = tempdir_inside_codebase_dir();
+    let (mut genesis_params, admin) = create_genesis_params();
+    let sequencer_config = &mut genesis_params.runtime.sequencer_registry.sequencer_config;
+    sequencer_config.is_preferred_sequencer = false;
+    let seq_da_address = sequencer_config.seq_da_address;
+
+    let test_rollup = RollupBuilder::<TestBlueprint>::new(
+        GenesisSource::CustomParams(genesis_params),
+        BlockProducingConfig::Manual,
+        0,
+    )
+    .set_config(|c| {
+        c.storage = StoragePath::Tmp(dir);
+        c.rollup_prover_config = RollupProverConfig::Disabled;
+        c.automatic_batch_production = true;
+    })
+    .set_da_config(|c| c.sender_address = seq_da_address)
+    .with_standard_sequencer()
+    .start()
+    .await
+    .unwrap();
+
+    let mut slots = test_rollup.api_client().subscribe_slots().await.unwrap();
+    test_rollup
+        .api_client()
+        .accept_tx(&api_types::AcceptTxBody {
+            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
+        })
+        .await
+        .unwrap();
+
+    // The sequencer submits its batch when it sees the next slot, and the node executes it in
+    // the slot after; produce slots until the value is committed.
+    let mut last_event_number = None;
+    for _ in 0..10 {
+        test_rollup.da_service.produce_block_now().await.unwrap();
+        slots.next().await.unwrap().unwrap();
+        let (number, value) = read_value_and_last_event_number(&test_rollup, "").await;
+        if value == Some(0x1234_5678) {
+            last_event_number = number;
+            break;
+        }
+    }
+
+    let latest_event = test_rollup
+        .api_client()
+        .get_latest_event()
+        .await
+        .expect("The value-setting transaction should have committed an event")
+        .into_inner();
+    assert_eq!(
+        last_event_number,
+        Some(latest_event.number),
+        "A reply from the standard sequencer must name the node's last committed event"
+    );
+    assert_eq!(
+        read_event_epoch(&test_rollup).await,
+        Some(sov_modules_api::EventEpoch::ZERO.to_string()),
+        "A publisher that never reissues numbers reports the zero epoch, so its clients never \
+         have to resynchronise over an epoch change"
+    );
 }

@@ -44,6 +44,9 @@ pub enum EthApiError {
     /// Thrown when an unknown tx index
     #[error("unknown tx index {0}")]
     UnknownTxIndex(u64),
+    /// Thrown when a transaction hash is unknown, or its transaction isn't available yet
+    #[error("transaction not found")]
+    TransactionNotFound,
     /// Thrown when unable to parse numeric block number
     #[error("invalid block number {0} {1}")]
     InvalidBlockNumber(String, ParseIntError),
@@ -117,6 +120,7 @@ impl From<EthApiError> for jsonrpsee_types::error::ErrorObject<'static> {
             EthApiError::InvalidBlockCount(_) => invalid_params_rpc_err(error.to_string()),
             EthApiError::UnknownBlock
             | EthApiError::UnknownTxIndex(_)
+            | EthApiError::TransactionNotFound
             | EthApiError::PrunedHistoryUnavailable => {
                 rpc_error_with_code(EthRpcErrorCode::ResourceNotFound.code(), error.to_string())
             }
@@ -175,6 +179,12 @@ mod tests {
     #[test]
     fn unknown_tx_index_maps_to_resource_not_found() {
         let err = jsonrpsee_types::error::ErrorObject::from(EthApiError::UnknownTxIndex(7));
+        assert_eq!(err.code(), EthRpcErrorCode::ResourceNotFound.code());
+    }
+
+    #[test]
+    fn transaction_not_found_maps_to_resource_not_found() {
+        let err = jsonrpsee_types::error::ErrorObject::from(EthApiError::TransactionNotFound);
         assert_eq!(err.code(), EthRpcErrorCode::ResourceNotFound.code());
     }
 }

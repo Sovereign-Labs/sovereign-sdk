@@ -25,7 +25,7 @@ def test_basic_transaction_submission():
             }
         }
     }
-    details = TxDetails(chain_id=4321)
+    details = TxDetails(chain_hash_fragment=serializer.chain_hash_fragment())
     unsigned_tx = UnsignedTransaction(runtime_call=call, details=details)
     tx_bytes = unsigned_tx.bytes_for_signing(serializer)
 

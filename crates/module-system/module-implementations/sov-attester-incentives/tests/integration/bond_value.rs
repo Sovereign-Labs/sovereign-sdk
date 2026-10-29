@@ -52,7 +52,7 @@ impl TestRole {
 /// Currently, the easiest way to do this is to artificially change the gas cost of some operation in the bank module. We do that
 /// by modifying the runtime manually.
 fn test_cannot_prove_when_gas_price_is_too_high(role: TestRole) {
-    let gas_limit = <<S as Spec>::Gas>::from(config_value!("INITIAL_GAS_LIMIT"));
+    let gas_limit = <<S as Spec>::Gas>::from(config_value!("BLOCK_GAS_LIMIT"));
     let gas_target = gas_limit.scalar_division(2);
 
     let runtime = Default::default();

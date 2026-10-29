@@ -30,7 +30,7 @@ use sov_rest_utils::json_obj;
 use sov_rollup_full_node_interface::DaSyncState;
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
-use sov_rollup_interface::node::da::DaService;
+use sov_rollup_interface::node::da::{DaService, DaWriteRole};
 use sov_rollup_interface::stf::BlobSenderStatus;
 use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use std::boxed::Box;
@@ -144,7 +144,15 @@ where
             ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
                 StateCheckpoint::new(latest_state_update.storage.clone(), &runtime.kernel()),
                 latest_state_update.latest_finalized_slot_number,
-            ),
+            )
+            // The standard sequencer only publishes node-committed state, whose event numbers
+            // are never reissued, so it has no epoch to rotate; see `EventEpoch::ZERO`. A DA
+            // reorg on a DA layer without instant finality can still renumber events;
+            // `EventEpoch` documents that gap.
+            .with_event_frontier(EventFrontier::new(
+                EventEpoch::ZERO,
+                latest_state_update.next_event_number,
+            )),
         );
         let (checkpoint_sender, checkpoint_receiver) = watch::channel(checkpoint);
 
@@ -163,6 +171,10 @@ where
         let da_address = da.get_signer().await.context(
             "Standard sequencer require DaService to be configured with submitting support",
         )?;
+
+        // The standard sequencer is always the writer; tell the DA service before the
+        // blob sender is started.
+        da.set_write_role(DaWriteRole::Writer).await;
 
         let nb_of_concurrent_batch_blob_submissions = Arc::new(AtomicUsize::new(0));
         let nb_of_concurrent_proof_blob_submissions = Arc::new(AtomicUsize::new(0));
@@ -620,6 +632,7 @@ where
         Ok(AcceptedTx {
             tx: baked_tx,
             tx_hash,
+            credential_id: None,
             confirmation: EmptyConfirmation {},
         })
     }
@@ -682,6 +695,7 @@ where
             slot_number,
             ledger_reader,
             latest_finalized_slot_number,
+            next_event_number,
             ..
         } = &state_update_info;
         let checkpoint = StateCheckpoint::new(storage.clone(), &Rt::default().kernel());
@@ -699,7 +713,10 @@ where
                     ConcurrentStateCheckpoint::from_state_checkpoint_with_finalized_slot(
                         checkpoint.clone_with_empty_witness_dropping_temp_cache(),
                         *latest_finalized_slot_number,
-                    ),
+                    )
+                    // The standard sequencer publishes node-committed state only, with no
+                    // soft-confirmation overlay, so the node's number is exact for it.
+                    .with_event_frontier(EventFrontier::new(EventEpoch::ZERO, *next_event_number)),
                 ))
                 .ok();
             inner.checkpoint = Some(checkpoint);

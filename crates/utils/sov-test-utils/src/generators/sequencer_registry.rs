@@ -90,7 +90,6 @@ impl<S: Spec> MessageGenerator for SequencerRegistryMessageGenerator<S> {
 
     fn create_messages(
         &self,
-        chain_id: u64,
         max_priority_fee_bips: PriorityFeeBips,
         max_fee: Amount,
         estimated_gas_usage: Option<<Self::Spec as Spec>::Gas>,
@@ -107,7 +106,6 @@ impl<S: Spec> MessageGenerator for SequencerRegistryMessageGenerator<S> {
                         .expect("Generated sequencer address was invalid"),
                     amount: msg.amount,
                 },
-                chain_id,
                 max_priority_fee_bips,
                 max_fee,
                 estimated_gas_usage,
@@ -124,7 +122,6 @@ impl<S: Spec> MessageGenerator for SequencerRegistryMessageGenerator<S> {
                         .expect("Generated sequencer address was invalid"),
                     amount: msg.amount,
                 },
-                chain_id,
                 max_priority_fee_bips,
                 max_fee,
                 estimated_gas_usage,

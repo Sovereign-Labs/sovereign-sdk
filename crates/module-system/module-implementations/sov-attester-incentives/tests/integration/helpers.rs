@@ -6,7 +6,6 @@ use sov_chain_state::ChainState;
 use sov_mock_da::MockDaSpec;
 use sov_mock_zkvm::MockZkvmHost;
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::{
     Amount, ApiStateAccessor, DaSpec, ProofOutcome, SerializedAttestation, SerializedChallenge,
     Spec, StateTransitionPublicData,
@@ -191,12 +190,9 @@ pub(crate) fn make_attestation_blob(
     let serialized_attestation = SerializedAttestation::from_attestation(&attestation).unwrap();
 
     borsh::to_vec(
-        &serialize_attestation_blob_with_metadata::<S>(
-            serialized_attestation,
-            config_value!("CHAIN_ID"),
-        )
-        .unwrap()
-        .0,
+        &serialize_attestation_blob_with_metadata::<S>(serialized_attestation)
+            .unwrap()
+            .0,
     )
     .unwrap()
 }
@@ -292,13 +288,9 @@ pub(crate) fn make_challenge_blob(
     };
 
     borsh::to_vec(
-        &serialize_challenge_blob_with_metadata::<S>(
-            serialized_challenge,
-            challenge_slot,
-            config_value!("CHAIN_ID"),
-        )
-        .unwrap()
-        .0,
+        &serialize_challenge_blob_with_metadata::<S>(serialized_challenge, challenge_slot)
+            .unwrap()
+            .0,
     )
     .unwrap()
 }

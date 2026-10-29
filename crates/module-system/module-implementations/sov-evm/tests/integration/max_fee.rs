@@ -107,7 +107,7 @@ fn test_disable_max_fee_check_does_not_mint_value() {
             );
 
             let receipt = evm
-                .get_transaction_receipt(tx_hash, state)
+                .get_transaction_receipt(&Default::default(), tx_hash, state)
                 .unwrap()
                 .expect("receipt should exist");
             let implied_fee =

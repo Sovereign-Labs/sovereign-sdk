@@ -14,7 +14,7 @@ use sov_celestia_adapter::types::TmHash;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_db::config::RollupDbConfig;
 use sov_db::ledger_db::LedgerDb;
-use sov_db::schema::tables::{BatchByNumber, SlotByNumber};
+use sov_db::schema::tables::BatchByNumber;
 use sov_db::schema::types::{BatchNumber, DbBytes, StoredBatch};
 use sov_db::storage_manager::NomtStorageManager;
 use sov_full_node_configs::runner::from_toml_path;
@@ -35,6 +35,13 @@ use sov_stf_runner::RollupConfig;
 
 use sov_demo_rollup::{CelestiaDemoRollup, MockDemoRollup};
 
+#[path = "common.rs"]
+mod common;
+use common::{
+    assert_ledger_head_state_root_matches_storage_root,
+    assert_storage_latest_version_matches_ledger_head, make_ledger_root_patch,
+};
+
 #[derive(Parser, Debug)]
 #[command(
     author,
@@ -50,6 +57,18 @@ struct Args {
     /// Override `storage.path` from the rollup config.
     #[arg(long)]
     db_path: Option<PathBuf>,
+
+    /// Override `storage.live_db_path` from the rollup config.
+    #[arg(long)]
+    live_db_path: Option<PathBuf>,
+
+    /// Override `storage.ledger_db_path` from the rollup config.
+    #[arg(long)]
+    ledger_db_path: Option<PathBuf>,
+
+    /// Override `storage.user_nomt_db_path` from the rollup config.
+    #[arg(long)]
+    user_nomt_db_path: Option<PathBuf>,
 
     /// The new sequencer DA address on Celestia (bech32, e.g. celestia1...).
     /// Required for single-sequencer migration mode (when `--sequencer-map` is not used).
@@ -953,9 +972,13 @@ fn load_storage_config(args: &Args) -> anyhow::Result<RollupDbConfig> {
         })?;
 
     let mut storage = rollup_config.storage;
-    if let Some(db_path_override) = &args.db_path {
-        storage.path = db_path_override.clone();
+    sov_migrations::DbPathOverrides {
+        db_path: args.db_path.clone(),
+        live_db_path: args.live_db_path.clone(),
+        ledger_db_path: args.ledger_db_path.clone(),
+        user_nomt_db_path: args.user_nomt_db_path.clone(),
     }
+    .apply(&mut storage)?;
 
     Ok(storage)
 }
@@ -1216,21 +1239,6 @@ fn select_source_sequencer(
     Ok(only.clone())
 }
 
-fn make_ledger_root_patch(
-    ledger_db: &LedgerDb,
-    new_state_root: &[u8],
-) -> anyhow::Result<SchemaBatch> {
-    let (head_slot_number, mut head_slot) = ledger_db
-        .get_head_slot()?
-        .ok_or_else(|| anyhow::anyhow!("ledger has no head slot; cannot patch state root"))?;
-
-    head_slot.state_root = new_state_root.to_vec().into();
-
-    let mut batch = SchemaBatch::new();
-    batch.put::<SlotByNumber>(&head_slot_number, &head_slot)?;
-    Ok(batch)
-}
-
 fn make_batch_receipt_patch(
     ledger_db: &LedgerDb,
     sequencer_plan: &ResolvedSequencerPlan,
@@ -1350,45 +1358,4 @@ fn migrate_stored_batch_receipt(
         bincode::serialize(&new_receipt).context("failed to encode migrated batch receipt")?,
     );
     Ok(BatchReceiptMigrationOutcome::NeedsRewrite(batch))
-}
-
-fn assert_storage_latest_version_matches_ledger_head<S: NativeStorage>(
-    storage: &S,
-    ledger_db: &LedgerDb,
-    phase: &str,
-) -> anyhow::Result<SlotNumber> {
-    let (head_slot_number, _head_slot) = ledger_db
-        .get_head_slot()?
-        .ok_or_else(|| anyhow::anyhow!("ledger has no head slot; cannot migrate an empty DB"))?;
-    let storage_latest_version = storage.latest_version();
-    if storage_latest_version != head_slot_number {
-        bail!(
-            "{phase} invariant failed: storage.latest_version ({}) != ledger head slot ({})",
-            storage_latest_version,
-            head_slot_number
-        );
-    }
-
-    Ok(head_slot_number)
-}
-
-fn assert_ledger_head_state_root_matches_storage_root<S: NativeStorage>(
-    storage: &S,
-    ledger_db: &LedgerDb,
-    phase: &str,
-) -> anyhow::Result<()> {
-    let (head_slot_number, head_slot) = ledger_db
-        .get_head_slot()?
-        .ok_or_else(|| anyhow::anyhow!("ledger has no head slot; cannot migrate an empty DB"))?;
-    let storage_root = storage
-        .get_root_hash(head_slot_number)
-        .context("failed to read storage root at ledger head slot")?;
-    if head_slot.state_root.as_ref() != storage_root.as_ref() {
-        bail!(
-            "{phase} invariant failed: ledger head state_root does not match storage root at slot {}",
-            head_slot_number
-        );
-    }
-
-    Ok(())
 }

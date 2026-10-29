@@ -1,6 +1,6 @@
 use sov_mock_zkvm::MockZkvmCryptoSpec;
 use sov_modules_api::capabilities::UniquenessData;
-use sov_modules_api::transaction::{Transaction, TxDetails, UnsignedTransaction, Version0};
+use sov_modules_api::transaction::{Transaction, TransactionSigningPayload, TxDetails, Version0};
 use sov_modules_api::CryptoSpec;
 use sov_test_utils::runtime::{sov_value_setter, TestOptimisticRuntime, TestOptimisticRuntimeCall};
 use sov_test_utils::TestSpec;
@@ -29,7 +29,7 @@ fn test_serde_serialize_tx() {
         max_priority_fee_bips: sov_modules_api::transaction::PriorityFeeBips(1),
         max_fee: sov_bank::Amount(10000),
         gas_limit: Some(vec![500, 500].try_into().unwrap()),
-        chain_id: 1337,
+        chain_hash_fragment: 1337,
     };
     let native_tx = Version0 {
         signature: native_sig,
@@ -37,6 +37,7 @@ fn test_serde_serialize_tx() {
         runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
         uniqueness: uniq,
         details,
+        address_override: None,
     };
     let native = Transaction::<Runtime, TestSpec>::V0(native_tx);
     let native_json = serde_json::to_value(&native).unwrap();
@@ -74,8 +75,9 @@ fn test_schema_and_native_serialization_consistency() {
                     "max_priority_fee_bips": 1,
                     "max_fee": 10000,
                     "gas_limit": [500, 500],
-                    "chain_id": 1337
-                }
+                    "chain_hash_fragment": 1337
+                },
+                "address_override": null
             }
         }"#;
     let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
@@ -96,7 +98,7 @@ fn test_schema_and_native_serialization_consistency() {
         max_priority_fee_bips: sov_modules_api::transaction::PriorityFeeBips(1),
         max_fee: sov_bank::Amount(10000),
         gas_limit: Some(vec![500, 500].try_into().unwrap()),
-        chain_id: 1337,
+        chain_hash_fragment: 1337,
     };
     let native_tx = Version0 {
         signature: native_sig,
@@ -104,6 +106,7 @@ fn test_schema_and_native_serialization_consistency() {
         runtime_call: TestOptimisticRuntimeCall::ValueSetter(native_call),
         uniqueness: uniq,
         details,
+        address_override: None,
     };
     let native = Transaction::<Runtime, TestSpec>::V0(native_tx);
     let native_bytes = borsh::to_vec(&native).unwrap();
@@ -140,7 +143,7 @@ mod web3_compatibility {
 
     #[test]
     fn test_unsigned_tx_wallet_serialization_none_gas_limit() {
-        let json = r#"{
+        let json = r#"{"V0": {
         "runtime_call": {
             "value_setter": {
                  "set_value": {
@@ -156,17 +159,20 @@ mod web3_compatibility {
             "max_priority_fee_bips": 1,
             "max_fee": 10000,
             "gas_limit": null,
-            "chain_id": 1337
-        }
-    }"#;
-        let schema = Schema::of_single_type::<UnsignedTransaction<Runtime, TestSpec>>().unwrap();
+            "chain_hash_fragment": 1337
+        },
+        "address_override": null,
+        "chain_hash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    }}"#;
+        let schema =
+            Schema::of_single_type::<TransactionSigningPayload<Runtime, TestSpec>>().unwrap();
 
         assert!(schema.json_to_borsh(0, json).is_ok(), "{ASSERT_MSG}");
     }
 
     #[test]
     fn test_unsigned_tx_wallet_serialization_some_gas_limit() {
-        let json = r#"{
+        let json = r#"{"V0": {
         "runtime_call": {
             "value_setter": {
                  "set_value": {
@@ -182,17 +188,20 @@ mod web3_compatibility {
             "max_priority_fee_bips": 1,
             "max_fee": 10000,
             "gas_limit": [500, 500],
-            "chain_id": 1337
-        }
-    }"#;
-        let schema = Schema::of_single_type::<UnsignedTransaction<Runtime, TestSpec>>().unwrap();
+            "chain_hash_fragment": 1337
+        },
+        "address_override": null,
+        "chain_hash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    }}"#;
+        let schema =
+            Schema::of_single_type::<TransactionSigningPayload<Runtime, TestSpec>>().unwrap();
 
         assert!(schema.json_to_borsh(0, json).is_ok(), "{ASSERT_MSG}");
     }
 
     #[test]
     fn test_unsigned_tx_wallet_serialization_window_uniqueness() {
-        let json = r#"{
+        let json = r#"{"V0": {
         "runtime_call": {
             "value_setter": {
                  "set_value": {
@@ -208,10 +217,13 @@ mod web3_compatibility {
             "max_priority_fee_bips": 1,
             "max_fee": 10000,
             "gas_limit": null,
-            "chain_id": 1337
-        }
-    }"#;
-        let schema = Schema::of_single_type::<UnsignedTransaction<Runtime, TestSpec>>().unwrap();
+            "chain_hash_fragment": 1337
+        },
+        "address_override": null,
+        "chain_hash": "0x0000000000000000000000000000000000000000000000000000000000000000"
+    }}"#;
+        let schema =
+            Schema::of_single_type::<TransactionSigningPayload<Runtime, TestSpec>>().unwrap();
 
         assert!(schema.json_to_borsh(0, json).is_ok(), "{ASSERT_MSG}");
     }
@@ -238,8 +250,9 @@ mod web3_compatibility {
                     "max_priority_fee_bips": 1,
                     "max_fee": 10000,
                     "gas_limit": [500, 500],
-                    "chain_id": 1337
-                }
+                    "chain_hash_fragment": 1337
+                },
+                "address_override": null
             }
         }"#;
         let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();
@@ -269,8 +282,9 @@ mod web3_compatibility {
                     "max_priority_fee_bips": 1,
                     "max_fee": 10000,
                     "gas_limit": null,
-                    "chain_id": 1337
-                }
+                    "chain_hash_fragment": 1337
+                },
+                "address_override": null
             }
         }"#;
         let schema = Schema::of_single_type::<Transaction<Runtime, TestSpec>>().unwrap();

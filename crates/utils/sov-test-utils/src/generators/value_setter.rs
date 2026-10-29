@@ -39,7 +39,6 @@ impl<S: Spec> MessageGenerator for ValueSetterMessages<S> {
 
     fn create_messages(
         &self,
-        chain_id: u64,
         max_priority_fee_bips: PriorityFeeBips,
         max_fee: Amount,
         gas_usage: Option<<Self::Spec as Spec>::Gas>,
@@ -60,7 +59,6 @@ impl<S: Spec> MessageGenerator for ValueSetterMessages<S> {
                 messages.push(Message::new(
                     admin.clone(),
                     set_value_msg,
-                    chain_id,
                     max_priority_fee_bips,
                     max_fee,
                     gas_usage,

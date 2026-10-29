@@ -5,7 +5,9 @@ pub mod capabilities;
 use std::io;
 
 use borsh::{BorshDeserialize, BorshSerialize};
-use capabilities::{HasCapabilities, HasKernel, TimelockPolicy, TransactionAuthenticator};
+use capabilities::{
+    HasCapabilities, HasKernel, HasSequencingData, TimelockPolicy, TransactionAuthenticator,
+};
 use serde::{Deserialize, Serialize};
 #[cfg(feature = "native")]
 use sov_rollup_interface::stf::GenesisParams;
@@ -70,6 +72,7 @@ impl ModuleExecutionConfig for () {
 pub trait Runtime<S: Spec>:
     DispatchCall<Spec = S>
     + HasCapabilities<S>
+    + HasSequencingData<S>
     + HasKernel<S>
     + Genesis<Spec = S, Config = Self::GenesisConfig>
     + TxHooks<Spec = S>
@@ -83,8 +86,9 @@ pub trait Runtime<S: Spec>:
     /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
-    /// The chain ID configured by the runtime and checked against every
-    /// transaction.
+    /// The chain ID configured by the runtime. Legacy (pre-fork) V0
+    /// transactions commit to it directly, so it is checked when
+    /// authenticating them.
     ///
     /// Runtimes usually implement this with
     /// `sov_modules_api::macros::config_value!("CHAIN_ID")` in the leaf crate;
@@ -204,6 +208,7 @@ pub fn decode_borsh_serialized_message<T: borsh::BorshDeserialize>(
 pub trait Runtime<S: Spec>:
     DispatchCall<Spec = S>
     + HasCapabilities<S>
+    + HasSequencingData<S>
     + HasKernel<S>
     + Genesis<Spec = S, Config = Self::GenesisConfig>
     + TxHooks<Spec = S>
@@ -216,8 +221,9 @@ pub trait Runtime<S: Spec>:
     /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
-    /// The chain ID configured by the runtime and checked against every
-    /// transaction.
+    /// The chain ID configured by the runtime. Legacy (pre-fork) V0
+    /// transactions commit to it directly, so it is checked when
+    /// authenticating them.
     fn chain_id() -> u64;
 
     /// The chain-hash overrides by height range.
@@ -274,19 +280,26 @@ impl Default for NodeEndpoints {
 
 /// Helper function to get [`sov_universal_wallet::schema::Schema`] for the [`Runtime`]
 ///
-/// The caller supplies the chain identity explicitly (typically read via
-/// `config_value!("CHAIN_ID")` / `config_value!("CHAIN_NAME")` in the calling
-/// crate), so that `sov-modules-api` itself never reads — and therefore never
-/// rebuilds on edits to — the chain-metadata manifest.
+/// The caller supplies the chain identity and chain-hash overrides explicitly
+/// (typically read via `config_value!("CHAIN_ID")` / `config_value!("CHAIN_NAME")` /
+/// `config_value!("CHAIN_HASH_OVERRIDES")` in the calling crate), so that
+/// `sov-modules-api` itself never reads — and therefore never rebuilds on edits
+/// to — the chain-metadata manifest.
+///
+/// # Errors
+/// Fails if the schema cannot be built, or if `chain_hash_overrides` contains a
+/// chain hash whose fragment collides with another simultaneously valid hash.
 pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'static>(
     chain_data: sov_universal_wallet::schema::ChainData,
+    chain_hash_overrides: &[ChainHashOverride],
 ) -> anyhow::Result<sov_universal_wallet::schema::Schema> {
     let schema = sov_universal_wallet::schema::Schema::of_rollup_types_with_chain_data::<
         crate::transaction::Transaction<R, S>,
-        crate::transaction::UnsignedTransaction<R, S>,
+        crate::transaction::TransactionSigningPayload<R, S>,
         R::Decodable,
         S::Address,
     >(chain_data)?;
+    validate_chain_hash_fragments(chain_hash_overrides, schema.chain_hash()?)?;
     Ok(schema)
 }
 
@@ -328,6 +341,58 @@ impl ChainHashOverride {
             && height >= self.end_height
             && height < self.end_height.saturating_add(self.grace_period)
     }
+}
+
+/// Rejects fragment collisions between distinct chain hashes that can be valid simultaneously.
+pub(crate) fn validate_chain_hash_fragments(
+    overrides: &[ChainHashOverride],
+    default_hash: [u8; 32],
+) -> anyhow::Result<()> {
+    for (index, first) in overrides.iter().enumerate() {
+        let first_valid_until = first.end_height.saturating_add(first.grace_period);
+        for second in &overrides[index + 1..] {
+            let second_valid_until = second.end_height.saturating_add(second.grace_period);
+            let validity_overlaps =
+                first.start_height < second_valid_until && second.start_height < first_valid_until;
+
+            if validity_overlaps {
+                ensure_distinct_chain_hash_fragments(first.chain_hash, second.chain_hash)?;
+            }
+        }
+    }
+
+    if let Some(last) = overrides.last() {
+        let default_start_height = last.end_height;
+        for hash_override in overrides {
+            let override_valid_until = hash_override
+                .end_height
+                .saturating_add(hash_override.grace_period);
+            if override_valid_until > default_start_height {
+                ensure_distinct_chain_hash_fragments(hash_override.chain_hash, default_hash)?;
+            }
+        }
+    }
+
+    Ok(())
+}
+
+fn ensure_distinct_chain_hash_fragments(
+    first_hash: [u8; 32],
+    second_hash: [u8; 32],
+) -> anyhow::Result<()> {
+    let first_fragment = crate::transaction::chain_hash_fragment(&first_hash);
+    if first_hash != second_hash
+        && first_fragment == crate::transaction::chain_hash_fragment(&second_hash)
+    {
+        anyhow::bail!(
+            "Distinct chain hashes that are valid simultaneously share transaction fragment \
+             {first_fragment:#018x}. Adjust the grace period or slightly change the newer schema \
+             or chain metadata so its chain hash has a different fragment. Colliding hashes: \
+             {first_hash:02x?} and {second_hash:02x?}"
+        );
+    }
+
+    Ok(())
 }
 
 /// Resolved chain hashes for a given height.

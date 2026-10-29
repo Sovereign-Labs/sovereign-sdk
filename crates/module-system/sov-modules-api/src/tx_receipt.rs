@@ -90,7 +90,8 @@ pub enum TxProcessingError {
     /// Impossible to resolve the context of the transaction.
     #[error("Impossible to resolve the context of the transaction, reason: {0}.")]
     CannotResolveContext(String),
-    /// Rejected by a pre-flight check.
+    /// Rejected by a pre-flight check. Batch execution drops such transactions without
+    /// creating a receipt, so this never appears in a receipt.
     #[error("The transaction was rejected by a pre-flight check.")]
     RejectedByPreFlight,
     /// Failed to mark transaction.

@@ -3,5 +3,6 @@
     "operating_mode": "operator",
     "inner_code_commitment": [0, 0, 0, 0, 0, 0, 0, 0],
     "outer_code_commitment": [0, 0, 0, 0, 0, 0, 0, 0],
-    "genesis_da_height": 3
+    "genesis_da_height": 3,
+    "state_version": 1
 }

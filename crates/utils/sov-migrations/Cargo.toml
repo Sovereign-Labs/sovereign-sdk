@@ -1,0 +1,26 @@
+[package]
+name = "sov-migrations"
+description = "Reusable offline state migrations for Sovereign SDK rollups"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+publish = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+rockbound = { workspace = true }
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
+sov-accounts = { workspace = true, features = ["native"] }
+sov-chain-state = { workspace = true, features = ["native"] }
+sov-db = { workspace = true, features = ["migration-script"] }
+sov-modules-api = { workspace = true, features = ["native"] }
+sov-rollup-interface = { workspace = true, features = ["native"] }
+sov-state = { workspace = true, features = ["native"] }
+sov-full-node-configs = { workspace = true }

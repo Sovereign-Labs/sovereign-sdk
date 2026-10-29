@@ -256,7 +256,6 @@ impl<S: Spec> MessageGenerator for BankMessageGenerator<S> {
 
     fn create_messages(
         &self,
-        chain_id: u64,
         max_priority_fee_bips: PriorityFeeBips,
         max_fee: Amount,
         gas_usage: Option<<Self::Spec as Spec>::Gas>,
@@ -270,7 +269,6 @@ impl<S: Spec> MessageGenerator for BankMessageGenerator<S> {
             messages.push(Message::new(
                 create_message.minter_pkey.clone(),
                 create_token_tx::<S>(create_message),
-                chain_id,
                 max_priority_fee_bips,
                 max_fee,
                 gas_usage,
@@ -284,7 +282,6 @@ impl<S: Spec> MessageGenerator for BankMessageGenerator<S> {
             messages.push(Message::new(
                 transfer_message.sender_pkey.clone(),
                 transfer_token_tx::<S>(transfer_message),
-                Self::default_chain_id(),
                 TEST_DEFAULT_MAX_PRIORITY_FEE,
                 TEST_DEFAULT_MAX_FEE,
                 gas_limit,

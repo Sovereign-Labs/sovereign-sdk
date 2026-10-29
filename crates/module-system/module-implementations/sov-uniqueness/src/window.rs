@@ -94,6 +94,27 @@ impl Window {
         // Otherwise, check the bitmap
         self.bits.get_bit(offset)
     }
+
+    fn highest_seen_nonce(&self) -> Option<u64> {
+        self.bits
+            .0
+            .iter()
+            .enumerate()
+            .rev()
+            .find_map(|(byte_index, byte)| {
+                if *byte == 0 {
+                    None
+                } else {
+                    let highest_set_bit = 7 - byte.leading_zeros() as u64;
+                    let offset = byte_index as u64 * 8 + highest_set_bit;
+                    Some(
+                        self.start_nonce
+                            .checked_add(offset)
+                            .expect("highest seen nonce cannot overflow. This is a bug."),
+                    )
+                }
+            })
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, Eq, BorshSerialize, BorshDeserialize, Default, Serialize)]
@@ -127,6 +148,29 @@ impl BitMap {
 }
 
 use crate::Uniqueness;
+
+fn ensure_window_nonce_is_not_too_far_ahead(
+    credential_id: &CredentialId,
+    highest_seen_nonce: u64,
+    nonce: u64,
+) -> anyhow::Result<()> {
+    // The `max()` term gives a margin for comfortable nonce increases at very low nonce numbers
+    // for new accounts, where the raw `mul(2)` limit would be very restrictive.
+    // The choice of PAST_TRANSACTIONS_WINDOW is somewhat arbitrary here, but has the nice property
+    // that it allows any nonce within the initial window to be submitted for a new account, which
+    // naturally conforms to the window semantics.
+    let max_allowed_nonce = highest_seen_nonce
+        .saturating_mul(2)
+        .max(PAST_TRANSACTIONS_WINDOW);
+
+    anyhow::ensure!(
+        nonce <= max_allowed_nonce,
+        "Bad window nonce for credential id: {credential_id}, latest known value is: {highest_seen_nonce}, provided value {nonce} exceeds the maximum allowed value {max_allowed_nonce}",
+    );
+
+    Ok(())
+}
+
 impl<S: Spec> Uniqueness<S> {
     pub(crate) fn check_window_uniqueness(
         &self,
@@ -136,6 +180,10 @@ impl<S: Spec> Uniqueness<S> {
     ) -> anyhow::Result<()> {
         let window = self.window.get(credential_id, state)?.unwrap_or_default();
         let start = window.start_nonce;
+
+        if let Some(highest_seen_nonce) = window.highest_seen_nonce() {
+            ensure_window_nonce_is_not_too_far_ahead(credential_id, highest_seen_nonce, nonce)?;
+        }
 
         anyhow::ensure!(
 	    nonce >= start,

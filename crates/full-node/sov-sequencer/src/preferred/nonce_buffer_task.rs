@@ -1383,6 +1383,7 @@ mod tests {
                 let _ = tx.send(AcceptedTx::<Confirmation<TestSpec, TestRuntime>> {
                     tx: baked_tx_clone,
                     tx_hash,
+                    credential_id: None,
                     confirmation: Confirmation {
                         events: vec![],
                         receipt: sov_modules_api::ApiTxEffect::Skipped {
