@@ -123,7 +123,7 @@ where
             <S::Da as sov_rollup_interface::da::DaSpec>::SlotHash,
         > + crate::MigrationStorage,
 {
-    let storage = crate::load_storage_config(&args.rollup_config_path, args.db_path.as_deref())?;
+    let storage = crate::load_storage_config(&args.rollup_config_path, &args.db_paths)?;
     let report = run_with_options::<S, H>(
         crate::MigrationOptions {
             storage,

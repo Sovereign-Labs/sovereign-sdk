@@ -805,9 +805,13 @@ where
             .executor
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache();
+        // This publishes the executor's own checkpoint, which still holds the sequencer's soft
+        // confirmations, so the frontier carries over from the executor. Using
+        // `info.next_event_number` here would under-report: the sequencer runs ahead of the node.
+        let next_event_number = inner.executor.next_event_number();
         inner
             .executor_events_sender
-            .force_update_api_state(checkpoint)
+            .force_update_api_state(checkpoint, next_event_number)
             .await;
         inner
             .executor_events_sender
@@ -878,9 +882,10 @@ where
         inner.latest_info = info.clone();
         // We update the API state, so users can query node state as it syncs.
         let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
+        // Node state only, so the frontier resets to the node's; see `force_overwrite_state`.
         inner
             .executor_events_sender
-            .update_state_for_recovery(checkpoint)
+            .update_state_for_recovery(checkpoint, info.next_event_number)
             .await;
         inner
             .executor_events_sender
