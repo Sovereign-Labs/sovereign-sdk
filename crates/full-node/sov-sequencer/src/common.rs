@@ -138,6 +138,20 @@ pub(crate) type SequencerEventStream<Rt> = Pin<
     >,
 >;
 
+/// Mints a fresh [`EventEpoch`], marking a new run of event numbering.
+///
+/// The sequencer starts a new run whenever it may hand out event numbers again for different
+/// content: on startup, and whenever it discards its transaction cache.
+///
+/// UUIDv7 carries a millisecond timestamp in its leading bits, so epochs sort chronologically
+/// and the time of a rollback can be read straight out of the token. The trailing random bits
+/// keep two epochs distinct even on hosts with a coarse clock, or across one that steps
+/// backwards. Nothing persists it: a restarting sequencer mints a new one, which is correct,
+/// because its un-committed soft confirmations are lost and clients must resynchronise.
+pub(crate) fn new_event_epoch() -> EventEpoch {
+    EventEpoch::new(uuid::Uuid::now_v7().as_u128())
+}
+
 /// The [`Sequencer`] trait is responsible for accepting transactions and
 /// assembling them into batches.
 #[async_trait]

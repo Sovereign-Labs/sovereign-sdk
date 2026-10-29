@@ -14,6 +14,22 @@
 //! - Query string parameters follow the bracket notation `foo[bar]` that was
 //!   popularized by [`qs`](https://github.com/ljharb/qs).
 //! - Pagination is cursor-based.
+//! - Replies that read the rollup's *latest* state carry `x-sov-last-event-number` and
+//!   `x-sov-event-epoch` headers (see [`record_last_event_number`]). Together they name the last
+//!   rollup event whose effects the reply reflects, so a client can take a state snapshot and
+//!   then apply exactly the events numbered above it from the event stream. Both headers are
+//!   absent when the request asked for a historical height, when the rollup has not emitted
+//!   any event yet, or when the endpoint does not read rollup state at all.
+//! - The epoch must be checked, not ignored. Event numbers are handed out before they are
+//!   committed, so a sequencer rollback retracts numbered events and reissues those numbers
+//!   for different content. The number alone cannot express that: a rollback that retracts
+//!   fewer events than it goes on to re-emit leaves the number *higher* than before. The
+//!   epoch changes whenever numbering is reissued, so numbers may only be compared across two
+//!   replies that agree on it; otherwise the client must resynchronise. An event that carries
+//!   no epoch counts as the all-zero epoch, which only a publisher that never reissues
+//!   numbers reports. The epoch is per
+//!   sequencer instance, not per cluster, so a failover or a redirect to another instance also
+//!   shows up as an epoch change; read state and stream events from the same instance.
 //!
 //! # Missing features
 //! - Multi-column sorting (see <https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/449>).
@@ -39,7 +55,7 @@ mod ws_tests;
 use axum::body::Body;
 use axum::extract::ws::WebSocket;
 use axum::extract::Request;
-use axum::http::{HeaderName, StatusCode};
+use axum::http::{HeaderName, HeaderValue, StatusCode};
 use axum::response::{IntoResponse, Response};
 use axum::{Error, Json, Router};
 pub use axum_extractors::{Path, Query};
@@ -51,6 +67,7 @@ pub use sealed_blocks_only::{SealedBlocksOnly, SEALED_BLOCKS_ONLY_HEADER};
 use serde::Serialize;
 pub use sorting::{Sorting, SortingOrder};
 use sov_shutdown::PrimaryShutdownController;
+use std::cell::Cell;
 use std::fmt::Debug;
 use tower_http::cors::CorsLayer;
 use tower_http::propagate_header::PropagateHeaderLayer;
@@ -124,6 +141,101 @@ pub fn to_json_object<T: Serialize>(value: T) -> JsonObject {
     }
 }
 
+static LAST_EVENT_NUMBER: HeaderName = HeaderName::from_static("x-sov-last-event-number");
+static EVENT_EPOCH: HeaderName = HeaderName::from_static("x-sov-event-epoch");
+
+/// What a handler has recorded about the events its state read reflects.
+#[derive(Clone, Copy, Debug)]
+enum RecordedEvents {
+    /// Nothing recorded; the handler did not read rollup state.
+    Unset,
+    /// Every read so far reflects exactly the events up to `last_event_number` in `epoch`;
+    /// `None` before the first event is emitted.
+    Recorded {
+        epoch: u128,
+        last_event_number: Option<u64>,
+    },
+    /// Reads disagreed, so no single `(epoch, number)` describes the reply.
+    Conflict,
+}
+
+tokio::task_local! {
+    /// The current request's record of the events reflected in the state its handler read.
+    ///
+    /// Scoped by the layer installed by [`preconfigured_router_layers`], which runs the handler
+    /// in the same task, so a state read anywhere in the handler reaches it without being
+    /// threaded through extractors.
+    static RECORDED_EVENTS: Cell<RecordedEvents>;
+}
+
+/// Records that the state read by the current HTTP request belongs to `epoch` and reflects
+/// every event up to and including `last_event_number`, or no event yet when that is `None`.
+/// The layer installed by [`preconfigured_router_layers`] turns this into the
+/// `x-sov-last-event-number` and `x-sov-event-epoch` response headers, which are omitted when
+/// there is no event to report.
+///
+/// A read that predates the first event must still be recorded: a later read in the same
+/// handler may reflect events it does not, and the reply must then carry neither header.
+///
+/// Outside such a request (the sequencer, JSON-RPC, a task spawned by the handler) this does
+/// nothing.
+///
+/// When a handler reads state more than once the reads may land on different snapshots. If
+/// they disagree on either the epoch or the number, no single pair describes the reply: the
+/// smaller number would make a client double-apply events already reflected in the later
+/// snapshot, and the larger would make it skip events missing from the earlier one. So the
+/// reply then carries neither header.
+pub fn record_last_event_number(epoch: u128, last_event_number: Option<u64>) {
+    let recorded = RecordedEvents::Recorded {
+        epoch,
+        last_event_number,
+    };
+    // `AccessError` only means we are outside a request scope, where there is nothing to report
+    // to; see the doc comment.
+    let _ = RECORDED_EVENTS.try_with(|cell| {
+        cell.set(match cell.get() {
+            RecordedEvents::Unset => recorded,
+            RecordedEvents::Recorded {
+                epoch: seen_epoch,
+                last_event_number: seen,
+            } if seen_epoch == epoch && seen == last_event_number => recorded,
+            RecordedEvents::Recorded { .. } | RecordedEvents::Conflict => RecordedEvents::Conflict,
+        });
+    });
+}
+
+/// Publishes whatever the handler recorded via [`record_last_event_number`] as response headers.
+async fn attach_last_event_number(
+    request: Request,
+    next: axum::middleware::Next,
+) -> axum::response::Response {
+    let (mut response, recorded) = RECORDED_EVENTS
+        .scope(Cell::new(RecordedEvents::Unset), async {
+            let response = next.run(request).await;
+            (response, RECORDED_EVENTS.with(Cell::get))
+        })
+        .await;
+
+    // A WebSocket stream outruns any frontier we could stamp on the handshake, so don't
+    // pretend otherwise.
+    if response.status() != StatusCode::SWITCHING_PROTOCOLS {
+        if let RecordedEvents::Recorded {
+            epoch,
+            last_event_number: Some(last_event_number),
+        } = recorded
+        {
+            let headers = response.headers_mut();
+            headers.insert(&LAST_EVENT_NUMBER, last_event_number.into());
+            // Hex, fixed width, to make clear it is an opaque token and not a quantity.
+            let epoch = HeaderValue::from_str(&format!("{epoch:032x}"))
+                .expect("Lowercase hex digits are always a valid header value");
+            headers.insert(&EVENT_EPOCH, epoch);
+        }
+    }
+
+    response
+}
+
 /// Customizes the given [`Router`] with a set of preconfigured "layers" that
 /// are a good starting point for building production-ready JSON APIs.
 pub fn preconfigured_router_layers<S>(router: Router<S>) -> Router<S>
@@ -162,6 +274,8 @@ where
                     "x-request-id",
                 ))),
         )
+        // Outermost, so it sees the final response of every route in this router.
+        .layer(axum::middleware::from_fn(attach_last_event_number))
 }
 
 /// A pre-configured [`CorsLayer`] with permissive configurations.
@@ -550,6 +664,10 @@ pub async fn handle_bad_ws_request(
 
 #[cfg(test)]
 mod tests {
+    use axum::http::HeaderMap;
+    use tower::ServiceExt;
+
+    use super::*;
     use crate::test_utils::uri_with_query_params;
 
     // Ideally we'd also test with types other than strings. E.g. integers?
@@ -557,5 +675,107 @@ mod tests {
     fn any_query_param_can_be_serialized(key: String, value: String) {
         // As long as it doesn't crash, we're good and the test succeeds.
         uri_with_query_params([(key, value)]);
+    }
+
+    const EPOCH: u128 = 0x1234_5678_9abc;
+    const OTHER_EPOCH: u128 = 0x4321_8765;
+    const NUMBER: u64 = 0x1234;
+
+    /// Serves one request to a handler that records each `(epoch, number)` in `reads`, as a
+    /// handler reading state once per entry would, and returns the response headers.
+    fn headers_after_recording(
+        reads: &'static [(u128, Option<u64>)],
+        request: Request,
+    ) -> HeaderMap {
+        let router: Router = preconfigured_router_layers(Router::new().route(
+            "/",
+            axum::routing::get(move || async move {
+                for &(epoch, last_event_number) in reads {
+                    record_last_event_number(epoch, last_event_number);
+                }
+            }),
+        ));
+        let response = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap()
+            .block_on(router.oneshot(request))
+            .unwrap();
+        response.headers().clone()
+    }
+
+    fn get_root() -> Request {
+        Request::get("/").body(Body::empty()).unwrap()
+    }
+
+    fn event_headers(headers: &HeaderMap) -> (Option<&str>, Option<&str>) {
+        (
+            headers
+                .get(&LAST_EVENT_NUMBER)
+                .map(|value| value.to_str().unwrap()),
+            headers
+                .get(&EVENT_EPOCH)
+                .map(|value| value.to_str().unwrap()),
+        )
+    }
+
+    #[test]
+    fn reads_that_agree_produce_headers() {
+        let headers =
+            headers_after_recording(&[(EPOCH, Some(NUMBER)), (EPOCH, Some(NUMBER))], get_root());
+
+        assert_eq!(
+            event_headers(&headers),
+            (Some("4660"), Some("00000000000000000000123456789abc")),
+        );
+    }
+
+    #[test]
+    fn reads_before_the_first_event_produce_no_headers() {
+        let headers = headers_after_recording(&[(EPOCH, None)], get_root());
+
+        assert_eq!(
+            event_headers(&headers),
+            (None, None),
+            "There is no event to order the reply against yet"
+        );
+    }
+
+    #[test]
+    fn a_read_before_the_first_event_conflicts_with_a_later_one() {
+        let headers = headers_after_recording(&[(EPOCH, None), (EPOCH, Some(NUMBER))], get_root());
+
+        assert_eq!(
+            event_headers(&headers),
+            (None, None),
+            "Part of the reply predates every event, so no number describes all of it"
+        );
+    }
+
+    #[test]
+    fn reads_with_different_numbers_produce_no_headers() {
+        let headers = headers_after_recording(
+            &[(EPOCH, Some(NUMBER)), (EPOCH, Some(NUMBER + 0x100))],
+            get_root(),
+        );
+
+        assert_eq!(
+            event_headers(&headers),
+            (None, None),
+            "No single number describes a reply built from two snapshots"
+        );
+    }
+
+    #[test]
+    fn reads_with_different_epochs_produce_no_headers() {
+        let headers = headers_after_recording(
+            &[(EPOCH, Some(NUMBER)), (OTHER_EPOCH, Some(NUMBER))],
+            get_root(),
+        );
+
+        assert_eq!(
+            event_headers(&headers),
+            (None, None),
+            "The same number in two epochs names two different events"
+        );
     }
 }

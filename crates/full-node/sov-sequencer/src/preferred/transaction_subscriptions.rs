@@ -8,7 +8,7 @@ use futures::task::Poll;
 use futures::{Future, FutureExt, Stream, StreamExt};
 use sov_db::ledger_db::LedgerDb;
 use sov_modules_api::capabilities::get_timestamp_from_sequencing_data;
-use sov_modules_api::{HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
+use sov_modules_api::{EventEpoch, HexString, Runtime, RuntimeEventResponse, Spec, TxHash};
 use sov_rollup_interface::node::ledger_api::{EventIdentifier, LedgerStateProvider, QueryMode};
 use tokio::sync::{broadcast, RwLock};
 use tokio_stream::wrappers::errors::BroadcastStreamRecvError;
@@ -60,8 +60,12 @@ impl<S: Spec, Rt: Runtime<S>> Clone for TxResultWriter<S, Rt> {
 type ArcInner<S, Rt> = Arc<tokio::sync::RwLock<TransactionCacheInner<S, Rt>>>;
 
 impl<S: Spec, Rt: Runtime<S>> TxResultWriter<S, Rt> {
-    pub async fn insert(&self, tx: AcceptedTx<Confirmation<S, Rt>>) {
+    /// Inserts a transaction, labelling its events with the cache's current [`EventEpoch`].
+    pub async fn insert(&self, mut tx: AcceptedTx<Confirmation<S, Rt>>) {
         let mut transaction_cache = self.inner.write().await;
+        for event in tx.confirmation.events.iter_mut() {
+            event.epoch = Some(transaction_cache.epoch);
+        }
         assert_eq!(
             tx.confirmation.tx_number, transaction_cache.next_tx_number,
             "Transactions must be inserted in order"
@@ -92,12 +96,23 @@ impl<S: Spec, Rt: Runtime<S>> TxResultWriter<S, Rt> {
         let _ = transaction_cache.tx_response_sender.send(tx); // We don't care if there are no listeners
     }
 
+    /// The run of event numbering that events inserted from now on belong to.
+    pub async fn epoch(&self) -> EventEpoch {
+        self.inner.read().await.epoch
+    }
+
+    /// Discards the cache, so that the transactions from `tx_number` onwards can be inserted again.
+    ///
+    /// The events re-inserted afterwards may reuse numbers that were already handed out for
+    /// different content, so this starts a new [`EventEpoch`]. That is conservative: a flush
+    /// that re-inserts identical events, or one on a cache that never numbered any, rotates too.
     pub async fn clean_and_overwrite_next_tx_number(&self, tx_number: u64) {
         tracing::debug!(
             "Cleaning and overwriting transaction cache up to {}",
             tx_number
         );
         let mut transaction_cache = self.inner.write().await;
+        transaction_cache.epoch = crate::common::new_event_epoch();
         transaction_cache.next_tx_number = tx_number;
         transaction_cache.cache.clear();
         transaction_cache.tx_hash_index.clear();
@@ -160,6 +175,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
                 next_tx_number,
                 tx_hash_index: HashMap::new(),
                 event_numbers_index: BTreeMap::new(),
+                epoch: crate::common::new_event_epoch(),
             })),
             ledger_db,
             tx_response_receiver,
@@ -173,13 +189,13 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         if event_range_len(&event_numbers)? == 0 {
             return Ok(vec![]);
         }
-        let cached_events = {
+        let (epoch, cached_events) = {
             let transaction_cache = self.inner.read().await;
             let mut relevant_txs = transaction_cache
                 .event_numbers_index
                 .range(event_numbers.clone())
                 .map(|(_, tx_number)| *tx_number);
-            match relevant_txs.next() {
+            let cached_events = match relevant_txs.next() {
                 Some(first_needed_tx) => {
                     let last_needed_tx = relevant_txs.next_back().unwrap_or(first_needed_tx);
                     transaction_cache
@@ -191,7 +207,8 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
                         .collect::<Vec<_>>()
                 }
                 None => Vec::new(),
-            }
+            };
+            (transaction_cache.epoch, cached_events)
         };
 
         // If we found any events in cache, we don't need to fetch those ones from the DB - adjust the range accordingly
@@ -240,6 +257,7 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
         Ok(db_event_opts
             .into_iter()
             .flatten()
+            .map(|event| label_ledger_event(event, epoch))
             .chain(cached_events)
             .collect())
     }
@@ -274,7 +292,10 @@ impl<S: Spec, Rt: Runtime<S>> TransactionCache<S, Rt> {
             confirmation: Confirmation {
                 events: tx
                     .events
-                    .expect("TxResponse::events cannot be None when query mode is Full"),
+                    .expect("TxResponse::events cannot be None when query mode is Full")
+                    .into_iter()
+                    .map(|event| label_ledger_event(event, transaction_cache.epoch))
+                    .collect(),
                 receipt: tx.receipt.into(),
                 tx_number,
                 timestamp_nanos: maybe_timestamp,
@@ -442,6 +463,7 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
             return Ok((txs_from_cache, maybe_subscription));
         }
         // Unlock while we backfill txs from the DB.
+        let epoch = tx_cache.epoch;
         drop(tx_cache);
         // Otherwise, we need to get some txs from the db to complete the chunk. There are some edge cases when the cache is empty...
         // - If the DB is also empty, we're done. In that case, next_tx_number will be 0;
@@ -491,7 +513,10 @@ impl<S: Spec, Rt: Runtime<S>> AcceptedTxStream<S, Rt> {
                     confirmation: Confirmation {
                         events: tx
                             .events
-                            .expect("TxResponse::events cannot be None when query mode is Full"),
+                            .expect("TxResponse::events cannot be None when query mode is Full")
+                            .into_iter()
+                            .map(|event| label_ledger_event(event, epoch))
+                            .collect(),
                         receipt: tx.receipt.into(),
                         tx_number: starting_from + idx as u64,
                         timestamp_nanos,
@@ -596,6 +621,27 @@ impl<S: Spec, Rt: Runtime<S>> Stream for AcceptedTxStream<S, Rt> {
     }
 }
 
+/// Labels an event read back from the ledger with the epoch the sequencer currently serves.
+///
+/// A committed event is never reissued, but the snapshot a client holds may be: if the
+/// sequencer rolled back since the snapshot was taken, the snapshot reflects retracted events
+/// and the client must resynchronise before applying anything, committed or not. The ledger
+/// cannot say so, as it stores no epoch, so every event served by the sequencer is labelled
+/// with the epoch that is current when it is served. Comparing it against the snapshot's
+/// epoch then catches the rollback whether the event came from the cache or the ledger.
+///
+/// "Current" is the epoch read while the cache was last locked, which may predate the ledger
+/// fetch. That is no worse than the window before a flush, during which the sequencer has not
+/// yet noticed that the node diverged and serves everything under the old epoch anyway: both
+/// are confined to recovery, which clients are expected to resynchronise through.
+fn label_ledger_event<E>(
+    mut event: RuntimeEventResponse<E>,
+    epoch: EventEpoch,
+) -> RuntimeEventResponse<E> {
+    event.epoch = Some(epoch);
+    event
+}
+
 type TxNumber = u64;
 type EventNumber = u64;
 #[derive(Debug)]
@@ -608,6 +654,8 @@ pub(crate) struct TransactionCacheInner<S: Spec, Rt: Runtime<S>> {
     // A map of tx hashes to tx numbers
     tx_hash_index: HashMap<TxHash, TxNumber>,
     event_numbers_index: BTreeMap<EventNumber, TxNumber>,
+    // The run of numbering that inserted events belong to. Rotated when the cache is discarded.
+    epoch: EventEpoch,
 }
 
 #[cfg(test)]
@@ -639,6 +687,7 @@ mod tests {
                 name: "ValueSetter".to_owned(),
             },
             tx_hash: HexString([event_number as u8; 32]),
+            epoch: None,
         }
     }
 
@@ -712,6 +761,81 @@ mod tests {
         ledger_db.replace_reader(storage_manager.create_ledger_storage());
 
         (temp_dir, TransactionCache::new(ledger_db, 1, 100))
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn inserted_events_are_labelled_with_the_cache_epoch() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+        let writer = cache.write_handle();
+        let mut stream = cache.subscribe_events();
+        writer
+            .insert(build_mock_confirmation_with_events(1, 3..5))
+            .await;
+
+        let epoch = writer.epoch().await;
+        for _ in 3..5 {
+            let event = stream.next().await.unwrap().unwrap();
+            assert_eq!(event.epoch, Some(epoch));
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn discarding_numbered_events_starts_a_new_epoch() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+        let writer = cache.write_handle();
+        writer
+            .insert(build_mock_confirmation_with_events(1, 3..5))
+            .await;
+        let epoch = writer.epoch().await;
+
+        writer.clean_and_overwrite_next_tx_number(1).await;
+
+        assert_ne!(
+            writer.epoch().await,
+            epoch,
+            "Events 3 and 4 may be reissued for different content, so they need a new epoch"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn listed_ledger_events_are_labelled_with_the_cache_epoch() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+        let epoch = cache.write_handle().epoch().await;
+
+        let events = cache.list_events(0..3).await.unwrap();
+
+        assert_eq!(
+            events.iter().map(|event| event.epoch).collect::<Vec<_>>(),
+            vec![Some(epoch); 3],
+            "Events read back from the ledger must carry the epoch they are served under, so a \
+             client can tell whether its snapshot predates a rollback"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn replayed_ledger_txs_carry_the_cache_epoch() {
+        let (_temp_dir, cache) = build_cache_with_db_events(0..3);
+        let epoch = cache.write_handle().epoch().await;
+
+        let mut stream = cache
+            .subscribe_starting_from_tx_number(Some(0))
+            .await
+            .unwrap();
+        let tx = tokio::time::timeout(std::time::Duration::from_secs(5), stream.next())
+            .await
+            .unwrap()
+            .unwrap()
+            .unwrap();
+
+        assert_eq!(
+            tx.confirmation
+                .events
+                .iter()
+                .map(|event| event.epoch)
+                .collect::<Vec<_>>(),
+            vec![Some(epoch); 3],
+            "A replayed transaction backfilled from the ledger must carry the epoch it is served under"
+        );
     }
 
     #[tokio::test(flavor = "multi_thread")]

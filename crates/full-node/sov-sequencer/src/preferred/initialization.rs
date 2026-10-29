@@ -81,8 +81,18 @@ where
 
         let tx_status_manager = TxStatusManager::default();
 
+        let cached_txs = TransactionCache::new(
+            api_ledger_db.clone(),
+            latest_state_update.next_tx_number,
+            preferred_config.events_channel_size,
+        );
+
         let (api_state, checkpoint_sender) = Self::api_state(
             latest_state_update.storage.clone(),
+            EventFrontier::new(
+                cached_txs.write_handle().epoch().await,
+                latest_state_update.next_event_number,
+            ),
             primary_shutdown.clone(),
         );
 
@@ -141,12 +151,6 @@ where
             !preferred_config.disable_state_root_consistency_checks,
         );
         handles.push(state_root_handle);
-
-        let cached_txs = TransactionCache::new(
-            api_ledger_db.clone(),
-            latest_state_update.next_tx_number,
-            preferred_config.events_channel_size,
-        );
 
         let (executor_events_sender, executor_events_receiver) =
             ExecutorEventsSender::new(primary_shutdown.clone(), db_cache);
@@ -338,6 +342,7 @@ where
 
     fn api_state(
         storage: S::Storage,
+        event_frontier: EventFrontier,
         primary_shutdown: PrimaryShutdownController,
     ) -> (
         ApiState<S>,
@@ -351,7 +356,10 @@ where
         let checkpoint = StateCheckpoint::new(storage, &runtime.kernel());
         // Preferred sequencer deliberately treats the latest available slot as finalized
         // when initializing API state (soft-confirmation semantics).
-        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
+        // Seed the frontier from the node, so API readers can order a state snapshot against the
+        // event stream from the very first request, before the sequencer opens its first batch.
+        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint)
+            .with_event_frontier(event_frontier);
         let (checkpoint_sender, checkpoint_receiver) =
             watch::channel(Arc::new(concurrent_checkpoint));
         let api_state = ApiState::build(
