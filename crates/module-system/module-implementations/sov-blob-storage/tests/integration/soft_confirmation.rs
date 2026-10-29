@@ -703,3 +703,66 @@ fn deferring_registered_non_preferred_blob_does_not_change_user_state() {
         "The user state root must not change in a slot that creates no rollup block"
     );
 }
+
+/// Regression test: a deferred blob from a *registered* non-preferred sequencer is stored with its
+/// gas in a deferred escrow. When the preferred sequencer's block builder pulls it via
+/// `get_non_preferred_blobs`, the escrow must be released exactly as the node does it (instead of
+/// panicking in `into_selected_blob`), leaving the gas for the blob's pre-execution checks
+/// reserved.
+#[test]
+fn sequencer_get_non_preferred_blobs_releases_deferred_escrow() {
+    use sov_modules_api::capabilities::{BlobSelector, ChainState, HasKernel};
+    use sov_modules_api::{Gas, GasArray, GasSpec, KernelStateAccessor, NoOpControlFlow};
+    use sov_rollup_interface::common::SlotNumber;
+
+    use crate::helpers_soft_confirmations::SoftConfRT;
+
+    let (
+        TestData {
+            regular_sequencer, ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+
+    // The registered non-preferred sequencer posts a single-tx batch. No preferred batch is in
+    // this slot, so the blob is deferred and its gas is held in a deferred escrow.
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(regular_sequencer.clone(), SequencerInfo::Regular)],
+        &mut HashMap::new(),
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+    assert!(
+        runner.receipts().last().unwrap().batch_receipts.is_empty(),
+        "The non-preferred blob should be deferred, not executed"
+    );
+
+    // Do what the preferred sequencer's block builder does when its visible slot advances over
+    // the DA slot that contains the deferred blob.
+    runner.__apply_to_state(|checkpoint| {
+        let mut rt = SoftConfRT::default();
+        let mut kernel = rt.kernel();
+        let mut accessor = KernelStateAccessor::from_checkpoint(&kernel, checkpoint);
+        let next_visible_slot_number = accessor.visible_slot_number().advance(10);
+        kernel.increment_rollup_height(&mut accessor, next_visible_slot_number);
+        let gas_price = kernel.base_fee_per_gas(&mut accessor).unwrap();
+        let blobs = kernel.get_non_preferred_blobs(
+            SlotNumber::new(1).range_inclusive(SlotNumber::new(10)),
+            &mut accessor,
+            NoOpControlFlow,
+        );
+
+        assert_eq!(blobs.len(), 1, "The deferred blob should be selected");
+        // As on the node, the escrow pays for one pre-execution check per tx of the batch.
+        let one_check = <crate::S as GasSpec>::max_tx_check_costs()
+            .checked_scalar_product(1)
+            .unwrap()
+            .checked_value(gas_price)
+            .unwrap();
+        assert_eq!(
+            blobs[0].reserved_gas_tokens,
+            Some(one_check),
+            "The blob should reserve the gas for its pre-execution checks, moved out of the deferred escrow"
+        );
+    });
+}

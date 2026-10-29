@@ -4753,3 +4753,146 @@ async fn standard_sequencer_state_reads_report_the_nodes_last_event() {
          have to resynchronise over an epoch change"
     );
 }
+
+// Regression test: a batch from a registered, non-preferred sequencer is deferred by the node and
+// its gas is held in a deferred escrow. When the preferred sequencer's visible slot advances over
+// it, the sequencer must release the escrow exactly like the node does. Previously it panicked
+// (crash loop). A fix that diverges from the node would trip the sequencer's state root
+// consistency checks against the node, which crash the rollup. So would a deferral that changes
+// the node's user state without a rollup block.
+#[tokio::test(flavor = "multi_thread")]
+async fn registered_non_preferred_batch_is_executed_like_the_node() {
+    use sov_modules_api::capabilities::TransactionAuthenticator;
+
+    type Rt = TestRuntime<TestSpec>;
+
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        MAX_BATCH_EXECUTION_TIME_MILLIS,
+        TEST_FINALIZATION_BLOCKS,
+        BlockProducingConfig::OnBatchSubmit {
+            block_wait_timeout_ms: None,
+        },
+    )
+    .await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+    let client = test_rollup.api_client().clone();
+
+    // 1. Register a second, non-preferred sequencer.
+    let other_da_address = sov_mock_da::MockAddress::new([0x42; 32]);
+    let register = encode_call::<Rt>(
+        &admin.private_key,
+        0,
+        &<Rt as DispatchCall>::Decodable::SequencerRegistry(
+            sov_test_utils::sov_sequencer_registry::CallMessage::Register {
+                da_address: other_da_address,
+                amount: Amount::new(100_000_000_000),
+            },
+        ),
+    );
+    let register_tx_hash = client
+        .send_raw_tx_to_sequencer(&register)
+        .await
+        .unwrap()
+        .into_inner()
+        .id;
+    // Wait for the node (not just the sequencer) to process the registration.
+    tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            // The ledger only contains txs processed by the node.
+            if test_rollup
+                .client
+                .query_rest_endpoint::<serde_json::Value>(&format!(
+                    "/ledger/txs/{}",
+                    *register_tx_hash
+                ))
+                .await
+                .is_ok()
+            {
+                break;
+            }
+            test_rollup.force_close_batch().await.unwrap();
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("The second sequencer's registration was never processed by the node");
+
+    // 2. The second sequencer posts a multi-tx batch. The node defers it, since no preferred batch
+    // advances the visible slot up to its DA slot yet.
+    let non_preferred_value = 4343;
+    let batch: Vec<sov_modules_api::FullyBakedTx> = [(100, 4242), (101, non_preferred_value)]
+        .into_iter()
+        .map(|(generation, value)| {
+            <<Rt as Runtime<TestSpec>>::Auth as TransactionAuthenticator<TestSpec>>::encode_with_standard_auth(
+                tx_set_value(&admin.private_key, generation, value),
+            )
+        })
+        .collect();
+    let other_da_service = test_rollup
+        .da_service
+        .another_on_the_same_layer(other_da_address)
+        .await;
+    let receipt = other_da_service
+        .send_transaction(&borsh::to_vec(&batch).unwrap())
+        .await;
+    test_rollup.da_service.produce_block_now().await.unwrap();
+    receipt.await.unwrap().unwrap();
+
+    // 3. The preferred sequencer keeps producing batches until both it and the node have executed
+    // the deferred batch.
+    let mut generation = 1;
+    tokio::time::timeout(Duration::from_secs(60), async {
+        loop {
+            client
+                .send_raw_tx_to_sequencer(&tx_event_emitter(
+                    &admin.private_key,
+                    vec![true],
+                    generation,
+                ))
+                .await
+                .expect("The preferred sequencer should keep accepting txs");
+            generation += 1;
+            test_rollup.force_close_batch().await.unwrap();
+            let value: serde_json::Value = test_rollup
+                .client
+                .query_rest_endpoint("/modules/value-setter/state/value")
+                .await
+                .unwrap();
+            if value["value"].as_u64() == Some(non_preferred_value) {
+                break;
+            }
+            sleep(Duration::from_millis(100)).await;
+        }
+    })
+    .await
+    .expect("The non-preferred batch was never executed");
+
+    // 4. More batches, so that the node processes the preferred batches that include the
+    // non-preferred batch and the sequencer checks its state roots against the node's.
+    for _ in 0..TEST_FINALIZATION_BLOCKS + 2 {
+        client
+            .send_raw_tx_to_sequencer(&tx_event_emitter(
+                &admin.private_key,
+                vec![true],
+                generation,
+            ))
+            .await
+            .expect("The preferred sequencer should keep accepting txs");
+        generation += 1;
+        test_rollup.force_close_batch().await.unwrap();
+    }
+    test_rollup.wait_for_node_synced().await.unwrap();
+
+    assert!(
+        !test_rollup.is_rollup_crashed(),
+        "The rollup crashed while executing the non-preferred batch"
+    );
+    test_rollup
+        .shutdown()
+        .await
+        .expect("Rollup should shut down cleanly, without any crashed background tasks");
+}
