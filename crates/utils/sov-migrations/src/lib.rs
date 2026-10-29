@@ -30,10 +30,72 @@ struct StorageOnlyRollupConfig {
 pub struct MigrationArgs {
     /// Path to the rollup config file used by the running node.
     pub rollup_config_path: PathBuf,
-    /// Override `storage.path` from the rollup config.
-    pub db_path: Option<PathBuf>,
+    /// Overrides for the database locations in the rollup config.
+    pub db_paths: DbPathOverrides,
     /// Compute the post-migration state root but do not commit changes.
     pub dry_run: bool,
+}
+
+/// Overrides for the database locations in the `storage` section of a rollup config.
+///
+/// Each field that is set replaces the matching `storage` field.
+#[derive(Debug, Clone, Default)]
+pub struct DbPathOverrides {
+    /// Overrides `storage.path`.
+    pub db_path: Option<PathBuf>,
+    /// Overrides `storage.live_db_path`.
+    pub live_db_path: Option<PathBuf>,
+    /// Overrides `storage.ledger_db_path`.
+    pub ledger_db_path: Option<PathBuf>,
+    /// Overrides `storage.user_nomt_db_path`.
+    pub user_nomt_db_path: Option<PathBuf>,
+}
+
+impl DbPathOverrides {
+    /// Applies the overrides to `storage`.
+    ///
+    /// Fails if `db_path` is set while the config pins an exact database path that is not
+    /// overridden too: that database would not move with `db_path`, so the migration would
+    /// silently modify the database at the original location.
+    pub fn apply(&self, storage: &mut RollupDbConfig) -> anyhow::Result<()> {
+        if let Some(db_path) = &self.db_path {
+            let pinned = [
+                ("live_db_path", &storage.live_db_path, &self.live_db_path),
+                (
+                    "ledger_db_path",
+                    &storage.ledger_db_path,
+                    &self.ledger_db_path,
+                ),
+                (
+                    "user_nomt_db_path",
+                    &storage.user_nomt_db_path,
+                    &self.user_nomt_db_path,
+                ),
+            ];
+            for (field, configured, overridden) in pinned {
+                if let (Some(configured), None) = (configured, overridden) {
+                    bail!(
+                        "rollup config sets `storage.{field}` = {}, which is not relocated by --db-path {}; \
+                         pass --{} explicitly",
+                        configured.display(),
+                        db_path.display(),
+                        field.replace('_', "-"),
+                    );
+                }
+            }
+            storage.path = db_path.clone();
+        }
+        if let Some(live_db_path) = &self.live_db_path {
+            storage.live_db_path = Some(live_db_path.clone());
+        }
+        if let Some(ledger_db_path) = &self.ledger_db_path {
+            storage.ledger_db_path = Some(ledger_db_path.clone());
+        }
+        if let Some(user_nomt_db_path) = &self.user_nomt_db_path {
+            storage.user_nomt_db_path = Some(user_nomt_db_path.clone());
+        }
+        Ok(())
+    }
 }
 
 /// NOMT storage operations needed to rewrite an existing head version.
@@ -115,10 +177,10 @@ pub struct MigrationOutcome<Report> {
     pub migration: Report,
 }
 
-/// Loads the storage config from a rollup TOML config and applies an optional DB path override.
+/// Loads the storage config from a rollup TOML config and applies the DB path overrides.
 pub fn load_storage_config(
     rollup_config_path: impl AsRef<Path>,
-    db_path_override: Option<&Path>,
+    overrides: &DbPathOverrides,
 ) -> anyhow::Result<RollupDbConfig> {
     let rollup_config: StorageOnlyRollupConfig =
         from_toml_path(&rollup_config_path).with_context(|| {
@@ -129,9 +191,7 @@ pub fn load_storage_config(
         })?;
 
     let mut storage = rollup_config.storage;
-    if let Some(db_path_override) = db_path_override {
-        storage.path = db_path_override.to_path_buf();
-    }
+    overrides.apply(&mut storage)?;
     Ok(storage)
 }
 
@@ -187,4 +247,97 @@ fn make_ledger_root_patch(
     let mut batch = SchemaBatch::new();
     batch.put::<SlotByNumber>(&head_slot_number, &head_slot)?;
     Ok(batch)
+}
+
+#[cfg(test)]
+mod tests {
+    use std::path::PathBuf;
+
+    use sov_db::config::RollupDbConfig;
+
+    use super::DbPathOverrides;
+
+    fn storage_in_data() -> RollupDbConfig {
+        serde_json::from_str(r#"{"path":"data"}"#).unwrap()
+    }
+
+    #[test]
+    fn per_db_overrides_replace_config_paths() {
+        let mut storage = storage_in_data();
+        storage.live_db_path = Some(PathBuf::from("/config/live"));
+        storage.ledger_db_path = Some(PathBuf::from("/config/ledger"));
+        storage.user_nomt_db_path = Some(PathBuf::from("/config/user"));
+
+        DbPathOverrides {
+            db_path: None,
+            live_db_path: Some(PathBuf::from("/cli/live")),
+            ledger_db_path: Some(PathBuf::from("/cli/ledger")),
+            user_nomt_db_path: Some(PathBuf::from("/cli/user")),
+        }
+        .apply(&mut storage)
+        .unwrap();
+
+        assert_eq!(storage.path, PathBuf::from("data"));
+        assert_eq!(storage.live_db_path, Some(PathBuf::from("/cli/live")));
+        assert_eq!(storage.ledger_db_path, Some(PathBuf::from("/cli/ledger")));
+        assert_eq!(storage.user_nomt_db_path, Some(PathBuf::from("/cli/user")));
+    }
+
+    #[test]
+    fn db_path_replaces_path_when_config_has_no_per_db_paths() {
+        let mut storage = storage_in_data();
+
+        DbPathOverrides {
+            db_path: Some(PathBuf::from("/cli/data")),
+            ..Default::default()
+        }
+        .apply(&mut storage)
+        .unwrap();
+
+        assert_eq!(storage.path, PathBuf::from("/cli/data"));
+        assert_eq!(storage.live_db_path, None);
+        assert_eq!(storage.ledger_db_path, None);
+        assert_eq!(storage.user_nomt_db_path, None);
+    }
+
+    #[test]
+    fn db_path_rejected_when_config_pins_ledger_db_path() {
+        let mut storage = storage_in_data();
+        storage.ledger_db_path = Some(PathBuf::from("/config/ledger"));
+        let original = storage.clone();
+
+        let err = DbPathOverrides {
+            db_path: Some(PathBuf::from("/cli/data")),
+            ..Default::default()
+        }
+        .apply(&mut storage)
+        .unwrap_err();
+
+        assert!(
+            err.to_string().contains("--ledger-db-path"),
+            "error should name the flag that resolves the conflict, got: {err}"
+        );
+        assert_eq!(storage, original, "config must be left untouched on error");
+    }
+
+    #[test]
+    fn db_path_accepted_when_config_per_db_paths_are_overridden() {
+        let mut storage = storage_in_data();
+        storage.live_db_path = Some(PathBuf::from("/config/live"));
+        storage.ledger_db_path = Some(PathBuf::from("/config/ledger"));
+
+        DbPathOverrides {
+            db_path: Some(PathBuf::from("/cli/data")),
+            live_db_path: Some(PathBuf::from("/cli/live")),
+            ledger_db_path: Some(PathBuf::from("/cli/ledger")),
+            user_nomt_db_path: None,
+        }
+        .apply(&mut storage)
+        .unwrap();
+
+        assert_eq!(storage.path, PathBuf::from("/cli/data"));
+        assert_eq!(storage.live_db_path, Some(PathBuf::from("/cli/live")));
+        assert_eq!(storage.ledger_db_path, Some(PathBuf::from("/cli/ledger")));
+        assert_eq!(storage.user_nomt_db_path, None);
+    }
 }

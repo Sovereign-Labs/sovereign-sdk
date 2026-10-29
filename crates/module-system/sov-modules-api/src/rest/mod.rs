@@ -285,6 +285,19 @@ impl<S: Spec, T> ApiState<S, T> {
             }
         };
 
+        // Only a latest-state accessor reports a frontier; archival ones return `None`, so this
+        // needs no separate check against `height_param`. A frontier of 0 (no event emitted yet)
+        // is recorded too, so that a later read in the same handler that does reflect events is
+        // detected as disagreeing with this one. Recording is a no-op outside an HTTP request,
+        // so every caller building latest state inside one, whatever route or extractor it came
+        // through, gets the response headers.
+        if let Some(frontier) = state.event_frontier() {
+            sov_rest_utils::record_last_event_number(
+                frontier.epoch.get(),
+                frontier.last_event_number(),
+            );
+        }
+
         Ok(state)
     }
 

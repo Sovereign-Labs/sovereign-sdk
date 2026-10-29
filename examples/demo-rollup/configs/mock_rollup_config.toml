@@ -28,7 +28,10 @@ block_time_ms = 1000
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
-# ledger_db_path = "demo_data/ledger-db" # A path override for the ledger db; by default, it is stored at {storage_path}/ledger-db
+# Optional exact database directories; relative paths use the process working directory.
+# live_db_path = "/mnt/fast/live" # Default: demo_data/state-db
+# ledger_db_path = "/mnt/ledger/ledger-db" # Default: demo_data/ledger
+# user_nomt_db_path = "/mnt/nomt/user" # Default: demo_data/user_nomt_db
 state_cache_size = 4294967296 # 4 GiB. Default is 1 GiB.
 user_commit_concurrency = 4 # Number of concurrent commit workers for user state
 user_hashtable_buckets = 15_000_000 # Expected state size, cannot be changed after creation
