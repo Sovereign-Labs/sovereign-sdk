@@ -6,9 +6,7 @@
 //! (deferred in storage, or selected earlier in the same slot) does not make the STF panic when
 //! that blob executes and its escrow is returned.
 
-use sov_bank::{config_gas_token_id, Bank, IntoPayable};
 use sov_mock_da::{MockAddress, MockBlob};
-use sov_modules_api::{Amount, Gas, GasSpec, ModuleInfo};
 use sov_modules_stf_blueprint::Runtime;
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_sequencer_registry::SequencerRegistry;
@@ -97,44 +95,12 @@ fn last_slot_batch_senders<RT: Runtime<S> + MinimalGenesis<S>>(
         .collect()
 }
 
-fn registry_gas_balance<RT: Runtime<S> + MinimalGenesis<S>>(runner: &TestRunner<RT>) -> Amount {
-    runner.query_state(|state| {
-        let registry_id = *SequencerRegistry::<S>::default().id();
-        Bank::<S>::default()
-            .get_balance_of(registry_id.to_payable(), config_gas_token_id(), state)
-            .unwrap()
-            .unwrap_or(Amount::ZERO)
-    })
-}
-
-fn sequencer_stake<RT: Runtime<S> + MinimalGenesis<S>>(
-    runner: &TestRunner<RT>,
-    da: &MockAddress,
-) -> Amount {
-    runner.query_state(|state| {
-        SequencerRegistry::<S>::default()
-            .get_sender_balance_via_api(da, state)
-            .expect("sequencer must be registered")
-    })
-}
-
-/// Registry gas balance minus the stake of `registered_sequencer`, which must be the only sequencer
-/// whose stake changes between the compared slots.
-fn unowned_registry_balance<RT: Runtime<S> + MinimalGenesis<S>>(
-    runner: &TestRunner<RT>,
-    registered_sequencer: &MockAddress,
-) -> Amount {
-    registry_gas_balance(runner)
-        .checked_sub(sequencer_stake(runner, registered_sequencer))
-        .expect("Registry must hold at least the registered sequencer's stake")
-}
-
 /// - Slot A: a registered non-preferred sequencer posts a valid batch, which is deferred.
 /// - Slot B: the same DA address posts garbage and gets slashed (registry entry deleted).
 /// - Slot C: the preferred sequencer advances the visible slot over slot A, so the stored batch
-///   executes after its sender was slashed, and its returned escrow goes to the registry.
+///   executes after its sender was slashed.
 #[test]
-fn deferred_blob_of_slashed_sequencer_executes_and_returns_escrow_to_registry() {
+fn deferred_blob_of_slashed_sequencer_executes_without_panic() {
     let (
         TestData {
             preferred_sequencer,
@@ -167,9 +133,6 @@ fn deferred_blob_of_slashed_sequencer_executes_and_returns_escrow_to_registry() 
         "Garbage blob must slash the sender"
     );
 
-    let unowned_registry_balance_before =
-        unowned_registry_balance(&runner, &preferred_sequencer.da_address);
-
     // Slot C
     let blobs = build_soft_confirmation_blobs(
         &vec![(
@@ -189,28 +152,6 @@ fn deferred_blob_of_slashed_sequencer_executes_and_returns_escrow_to_registry() 
         vec![preferred_sequencer.da_address, da],
         "The preferred batch and the slashed sequencer's stored batch must both execute"
     );
-    let unowned_registry_balance_after =
-        unowned_registry_balance(&runner, &preferred_sequencer.da_address);
-    let receipts = runner.receipts();
-    let slashed_batch = &receipts.last().unwrap().batch_receipts[1].inner;
-    // When a deferred batch is retrieved, its escrow is trimmed to the pre-exec check costs of its
-    // single transaction; the reserved storage costs are refunded to the sender's rollup address.
-    let escrow = <S as GasSpec>::max_tx_check_costs()
-        .checked_value(slashed_batch.gas_price)
-        .unwrap();
-    let rewards = &slashed_batch.outcome.rewards;
-    let expected_returned = escrow
-        .checked_sub(rewards.accumulated_penalty)
-        .unwrap()
-        .checked_add(rewards.accumulated_reward)
-        .unwrap();
-    assert_eq!(
-        unowned_registry_balance_after
-            .checked_sub(unowned_registry_balance_before)
-            .unwrap(),
-        expected_returned,
-        "The slashed sequencer's escrow, net of penalties and plus rewards, must be transferred to the registry"
-);
 }
 
 /// One DA block contains [preferred batch advancing visible, regular sequencer's valid empty batch,

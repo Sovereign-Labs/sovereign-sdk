@@ -654,3 +654,52 @@ fn check_blob_selection() {
     let result = runner.execute::<RelevantBlobs<MockBlob>>(slot_to_send);
     assert_eq!(result.0.batch_receipts.len(), 0);
 }
+
+/// The user state root must change only when a rollup block is created. Deferring a blob from a
+/// registered non-preferred sequencer escrows part of its stake, and that escrow must be tracked in
+/// kernel state only. Otherwise the node's user root changes in a slot with no rollup block, and
+/// the preferred sequencer's user root consistency check against the node fails.
+#[test]
+fn deferring_registered_non_preferred_blob_does_not_change_user_state() {
+    use sov_sequencer_registry::SequencerRegistry;
+    use sov_state::{ProvableNamespace, StateRoot};
+
+    let (
+        TestData {
+            regular_sequencer, ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+
+    let sequencer_stake = |runner: &crate::TestRunner<_>| {
+        runner.query_state(|state| {
+            SequencerRegistry::<crate::S>::default()
+                .get_sender_balance_via_api(&regular_sequencer.da_address, state)
+                .expect("The regular sequencer must be registered")
+        })
+    };
+    let stake_before = sequencer_stake(&runner);
+    let user_root_before = runner.state_root().namespace_root(ProvableNamespace::User);
+
+    // No preferred batch is in this slot, so the blob is deferred and no rollup block is created.
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(regular_sequencer.clone(), SequencerInfo::Regular)],
+        &mut HashMap::new(),
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+
+    assert!(
+        runner.receipts().last().unwrap().batch_receipts.is_empty(),
+        "The non-preferred blob should be deferred, not executed"
+    );
+    assert!(
+        sequencer_stake(&runner) < stake_before,
+        "Deferring the blob should escrow part of the sequencer's stake"
+    );
+    assert_eq!(
+        runner.state_root().namespace_root(ProvableNamespace::User),
+        user_root_before,
+        "The user state root must not change in a slot that creates no rollup block"
+    );
+}
