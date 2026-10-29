@@ -215,8 +215,8 @@ where
             .add_to_stake(self.bank.id().to_payable(), sequencer, net_amount, state)
         {
             Ok(_) => {}
-            // There's an edge case where a sequencer submitted several blobs which all got deferred. If a garbage blob arrives after a valid blob was queued, it causes immediate
-            // slashing but the queued blobs aren't dropped and can result in sequencer rewards for a slashed sequencer.
+            // There's an edge case where a sequencer's valid blob was already selected or deferred when a garbage blob from the same sender slashes it.
+            // The queued blob isn't dropped, so it still executes and can result in sequencer rewards for a slashed sequencer.
             Err(AddToStakeError::SequencerNotRegistered { sequencer }) => {
                 tracing::info!(amount = %net_amount, %sequencer, "A sequencer was rewarded after having been removed from the registry (probably due to slashing). Those funds are held by the sequencer registry but not claimable by anyone.");
                 let coins = Coins {
@@ -225,7 +225,7 @@ where
                 };
                 let bank_id = *self.bank.id();
                 // In this edge case, we still transfer the funds from bank -> sequencer registry. This ensures that the user space state root matches whether or not the
-                // preferred sequencer observed the slashing before executing its batch; during the slashing only the kernel space `known_sequencers` map changes.
+                // preferred sequencer observed the slashing before executing its batch; slashing a non-preferred sequencer only changes the kernel space `known_sequencers` map.
                 // Without this, the preferred sequencer might see the wrong state root leading to a defensive panic.
                 self.bank
                     .transfer_from(
@@ -236,7 +236,7 @@ where
                     )
                     .expect("Bank had insufficient funds to transfer to sequencer registry after a slashing. This is a bug in gas accounting");
             }
-            Err(e) => panic!("Attempted to send more funds to the sequencer than they have escrowed. This is a bug in gas accounting. Underlying error: {e}"),
+            Err(e) => panic!("Failed to return escrowed funds to sequencer. This is a bug in gas accounting. Underlying error: {e}"),
         }
     }
 }
