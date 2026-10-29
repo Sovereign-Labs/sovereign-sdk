@@ -799,6 +799,11 @@ impl<S: Spec> BlobStorage<S> {
     ///
     /// Both the node (`retrieve_stored_blobs_and_add_to_selection`) and the preferred sequencer
     /// (`get_non_preferred_blobs`) must use this, so that they produce the same state.
+    ///
+    /// TODO(@preston-evans98): Callers release the escrow *before* checking the blob against the size limit. If the
+    /// blob is then dropped as `OutOfCapacity`, its sender has already paid for pre-execution checks.
+    /// Checking capacity first (and efunding the whole escrow on `OutOfCapacity`) would fix this, but we should analyze
+    /// the game theory before fixing. This would be a breaking change for any chains that have already dropped deferred blobs.
     fn release_deferred_escrow(
         &mut self,
         batch: &mut ValidatedBlob<S, BatchWithId<S>>,
