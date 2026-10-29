@@ -28,9 +28,9 @@ use sov_modules_api::registration_lib::RegistrationError;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
-    BasicAddress, Context, DaSpec, GenesisState, InfallibleStateAccessor, KernelStateAccessor,
-    KernelStateMap, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, StateAccessor, StateReader,
-    StateValue, StateWriter, TxState, VisibleSlotNumber,
+    BasicAddress, Context, DaSpec, GenesisState, KernelStateAccessor, KernelStateMap, Module,
+    ModuleId, ModuleInfo, ModuleRestApi, Spec, StateAccessor, StateReader, StateValue, StateWriter,
+    TxState, VisibleSlotNumber,
 };
 use sov_state::{Kernel, User};
 use thiserror::Error;
@@ -138,6 +138,10 @@ pub struct SequencerRegistry<S: Spec> {
     /// Minimum bond for the sequencer to be registered.
     #[state]
     pub(crate) minimum_bond: StateValue<Amount>,
+
+    /// Escrowed balances for deferred blobs
+    #[state]
+    pub(crate) escrow: KernelStateMap<DerivedHolder, Amount>,
 }
 
 /// A special error type that can be raised when calling a method from the sequencer registry
@@ -251,20 +255,16 @@ impl<S: Spec> SequencerRegistry<S> {
         }
     }
 
-    /// Retrieves the escrowed funds and transfers the amount needed for pre-execution checks to the bank module.
+    /// Retrieves the escrowed funds and transfers the amount needed for pre-execution checks from the sequencer registry to the bank module.
     /// The remaining amount is transferred back to the selected recipient.
     pub fn retrieve_funds_from_escrow(
         &mut self,
         holder: &DerivedHolder,
         recipient: &S::Address,
         tokens_needed_for_pre_exec_checks: Amount,
-        state: &mut impl InfallibleStateAccessor,
+        state: &mut KernelStateAccessor<S>,
     ) -> Result<(), anyhow::Error> {
-        let Some(reserved_balance) = self
-            .bank
-            .get_balance_of(holder.to_payable(), sov_bank::config_gas_token_id(), state)
-            .unwrap_infallible()
-        else {
+        let Some(reserved_balance) = self.escrow.get(holder, state).unwrap_infallible() else {
             bail!("No reserved balance found for holder {}", holder);
         };
 
@@ -280,15 +280,18 @@ impl<S: Spec> SequencerRegistry<S> {
             );
         };
 
-        self.bank.transfer_from(
-            holder.to_payable(),
-            recipient,
-            gas_coins(amount_to_refund),
-            state,
-        )?;
+        self.escrow.delete(holder, state).unwrap_infallible();
         self.bank
             .transfer_from(
-                holder.to_payable(),
+                self.id().clone().to_payable(),
+                recipient,
+                gas_coins(amount_to_refund),
+                state,
+            )
+            .expect("Failed to transfer a valid balance. This should never happen.");
+        self.bank
+            .transfer_from(
+                self.id().clone().to_payable(),
                 self.bank.id().clone().to_payable(),
                 gas_coins(tokens_needed_for_pre_exec_checks),
                 state,
@@ -297,24 +300,22 @@ impl<S: Spec> SequencerRegistry<S> {
         Ok(())
     }
 
-    /// Refunds the holder for the unneeded reserved gas.
+    /// Refunds the holder for the unneeded reserved gas and clears the sequencer escrow map entry.
     pub fn refund_all_reserved_gas(
         &mut self,
         holder: &DerivedHolder,
         recipient: &S::Address,
-        state: &mut impl InfallibleStateAccessor,
+        state: &mut KernelStateAccessor<S>,
     ) {
-        let Some(reserved_balance) = self
-            .bank
-            .get_balance_of(holder.to_payable(), sov_bank::config_gas_token_id(), state)
-            .unwrap_infallible()
-        else {
+        let Some(reserved_balance) = self.escrow.get(holder, state).unwrap_infallible() else {
             // If the holder has no reserved balance, we're done.
             return;
         };
+        self.escrow.delete(holder, state).unwrap_infallible();
+
         self.bank
             .transfer_from(
-                holder.to_payable(),
+                self.id().clone().to_payable(),
                 recipient,
                 gas_coins(reserved_balance),
                 state,
