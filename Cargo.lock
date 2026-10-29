@@ -11342,6 +11342,7 @@ dependencies = [
  "borsh",
  "derive_more 2.0.1",
  "hex",
+ "proptest",
  "schemars 1.2.1",
  "serde",
  "sov-bank",
