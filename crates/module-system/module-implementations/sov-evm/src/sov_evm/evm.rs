@@ -1,5 +1,5 @@
 use revm::{
-    context::{ContextError, ContextSetters, ContextTr, Evm, FrameStack},
+    context::{Cfg, ContextError, ContextSetters, ContextTr, Evm, FrameStack},
     handler::{
         evm::FrameTr, instructions::EthInstructions, EthFrame, EvmTr, FrameInitOrResult,
         ItemOrResult, PrecompileProvider,
@@ -22,10 +22,11 @@ where
 {
     /// Creates new SovEvm instance from context, inspector, and precompile provider.
     pub fn new(ctx: CTX, inspector: INSP, precompiles: P) -> Self {
+        let spec = ctx.cfg().spec().into();
         Self(Evm {
             ctx,
             inspector,
-            instruction: EthInstructions::new_mainnet(),
+            instruction: EthInstructions::new_mainnet_with_spec(spec),
             precompiles,
             frame_stack: FrameStack::new(),
         })
@@ -171,5 +172,27 @@ where
         &mut Self::Inspector,
     ) {
         self.0.all_mut_inspector()
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use revm::context::{CfgEnv, Context};
+    use revm::database_interface::EmptyDB;
+    use revm::handler::EthPrecompiles;
+    use revm::primitives::hardfork::SpecId;
+    use revm::MainContext;
+
+    use super::SovEvm;
+
+    #[test]
+    fn instruction_gas_table_follows_cfg_spec() {
+        let ctx = Context::mainnet()
+            .with_db(EmptyDB::default())
+            .with_cfg(CfgEnv::<SpecId>::default().with_spec_and_mainnet_gas_params(SpecId::CANCUN));
+
+        let evm = SovEvm::new(ctx, (), EthPrecompiles::new(SpecId::CANCUN));
+
+        assert_eq!(evm.0.instruction.spec, SpecId::CANCUN);
     }
 }

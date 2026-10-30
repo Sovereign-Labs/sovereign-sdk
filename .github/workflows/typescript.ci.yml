@@ -14,7 +14,7 @@ on:
 jobs:
   check:
     name: Check
-    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=typescript-ci-1-93
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x32-rust-1-96-v20261021;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=typescript-ci-1-96
     timeout-minutes: 30
     defaults:
       run:

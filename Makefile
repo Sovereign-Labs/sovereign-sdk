@@ -118,14 +118,14 @@ install-risc0-toolchain:  ## install risc0 toolchain
 	curl -L https://risczero.com/install | bash
 	~/.risc0/bin/rzup install cargo-risczero 3.0.5
 	~/.risc0/bin/rzup install r0vm 3.0.5
-	~/.risc0/bin/rzup install rust 1.91.1
+	~/.risc0/bin/rzup install rust 1.94.1
 	~/.risc0/bin/rzup install cpp 2024.1.5
 	@echo "Risc0 toolchain version:"
 	cargo +risc0 --version
 
 install-sp1-toolchain:  ## install SP1 toolchain
 	curl -L https://sp1up.succinct.xyz | bash
-	~/.sp1/bin/sp1up $${GITHUB_TOKEN:+--token "$$GITHUB_TOKEN"} --version 6.2.2
+	~/.sp1/bin/sp1up $${GITHUB_TOKEN:+--token "$$GITHUB_TOKEN"} --version 6.9.0
 	~/.sp1/bin/cargo-prove prove --version
 	~/.sp1/bin/cargo-prove prove install-toolchain
 	@echo "SP1 toolchain version:"
