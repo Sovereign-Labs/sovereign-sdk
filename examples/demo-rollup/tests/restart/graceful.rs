@@ -22,7 +22,6 @@ use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{CryptoSpec, OperatingMode, PrivateKey, PublicKey, Spec};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
 use sov_rollup_interface::da::BlockHeaderTrait;
-use sov_sequencer::SequencerKindConfig;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::generate_operator_runtime_with_kernel;
 use sov_test_utils::logging::LogCollector;
@@ -233,11 +232,11 @@ async fn start_stop_empty(
                 c.max_concurrent_batch_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
                 c.rollup_prover_config = RollupProverConfig::Prove;
-                if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
-                    sequencer_conf.disable_state_root_consistency_checks = true;
-                    sequencer_conf.ideal_lag_behind_finalized_slot = 3;
-                }
                 c.aggregated_proof_block_jump = 10;
+            })
+            .with_preferred_seq_config(|seq| {
+                seq.disable_state_root_consistency_checks = true;
+                seq.ideal_lag_behind_finalized_slot = 3;
             })
             .set_persistent_da()
             .start(),
@@ -344,11 +343,11 @@ async fn start_stop_under_load(
                 c.max_concurrent_batch_blobs = 65536;
                 c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
                 c.rollup_prover_config = RollupProverConfig::Prove;
-                if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
-                    sequencer_conf.disable_state_root_consistency_checks = true;
-                    sequencer_conf.ideal_lag_behind_finalized_slot = 3;
-                }
                 c.aggregated_proof_block_jump = 10;
+            })
+            .with_preferred_seq_config(|seq| {
+                seq.disable_state_root_consistency_checks = true;
+                seq.ideal_lag_behind_finalized_slot = 3;
             })
             .set_persistent_da()
             .start(),
@@ -507,12 +506,12 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         c.max_concurrent_batch_blobs = 65536;
         c.storage = StoragePath::Tmp(rollup_storage_dir.clone());
         c.rollup_prover_config = RollupProverConfig::Prove;
-        // Since we have the prover enabled, we need to disable state root consistency checks.
-        if let SequencerKindConfig::Preferred(sequencer_conf) = &mut c.sequencer_config {
-            sequencer_conf.disable_state_root_consistency_checks = true;
-            sequencer_conf.ideal_lag_behind_finalized_slot = 3;
-        }
         c.aggregated_proof_block_jump = jump_size;
+    })
+    .with_preferred_seq_config(|seq| {
+        // Since we have the prover enabled, we need to disable state root consistency checks.
+        seq.disable_state_root_consistency_checks = true;
+        seq.ideal_lag_behind_finalized_slot = 3;
     })
     .set_da_config(|da_config| {
         da_config.connection_string = MockDaConfig::sqlite_in_dir(mock_da_dir.path()).unwrap();
@@ -667,9 +666,9 @@ async fn check_with_increasing_stf_infos(
         c.aggregated_proof_block_jump = aggregated_proof_jump;
         c.max_channel_size = max_channel_size;
         c.max_infos_in_db = max_infos_in_db;
-        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
-            seq.ideal_lag_behind_finalized_slot = 3;
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.ideal_lag_behind_finalized_slot = 3;
     });
 
     let mut last_processed_slot_number = 0;
