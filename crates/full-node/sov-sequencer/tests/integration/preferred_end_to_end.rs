@@ -2715,13 +2715,12 @@ async fn query_historical_values() {
             "Panicked during assertions"
         );
     };
-    do_manual_block_production_test(tx_builder, assertions, 22222).await;
+    do_manual_block_production_test(tx_builder, assertions).await;
 }
 
 async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
     tx_builder: impl Fn(Ed25519PrivateKey) -> RawTx,
     assertions: impl FnOnce(TestRollup<TestBlueprint>) -> Fut,
-    port: u16,
 ) {
     const FINALIZATION_BLOCKS: u32 = 0;
     let genesis_config =
@@ -2765,7 +2764,6 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
         .set_config(|c| {
             c.rollup_prover_config = RollupProverConfig::Disabled;
             c.storage = StoragePath::Tmp(dir);
-            c.axum_port = port;
         })
         .set_da_config(|c| {
             c.sender_address = sequencer_addr;
@@ -2789,10 +2787,11 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
         })
         .await
         .unwrap();
-    test_rollup.force_close_batch().await.unwrap();
-    // Wait for blob publication after force_close_batch; without this pause the next block can be
-    // produced before the batch is visible in DA.
-    sleep(Duration::from_millis(300)).await;
+    // Without waiting for publication, the next block can be produced before the batch is visible in DA.
+    test_rollup
+        .force_close_batch_and_wait_for_publication()
+        .await
+        .unwrap();
     da_layer.produce_and_wait_for_slot().await;
 
     // Note: The exact number height asserted here is not important, as long as it's correct
@@ -2812,11 +2811,11 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
     assert_eq!(slot.number, 7);
     assert_eq!(slot.batches.len(), 0);
 
-    // Close the batch and submit to DA
-    test_rollup.force_close_batch().await.unwrap();
-    // Wait for blob publication after force_close_batch; without this pause the next block can be
-    // produced before the batch is visible in DA.
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    // Close the batch and wait until it is submitted to DA
+    test_rollup
+        .force_close_batch_and_wait_for_publication()
+        .await
+        .unwrap();
 
     // Ensure that the sequencer has time to see the updated state and submit its batch containing the transaction to DA.
     let next = da_layer.produce_and_wait_for_slot().await;
@@ -3135,7 +3134,7 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
 #[tokio::test(flavor = "multi_thread")]
 async fn replay_uses_correct_visible_slot_number() {
     let tx_builder = |key| tx_assert_visible_slot_number(&key, 0, 2);
-    do_manual_block_production_test(tx_builder, |_| async {}, 22223).await;
+    do_manual_block_production_test(tx_builder, |_| async {}).await;
 }
 
 /// This test checks that the visible hash of the rollup block is the same in the node and the sequencer.
@@ -3299,7 +3298,7 @@ async fn visible_hashes_match_across_node_and_sequencer() {
 ///
 /// If this test is flaky, it can be made more reliable by simply increasing the `worker_timeout_secs` variable.
 /// This makes the test take longer to run, but also reduces the chance of it flaking.
-// Note that this test is marked heavy, so it will be ignored by nextest unless you run `make test-all` or manually activate the `ci` test profile
+// Note that this test is `#[ignore]`d and does not run in CI; run it with `cargo nextest run --run-ignored only`.
 #[tokio::test(flavor = "multi_thread")]
 #[ignore]
 async fn heavy_blob_submission_long_delay() {
