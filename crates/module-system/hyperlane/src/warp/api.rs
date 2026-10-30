@@ -93,7 +93,7 @@ impl<S: Spec> Warp<S> {
             .warp_routes
             .get(&route, &mut accessor)
             .unwrap_infallible()
-            .ok_or(errors::not_found_404("warp route", route))?;
+            .ok_or_else(|| errors::not_found_404("warp route", route))?;
 
         let mut routers = Vec::with_capacity(router.enrolled_destinations.len());
         for domain in router.enrolled_destinations {
@@ -107,7 +107,7 @@ impl<S: Spec> Warp<S> {
                     &mut accessor,
                 )
                 .unwrap_infallible()
-                .ok_or(errors::internal_server_error_response_500(format!(
+                .ok_or_else(|| errors::internal_server_error_response_500(format!(
                     "Domain {domain} was enrolled in route {route} but router for domain {domain} not found"
                 )))?;
             routers.push(RemoteRouter {
@@ -127,7 +127,7 @@ impl<S: Spec> Warp<S> {
             .warp_routes
             .get(&route, &mut accessor)
             .unwrap_infallible()
-            .ok_or(errors::not_found_404("warp route", route))?;
+            .ok_or_else(|| errors::not_found_404("warp route", route))?;
 
         Ok(RouteLimits::from_route_and_current_visiible_slot(
             &route,
