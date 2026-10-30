@@ -40,9 +40,9 @@ struct SideBySide {
     standard: TestRollup<TestBlueprint>,
     /// Transfer sent through the preferred sequencer, by an account that touches nothing else.
     preferred_tx_hash: TxHash,
-    /// Transfer sent through the standard sequencer after it got registered, by an account that
-    /// touches nothing else.
-    standard_tx_hash: TxHash,
+    /// Two transfers sent through the standard sequencer after it got registered, by an account
+    /// that touches nothing else. Two, so they land in one multi-tx batch.
+    standard_tx_hashes: [TxHash; 2],
 }
 
 fn create_genesis_params() -> (GenesisParams<GenesisConfig<S>>, Vec<TestUser<S>>) {
@@ -53,10 +53,10 @@ fn create_genesis_params() -> (GenesisParams<GenesisConfig<S>>, Vec<TestUser<S>>
     (GenesisParams { runtime }, users)
 }
 
-fn transfer(sender: &TestUser<S>, recipient: &TestUser<S>) -> RawTx {
+fn transfer(sender: &TestUser<S>, recipient: &TestUser<S>, generation: u64) -> RawTx {
     encode_call::<RT>(
         &sender.private_key,
-        0,
+        generation,
         &TestRuntimeCall::Bank(sov_test_utils::sov_bank::CallMessage::Transfer {
             to: recipient.address(),
             coins: sov_test_utils::runtime::Coins {
@@ -132,6 +132,11 @@ async fn produce_blocks_until<F, Fut>(
                 return;
             }
             preferred.tenderly_produce_blocks(1).await.unwrap();
+            // Two nodes on one machine process slots slower than blocks are produced. Without
+            // waiting, the lag grows until the preferred sequencer pauses as `Syncing`.
+            for node in [preferred, standard] {
+                node.wait_for_node_synced().await.unwrap();
+            }
         }
     })
     .await
@@ -223,14 +228,20 @@ async fn run_side_by_side() -> SideBySide {
         "standard sequencer registration must succeed, otherwise its batches go down the unregistered path"
     );
 
-    let standard_tx_hash = accept_tx(
-        standard.api_client(),
-        &transfer(standard_sender, standard_recipient),
-    )
-    .await;
+    let mut standard_tx_hashes = Vec::new();
+    for generation in 0..2 {
+        standard_tx_hashes.push(
+            accept_tx(
+                standard.api_client(),
+                &transfer(standard_sender, standard_recipient, generation),
+            )
+            .await,
+        );
+    }
+    let standard_tx_hashes: [TxHash; 2] = standard_tx_hashes.try_into().unwrap();
     let preferred_tx_hash = accept_tx(
         preferred.api_client(),
-        &transfer(preferred_sender, preferred_recipient),
+        &transfer(preferred_sender, preferred_recipient, 0),
     )
     .await;
     preferred.force_close_batch().await.unwrap();
@@ -240,7 +251,7 @@ async fn run_side_by_side() -> SideBySide {
         "both transfers to execute on both nodes",
         || async {
             for node in [&preferred, &standard] {
-                for hash in [&preferred_tx_hash, &standard_tx_hash] {
+                for hash in std::iter::once(&preferred_tx_hash).chain(&standard_tx_hashes) {
                     if ledger_tx(node, hash).await.is_none() {
                         return false;
                     }
@@ -255,20 +266,18 @@ async fn run_side_by_side() -> SideBySide {
         preferred,
         standard,
         preferred_tx_hash,
-        standard_tx_hash,
+        standard_tx_hashes,
     }
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "preferred sequencer panics replaying a registered non-preferred batch; fixed later in the PR stack"]
 async fn txs_from_both_sequencers_succeed_on_both_nodes() {
     let run = run_side_by_side().await;
 
     for (node_name, node) in [("preferred", &run.preferred), ("standard", &run.standard)] {
-        for (seq_name, hash) in [
-            ("preferred", &run.preferred_tx_hash),
-            ("standard", &run.standard_tx_hash),
-        ] {
+        for (seq_name, hash) in std::iter::once(("preferred", &run.preferred_tx_hash))
+            .chain(run.standard_tx_hashes.iter().map(|h| ("standard", h)))
+        {
             assert_eq!(
                 ledger_tx(node, hash).await.unwrap().receipt.result,
                 TxReceiptResult::Successful,
@@ -282,10 +291,9 @@ async fn txs_from_both_sequencers_succeed_on_both_nodes() {
 /// node's, panicking on mismatch. Both happen when it processes the node's state update, which can
 /// be after the node's ledger already shows the transaction, so wait for that update explicitly.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "preferred sequencer panics replaying a registered non-preferred batch; fixed later in the PR stack"]
 async fn preferred_sequencer_stays_ready_after_non_preferred_batch() {
     let run = run_side_by_side().await;
-    let target_slot = slot_number_containing(&run.preferred, &run.standard_tx_hash).await;
+    let target_slot = slot_number_containing(&run.preferred, &run.standard_tx_hashes[0]).await;
     let mut state_updates = run
         .preferred
         .subscribe_state_updates()
