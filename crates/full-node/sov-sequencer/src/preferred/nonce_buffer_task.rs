@@ -1835,10 +1835,8 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 4);
     }
 
-    /// Ignored because pre-requisite checks are disabled, so transactions will timeout
-    /// immediately.
     #[tokio::test]
-    #[ignore]
+    #[ignore = "Pre-requisite checks are disabled, so transactions time out immediately"]
     async fn test_queued_tx_timeout_loops_if_all_prerequisites_present() {
         // Timeout longer than execution delay but shorter than total time to execute all
         // transactions, to ensure we hit the timeout loop
@@ -1889,9 +1887,8 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
-    /// Ignored because pre-requisite checks are disabled, so tx 1 will time out immediately.
     #[tokio::test]
-    #[ignore]
+    #[ignore = "Pre-requisite checks are disabled, so tx 1 times out immediately"]
     async fn test_non_persisted_nonce_tracking_slow_execution() {
         // This test verifies that the queue avoids evicting transactions if a current one is
         // executing. Similar to the db timeout test.
@@ -1913,9 +1910,9 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
-    /// Ignored because pre-requisite checks are disabled, so tx 1 will time out immediately.
     #[tokio::test]
-    #[ignore]
+    #[ignore = "Pre-requisite checks are disabled, so tx 1 times out immediately and the test \
+                passes without exercising the in-flight path"]
     async fn test_non_persisted_nonce_tracking_slow_execution_with_rejection() {
         // This test verifies correct behaviour if a transaction arrives while the previous one is
         // in-flight, and then the previous one rejects.
