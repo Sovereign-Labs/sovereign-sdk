@@ -12809,6 +12809,7 @@ dependencies = [
  "nomt",
  "nomt-core",
  "proptest",
+ "rayon",
  "serde",
  "serde-big-array",
  "serde_json",
@@ -12821,6 +12822,7 @@ dependencies = [
  "sov-universal-wallet",
  "tempfile",
  "test-strategy",
+ "toml 0.8.23",
  "tracing",
 ]
 
