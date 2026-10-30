@@ -1,4 +1,5 @@
 .PHONY: help
+.PHONY: docs
 
 PROVER_DIRS := examples/demo-rollup/provers/risc0/guest-mock \
                examples/demo-rollup/provers/risc0/guest-celestia \
@@ -226,7 +227,8 @@ dry-run-publish:
 	yq '.[]' packages_to_publish.yml | xargs -I _ cargo publish --allow-dirty --dry-run -p _
 
 docs:  ## Generates documentation locally
-	cargo doc --open
+	cargo doc --no-deps --no-default-features
+	cargo doc -p sov-sdk-specs --no-deps --open
 
 docs-generate: ## Generate documentation but don't open it, to verify that it would pass CI.
 	cargo doc --no-deps --all-features
