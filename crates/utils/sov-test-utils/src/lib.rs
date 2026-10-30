@@ -378,3 +378,22 @@ pub fn validate_and_materialize<ST: Storage>(
     let change_set = storage.materialize_changes(node_batch);
     Ok((root_hash, change_set))
 }
+
+#[cfg(test)]
+mod tests {
+    // This is a bit of a special test because it only fails when:
+    //  1. the chain ID is overridden with `SOV_TEST_CONST_OVERRIDE_CHAIN_ID`; and
+    //  2. the test is run in non-release mode.
+    //
+    // By setting the env. variable and controlling the test profile, this test
+    // can be used to ensure that constant overriding is disabled in release
+    // mode. It is invoked by the `check-constant-overriding-is-disabled-in-release-mode`
+    // Makefile target — keep the Makefile in sync if this test moves.
+    //
+    // Grep for `SOV_TEST_CONST_OVERRIDE_CHAIN_ID` to find the relevant code.
+    #[test]
+    fn assert_chain_id_was_not_overridden() {
+        let chain_id: u64 = sov_modules_api::macros::config_value!("CHAIN_ID");
+        assert_eq!(chain_id, 4321);
+    }
+}

@@ -74,3 +74,20 @@ The macro compilation will endeavor to obtain the workspace root of the current 
 ```sh
 CONSTANTS_MANIFEST=/foo/bar cargo build --manifest-path /foo/bar/Cargo.toml
 ```
+
+#### `chain-metadata.toml`
+
+The per-network chain metadata keys — `CHAIN_ID`, `CHAIN_NAME`, `CHAIN_HASH_OVERRIDES`, `BATCH_NAMESPACE`, and `PROOF_NAMESPACE` — can be split into a `chain-metadata.toml` file sitting next to `constants.toml` (`chain-metadata.testing.toml` next to `constants.testing.toml`). It uses the same `[constants]` format:
+
+```toml
+[constants]
+CHAIN_ID = 4321
+CHAIN_NAME = "TestChain"
+CHAIN_HASH_OVERRIDES = []
+BATCH_NAMESPACE = { byte_string = "sov-test-b" }
+PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }
+```
+
+These five keys — and only these — are then read from (and dependency-tracked against) the chain-metadata file. Tracking is per file: editing chain metadata recompiles the crates whose macro expansions read any of the five keys (plus their dependents), and no longer touches crates that only read `constants.toml`. All other keys, including the `[gas]` tables and module discriminants, always stay in `constants.toml`.
+
+If `chain-metadata.toml` does not exist, the chain keys are read from `constants.toml` as before — the split is opt-in. To migrate, move the five keys into the new file and **remove them from `constants.toml`** (the removal is what triggers the one-time recompilation that picks up the new file). Once the file exists, every chain-metadata key must be defined in it: a chain key missing from an existing `chain-metadata.toml` is a compile error, even if `constants.toml` still defines it.

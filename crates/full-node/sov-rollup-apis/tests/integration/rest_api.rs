@@ -181,7 +181,14 @@ async fn test_simulation_success_with_address_override() {
             "insert_credential_id": delegated_credential,
         },
     });
-    let schema = get_runtime_schema::<S, RT>().unwrap();
+    let schema = get_runtime_schema::<S, RT>(
+        sov_modules_api::sov_universal_wallet::schema::ChainData {
+            chain_id: RT::chain_id(),
+            chain_name: sov_modules_api::macros::config_value!("CHAIN_NAME").to_string(),
+        },
+        RT::chain_hash_overrides(),
+    )
+    .unwrap();
     let registration_call_bytes = schema
         .json_to_borsh(
             schema

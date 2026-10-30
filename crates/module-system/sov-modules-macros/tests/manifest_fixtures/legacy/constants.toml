@@ -1,0 +1,5 @@
+# Unit-test fixture for `Manifest::read_for_constant_at` (src/manifest.rs):
+# legacy layout — no chain-metadata.toml sibling, chain keys live here.
+[constants]
+CHAIN_ID = 7777
+MAX_TX_SIZE = 1000

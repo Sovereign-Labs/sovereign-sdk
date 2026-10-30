@@ -86,6 +86,23 @@ pub trait Runtime<S: Spec>:
     /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
+    /// The chain ID configured by the runtime. Legacy (pre-fork) V0
+    /// transactions commit to it directly, so it is checked when
+    /// authenticating them.
+    ///
+    /// Runtimes usually implement this with
+    /// `sov_modules_api::macros::config_value!("CHAIN_ID")` in the leaf crate;
+    /// keeping it required avoids manifest reads from `sov-modules-api`.
+    fn chain_id() -> u64;
+
+    /// The chain-hash overrides by height range (see [`ChainHashOverride`]),
+    /// letting transactions signed against older schemas keep verifying
+    /// across upgrades.
+    ///
+    /// Runtimes usually implement this with
+    /// `sov_modules_api::macros::config_value!("CHAIN_HASH_OVERRIDES")`.
+    fn chain_hash_overrides() -> &'static [ChainHashOverride];
+
     /// GenesisConfig type.
     type GenesisConfig: Clone + Send + Sync + GenesisParams;
 
@@ -204,6 +221,14 @@ pub trait Runtime<S: Spec>:
     /// [schema](crate::sov_universal_wallet::schema::Schema).
     const CHAIN_HASH: [u8; 32];
 
+    /// The chain ID configured by the runtime. Legacy (pre-fork) V0
+    /// transactions commit to it directly, so it is checked when
+    /// authenticating them.
+    fn chain_id() -> u64;
+
+    /// The chain-hash overrides by height range.
+    fn chain_hash_overrides() -> &'static [ChainHashOverride];
+
     /// `GenesisConfig` type.
     type GenesisConfig: Clone + Send + Sync;
 
@@ -254,20 +279,27 @@ impl Default for NodeEndpoints {
 }
 
 /// Helper function to get [`sov_universal_wallet::schema::Schema`] for the [`Runtime`]
+///
+/// The caller supplies the chain identity and chain-hash overrides explicitly
+/// (typically read via `config_value!("CHAIN_ID")` / `config_value!("CHAIN_NAME")` /
+/// `config_value!("CHAIN_HASH_OVERRIDES")` in the calling crate), so that
+/// `sov-modules-api` itself never reads — and therefore never rebuilds on edits
+/// to — the chain-metadata manifest.
+///
+/// # Errors
+/// Fails if the schema cannot be built, or if `chain_hash_overrides` contains a
+/// chain hash whose fragment collides with another simultaneously valid hash.
 pub fn get_runtime_schema<S: Spec, R: TransactionCallable + DispatchCall + 'static>(
+    chain_data: sov_universal_wallet::schema::ChainData,
+    chain_hash_overrides: &[ChainHashOverride],
 ) -> anyhow::Result<sov_universal_wallet::schema::Schema> {
     let schema = sov_universal_wallet::schema::Schema::of_rollup_types_with_chain_data::<
         crate::transaction::Transaction<R, S>,
         crate::transaction::TransactionSigningPayload<R, S>,
         R::Decodable,
         S::Address,
-    >(sov_universal_wallet::schema::ChainData {
-        chain_id: sov_modules_macros::config_value!("CHAIN_ID"),
-        chain_name: sov_modules_macros::config_value!("CHAIN_NAME").to_string(),
-    })?;
-    let overrides: &[ChainHashOverride] =
-        sov_modules_macros::config_value_private!("CHAIN_HASH_OVERRIDES");
-    validate_chain_hash_fragments(overrides, schema.chain_hash()?)?;
+    >(chain_data)?;
+    validate_chain_hash_fragments(chain_hash_overrides, schema.chain_hash()?)?;
     Ok(schema)
 }
 

@@ -205,9 +205,9 @@ check-demo-rollup-features: ## Constrained feature-powerset for demo-rollup (nee
 
 check-constant-overriding-is-disabled-in-release-mode:
 	# Passes in release mode...
-	SOV_TEST_CONST_OVERRIDE_CHAIN_ID=1 cargo test -p sov-modules-api --profile release-with-opt-level-0 assert_chain_id_was_not_overridden
+	SOV_TEST_CONST_OVERRIDE_CHAIN_ID=1 cargo test -p sov-test-utils --profile release-with-opt-level-0 assert_chain_id_was_not_overridden
 	# ...but not with standard test profile
-	if SOV_TEST_CONST_OVERRIDE_CHAIN_ID=1 cargo test -p sov-modules-api assert_chain_id_was_not_overridden; then \
+	if SOV_TEST_CONST_OVERRIDE_CHAIN_ID=1 cargo test -p sov-test-utils assert_chain_id_was_not_overridden; then \
 		echo "Check succeeded, but was expected to fail!"; \
 		exit 1; \
 	fi

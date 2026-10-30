@@ -129,11 +129,7 @@ where
         match input {
             Eip712AuthenticatorInput::Eip712(tx) => authenticate::<_, S, Rt, SP>(&tx.data, state),
             Eip712AuthenticatorInput::Standard(tx) => {
-                sov_modules_api::capabilities::authenticate::<_, S, Rt>(
-                    &tx.data,
-                    &Rt::CHAIN_HASH,
-                    state,
-                )
+                sov_modules_api::capabilities::authenticate::<_, S, Rt>(&tx.data, state)
             }
         }
     }
