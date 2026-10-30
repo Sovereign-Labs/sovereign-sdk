@@ -317,6 +317,9 @@ export class JsonToBorshConverter {
         if (integerType.includes("128") || integerType.includes("64")) {
           value = BigInt(context.value);
         } else {
+          if (!/^[+-]?\d+$/.test(context.value)) {
+            throw new Error("Invalid integer");
+          }
           const parsed = Number.parseInt(context.value, 10);
           if (isNaN(parsed)) {
             throw new Error("NaN");
