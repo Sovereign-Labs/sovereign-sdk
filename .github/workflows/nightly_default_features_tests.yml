@@ -45,3 +45,22 @@ jobs:
           webhook-type: incoming-webhook
           payload: |
             text: "❌ *Nightly default-features tests failed*\n\nDivergent default-features code paths in sov-db / sov-mock-da / sov-modules-api / sov-modules-macros regressed.\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
+
+      # `heavy_` tests are `#[ignore]`d because they are too slow for PR CI.
+      - name: Run heavy tests
+        id: heavy_tests
+        if: ${{ !cancelled() }}
+        run: |
+          cargo nextest run --no-fail-fast --status-level skip \
+            -p sov-sequencer --run-ignored only -E 'test(heavy_)'
+
+      - name: Slack notification on heavy tests failure
+        if: failure() && steps.heavy_tests.outcome == 'failure'
+        uses: slackapi/slack-github-action@v2.1.1
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+        with:
+          webhook: ${{ secrets.SLACK_WEBHOOK_URL }}
+          webhook-type: incoming-webhook
+          payload: |
+            text: "❌ *Nightly heavy tests failed*\n\nA `heavy_` test in sov-sequencer regressed.\n\n*Workflow run:* ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}"
