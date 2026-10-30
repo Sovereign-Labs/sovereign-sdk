@@ -1,5 +1,6 @@
 use serde::{Deserialize, Serialize};
 
+use crate::fibre::{FibreRowsProof, FIBRE_SHARE_VERSION};
 use crate::shares::is_tail_padding;
 use crate::types::NamespaceValidationError::{
     IncompleteNamespace, InvalidBlobData, InvalidRowProof,
@@ -14,6 +15,8 @@ use crate::types::{
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct BlobProof {
     pub(crate) range_proofs: Vec<RangeProof>,
+    /// Opening of the Fibre rows backing a share version 2 pointer; `None` for every other blob.
+    pub(crate) fibre: Option<FibreRowsProof>,
 }
 
 impl BlobProof {
@@ -54,13 +57,18 @@ impl BlobProof {
             })
     }
 
-    /// Returns true if this proof is for a supported blob.
-    pub(crate) fn is_supported_blob(&self) -> Result<bool, NamespaceValidationError> {
+    /// Returns true if this proof is for a supported blob. Share version 2 (Fibre) is supported
+    /// only when `fibre_active`.
+    pub(crate) fn is_supported_blob(
+        &self,
+        fibre_active: bool,
+    ) -> Result<bool, NamespaceValidationError> {
         let first_share = self.first_share().map_err(InvalidRowProof)?;
         let Some(info_byte) = first_share.info_byte() else {
             return Err(InvalidBlobData(BlobDataError::NonMatchingShare));
         };
-        Ok(info_byte.version() == SUPPORTED_SHARE_VERSION && !is_tail_padding(first_share))
+        let version = info_byte.version();
+        Ok(is_supported_share_version(version, fibre_active) && !is_tail_padding(first_share))
     }
 
     fn get_first_sub_proof(&self) -> Result<&RangeProof, RowProofError> {
@@ -140,6 +148,10 @@ impl BlobProof {
     }
 }
 
+fn is_supported_share_version(version: u8, fibre_active: bool) -> bool {
+    version == SUPPORTED_SHARE_VERSION || (version == FIBRE_SHARE_VERSION && fibre_active)
+}
+
 /// Proof of range inside a single row
 #[derive(Debug, PartialEq, Clone, Serialize, Deserialize)]
 pub struct RangeProof {
@@ -155,8 +167,13 @@ pub(crate) fn new_inclusion_proof(
     header: &crate::CelestiaHeader,
     rollup_data: &crate::types::NamespaceRelevantData,
     blobs: &[crate::types::BlobWithSender],
+    fibre_blobs: &[crate::types::FibreBlobData],
 ) -> Vec<BlobProof> {
+    // Fibre data is only fetched once Fibre is active, so its presence tells the activation state.
+    let fibre_active = !fibre_blobs.is_empty();
     let mut needed_share_ranges = Vec::new();
+    // Opening of each Fibre blob, keyed by the index of its range in `needed_share_ranges`.
+    let mut fibre_rows_proofs = Vec::new();
 
     let mut prev_range_end: Option<usize> = None;
     let flat_shares = rollup_data
@@ -175,22 +192,34 @@ pub(crate) fn new_inclusion_proof(
         let relevant_len = blob.compressed_verified_data().len();
         let start_share = flat_shares[range.start];
         let has_signer = start_share.signer().is_some();
-        let relevant_end = range
-            .start
-            .checked_add(
-                crate::shares::shares_needed_for_bytes_with_signer(relevant_len, has_signer).max(1),
-            )
-            .expect("share index overflow");
-        let full_blob_end = range
-            .start
-            .checked_add(
-                crate::shares::shares_needed_for_bytes_with_signer(
-                    blob.compressed_total_len(),
-                    has_signer,
-                )
-                .max(1),
-            )
-            .expect("share index overflow");
+        // A Fibre blob is a single pointer share, whatever the length of its off-chain data.
+        let (relevant_end, full_blob_end) =
+            if matches!(blob.kind, crate::types::BlobKind::Fibre { .. }) {
+                let end = range.start.checked_add(1).expect("share index overflow");
+                (end, end)
+            } else {
+                let relevant_end = range
+                    .start
+                    .checked_add(
+                        crate::shares::shares_needed_for_bytes_with_signer(
+                            relevant_len,
+                            has_signer,
+                        )
+                        .max(1),
+                    )
+                    .expect("share index overflow");
+                let full_blob_end = range
+                    .start
+                    .checked_add(
+                        crate::shares::shares_needed_for_bytes_with_signer(
+                            blob.compressed_total_len(),
+                            has_signer,
+                        )
+                        .max(1),
+                    )
+                    .expect("share index overflow");
+                (relevant_end, full_blob_end)
+            };
         // Guard in depth - should never be false unless share counting is bugged
         // or we read more bytes from the blob than the range has shares (e.g. `BlobWithIter`'s range
         // initialisation is bugged)
@@ -213,11 +242,26 @@ pub(crate) fn new_inclusion_proof(
                 let skipped_blob_ranges = build_ranges_to_prove_for_skipped_blobs(
                     prev_range_end..range.start,
                     &flat_shares,
+                    fibre_active,
                 );
                 needed_share_ranges.extend(skipped_blob_ranges);
             }
         }
 
+        if let crate::types::BlobKind::Fibre { .. } = blob.kind {
+            let fibre_blob = fibre_blobs
+                .iter()
+                .find(|fibre_blob| fibre_blob.share_idx_in_ns == range.start)
+                .expect("bug: Fibre data missing for pointer");
+            fibre_rows_proofs.push((
+                needed_share_ranges.len(),
+                crate::fibre::build_rows_proof(
+                    fibre_blob.encoded(),
+                    &fibre_blob.data,
+                    relevant_len,
+                ),
+            ));
+        }
         needed_share_ranges.push(range.start..relevant_end);
         prev_range_end = Some(full_blob_end);
     }
@@ -225,8 +269,10 @@ pub(crate) fn new_inclusion_proof(
     let end_of_ns = flat_shares.len();
     let namespace_has_supported_shares = flat_shares.iter().any(|share| {
         !is_tail_padding(share)
-            && share.info_byte().expect("Bug. Missing info byte").version()
-                == SUPPORTED_SHARE_VERSION
+            && is_supported_share_version(
+                share.info_byte().expect("Bug. Missing info byte").version(),
+                fibre_active,
+            )
     });
 
     // Invariant: if namespace has supported shares, extraction is expected to produce
@@ -246,13 +292,16 @@ pub(crate) fn new_inclusion_proof(
             // If no supported blobs were extracted, the namespace may still contain
             // unsupported blobs (e.g. v0) that must be proven as skipped.
             let skipped_blob_ranges =
-                build_ranges_to_prove_for_skipped_blobs(0..end_of_ns, &flat_shares);
+                build_ranges_to_prove_for_skipped_blobs(0..end_of_ns, &flat_shares, fibre_active);
             needed_share_ranges.extend(skipped_blob_ranges);
         }
     } else if let Some(prev_end) = prev_range_end {
         if prev_end != end_of_ns {
-            let skipped_blob_ranges =
-                build_ranges_to_prove_for_skipped_blobs(prev_end..end_of_ns, &flat_shares);
+            let skipped_blob_ranges = build_ranges_to_prove_for_skipped_blobs(
+                prev_end..end_of_ns,
+                &flat_shares,
+                fibre_active,
+            );
             needed_share_ranges.extend(skipped_blob_ranges);
         }
     }
@@ -262,19 +311,24 @@ pub(crate) fn new_inclusion_proof(
         .cloned()
         .collect::<Vec<_>>();
 
-    sub_namespace_inclusion_proofs(
+    let mut proofs = sub_namespace_inclusion_proofs(
         header.row_length(),
         &rollup_data.data,
         rollup_data.namespace,
         &needed_share_ranges,
         &row_roots,
-    )
+    );
+    for (range_idx, rows_proof) in fibre_rows_proofs {
+        proofs[range_idx].fibre = Some(rows_proof);
+    }
+    proofs
 }
 
 #[cfg(feature = "native")]
 fn build_ranges_to_prove_for_skipped_blobs(
     inner_range: std::ops::Range<usize>,
     flat_namespace_shares: &[&celestia_types::Share],
+    fibre_active: bool,
 ) -> Vec<std::ops::Range<usize>> {
     let mut ranges = Vec::new();
     let mut start = inner_range.start;
@@ -295,10 +349,10 @@ fn build_ranges_to_prove_for_skipped_blobs(
                 start_share.payload().map(hex::encode),
             );
         } else {
-            assert_ne!(
-                info_byte.version(),
-                SUPPORTED_SHARE_VERSION,
-                "Skipping version 1, bug!"
+            assert!(
+                !is_supported_share_version(info_byte.version(), fibre_active),
+                "Skipping supported share version {}, bug!",
+                info_byte.version()
             );
         }
         let shares_in_blob = crate::shares::shares_needed_for_bytes_with_signer(
@@ -371,6 +425,7 @@ fn sub_namespace_inclusion_proofs(
         let per_row_sub_ranges = split_blob_range_by_rows(blob_range, first_row_offset, row_length);
         let mut current_blob_proof: BlobProof = BlobProof {
             range_proofs: Vec::new(),
+            fibre: None,
         };
 
         let ns_rows = namespace_data.rows();

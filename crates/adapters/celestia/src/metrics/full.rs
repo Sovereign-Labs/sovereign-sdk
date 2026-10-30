@@ -163,3 +163,96 @@ impl Metric for CelestiaAdapterStateMeasurement {
         )
     }
 }
+
+/// Fetch of the off-chain data behind one Fibre pointer, from the archive or from validators.
+#[derive(Debug)]
+pub(crate) struct FibreDownloadMeasurement {
+    pub bytes: usize,
+    pub response_time: std::time::Duration,
+    pub is_success: bool,
+    pub from_archive: bool,
+}
+
+impl Metric for FibreDownloadMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_fibre_download"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let from_archive = self.from_archive;
+        let bytes = self.bytes;
+        let response_time_us = self.response_time.as_micros();
+        let is_success = self.is_success as u8;
+        write!(
+            buffer,
+            "{name},from_archive={from_archive} bytes={bytes},response_time_us={response_time_us},is_success={is_success}"
+        )
+    }
+}
+
+/// Re-encoding of downloaded Fibre data to recover its commitment and proof material.
+#[derive(Debug)]
+pub(crate) struct FibreEncodeMeasurement {
+    pub bytes: usize,
+    pub time: std::time::Duration,
+}
+
+impl Metric for FibreEncodeMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_fibre_encode"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let bytes = self.bytes;
+        let time_us = self.time.as_micros();
+        write!(buffer, "{name} bytes={bytes},time_us={time_us}")
+    }
+}
+
+/// One attempt to upload a batch blob through Fibre and broadcast its `MsgPayForFibre`.
+#[derive(Debug)]
+pub(crate) struct SubmitPayForFibreMeasurement {
+    pub bytes: usize,
+    pub time: std::time::Duration,
+    pub is_success: bool,
+}
+
+impl Metric for SubmitPayForFibreMeasurement {
+    fn measurement_name(&self) -> &'static str {
+        "sov_celestia_adapter_submit_pay_for_fibre"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let name = self.measurement_name();
+        let bytes = self.bytes;
+        let time_us = self.time.as_micros();
+        let is_success = self.is_success as u8;
+        write!(
+            buffer,
+            "{name} bytes={bytes},time_us={time_us},is_success={is_success}"
+        )
+    }
+}
+
+#[cfg(test)]
+mod submit_pay_for_fibre_tests {
+    use super::SubmitPayForFibreMeasurement;
+    use sov_metrics::Metric;
+
+    #[test]
+    fn submit_pay_for_fibre_serializes_for_telegraf() {
+        let measurement = SubmitPayForFibreMeasurement {
+            bytes: 1234,
+            time: std::time::Duration::from_micros(5678),
+            is_success: true,
+        };
+        let mut buffer = Vec::new();
+        measurement.serialize_for_telegraf(&mut buffer).unwrap();
+        assert_eq!(
+            String::from_utf8(buffer).unwrap(),
+            "sov_celestia_adapter_submit_pay_for_fibre bytes=1234,time_us=5678,is_success=1"
+        );
+    }
+}

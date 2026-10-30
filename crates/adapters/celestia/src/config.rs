@@ -1,8 +1,8 @@
 //! Configuration for [`crate::da_service::CelestiaService`]
+use std::fmt;
 use std::num::NonZero;
 
 use schemars::JsonSchema;
-use std::fmt;
 
 /// Configuration for a single gRPC fallback endpoint.
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
@@ -175,6 +175,69 @@ pub struct CelestiaConfig {
     /// the envelope non-canonical, so that batch is posted verbatim (uncompressed), not rejected.
     #[serde(default = "default_compression_chunk_size")]
     pub compression_chunk_size: usize,
+
+    /// Optional Fibre (share version 2) support. When set, the node downloads Fibre batch blobs
+    /// referenced on-chain, and submits batches through Fibre if `fibre.submit` is `true`.
+    /// Default: `None` (Fibre disabled).
+    #[serde(default)]
+    pub fibre: Option<FibreConfig>,
+}
+
+/// Configuration for reading (and optionally submitting) blobs through Celestia Fibre.
+#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
+#[serde(deny_unknown_fields)]
+pub struct FibreConfig {
+    /// Submit batch blobs through Fibre instead of `MsgPayForBlobs`.
+    /// Requires `signer_private_key` and a funded Fibre escrow account for the signer.
+    /// Default: `false`.
+    #[serde(default)]
+    pub submit: bool,
+    /// gRPC endpoint used by the Fibre client. Default: `CelestiaConfig::grpc_url`.
+    #[serde(default)]
+    pub grpc_url: Option<String>,
+    /// Token for the Fibre gRPC endpoint, sent as `x-token` metadata.
+    /// Default: `CelestiaConfig::grpc_auth_token` when `grpc_url` is not overridden.
+    #[serde(default)]
+    pub grpc_auth_token: Option<String>,
+    /// Timeout for a single Fibre blob download, in seconds. Default: 120.
+    #[serde(default = "default_fibre_download_timeout_secs")]
+    pub download_timeout_secs: NonZero<u64>,
+    /// Directory where downloaded Fibre blobs are archived. Validators only retain shards for a
+    /// limited time (4h by default), so nodes that must sync older blocks need an archive.
+    #[serde(default)]
+    pub archive_dir: Option<std::path::PathBuf>,
+    /// Base URLs queried as `GET {url}/{blob_id_hex}` when a blob is not in the local archive.
+    #[serde(default)]
+    pub archive_fallback_urls: Vec<String>,
+}
+
+impl fmt::Debug for FibreConfig {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        f.debug_struct("FibreConfig")
+            .field("submit", &self.submit)
+            .field("grpc_url", &self.grpc_url)
+            .field(
+                "grpc_auth_token",
+                &self.grpc_auth_token.as_ref().map(|_| "REDACTED"),
+            )
+            .field("download_timeout_secs", &self.download_timeout_secs)
+            .field("archive_dir", &self.archive_dir)
+            .field("archive_fallback_urls", &self.archive_fallback_urls)
+            .finish()
+    }
+}
+
+impl Default for FibreConfig {
+    fn default() -> Self {
+        Self {
+            submit: false,
+            grpc_url: None,
+            grpc_auth_token: None,
+            download_timeout_secs: default_fibre_download_timeout_secs(),
+            archive_dir: None,
+            archive_fallback_urls: Vec::new(),
+        }
+    }
 }
 
 impl fmt::Debug for CelestiaConfig {
@@ -217,6 +280,7 @@ impl fmt::Debug for CelestiaConfig {
             .field("backoff_factor", &self.backoff_factor)
             .field("compression", &self.compression)
             .field("compression_chunk_size", &self.compression_chunk_size)
+            .field("fibre", &self.fibre)
             .finish()
     }
 }
@@ -324,6 +388,7 @@ impl CelestiaConfig {
             backoff_factor: default_factor(),
             compression: CompressOnSubmit::default(),
             compression_chunk_size: default_compression_chunk_size(),
+            fibre: None,
         }
     }
 
@@ -346,6 +411,59 @@ impl CelestiaConfig {
     }
 
     pub(crate) async fn build_client(&self) -> anyhow::Result<celestia_client::Client> {
+        self.validate_fibre()?;
+        let Some(fibre) = &self.fibre else {
+            return self.client_builder()?.build().await.map_err(Into::into);
+        };
+
+        // `FibreClientConfig` needs the chain id, which is only known once a client is connected.
+        let chain_id = self.client_builder()?.build().await?.chain_id().to_string();
+        let grpc_url = fibre
+            .grpc_url
+            .as_ref()
+            .or(self.grpc_url.as_ref())
+            .expect("checked by validate_fibre");
+        let grpc_auth_token = if fibre.grpc_url.is_some() {
+            fibre.grpc_auth_token.as_ref()
+        } else {
+            fibre
+                .grpc_auth_token
+                .as_ref()
+                .or(self.grpc_auth_token.as_ref())
+        };
+        let mut endpoint = celestia_client::Endpoint::new(grpc_url.clone());
+        if let Some(token) = grpc_auth_token {
+            endpoint = endpoint.metadata("x-token", token);
+        }
+        let fibre_client = celestia_client::api::fibre::FibreClient::from_endpoint(
+            endpoint,
+            celestia_client::api::fibre::FibreClientConfig::new(chain_id)?,
+        )?;
+        self.client_builder()?
+            .fibre_client(fibre_client)
+            .build()
+            .await
+            .map_err(Into::into)
+    }
+
+    fn validate_fibre(&self) -> anyhow::Result<()> {
+        let Some(fibre) = &self.fibre else {
+            return Ok(());
+        };
+        if fibre.submit && self.signer_private_key.is_none() {
+            anyhow::bail!("`fibre.submit` requires `signer_private_key` to be set");
+        }
+        match fibre.grpc_url.as_ref().or(self.grpc_url.as_ref()) {
+            Some(url) if !url.trim().is_empty() => {}
+            _ => anyhow::bail!("`fibre` requires `fibre.grpc_url` or `grpc_url` to be set"),
+        }
+        validate_fallback_endpoint_urls(
+            "fibre.archive_fallback_urls",
+            fibre.archive_fallback_urls.iter().map(String::as_str),
+        )
+    }
+
+    fn client_builder(&self) -> anyhow::Result<celestia_client::ClientBuilder> {
         validate_rpc_url(&self.rpc_url)?;
         validate_fallback_endpoint_urls(
             "rpc_fallback_endpoints",
@@ -417,8 +535,12 @@ impl CelestiaConfig {
                 builder = builder.private_key_hex(signer_key_hex);
             }
         }
-        builder.build().await.map_err(Into::into)
+        Ok(builder)
     }
+}
+
+const fn default_fibre_download_timeout_secs() -> NonZero<u64> {
+    NonZero::new(120).unwrap()
 }
 
 pub(crate) const fn default_safe_lead_time_ms() -> u64 {
@@ -579,8 +701,8 @@ mod tests {
     use super::{
         default_api_request_timeout_secs, default_compression_chunk_size,
         default_request_timeout_seconds, validate_compression_chunk_size, validate_rpc_url,
-        CelestiaConfig, CompressOnSubmit, GrpcEndpointConfig, RpcEndpointConfig, TxPriority,
-        VerifyOnFetchMode,
+        CelestiaConfig, CompressOnSubmit, FibreConfig, GrpcEndpointConfig, RpcEndpointConfig,
+        TxPriority, VerifyOnFetchMode,
     };
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
@@ -793,6 +915,87 @@ mod tests {
             error.to_string().contains("grpc_fallback_endpoints"),
             "unexpected error: {error}"
         );
+    }
+
+    #[tokio::test]
+    async fn build_client_rejects_fibre_submit_without_signer() {
+        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
+        config.grpc_url = Some("http://localhost:9090".to_string());
+        config.fibre = Some(FibreConfig {
+            submit: true,
+            ..Default::default()
+        });
+        let error = config.build_client().await.unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("`fibre.submit` requires `signer_private_key`"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn build_client_rejects_fibre_without_grpc_url() {
+        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
+        config.fibre = Some(FibreConfig::default());
+        let error = config.build_client().await.unwrap_err();
+        assert!(
+            error
+                .to_string()
+                .contains("`fibre` requires `fibre.grpc_url` or `grpc_url`"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[tokio::test]
+    async fn build_client_rejects_empty_fibre_archive_fallback_url() {
+        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
+        config.fibre = Some(FibreConfig {
+            grpc_url: Some("http://localhost:9090".to_string()),
+            archive_fallback_urls: vec!["  ".to_string()],
+            ..Default::default()
+        });
+        let error = config.build_client().await.unwrap_err();
+        assert!(
+            error.to_string().contains("fibre.archive_fallback_urls"),
+            "unexpected error: {error}"
+        );
+    }
+
+    #[test]
+    fn fibre_is_disabled_by_default() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let config = deserialize_config("{}").unwrap();
+        assert_eq!(config.fibre, None);
+    }
+
+    #[test]
+    fn fibre_section_parses_with_defaults() {
+        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
+        let config = deserialize_config(
+            r#"{"fibre":{"submit":true,"archive_dir":"/var/fibre","archive_fallback_urls":["http://a:8080"]}}"#,
+        )
+        .unwrap();
+        assert_eq!(
+            config.fibre,
+            Some(FibreConfig {
+                submit: true,
+                archive_dir: Some("/var/fibre".into()),
+                archive_fallback_urls: vec!["http://a:8080".to_string()],
+                ..Default::default()
+            })
+        );
+    }
+
+    #[test]
+    fn fibre_debug_redacts_token() {
+        let fibre = FibreConfig {
+            grpc_auth_token: Some("super-secret".to_string()),
+            ..Default::default()
+        };
+        let debug_output = format!("{fibre:?}");
+        assert!(!debug_output.contains("super-secret"));
+        assert!(debug_output.contains("REDACTED"));
     }
 
     #[test]

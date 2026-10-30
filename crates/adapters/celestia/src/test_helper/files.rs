@@ -18,6 +18,7 @@ pub const HEADER_JSON: &str = "header.json";
 pub const ROLLUP_BATCH_ROWS_JSON: &str = "rollup_batch_rows.json";
 pub const ROLLUP_PROOF_ROWS_JSON: &str = "rollup_proof_rows.json";
 pub const SIGNERS_JSON: &str = "signers.json";
+pub const FIBRE_BLOBS_JSON: &str = "fibre_blobs.json";
 
 const ROLLUP_BATCH_NAMESPACE_EXAMPLES_RAW: [u8; 10] = [0, 0, 115, 111, 118, 45, 116, 101, 115, 116];
 pub const ROLLUP_BATCH_NAMESPACE_EXAMPLES: Namespace =
@@ -32,6 +33,7 @@ pub const ROLLUP_PROOF_NAMESPACE_EXAMPLES: Namespace =
 pub const ROLLUP_PARAMS_EXAMPLES: RollupParams = RollupParams {
     rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE_EXAMPLES,
     rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE_EXAMPLES,
+    fibre_activation_height: None,
 };
 
 /// Fits into single share.
@@ -593,6 +595,7 @@ pub mod from_mocha_shares_mismatch {
     pub const ROLLUP_PARAMS: RollupParams = RollupParams {
         rollup_batch_namespace: Namespace::const_v0(*b"test-batch"),
         rollup_proof_namespace: Namespace::const_v0(*b"test-proof"),
+        fibre_activation_height: None,
     };
     const HEIGHT: u64 = 9815642;
 
@@ -644,6 +647,7 @@ pub mod from_testnet_with_tail_padding {
     pub const ROLLUP_PARAMS: RollupParams = RollupParams {
         rollup_batch_namespace: Namespace::const_v0(BATCH_NAMESPACE_RAW),
         rollup_proof_namespace: Namespace::const_v0(PROOF_NAMESPACE_RAW),
+        fibre_activation_height: None,
     };
 
     pub fn filtered_block() -> FilteredCelestiaBlock {
@@ -925,6 +929,7 @@ pub mod from_mocha_invalid_row_proof {
     pub const ROLLUP_PARAMS: RollupParams = RollupParams {
         rollup_batch_namespace: Namespace::const_v0(*b"sov-soak-a"),
         rollup_proof_namespace: Namespace::const_v0(*b"sov-soak-p"),
+        fibre_activation_height: None,
     };
 
     pub const HEIGHT: u64 = 10207148;
@@ -980,6 +985,7 @@ pub mod from_mocha_multi_candidate_rows_10261831 {
         // Namespace from hex: 0a753d7fa7382f45, left-padded to v0 10-byte namespace id.
         rollup_batch_namespace: Namespace::const_v0([0, 0, 10, 117, 61, 127, 167, 56, 47, 69]),
         rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE_EXAMPLES,
+        fibre_activation_height: None,
     };
     pub const HEIGHT: u64 = 10261831;
 
@@ -1025,6 +1031,7 @@ pub mod from_mainnet_real_rollup_average {
         rollup_batch_namespace: Namespace::const_v0(*b"bltbatch-t"),
         // Does not matter here
         rollup_proof_namespace: Namespace::const_v0(*b"bltbatch-z"),
+        fibre_activation_height: None,
     };
 
     pub fn filtered_block() -> FilteredCelestiaBlock {
@@ -1069,6 +1076,7 @@ pub mod from_mainnet_real_rollup_p99 {
         rollup_batch_namespace: Namespace::const_v0(*b"bltbatch-t"),
         // Does not matter here
         rollup_proof_namespace: Namespace::const_v0(*b"bltbatch-z"),
+        fibre_activation_height: None,
     };
 
     pub fn filtered_block() -> FilteredCelestiaBlock {
@@ -1131,7 +1139,13 @@ fn filtered_block_from_path(
     let rollup_batch_shares = NamespaceRelevantData::new(batch_namespace, rollup_batch_rows);
     let rollup_proof_shares = NamespaceRelevantData::new(proof_namespace, rollup_proof_rows);
 
-    FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header.into())
+    let mut block =
+        FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header.into())?;
+    // Absent file means the block has no Fibre blobs.
+    if path.join(FIBRE_BLOBS_JSON).exists() {
+        block.fibre_blobs = load_from_file(path, FIBRE_BLOBS_JSON)?;
+    }
+    Ok(block)
 }
 
 pub(crate) fn make_test_path(data_path: &str) -> PathBuf {

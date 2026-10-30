@@ -4,18 +4,19 @@ pub mod proofs;
 use borsh::{BorshDeserialize, BorshSerialize};
 use celestia_types::nmt::{Namespace, NamespacedHash, NS_SIZE};
 use nmt_rs::NamespacedSha2Hasher;
-use sov_rollup_interface::da::{self, DaSpec, RelevantBlobs, RelevantProofs};
+use sov_rollup_interface::da::{self, BlockHeaderTrait, DaSpec, RelevantBlobs, RelevantProofs};
 
 use self::address::CelestiaAddress;
 use self::proofs::*;
+use crate::fibre::{parse_v2_pointer, verify_fibre_prefix, FIBRE_HEADER_LEN, FIBRE_SHARE_VERSION};
 use crate::shares::shares_needed_for_bytes_with_signer;
 use crate::types::NamespaceValidationError::{
     IncompleteNamespace, InvalidBlobData, InvalidRowProof,
 };
 use crate::types::{
-    BlobDataError, BlobWithSender, IncompleteNamespaceError, NamespaceBoundaryProof, NamespaceType,
-    NamespaceValidationError, ProofError, RowProofError, TmHash, ValidationError,
-    SUPPORTED_SHARE_VERSION,
+    BlobDataError, BlobKind, BlobWithSender, FibreProofError, IncompleteNamespaceError,
+    NamespaceBoundaryProof, NamespaceType, NamespaceValidationError, ProofError, RowProofError,
+    TmHash, ValidationError, SUPPORTED_SHARE_VERSION,
 };
 use crate::CelestiaHeader;
 
@@ -23,12 +24,16 @@ use crate::CelestiaHeader;
 pub struct RollupParams {
     pub rollup_batch_namespace: Namespace,
     pub rollup_proof_namespace: Namespace,
+    /// First block height at which share version 2 (Fibre) blobs in the batch namespace are
+    /// read. `None` keeps them skipped, as they were before Fibre support.
+    pub fibre_activation_height: Option<u64>,
 }
 
 #[derive(Clone)]
 pub struct CelestiaVerifier {
     rollup_batch_namespace: Namespace,
     rollup_proof_namespace: Namespace,
+    fibre_activation_height: Option<u64>,
 }
 
 #[derive(
@@ -72,6 +77,7 @@ impl da::DaVerifier for CelestiaVerifier {
         Self {
             rollup_proof_namespace: params.rollup_proof_namespace,
             rollup_batch_namespace: params.rollup_batch_namespace,
+            fibre_activation_height: params.fibre_activation_height,
         }
     }
 
@@ -92,6 +98,7 @@ impl da::DaVerifier for CelestiaVerifier {
             block_header,
             &relevant_blobs.batch_blobs,
             self.rollup_batch_namespace,
+            self.fibre_active(block_header.height()),
             relevant_proofs.batch.inclusion_proof.clone(),
             relevant_proofs.batch.completeness_proof.clone(),
         )
@@ -105,6 +112,8 @@ impl da::DaVerifier for CelestiaVerifier {
             block_header,
             &relevant_blobs.proof_blobs,
             self.rollup_proof_namespace,
+            // Fibre is not supported in the proof namespace.
+            false,
             relevant_proofs.proof.inclusion_proof.clone(),
             relevant_proofs.proof.completeness_proof.clone(),
         )
@@ -118,10 +127,16 @@ impl da::DaVerifier for CelestiaVerifier {
 }
 
 impl CelestiaVerifier {
+    fn fibre_active(&self, height: u64) -> bool {
+        self.fibre_activation_height
+            .is_some_and(|activation| height >= activation)
+    }
+
     /// Input:
     /// * reference [`CelestiaHeader`] to verify against. This data is trusted by this point.
     /// * the slice of [`BlobWithSender`] that has been extracted. Not trusted.
     /// * Namespace of the blobs. Trusted parameter of the whole rollup
+    /// * Whether share version 2 (Fibre) blobs are read in this namespace at this height.
     /// * Option<NamespaceBoundaryProof> is needed to do the whole namespace completeness check
     ///
     /// This method verifies that:
@@ -132,6 +147,7 @@ impl CelestiaVerifier {
         block_header: &CelestiaHeader,
         blobs: &[BlobWithSender],
         namespace: Namespace,
+        fibre_active: bool,
         inclusion_proof: Vec<BlobProof>,
         // Proof for the last share, if needed.
         namespace_boundary_proof: Option<NamespaceBoundaryProof>,
@@ -202,23 +218,39 @@ impl CelestiaVerifier {
                 }
             }
 
-            let shares_checked = if blob_row_proof.is_supported_blob()? {
+            let shares_checked = if blob_row_proof.is_supported_blob(fibre_active)? {
                 let Some(blob) = blobs_iter.next() else {
                     return Err(InvalidBlobData(BlobDataError::MoreProofsThanBlobs));
                 };
-                authenticate_blob_data(
-                    block_header,
-                    &namespace_row_roots,
-                    namespace,
-                    blob,
-                    blob_row_proof,
-                )?
+                let is_fibre = blob_row_proof
+                    .first_share()
+                    .map_err(InvalidRowProof)?
+                    .info_byte()
+                    .is_some_and(|info_byte| info_byte.version() == FIBRE_SHARE_VERSION);
+                if is_fibre {
+                    authenticate_fibre_blob(
+                        block_header,
+                        &namespace_row_roots,
+                        namespace,
+                        blob,
+                        blob_row_proof,
+                    )?
+                } else {
+                    authenticate_blob_data(
+                        block_header,
+                        &namespace_row_roots,
+                        namespace,
+                        blob,
+                        blob_row_proof,
+                    )?
+                }
             } else {
                 // Non-supported blobs are skipped. But still checked its inclusion.
                 verify_skipped_blob(
                     block_header,
                     &namespace_row_roots,
                     namespace,
+                    fibre_active,
                     blob_row_proof,
                 )?
             };
@@ -357,6 +389,9 @@ fn authenticate_blob_data(
         // Parity share namespace should not be verified
         return Err(InvalidBlobData(BlobDataError::UnexpectedBlobs));
     }
+    if blob.kind != BlobKind::Pfb {
+        return Err(InvalidBlobData(BlobDataError::NonMatchingShare));
+    }
     // The accumulator length is considered trusted as a record of the bytes that the rollup saw.
     // This does not mean that it can be trusted to contain the correct bytes.
     // Share-occupancy math is defined over DA bytes, hence the compressed accessor.
@@ -486,12 +521,85 @@ fn authenticate_blob_data(
     Ok(shares_occupied_total)
 }
 
+/// Authenticates one share version 2 (Fibre) blob against its inclusion proof.
+/// 1. Verifies the inclusion of the single pointer share.
+/// 2. Verifies the signer and that the blob is identified by the commitment in the pointer.
+/// 3. Verifies that the data read by the rollup is the prefix of the blob committed to.
+///
+/// Returns the number of shares occupied by this blob, which is always one.
+fn authenticate_fibre_blob(
+    block_header: &CelestiaHeader,
+    namespace_row_roots: &[&NamespacedHash],
+    namespace: Namespace,
+    blob: &BlobWithSender,
+    blob_row_proof: BlobProof,
+) -> Result<usize, NamespaceValidationError> {
+    let [sub_proof] = blob_row_proof.range_proofs.as_slice() else {
+        return Err(InvalidRowProof(RowProofError::WrongNumberOfShares {
+            expected: 1,
+            actual: blob_row_proof.range_proofs.len(),
+        }));
+    };
+    let [share] = sub_proof.shares.as_slice() else {
+        return Err(InvalidRowProof(RowProofError::WrongNumberOfShares {
+            expected: 1,
+            actual: sub_proof.shares.len(),
+        }));
+    };
+
+    let row_number = block_header.calculate_row_number_for_share(sub_proof.start_share_idx);
+    let row_root = namespace_row_roots[row_number];
+    sub_proof
+        .proof
+        .verify_range(row_root, &[share.data()], namespace.into())
+        .map_err(|e| InvalidRowProof(RowProofError::ProofError(ProofError::Invalid(e))))?;
+
+    if share.signer().map(CelestiaAddress) != Some(blob.sender) {
+        return Err(InvalidBlobData(BlobDataError::WrongSender));
+    }
+    let pointer = parse_v2_pointer(share).map_err(|e| InvalidBlobData(e.into()))?;
+    if blob.kind
+        != (BlobKind::Fibre {
+            commitment: pointer.commitment,
+        })
+    {
+        return Err(InvalidBlobData(FibreProofError::CommitmentMismatch.into()));
+    }
+    let rows_proof = blob_row_proof
+        .fibre
+        .as_ref()
+        .ok_or(InvalidBlobData(FibreProofError::MissingProof.into()))?;
+    verify_fibre_prefix(
+        &pointer.commitment,
+        rows_proof,
+        blob.compressed_verified_data(),
+        blob.compressed_total_len(),
+    )
+    .map_err(|e| InvalidBlobData(e.into()))?;
+
+    // Mirrors `authenticate_blob_data`: the classification of the blob (envelope vs. legacy)
+    // is decided by the first bytes, so the verified prefix must cover the envelope header
+    // whenever the committed data starts with the magic. The rows are authenticated by now.
+    let total_len = blob.compressed_total_len();
+    let committed_head = &rows_proof.rows[FIBRE_HEADER_LEN..];
+    let committed_head = &committed_head[..committed_head.len().min(total_len)];
+    if crate::envelope::has_magic_prefix(committed_head) {
+        let required_prefix_len = crate::envelope::ENVELOPE_HEADER_LEN.min(total_len);
+        if blob.compressed_verified_data().len() < required_prefix_len {
+            return Err(InvalidBlobData(BlobDataError::NonMatchingShare));
+        }
+    }
+
+    Ok(1)
+}
+
 // Checks
 // Returns number of shares covered
 fn verify_skipped_blob(
     block_header: &CelestiaHeader,
     namespace_row_roots: &[&NamespacedHash],
     namespace: Namespace,
+    fibre_active: bool,
     blob_row_proof: BlobProof,
 ) -> Result<usize, NamespaceValidationError> {
     let first_share = blob_row_proof.first_share().map_err(InvalidRowProof)?;
@@ -510,11 +618,11 @@ fn verify_skipped_blob(
             "Padding share has payload with non-zero bytes",
         );
     } else {
-        assert_ne!(
-            info_byte.version(),
-            SUPPORTED_SHARE_VERSION,
-            "Bug. `verify_skipped_blob` should only be called for blobs with non supported version."
-        );
+        let version = info_byte.version();
+        if version == SUPPORTED_SHARE_VERSION || (version == FIBRE_SHARE_VERSION && fibre_active) {
+            // Supported blobs must be authenticated, not skipped.
+            return Err(InvalidBlobData(BlobDataError::NonMatchingShare));
+        }
     }
 
     // If there is more than one blob row proof, we ignore them, as we need single share.
@@ -798,6 +906,7 @@ mod tests {
         let empty_blobs: Vec<BlobWithSender> = Vec::new();
         let non_empty_inclusion_proof = vec![BlobProof {
             range_proofs: Vec::new(),
+            fibre: None,
         }];
         let output = prevalidate_blobs(
             &namespace_row_roots,
