@@ -189,6 +189,21 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
         self
     }
 
+    /// Modifies the [`PreferredSequencerConfig`].
+    ///
+    /// # Panics
+    /// If the rollup is not configured with a preferred sequencer.
+    pub fn with_preferred_seq_config(
+        mut self,
+        config_f: impl FnOnce(&mut PreferredSequencerConfig<<R::Spec as Spec>::Address>),
+    ) -> Self {
+        let SequencerKindConfig::Preferred(config) = &mut self.config.sequencer_config else {
+            panic!("with_preferred_seq_config requires a preferred sequencer");
+        };
+        config_f(config);
+        self
+    }
+
     /// Enables the prover for this rollup. Equivalent to setting
     /// [`RollupBuilderConfig::rollup_prover_config`] to [`RollupProverConfig::Prove`].
     pub fn enable_prover(mut self) -> Self {
