@@ -468,7 +468,6 @@ struct StreamOfTransactionsArgs {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Unblock later when state manager is performant and stable"]
 async fn test_small_reshuffle_no_drops() -> anyhow::Result<()> {
     let finality = 5;
     let randomization_config = RandomizationConfig {
