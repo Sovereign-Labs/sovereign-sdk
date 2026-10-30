@@ -2,6 +2,7 @@
 - #3080 DB: Added optional `storage.live_db_path` and `storage.user_nomt_db_path` config values, which set exact directories for the live state DB and the user NOMT DB (alongside the existing `storage.ledger_db_path`). When unset, databases stay under `storage.path` as before. Relative paths are resolved from the process working directory.
     - **Breaking Change** Migrations: `migrate_to_v1` and `mockda-to-celestia-migrate` accept `--live-db-path`, `--ledger-db-path` and `--user-nomt-db-path` overrides. `--db-path` now refuses to run if the rollup config sets a per-DB path that isn't overridden too, because that DB would otherwise be migrated at its original location. `sov_migrations::MigrationArgs::db_path` is replaced by `db_paths: DbPathOverrides`, and `load_storage_config` takes `&DbPathOverrides`.
 - #3085 State: Faster NOMT finalization state-root computation. NOMT accesses are built with parallel hashing and a sort + merge-join, pure reads are dropped when no witness is generated, and NOMT now prepopulates its upper page cache levels on startup.
+- #3084 State: `nomt`/`nomt-core` now come from `thrumdev/nomt` at git rev `9f3542a`, which overlaps rollback delta building with the merkle update and evicts superseded leaf cache pages after write completion.
 # 2026-10-20
 - #3077 Make benchmark inputs reproducible and report median-block TPS and a receipt digest.
 # 2026-10-23
