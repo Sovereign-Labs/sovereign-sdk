@@ -2,10 +2,7 @@
 //! standard sequencer, side by side on the same mock DA layer.
 
 use std::future::Future;
-use std::time::Duration;
 
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
 use futures::{FutureExt, StreamExt};
 use sov_api_spec::types::{self as api_types, IntOrHash, TxReceiptResult};
 use sov_mock_da::{BlockProducingConfig, MockAddress};
@@ -33,7 +30,6 @@ type RT = TestRuntime<S>;
 type TestBlueprint = RtAgnosticBlueprint<S, RT>;
 
 const STANDARD_SEQUENCER_DA_ADDRESS: MockAddress = MockAddress::new([0x5e; 32]);
-const PROGRESS_TIMEOUT: Duration = Duration::from_secs(60);
 
 struct SideBySide {
     preferred: TestRollup<TestBlueprint>,
@@ -68,13 +64,13 @@ fn transfer(sender: &TestUser<S>, recipient: &TestUser<S>) -> RawTx {
 }
 
 async fn accept_tx(client: &sov_api_spec::Client, tx: &RawTx) -> TxHash {
-    let accepted = client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx.data),
-        })
+    client
+        .send_raw_tx_to_sequencer(tx)
         .await
-        .expect("sequencer should accept the transaction");
-    accepted.id.parse().unwrap()
+        .expect("sequencer should accept the transaction")
+        .id
+        .parse()
+        .unwrap()
 }
 
 /// Returns `None` while the node hasn't executed the transaction yet.
@@ -116,26 +112,26 @@ async fn produce_blocks_until<F, Fut>(
     F: FnMut() -> Fut,
     Fut: Future<Output = bool>,
 {
-    let assert_no_crash = || {
-        for node in [preferred, standard] {
-            assert!(
-                !node.is_rollup_crashed(),
-                "a node crashed while waiting for {description}"
-            );
-        }
-    };
-    tokio::time::timeout(PROGRESS_TIMEOUT, async {
-        loop {
-            assert_no_crash();
-            if done().await {
-                assert_no_crash();
-                return;
-            }
-            preferred.tenderly_produce_blocks(1).await.unwrap();
-        }
-    })
-    .await
-    .unwrap_or_else(|_| panic!("timed out waiting for {description}"));
+    preferred
+        .wait_for_condition(
+            || {
+                let done = done();
+                async move {
+                    let done = done.await;
+                    anyhow::ensure!(
+                        !preferred.is_rollup_crashed() && !standard.is_rollup_crashed(),
+                        "a node crashed while waiting for {description}"
+                    );
+                    if !done {
+                        preferred.tenderly_produce_blocks(1).await?;
+                    }
+                    Ok(done)
+                }
+            },
+            description,
+        )
+        .await
+        .unwrap();
 }
 
 /// Starts both nodes, registers the standard sequencer through the preferred one, then sends one
@@ -165,9 +161,10 @@ async fn run_side_by_side() -> SideBySide {
     )
     .set_config(|c| {
         c.storage = sov_test_utils::test_rollup::StoragePath::Tmp(preferred_dir);
-        if let SequencerKindConfig::Preferred(p) = &mut c.sequencer_config {
-            p.ideal_lag_behind_finalized_slot = 3;
-        }
+        let SequencerKindConfig::Preferred(p) = &mut c.sequencer_config else {
+            unreachable!("Default config is preferred");
+        };
+        p.ideal_lag_behind_finalized_slot = 3;
     })
     .set_da_config(|c| c.sender_address = preferred_da_address)
     .start()
