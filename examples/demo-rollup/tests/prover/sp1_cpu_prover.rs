@@ -45,28 +45,72 @@ async fn test_save_proofs() {
     }
 }
 
-/// This test reproduces the proof generation process for the rollup used in benchmarks.
+/// This test reproduces the proof generation process for the rollup used in benchmarks. It also
+/// enforces the [`assert_native_matches_zk`] invariant for bank token creation + transfers.
 #[tokio::test(flavor = "multi_thread")]
 #[cfg_attr(skip_guest_build, ignore)]
 async fn test_proof_generation() {
-    // Use the mock prover: CPU proving is far too slow to run in tests.
+    let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
+    assert_native_matches_zk(witnesses).await;
+}
+
+/// Enforces the [`assert_native_matches_zk`] invariant for a block that deploys and exercises an EVM
+/// contract (the path most likely to grow native-only execution shortcuts).
+#[tokio::test(flavor = "multi_thread")]
+#[cfg_attr(skip_guest_build, ignore)]
+async fn test_evm_deploy_and_call_proof_generation() {
+    let (_genesis_state_root, witnesses) = super::generate_evm_witnesses().await;
+    assert_eq!(witnesses.len(), 1);
+    assert_native_matches_zk(witnesses).await;
+}
+
+/// SDK consistency invariant: **the ZK guest must reproduce native execution exactly.**
+///
+/// For each block's witness, this runs the guest — which re-executes the STF *cache-free*
+/// ([`ExecutionContext::Zk`], with no `#[cfg(feature = "native")]` code) — and asserts the proven
+/// initial/final state roots equal the natively-computed ones.
+///
+/// Crucially, the final state root commits the *entire* provable state, including the per-block
+/// `gas_used` recorded by `sov-chain-state`. So a native-only divergence in gas accounting (e.g. a
+/// native cache or optimization the guest does not share) shows up here as a final-root mismatch —
+/// this is the general guard whose absence let such a divergence ship undetected. Any future
+/// native-only execution shortcut MUST keep this invariant passing.
+async fn assert_native_matches_zk(witnesses: Vec<StfWitness>) {
+    // Mock prover: still *executes* the guest (the cache-free re-execution we rely on), but skips the
+    // slow STARK so this can run in tests.
     std::env::set_var("SP1_PROVER", "mock");
+
+    assert!(
+        !witnesses.is_empty(),
+        "expected at least one block witness to verify"
+    );
 
     let host = TestHost::new().await;
     let method_id = host.prover.method_id();
-    let (_genesis_state_root, witnesses) = super::generate_witnesses().await;
     let prover_address = default_prover_address();
 
     for witness in witnesses {
         let initial_state_root = witness.initial_state_root;
         let final_state_root = witness.final_state_root;
+        let slot_number = witness.slot_number;
 
+        // The guest re-executes the state transition from the witness. If native produced a
+        // transition the cache-free guest cannot reproduce (e.g. an incomplete witness from a
+        // native-only read path), this step itself fails.
         let proof = generate_proof(&host, witness, prover_address).await;
         let proof_public_data = verify(&proof.proof, method_id.clone()).await;
 
         assert_eq!(proof_public_data.slot_hash, proof.da_block_header.hash());
-        assert_eq!(proof_public_data.initial_state_root, initial_state_root);
-        assert_eq!(proof_public_data.final_state_root, final_state_root);
+        assert_eq!(
+            proof_public_data.initial_state_root, initial_state_root,
+            "slot {slot_number:?}: ZK-guest initial state root must equal native execution"
+        );
+        assert_eq!(
+            proof_public_data.final_state_root, final_state_root,
+            "slot {slot_number:?}: ZK-guest final state root must equal native execution. The final \
+             root commits the provable `gas_used`, so this also guards gas calculation against \
+             native-only divergence."
+        );
         assert_eq!(proof_public_data.prover_address, prover_address);
     }
 }
