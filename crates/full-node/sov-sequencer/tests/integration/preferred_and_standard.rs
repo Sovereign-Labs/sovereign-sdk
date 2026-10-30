@@ -132,6 +132,11 @@ async fn produce_blocks_until<F, Fut>(
                 return;
             }
             preferred.tenderly_produce_blocks(1).await.unwrap();
+            // Two nodes on one machine process slots slower than blocks are produced. Without
+            // waiting, the lag grows until the preferred sequencer pauses as `Syncing`.
+            for node in [preferred, standard] {
+                node.wait_for_node_synced().await.unwrap();
+            }
         }
     })
     .await
