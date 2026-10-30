@@ -24,6 +24,7 @@ serde = { workspace = true, default-features = false, features = [
 strum = { workspace = true, features = ["derive"] }
 
 sov-api-spec = { workspace = true }
+sov-commonware-crypto = { workspace = true, features = ["arbitrary", "native"] }
 sov-metrics = { workspace = true }
 sov-modules-rollup-blueprint = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true, features = ["native"] }
