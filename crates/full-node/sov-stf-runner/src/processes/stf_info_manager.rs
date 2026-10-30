@@ -18,6 +18,15 @@ use sov_rollup_interface::zk::StateTransitionWitness;
 use sov_rollup_interface::ProvableHeightTracker;
 use tokio::sync::mpsc;
 
+/// The durable event from which STF-info processing should resume.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum StfInfoResumeSource {
+    /// The latest aggregated proof accepted and persisted by a ZK rollup.
+    LatestAggregatedProof(Option<SlotNumber>),
+    /// The latest optimistic attestation recorded in durable local metadata.
+    LatestOptimisticAttestation(Option<SlotNumber>),
+}
+
 /// Holds all the necessary data for the creation of a block zk-proof.
 #[derive(Serialize, Deserialize)]
 #[serde(bound = "StateRoot: Serialize + DeserializeOwned, Witness: Serialize + DeserializeOwned")]
@@ -66,6 +75,9 @@ pub struct Sender<StateRoot, Witness, Da: DaSpec> {
 
     // Max number of entries we will keep in the Db, older data will be pruned.
     max_nb_of_infos_in_db: NonZero<u64>,
+
+    // Latest optimistic attestation successfully submitted by the consumer.
+    latest_optimistic_attestation: Option<Arc<AtomicU64>>,
 
     /// The notification channel does not contain the actual STF info data,
     /// only the indexes in the Db where the data is stored.
@@ -150,6 +162,10 @@ impl<
 
     /// Increment next height to receive by one, returning the previous value.
     pub fn inc_next_height_to_receive(&self) -> SlotNumber {
+        assert!(
+            self.latest_optimistic_attestation.is_none(),
+            "Optimistic STF-info progress must be recorded by the attestation consumer"
+        );
         SlotNumber::new(self.next_height_to_receive.fetch_add(1, Ordering::SeqCst))
     }
 }
@@ -158,6 +174,8 @@ impl<
 pub struct Receiver<StateRoot, Witness, Da: DaSpec> {
     /// Height of the next `StateTransitionInfo` that is expected to be processed by the `Receiver`
     next_height_to_receive: Arc<AtomicU64>,
+    // Latest optimistic attestation successfully submitted by the consumer.
+    latest_optimistic_attestation: Option<Arc<AtomicU64>>,
     ledger_db: LedgerDb,
     receiver: mpsc::Receiver<SlotNumber>,
     _phantom: PhantomData<(StateRoot, Witness, Da)>,
@@ -176,7 +194,7 @@ pub async fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     ledger_db: LedgerDb,
     max_channel_size: NonZero<u64>,
     max_nb_of_infos_in_db: NonZero<u64>,
-    latest_proof_final_slot: Option<SlotNumber>,
+    resume_source: StfInfoResumeSource,
 ) -> anyhow::Result<(
     Sender<StateRoot, Witness, Da>,
     Receiver<StateRoot, Witness, Da>,
@@ -189,25 +207,34 @@ pub async fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
     // Internally, the Db keeps the following entries:
     // 1. The STF info data.
     // 2. The latest height of the written STF info (increased on every `materialize_stf_info`` operation)
-    // 3. The next height of the retrieved STF info (increased on every `read_next`` operation).
+    // 3. In optimistic mode, the latest successfully submitted attestation.
 
     // On startup, we need to fill the notification channel with the pending STF info from the db.
     let (notifier, receiver) =
         tokio::sync::mpsc::channel::<SlotNumber>(max_channel_size.get().try_into()?);
 
-    // Resume STF-info processing from the last aggregated proof that was
-    // verified on-chain and persisted in the DB: that proof's `final_slot` is
-    // the last slot we know is committed, so the prover picks up at
-    // `final_slot + 1`. If no such proof exists yet (fresh node), start from
-    // genesis.
-    let next_height_to_receive = latest_proof_final_slot
-        .map(|final_slot| final_slot.saturating_add(1))
+    let (latest_processed_slot, latest_optimistic_attestation) = match resume_source {
+        StfInfoResumeSource::LatestAggregatedProof(latest_aggregated_proof) => {
+            (latest_aggregated_proof, None)
+        }
+        StfInfoResumeSource::LatestOptimisticAttestation(latest_optimistic_attestation) => (
+            latest_optimistic_attestation,
+            Some(Arc::new(AtomicU64::new(
+                latest_optimistic_attestation
+                    .unwrap_or(SlotNumber::GENESIS)
+                    .get(),
+            ))),
+        ),
+    };
+    let next_height_to_receive = latest_processed_slot
+        .map(|slot_number| slot_number.saturating_add(1))
         .unwrap_or(SlotNumber::ONE);
 
     let next_height_to_receive_ref = Arc::new(AtomicU64::new(next_height_to_receive.get()));
 
     let sender = Sender {
         max_nb_of_infos_in_db,
+        latest_optimistic_attestation: latest_optimistic_attestation.clone(),
         next_height_to_receive: next_height_to_receive_ref.clone(),
         next_height_to_send: next_height_to_receive,
         notifier,
@@ -217,6 +244,7 @@ pub async fn new_stf_info_channel<StateRoot, Witness, Da: DaSpec>(
 
     let receiver = Receiver {
         next_height_to_receive: next_height_to_receive_ref,
+        latest_optimistic_attestation,
         ledger_db,
         receiver,
         _phantom: PhantomData,
@@ -335,6 +363,20 @@ where
         schema.merge(ledger_db.materialize_stf_info_write_slot_number(write_rollup_height)?);
 
         let next_rollup_height_to_receive = self.next_height_to_receive();
+        if let Some(latest_optimistic_attestation) = &self.latest_optimistic_attestation {
+            // This checkpoint deliberately lags successful submission until the
+            // next STF-info commit. A restart can therefore replay recent
+            // attestations, preserving at-least-once rather than at-most-once
+            // submission semantics.
+            let latest_optimistic_attestation =
+                SlotNumber::new(latest_optimistic_attestation.load(Ordering::SeqCst));
+            if latest_optimistic_attestation > SlotNumber::GENESIS {
+                schema
+                    .merge(ledger_db.materialize_latest_optimistic_attestation(
+                        latest_optimistic_attestation,
+                    )?);
+            }
+        }
 
         // Prune the oldest entries if needed
         schema.merge(
@@ -395,6 +437,9 @@ where
                          This usually means the node previously ran without the proof pipeline (e.g. as a replica)."
                     );
                     self.next_height_to_send = height;
+                    // Realignment is not evidence that an optimistic
+                    // attestation was submitted, so it must not update the
+                    // optimistic attestation checkpoint.
                     self.next_height_to_receive
                         .fetch_max(height.get(), Ordering::SeqCst);
                 }
@@ -463,13 +508,33 @@ where
         SlotNumber::new(self.next_height_to_receive.load(Ordering::SeqCst))
     }
 
-    /// Increment next height to receive by one, returning the previous value.
-    pub fn inc_next_height_to_receive(&self) -> SlotNumber {
-        SlotNumber::new(self.next_height_to_receive.fetch_add(1, Ordering::SeqCst))
+    /// Records a successfully submitted optimistic attestation and advances the cursor.
+    pub(crate) fn record_successful_optimistic_attestation(&self) -> SlotNumber {
+        let latest_optimistic_attestation = self
+            .latest_optimistic_attestation
+            .as_ref()
+            .expect("An optimistic attestation can only be recorded in optimistic mode");
+        let processed_slot = self.next_height_to_receive();
+
+        // Store the attestation first so a concurrent materialization can never
+        // prune the processed STF info while checkpointing the previous
+        // attestation.
+        latest_optimistic_attestation.store(processed_slot.get(), Ordering::SeqCst);
+        let previous_slot =
+            SlotNumber::new(self.next_height_to_receive.fetch_add(1, Ordering::SeqCst));
+        assert_eq!(
+            previous_slot, processed_slot,
+            "The optimistic STF-info cursor changed concurrently"
+        );
+        processed_slot
     }
 
-    /// Increment next height to receive by the requested amount, returning the previous value.
+    /// Increment the ZK STF-info cursor by the requested amount, returning the previous value.
     pub fn inc_next_height_to_receive_by(&self, amount: u64) -> SlotNumber {
+        assert!(
+            self.latest_optimistic_attestation.is_none(),
+            "Optimistic STF-info progress must advance one successfully submitted attestation at a time"
+        );
         SlotNumber::new(
             self.next_height_to_receive
                 .fetch_add(amount, Ordering::SeqCst),
@@ -482,6 +547,10 @@ where
     /// cursor advance co-located with the actual proof publication, while
     /// the channel-draining `read_next` still happens on the intake task.
     pub fn cursor_handle(&self) -> CursorHandle {
+        assert!(
+            self.latest_optimistic_attestation.is_none(),
+            "CursorHandle is only valid for the ZK proof pipeline"
+        );
         CursorHandle {
             next_height_to_receive: self.next_height_to_receive.clone(),
         }
@@ -539,14 +608,20 @@ mod tests {
         Sender<StateRoot, Witness, MockDaSpec>,
         Receiver<StateRoot, Witness, MockDaSpec>,
     )> {
-        setup_with_resume(path, max_channel_size, max_nb_of_infos_in_db, None).await
+        setup_with_resume_source(
+            path,
+            max_channel_size,
+            max_nb_of_infos_in_db,
+            StfInfoResumeSource::LatestAggregatedProof(None),
+        )
+        .await
     }
 
-    async fn setup_with_resume(
+    async fn setup_with_resume_source(
         path: &Path,
         max_channel_size: u64,
         max_nb_of_infos_in_db: u64,
-        latest_proof_final_slot: Option<SlotNumber>,
+        resume_source: StfInfoResumeSource,
     ) -> anyhow::Result<(
         LedgerDb,
         SimpleLedgerStorageManager,
@@ -560,7 +635,7 @@ mod tests {
             ledger_db.clone(),
             NonZero::new(max_channel_size).unwrap(),
             NonZero::new(max_nb_of_infos_in_db).unwrap(),
-            latest_proof_final_slot,
+            resume_source,
         )
         .await?;
 
@@ -617,9 +692,7 @@ mod tests {
             assert_eq!(sender.get_oldest_slot_number(&ledger_db).await?.get(), 1);
 
             // Commit new data.
-            receiver
-                .next_height_to_receive
-                .fetch_add(2, Ordering::SeqCst);
+            receiver.inc_next_height_to_receive_by(2);
 
             let stf_info = make_stf_info(channel_size + 1);
             let schema_batch = sender.materialize_stf_info(&stf_info, &ledger_db).await?;
@@ -639,11 +712,11 @@ mod tests {
             // The previous block advanced `next_height_to_receive` to 3 in
             // memory and persisted writes through slot 12. Resume the channel
             // at slot 3 by anchoring to a "previous proof" with `final_slot=2`.
-            let (ledger_db, _, sender, mut receiver) = setup_with_resume(
+            let (ledger_db, _, sender, mut receiver) = setup_with_resume_source(
                 temp_dir.path(),
                 channel_size,
                 max_nb_of_infos_in_db,
-                Some(SlotNumber::new(2)),
+                StfInfoResumeSource::LatestAggregatedProof(Some(SlotNumber::new(2))),
             )
             .await?;
 
@@ -656,6 +729,98 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
+    async fn test_optimistic_attestation_resume_is_persisted() -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let channel_size = 10;
+        let max_nb_of_infos_in_db = 10;
+
+        {
+            let (ledger_db, mut storage_manager, mut sender, mut receiver) =
+                setup_with_resume_source(
+                    temp_dir.path(),
+                    channel_size,
+                    max_nb_of_infos_in_db,
+                    StfInfoResumeSource::LatestOptimisticAttestation(None),
+                )
+                .await?;
+
+            let first_stf_info = make_stf_info(1);
+            let schema_batch = sender
+                .materialize_stf_info(&first_stf_info, &ledger_db)
+                .await?;
+            storage_manager.commit(&schema_batch);
+            sender
+                .notify(first_stf_info.slot_number(), &ledger_db)
+                .await?;
+
+            let stf_info = receiver.read_next().await?.unwrap();
+            assert_eq!(stf_info.slot_number(), SlotNumber::ONE);
+            receiver.record_successful_optimistic_attestation();
+
+            let second_stf_info = make_stf_info(2);
+            let schema_batch = sender
+                .materialize_stf_info(&second_stf_info, &ledger_db)
+                .await?;
+            storage_manager.commit(&schema_batch);
+            sender
+                .notify(second_stf_info.slot_number(), &ledger_db)
+                .await?;
+
+            assert_eq!(
+                ledger_db.get_latest_optimistic_attestation().await?,
+                Some(SlotNumber::ONE)
+            );
+        }
+
+        {
+            let latest_optimistic_attestation = {
+                let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
+                let ledger_db = LedgerDb::with_reader(storage_manager.create_ledger_storage())?;
+                ledger_db.get_latest_optimistic_attestation().await?
+            };
+            let (_, _, _, mut receiver) = setup_with_resume_source(
+                temp_dir.path(),
+                channel_size,
+                max_nb_of_infos_in_db,
+                StfInfoResumeSource::LatestOptimisticAttestation(latest_optimistic_attestation),
+            )
+            .await?;
+
+            let stf_info = receiver.read_next().await?.unwrap();
+            assert_eq!(stf_info.slot_number(), SlotNumber::new(2));
+        }
+
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_aggregated_proof_resume_does_not_persist_optimistic_attestation(
+    ) -> anyhow::Result<()> {
+        let temp_dir = tempfile::tempdir()?;
+        let (ledger_db, mut storage_manager, sender, receiver) = setup_with_resume_source(
+            temp_dir.path(),
+            10,
+            10,
+            StfInfoResumeSource::LatestAggregatedProof(None),
+        )
+        .await?;
+
+        let schema_batch = sender
+            .materialize_stf_info(&make_stf_info(1), &ledger_db)
+            .await?;
+        storage_manager.commit(&schema_batch);
+
+        receiver.inc_next_height_to_receive_by(1);
+        let schema_batch = sender
+            .materialize_stf_info(&make_stf_info(2), &ledger_db)
+            .await?;
+        storage_manager.commit(&schema_batch);
+
+        assert_eq!(ledger_db.get_latest_optimistic_attestation().await?, None);
+        Ok(())
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
     async fn test_stf_info_restart_realigns_missing_local_prefix() -> anyhow::Result<()> {
         let temp_dir = tempfile::tempdir()?;
         let channel_size = 10;
@@ -664,11 +829,11 @@ mod tests {
         // Simulate a former replica that restarts as a prover: the resume cursor
         // points at slot 3, but the local node only has STF infos starting at 5.
         {
-            let (ledger_db, mut storage_manager, sender, _receiver) = setup_with_resume(
+            let (ledger_db, mut storage_manager, sender, _receiver) = setup_with_resume_source(
                 temp_dir.path(),
                 channel_size,
                 max_nb_of_infos_in_db,
-                Some(SlotNumber::new(2)),
+                StfInfoResumeSource::LatestAggregatedProof(Some(SlotNumber::new(2))),
             )
             .await?;
 
@@ -680,11 +845,11 @@ mod tests {
         }
 
         {
-            let (_, _, _, mut receiver) = setup_with_resume(
+            let (_, _, _, mut receiver) = setup_with_resume_source(
                 temp_dir.path(),
                 channel_size,
                 max_nb_of_infos_in_db,
-                Some(SlotNumber::new(2)),
+                StfInfoResumeSource::LatestAggregatedProof(Some(SlotNumber::new(2))),
             )
             .await?;
 
