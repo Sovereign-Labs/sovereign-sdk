@@ -36,11 +36,14 @@ runs:
         ACCEPTANCE_SERVER_API_TOKEN: ${{ inputs.api_token }}
         ACCEPTANCE_SERVER_API_URL: ${{ inputs.api_url }}
         COMMIT_SHA: ${{ inputs.commit_sha }}
+        COMMIT_SHORT_SHA: ${{ inputs.commit_short_sha }}
+        COMMIT_MESSAGE: ${{ inputs.commit_message }}
         ENDPOINT: ${{ inputs.endpoint }}
         SKIP_REGENERATION: ${{ inputs.skip_regeneration }}
+        TEST_TYPE: ${{ inputs.test_type }}
       run: |
-        echo "Triggering ${{ inputs.test_type }} test for commit ${{ inputs.commit_short_sha }}"
-        echo "Commit message: ${{ inputs.commit_message }}"
+        echo "Triggering $TEST_TYPE test for commit $COMMIT_SHORT_SHA"
+        echo "Commit message: $COMMIT_MESSAGE"
 
         # Build JSON payload based on whether skip_regeneration is needed
         if [ "$ENDPOINT" = "start-test" ]; then
@@ -62,10 +65,10 @@ runs:
         body=$(echo "$response" | head -n-1)
 
         if [ "$http_code" -ne 200 ]; then
-          echo "❌ Failed to trigger ${{ inputs.test_type }} test (HTTP $http_code)"
+          echo "❌ Failed to trigger $TEST_TYPE test (HTTP $http_code)"
           echo "Response: $body"
           exit 1
         fi
 
-        echo "✅ ${{ inputs.test_type }} test triggered successfully"
+        echo "✅ $TEST_TYPE test triggered successfully"
         echo "$body"
