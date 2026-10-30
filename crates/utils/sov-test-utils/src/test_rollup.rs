@@ -21,7 +21,7 @@ use serde::Deserialize;
 use sov_api_spec::types;
 use sov_api_spec::types::TxInfoWithConfirmation;
 use sov_api_spec::WsSubscription;
-use sov_blob_sender::BlobExecutionStatus;
+use sov_blob_sender::{BlobExecutionStatus, BlobSubmissionStatus};
 use sov_blob_storage::PreferredBatchData;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_cli::NodeClient;
@@ -860,6 +860,30 @@ where
         Ok(())
     }
 
+    /// Force closes the current batch and waits until the blob sender reports a blob as published
+    /// to DA. The current batch must be non-empty, otherwise no blob is sent and this times out
+    /// after [`Self::POLLING_TIMEOUT`].
+    pub async fn force_close_batch_and_wait_for_publication(&self) -> anyhow::Result<()> {
+        let mut statuses = self.subscribe_to_blobs_from_blob_sender().await?;
+        self.force_close_batch().await?;
+        timeout(Self::POLLING_TIMEOUT, async {
+            loop {
+                let status = statuses
+                    .next()
+                    .await
+                    .context("BlobSender status stream closed before the batch was published")??;
+                if matches!(
+                    status.blob_submission_status,
+                    BlobSubmissionStatus::Published { .. }
+                ) {
+                    return Ok(());
+                }
+            }
+        })
+        .await
+        .context("Timed out waiting for the closed batch to be published to DA")?
+    }
+
     /// Subscribe to state update completion notifications.
     pub async fn subscribe_state_updates(&self) -> WsSubscription<StateUpdateNotification> {
         self.client
@@ -1125,11 +1149,21 @@ where
     }
 
     /// Wait until sequencer reaches a specific height.
+    /// Panics after [`Self::POLLING_TIMEOUT`].
     pub async fn wait_for_height(&self, height: u64) {
         let mut current_height = get_height(&self.client).await.unwrap();
-        while current_height.get() < height {
-            tokio::time::sleep(Duration::from_millis(100)).await;
-            current_height = get_height(&self.client).await.unwrap();
+        let wait_loop = async {
+            while current_height.get() < height {
+                tokio::time::sleep(Duration::from_millis(100)).await;
+                current_height = get_height(&self.client).await.unwrap();
+            }
+        };
+        if timeout(Self::POLLING_TIMEOUT, wait_loop).await.is_err() {
+            panic!(
+                "Rollup did not reach height {height} within {:?}; last observed height: {}",
+                Self::POLLING_TIMEOUT,
+                current_height.get()
+            );
         }
     }
 

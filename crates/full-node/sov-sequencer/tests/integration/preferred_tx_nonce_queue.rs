@@ -303,7 +303,6 @@ async fn test_failed_transaction_aborts_drain() {
     }
 
     let nonces = (0..2).rev().collect::<Vec<_>>(); // 1, 0: will be included
-    let mut handles = vec![];
     for nonce in nonces {
         let client = client.clone();
         let key = key.clone();
