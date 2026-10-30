@@ -11,6 +11,7 @@ use sov_modules_api::capabilities::{
     AuthorizationData, GasEnforcer, ProofProcessor, SequencerAuthorization, SequencerRemuneration,
     TransactionAuthorizer,
 };
+use sov_modules_api::prelude::tracing;
 use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
 };
@@ -24,7 +25,7 @@ use sov_modules_api::{ExecutionContext, VersionReader};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::Bytes;
-use sov_sequencer_registry::SequencerRegistry;
+use sov_sequencer_registry::{AddToStakeError, SequencerRegistry};
 use sov_state::{Kernel, User};
 
 /// Implements the basic capabilities required for a zk-rollup runtime.
@@ -209,12 +210,34 @@ where
         let mut net_amount = bond_amount.checked_sub(reward.accumulated_penalty).expect("A sequencer can never be penalized more than the amount they have escrowed, regardless of reward accumulation!");
         net_amount = net_amount.checked_add(reward.accumulated_reward).expect("Total sequencer reward + escrow amount is greater than the max possible token supply. This is a bug in gas accounting.");
 
-        self.sequencer_registry.add_to_stake(
-            self.bank.id().to_payable(),
-            sequencer,
-            net_amount,
-            state,
-        ).expect("Attempted to send more funds to the sequencer than they have escrowed. This is a bug in gas accounting.");
+        match self
+            .sequencer_registry
+            .add_to_stake(self.bank.id().to_payable(), sequencer, net_amount, state)
+        {
+            Ok(_) => {}
+            // There's an edge case where a sequencer's valid blob was already selected or deferred when a garbage blob from the same sender slashes it.
+            // The queued blob isn't dropped, so it still executes and can result in sequencer rewards for a slashed sequencer.
+            Err(AddToStakeError::SequencerNotRegistered { sequencer }) => {
+                tracing::info!(amount = %net_amount, %sequencer, "A sequencer was rewarded after having been removed from the registry (probably due to slashing). Those funds are held by the sequencer registry but not claimable by anyone.");
+                let coins = Coins {
+                    token_id: config_gas_token_id(),
+                    amount: net_amount,
+                };
+                let bank_id = *self.bank.id();
+                // In this edge case, we still transfer the funds from bank -> sequencer registry. This ensures that the user space state root matches whether or not the
+                // preferred sequencer observed the slashing before executing its batch; slashing a non-preferred sequencer only changes the kernel space `known_sequencers` map.
+                // Without this, the preferred sequencer might see the wrong state root leading to a defensive panic.
+                self.bank
+                    .transfer_from(
+                        bank_id.to_payable(),
+                        self.sequencer_registry.id().to_payable(),
+                        coins,
+                        state,
+                    )
+                    .expect("Bank had insufficient funds to transfer to sequencer registry after a slashing. This is a bug in gas accounting");
+            }
+            Err(e) => panic!("Failed to return escrowed funds to sequencer. This is a bug in gas accounting. Underlying error: {e}"),
+        }
     }
 }
 

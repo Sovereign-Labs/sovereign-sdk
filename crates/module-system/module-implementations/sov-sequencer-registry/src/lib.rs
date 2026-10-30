@@ -15,6 +15,7 @@ use std::convert::Infallible;
 use anyhow::bail;
 use borsh::{BorshDeserialize, BorshSerialize};
 pub use call::*;
+pub use capabilities::AddToStakeError;
 pub use event::Event;
 pub use genesis::*;
 use registration::gas_coins;
