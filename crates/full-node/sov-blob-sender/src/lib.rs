@@ -365,7 +365,6 @@ where
             },
         );
 
-        // TODO: handle errors from the spawned tasks.
         blobs.retain(|_, b| !b.handle.is_finished());
 
         Ok(())
