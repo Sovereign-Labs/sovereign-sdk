@@ -96,6 +96,7 @@ export class Indexer {
         module: event.module.name,
       }));
     } catch (err) {
+      logger.error("Failed to fetch rollup events", err);
       this.setAndCheckHealth(err);
       return [];
     }
@@ -130,8 +131,8 @@ export class Indexer {
     });
   }
 
-  private setAndCheckHealth(e: unknown): boolean {
-    this.isRollupHealthy = !(e instanceof SovereignClient.APIConnectionError);
+  private setAndCheckHealth(_e: unknown): boolean {
+    this.isRollupHealthy = false;
     return this.isRollupHealthy;
   }
 }
