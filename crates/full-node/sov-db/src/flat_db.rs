@@ -297,7 +297,7 @@ impl FlatStateDb {
         &self.kernel
     }
 
-    /// [`DbOptions`] for [`HistoricalStateReader`].
+    /// [`DbOptions`] for [`FlatStateDb`].
     pub fn get_rockbound_options(
         columns: Vec<ColumnFamilyDescriptor>,
     ) -> DbOptions<ColumnFamilyDescriptor> {
