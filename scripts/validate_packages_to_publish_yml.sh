@@ -27,30 +27,30 @@ echo ""
 echo "Validating packages_to_publish.yml..."
 
 status=0
-while read -r pkg; do
-    if yq -e "[\"$pkg\"] - . | length == 1" packages_to_publish.yml > /dev/null 2>&1; then
+while IFS= read -r pkg; do
+    if yq -e --arg pkg "$pkg" '[ $pkg ] - . | length == 1' packages_to_publish.yml > /dev/null 2>&1; then
         printf "%40s | ERR is releasable but NOT found in packages_to_publish.yml\n" "$pkg"
-		status=1
-	fi
+        status=1
+    fi
 done <<< "$releasable_packages"
 
 echo ""
 echo "Validating the presence of package metadata for all packages_to_publish.yml entries..."
 
-while read -r pkg; do
-	# Capture both stdout and stderr.
-	output=$(cargo package --allow-dirty -p $pkg --list 2>&1)
+while IFS= read -r pkg; do
+    # Capture both stdout and stderr.
+    output=$(cargo package --allow-dirty -p "$pkg" --list 2>&1)
     if echo "$output" | grep -q "warning:"; then
         printf "%40s | ERR warnings found:\n" "$pkg"
-		echo "$output" | grep "warning:"
-		status=1
-	fi
+        echo "$output" | grep "warning:"
+        status=1
+    fi
 done < <(yq '.[]' packages_to_publish.yml)
 
 echo ""
 if [ $status -eq 1 ]; then
-	echo "Validation failed."
-	exit 1
+    echo "Validation failed."
+    exit 1
 fi
 
 echo "Validation successful, everything okay."
