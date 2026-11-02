@@ -37,7 +37,8 @@ use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction, default_test_tx_details, test_signed_transaction, EncodeCall,
     MessageGenerator, RtAgnosticBlueprint, TestPrivateKey, TestSpec, TransactionType,
-    TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE, TEST_DEFAULT_MAX_PRIORITY_FEE,
+    TEST_BLOB_PROCESSING_TIMEOUT, TEST_DEFAULT_GAS_LIMIT, TEST_DEFAULT_MAX_FEE,
+    TEST_DEFAULT_MAX_PRIORITY_FEE, TEST_FINALIZATION_BLOCKS, TEST_MAX_BATCH_SIZE,
     TEST_MAX_CONCURRENT_BATCH_BLOBS,
 };
 use sov_value_setter::ValueSetter;
@@ -289,8 +290,9 @@ pub mod pause_update_state {
     }
 }
 
-#[allow(clippy::too_many_arguments)]
-pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
+/// Builds a preferred-sequencer [`TestRollup`] with the defaults shared by most sequencer
+/// integration tests. Override only what a test cares about.
+pub struct SeqTestRollup<RT: Runtime<TestSpec>> {
     dir: Arc<tempfile::TempDir>,
     seq_da_address: MockAddress,
     genesis_params: GenesisParams<<RT as Runtime<TestSpec>>::GenesisConfig>,
@@ -298,81 +300,127 @@ pub async fn new_test_rollup<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
     automatic_batch_production: bool,
     max_batch_size_bytes: usize,
     block_producing_config: BlockProducingConfig,
-    rollup_prover_config: Option<RollupProverConfig>,
-    blob_processing_timeout_secs: u64,
-    max_batch_execution_time_millis: u64,
-    stop_at_rollup_height: Option<RollupHeight>,
-    finalization_blocks: u32,
-) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
-    // Pruning disabled by default, matching production defaults for fresh nodes.
-    new_test_rollup_with_pruning(
-        dir,
-        seq_da_address,
-        genesis_params,
-        minimum_profit_per_tx,
-        automatic_batch_production,
-        max_batch_size_bytes,
-        block_producing_config,
-        rollup_prover_config,
-        blob_processing_timeout_secs,
-        max_batch_execution_time_millis,
-        stop_at_rollup_height,
-        finalization_blocks,
-        PrunerConfig::Off,
-    )
-    .await
-}
-
-/// Like [`new_test_rollup`], but with state-version pruning configured in the node DB config.
-/// Pass the desired `PrunerConfig` (e.g. `PrunerConfig::Periodic { block_interval, .. }`) to
-/// control how pruning runs.
-#[allow(clippy::too_many_arguments)]
-pub async fn new_test_rollup_with_pruning<RT: Runtime<TestSpec> + HasRestApi<TestSpec>>(
-    dir: Arc<tempfile::TempDir>,
-    seq_da_address: MockAddress,
-    genesis_params: GenesisParams<<RT as Runtime<TestSpec>>::GenesisConfig>,
-    minimum_profit_per_tx: u128,
-    automatic_batch_production: bool,
-    max_batch_size_bytes: usize,
-    block_producing_config: BlockProducingConfig,
-    rollup_prover_config: Option<RollupProverConfig>,
+    rollup_prover_config: RollupProverConfig,
     blob_processing_timeout_secs: u64,
     max_batch_execution_time_millis: u64,
     stop_at_rollup_height: Option<RollupHeight>,
     finalization_blocks: u32,
     pruner: PrunerConfig,
-) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
-    let rollup_prover_config = rollup_prover_config.unwrap_or(RollupProverConfig::Disabled);
-    let prover_enabled = rollup_prover_config.is_enabled();
-    let builder = RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
-        GenesisSource::CustomParams(genesis_params),
-        block_producing_config,
-        finalization_blocks,
-    )
-    .set_config(|c| {
-        c.rollup_prover_config = rollup_prover_config;
-        c.automatic_batch_production = automatic_batch_production;
-        c.storage = StoragePath::Tmp(dir);
-        c.max_batch_size_bytes = max_batch_size_bytes;
-        c.blob_processing_timeout_secs = blob_processing_timeout_secs;
-        c.stop_at_rollup_height = stop_at_rollup_height;
-        c.pruner = pruner;
-        c.max_concurrent_batch_blobs = TEST_MAX_CONCURRENT_BATCH_BLOBS;
-    })
-    .with_preferred_seq_config(|seq| {
-        seq.batch_execution_time_limit_millis = max_batch_execution_time_millis;
-        // Proof generation and sequencer state-root consistency checks are currently
-        // incompatible in these integration tests.
-        if prover_enabled {
-            seq.disable_state_root_consistency_checks = true;
-        }
-    })
-    .set_da_config(|c| c.sender_address = seq_da_address)
-    .set_persistent_da()
-    .with_preferred_seq_min_profit_per_tx(minimum_profit_per_tx)
-    .with_preferred_seq_recovery_strategy(sov_sequencer::preferred::RecoveryStrategy::TryToSave);
+}
 
-    builder.start().await.unwrap()
+impl<RT: Runtime<TestSpec> + HasRestApi<TestSpec>> SeqTestRollup<RT> {
+    pub fn new(
+        seq_da_address: MockAddress,
+        genesis_params: GenesisParams<<RT as Runtime<TestSpec>>::GenesisConfig>,
+    ) -> Self {
+        Self {
+            dir: tempdir_inside_codebase_dir(),
+            seq_da_address,
+            genesis_params,
+            minimum_profit_per_tx: 0,
+            automatic_batch_production: true,
+            max_batch_size_bytes: TEST_MAX_BATCH_SIZE,
+            block_producing_config: BlockProducingConfig::Manual,
+            rollup_prover_config: RollupProverConfig::Disabled,
+            blob_processing_timeout_secs: TEST_BLOB_PROCESSING_TIMEOUT,
+            max_batch_execution_time_millis: MAX_BATCH_EXECUTION_TIME_MILLIS,
+            stop_at_rollup_height: None,
+            finalization_blocks: TEST_FINALIZATION_BLOCKS,
+            // Pruning disabled by default, matching production defaults for fresh nodes.
+            pruner: PrunerConfig::Off,
+        }
+    }
+
+    /// Storage directory. Pass a clone of a directory the test keeps to reuse it across restarts.
+    pub fn dir(mut self, dir: Arc<tempfile::TempDir>) -> Self {
+        self.dir = dir;
+        self
+    }
+
+    pub fn minimum_profit_per_tx(mut self, minimum_profit_per_tx: u128) -> Self {
+        self.minimum_profit_per_tx = minimum_profit_per_tx;
+        self
+    }
+
+    pub fn automatic_batch_production(mut self, automatic_batch_production: bool) -> Self {
+        self.automatic_batch_production = automatic_batch_production;
+        self
+    }
+
+    pub fn max_batch_size_bytes(mut self, max_batch_size_bytes: usize) -> Self {
+        self.max_batch_size_bytes = max_batch_size_bytes;
+        self
+    }
+
+    pub fn block_producing_config(mut self, block_producing_config: BlockProducingConfig) -> Self {
+        self.block_producing_config = block_producing_config;
+        self
+    }
+
+    /// Proof generation is incompatible with sequencer state-root consistency checks in these
+    /// tests, so enabling the prover also disables those checks.
+    pub fn rollup_prover_config(mut self, rollup_prover_config: RollupProverConfig) -> Self {
+        self.rollup_prover_config = rollup_prover_config;
+        self
+    }
+
+    pub fn blob_processing_timeout_secs(mut self, blob_processing_timeout_secs: u64) -> Self {
+        self.blob_processing_timeout_secs = blob_processing_timeout_secs;
+        self
+    }
+
+    pub fn max_batch_execution_time_millis(mut self, max_batch_execution_time_millis: u64) -> Self {
+        self.max_batch_execution_time_millis = max_batch_execution_time_millis;
+        self
+    }
+
+    pub fn stop_at_rollup_height(mut self, stop_at_rollup_height: Option<RollupHeight>) -> Self {
+        self.stop_at_rollup_height = stop_at_rollup_height;
+        self
+    }
+
+    pub fn finalization_blocks(mut self, finalization_blocks: u32) -> Self {
+        self.finalization_blocks = finalization_blocks;
+        self
+    }
+
+    /// State-version pruning in the node DB config, e.g. `PrunerConfig::Periodic { .. }`.
+    pub fn pruner(mut self, pruner: PrunerConfig) -> Self {
+        self.pruner = pruner;
+        self
+    }
+
+    pub async fn start(self) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
+        let prover_enabled = self.rollup_prover_config.is_enabled();
+        RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
+            GenesisSource::CustomParams(self.genesis_params),
+            self.block_producing_config,
+            self.finalization_blocks,
+        )
+        .set_config(|c| {
+            c.rollup_prover_config = self.rollup_prover_config;
+            c.automatic_batch_production = self.automatic_batch_production;
+            c.storage = StoragePath::Tmp(self.dir);
+            c.max_batch_size_bytes = self.max_batch_size_bytes;
+            c.blob_processing_timeout_secs = self.blob_processing_timeout_secs;
+            c.stop_at_rollup_height = self.stop_at_rollup_height;
+            c.pruner = self.pruner;
+            c.max_concurrent_batch_blobs = TEST_MAX_CONCURRENT_BATCH_BLOBS;
+        })
+        .with_preferred_seq_config(|seq| {
+            seq.batch_execution_time_limit_millis = self.max_batch_execution_time_millis;
+            if prover_enabled {
+                seq.disable_state_root_consistency_checks = true;
+            }
+        })
+        .set_da_config(|c| c.sender_address = self.seq_da_address)
+        .set_persistent_da()
+        .with_preferred_seq_min_profit_per_tx(self.minimum_profit_per_tx)
+        .with_preferred_seq_recovery_strategy(sov_sequencer::preferred::RecoveryStrategy::TryToSave)
+        .start()
+        .await
+        .unwrap()
+    }
 }
 
 pub fn encode_call_with_fee<RT: Runtime<TestSpec>>(
