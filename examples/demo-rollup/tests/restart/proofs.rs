@@ -3,7 +3,6 @@ use std::time::Duration;
 
 use futures::StreamExt;
 use sov_demo_rollup::ExternalMockDemoRollup;
-use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::execution_mode::Native;
@@ -36,12 +35,12 @@ async fn build_rollup_with_prover(
             c.blob_processing_timeout_secs = 300;
             c.aggregated_proof_block_jump = AGGREGATED_PROOF_BLOCK_JUMP;
             c.rollup_prover_config = RollupProverConfig::Prove;
-            if let SequencerKindConfig::Preferred(p) = &mut c.sequencer_config {
-                p.disable_state_root_consistency_checks = true;
-                p.num_cache_warmup_workers = 0;
-                p.recovery_strategy = RecoveryStrategy::TryToSave;
-                p.ideal_lag_behind_finalized_slot = 3;
-            }
+        })
+        .with_preferred_seq_config(|seq| {
+            seq.disable_state_root_consistency_checks = true;
+            seq.num_cache_warmup_workers = 0;
+            seq.recovery_strategy = RecoveryStrategy::TryToSave;
+            seq.ideal_lag_behind_finalized_slot = 3;
         })
 }
 
