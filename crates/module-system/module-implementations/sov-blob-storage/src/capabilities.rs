@@ -1284,10 +1284,12 @@ impl<S: Spec> BlobStorage<S> {
         amount: Amount,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> anyhow::Result<()> {
+        // The preferred sequencer can be slashed earlier in the same slot (e.g. for an undecodable blob)
+        // while its stored batches are still being selected, so this must not panic.
         let preferred_sequencer = self
             .sequencer_registry
             .preferred_sequencer(state)
-            .expect("Preferred sequencer must be set in order to escrow funds!");
+            .ok_or_else(|| anyhow::anyhow!("No preferred sequencer is set; cannot escrow funds"))?;
 
         self.sequencer_registry.remove_part_of_the_stake(
             &preferred_sequencer,
