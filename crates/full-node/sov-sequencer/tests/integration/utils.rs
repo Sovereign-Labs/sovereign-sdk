@@ -23,7 +23,6 @@ use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::PaymasterPolicyInitializer;
 use sov_rollup_interface::TxHash;
 use sov_sequencer::standard::{StdSequencer, StdSequencerConfig};
-use sov_sequencer::SequencerKindConfig;
 use sov_state::Storage;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::generators::bank::BankMessageGenerator;
@@ -343,30 +342,30 @@ pub async fn new_test_rollup_with_pruning<RT: Runtime<TestSpec> + HasRestApi<Tes
     finalization_blocks: u32,
     pruner: PrunerConfig,
 ) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
+    let rollup_prover_config = rollup_prover_config.unwrap_or(RollupProverConfig::Disabled);
+    let prover_enabled = rollup_prover_config.is_enabled();
     let builder = RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
         GenesisSource::CustomParams(genesis_params),
         block_producing_config,
         finalization_blocks,
     )
     .set_config(|c| {
-        c.rollup_prover_config = rollup_prover_config.unwrap_or(RollupProverConfig::Disabled);
+        c.rollup_prover_config = rollup_prover_config;
         c.automatic_batch_production = automatic_batch_production;
         c.storage = StoragePath::Tmp(dir);
         c.max_batch_size_bytes = max_batch_size_bytes;
         c.blob_processing_timeout_secs = blob_processing_timeout_secs;
         c.stop_at_rollup_height = stop_at_rollup_height;
         c.pruner = pruner;
-        if let SequencerKindConfig::Preferred(preferred_sequencer_config) = &mut c.sequencer_config
-        {
-            preferred_sequencer_config.batch_execution_time_limit_millis =
-                max_batch_execution_time_millis;
-            // Proof generation and sequencer state-root consistency checks are currently
-            // incompatible in these integration tests.
-            if c.rollup_prover_config.is_enabled() {
-                preferred_sequencer_config.disable_state_root_consistency_checks = true;
-            }
-        }
         c.max_concurrent_batch_blobs = TEST_MAX_CONCURRENT_BATCH_BLOBS;
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.batch_execution_time_limit_millis = max_batch_execution_time_millis;
+        // Proof generation and sequencer state-root consistency checks are currently
+        // incompatible in these integration tests.
+        if prover_enabled {
+            seq.disable_state_root_consistency_checks = true;
+        }
     })
     .set_da_config(|c| c.sender_address = seq_da_address)
     .set_persistent_da()
