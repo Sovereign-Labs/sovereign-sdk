@@ -191,10 +191,26 @@ fn deferred_blob_of_slashed_sequencer_executes_and_returns_escrow_to_registry() 
     );
     let unowned_registry_balance_after =
         unowned_registry_balance(&runner, &preferred_sequencer.da_address);
-    assert!(
-        unowned_registry_balance_after > unowned_registry_balance_before,
-        "The slashed sequencer's returned escrow must be transferred to the registry"
-    );
+    let receipts = runner.receipts();
+    let slashed_batch = &receipts.last().unwrap().batch_receipts[1].inner;
+    // When a deferred batch is retrieved, its escrow is trimmed to the pre-exec check costs of its
+    // single transaction; the reserved storage costs are refunded to the sender's rollup address.
+    let escrow = <S as GasSpec>::max_tx_check_costs()
+        .checked_value(slashed_batch.gas_price)
+        .unwrap();
+    let rewards = &slashed_batch.outcome.rewards;
+    let expected_returned = escrow
+        .checked_sub(rewards.accumulated_penalty)
+        .unwrap()
+        .checked_add(rewards.accumulated_reward)
+        .unwrap();
+    assert_eq!(
+        unowned_registry_balance_after
+            .checked_sub(unowned_registry_balance_before)
+            .unwrap(),
+        expected_returned,
+        "The slashed sequencer's escrow, net of penalties and plus rewards, must be transferred to the registry"
+);
 }
 
 /// One DA block contains [preferred batch advancing visible, regular sequencer's valid empty batch,
