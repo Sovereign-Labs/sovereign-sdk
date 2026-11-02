@@ -70,14 +70,14 @@ pub enum SupportedZkVm {
 }
 
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
-/// You can change this constant by modifying BATCH_NAMESPACE in constants.toml
+/// You can change this constant by modifying BATCH_NAMESPACE in chain-metadata.toml
 #[cfg(feature = "celestia_da")]
 pub const ROLLUP_BATCH_NAMESPACE: sov_celestia_adapter::types::Namespace =
     sov_celestia_adapter::types::Namespace::const_v0(sov_modules_api::macros::config_value!(
         "BATCH_NAMESPACE"
     ));
 /// The rollup stores the zk proofs in the namespace b"sov-test-p" on Celestia.
-/// You can change this constant by modifying PROOF_NAMESPACE in constants.toml
+/// You can change this constant by modifying PROOF_NAMESPACE in chain-metadata.toml
 #[cfg(feature = "celestia_da")]
 pub const ROLLUP_PROOF_NAMESPACE: sov_celestia_adapter::types::Namespace =
     sov_celestia_adapter::types::Namespace::const_v0(sov_modules_api::macros::config_value!(

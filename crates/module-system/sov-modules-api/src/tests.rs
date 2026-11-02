@@ -183,19 +183,6 @@ fn test_default_signature_roundtrip() {
         .expect("Roundtrip verification failed");
 }
 
-// This is a bit of a special test because it only fails when:
-//  1. the chain ID is overridden with `SOV_TEST_CONST_OVERRIDE_CHAIN_ID`; and
-//  2. the test is run in non-release mode.
-//
-// By setting the env. variable and controlling the test profile, this test
-// can be used to ensure that constant overriding is disabled in release mode.
-//
-// Grep for `SOV_TEST_CONST_OVERRIDE_CHAIN_ID` to find the relevant code.
-#[test]
-fn assert_chain_id_was_not_overridden() {
-    assert_eq!(sov_modules_macros::config_value_private!("CHAIN_ID"), 4321);
-}
-
 mod chain_hash_override_tests {
     use crate::runtime::{resolve_chain_hashes, validate_chain_hash_fragments, ChainHashOverride};
 

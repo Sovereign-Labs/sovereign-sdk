@@ -22,8 +22,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 WORKDIR /src
 COPY . .
 
-RUN sed -Ei "s/^(CHAIN_ID[[:space:]]*=[[:space:]]*).*/\\1${HIVE_CHAIN_ID}/" constants.toml \
-    && sed -Ei "s/^(CHAIN_ID[[:space:]]*=[[:space:]]*).*/\\1${HIVE_CHAIN_ID}/" constants.testing.toml \
+RUN sed -Ei "s/^(CHAIN_ID[[:space:]]*=[[:space:]]*).*/\\1${HIVE_CHAIN_ID}/" chain-metadata.toml \
+    && sed -Ei "s/^(CHAIN_ID[[:space:]]*=[[:space:]]*).*/\\1${HIVE_CHAIN_ID}/" chain-metadata.testing.toml \
     && sed -Ei "s/^(EVM_GAS_METERING_MODE[[:space:]]*=[[:space:]]*).*/\\1\"EVM\"/" constants.toml \
     && sed -Ei "s/^(EVM_GAS_METERING_MODE[[:space:]]*=[[:space:]]*).*/\\1\"EVM\"/" constants.testing.toml
 

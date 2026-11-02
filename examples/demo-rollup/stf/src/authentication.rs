@@ -101,11 +101,7 @@ where
             }
             EvmAndSolanaOffchainAuthenticatorInput::Standard(tx) => {
                 let (tx_and_raw_hash, auth_data, runtime_call) =
-                    sov_modules_api::capabilities::authenticate::<_, S, Rt>(
-                        &tx.data,
-                        &Rt::CHAIN_HASH,
-                        state,
-                    )?;
+                    sov_modules_api::capabilities::authenticate::<_, S, Rt>(&tx.data, state)?;
 
                 Ok((
                     tx_and_raw_hash,

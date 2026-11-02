@@ -1,0 +1,4 @@
+# Unit-test fixture for `Manifest::read_for_constant_at` (src/manifest.rs):
+# split layout — chain keys live here, everything else in constants.toml.
+[constants]
+CHAIN_ID = 7777

@@ -26,24 +26,6 @@ use crate::{
     Runtime, Spec, VersionReader,
 };
 
-/// Resolves all valid chain hashes for a given height using configured overrides.
-///
-/// This function loads the `CHAIN_HASH_OVERRIDES` from config and uses them
-/// to resolve the appropriate chain hashes for the given height, including
-/// any hashes that are valid due to grace periods.
-///
-/// This is useful for endpoints (like `/rollup/schema`) that need to return
-/// the currently active chain hash for wallets.
-pub fn resolve_chain_hashes_for_height(
-    height: u64,
-    default_hash: [u8; 32],
-) -> crate::runtime::ResolvedChainHashes {
-    #[allow(clippy::needless_borrow)]
-    // We have slightly different types when static vs. dynamic constant resolution is enabled. We need an extra borrow in one case but not the other, so clippy complains.
-    let overrides: &[crate::ChainHashOverride] = &config_value_private!("CHAIN_HASH_OVERRIDES");
-    crate::runtime::resolve_chain_hashes(height, overrides, default_hash)
-}
-
 /// A batch sent by an unregistered sequencer contains only one transaction.
 pub struct BatchFromUnregisteredSequencer {
     /// The transaction.
@@ -209,7 +191,7 @@ where
             capabilities::fatal_deserialization_error::<_, S, _>(&tx.data, e, pre_exec_ws)
         })?;
 
-        crate::capabilities::authenticate::<_, S, Rt>(&input.data, &Rt::CHAIN_HASH, pre_exec_ws)
+        crate::capabilities::authenticate::<_, S, Rt>(&input.data, pre_exec_ws)
     }
 
     #[cfg(feature = "native")]
@@ -479,9 +461,9 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
 /// Authenticate raw sov-transaction.
 ///
 /// This function resolves the appropriate chain hashes for the current block height
-/// using configured overrides (including grace periods), falling back to `default_chain_hash`
-/// when no override applies. It selects the hash matching the transaction's chain
-/// hash fragment before verifying the signature.
+/// using the runtime's configured overrides (including grace periods), falling back to
+/// [`Runtime::CHAIN_HASH`] when no override applies. It selects the hash matching the
+/// transaction's chain hash fragment before verifying the signature.
 ///
 /// Transactions in the pre-fork V0 encoding are also accepted and authenticated with the pre-fork
 /// rules below `ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT`; see [`crate::transaction::legacy_v0`].
@@ -492,21 +474,24 @@ pub fn verify_and_decode_tx<S: Spec, D: DispatchCall<Spec = S>>(
 pub fn authenticate<
     Accessor: ProvableStateReader<User, Spec = S> + VersionReader,
     S: Spec,
-    D: DispatchCall<Spec = S>,
+    Rt: Runtime<S>,
 >(
     mut raw_tx: &[u8],
-    default_chain_hash: &[u8; 32],
     state: &mut Accessor,
-) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
+) -> Result<AuthenticationOutput<S, Rt::Decodable>, AuthenticationError> {
     // Resolve all valid chain hashes for this height (including grace period hashes)
     let height = state.rollup_height_to_access();
-    let resolved_hashes = resolve_chain_hashes_for_height(height.get(), *default_chain_hash);
+    let resolved_hashes = crate::runtime::resolve_chain_hashes(
+        height.get(),
+        Rt::chain_hash_overrides(),
+        Rt::CHAIN_HASH,
+    );
 
     let raw_tx_hash = calculate_hash_metered::<Accessor, S>(raw_tx, state)
         .map_err(|e| AuthenticationError::OutOfGas(e.to_string()))?;
 
     let tx = match metered_decode_from_slice(&mut raw_tx, state, |reader| {
-        legacy_v0::deserialize_transaction_reader::<D, S, <S as Spec>::CryptoSpec, _>(reader)
+        legacy_v0::deserialize_transaction_reader::<Rt, S, <S as Spec>::CryptoSpec, _>(reader)
     }) {
         Ok(ok) => ok,
 
@@ -536,7 +521,7 @@ pub fn authenticate<
 
     match tx {
         DecodedTransaction::Current(tx) => {
-            verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
+            verify_and_decode_tx_multi_hash::<S, Rt>(raw_tx_hash, tx, resolved_hashes, state)
         }
         DecodedTransaction::LegacyV0(tx_v0) => {
             let cutoff: u64 = config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
@@ -549,7 +534,13 @@ pub fn authenticate<
                     raw_tx_hash,
                 ));
             }
-            verify_and_decode_legacy_v0_tx(raw_tx_hash, tx_v0, &resolved_hashes, state)
+            verify_and_decode_legacy_v0_tx(
+                raw_tx_hash,
+                tx_v0,
+                Rt::chain_id(),
+                &resolved_hashes,
+                state,
+            )
         }
     }
 }
@@ -591,18 +582,14 @@ fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
     Ok((tx_and_raw_hash, auth_data, runtime_call.clone()))
 }
 
-/// The rollup's `CHAIN_ID`. Pre-fork transactions commit to it in the details field that now holds
-/// the chain hash fragment, so it is still required to authenticate legacy V0 transactions.
-fn legacy_chain_id() -> u64 {
-    config_value_private!("CHAIN_ID")
-}
-
-/// Verifies that a legacy V0 transaction carries the rollup's chain id.
+/// Verifies that a legacy V0 transaction carries the rollup's chain id ([`Runtime::chain_id`]).
+/// Pre-fork transactions commit to it in the details field that now holds the chain hash
+/// fragment, so it is still required to authenticate legacy V0 transactions.
 fn verify_legacy_chain_id<S: Spec>(
     tx_details: &TxDetails<S>,
+    expected: u64,
     raw_tx_hash: TxHash,
 ) -> Result<(), AuthenticationError> {
-    let expected = legacy_chain_id();
     let got = tx_details.chain_hash_fragment;
     if got != expected {
         return Err(AuthenticationError::FatalError(
@@ -614,9 +601,9 @@ fn verify_legacy_chain_id<S: Spec>(
 }
 
 /// Authenticates a V0 transaction in the pre-fork encoding with the pre-fork rules: the
-/// authorization data is extracted, the chain id is checked against `CHAIN_ID`, and the signature
-/// is verified over the legacy signing payload against every chain hash valid at this height, in
-/// order, until one succeeds.
+/// authorization data is extracted, the chain id is checked against `expected_chain_id`, and the
+/// signature is verified over the legacy signing payload against every chain hash valid at this
+/// height, in order, until one succeeds.
 ///
 /// The legacy envelope has a single valid encoding (no optional trailing fields), so the raw
 /// transaction hash doubles as the non-malleable hash.
@@ -627,11 +614,12 @@ fn verify_legacy_chain_id<S: Spec>(
 fn verify_and_decode_legacy_v0_tx<S: Spec, D: DispatchCall<Spec = S>>(
     raw_tx_hash: TxHash,
     tx: Version0<D, S>,
+    expected_chain_id: u64,
     resolved_hashes: &crate::runtime::ResolvedChainHashes,
     meter: &mut impl GasMeter<Spec = S>,
 ) -> Result<AuthenticationOutput<S, D::Decodable>, AuthenticationError> {
     let auth_data = tx.auth_data(raw_tx_hash, raw_tx_hash, meter)?;
-    verify_legacy_chain_id(&tx.details, raw_tx_hash)?;
+    verify_legacy_chain_id(&tx.details, expected_chain_id, raw_tx_hash)?;
     let details = tx.details.clone();
 
     let tx = Transaction::V0(tx);
@@ -681,8 +669,8 @@ pub fn authenticate_unregistered<
     raw_tx: &[u8],
     pre_exec_ws: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, Rt::Decodable>, UnregisteredAuthenticationError> {
-    let (tx_and_raw_hash, auth_data, runtime_call) =
-        authenticate::<_, S, Rt>(raw_tx, &Rt::CHAIN_HASH, pre_exec_ws).map_err(|e| match e {
+    let (tx_and_raw_hash, auth_data, runtime_call) = authenticate::<_, S, Rt>(raw_tx, pre_exec_ws)
+        .map_err(|e| match e {
             AuthenticationError::FatalError(err, hash) => {
                 UnregisteredAuthenticationError::FatalError(err, hash)
             }

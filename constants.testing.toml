@@ -6,11 +6,8 @@ mint = [2, 2]
 freeze = [1, 1]
 
 [constants]
-# We use the ID 4321 for demo purposes. Change this value before deploying!
-CHAIN_ID = 4321
-CHAIN_NAME = "TestChain"
+# Chain metadata lives in chain-metadata.testing.toml.
 STATE_VERSION = 1
-CHAIN_HASH_OVERRIDES = []
 # Legacy V0 transactions are accepted only below this rollup execution height.
 # Note that rollup height obviously counts from genesis; so if the rollup upgrades at height N,
 # then to give M blocks of grace period for clients to update, set this to N + M.
