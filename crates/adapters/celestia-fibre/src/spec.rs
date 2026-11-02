@@ -6,6 +6,7 @@ use sov_rollup_interface::da::{
     BlobReaderTrait, CountedBufReader, DaSpec, DaVerifier, RelevantBlobs, RelevantProofs,
 };
 
+/// [`DaSpec`] for Celestia Fibre: Celestia headers and addresses, with blobs stored off-chain.
 #[derive(
     Default,
     serde::Serialize,
@@ -26,7 +27,7 @@ impl DaSpec for CelestiaFibreSpec {
     type BlobTransaction = FibreBlob;
     type TransactionId = TmHash;
     type Address = CelestiaAddress;
-    // shortcut: no proofs yet, replace with real types together with `CelestiaFibreVerifier`.
+    // TODO: no proofs yet, replace with real types together with `CelestiaFibreVerifier`.
     type InclusionMultiProof = ();
     type CompletenessProof = ();
     type ChainParams = RollupParams;
@@ -41,6 +42,7 @@ pub struct FibreBlob {
 }
 
 impl FibreBlob {
+    /// Wraps downloaded blob `data` posted by `sender` under the given Fibre `commitment`.
     pub fn new(sender: CelestiaAddress, commitment: [u8; 32], data: Vec<u8>) -> Self {
         Self {
             sender,
@@ -77,6 +79,7 @@ impl BlobReaderTrait for FibreBlob {
     }
 }
 
+/// Placeholder verifier that rejects every block until Fibre blob proofs are implemented.
 #[derive(Clone)]
 pub struct CelestiaFibreVerifier;
 

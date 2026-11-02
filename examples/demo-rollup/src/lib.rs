@@ -6,13 +6,22 @@
 // With no DA feature the crate is only the `compile_error!` below; allow the dead-code /
 // unused-import warnings that result so that error is the single, clear diagnostic.
 #![cfg_attr(
-    not(any(feature = "mock_da", feature = "celestia_da", feature = "celestia_fibre_da")),
+    not(any(
+        feature = "mock_da",
+        feature = "celestia_da",
+        feature = "celestia_fibre_da"
+    )),
     allow(dead_code, unused_imports)
 )]
 
-// A DA layer must be selected at compile time. `mock_da` (mock + SP1 zkVMs) and
-// `celestia_da` (Risc0) are the two profiles; at least one must be enabled.
-#[cfg(not(any(feature = "mock_da", feature = "celestia_da", feature = "celestia_fibre_da")))]
+// A DA layer must be selected at compile time. `mock_da` (mock + SP1 zkVMs),
+// `celestia_da` (Risc0) and `celestia_fibre_da` (MockZkvm) are the profiles; at least one
+// must be enabled.
+#[cfg(not(any(
+    feature = "mock_da",
+    feature = "celestia_da",
+    feature = "celestia_fibre_da"
+)))]
 compile_error!("enable at least one DA feature: `mock_da`, `celestia_da` or `celestia_fibre_da`");
 
 use std::str::FromStr;

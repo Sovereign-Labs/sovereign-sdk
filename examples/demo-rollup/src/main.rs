@@ -18,7 +18,11 @@ use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::debug;
 
-#[cfg(not(any(feature = "mock_da", feature = "celestia_da", feature = "celestia_fibre_da")))]
+#[cfg(not(any(
+    feature = "mock_da",
+    feature = "celestia_da",
+    feature = "celestia_fibre_da"
+)))]
 compile_error!("enable at least one DA feature: `mock_da`, `celestia_da` or `celestia_fibre_da`");
 
 /// Main demo runner. Initializes a DA chain, and starts a demo-rollup using the provided.

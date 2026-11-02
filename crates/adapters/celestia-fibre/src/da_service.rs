@@ -19,6 +19,7 @@ use tokio::sync::oneshot;
 
 use crate::{CelestiaFibreConfig, CelestiaFibreSpec, CelestiaFibreVerifier, FibreBlob};
 
+/// Celestia block header plus the rollup's Fibre blobs, already downloaded from validators.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FilteredFibreBlock {
     pub header: CelestiaHeader,
@@ -42,6 +43,7 @@ impl SlotData for FilteredFibreBlock {
     }
 }
 
+/// [`DaService`] that reads blob references from a bridge node and blob data from Fibre.
 #[derive(Clone)]
 pub struct CelestiaFibreDaService {
     client: Arc<celestia_client::Client>,
@@ -54,6 +56,7 @@ pub struct CelestiaFibreDaService {
 }
 
 impl CelestiaFibreDaService {
+    /// Connects to the bridge node and consensus gRPC. Read-only unless `signer_private_key` is set.
     pub async fn new(
         config: CelestiaFibreConfig,
         chain_params: RollupParams,
@@ -120,7 +123,7 @@ impl CelestiaFibreDaService {
             .unwrap_or_default();
 
         let mut fibre_blobs = Vec::with_capacity(blobs.len());
-        // shortcut: downloads run sequentially, parallelize if blocks carry many Fibre blobs.
+        // TODO: downloads run sequentially, parallelize if blocks carry many Fibre blobs.
         for blob in blobs {
             let Some((blob_id, sender)) = fibre_blob_ref(&blob) else {
                 tracing::debug!(height, ?namespace, "Skipping non-Fibre blob");
