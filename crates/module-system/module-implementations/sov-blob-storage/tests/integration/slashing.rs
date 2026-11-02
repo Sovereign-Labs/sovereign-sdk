@@ -8,7 +8,7 @@
 
 use sov_bank::{config_gas_token_id, Bank, IntoPayable};
 use sov_mock_da::{MockAddress, MockBlob};
-use sov_modules_api::{Amount, GasSpec, ModuleInfo};
+use sov_modules_api::{Amount, Gas, GasSpec, ModuleInfo};
 use sov_modules_stf_blueprint::Runtime;
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_sequencer_registry::SequencerRegistry;
