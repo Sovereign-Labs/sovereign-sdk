@@ -11460,6 +11460,7 @@ dependencies = [
  "schemars 1.2.1",
  "serde",
  "sov-celestia-adapter",
+ "sov-celestia-fibre-adapter",
  "sov-rollup-interface",
  "tokio",
  "tracing",

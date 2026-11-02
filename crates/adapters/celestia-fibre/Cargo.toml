@@ -34,6 +34,11 @@ hex = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, features = ["sync"] }
 tracing = { workspace = true, optional = true }
 
+[dev-dependencies]
+# Tests and benches exercise the native service, and workspace builds can enable
+# `sov-rollup-interface/native` (which adds `BlobReaderTrait::advance`) without ours.
+sov-celestia-fibre-adapter = { path = ".", features = ["native"] }
+
 [features]
 default = []
 native = [
@@ -44,5 +49,6 @@ native = [
     "dep:tokio",
     "dep:tracing",
     "sov-celestia-adapter/native",
+    "sov-celestia-fibre-adapter/native",
     "sov-rollup-interface/native",
 ]
