@@ -5,13 +5,11 @@
 use std::future::Future;
 
 use crate::preferred_end_to_end::tx_set_value;
-use crate::utils::new_test_rollup;
 use crate::utils::tempdir_inside_codebase_dir;
-use crate::utils::MAX_BATCH_EXECUTION_TIME_MILLIS;
+use crate::utils::SeqTestRollup;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
 use sov_api_spec::types::{self as api_types};
-use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::macros::config_value;
@@ -33,9 +31,6 @@ use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::test_signed_transaction;
 use sov_test_utils::RtAgnosticBlueprint;
 use sov_test_utils::TestSpec;
-use sov_test_utils::TEST_BLOB_PROCESSING_TIMEOUT;
-use sov_test_utils::TEST_FINALIZATION_BLOCKS;
-use sov_test_utils::TEST_MAX_BATCH_SIZE;
 use sov_test_utils::{sov_bank, sov_sequencer_registry};
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
@@ -160,24 +155,16 @@ where
 
     let dir = tempdir_inside_codebase_dir();
 
-    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
-        dir.clone(),
+    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
         genesis_params
             .runtime
             .sequencer_registry
             .sequencer_config
             .seq_da_address,
         genesis_params,
-        0,
-        true,
-        TEST_MAX_BATCH_SIZE,
-        BlockProducingConfig::Manual,
-        None,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        None,
-        TEST_FINALIZATION_BLOCKS,
     )
+    .dir(dir.clone())
+    .start()
     .await;
 
     test_rollup.produce_enough_finalized_slots().await;

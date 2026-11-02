@@ -3,9 +3,9 @@
 
 use crate::utils::{encode_call, EventEmitterModule};
 use crate::utils::{
-    generate_paymaster_tx, generate_txs, new_test_rollup, new_test_rollup_with_pruning,
-    pause_update_state, tempdir_inside_codebase_dir, tx_set_value_with_gas,
-    ModuleWithVersionedStateAccessInSlotHook, MAX_BATCH_EXECUTION_TIME_MILLIS,
+    generate_paymaster_tx, generate_txs, pause_update_state, tempdir_inside_codebase_dir,
+    tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook, SeqTestRollup,
+    MAX_BATCH_EXECUTION_TIME_MILLIS,
 };
 use anyhow::Context;
 use backon::Retryable;
@@ -310,24 +310,19 @@ async fn test_transaction_priority() {
 async fn test_archival_state_is_immediately_available() {
     let (genesis_params, admin) = create_genesis_params();
     let dir = tempdir_inside_codebase_dir();
-    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
-        dir.clone(),
+    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
         genesis_params
             .runtime
             .sequencer_registry
             .sequencer_config
             .seq_da_address,
         genesis_params,
-        0,
-        false, // automatic_batch_production — disabled to prevent empty batches from advancing height
-        TEST_MAX_BATCH_SIZE,
-        BlockProducingConfig::Manual,
-        None,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        None,
-        0,
     )
+    .dir(dir.clone())
+    // automatic_batch_production — disabled to prevent empty batches from advancing height
+    .automatic_batch_production(false)
+    .finalization_blocks(0)
+    .start()
     .await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -404,27 +399,19 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
         .seq_da_address;
     let versions_to_keep = 4u64;
 
-    let test_rollup = new_test_rollup_with_pruning::<TestRuntime<TestSpec>>(
-        dir.clone(),
-        seq_da_address,
-        genesis_params,
-        0,
-        false, // automatic_batch_production — disabled to keep height deterministic
-        TEST_MAX_BATCH_SIZE,
-        BlockProducingConfig::Manual,
-        None,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        None,
-        0,
+    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(seq_da_address, genesis_params)
+        .dir(dir.clone())
+        // automatic_batch_production — disabled to keep height deterministic
+        .automatic_batch_production(false)
+        .finalization_blocks(0)
         // Prune every finalized block, retaining only the most recent few versions.
-        PrunerConfig::Periodic {
+        .pruner(PrunerConfig::Periodic {
             block_interval: 1,
             versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
             max_batch_size: default_max_pruning_batch_size(),
-        },
-    )
-    .await;
+        })
+        .start()
+        .await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -583,24 +570,19 @@ async fn test_archival_state_is_accessible_even_with_delayed_checkpoint_update()
 
     let (genesis_params, admin) = create_genesis_params();
     let dir = Arc::new(tempfile::tempdir().unwrap());
-    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
-        dir.clone(),
+    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
         genesis_params
             .runtime
             .sequencer_registry
             .sequencer_config
             .seq_da_address,
         genesis_params,
-        0,
-        false, // automatic_batch_production — disabled to isolate checkpoint ordering
-        TEST_MAX_BATCH_SIZE,
-        BlockProducingConfig::Manual,
-        None,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        None,
-        0,
     )
+    .dir(dir.clone())
+    // automatic_batch_production — disabled to isolate checkpoint ordering
+    .automatic_batch_production(false)
+    .finalization_blocks(0)
+    .start()
     .await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -673,24 +655,18 @@ async fn test_archival_state_is_accessible_even_with_delayed_checkpoint_update()
 async fn test_archival_read_from_uncommitted_changes() {
     let (genesis_params, admin) = create_genesis_params();
     let dir = tempdir_inside_codebase_dir();
-    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
-        dir.clone(),
+    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
         genesis_params
             .runtime
             .sequencer_registry
             .sequencer_config
             .seq_da_address,
         genesis_params,
-        0,
-        false,
-        TEST_MAX_BATCH_SIZE,
-        BlockProducingConfig::Manual,
-        None,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        None,
-        0,
     )
+    .dir(dir.clone())
+    .automatic_batch_production(false)
+    .finalization_blocks(0)
+    .start()
     .await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -858,24 +834,22 @@ async fn create_test_rollup(
     let dir = tempdir_inside_codebase_dir();
 
     (
-        new_test_rollup::<TestRuntime<TestSpec>>(
-            dir.clone(),
+        SeqTestRollup::<TestRuntime<TestSpec>>::new(
             genesis_params
                 .runtime
                 .sequencer_registry
                 .sequencer_config
                 .seq_da_address,
             genesis_params,
-            minimum_profit_per_tx,
-            true,
-            max_batch_size,
-            block_producing_config,
-            None,
-            blob_processing_timeout_secs,
-            max_batch_execution_time_millis,
-            None,
-            finality,
         )
+        .dir(dir.clone())
+        .minimum_profit_per_tx(minimum_profit_per_tx)
+        .max_batch_size_bytes(max_batch_size)
+        .block_producing_config(block_producing_config)
+        .blob_processing_timeout_secs(blob_processing_timeout_secs)
+        .max_batch_execution_time_millis(max_batch_execution_time_millis)
+        .finalization_blocks(finality)
+        .start()
         .await,
         admin,
     )
@@ -1146,24 +1120,17 @@ async fn sequencer_filled_up_block() {
 
     let dir = tempdir_inside_codebase_dir();
 
-    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
-        dir.clone(),
+    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
         genesis_params
             .runtime
             .sequencer_registry
             .sequencer_config
             .seq_da_address,
         genesis_params,
-        0,
-        true,
-        TEST_MAX_BATCH_SIZE,
-        BlockProducingConfig::Manual,
-        None,
-        60,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        None,
-        0,
     )
+    .dir(dir.clone())
+    .finalization_blocks(0)
+    .start()
     .await;
 
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
@@ -1569,24 +1536,16 @@ async fn seq_out_of_gas_for_pre_checks() {
 
     let dir = tempdir_inside_codebase_dir();
 
-    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
-        dir.clone(),
+    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
         genesis_params
             .runtime
             .sequencer_registry
             .sequencer_config
             .seq_da_address,
         genesis_params,
-        0,
-        true,
-        TEST_MAX_BATCH_SIZE,
-        BlockProducingConfig::Manual,
-        None,
-        60,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        None,
-        TEST_FINALIZATION_BLOCKS,
     )
+    .dir(dir.clone())
+    .start()
     .await;
 
     test_rollup.produce_enough_finalized_slots().await;
@@ -2226,26 +2185,19 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
 
     let dir = tempdir_inside_codebase_dir();
 
-    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
-        dir.clone(),
+    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
         genesis_params
             .runtime
             .sequencer_registry
             .sequencer_config
             .seq_da_address,
         genesis_params,
-        0,
-        true,
-        TEST_MAX_BATCH_SIZE,
-        BlockProducingConfig::OnAnySubmit {
-            block_wait_timeout_ms: None,
-        },
-        None,
-        60,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        None,
-        TEST_FINALIZATION_BLOCKS,
     )
+    .dir(dir.clone())
+    .block_producing_config(BlockProducingConfig::OnAnySubmit {
+        block_wait_timeout_ms: None,
+    })
+    .start()
     .await;
 
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
@@ -3325,25 +3277,22 @@ async fn heavy_blob_submission_long_delay() {
 
     let dir = Arc::new(tempfile::tempdir().unwrap());
 
-    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
-        dir,
+    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
         genesis_params
             .runtime
             .sequencer_registry
             .sequencer_config
             .seq_da_address,
         genesis_params,
-        0,
-        true,
-        max_batch_size,
-        // Block time is intentionally low to put extra pressure on Node and Sequencer.
-        BlockProducingConfig::Periodic { block_time_ms: 200 },
-        None,
-        blob_processing_timeout_secs,
-        400, // Set the batch time limit to twice the block time
-        None,
-        TEST_FINALIZATION_BLOCKS,
     )
+    .dir(dir)
+    .max_batch_size_bytes(max_batch_size)
+    // Block time is intentionally low to put extra pressure on Node and Sequencer.
+    .block_producing_config(BlockProducingConfig::Periodic { block_time_ms: 200 })
+    .blob_processing_timeout_secs(blob_processing_timeout_secs)
+    // Set the batch time limit to twice the block time
+    .max_batch_execution_time_millis(400)
+    .start()
     .await;
 
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -3843,24 +3792,19 @@ async fn preferred_sequencer_is_resistant_to_miscellaneous_edge_cases(actions: V
 
     let dir = tempdir_inside_codebase_dir();
 
-    let test_rollup = new_test_rollup::<TestRuntime<TestSpec>>(
-        dir.clone(),
+    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
         genesis_params
             .runtime
             .sequencer_registry
             .sequencer_config
             .seq_da_address,
         genesis_params,
-        0,
-        false,
-        TEST_MAX_BATCH_SIZE,
-        DEFAULT_BLOCK_PRODUCING_CONFIG,
-        Some(RollupProverConfig::Prove),
-        60,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        None,
-        TEST_FINALIZATION_BLOCKS,
     )
+    .dir(dir.clone())
+    .automatic_batch_production(false)
+    .block_producing_config(DEFAULT_BLOCK_PRODUCING_CONFIG)
+    .rollup_prover_config(RollupProverConfig::Prove)
+    .start()
     .await;
 
     let (test_rollup, test_state) = setup_test_rollup_with_initial_state(test_rollup, &admin).await;
