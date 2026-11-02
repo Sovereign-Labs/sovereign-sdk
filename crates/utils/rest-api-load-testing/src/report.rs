@@ -37,7 +37,7 @@ impl Report {
         let mut total_time: u128 = 0;
         let len = measurements.len();
 
-        measurements.sort_by(|a, b| a.time.cmp(&b.time));
+        measurements.sort_by_key(|m| m.time);
         let index_p95: usize = measurements.len() * 95 / 100;
         let p95_time = measurements[index_p95].time;
         let min_time = measurements[0].time;
@@ -88,7 +88,7 @@ impl Summary {
     }
 
     fn sort_by_avg_time(mut ok_data: Vec<Report>) -> Vec<Report> {
-        ok_data.sort_by(|a, b| a.average_time.cmp(&b.average_time));
+        ok_data.sort_by_key(|r| r.average_time);
         ok_data
     }
 

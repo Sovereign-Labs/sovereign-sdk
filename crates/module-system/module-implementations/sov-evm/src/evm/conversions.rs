@@ -147,6 +147,7 @@ pub(crate) fn create_block_env(
         }),
         // Default values
         difficulty: U256::ZERO,
+        slot_num: 0,
     }
 }
 

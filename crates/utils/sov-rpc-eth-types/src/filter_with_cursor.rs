@@ -5,7 +5,7 @@ use serde::Deserialize;
 use serde::Serialize;
 
 /// Filter for logs with cursor.
-#[derive(Clone, Debug, Default, PartialEq, Eq, Hash, Serialize, Deserialize)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Serialize, Deserialize)]
 pub struct FilterWithCursor {
     pub cursor: Option<String>,
     #[serde(flatten)]

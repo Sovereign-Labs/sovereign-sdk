@@ -118,15 +118,10 @@ pub(crate) fn build_multiple_transfers(
     recipient: <TestSpec as Spec>::Address,
     start_nonce: u64,
 ) -> Vec<Transaction<Runtime<TestSpec>, TestSpec>> {
-    let mut txs = vec![];
-    let mut nonce = start_nonce;
-    for amt in amounts {
-        txs.push(build_transfer_token_tx(
-            signer_key, token_id, recipient, *amt, nonce,
-        ));
-        nonce += 1;
-    }
-    txs
+    (start_nonce..)
+        .zip(amounts)
+        .map(|(nonce, amt)| build_transfer_token_tx(signer_key, token_id, recipient, *amt, nonce))
+        .collect()
 }
 
 pub(crate) async fn assert_balance(

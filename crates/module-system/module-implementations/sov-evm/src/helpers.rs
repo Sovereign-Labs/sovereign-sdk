@@ -120,6 +120,7 @@ pub(crate) fn from_recovered_with_block_context(
         index: Some(tx_index),
         // Default value, because hash is in the tx.
         hash: None,
+        block_timestamp: None,
     };
     alloy_rpc_types::Transaction::from_transaction(tx.convert(), tx_info)
 }

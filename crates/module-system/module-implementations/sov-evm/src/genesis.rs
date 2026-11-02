@@ -136,6 +136,7 @@ where
                 code_hash,
                 nonce,
                 code: None,
+                account_id: None,
             },
         )?;
 
@@ -177,6 +178,8 @@ fn init_block<S: Spec>(config: &EvmGenesisConfig<S>) -> Block {
         blob_gas_used: None,
         parent_beacon_block_root: None,
         requests_hash: None,
+        block_access_list_hash: None,
+        slot_number: None,
     };
 
     Block {
@@ -188,7 +191,7 @@ fn init_block<S: Spec>(config: &EvmGenesisConfig<S>) -> Block {
 fn init_spec<S: Spec>(config: &EvmGenesisConfig<S>) -> anyhow::Result<Vec<(BlockNumber, SpecId)>> {
     let mut spec = config.chain_spec.hardforks.to_vec();
 
-    spec.sort_by(|a, b| a.0.cmp(&b.0));
+    spec.sort_by_key(|a| a.0);
 
     if spec.is_empty() {
         spec.push((0, SpecId::CANCUN));

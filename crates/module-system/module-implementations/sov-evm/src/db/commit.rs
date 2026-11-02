@@ -1,22 +1,21 @@
 use alloy_primitives::{Address, U256};
 use itertools::Itertools;
-use revm::primitives::HashMap;
-use revm::state::{Account, EvmStorageSlot};
+use revm::state::{Account, EvmState, EvmStorage};
 use revm_database_interface::TryDatabaseCommit;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::{Spec, StateAccessor};
 
 use super::EvmDb;
-use crate::db::{DbAccount, Error};
+use crate::db::{DbAccount, Error, WsError};
 use crate::{to_rollup_address, to_rollup_balance};
 
 impl<'a, Ws: StateAccessor, S: Spec> TryDatabaseCommit for EvmDb<'a, Ws, S>
 where
     S::Address: FromVmAddress<EthereumAddress>,
 {
-    type Error = Error<Ws>;
+    type Error = WsError<Ws>;
 
-    fn try_commit(&mut self, changes: HashMap<Address, Account>) -> Result<(), Self::Error> {
+    fn try_commit(&mut self, changes: EvmState) -> Result<(), Self::Error> {
         for (address, account) in changes
             .into_iter()
             // Sort addresses to avoid non-determinism in ZK
@@ -31,7 +30,7 @@ where
 
 impl<'a, Ws: StateAccessor, S: Spec> EvmDb<'a, Ws, S>
 where
-    EvmDb<'a, Ws, S>: TryDatabaseCommit<Error = Error<Ws>>,
+    EvmDb<'a, Ws, S>: TryDatabaseCommit<Error = WsError<Ws>>,
     S::Address: FromVmAddress<EthereumAddress>,
 {
     fn commit_account(
@@ -78,7 +77,7 @@ where
     fn commit_storage(
         &mut self,
         address: Address,
-        storage: HashMap<U256, EvmStorageSlot>,
+        storage: EvmStorage,
     ) -> Result<(), <Self as TryDatabaseCommit>::Error> {
         storage
             .into_iter()

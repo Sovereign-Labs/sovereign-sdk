@@ -348,12 +348,7 @@ impl HyperlaneBuilder {
             .enumerate()
             .map(|(id, key)| start_validator(&container, id, key).boxed_local());
 
-        let mut agents = join_all(
-            maybe_relayer_fut
-                .into_iter()
-                .chain(validators_futs.into_iter()),
-        )
-        .await;
+        let mut agents = join_all(maybe_relayer_fut.into_iter().chain(validators_futs)).await;
 
         let relayer = if has_relayer {
             Some(agents.remove(0))

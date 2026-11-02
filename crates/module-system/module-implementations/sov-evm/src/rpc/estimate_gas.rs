@@ -53,8 +53,8 @@ where
             ExecutionResult::Revert { output, .. } => {
                 Err(RpcInvalidTransactionError::Revert(RevertError::new(output)).into())
             }
-            ExecutionResult::Halt { reason, gas_used } => {
-                Err(RpcInvalidTransactionError::halt(reason, gas_used).into())
+            ExecutionResult::Halt { reason, gas, .. } => {
+                Err(RpcInvalidTransactionError::halt(reason, gas.tx_gas_used()).into())
             }
         }
     }
@@ -114,14 +114,16 @@ where
                 .map_err(into_rpc_error)?;
 
         let gas_used = match &result {
-            ExecutionResult::Success { gas_used, .. } => *gas_used,
+            ExecutionResult::Success { gas, .. } => gas.tx_gas_used(),
             ExecutionResult::Revert { output, .. } => {
                 return Err(
                     RpcInvalidTransactionError::Revert(RevertError::new(output.clone())).into(),
                 );
             }
-            ExecutionResult::Halt { reason, gas_used } => {
-                return Err(RpcInvalidTransactionError::halt(reason.clone(), *gas_used).into());
+            ExecutionResult::Halt { reason, gas, .. } => {
+                return Err(
+                    RpcInvalidTransactionError::halt(reason.clone(), gas.tx_gas_used()).into(),
+                );
             }
         };
 

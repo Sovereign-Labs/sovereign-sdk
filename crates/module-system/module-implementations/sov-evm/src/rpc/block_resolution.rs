@@ -629,6 +629,8 @@ where
             blob_gas_used: None,
             parent_beacon_block_root: None,
             requests_hash: None,
+            block_access_list_hash: None,
+            slot_number: None,
         };
 
         let block = SyntheticBlockWithoutRootsAndBloom::new(header, first_tx_index..last_tx_index);
@@ -691,6 +693,8 @@ where
             blob_gas_used: None,
             parent_beacon_block_root: None,
             requests_hash: None,
+            block_access_list_hash: None,
+            slot_number: None,
         };
 
         let block = SyntheticBlockWithoutRootsAndBloom::new(header, start..end);

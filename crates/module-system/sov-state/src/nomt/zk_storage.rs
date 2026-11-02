@@ -94,7 +94,7 @@ impl<S: MerkleProofSpec> NomtVerifierStorage<S> {
             .collect::<Vec<(KeyPath, Option<ValueHash>)>>();
 
         // Sort them by key hash, as required by [`nomt_core::proof::verify_multi_proof_update`]
-        updates.sort_by(|a, b| a.0.cmp(&b.0));
+        updates.sort_by_key(|a| a.0);
 
         nomt_core::proof::verify_multi_proof_update::<BinaryHasher<S::Hasher>>(
             &verified_multi_proof,

@@ -92,10 +92,8 @@ fn test_modified_read_to_none() {
 fn check_malicious_case(native_case: TestCase, zk_case: TestCase, expected_error: &str) {
     let mut sm = SimpleStorageManager::new();
 
-    for (native_state_accesses, zk_state_accesses) in native_case
-        .rounds
-        .into_iter()
-        .zip(zk_case.rounds.into_iter())
+    for (native_state_accesses, zk_state_accesses) in
+        native_case.rounds.into_iter().zip(zk_case.rounds)
     {
         let (prover_storage, prev_state_root) = sm.create_storage_with_root();
 

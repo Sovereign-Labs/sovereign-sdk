@@ -6,6 +6,7 @@ use revm::context_interface::{ContextTr, JournalTr, LocalContextTr};
 use revm::database::State as RevmState;
 use revm::handler::{EthPrecompiles, PrecompileProvider};
 use revm::interpreter::{CallInputs, Gas, InstructionResult, InterpreterResult};
+use revm::primitives::{hardfork::SpecId, AddressSet};
 use sov_modules_api::{Context as SovContext, Spec, TxState};
 use std::collections::BTreeSet;
 
@@ -87,6 +88,8 @@ pub(crate) struct SovPrecompileProvider<'a, S: Spec, P: EvmPrecompileSet<S>> {
     custom: P,
     sov_context: Option<&'a SovContext<S>>,
     enabled_custom_precompiles: BTreeSet<Address>,
+    /// Ethereum precompiles of the current spec plus the enabled custom precompiles.
+    warm_addresses: AddressSet,
 }
 
 impl<'a, S: Spec, P: EvmPrecompileSet<S>> SovPrecompileProvider<'a, S, P> {
@@ -96,14 +99,28 @@ impl<'a, S: Spec, P: EvmPrecompileSet<S>> SovPrecompileProvider<'a, S, P> {
         enabled_custom_precompiles: BTreeSet<Address>,
     ) -> Self {
         let () = P::CHECK_ADDRESSES;
-        let eth = EthPrecompiles::default();
+        let eth = EthPrecompiles::new(SpecId::default());
 
-        Self {
+        let mut provider = Self {
             eth,
             custom,
             sov_context,
             enabled_custom_precompiles,
-        }
+            warm_addresses: AddressSet::default(),
+        };
+        provider.refresh_warm_addresses();
+        provider
+    }
+
+    fn refresh_warm_addresses(&mut self) {
+        let mut warm_addresses = self.eth.warm_addresses().clone();
+        warm_addresses.extend(
+            self.enabled_custom_precompiles
+                .iter()
+                .copied()
+                .filter(|address| P::ADDRESSES.contains(address)),
+        );
+        self.warm_addresses = warm_addresses;
     }
 
     fn custom_precompile_enabled(&self, address: &Address) -> bool {
@@ -124,7 +141,11 @@ where
         &mut self,
         spec: <<CTX as ContextTr>::Cfg as revm::context_interface::Cfg>::Spec,
     ) -> bool {
-        <EthPrecompiles as PrecompileProvider<CTX>>::set_spec(&mut self.eth, spec)
+        let changed = <EthPrecompiles as PrecompileProvider<CTX>>::set_spec(&mut self.eth, spec);
+        if changed {
+            self.refresh_warm_addresses();
+        }
+        changed
     }
 
     fn run(&mut self, ctx: &mut CTX, inputs: &CallInputs) -> Result<Option<Self::Output>, String> {
@@ -163,15 +184,8 @@ where
         )))
     }
 
-    fn warm_addresses(&self) -> Box<impl Iterator<Item = Address>> {
-        Box::new(
-            self.eth.warm_addresses().chain(
-                self.enabled_custom_precompiles
-                    .iter()
-                    .copied()
-                    .filter(|address| P::ADDRESSES.contains(address)),
-            ),
-        )
+    fn warm_addresses(&self) -> &AddressSet {
+        &self.warm_addresses
     }
 
     fn contains(&self, address: &Address) -> bool {
@@ -183,7 +197,7 @@ fn convert_to_interpreter_result(result: PrecompileResult, gas_limit: u64) -> In
     match result {
         Ok(output) => {
             let mut gas = Gas::new(gas_limit);
-            if !gas.record_cost(output.gas_used) {
+            if !gas.record_regular_cost(output.gas_used) {
                 return InterpreterResult {
                     result: InstructionResult::PrecompileOOG,
                     gas: Gas::new(gas_limit),

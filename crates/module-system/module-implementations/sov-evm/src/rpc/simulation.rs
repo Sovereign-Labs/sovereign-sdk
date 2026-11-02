@@ -9,8 +9,7 @@ use alloy_rpc_types::{
 use revm::context::result::ResultAndState;
 use revm::context::{BlockEnv, CfgEnv};
 use revm::database::State as RevmState;
-use revm::primitives::HashMap as RevmHashMap;
-use revm::state::{Account, AccountStatus, Bytecode, EvmStorageSlot};
+use revm::state::{Account, Bytecode, EvmState, EvmStorageSlot, TransactionId};
 use revm::{Database, DatabaseCommit};
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_modules_api::macros::config_value;
@@ -348,7 +347,10 @@ where
         )));
     }
 
-    let mut info = db.basic(address).map_err(Into::into)?.unwrap_or_default();
+    let mut info = db
+        .basic(address)
+        .map_err(EthApiError::from)?
+        .unwrap_or_default();
     if let Some(nonce) = nonce {
         info.nonce = nonce;
     }
@@ -362,12 +364,7 @@ where
         info.balance = balance;
     }
 
-    let mut patched_account = Account {
-        info,
-        status: AccountStatus::Touched,
-        storage: Default::default(),
-        transaction_id: 0,
-    };
+    let mut patched_account = Account::default().with_info(info).with_touched_mark();
 
     let storage_overrides = match (state, state_diff) {
         (Some(_), Some(_)) => {
@@ -376,12 +373,11 @@ where
             )));
         }
         (Some(state), None) => {
-            db.commit(RevmHashMap::from_iter([(
+            db.commit(EvmState::from_iter([(
                 address,
-                Account {
-                    status: AccountStatus::SelfDestructed | AccountStatus::Touched,
-                    ..Default::default()
-                },
+                Account::default()
+                    .with_selfdestruct_mark()
+                    .with_touched_mark(),
             )]));
             patched_account.mark_created();
             Some(state)
@@ -394,12 +390,12 @@ where
         for (slot, value) in storage_overrides {
             patched_account.storage.insert(
                 slot.into(),
-                EvmStorageSlot::new_changed((!value).into(), value.into(), 0),
+                EvmStorageSlot::new_changed((!value).into(), value.into(), TransactionId::ZERO),
             );
         }
     }
 
-    db.commit(RevmHashMap::from_iter([(address, patched_account)]));
+    db.commit(EvmState::from_iter([(address, patched_account)]));
     Ok(())
 }
 

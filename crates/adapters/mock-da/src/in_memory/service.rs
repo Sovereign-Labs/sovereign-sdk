@@ -160,8 +160,7 @@ impl MockDaService {
     async fn get_last_finalized_height(&self, blocks: &VecDeque<MockBlock>) -> u64 {
         blocks
             .len()
-            .checked_sub(self.blocks_to_finality as usize)
-            .unwrap_or_default() as u64
+            .saturating_sub(self.blocks_to_finality as usize) as u64
     }
 
     fn make_blob(&self, blob: Vec<u8>) -> MockBlob {

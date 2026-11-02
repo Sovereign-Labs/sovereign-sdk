@@ -267,7 +267,7 @@ impl LedgerRpcReader {
                 .with_context(|| {
                     format!("Resolved transaction hash {} to tx number {}, but failed to resolve find the events for that number", hex::encode(tx_hash), tx_num.0)
                 })?;
-            events_response.extend(events.into_iter());
+            events_response.extend(events);
         }
         Ok(events_response)
     }
@@ -574,7 +574,7 @@ impl LedgerRpcReader {
             QueryMode::Standard | QueryMode::Full => {
                 let events = self.get_event_range(&tx.events).await?;
                 let events = (tx.events.start.0..=tx.events.end.0)
-                    .zip(events.into_iter())
+                    .zip(events)
                     .map(|(event_num, event)| (event_num, &event).try_into())
                     .collect::<Result<Vec<E>, _>>()?;
                 let mut tx_response: TxResponse<T, E> = tx.try_into()?;
