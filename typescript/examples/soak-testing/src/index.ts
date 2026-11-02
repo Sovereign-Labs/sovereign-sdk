@@ -21,7 +21,7 @@ import {
 } from "@sovereign-sdk/test/soak";
 import random from "random";
 import keypairs from "../data/keypairs.json" assert { type: "json" };
-import { Ed25519Signer } from "@sovereign-sdk/signers";
+import { CommonwareSigner, Ed25519Signer } from "@sovereign-sdk/signers";
 import { type RuntimeCall } from "./types";
 import assert from "node:assert";
 
@@ -93,7 +93,7 @@ class BankTransferGenerator extends TransactionGenerator<S> {
 
     return {
       unsignedTransaction,
-      signer: new Ed25519Signer(sender.privateKey),
+      signer: new CommonwareSigner(new Ed25519Signer(sender.privateKey)),
       async onSubmitted(result) {
         assert(
           result.events?.length === 1,

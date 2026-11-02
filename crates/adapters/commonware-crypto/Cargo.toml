@@ -1,0 +1,43 @@
+[package]
+name = "sov-commonware-crypto"
+description = "Ed25519 CryptoSpec backed by commonware-cryptography-curve25519"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+homepage.workspace = true
+repository.workspace = true
+publish = true
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+borsh = { workspace = true }
+commonware-codec = { workspace = true }
+commonware-cryptography-curve25519 = { workspace = true }
+hex = { workspace = true }
+schemars = { workspace = true }
+serde = { workspace = true }
+sha2 = { workspace = true }
+sov-rollup-interface = { workspace = true }
+sov-universal-wallet = { workspace = true }
+arbitrary = { workspace = true, optional = true }
+rand = { workspace = true, optional = true }
+
+[dev-dependencies]
+ed25519-dalek = { workspace = true }
+serde_json = { workspace = true }
+sov-commonware-crypto = { path = ".", features = ["native"] }
+
+[features]
+default = []
+native = ["rand", "sov-commonware-crypto/native", "sov-rollup-interface/native"]
+arbitrary = [
+	"dep:arbitrary",
+	"sov-commonware-crypto/arbitrary",
+	"sov-rollup-interface/arbitrary",
+	"commonware-codec/arbitrary",
+	"commonware-cryptography-curve25519/arbitrary"
+]

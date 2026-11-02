@@ -59,6 +59,8 @@ There are multiple options available:
 
 The default `MockDemoRollup` blueprint uses MockZkvm as the inner zkVM. Selecting `--zk-vm sp1` switches to SP1, which requires the SP1 guest ELF when proving is enabled.
 
+The default mock rollup and the soak generator's `demo-mock` runtime use Commonware Ed25519 signatures over `0x00 || message`. This experimental configuration requires Rust 1.95 or newer; use the tested Rust 1.96.0 toolchain. From `examples/demo-rollup`, start the node with `SKIP_GUEST_BUILD=1 SP1_SKIP_PROGRAM_BUILD=1 cargo +1.96.0 run --locked --release -p sov-demo-rollup --bin sov-demo-rollup`, then start the generator in another terminal with `SKIP_GUEST_BUILD=1 SP1_SKIP_PROGRAM_BUILD=1 cargo +1.96.0 run --locked --release -p sov-soak-testing --bin generator -- --runtime demo-mock`. Use a fresh, separate storage directory when comparing with `dev`: the signature format differs, so existing signed transactions are not compatible. Set `[storage].path` in a separate rollup config and pass it with `--rollup-config-path`.
+
 By default, demo-rollup disables proving. To enable proving:
 
 - `export SOV_PROVER_MODE=prove` Run the rollup verifier and create a SNARK of execution.

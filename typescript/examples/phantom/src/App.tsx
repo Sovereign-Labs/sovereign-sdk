@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { CommonwareSigner } from "@sovereign-sdk/signers";
 import { createSolanaSignableRollup, SovereignClient } from "@sovereign-sdk/web3";
 import ConnectButton from "./ConnectButton.tsx";
 import "./App.css";
@@ -139,7 +140,7 @@ export default function App() {
         { url: ROLLUP_URL },
         SOLANA_ENDPOINT,
       );
-      const signer = new PhantomSigner(walletProvider);
+      const signer = new CommonwareSigner(new PhantomSigner(walletProvider));
 
       // Sign and send as a Solana offchain message
       const result = await rollup.call(parsedTx, {

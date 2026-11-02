@@ -5,6 +5,19 @@
 
 A signer interface and implementations for use with Sovereign SDK applications.
 
+`Ed25519Signer` and `PhantomSigner` sign the original message, preserving compatibility with existing Ed25519 rollups. For the Commonware demo, explicitly wrap a raw Ed25519 signer in `CommonwareSigner` to sign `0x00 || message`:
+
+```typescript
+import { CommonwareSigner, Ed25519Signer } from '@sovereign-sdk/signers';
+
+const signer = new CommonwareSigner(new Ed25519Signer(privateKey));
+const signature = await signer.sign(message);
+```
+
+The same wrapper supports raw software-wallet adapters, such as `new CommonwareSigner(new PhantomSigner(provider))`. Pass the original message and wrap the signer only once. Transaction and Solana envelope serialization remain unchanged. A Commonware signature verifies against the prefixed message; it is not interchangeable with an unprefixed signature.
+
+Ledger Solana is excluded from this experiment: its firmware requires the Solana preamble at byte zero and rejects the Commonware prefix.
+
 ## Installation
 
 ```

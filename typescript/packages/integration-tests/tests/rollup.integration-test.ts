@@ -1,4 +1,4 @@
-import { Ed25519Signer } from "@sovereign-sdk/signers";
+import { CommonwareSigner, Ed25519Signer } from "@sovereign-sdk/signers";
 import {
   type StandardRollup,
   VersionMismatchError,
@@ -10,7 +10,7 @@ const privateKey = new Uint8Array([
   117, 251, 248, 217, 135, 70, 194, 105, 46, 80, 41, 66, 185, 56, 200, 35, 121,
   253, 9, 234, 159, 91, 96, 212, 211, 158, 135, 225, 180, 36, 104, 253,
 ]);
-const signer = new Ed25519Signer(privateKey);
+const signer = new CommonwareSigner(new Ed25519Signer(privateKey));
 let rollup: StandardRollup<any>;
 
 const testAddress = {
