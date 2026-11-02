@@ -13,7 +13,6 @@ use demo_stf::runtime::{Runtime as DemoRuntime, RuntimeCall};
 use futures::StreamExt;
 use sov_api_spec::types::{SyncStatus, TxStatus};
 use sov_demo_rollup::MockDemoRollup;
-use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{CryptoSpec, OperatingMode, RawTx, Runtime, Spec, TxHash};
 use sov_modules_rollup_blueprint::logging::default_rust_log_value;
@@ -109,12 +108,11 @@ async fn start_rollup(
         .set_config(|c| {
             c.aggregated_proof_block_jump = 10;
             c.max_concurrent_batch_blobs = 92;
-            if let SequencerKindConfig::Preferred(seq_config) = &mut c.sequencer_config {
-                seq_config.batch_execution_time_limit_millis =
-                    TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 3;
-                seq_config.ideal_lag_behind_finalized_slot = 3;
-                seq_config.num_cache_warmup_workers = 0;
-            }
+        })
+        .with_preferred_seq_config(|seq| {
+            seq.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 3;
+            seq.ideal_lag_behind_finalized_slot = 3;
+            seq.num_cache_warmup_workers = 0;
         })
         .start(),
     )

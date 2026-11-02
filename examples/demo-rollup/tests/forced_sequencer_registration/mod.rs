@@ -357,9 +357,9 @@ async fn setup_with_block_producing(
         c.automatic_batch_production = true;
         c.max_channel_size = 1;
         c.max_infos_in_db = 1;
-        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
-            seq.ideal_lag_behind_finalized_slot = 3;
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.ideal_lag_behind_finalized_slot = 3;
     })
     .start()
     .await

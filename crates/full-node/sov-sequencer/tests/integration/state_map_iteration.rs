@@ -11,7 +11,6 @@ use sov_modules_api::RawTx;
 use sov_modules_api::{DispatchCall, HexHash, HexString};
 use sov_modules_stf_blueprint::Runtime;
 use sov_rest_utils::PaginatedResponse;
-use sov_sequencer::SequencerKindConfig;
 use sov_test_modules::state_map_tester::CallMessage;
 use sov_test_modules::state_map_tester::StateKey;
 use sov_test_modules::state_map_tester::StateMapTester;
@@ -95,11 +94,11 @@ async fn create_test_nomt_rollup_with_long_finalization(
     .set_config(|c| {
         c.storage = StoragePath::Tmp(dir);
         c.max_concurrent_batch_blobs = 64;
-        if let SequencerKindConfig::Preferred(ref mut config) = &mut c.sequencer_config {
-            config.num_cache_warmup_workers = 0;
-            config.batch_execution_time_limit_millis = 6000;
-            config.ideal_lag_behind_finalized_slot = 10;
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.num_cache_warmup_workers = 0;
+        seq.batch_execution_time_limit_millis = 6000;
+        seq.ideal_lag_behind_finalized_slot = 10;
     })
     .set_da_config(|c| {
         c.sender_address = seq_da_address;

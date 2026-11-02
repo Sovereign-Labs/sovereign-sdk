@@ -5,7 +5,7 @@ use sov_mock_da::storable::layer::StorableMockDaLayer;
 use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::macros::config_value;
 use sov_modules_stf_blueprint::GenesisParams;
-use sov_sequencer::{SeqConfigExtension, SequencerKindConfig, SovRateLimiterConfig};
+use sov_sequencer::{SeqConfigExtension, SovRateLimiterConfig};
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, StoragePath, TestRollup};
 use tempfile::TempDir;
@@ -59,9 +59,9 @@ async fn start_node_with_genesis(
             c.max_infos_in_db = 30;
             c.max_channel_size = 20;
             c.extension = extension;
-            if let SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
-                seq.ideal_lag_behind_finalized_slot = ideal_lag;
-            }
+        })
+        .with_preferred_seq_config(|seq| {
+            seq.ideal_lag_behind_finalized_slot = ideal_lag;
         })
         .set_da_config(|c| {
             c.sender_address = seq_da_address;
