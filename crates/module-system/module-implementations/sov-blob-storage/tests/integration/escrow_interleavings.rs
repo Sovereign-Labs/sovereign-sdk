@@ -1,9 +1,11 @@
 //! Property test: random interleavings of preferred, registered non-preferred, garbage,
 //! unregistered and emergency-registration blobs (batches and proofs) must never panic the STF,
 //! must never change the user state root in a slot that creates no rollup block, and must account
-//! for every token of deferred-blob escrow.
+//! for every token of deferred-blob escrow. For every rollup block built from a preferred batch,
+//! the preferred sequencer's block builder must also select the same non-preferred blobs, at the
+//! same gas price, as the node.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::num::NonZero;
 use std::sync::Arc;
 
@@ -12,9 +14,11 @@ use sov_bank::derived_holder::DerivedHolder;
 use sov_bank::{config_gas_token_id, Bank, IntoPayable};
 use sov_blob_storage::{PreferredBatchData, PreferredBlobData, PreferredProofData};
 use sov_mock_da::{MockAddress, MockBlob};
+use sov_modules_api::capabilities::{BlobSelector, ChainState, HasKernel};
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
-    Amount, CryptoSpec, Gas, ModuleInfo, PrivateKey, RawTx, Spec, VersionReader,
+    Amount, BlobDataWithId, BlobReaderTrait, CryptoSpec, Gas, GasArray, KernelStateAccessor,
+    ModuleInfo, NoOpControlFlow, PrivateKey, RawTx, Spec, StateCheckpoint, VersionReader,
 };
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobs;
@@ -22,6 +26,7 @@ use sov_sequencer_registry::{CallMessage, SequencerRegistry};
 use sov_state::{ProvableNamespace, StateRoot};
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::{BlobStorage, Uniqueness};
+use sov_test_utils::storage::ForklessStorageManager;
 use sov_test_utils::{AsUser, TestUser, TransactionType, TEST_MIN_SEQ_BOND};
 use sov_value_setter::ValueSetterConfig;
 
@@ -29,6 +34,19 @@ use crate::helpers_soft_confirmations::{GenesisConfig, SoftConfRT};
 use crate::{TestRunner, S};
 
 type Nonces = HashMap<<<S as Spec>::CryptoSpec as CryptoSpec>::PublicKey, u64>;
+type GasPrice = <<S as Spec>::Gas as Gas>::Price;
+
+/// What the preferred sequencer's block builder selects when it builds a rollup block that
+/// advances the visible slot to a given slot.
+struct SequencerBlock {
+    /// Non-preferred batches (including emergency registrations), as (blob id, sender).
+    batches: Vec<([u8; 32], MockAddress)>,
+    /// Non-preferred proof blob ids.
+    proofs: Vec<[u8; 32]>,
+    /// The gas reserved for each registered batch and proof, by blob id.
+    reserved_gas: Vec<([u8; 32], Amount)>,
+    gas_price: GasPrice,
+}
 
 /// A small data limit, so that blob sizes in the generated range can exceed it and exercise the
 /// `OutOfCapacity` paths. Non-preferred blobs get 10% of it (`PREFERRED_DATA_FRACTION`), which must
@@ -83,6 +101,11 @@ enum RegistryCall {
 enum Action {
     PreferredBatch {
         slots_to_advance: u8,
+        /// Whether to cap `slots_to_advance` at the last slot before the one the batch lands in.
+        /// A real preferred sequencer only advances the visible slot to DA slots it has seen, so
+        /// it never reaches the slot its own batch lands in. Uncapped batches can, which exercises
+        /// the node's handling of the current slot's blobs, but has no sequencer equivalent.
+        only_seen_slots: bool,
         sequence_number: SequenceNumberChoice,
         calls: Vec<RegistryCall>,
         /// Size of an extra junk tx, used to push the batch over the data limit.
@@ -146,13 +169,15 @@ fn action_strategy() -> impl Strategy<Value = Action> {
     prop_oneof![
         6 => (
             1u8..=3,
+            proptest::bool::weighted(0.85),
             sequence_number_strategy(),
             proptest::collection::vec(registry_call_strategy(), 0..=2),
             proptest::option::weighted(0.1, 1usize..=2 * MAX_BLOB_STORAGE_DATA_SIZE),
         )
-            .prop_map(|(slots_to_advance, sequence_number, calls, padding)| {
+            .prop_map(|(slots_to_advance, only_seen_slots, sequence_number, calls, padding)| {
                 Action::PreferredBatch {
                     slots_to_advance,
+                    only_seen_slots,
                     sequence_number,
                     calls,
                     padding,
@@ -231,6 +256,14 @@ struct Harness {
     unowned_registry_balance: Amount,
     /// Regular sequencers with a pending withdrawal. Every preferred batch tries to complete them.
     pending_withdrawals: Vec<Regular>,
+    /// Hashes of every blob posted by the preferred sequencer, to tell its proofs apart from
+    /// non-preferred ones in receipts.
+    preferred_blob_hashes: HashSet<[u8; 32]>,
+    /// Rollup blocks for which the sequencer's selection was compared with the node's.
+    compared_blocks: usize,
+    /// The number of pre-execution checks each registered non-preferred blob needs (one per tx,
+    /// or one for a proof), by blob hash.
+    pre_exec_checks: HashMap<[u8; 32], u64>,
 }
 
 impl Harness {
@@ -269,6 +302,9 @@ impl Harness {
             seen_holders: Vec::new(),
             unowned_registry_balance: Amount::ZERO,
             pending_withdrawals: Vec::new(),
+            preferred_blob_hashes: HashSet::new(),
+            compared_blocks: 0,
+            pre_exec_checks: HashMap::new(),
         };
 
         // Register the regular sequencers through the preferred sequencer. The rich one can afford
@@ -413,10 +449,13 @@ impl Harness {
             data: Arc::new(data),
             visible_slots_to_advance: NonZero::new(slots_to_advance).unwrap(),
         };
-        MockBlob::new_with_hash(borsh::to_vec(&batch).unwrap(), self.preferred)
+        let blob = MockBlob::new_with_hash(borsh::to_vec(&batch).unwrap(), self.preferred);
+        self.preferred_blob_hashes.insert(blob.hash().into());
+        blob
     }
 
     fn regular_batch_blob(&mut self, sender: MockAddress, txs: Vec<RawTx>) -> MockBlob {
+        let num_txs = txs.len() as u64;
         let data = txs
             .into_iter()
             .map(|tx| {
@@ -424,7 +463,9 @@ impl Harness {
                     .to_serialized_authenticated_tx(&mut self.nonces)
             })
             .collect::<Vec<_>>();
-        MockBlob::new_with_hash(borsh::to_vec(&data).unwrap(), sender)
+        let blob = MockBlob::new_with_hash(borsh::to_vec(&data).unwrap(), sender);
+        self.pre_exec_checks.insert(blob.hash().into(), num_txs);
+        blob
     }
 
     fn emergency_registration_blob(&mut self, registrant: usize, amount: u64) -> MockBlob {
@@ -450,10 +491,23 @@ impl Harness {
         match action {
             Action::PreferredBatch {
                 slots_to_advance,
+                only_seen_slots,
                 sequence_number,
                 calls,
                 padding,
             } => {
+                let slots_to_advance = if *only_seen_slots {
+                    // The batch lands in the next slot, so the last slot it can have seen is the
+                    // current true slot. `execute_actions` skips these batches when there is no
+                    // unseen slot.
+                    let unseen = self.runner.true_slot_number().get()
+                        - self.runner.visible_slot_number().get();
+                    (*slots_to_advance)
+                        .min(u8::try_from(unseen).unwrap_or(u8::MAX))
+                        .max(1)
+                } else {
+                    *slots_to_advance
+                };
                 let mut txs = calls
                     .iter()
                     .copied()
@@ -467,7 +521,7 @@ impl Harness {
                 if let Some(size) = padding {
                     txs.push(TransactionType::PreSigned(RawTx::new(vec![0xab; *size])));
                 }
-                let blob = self.preferred_batch_blob(*slots_to_advance, *sequence_number, txs);
+                let blob = self.preferred_batch_blob(slots_to_advance, *sequence_number, txs);
                 (blob, false)
             }
             Action::PreferredProof { sequence_number } => {
@@ -476,6 +530,7 @@ impl Harness {
                     data: vec![0xcd; 64],
                 };
                 let blob = MockBlob::new_with_hash(borsh::to_vec(&proof).unwrap(), self.preferred);
+                self.preferred_blob_hashes.insert(blob.hash().into());
                 (blob, true)
             }
             Action::RegularBatch {
@@ -491,10 +546,13 @@ impl Harness {
                 (self.regular_batch_blob(sender, txs), false)
             }
             Action::RegularProof { sender, size } => {
+                // At least one byte, so that an empty proof can't share a hash with an empty batch
+                // (both would encode as an empty borsh vector).
                 let blob = MockBlob::new_with_hash(
-                    borsh::to_vec(&vec![0xef_u8; *size]).unwrap(),
+                    borsh::to_vec(&vec![0xef_u8; *size + 1]).unwrap(),
                     self.regular(*sender).da_address,
                 );
+                self.pre_exec_checks.insert(blob.hash().into(), 1);
                 (blob, true)
             }
             // Random bytes can never deserialize as a batch.
@@ -521,7 +579,22 @@ impl Harness {
             proof_blobs: Vec::new(),
             batch_blobs: Vec::new(),
         };
+        let caught_up =
+            self.runner.visible_slot_number().get() == self.runner.true_slot_number().get();
         for action in actions {
+            // A real preferred sequencer only starts a block once it sees a new DA slot, so it has
+            // no batch to post while the visible slot is caught up.
+            if caught_up
+                && matches!(
+                    action,
+                    Action::PreferredBatch {
+                        only_seen_slots: true,
+                        ..
+                    }
+                )
+            {
+                continue;
+            }
             if let Action::UnregisteredBurst { count } = action {
                 // Distinct bytes per blob, so that they have different hashes.
                 blobs.batch_blobs.extend(
@@ -548,6 +621,17 @@ impl Harness {
         let rollup_height_before = self
             .runner
             .query_state(|state| state.rollup_height_to_access());
+        // The sequencer builds its next block on the node's state before this slot, without
+        // knowing how far the block will advance the visible slot. So compute its selection for
+        // every visible slot the block could advance to, and compare the right one afterwards.
+        let sequencer_blocks = if check_user_root && self.preferred_is_registered() {
+            let visible = self.runner.visible_slot_number().get();
+            (visible + 1..=self.runner.true_slot_number().get())
+                .map(|next_visible| (next_visible, self.sequencer_block(next_visible)))
+                .collect()
+        } else {
+            HashMap::new()
+        };
         let user_root_before = self
             .runner
             .state_root()
@@ -569,6 +653,10 @@ impl Harness {
             );
         }
 
+        if rollup_height_after != rollup_height_before {
+            self.compare_with_sequencer_block(&sequencer_blocks);
+        }
+
         let unowned = self.compute_unowned_registry_balance();
         assert!(
             unowned >= self.unowned_registry_balance,
@@ -579,6 +667,123 @@ impl Harness {
         );
         self.unowned_registry_balance = unowned;
         self.update_pending_withdrawals();
+    }
+
+    /// Runs what the preferred sequencer's block builder does to start a rollup block advancing
+    /// the visible slot to `next_visible`, on a throwaway copy of the current state.
+    fn sequencer_block(&self, next_visible: u64) -> SequencerBlock {
+        let mut rt = SoftConfRT::default();
+        let mut kernel = rt.kernel();
+        let mut checkpoint = StateCheckpoint::<S>::new(
+            self.runner.storage_manager().create_prover_storage(),
+            &kernel,
+        );
+        let mut accessor = KernelStateAccessor::from_checkpoint(&kernel, &mut checkpoint);
+        let old_visible = accessor.visible_slot_number();
+        // `advance` mutates its receiver, so advance a copy.
+        let next_visible = { old_visible }.advance(next_visible - old_visible.get());
+        kernel.increment_rollup_height(&mut accessor, next_visible);
+        let gas_price = kernel.base_fee_per_gas(&mut accessor).unwrap();
+        let selected = kernel.get_non_preferred_blobs(
+            old_visible
+                .as_true()
+                .next()
+                .range_inclusive(next_visible.as_true()),
+            &mut accessor,
+            NoOpControlFlow,
+        );
+
+        let mut block = SequencerBlock {
+            batches: Vec::new(),
+            proofs: Vec::new(),
+            reserved_gas: Vec::new(),
+            gas_price,
+        };
+        for blob in selected {
+            assert_eq!(
+                blob.reserved_gas_tokens.is_none(),
+                matches!(blob.blob_data, BlobDataWithId::EmergencyRegistration { .. }),
+                "Only emergency registrations should be selected without reserved gas"
+            );
+            let id = match &blob.blob_data {
+                BlobDataWithId::Batch(batch) => batch.id,
+                BlobDataWithId::Proof { id, .. }
+                | BlobDataWithId::EmergencyRegistration { id, .. } => *id,
+            };
+            if let Some(reserved) = blob.reserved_gas_tokens {
+                block.reserved_gas.push((id, reserved));
+            }
+            match blob.blob_data {
+                BlobDataWithId::Proof { .. } => block.proofs.push(id),
+                BlobDataWithId::Batch(_) | BlobDataWithId::EmergencyRegistration { .. } => {
+                    block.batches.push((id, blob.sender));
+                }
+            }
+        }
+        block
+    }
+
+    /// If the last slot created a rollup block from a preferred batch, checks that the sequencer
+    /// would have selected the same non-preferred blobs, at the same gas price, as the node.
+    fn compare_with_sequencer_block(&mut self, sequencer_blocks: &HashMap<u64, SequencerBlock>) {
+        let receipt = self.runner.receipts().last().unwrap();
+        // Blocks without a preferred batch are created by forced visible slot advancement, which
+        // the sequencer is not involved in.
+        let Some(preferred_batch) = receipt
+            .batch_receipts
+            .iter()
+            .find(|batch| batch.inner.da_address == self.preferred)
+        else {
+            return;
+        };
+        let new_visible = self.runner.visible_slot_number().get();
+        // A preferred batch can only advance the visible slot to a slot its sequencer has seen,
+        // which is always before the slot the batch lands in. The generator doesn't model this,
+        // so blocks that advance to the batch's own slot have no sequencer equivalent.
+        let Some(sequencer_block) = sequencer_blocks.get(&new_visible) else {
+            return;
+        };
+        self.compared_blocks += 1;
+
+        let node_batches = receipt
+            .batch_receipts
+            .iter()
+            .filter(|batch| batch.inner.da_address != self.preferred)
+            .map(|batch| (batch.batch_hash, batch.inner.da_address))
+            .collect::<Vec<_>>();
+        let node_proofs = receipt
+            .proof_receipts
+            .iter()
+            .map(|proof| proof.blob_hash)
+            .filter(|hash| !self.preferred_blob_hashes.contains(hash))
+            .collect::<Vec<_>>();
+        let slot = self.runner.true_slot_number();
+        assert_eq!(
+            sequencer_block.batches, node_batches,
+            "The sequencer and the node selected different non-preferred batches in slot {slot}"
+        );
+        assert_eq!(
+            sequencer_block.proofs, node_proofs,
+            "The sequencer and the node selected different non-preferred proofs in slot {slot}"
+        );
+        assert_eq!(
+            sequencer_block.gas_price, preferred_batch.inner.gas_price,
+            "The sequencer and the node used different gas prices for the block in slot {slot}"
+        );
+        // The node reserves one `max_tx_check_costs` per pre-execution check at the block's price.
+        for (id, reserved) in &sequencer_block.reserved_gas {
+            let checks = self.pre_exec_checks[id];
+            let expected = <S as sov_modules_api::GasSpec>::max_tx_check_costs()
+                .checked_scalar_product(checks)
+                .unwrap()
+                .checked_value(preferred_batch.inner.gas_price)
+                .unwrap();
+            assert_eq!(
+                *reserved, expected,
+                "The sequencer reserved a different amount of gas than the node for blob {} in slot {slot}",
+                hex::encode(id)
+            );
+        }
     }
 
     fn update_pending_withdrawals(&mut self) {
@@ -666,8 +871,9 @@ impl Harness {
         })
     }
 
-    /// Builds a preferred batch that advances the visible slot as far as possible, with the
-    /// sequence number the rollup expects next. Generated scenarios can desync the harness's
+    /// Builds a preferred batch that advances the visible slot to the last slot before the one the
+    /// batch lands in (as far as a real preferred sequencer can), with the sequence number the
+    /// rollup expects next. Generated scenarios can desync the harness's
     /// sequence numbers from the rollup's (e.g. a dropped oversized batch never uses its number),
     /// so this reads the rollup's state instead. Returns `None` if a stored batch will already
     /// advance the visible slot in the next slot.
@@ -692,15 +898,21 @@ impl Harness {
             }
         })?;
         self.next_sequence_number = sequence_number;
-        Some(self.preferred_batch_blob(u8::MAX, SequenceNumberChoice::Next, txs))
+        let unseen = self.runner.true_slot_number().get() - self.runner.visible_slot_number().get();
+        let slots_to_advance = u8::try_from(unseen).unwrap_or(u8::MAX).max(1);
+        Some(self.preferred_batch_blob(slots_to_advance, SequenceNumberChoice::Next, txs))
     }
 
-    /// Catches the visible slot up to the true slot, so that every deferred blob is either
-    /// executed or dropped. With a preferred sequencer, it advances the visible slot. In recovery
-    /// mode, the visible slot catches up on its own.
+    /// Catches the visible slot up with every slot that has deferred blobs, so that they are all
+    /// either executed or dropped. With a preferred sequencer, it advances the visible slot up to
+    /// the slot before each catch-up slot. Catch-up slots have no non-preferred blobs, so one
+    /// catch-up slot that ends one slot behind leaves nothing deferred. In recovery mode, the
+    /// visible slot catches up on its own.
     fn drain(&mut self) {
-        for _ in 0..MAX_DRAIN_SLOTS {
-            if self.runner.visible_slot_number().as_true() == self.runner.true_slot_number() {
+        for drained_slots in 0..MAX_DRAIN_SLOTS {
+            let behind =
+                self.runner.true_slot_number().get() - self.runner.visible_slot_number().get();
+            if behind == 0 || (behind == 1 && drained_slots > 0) {
                 return;
             }
             let batch_blobs = if self.preferred_is_registered() {
