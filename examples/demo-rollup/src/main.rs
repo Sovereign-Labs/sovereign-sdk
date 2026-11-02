@@ -209,6 +209,7 @@ async fn run() -> anyhow::Result<()> {
                 prover_config,
                 start_at_rollup_height,
                 stop_at_rollup_height,
+                args.override_code_commitments,
                 args.start_fresh_outer_proof_on_resync,
             )
             .await
@@ -371,12 +372,19 @@ async fn new_rollup_with_celestia_fibre_da(
     prover_config: RollupProverConfig,
     start_at_rollup_height: Option<RollupHeight>,
     stop_at_rollup_height: Option<RollupHeight>,
+    override_code_commitments: bool,
     start_fresh_outer_proof_on_resync: bool,
 ) -> anyhow::Result<Rollup<sov_demo_rollup::CelestiaFibreDemoRollup<Native>, Native>> {
     debug!(
         config_path = rollup_config_path,
         "Starting Celestia Fibre rollup"
     );
+
+    apply_code_commitments_override::<sov_demo_rollup::CelestiaFibreDemoRollup<Native>>(
+        rt_genesis_paths,
+        override_code_commitments,
+    )
+    .await?;
 
     let rollup_config: RollupConfig<
         MultiAddressEvmSolana,
