@@ -1976,10 +1976,9 @@ async fn test_sequencer_event_stream_lag_message() {
     )
     .set_config(|c| {
         c.storage = StoragePath::Tmp(dir);
-        if let SequencerKindConfig::Preferred(preferred_sequencer_config) = &mut c.sequencer_config
-        {
-            preferred_sequencer_config.events_channel_size = events_channel_size;
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.events_channel_size = events_channel_size;
     })
     .set_da_config(|c| c.sender_address = seq_da_address)
     .set_persistent_da();

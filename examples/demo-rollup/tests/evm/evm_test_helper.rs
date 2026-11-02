@@ -55,9 +55,9 @@ async fn start_node(
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
         c.extension = extension;
-        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
-            seq.ideal_lag_behind_finalized_slot = ideal_lag;
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.ideal_lag_behind_finalized_slot = ideal_lag;
     })
     .start()
     .await
@@ -138,9 +138,9 @@ pub async fn setup_test_rollup_with_paymaster(
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
         c.extension = Some(extension);
-        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
-            seq.ideal_lag_behind_finalized_slot = 1;
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.ideal_lag_behind_finalized_slot = 1;
     })
     .start()
     .await
@@ -168,9 +168,9 @@ pub async fn setup_test_rollup_with_selective_paymaster(
         c.max_infos_in_db = 30;
         c.max_channel_size = 20;
         c.extension = Some(extension);
-        if let sov_sequencer::SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
-            seq.ideal_lag_behind_finalized_slot = 3;
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.ideal_lag_behind_finalized_slot = 3;
     })
     .start()
     .await
