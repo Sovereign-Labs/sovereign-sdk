@@ -219,10 +219,7 @@ where
             // The queued blob isn't dropped, so it still executes and can result in sequencer rewards for a slashed sequencer.
             Err(AddToStakeError::SequencerNotRegistered { sequencer }) => {
                 tracing::info!(amount = %net_amount, %sequencer, "A sequencer was rewarded after having been removed from the registry (probably due to slashing). Those funds are held by the sequencer registry but not claimable by anyone.");
-                let coins = Coins {
-                    token_id: config_gas_token_id(),
-                    amount: net_amount,
-                };
+                let coins = gas_coins(net_amount);
                 let bank_id = *self.bank.id();
                 // In this edge case, we still transfer the funds from bank -> sequencer registry. This ensures that the user space state root matches whether or not the
                 // preferred sequencer observed the slashing before executing its batch; slashing a non-preferred sequencer only changes the kernel space `known_sequencers` map.
