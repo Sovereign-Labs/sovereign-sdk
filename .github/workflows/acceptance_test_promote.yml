@@ -71,7 +71,7 @@ jobs:
 
       - name: Slack notification on acceptance test failure
         if: github.event.action == 'acceptance-test-failure'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@v3.0.5
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
@@ -82,7 +82,7 @@ jobs:
 
       - name: Slack notification on fast-forward failure
         if: steps.promote.outcome == 'failure'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@v3.0.5
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
@@ -93,7 +93,7 @@ jobs:
 
       - name: Slack notification on validation failure
         if: failure() && (steps.validate.outcome == 'failure' || steps.checkout.outcome == 'failure')
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@v3.0.5
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
@@ -104,7 +104,7 @@ jobs:
 
       - name: Slack notification on data regeneration success
         if: github.event.action == 'data-regeneration-success'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@v3.0.5
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
@@ -115,7 +115,7 @@ jobs:
 
       - name: Slack notification on data regeneration failure
         if: github.event.action == 'data-regeneration-failure'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@v3.0.5
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
@@ -126,7 +126,7 @@ jobs:
 
       - name: Slack notification on EVM test failure
         if: github.event.action == 'evm-test-failure'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@v3.0.5
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
@@ -137,7 +137,7 @@ jobs:
 
       - name: Slack notification on EVM build failure
         if: github.event.action == 'evm-test-build-failure'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@v3.0.5
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
@@ -148,7 +148,7 @@ jobs:
 
       - name: Slack notification on EVM startup failure
         if: github.event.action == 'evm-test-startup-failure'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@v3.0.5
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:
