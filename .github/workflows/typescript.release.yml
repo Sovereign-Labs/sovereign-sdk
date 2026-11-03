@@ -24,13 +24,13 @@ jobs:
     name: Release
     # Must run on a GitHub-hosted runner: npm trusted publishing (OIDC)
     # rejects tokens from self-hosted runners.
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 30
     steps:
       - uses: actions/checkout@v6
         with:
           ref: ${{ inputs.branch || '' }}
-      - uses: pnpm/action-setup@v4
+      - uses: pnpm/action-setup@v6
         with:
           package_json_file: ./typescript/package.json
       - uses: actions/setup-node@v6
@@ -52,7 +52,7 @@ jobs:
         run: pnpm test
         working-directory: ./typescript
       - name: Create Release Pull Request or Publish to npm
-        uses: Sovereign-Labs/changesets-action@v1.5.4
+        uses: changesets/action@v1.9.0
         with:
           publish: pnpm release
           version: pnpm pkg-version
