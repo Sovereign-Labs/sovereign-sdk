@@ -146,7 +146,7 @@ impl CelestiaNode {
         let proof_ns_metrics = NamespaceDataMetrics::new(&proof_rows);
         let build_relevant_data = build_relevant_data_start.elapsed();
         let total_time = start_get_block.elapsed();
-        let square_width = header.dah.square_width() as u16;
+        let square_width = header.dah.square_width();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(GetBlockMeasurement {
                 height,

@@ -38,7 +38,6 @@ serde = { workspace = true, default-features = false, features = [
 serde_json = { workspace = true, features = ["alloc"] }
 sov-metrics = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true }
-sov-shutdown = { workspace = true, optional = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 thiserror = { workspace = true }
 tokio = { workspace = true, optional = true, features = ["sync"] }
@@ -59,14 +58,15 @@ native = [
     "dep:futures",
     "dep:tokio",
     "sov-rollup-interface/native",
-    "dep:sov-shutdown",
     "dep:sov-metrics",
     "sov-metrics/native",
+    "sov-celestia-common/native",
 ]
-bench = []
+bench = ["sov-celestia-common/bench"]
 arbitrary = [
     "dep:arbitrary",
     "dep:proptest",
     "sov-rollup-interface/arbitrary",
     "sov-test-utils/arbitrary",
+    "sov-celestia-common/arbitrary",
 ]

@@ -520,10 +520,11 @@ mod tests {
 
     use celestia_types::consts::appconsts::SHARE_SIZE;
     use celestia_types::{Blob, DataAvailabilityHeader, ExtendedDataSquare, Share};
-    use sov_celestia_common::fixtures::load_block_fixture;
+    use sov_celestia_common::fixtures::{load_block_fixture, BlockFixture};
     use sov_celestia_common::header::ProtobufHash;
+    use sov_celestia_common::shares::shares_needed_for_bytes_with_signer;
     use sov_celestia_common::types::NamespaceData;
-    use sov_rollup_interface::da::{BlobReaderTrait, DaVerifier};
+    use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier};
 
     use super::*;
 
@@ -535,24 +536,73 @@ mod tests {
         Share::from_raw(&raw).unwrap()
     }
 
-    async fn fibre_block(with_v1: bool) -> (FilteredFibreBlock, Vec<u8>, RollupParams) {
-        let params = RollupParams {
+    fn mocha_params() -> RollupParams {
+        RollupParams {
             rollup_batch_namespace: Namespace::const_v0(*b"sov-niko-a"),
             rollup_proof_namespace: Namespace::const_v0([1; 10]),
-        };
-        let path = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
-            .join("test_data/block_mocha_fibre_v2_1194000");
-        let template = load_block_fixture(
+        }
+    }
+
+    fn load_fixture(path: &str) -> BlockFixture {
+        let params = mocha_params();
+        load_block_fixture(
             params.rollup_batch_namespace,
             params.rollup_proof_namespace,
-            &path,
+            &PathBuf::from(env!("CARGO_MANIFEST_DIR")).join(path),
         )
-        .unwrap();
+        .unwrap()
+    }
+
+    fn patch_commitment(share: &Share, commitment: &[u8; 32]) -> Share {
+        let mut raw = share.to_vec();
+        let payload_start = SHARE_SIZE - share.payload().unwrap().len();
+        raw[payload_start..payload_start + 4].copy_from_slice(&0u32.to_be_bytes());
+        raw[payload_start + 4..payload_start + 36].copy_from_slice(commitment);
+        Share::from_raw(&raw).unwrap()
+    }
+
+    fn block_around(
+        template: &CelestiaHeader,
+        shares: Vec<Share>,
+        batch_blobs: Vec<DownloadedFibre>,
+        params: &RollupParams,
+    ) -> FilteredFibreBlock {
+        let mut width = 2usize;
+        while width * width < shares.len() {
+            width *= 2;
+        }
+        let mut ods = shares.iter().map(Share::to_vec).collect::<Vec<_>>();
+        ods.resize(width * width, tail_padding().to_vec());
+        let eds = ExtendedDataSquare::from_ods(ods).unwrap();
+        let dah = DataAvailabilityHeader::from_eds(&eds);
+        let mut compact = template.header.clone();
+        compact.data_hash = Some(ProtobufHash(dah.hash().as_ref().try_into().unwrap()));
+        let header = CelestiaHeader::new(dah.clone(), compact);
+        let batch_rows = eds
+            .get_namespace_data(params.rollup_batch_namespace, &dah, header.height())
+            .unwrap()
+            .into_iter()
+            .map(|(_, row)| row)
+            .collect();
+        FilteredFibreBlock::new(
+            header,
+            NamespaceRelevantData::new(
+                params.rollup_batch_namespace,
+                NamespaceData::new(batch_rows),
+            ),
+            NamespaceRelevantData::new(params.rollup_proof_namespace, NamespaceData::new(vec![])),
+            batch_blobs,
+            vec![],
+        )
+    }
+
+    async fn fibre_block(with_v1: bool) -> (FilteredFibreBlock, Vec<u8>, RollupParams) {
+        let params = mocha_params();
+        let template = load_fixture("test_data/block_mocha_fibre_v2_1194000");
         let pointer = &template.batch_rows.rows()[0].shares[0];
         let signer = pointer.signer().unwrap();
         let data: Vec<u8> = (0..4_000).map(|i| (i * 13) as u8).collect();
-        let encoded = encode(&data).await.unwrap();
-        let commitment = encoded.id().commitment();
+        let commitment = encode(&data).await.unwrap().id().commitment();
 
         let mut shares = Vec::new();
         if with_v1 {
@@ -564,44 +614,34 @@ mod tests {
             );
         }
         let share_idx = shares.len();
-        let mut raw = pointer.to_vec();
-        let payload_start = SHARE_SIZE - pointer.payload().unwrap().len();
-        raw[payload_start..payload_start + 4].copy_from_slice(&0u32.to_be_bytes());
-        raw[payload_start + 4..payload_start + 36].copy_from_slice(&commitment);
-        shares.push(Share::from_raw(&raw).unwrap());
-
-        let mut ods = shares.iter().map(Share::to_vec).collect::<Vec<_>>();
-        ods.resize(4, tail_padding().to_vec());
-        let eds = ExtendedDataSquare::from_ods(ods).unwrap();
-        let dah = DataAvailabilityHeader::from_eds(&eds);
-        let mut compact = template.header.header.clone();
-        compact.data_hash = Some(ProtobufHash(dah.hash().as_ref().try_into().unwrap()));
-        let header = CelestiaHeader::new(dah.clone(), compact);
-        let height = {
-            use sov_rollup_interface::da::BlockHeaderTrait;
-            header.height()
-        };
-        let batch_rows = eds
-            .get_namespace_data(params.rollup_batch_namespace, &dah, height)
-            .unwrap()
-            .into_iter()
-            .map(|(_, row)| row)
-            .collect();
-        let block = FilteredFibreBlock::new(
-            header,
-            NamespaceRelevantData::new(
-                params.rollup_batch_namespace,
-                NamespaceData::new(batch_rows),
-            ),
-            NamespaceRelevantData::new(params.rollup_proof_namespace, NamespaceData::new(vec![])),
+        shares.push(patch_commitment(pointer, &commitment));
+        let block = block_around(
+            &template.header,
+            shares,
             vec![DownloadedFibre {
                 share_idx,
                 commitment,
                 data: Bytes::from(data.clone()),
             }],
-            vec![],
+            &params,
         );
         (block, data, params)
+    }
+
+    async fn verify_supplied(
+        block: &FilteredFibreBlock,
+        params: RollupParams,
+        read_len: usize,
+    ) -> RelevantBlobs<FibreBlob> {
+        let mut blobs = extract_relevant_blobs(block);
+        if read_len > 0 {
+            blobs.batch_blobs[0].advance(read_len);
+        }
+        let proofs = get_extraction_proof(block, &blobs).await;
+        CelestiaFibreVerifier::new(params)
+            .verify_relevant_tx_list(block.header(), &blobs, proofs)
+            .unwrap();
+        blobs
     }
 
     #[tokio::test]
@@ -616,5 +656,139 @@ mod tests {
         CelestiaFibreVerifier::new(params)
             .verify_relevant_tx_list(block.header(), &blobs, proofs)
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn mocha_v2_pointer_extracts_matching_data_and_verifies() {
+        let params = mocha_params();
+        let fixture = load_fixture("test_data/block_mocha_fibre_v2_1194000");
+        let pointer_share = &fixture.batch_rows.rows()[0].shares[0];
+        let pointer = parse_v2_pointer(pointer_share).unwrap();
+        let sender = pointer_share.signer().unwrap();
+        assert_eq!(fixture.header.height(), 1_194_000);
+        assert_ne!(pointer.commitment, [0; 32]);
+
+        let data = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+        let commitment = encode(&data).await.unwrap().id().commitment();
+        let block = block_around(
+            &fixture.header,
+            vec![patch_commitment(pointer_share, &commitment)],
+            vec![DownloadedFibre {
+                share_idx: 0,
+                commitment,
+                data: Bytes::from(data.clone()),
+            }],
+            &params,
+        );
+        let blobs = verify_supplied(&block, params, data.len()).await;
+        assert_eq!(blobs.batch_blobs.len(), 1);
+        assert!(blobs.proof_blobs.is_empty());
+        assert_eq!(blobs.batch_blobs[0].commitment(), commitment);
+        assert_eq!(blobs.batch_blobs[0].sender(), CelestiaAddress(sender));
+        assert_eq!(blobs.batch_blobs[0].verified_data(), data.as_slice());
+    }
+
+    #[tokio::test]
+    async fn mocha_mixed_v1_blob_is_proven_skipped() {
+        let params = mocha_params();
+        let fixture = load_fixture("test_data/block_mocha_mixed_v1_v2_1193993");
+        assert_eq!(fixture.header.height(), 1_193_993);
+        let mut shares = fixture
+            .batch_rows
+            .rows()
+            .iter()
+            .flat_map(|row| row.shares.clone())
+            .collect::<Vec<_>>();
+        let v1 = &shares[0];
+        assert_eq!(v1.info_byte().unwrap().version(), 1);
+        let v1_len = v1.sequence_length().unwrap() as usize;
+        let v1_shares = shares_needed_for_bytes_with_signer(v1_len, v1.signer().is_some());
+        assert_eq!(shares.len(), v1_shares + 1);
+        let pointer_share = shares.pop().unwrap();
+        let pointer = parse_v2_pointer(&pointer_share).unwrap();
+        let sender = pointer_share.signer().unwrap();
+        assert_ne!(pointer.commitment, [0; 32]);
+
+        let data = b"mixed-fixture-fibre".to_vec();
+        let commitment = encode(&data).await.unwrap().id().commitment();
+        shares.push(patch_commitment(&pointer_share, &commitment));
+        let share_idx = shares.len() - 1;
+        let block = block_around(
+            &fixture.header,
+            shares,
+            vec![DownloadedFibre {
+                share_idx,
+                commitment,
+                data: Bytes::from(data.clone()),
+            }],
+            &params,
+        );
+        let mut blobs = extract_relevant_blobs(&block);
+        assert_eq!(blobs.batch_blobs.len(), 1);
+        assert_eq!(blobs.batch_blobs[0].commitment(), commitment);
+        assert_eq!(blobs.batch_blobs[0].sender(), CelestiaAddress(sender));
+        blobs.batch_blobs[0].advance(data.len());
+        let proofs = get_extraction_proof(&block, &blobs).await;
+        assert_eq!(proofs.batch.inclusion_proof.len(), 2);
+        assert!(proofs.batch.inclusion_proof[0].rows.is_none());
+        assert!(proofs.batch.inclusion_proof[1].rows.is_some());
+        CelestiaFibreVerifier::new(params)
+            .verify_relevant_tx_list(block.header(), &blobs, proofs)
+            .unwrap();
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    #[ignore = "needs a celestia-app >= v10 image and a funded Fibre escrow for the signer"]
+    async fn test_submit_blob_through_fibre_correct() -> anyhow::Result<()> {
+        let config: CelestiaFibreConfig = serde_json::from_str("{}")?;
+        anyhow::ensure!(
+            !config.rpc_url.is_empty()
+                && config.grpc_url.is_some()
+                && config.signing_key()?.is_some(),
+            "set SOV_CELESTIA_RPC_URL, SOV_CELESTIA_GRPC_URL and SOV_CELESTIA_SIGNER_KEY"
+        );
+        let params = RollupParams {
+            rollup_batch_namespace: Namespace::const_v0(*b"\0\0sov-test"),
+            rollup_proof_namespace: Namespace::const_v0(*b"sov-test-p"),
+        };
+        let shutdown = SecondaryShutdownController::new();
+        let service = CelestiaFibreService::new(config, params, &shutdown).await?;
+        let signer = service.get_signer().await.expect("signer");
+        let blob = vec![1, 2, 3, 4, 5, 11, 12, 13, 14, 15];
+        let height_before = service.get_head_block_header().await?.height();
+        let response = service.send_transaction(&blob).await.await??;
+
+        let mut matched = false;
+        for _ in 0..40 {
+            let head = service.get_head_block_header().await?.height();
+            for height in height_before..=head {
+                let block = service.get_block_at(height).await?;
+                let mut blobs = service.extract_relevant_blobs(&block);
+                assert!(
+                    blobs
+                        .proof_blobs
+                        .iter()
+                        .all(|proof| proof.commitment() != response.blob_hash.0),
+                    "batch submission must not land in the proof namespace"
+                );
+                if let Some(found) = blobs
+                    .batch_blobs
+                    .iter_mut()
+                    .find(|item| item.commitment() == response.blob_hash.0)
+                {
+                    assert_eq!(found.sender(), signer);
+                    found.advance(found.total_len());
+                    assert_eq!(found.verified_data(), blob.as_slice());
+                    matched = true;
+                    break;
+                }
+            }
+            if matched {
+                break;
+            }
+            tokio::time::sleep(Duration::from_millis(250)).await;
+        }
+        anyhow::ensure!(matched, "submitted Fibre blob was not found");
+        Ok(())
     }
 }

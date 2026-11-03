@@ -11405,15 +11405,12 @@ name = "sov-celestia-adapter"
 version = "0.3.0"
 dependencies = [
  "anyhow",
- "arbitrary",
  "async-trait",
  "backon",
- "bech32",
  "bincode",
  "borsh",
  "celestia-client",
  "celestia-types",
- "derive_more 2.0.1",
  "futures",
  "hex",
  "lz4_flex",
@@ -11436,9 +11433,7 @@ dependencies = [
  "sov-rollup-interface",
  "sov-shutdown",
  "sov-test-utils",
- "sov-universal-wallet",
  "tendermint",
- "tendermint-proto",
  "test-strategy",
  "testcontainers",
  "thiserror 2.0.18",
@@ -11471,7 +11466,6 @@ dependencies = [
  "sov-celestia-common",
  "sov-metrics",
  "sov-rollup-interface",
- "sov-shutdown",
  "sov-test-utils",
  "sov-universal-wallet",
  "tendermint",
@@ -11494,7 +11488,6 @@ dependencies = [
  "celestia-client",
  "celestia-fibre",
  "celestia-types",
- "futures",
  "hex",
  "nmt-rs",
  "risc0-zkvm",
@@ -11510,7 +11503,6 @@ dependencies = [
  "sov-test-utils",
  "thiserror 2.0.18",
  "tokio",
- "tracing",
 ]
 
 [[package]]

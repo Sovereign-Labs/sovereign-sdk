@@ -24,13 +24,11 @@ sha2 = { workspace = true }
 sov-celestia-common = { workspace = true }
 sov-rollup-interface = { workspace = true }
 thiserror = { workspace = true }
-tracing = { workspace = true }
 
 async-trait = { workspace = true, optional = true }
 backon = { workspace = true, optional = true }
 celestia-client = { version = "1.2.0", optional = true }
 celestia-fibre = { version = "1.2.0", optional = true }
-futures = { workspace = true, default-features = false, optional = true }
 sov-metrics = { workspace = true, optional = true }
 sov-shutdown = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, features = ["rt", "sync"] }
@@ -50,13 +48,21 @@ native = [
     "dep:backon",
     "dep:celestia-client",
     "dep:celestia-fibre",
-    "dep:futures",
     "dep:sov-metrics",
     "sov-metrics/native",
     "dep:sov-shutdown",
     "dep:tokio",
     "sov-celestia-common/native",
     "sov-rollup-interface/native",
+    "sov-celestia-fibre-adapter/native",
 ]
-bench = ["sov-celestia-common/bench"]
-arbitrary = ["sov-celestia-common/arbitrary", "sov-rollup-interface/arbitrary"]
+bench = [
+    "sov-celestia-common/bench",
+    "sov-celestia-fibre-adapter/bench",
+]
+arbitrary = [
+    "sov-celestia-common/arbitrary",
+    "sov-rollup-interface/arbitrary",
+    "sov-celestia-fibre-adapter/arbitrary",
+    "sov-test-utils/arbitrary",
+]

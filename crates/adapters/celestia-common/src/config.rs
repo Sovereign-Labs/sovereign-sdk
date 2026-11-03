@@ -88,11 +88,6 @@ pub const fn default_safe_lead_time_ms() -> u64 {
     500
 }
 
-/// Default chunk size: the per-chunk compressed cap [`crate::envelope::MAX_COMPRESSED_CHUNK_LEN`]
-/// (one signed-v1 first share minus the envelope and chunk headers). Tying the default to that cap
-/// keeps a default-config chunk within a single authenticated Celestia share and guarantees the
-/// uncompressed chunk size can never exceed the cap. A raw (incompressible) chunk then exactly
-
 pub fn validate_rpc_url(rpc_url: &str) -> anyhow::Result<()> {
     if rpc_url.trim().is_empty() {
         anyhow::bail!("`rpc_url` must be set in the config or via `SOV_CELESTIA_RPC_URL`");
@@ -116,9 +111,6 @@ pub fn validate_fallback_endpoint_urls<'a>(
 
     Ok(())
 }
-
-/// Validate `compression_chunk_size` against the verifier's per-chunk rollup cap.
-/// An out-of-range value would otherwise be silently clamped at encode time, so a
 
 pub fn default_rpc_url_from_env() -> String {
     std::env::var("SOV_CELESTIA_RPC_URL").unwrap_or_default()
