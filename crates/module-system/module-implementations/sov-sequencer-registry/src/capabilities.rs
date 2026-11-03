@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 
+use sov_bank::error::TransferTokenError;
 use sov_bank::{config_gas_token_id, Coins, IntoPayable, Payable};
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{Amount, DaSpec, InfallibleStateAccessor, Spec, StateReader, StateWriter};
@@ -89,7 +90,7 @@ impl<S: Spec> SequencerRegistry<S> {
         sequencer: &<S::Da as DaSpec>::Address,
         amount: Amount,
         state: &mut Accessor,
-    ) -> anyhow::Result<()> {
+    ) -> Result<(), AddToStakeError<S>> {
         if let Some(KnownSequencer {
             address,
             balance,
@@ -102,12 +103,14 @@ impl<S: Spec> SequencerRegistry<S> {
             // Note that we don't check if the sequencer is active here, because the sequencer can get
             // refunded from escrow while their withdrawal is pending. In fact, that's the whole point of the
             // withdrawal period - to wait until all possible escrows involving the sequencer are resolved.
-            let new_balance = balance.checked_add(amount).ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Sequencer {}: overflow error unable to increase sequencer's stake",
-                    sequencer
-                )
-            })?;
+            let new_balance =
+                balance
+                    .checked_add(amount)
+                    .ok_or_else(|| AddToStakeError::BalanceOverflow {
+                        sequencer: *sequencer,
+                        original_balance: balance,
+                        amount_to_add: amount,
+                    })?;
 
             let coins = Coins {
                 amount,
@@ -130,7 +133,33 @@ impl<S: Spec> SequencerRegistry<S> {
 
             Ok(())
         } else {
-            anyhow::bail!("Sequencer {} is not registered", sequencer)
+            Err(AddToStakeError::SequencerNotRegistered {
+                sequencer: *sequencer,
+            })
         }
     }
+}
+
+/// Errors that can arise when incrementing a sequencer's stake
+#[derive(thiserror::Error, Debug)]
+pub enum AddToStakeError<S: Spec> {
+    /// The bank transfer failed
+    #[error(transparent)]
+    Bank(#[from] TransferTokenError),
+    /// The sequencer is not in the registry, e.g. because it was slashed after one of its blobs was queued.
+    #[error("Sequencer {sequencer} is not registered")]
+    SequencerNotRegistered {
+        /// DA address of the sequencer.
+        sequencer: <S::Da as DaSpec>::Address,
+    },
+    /// The sequencer balance would overflow if rewarded in this way
+    #[error("Balance overflow for {sequencer} while trying to add to their stake. original_balance: {original_balance}. amount_to_add: {amount_to_add}")]
+    BalanceOverflow {
+        /// DA address of the sequencer.
+        sequencer: <S::Da as DaSpec>::Address,
+        /// The sequencer's previous balance
+        original_balance: Amount,
+        /// the amount to add
+        amount_to_add: Amount,
+    },
 }
