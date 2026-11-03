@@ -334,7 +334,7 @@ impl CelestiaService {
         sov_celestia_common::node::apply_verify_on_fetch(
             self.verify_on_fetch_mode,
             height,
-            self.verify_block_integrity(&block),
+            || self.verify_block_integrity(&block),
         )?;
         Ok(block)
     }

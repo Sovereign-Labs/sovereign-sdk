@@ -31,7 +31,7 @@ celestia-client = { version = "1.2.0", optional = true }
 celestia-fibre = { version = "1.2.0", optional = true }
 sov-metrics = { workspace = true, optional = true }
 sov-shutdown = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true, features = ["rt", "sync"] }
+tokio = { workspace = true, optional = true, features = ["rt", "sync", "time"] }
 
 [dev-dependencies]
 sov-celestia-fibre-adapter = { path = ".", features = ["native"] }

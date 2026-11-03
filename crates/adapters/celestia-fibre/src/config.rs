@@ -3,13 +3,11 @@ use std::num::NonZero;
 
 use schemars::JsonSchema;
 use sov_celestia_common::config::{
-    backoff_policy, default_api_request_timeout_secs,
-    default_background_stat_polling_interval_secs, default_factor, default_grpc_auth_token,
+    backoff_policy, default_api_request_timeout_secs, default_factor, default_grpc_auth_token,
     default_grpc_fallback_endpoints_from_env, default_grpc_url, default_max_delay_ms,
     default_max_times, default_min_delay_ms, default_request_timeout_seconds,
     default_rpc_auth_token, default_rpc_fallback_endpoints_from_env, default_rpc_url_from_env,
-    default_safe_lead_time_ms, default_signer_private_key, default_tx_priority,
-    default_tx_status_polling_millis, GrpcEndpointConfig, RpcEndpointConfig, TxPriority,
+    default_safe_lead_time_ms, default_signer_private_key, GrpcEndpointConfig, RpcEndpointConfig,
     VerifyOnFetchMode,
 };
 
@@ -50,8 +48,6 @@ pub struct CelestiaFibreConfig {
     pub api_request_timeout_secs: NonZero<u64>,
     #[serde(default = "default_safe_lead_time_ms")]
     pub safe_lead_time_ms: u64,
-    #[serde(default = "default_tx_priority")]
-    pub tx_priority: TxPriority,
     #[serde(default = "default_min_delay_ms")]
     pub backoff_min_delay_ms: u64,
     #[serde(default = "default_max_delay_ms")]
@@ -60,10 +56,6 @@ pub struct CelestiaFibreConfig {
     pub backoff_max_times: usize,
     #[serde(default = "default_factor")]
     pub backoff_factor: f32,
-    #[serde(default = "default_tx_status_polling_millis")]
-    pub tx_status_polling_millis: u64,
-    #[serde(default = "default_background_stat_polling_interval_secs")]
-    pub background_stat_polling_interval_secs: u64,
     #[serde(default)]
     pub verify_on_fetch: VerifyOnFetchMode,
 }

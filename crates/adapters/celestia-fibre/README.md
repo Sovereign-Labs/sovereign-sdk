@@ -14,6 +14,10 @@ The pointer share is covered by Celestia consensus. The verifier checks a SHA-25
 
 Downloads come from validator shards. This adapter has no archive. A block older than shard retention cannot be fetched until the SDK has state sync.
 
+## Pointer versions
+
+Only blob version 0 with a 36-byte pointer is supported. Any other share-version-2 pointer fails the download and cannot be proven as skipped, so the rollup stops on that block until the adapter learns the new version.
+
 ## Configuration
 
 `CelestiaFibreConfig` accepts the same RPC and gRPC fields as `CelestiaConfig`, plus:

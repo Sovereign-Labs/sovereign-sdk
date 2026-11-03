@@ -40,7 +40,7 @@ sov-metrics = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true }
 sov-universal-wallet = { workspace = true, features = ["macros"] }
 thiserror = { workspace = true }
-tokio = { workspace = true, optional = true, features = ["sync"] }
+tokio = { workspace = true, optional = true, features = ["macros", "time"] }
 tracing = { workspace = true }
 
 [dev-dependencies]

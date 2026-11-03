@@ -1,10 +1,13 @@
+use std::sync::{Arc, OnceLock};
 use std::time::Duration;
 
 use async_trait::async_trait;
-use celestia_fibre::{BlobID, DownloadOptions};
+use celestia_fibre::{BlobID, DownloadOptions, EncodedBlob};
 use celestia_types::nmt::Namespace;
 use sov_celestia_common::address::CelestiaAddress;
+use sov_celestia_common::config::VerifyOnFetchMode;
 use sov_celestia_common::header::CelestiaHeader;
+use sov_celestia_common::metrics::RollupNamespace;
 use sov_celestia_common::node::{
     apply_verify_on_fetch, run_maybe_retryable_async_fn_with_retries, CelestiaNode, MaybeRetryable,
 };
@@ -33,11 +36,74 @@ use crate::verifier::{
     parse_v2_pointer, supported_share, CelestiaFibreVerifier, FIBRE_SHARE_VERSION,
 };
 
-#[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
+#[derive(serde::Serialize, serde::Deserialize)]
 pub struct DownloadedFibre {
     pub share_idx: usize,
     pub commitment: [u8; 32],
     pub data: Bytes,
+    #[serde(skip)]
+    encoded: OnceLock<Arc<EncodedBlob>>,
+}
+
+impl DownloadedFibre {
+    pub fn new(share_idx: usize, commitment: [u8; 32], data: Bytes) -> Self {
+        Self {
+            share_idx,
+            commitment,
+            data,
+            encoded: OnceLock::new(),
+        }
+    }
+
+    fn store_encoded(&self, encoded: EncodedBlob) {
+        let _ = self.encoded.set(Arc::new(encoded));
+    }
+
+    async fn encoded_blob(&self) -> anyhow::Result<&EncodedBlob> {
+        if self.encoded.get().is_none() {
+            let encoded = encode(&self.data).await?;
+            let _ = self.encoded.set(Arc::new(encoded));
+        }
+        Ok(self
+            .encoded
+            .get()
+            .expect("Fibre encoding was just stored")
+            .as_ref())
+    }
+}
+
+impl Clone for DownloadedFibre {
+    fn clone(&self) -> Self {
+        let encoded = OnceLock::new();
+        if let Some(cached) = self.encoded.get() {
+            let _ = encoded.set(Arc::clone(cached));
+        }
+        Self {
+            share_idx: self.share_idx,
+            commitment: self.commitment,
+            data: self.data.clone(),
+            encoded,
+        }
+    }
+}
+
+impl PartialEq for DownloadedFibre {
+    fn eq(&self, other: &Self) -> bool {
+        self.share_idx == other.share_idx
+            && self.commitment == other.commitment
+            && self.data == other.data
+    }
+}
+
+impl std::fmt::Debug for DownloadedFibre {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("DownloadedFibre")
+            .field("share_idx", &self.share_idx)
+            .field("commitment", &self.commitment)
+            .field("data", &self.data)
+            .field("encoded", &self.encoded.get().is_some())
+            .finish()
+    }
 }
 
 #[derive(Clone, Debug, PartialEq, serde::Serialize, serde::Deserialize)]
@@ -126,22 +192,31 @@ pub async fn get_extraction_proof(
     block: &FilteredFibreBlock,
     blobs: &RelevantBlobs<FibreBlob>,
 ) -> RelevantProofs<Vec<FibreBlobProof>, Option<NamespaceBoundaryProof>> {
-    RelevantProofs {
+    try_get_extraction_proof(block, blobs)
+        .await
+        .expect("Fibre extraction proof")
+}
+
+async fn try_get_extraction_proof(
+    block: &FilteredFibreBlock,
+    blobs: &RelevantBlobs<FibreBlob>,
+) -> anyhow::Result<RelevantProofs<Vec<FibreBlobProof>, Option<NamespaceBoundaryProof>>> {
+    Ok(RelevantProofs {
         batch: prove_namespace(
             &block.header,
             &block.batch,
             &blobs.batch_blobs,
             &block.batch_blobs,
         )
-        .await,
+        .await?,
         proof: prove_namespace(
             &block.header,
             &block.proof,
             &blobs.proof_blobs,
             &block.proof_blobs,
         )
-        .await,
-    }
+        .await?,
+    })
 }
 
 async fn prove_namespace(
@@ -149,7 +224,7 @@ async fn prove_namespace(
     data: &NamespaceRelevantData,
     blobs: &[FibreBlob],
     downloaded: &[DownloadedFibre],
-) -> DaProof<Vec<FibreBlobProof>, Option<NamespaceBoundaryProof>> {
+) -> anyhow::Result<DaProof<Vec<FibreBlobProof>, Option<NamespaceBoundaryProof>>> {
     let included = blobs
         .iter()
         .map(|blob| {
@@ -178,23 +253,20 @@ async fn prove_namespace(
                     .find(|blob| Some(blob.range_in_namespace().start) == start)
                     .map(|blob| blob.verified_data().len())
                     .unwrap_or(0);
-                Some(
-                    build_rows_proof(
-                        &encode(&stored.data).await.expect("encode"),
-                        &stored.data,
-                        read_len,
-                    )
-                    .expect("rows proof"),
-                )
+                Some(build_rows_proof(
+                    stored.encoded_blob().await?,
+                    &stored.data,
+                    read_len,
+                )?)
             }
             None => None,
         };
         fibre_proofs.push(FibreBlobProof { pointer, rows });
     }
-    DaProof {
+    Ok(DaProof {
         inclusion_proof: fibre_proofs,
         completeness_proof: NamespaceBoundaryProof::from_namespace_data(data),
-    }
+    })
 }
 
 #[derive(Clone)]
@@ -204,7 +276,7 @@ pub struct CelestiaFibreService {
     signing_key: Option<celestia_client::tx::SigningKey>,
     download_timeout: Duration,
     safe_lead_time: Duration,
-    verify_on_fetch: sov_celestia_common::config::VerifyOnFetchMode,
+    verify_on_fetch: VerifyOnFetchMode,
 }
 
 impl CelestiaFibreService {
@@ -286,20 +358,13 @@ impl DaService for CelestiaFibreService {
         let batch_blobs = self.download_namespace(&batch, height).await?;
         let proof_blobs = self.download_namespace(&proof, height).await?;
         let block = FilteredFibreBlock::new(header, batch, proof, batch_blobs, proof_blobs);
-        apply_verify_on_fetch(self.verify_on_fetch, height, {
-            let mut blobs = extract_relevant_blobs(&block);
-            for blob in blobs
-                .batch_blobs
-                .iter_mut()
-                .chain(blobs.proof_blobs.iter_mut())
-            {
-                blob.advance(blob.total_len());
+        match self.verify_on_fetch {
+            VerifyOnFetchMode::Off => {}
+            mode => {
+                let verified = self.verify_block_integrity(&block).await;
+                apply_verify_on_fetch(mode, height, || verified)?;
             }
-            let proofs = get_extraction_proof(&block, &blobs).await;
-            CelestiaFibreVerifier::new(self.params)
-                .verify_relevant_tx_list(block.header(), &blobs, proofs)
-                .map_err(|error| anyhow::anyhow!(error))
-        })?;
+        }
         Ok(block)
     }
 
@@ -362,14 +427,18 @@ impl DaService for CelestiaFibreService {
     }
 
     async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
-        let (_header, _batch, proof_rows) = self
-            .node
-            .fetch_block_parts(
-                height,
-                self.params.rollup_batch_namespace,
-                self.params.rollup_proof_namespace,
-            )
-            .await?;
+        let proof_rows = run_maybe_retryable_async_fn_with_retries(
+            self.node.backoff,
+            || {
+                self.node.get_namespace_data_at(
+                    height,
+                    self.params.rollup_proof_namespace,
+                    RollupNamespace::Proof,
+                )
+            },
+            "get_proofs_at",
+        )
+        .await?;
         let proof = NamespaceRelevantData::new(self.params.rollup_proof_namespace, proof_rows);
         let downloaded = self.download_namespace(&proof, height).await?;
         Ok(downloaded
@@ -461,13 +530,33 @@ impl CelestiaFibreService {
                 encoded.id().commitment() == commitment,
                 "downloaded Fibre blob does not match the pointer commitment"
             );
-            downloaded.push(DownloadedFibre {
-                share_idx: seq.range_in_ns.start,
-                commitment,
-                data: bytes,
-            });
+            let stored = DownloadedFibre::new(seq.range_in_ns.start, commitment, bytes);
+            stored.store_encoded(encoded);
+            downloaded.push(stored);
         }
         Ok(downloaded)
+    }
+
+    async fn verify_block_integrity(&self, block: &FilteredFibreBlock) -> anyhow::Result<()> {
+        let blobs = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            let mut blobs = extract_relevant_blobs(block);
+            for blob in blobs
+                .batch_blobs
+                .iter_mut()
+                .chain(blobs.proof_blobs.iter_mut())
+            {
+                blob.advance(blob.total_len());
+            }
+            blobs
+        }))
+        .map_err(integrity_panic)?;
+        let proofs = try_get_extraction_proof(block, &blobs).await?;
+        std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+            CelestiaFibreVerifier::new(self.params)
+                .verify_relevant_tx_list(block.header(), &blobs, proofs)
+                .map_err(|error| anyhow::anyhow!(error))
+        }))
+        .map_err(integrity_panic)?
     }
 
     async fn submit(
@@ -495,6 +584,7 @@ impl CelestiaFibreService {
                 .confirm()
                 .await
                 .map_err(|error| anyhow::anyhow!(error))?;
+            // `FibreApi::put` returns only the tx hash. The commitment is not on that result.
             let encoded = encode(data).await?;
             sov_metrics::track_metrics(|tracker| {
                 tracker.submit(SubmitPayForFibreMeasurement {
@@ -511,6 +601,23 @@ impl CelestiaFibreService {
         .await;
         let _ = tx.send(result);
         rx
+    }
+}
+
+fn integrity_panic(panic: Box<dyn std::any::Any + Send>) -> anyhow::Error {
+    anyhow::anyhow!(
+        "Fibre block integrity verification panicked: {}",
+        panic_payload_to_string(panic.as_ref())
+    )
+}
+
+fn panic_payload_to_string(payload: &(dyn std::any::Any + Send)) -> String {
+    if let Some(message) = payload.downcast_ref::<&str>() {
+        (*message).to_owned()
+    } else if let Some(message) = payload.downcast_ref::<String>() {
+        message.clone()
+    } else {
+        "non-string panic payload".to_owned()
     }
 }
 
@@ -618,11 +725,11 @@ mod tests {
         let block = block_around(
             &template.header,
             shares,
-            vec![DownloadedFibre {
+            vec![DownloadedFibre::new(
                 share_idx,
                 commitment,
-                data: Bytes::from(data.clone()),
-            }],
+                Bytes::from(data.clone()),
+            )],
             &params,
         );
         (block, data, params)
@@ -673,11 +780,11 @@ mod tests {
         let block = block_around(
             &fixture.header,
             vec![patch_commitment(pointer_share, &commitment)],
-            vec![DownloadedFibre {
-                share_idx: 0,
+            vec![DownloadedFibre::new(
+                0,
                 commitment,
-                data: Bytes::from(data.clone()),
-            }],
+                Bytes::from(data.clone()),
+            )],
             &params,
         );
         let blobs = verify_supplied(&block, params, data.len()).await;
@@ -716,11 +823,11 @@ mod tests {
         let block = block_around(
             &fixture.header,
             shares,
-            vec![DownloadedFibre {
+            vec![DownloadedFibre::new(
                 share_idx,
                 commitment,
-                data: Bytes::from(data.clone()),
-            }],
+                Bytes::from(data.clone()),
+            )],
             &params,
         );
         let mut blobs = extract_relevant_blobs(&block);

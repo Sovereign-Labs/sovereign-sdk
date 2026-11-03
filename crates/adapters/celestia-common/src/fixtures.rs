@@ -18,15 +18,29 @@ pub fn load_block_fixture(
     proof_namespace: Namespace,
     path: &Path,
 ) -> anyhow::Result<BlockFixture> {
-    let _ = (batch_namespace, proof_namespace);
     let header: ExtendedHeader = load_json(path, "header.json")?;
     let batch_rows: NamespaceData = load_json(path, "rollup_batch_rows.json")?;
     let proof_rows: NamespaceData = load_json(path, "rollup_proof_rows.json")?;
+    ensure_namespace(&batch_rows, batch_namespace, "batch")?;
+    ensure_namespace(&proof_rows, proof_namespace, "proof")?;
     Ok(BlockFixture {
         header: header.into(),
         batch_rows,
         proof_rows,
     })
+}
+
+fn ensure_namespace(rows: &NamespaceData, namespace: Namespace, label: &str) -> anyhow::Result<()> {
+    for row in rows.rows() {
+        for share in &row.shares {
+            let found = share.namespace();
+            anyhow::ensure!(
+                found == namespace,
+                "{label} fixture share is in {found:?}, expected {namespace:?}"
+            );
+        }
+    }
+    Ok(())
 }
 
 fn load_json<T: serde::de::DeserializeOwned>(path: &Path, name: &str) -> anyhow::Result<T> {

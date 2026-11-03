@@ -1,6 +1,6 @@
 # 2026-11-02
 - Split Celestia Fibre into its own adapter. `sov-celestia-common` holds the shared header, namespace walk, and native Celestia client. `sov-celestia-fibre-adapter` reads and posts both the batch and proof namespaces through lumina's `celestia-fibre` 1.2.0 client. `sov-celestia-adapter` no longer contains Fibre code; its public paths are unchanged. The demo rollup can run Fibre with `--da-layer celestia-fibre` behind the `celestia_fibre_da` feature (MockZkvm).
-    - Follow-ups: a risc0 guest and demo profile for Fibre, a compression envelope for Fibre blobs, state sync / archival retrieval, and a lumina 1.3.0 bump.
+    - Follow-ups: a risc0 guest and demo profile for Fibre, a compression envelope for Fibre blobs, state sync / archival retrieval, a lumina 1.3.0 bump, and proving unknown Fibre blob versions as skipped.
 
 # 2026-10-21
 - #3080 DB: Added optional `storage.live_db_path` and `storage.user_nomt_db_path` config values, which set exact directories for the live state DB and the user NOMT DB (alongside the existing `storage.ledger_db_path`). When unset, databases stay under `storage.path` as before. Relative paths are resolved from the process working directory.

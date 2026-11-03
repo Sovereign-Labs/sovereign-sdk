@@ -165,12 +165,12 @@ impl CelestiaNode {
 pub fn apply_verify_on_fetch(
     mode: VerifyOnFetchMode,
     height: u64,
-    result: anyhow::Result<()>,
+    verify: impl FnOnce() -> anyhow::Result<()>,
 ) -> anyhow::Result<()> {
     match mode {
         VerifyOnFetchMode::Off => Ok(()),
         VerifyOnFetchMode::LogError => {
-            if let Err(error) = result {
+            if let Err(error) = verify() {
                 tracing::error!(
                     height,
                     ?error,
@@ -180,7 +180,7 @@ pub fn apply_verify_on_fetch(
             }
             Ok(())
         }
-        VerifyOnFetchMode::ReturnError => result.with_context(|| {
+        VerifyOnFetchMode::ReturnError => verify().with_context(|| {
             format!("Celestia block integrity verification failed at height {height}")
         }),
     }
@@ -193,5 +193,30 @@ pub fn flatten_timeout<T>(
         Ok(Ok(response)) => Ok(response),
         Ok(Err(e)) => Err(MaybeRetryable::Transient(e.into())),
         Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("await timeout"))),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::config::VerifyOnFetchMode;
+
+    use super::*;
+
+    #[test]
+    fn verify_on_fetch_off_does_not_run_the_check() {
+        let mut ran = false;
+        apply_verify_on_fetch(VerifyOnFetchMode::Off, 1, || {
+            ran = true;
+            Ok(())
+        })
+        .unwrap();
+        assert!(!ran);
+
+        apply_verify_on_fetch(VerifyOnFetchMode::ReturnError, 2, || {
+            ran = true;
+            Ok(())
+        })
+        .unwrap();
+        assert!(ran);
     }
 }
