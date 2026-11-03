@@ -1,5 +1,5 @@
 # 2026-11-02
-- #3106 Dependencies: Fixed Dependabot security alerts by updating `quinn-proto` to 0.11.15 (GHSA-4w2j-m93h-cj5j), `rustls` to 0.23.45 (GHSA-2mjx-qc3c-rqvc), `serde_with` to 3.21.0 (GHSA-7gcf-g7xr-8hxj; the workspace now requires `serde_with = "3.21"`) and `pyo3` to 0.29 (`py_sovereign_web3` only). To apply the same updates to a rollup (e.g. rollup-starter), run these commands in the workspace root and again in each zkVM guest crate with `--manifest-path <guest>/Cargo.toml`, skipping any package that isn't in that lockfile:
+- #3106 Dependencies: Updated `quinn-proto` to 0.11.15 (GHSA-4w2j-m93h-cj5j), `rustls` to 0.23.45 (GHSA-2mjx-qc3c-rqvc), `serde_with` to 3.21.0 (GHSA-7gcf-g7xr-8hxj; the workspace now requires `serde_with = "3.21"`) and `pyo3` to 0.29 (`py_sovereign_web3` only). To apply the same updates to a rollup (e.g. rollup-starter), run these commands in the workspace root and again in each zkVM guest crate with `--manifest-path <guest>/Cargo.toml`, skipping any package that isn't in that lockfile:
     - `cargo update -p quinn-proto --precise 0.11.15`
     - `cargo update -p rustls --precise 0.23.45` (if cargo reports multiple `rustls` versions, use `-p rustls@<current 0.23.x version>`)
     - `cargo update -p serde_with --precise 3.21.0` (3.23+ pulls in `syn` 3, `darling` 0.24 and `base64` 0.23 as duplicate majors)
