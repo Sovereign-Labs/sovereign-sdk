@@ -18,8 +18,12 @@ use sov_stf_runner::processes::RollupProverConfig;
 use sov_stf_runner::{from_toml_path, RollupConfig};
 use tracing::debug;
 
-#[cfg(not(any(feature = "mock_da", feature = "celestia_da")))]
-compile_error!("enable at least one DA feature: `mock_da` or `celestia_da`");
+#[cfg(not(any(
+    feature = "mock_da",
+    feature = "celestia_da",
+    feature = "celestia_fibre_da"
+)))]
+compile_error!("enable at least one DA feature: `mock_da`, `celestia_da`, or `celestia_fibre_da`");
 
 /// Main demo runner. Initializes a DA chain, and starts a demo-rollup using the provided.
 /// If you're trying to sign or submit transactions to the rollup, the `sov-cli` binary
@@ -33,6 +37,14 @@ struct Args {
     #[cfg_attr(
         all(feature = "celestia_da", not(feature = "mock_da")),
         arg(long, default_value = "celestia")
+    )]
+    #[cfg_attr(
+        all(
+            feature = "celestia_fibre_da",
+            not(feature = "mock_da"),
+            not(feature = "celestia_da")
+        ),
+        arg(long, default_value = "celestia-fibre")
     )]
     da_layer: SupportedDaLayer,
 
@@ -49,6 +61,14 @@ struct Args {
         all(feature = "celestia_da", not(feature = "mock_da")),
         arg(long, default_value = "configs/celestia_rollup_config.toml")
     )]
+    #[cfg_attr(
+        all(
+            feature = "celestia_fibre_da",
+            not(feature = "mock_da"),
+            not(feature = "celestia_da")
+        ),
+        arg(long, default_value = "configs/celestia_fibre_rollup_config.toml")
+    )]
     rollup_config_path: String,
 
     /// The path to the genesis configs.
@@ -58,6 +78,14 @@ struct Args {
     )]
     #[cfg_attr(
         all(feature = "celestia_da", not(feature = "mock_da")),
+        arg(long, default_value = "../test-data/genesis/demo/celestia")
+    )]
+    #[cfg_attr(
+        all(
+            feature = "celestia_fibre_da",
+            not(feature = "mock_da"),
+            not(feature = "celestia_da")
+        ),
         arg(long, default_value = "../test-data/genesis/demo/celestia")
     )]
     genesis_config_dir: PathBuf,
@@ -85,6 +113,7 @@ struct Args {
 #[derive(clap::ValueEnum, Clone, Debug)]
 enum SupportedDaLayer {
     Celestia,
+    CelestiaFibre,
     Mock,
     ExternalMock,
 }
@@ -179,6 +208,21 @@ async fn run() -> anyhow::Result<()> {
             )
             .await
             .context("Failed to initialize SP1 ExternalMockDa rollup")?;
+            rollup.run().await
+        }
+        #[cfg(feature = "celestia_fibre_da")]
+        (SupportedDaLayer::CelestiaFibre, SupportedZkVm::Mock) => {
+            let rollup = new_rollup_with_celestia_fibre_da(
+                &GenesisPaths::from_dir(&args.genesis_config_dir),
+                rollup_config_path,
+                prover_config,
+                start_at_rollup_height,
+                stop_at_rollup_height,
+                args.override_code_commitments,
+                args.start_fresh_outer_proof_on_resync,
+            )
+            .await
+            .context("Failed to initialize Celestia Fibre rollup")?;
             rollup.run().await
         }
         #[cfg(feature = "celestia_da")]
@@ -306,6 +350,45 @@ where
         "Overrode inner/outer code commitments in chain_state.json",
     );
     Ok(())
+}
+
+#[cfg(feature = "celestia_fibre_da")]
+async fn new_rollup_with_celestia_fibre_da(
+    rt_genesis_paths: &GenesisPaths,
+    rollup_config_path: &str,
+    prover_config: RollupProverConfig,
+    start_at_rollup_height: Option<RollupHeight>,
+    stop_at_rollup_height: Option<RollupHeight>,
+    override_code_commitments: bool,
+    start_fresh_outer_proof_on_resync: bool,
+) -> anyhow::Result<Rollup<sov_demo_rollup::CelestiaFibreDemoRollup<Native>, Native>> {
+    debug!(
+        config_path = rollup_config_path,
+        "Starting Celestia Fibre rollup"
+    );
+    apply_code_commitments_override::<sov_demo_rollup::CelestiaFibreDemoRollup<Native>>(
+        rt_genesis_paths,
+        override_code_commitments,
+    )
+    .await?;
+    let rollup_config: RollupConfig<
+        MultiAddressEvmSolana,
+        sov_celestia_fibre_adapter::CelestiaFibreService,
+    > = from_toml_path(rollup_config_path).with_context(|| {
+        format!("Failed to read rollup configuration from {rollup_config_path}")
+    })?;
+    let rollup = sov_demo_rollup::CelestiaFibreDemoRollup::<Native>::default();
+    rollup
+        .create_new_rollup(
+            rt_genesis_paths,
+            rollup_config,
+            prover_config,
+            start_at_rollup_height,
+            stop_at_rollup_height,
+            None,
+            start_fresh_outer_proof_on_resync,
+        )
+        .await
 }
 
 #[cfg(feature = "celestia_da")]

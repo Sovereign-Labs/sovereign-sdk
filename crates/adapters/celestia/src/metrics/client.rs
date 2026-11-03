@@ -21,8 +21,6 @@ pub(crate) struct HeaderGetByHeight;
 #[derive(Debug)]
 pub(crate) struct HeaderNetworkHead;
 #[derive(Debug)]
-pub(crate) struct ShareGetNamespaceData;
-#[derive(Debug)]
 pub(crate) struct StateSubmitPayForBlob;
 #[derive(Debug)]
 pub(crate) struct BlobGetAll;
@@ -42,12 +40,6 @@ impl ApiCall for HeaderGetByHeight {
 impl ApiCall for HeaderNetworkHead {
     fn measurement_name() -> &'static str {
         "sov_celestia_adapter_header_network_head"
-    }
-}
-
-impl ApiCall for ShareGetNamespaceData {
-    fn measurement_name() -> &'static str {
-        "sov_celestia_adapter_share_get_namespace_data"
     }
 }
 
@@ -159,7 +151,6 @@ impl<T: ApiCall> Metric for MeasuredApiCallWithNamespace<T> {
 // Type aliases for concrete types
 pub(crate) type GetBlockHeaderMeasurement = MeasuredApiCall<HeaderGetByHeight>;
 pub(crate) type GetChainHeadMeasurement = MeasuredApiCall<HeaderNetworkHead>;
-pub(crate) type GetNamespaceDataMeasurement = MeasuredApiCallWithNamespace<ShareGetNamespaceData>;
 pub(crate) type SubmitPayForBlob = MeasuredApiCallWithNamespace<StateSubmitPayForBlob>;
 pub(crate) type BlobGetAllMeasurement = MeasuredApiCall<BlobGetAll>;
 pub(crate) type StateBalanceForAddressMeasurement = MeasuredApiCall<StateBalanceForAddress>;

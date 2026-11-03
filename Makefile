@@ -201,7 +201,7 @@ check-features-default-targets:
 # at least one DA feature (a no-DA combo hits a compile_error). It is excluded from the
 # workspace powerset above and checked here with that constraint. Guest builds are skipped.
 check-demo-rollup-features: ## Constrained feature-powerset for demo-rollup (needs a DA feature).
-	SKIP_GUEST_BUILD=1 cargo hack check -p sov-demo-rollup --feature-powerset --at-least-one-of mock_da,celestia_da --exclude-features default --all-targets
+	SKIP_GUEST_BUILD=1 cargo hack check -p sov-demo-rollup --feature-powerset --at-least-one-of mock_da,celestia_da,celestia_fibre_da --exclude-features default --all-targets
 
 check-constant-overriding-is-disabled-in-release-mode:
 	# Passes in release mode...

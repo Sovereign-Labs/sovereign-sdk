@@ -21,6 +21,7 @@ docker/observability
 .vscode/*
 
 /docker/celestia/credentials/*
+examples/demo-rollup/configs/mocha_fibre_config.toml
 /docker/credentials/*
 /docker/**/storage/*
 /docker/influxdb-data

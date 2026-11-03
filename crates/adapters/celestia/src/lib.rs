@@ -11,9 +11,6 @@ mod metrics;
 // path is pure and ungated so the guest verifier shares identical logic; only the
 // encoder is `native`-gated.
 mod envelope;
-mod fibre;
-#[cfg(feature = "native")]
-mod fibre_archive;
 pub mod shares;
 #[cfg(test)]
 mod test_helper;

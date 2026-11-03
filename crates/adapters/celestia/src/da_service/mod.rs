@@ -2,21 +2,17 @@
 mod tests;
 
 pub use crate::config::{CelestiaConfig, VerifyOnFetchMode};
-use crate::fibre::{encode_for_proofs, parse_v2_pointer, FIBRE_SHARE_VERSION};
-use crate::fibre_archive::{ChainedArchive, FibreArchive, FsArchive, HttpFallbackArchive};
 use crate::metrics::client::{
     BlobGetAllMeasurement, GetBlockHeaderMeasurement, GetChainHeadMeasurement,
-    GetNamespaceDataMeasurement, HeaderSyncStateMeasurement, StateBalanceForAddressMeasurement,
+    HeaderSyncStateMeasurement, StateBalanceForAddressMeasurement,
     StateEstimateGasPriceMeasurement, SubmitPayForBlob,
 };
 use crate::metrics::full::{
     BlobCompressionMeasurement, BlobSubmitMeasurement, CelestiaAdapterStateMeasurement,
-    FibreDownloadMeasurement, FibreEncodeMeasurement, GetBlockMeasurement, NamespaceDataMetrics,
-    SubmitPayForFibreMeasurement,
 };
 use crate::metrics::RollupNamespace;
 use crate::types::{
-    BlobWithSender, FibreBlobData, FilteredCelestiaBlock, NamespaceBoundaryProof,
+    BlobWithSender, FilteredCelestiaBlock, NamespaceBlobs, NamespaceBoundaryProof,
     NamespaceRelevantData, TmHash,
 };
 use crate::verifier::address::CelestiaAddress;
@@ -26,13 +22,9 @@ use crate::CelestiaHeader;
 use anyhow::Context;
 use async_trait::async_trait;
 use backon::ExponentialBuilder;
-use celestia_client::api::fibre::{BlobID, DownloadOptions};
 use celestia_types::blob::Blob as JsonBlob;
-use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
-use celestia_types::ExtendedHeader;
 use futures::stream::BoxStream;
-use futures::{StreamExt, TryStreamExt};
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{
     BlobReaderTrait, DaProof, DaSpec, DaVerifier, RelevantBlobs, RelevantProofs,
@@ -42,46 +34,24 @@ use sov_rollup_interface::node::da::{
 };
 use sov_shutdown::SecondaryShutdownController;
 use std::path::Path;
-use std::sync::Arc;
 use std::time::Duration;
 use tokio::sync::oneshot;
-use tokio::time::Instant;
 use tracing::instrument;
 
 type BoxError = anyhow::Error;
 
-/// Fibre blobs of a block downloaded and encoded at the same time. Encoding a blob of up to
-/// 128 MiB holds several times its size in memory, so blobs are processed one at a time.
-const FIBRE_DOWNLOAD_CONCURRENCY: usize = 1;
-
-#[derive(Clone)]
-struct FibreArchiveHandle(Arc<dyn FibreArchive>);
-
-impl std::fmt::Debug for FibreArchiveHandle {
-    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        f.write_str("FibreArchive")
-    }
-}
-
 #[derive(Debug, Clone)]
 pub struct CelestiaService {
-    client: Arc<celestia_client::Client>,
+    node: sov_celestia_common::node::CelestiaNode,
     rollup_batch_namespace: Namespace,
     rollup_proof_namespace: Namespace,
     verify_on_fetch_mode: VerifyOnFetchMode,
     signer_address: Option<CelestiaAddress>,
     safe_lead_time: Duration,
-    backoff_policy: ExponentialBuilder,
-    request_timeout: Duration,
     tx_priority: celestia_client::tx::TxPriority,
     tx_status_polling_millis: u64,
     compression: crate::config::CompressOnSubmit,
     compression_chunk_size: usize,
-    fibre_activation_height: Option<u64>,
-    fibre_download_timeout: Duration,
-    fibre_archive: Option<FibreArchiveHandle>,
-    /// Set only when `fibre.submit` is enabled: batch blobs are then submitted through Fibre.
-    fibre_signing_key: Option<celestia_client::tx::SigningKey>,
 }
 
 impl CelestiaService {
@@ -100,39 +70,23 @@ impl CelestiaService {
         tx_status_polling_millis: u64,
         compression: crate::config::CompressOnSubmit,
         compression_chunk_size: usize,
-        fibre_activation_height: Option<u64>,
-        fibre_download_timeout: Duration,
-        fibre_archive: Option<FibreArchiveHandle>,
-        fibre_signing_key: Option<celestia_client::tx::SigningKey>,
     ) -> Self {
         Self {
-            client: Arc::new(client),
+            node: sov_celestia_common::node::CelestiaNode::new(
+                client,
+                request_timeout,
+                backoff_policy,
+            ),
             rollup_batch_namespace,
             rollup_proof_namespace,
             verify_on_fetch_mode,
             signer_address,
             safe_lead_time,
-            backoff_policy,
-            request_timeout,
             tx_priority,
             tx_status_polling_millis,
             compression,
             compression_chunk_size,
-            fibre_activation_height,
-            fibre_download_timeout,
-            fibre_archive,
-            fibre_signing_key,
         }
-    }
-
-    fn fibre_active(&self, height: u64) -> bool {
-        self.fibre_activation_height
-            .is_some_and(|activation| height >= activation)
-    }
-
-    /// Whether batch blobs are submitted through Fibre instead of `MsgPayForBlob`.
-    pub(crate) fn submits_through_fibre(&self) -> bool {
-        self.fibre_signing_key.is_some()
     }
 
     fn rollup_namespace(&self, namespace: &Namespace) -> RollupNamespace {
@@ -190,12 +144,6 @@ impl CelestiaService {
         let bytes = da_payload.len();
         tracing::debug!(rollup_len, bytes, namespace = ?ns, "Sending data to Celestia");
 
-        if let (RollupNamespace::Batch, Some(signing_key)) = (ns, &self.fibre_signing_key) {
-            return self
-                .submit_fibre_blob(signing_key, namespace, da_payload, start)
-                .await;
-        }
-
         let blob =
             JsonBlob::new(namespace, da_payload, Some(signer.0)).expect("Bug in CelestiaAdapter");
         let blob_hash = HexHash::new(*blob.commitment.hash());
@@ -207,18 +155,18 @@ impl CelestiaService {
         );
 
         let lock_acquisition = std::time::Duration::from_secs(0);
-        let submit_client = self.client.clone();
+        let submit_client = self.node.client.clone();
 
         let start_submit = std::time::Instant::now();
         let blobs = &[blob];
         let method_name = format!("submit_{ns}_blob");
         let tx_response = run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
+            self.node.backoff,
             || async {
                 let tx_config = self.get_tx_config();
                 let start = std::time::Instant::now();
                 let result = tokio::time::timeout(
-                    self.request_timeout,
+                    self.node.request_timeout,
                     submit_client.state().submit_pay_for_blob(blobs, tx_config),
                 )
                 .await;
@@ -257,91 +205,6 @@ impl CelestiaService {
             ?submit_time,
             ?total_time,
             "Blob has been submitted to Celestia"
-        );
-
-        Ok(SubmitBlobReceipt {
-            blob_hash,
-            da_transaction_id: tx_hash,
-        })
-    }
-
-    /// Submits a batch payload through Fibre. The blob hash is the Fibre commitment, which is
-    /// also what the verifier reports as the hash of the resulting blob.
-    async fn submit_fibre_blob(
-        &self,
-        signing_key: &celestia_client::tx::SigningKey,
-        namespace: Namespace,
-        da_payload: Vec<u8>,
-        start: std::time::Instant,
-    ) -> anyhow::Result<SubmitBlobReceipt<TmHash>> {
-        let bytes = da_payload.len();
-        let (da_payload, encoded) = tokio::task::spawn_blocking(move || {
-            let encoded = encode_for_proofs(&da_payload);
-            (da_payload, encoded)
-        })
-        .await?;
-        let commitment = encoded.context("Failed to encode Fibre blob")?.commitment;
-        let blob_hash = HexHash::new(commitment);
-        let fibre = self.client.fibre().ok_or_else(|| {
-            anyhow::anyhow!(
-                "`fibre.submit` is enabled but the Celestia client has no Fibre support"
-            )
-        })?;
-        let head_height = sov_rollup_interface::da::BlockHeaderTrait::height(
-            &self.get_head_block_header().await?,
-        );
-        anyhow::ensure!(
-            self.fibre_active(head_height.saturating_add(1)),
-            "Fibre activation height {:?} has not been reached (DA head is {head_height}): \
-             the verifier would ignore this batch",
-            self.fibre_activation_height,
-        );
-        tracing::debug!(commitment = %blob_hash, bytes, "Submitting a Fibre blob");
-
-        let start_submit = std::time::Instant::now();
-        // Not retried: a timeout can fire after `MsgPayForFibre` is broadcast, and re-running
-        // `put` would then pay for and post the same batch twice.
-        let result = tokio::time::timeout(
-            self.request_timeout,
-            fibre.put(signing_key, namespace, &da_payload),
-        )
-        .await;
-        let result = match result {
-            Ok(result) => result.map_err(anyhow::Error::from),
-            Err(_) => Err(anyhow::anyhow!("await timeout")),
-        };
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(SubmitPayForFibreMeasurement {
-                bytes,
-                time: start_submit.elapsed(),
-                is_success: result.is_ok(),
-            })
-        });
-        let submitted = result.context("Failed to submit the Fibre blob")?;
-        // `MsgPayForFibre` is already broadcast here, so confirmation is deliberately not
-        // retried either.
-        let tx_info = tokio::time::timeout(self.request_timeout, submitted.confirm())
-            .await
-            .context("Timed out confirming the Fibre transaction")?
-            .context("Failed to confirm the Fibre transaction")?;
-        let submit_time = start_submit.elapsed();
-
-        if let Some(archive) = &self.fibre_archive {
-            let id = BlobID::new(0, commitment);
-            if let Err(error) = archive.0.put(&id, &da_payload).await {
-                tracing::warn!(?id, ?error, "Failed to archive submitted Fibre blob");
-            }
-        }
-
-        let tx_hash = TmHash(tx_info.hash);
-        tracing::info!(
-            da_height = tx_info.height,
-            tx_hash = %tx_hash,
-            blob_hash = %blob_hash,
-            bytes,
-            ?submit_time,
-            total_time = ?start.elapsed(),
-            "Fibre blob has been submitted to Celestia"
         );
 
         Ok(SubmitBlobReceipt {
@@ -397,10 +260,6 @@ impl CelestiaService {
             }
         }
 
-        let (fibre_download_timeout, fibre_archive) = build_fibre_archive(&config);
-        let fibre_signing_key =
-            build_fibre_signing_key(&config, chain_params.fibre_activation_height);
-
         Self::with_client(
             client,
             chain_params.rollup_batch_namespace,
@@ -414,66 +273,8 @@ impl CelestiaService {
             config.tx_status_polling_millis,
             config.compression,
             config.compression_chunk_size,
-            chain_params.fibre_activation_height,
-            fibre_download_timeout,
-            fibre_archive,
-            fibre_signing_key,
         )
     }
-}
-
-/// Returns the key Fibre submissions are signed with, if `fibre.submit` is enabled.
-///
-/// Panics when submission is enabled without a Fibre activation height: the verifier skips
-/// share-version-2 blobs, so every submitted batch would be paid for and then ignored.
-fn build_fibre_signing_key(
-    config: &CelestiaConfig,
-    fibre_activation_height: Option<u64>,
-) -> Option<celestia_client::tx::SigningKey> {
-    if !config.fibre.as_ref().is_some_and(|fibre| fibre.submit) {
-        return None;
-    }
-    assert!(
-        fibre_activation_height.is_some(),
-        "`fibre.submit` requires `fibre_activation_height` to be set in the rollup params;          enable it only once the activation height is reached"
-    );
-    let key_hex = config
-        .signer_private_key
-        .as_ref()
-        .expect("`fibre.submit` requires `signer_private_key`, checked by config validation");
-    let key_bytes = hex::decode(key_hex).expect("`signer_private_key` is not valid hex");
-    Some(
-        celestia_client::tx::SigningKey::from_slice(&key_bytes)
-            .expect("`signer_private_key` is not a valid secp256k1 key"),
-    )
-}
-
-/// Returns the Fibre download timeout and the archive built from `config.fibre`.
-fn build_fibre_archive(config: &CelestiaConfig) -> (Duration, Option<FibreArchiveHandle>) {
-    let Some(fibre) = &config.fibre else {
-        return (Duration::default(), None);
-    };
-    let mut archives: Vec<Arc<dyn FibreArchive>> = Vec::new();
-    if let Some(dir) = &fibre.archive_dir {
-        archives.push(Arc::new(FsArchive::new(dir.clone())));
-    } else {
-        tracing::warn!(
-            "Fibre is enabled without `fibre.archive_dir`: this node will be unable to sync Fibre \
-             blocks older than the validators' shard retention"
-        );
-    }
-    if !fibre.archive_fallback_urls.is_empty() {
-        archives.push(Arc::new(
-            HttpFallbackArchive::new(fibre.archive_fallback_urls.clone())
-                .expect("Failed to build Fibre archive HTTP client"),
-        ));
-    }
-    let archive =
-        (!archives.is_empty()).then(|| FibreArchiveHandle(Arc::new(ChainedArchive::new(archives))));
-    (
-        Duration::from_secs(fibre.download_timeout_secs.get()),
-        archive,
-    )
 }
 
 /// Allows consuming the [`futures::Stream`] of BlockHeaders.
@@ -486,9 +287,12 @@ impl CelestiaService {
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
         tracing::trace!(height, "Making call to header.GetByHeight");
         let start = std::time::Instant::now();
-        let client = &self.client;
-        let result =
-            tokio::time::timeout(self.request_timeout, client.header().get_by_height(height)).await;
+        let client = &self.node.client;
+        let result = tokio::time::timeout(
+            self.node.request_timeout,
+            client.header().get_by_height(height),
+        )
+        .await;
         let response_time = start.elapsed();
         let is_success = matches!(result, Ok(Ok(_)));
         tracing::trace!(
@@ -510,261 +314,29 @@ impl CelestiaService {
         Ok(extended_header.into())
     }
 
-    async fn get_namespace_data_at_inner(
-        &self,
-        height: u64,
-        namespace: Namespace,
-    ) -> Result<NamespaceData, MaybeRetryable<anyhow::Error>> {
-        let start = std::time::Instant::now();
-        let client = &self.client;
-        let ns = self.rollup_namespace(&namespace);
-        tracing::trace!(height, %ns, "Making call to share.GetNamespaceData");
-        let result = tokio::time::timeout(
-            self.request_timeout,
-            client.share().get_namespace_data(height, namespace),
-        )
-        .await;
-        let is_success = matches!(result, Ok(Ok(_)));
-        let response_time = start.elapsed();
-        tracing::trace!(height, %ns, ?is_success, ?response_time, "Call to share.GetNamespaceData is completed");
-        let measurement = GetNamespaceDataMeasurement::new(ns, response_time, is_success);
-        sov_metrics::track_metrics(|tracker| tracker.submit(measurement));
-        flatten_timeout(result)
-    }
-
     async fn get_block_at_with_retries(
         &self,
         height: u64,
     ) -> anyhow::Result<FilteredCelestiaBlock> {
-        tracing::trace!(height, "Getting block, firing requests");
-        let start_get_block = Instant::now();
-
-        let header_future = run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.get_block_header_at_inner(height),
-            "get_block_header_at",
-        );
-        let rollup_batch_rows_future = run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.get_namespace_data_at_inner(height, self.rollup_batch_namespace),
-            "get_rollup_batch_namespace",
-        );
-        let rollup_proof_rows_future = run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.get_namespace_data_at_inner(height, self.rollup_proof_namespace),
-            "get_rollup_proof_namespace",
-        );
-
-        let (header, batch_rows, proof_rows) = tokio::try_join!(
-            header_future,
-            rollup_batch_rows_future,
-            rollup_proof_rows_future,
-        )?;
-        let futures_time = start_get_block.elapsed();
-        tracing::trace!(height, time = ?futures_time, "All requests have been completed, building relevant data..");
-
-        let square_width = header.dah.square_width();
-
-        let fibre_blobs = if self.fibre_active(height) {
-            self.get_fibre_blobs(height, &batch_rows).await?
-        } else {
-            Vec::new()
-        };
-
-        let build_relevant_data_start = std::time::Instant::now();
-        let batch_ns_metrics = NamespaceDataMetrics::new(&batch_rows);
-        let rollup_batch_shares =
-            NamespaceRelevantData::new(self.rollup_batch_namespace, batch_rows);
-
-        let proof_ns_metrics = NamespaceDataMetrics::new(&proof_rows);
-        let rollup_proof_shares =
-            NamespaceRelevantData::new(self.rollup_proof_namespace, proof_rows);
-        let build_relevant_data = build_relevant_data_start.elapsed();
-
-        let total_time = start_get_block.elapsed();
-        tracing::trace!(time_ms = total_time.as_millis(), "Get block total");
-
-        sov_metrics::track_metrics(|tracker| {
-            let get_block_measurement = GetBlockMeasurement {
+        let (header, batch_rows, proof_rows) = self
+            .node
+            .fetch_block_parts(
                 height,
-                square_width,
-                futures_time,
-                build_relevant_data,
-                batch_ns_metrics,
-                proof_ns_metrics,
-                total_time,
-            };
-            tracker.submit(get_block_measurement);
-        });
-        tracing::trace!(height, "get_block_at metrics send, returning");
-        let mut block =
-            FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header)?;
-        block.fibre_blobs = fibre_blobs;
-        match self.verify_on_fetch_mode {
-            VerifyOnFetchMode::Off => {}
-            VerifyOnFetchMode::LogError => {
-                if let Err(error) = self.verify_block_integrity(&block) {
-                    tracing::error!(
-                        height,
-                        ?error,
-                        "Celestia block integrity verification failed; continuing because \
-                         verify_on_fetch_mode is `log_error`"
-                    );
-                }
-            }
-            VerifyOnFetchMode::ReturnError => {
-                self.verify_block_integrity(&block).with_context(|| {
-                    format!("Celestia block integrity verification failed at height {height}")
-                })?;
-            }
-        }
-        Ok(block)
-    }
-
-    /// Fetches the off-chain data of every Fibre pointer in `batch_rows`, ordered by share index.
-    async fn get_fibre_blobs(
-        &self,
-        height: u64,
-        batch_rows: &NamespaceData,
-    ) -> anyhow::Result<Vec<FibreBlobData>> {
-        let mut pointers = Vec::new();
-        for share_seq in crate::shares::NamespaceDataIterator::new(batch_rows) {
-            let first_share = &share_seq.shares[0];
-            if first_share.info_byte().map(|info| info.version()) != Some(FIBRE_SHARE_VERSION) {
-                continue;
-            }
-            // celestia-app cannot produce a malformed pointer, and the verifier would reject the
-            // block anyway, so fail instead of skipping it.
-            let pointer = parse_v2_pointer(first_share).with_context(|| {
-                format!(
-                    "Malformed Fibre pointer at height {height}, share {}",
-                    share_seq.range_in_ns.start
-                )
-            })?;
-            pointers.push((share_seq.range_in_ns.start, pointer.commitment));
-        }
-        // `buffered` yields results in input order, so the blobs stay sorted by `share_idx_in_ns`.
-        futures::stream::iter(pointers)
-            .map(|(share_idx_in_ns, commitment)| {
-                self.get_fibre_blob(height, share_idx_in_ns, commitment)
-            })
-            .buffered(FIBRE_DOWNLOAD_CONCURRENCY)
-            .try_collect()
-            .await
-    }
-
-    /// Returns the data behind a Fibre pointer, checked against the pointer's commitment.
-    /// The archive is untrusted: data that does not match is discarded and downloaded instead.
-    async fn get_fibre_blob(
-        &self,
-        height: u64,
-        share_idx_in_ns: usize,
-        commitment: [u8; 32],
-    ) -> anyhow::Result<FibreBlobData> {
-        let id = BlobID::new(0, commitment);
-        if let Some(archive) = &self.fibre_archive {
-            let start = std::time::Instant::now();
-            match archive.0.get(&id).await {
-                Ok(Some(data)) => {
-                    sov_metrics::track_metrics(|tracker| {
-                        tracker.submit(FibreDownloadMeasurement {
-                            bytes: data.len(),
-                            response_time: start.elapsed(),
-                            is_success: true,
-                            from_archive: true,
-                        });
-                    });
-                    match self
-                        .encode_fibre_blob(share_idx_in_ns, commitment, data)
-                        .await
-                    {
-                        Ok(blob) => return Ok(blob),
-                        Err(error) => tracing::warn!(
-                            height,
-                            ?id,
-                            ?error,
-                            "Archived Fibre blob was rejected, downloading it instead"
-                        ),
-                    }
-                }
-                Ok(None) => {}
-                Err(error) => tracing::warn!(height, ?id, ?error, "Fibre archive lookup failed"),
-            }
-        }
-
-        let data = run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
-            || self.download_fibre_blob_inner(height, &id),
-            "fibre_download",
-        )
-        .await?;
-        let blob = self
-            .encode_fibre_blob(share_idx_in_ns, commitment, data)
+                self.rollup_batch_namespace,
+                self.rollup_proof_namespace,
+            )
             .await?;
-        if let Some(archive) = &self.fibre_archive {
-            if let Err(error) = archive.0.put(&id, &blob.data).await {
-                tracing::warn!(height, ?id, ?error, "Failed to archive Fibre blob");
-            }
-        }
-        Ok(blob)
-    }
-
-    async fn download_fibre_blob_inner(
-        &self,
-        height: u64,
-        id: &BlobID,
-    ) -> Result<sov_rollup_interface::Bytes, MaybeRetryable<anyhow::Error>> {
-        let fibre = self.client.fibre().ok_or_else(|| {
-            MaybeRetryable::Permanent(anyhow::anyhow!(
-                "Block {height} has Fibre blobs but the Celestia client has no Fibre support: set `fibre` in the config"
-            ))
-        })?;
-        tracing::trace!(height, ?id, "Downloading Fibre blob");
-        let start = std::time::Instant::now();
-        let options = DownloadOptions {
-            height: Some(height),
-            ..Default::default()
-        };
-        let result = tokio::time::timeout(self.fibre_download_timeout, fibre.download(id, options))
-            .await
-            .map_err(|_| anyhow::anyhow!("await timeout"))
-            .and_then(|downloaded| downloaded.map_err(Into::into));
-        let response_time = start.elapsed();
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(FibreDownloadMeasurement {
-                bytes: result.as_ref().map_or(0, |blob| blob.data().len()),
-                response_time,
-                is_success: result.is_ok(),
-                from_archive: false,
-            });
-        });
-        result
-            .map(|blob| sov_rollup_interface::Bytes::copy_from_slice(blob.data()))
-            .map_err(MaybeRetryable::Transient)
-    }
-
-    /// Re-encodes `data` to recover its proof material and checks it against `commitment`.
-    async fn encode_fibre_blob(
-        &self,
-        share_idx_in_ns: usize,
-        commitment: [u8; 32],
-        data: sov_rollup_interface::Bytes,
-    ) -> anyhow::Result<FibreBlobData> {
-        let bytes = data.len();
-        let start = std::time::Instant::now();
-        let to_encode = data.clone();
-        let encoded = tokio::task::spawn_blocking(move || encode_for_proofs(&to_encode)).await??;
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(FibreEncodeMeasurement {
-                bytes,
-                time: start.elapsed(),
-            });
-        });
-        anyhow::ensure!(
-            encoded.commitment == commitment,
-            "Fibre data does not match on-chain commitment"
-        );
-        Ok(FibreBlobData::with_encoded(share_idx_in_ns, data, encoded))
+        let block = FilteredCelestiaBlock::new(
+            NamespaceRelevantData::new(self.rollup_batch_namespace, batch_rows),
+            NamespaceRelevantData::new(self.rollup_proof_namespace, proof_rows),
+            header,
+        )?;
+        sov_celestia_common::node::apply_verify_on_fetch(
+            self.verify_on_fetch_mode,
+            height,
+            self.verify_block_integrity(&block),
+        )?;
+        Ok(block)
     }
 
     async fn get_head_block_header_inner(
@@ -772,8 +344,11 @@ impl CelestiaService {
     ) -> Result<CelestiaHeader, MaybeRetryable<anyhow::Error>> {
         tracing::trace!("Making call to header.NetworkHead");
         let start = std::time::Instant::now();
-        let result =
-            tokio::time::timeout(self.request_timeout, self.client.header().network_head()).await;
+        let result = tokio::time::timeout(
+            self.node.request_timeout,
+            self.node.client.header().network_head(),
+        )
+        .await;
         let response_time = start.elapsed();
         let is_success = matches!(result, Ok(Ok(_)));
         tracing::trace!(
@@ -796,8 +371,9 @@ impl CelestiaService {
         tracing::trace!(height, "Making call to blob.GetAll for proofs");
         let start = std::time::Instant::now();
         let result = tokio::time::timeout(
-            self.request_timeout,
-            self.client
+            self.node.request_timeout,
+            self.node
+                .client
                 .blob()
                 .get_all(height, &[self.rollup_proof_namespace]),
         )
@@ -831,12 +407,7 @@ impl CelestiaService {
     /// Expect only to receive headers which were finalized after subscription
     /// Optimized version of `get_last_finalized_block_header`.
     pub async fn subscribe_finalized_header(&self) -> Result<HeaderStream, anyhow::Error> {
-        Ok(self
-            .client
-            .header()
-            .subscribe()
-            .map(|res| res.map(CelestiaHeader::from).map_err(|e| e.into()))
-            .boxed())
+        self.node.subscribe_headers().await
     }
 
     fn verify_block_integrity(&self, block: &FilteredCelestiaBlock) -> anyhow::Result<()> {
@@ -845,7 +416,6 @@ impl CelestiaService {
             RollupParams {
                 rollup_batch_namespace: self.rollup_batch_namespace,
                 rollup_proof_namespace: self.rollup_proof_namespace,
-                fibre_activation_height: self.fibre_activation_height,
             },
         )
     }
@@ -917,7 +487,7 @@ impl DaService for CelestiaService {
         height: u64,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
         run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
+            self.node.backoff,
             || self.get_block_header_at_inner(height),
             "get_block_header_at",
         )
@@ -943,7 +513,7 @@ impl DaService for CelestiaService {
         &self,
     ) -> Result<<Self::Spec as DaSpec>::BlockHeader, Self::Error> {
         run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
+            self.node.backoff,
             || self.get_head_block_header_inner(),
             "get_head_block_header",
         )
@@ -1013,7 +583,7 @@ impl DaService for CelestiaService {
     #[instrument(err)]
     async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
         run_maybe_retryable_async_fn_with_retries(
-            self.backoff_policy,
+            self.node.backoff,
             || self.get_proofs_at_inner(height),
             "get_proofs_at",
         )
@@ -1030,16 +600,59 @@ impl DaService for CelestiaService {
 }
 
 pub fn extract_relevant_blobs(block: &FilteredCelestiaBlock) -> RelevantBlobs<BlobWithSender> {
-    // Fibre data is only fetched once Fibre is active, so its presence tells the activation state.
-    let fibre_active = !block.fibre_blobs.is_empty();
-    let proof_blobs = block.rollup_proof_data.get_blobs_with_sender(false, &[]);
-    let batch_blobs = block
-        .rollup_batch_data
-        .get_blobs_with_sender(fibre_active, &block.fibre_blobs);
+    let proof_blobs = block.rollup_proof_data.get_blobs_with_sender();
+    let batch_blobs = block.rollup_batch_data.get_blobs_with_sender();
     RelevantBlobs {
         proof_blobs,
         batch_blobs,
     }
+}
+
+fn included_blobs(
+    data: &NamespaceRelevantData,
+    blobs: &[BlobWithSender],
+) -> Vec<proofs::IncludedBlob> {
+    let flat_shares = data
+        .data
+        .rows()
+        .iter()
+        .flat_map(|row| row.shares.iter())
+        .collect::<Vec<_>>();
+    blobs
+        .iter()
+        .map(|blob| {
+            let range = blob.range_in_namespace.clone();
+            let start_share = flat_shares[range.start];
+            let has_signer = start_share.signer().is_some();
+            let proven_end = range.start
+                + crate::shares::shares_needed_for_bytes_with_signer(
+                    blob.compressed_verified_data().len(),
+                    has_signer,
+                )
+                .max(1);
+            let occupied_end = range.start
+                + crate::shares::shares_needed_for_bytes_with_signer(
+                    blob.compressed_total_len(),
+                    has_signer,
+                )
+                .max(1);
+            assert!(
+                proven_end <= range.end,
+                "proven_end > range.end: {proven_end} > {}",
+                range.end
+            );
+            assert!(
+                occupied_end <= range.end,
+                "occupied_end > range.end: {occupied_end} > {}",
+                range.end
+            );
+            proofs::IncludedBlob {
+                start: range.start,
+                proven_end,
+                occupied_end,
+            }
+        })
+        .collect()
 }
 
 pub fn get_extraction_proof(
@@ -1047,11 +660,11 @@ pub fn get_extraction_proof(
     blobs: &RelevantBlobs<BlobWithSender>,
 ) -> RelevantProofs<Vec<BlobProof>, Option<NamespaceBoundaryProof>> {
     let batch = {
-        let inclusion_proof = proofs::new_inclusion_proof(
+        let inclusion_proof = proofs::build_inclusion_proofs(
             &block.header,
             &block.rollup_batch_data,
-            &blobs.batch_blobs,
-            &block.fibre_blobs,
+            &included_blobs(&block.rollup_batch_data, &blobs.batch_blobs),
+            crate::verifier::supported_share,
         );
 
         DaProof {
@@ -1064,11 +677,11 @@ pub fn get_extraction_proof(
 
     let proof = {
         // Note: The second call to new_inclusion_proof merklizes and parse the executable transactions namespace again.
-        let inclusion_proof = proofs::new_inclusion_proof(
+        let inclusion_proof = proofs::build_inclusion_proofs(
             &block.header,
             &block.rollup_proof_data,
-            &blobs.proof_blobs,
-            &[],
+            &included_blobs(&block.rollup_proof_data, &blobs.proof_blobs),
+            crate::verifier::supported_share,
         );
 
         DaProof {
@@ -1088,28 +701,13 @@ pub fn filtered_block_from_json_path(
     proof_namespace: Namespace,
     path: &Path,
 ) -> anyhow::Result<FilteredCelestiaBlock> {
-    const HEADER_JSON: &str = "header.json";
-    const ROLLUP_BATCH_ROWS_JSON: &str = "rollup_batch_rows.json";
-    const ROLLUP_PROOF_ROWS_JSON: &str = "rollup_proof_rows.json";
-
-    let header: ExtendedHeader = load_json_from_fixture(path, HEADER_JSON)?;
-    let rollup_batch_rows: NamespaceData = load_json_from_fixture(path, ROLLUP_BATCH_ROWS_JSON)?;
-    let rollup_proof_rows: NamespaceData = load_json_from_fixture(path, ROLLUP_PROOF_ROWS_JSON)?;
-
-    let rollup_batch_shares = NamespaceRelevantData::new(batch_namespace, rollup_batch_rows);
-    let rollup_proof_shares = NamespaceRelevantData::new(proof_namespace, rollup_proof_rows);
-
-    FilteredCelestiaBlock::new(rollup_batch_shares, rollup_proof_shares, header.into())
-}
-
-fn load_json_from_fixture<T: serde::de::DeserializeOwned>(
-    path: &Path,
-    name: &str,
-) -> anyhow::Result<T> {
-    let path = path.join(name);
-    let contents = std::fs::read_to_string(&path)
-        .with_context(|| format!("Failed to open {}", path.display()))?;
-    serde_json::from_str(&contents).with_context(|| format!("Failed to parse {}", path.display()))
+    let fixture =
+        sov_celestia_common::fixtures::load_block_fixture(batch_namespace, proof_namespace, path)?;
+    FilteredCelestiaBlock::new(
+        NamespaceRelevantData::new(batch_namespace, fixture.batch_rows),
+        NamespaceRelevantData::new(proof_namespace, fixture.proof_rows),
+        fixture.header,
+    )
 }
 
 fn flatten_timeout<T>(
@@ -1215,41 +813,4 @@ async fn gather_stat(
         gas_price,
         sync_distance,
     })
-}
-
-#[cfg(test)]
-mod fibre_submit_tests {
-    use super::build_fibre_signing_key;
-    use crate::config::{CelestiaConfig, FibreConfig};
-
-    const KEY_HEX: &str = "0102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f20";
-
-    fn config(submit: bool, key: Option<&str>) -> CelestiaConfig {
-        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
-        config.signer_private_key = key.map(str::to_string);
-        config.fibre = Some(FibreConfig {
-            submit,
-            ..Default::default()
-        });
-        config
-    }
-
-    #[test]
-    fn no_signing_key_when_fibre_submit_is_disabled() {
-        let key = build_fibre_signing_key(&config(false, Some(KEY_HEX)), Some(1));
-        assert_eq!(key, None);
-    }
-
-    #[test]
-    fn signing_key_is_built_from_configured_hex() {
-        let key = build_fibre_signing_key(&config(true, Some(KEY_HEX)), Some(1))
-            .expect("fibre.submit is enabled");
-        assert_eq!(key.to_bytes().as_slice(), hex::decode(KEY_HEX).unwrap());
-    }
-
-    #[test]
-    #[should_panic(expected = "requires `fibre_activation_height`")]
-    fn fibre_submit_without_activation_height_is_rejected() {
-        build_fibre_signing_key(&config(true, Some(KEY_HEX)), None);
-    }
 }

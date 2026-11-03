@@ -101,7 +101,9 @@ members = [
     # Adapters
     # TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/498
     # "crates/adapters/avail",
+    "crates/adapters/celestia-common",
     "crates/adapters/celestia",
+    "crates/adapters/celestia-fibre",
     "crates/adapters/risc0",
     "crates/adapters/sp1",
     "crates/web3",
@@ -144,6 +146,8 @@ demo-stf-declaration = { path = "examples/demo-rollup/stf/stf-declaration", defa
 sov-soak-testing-lib = { path = "crates/utils/sov-soak-testing-lib", default-features = false }
 sov-eth-client = { path = "crates/utils/sov-eth-client", default-features = false, version = "0.3" }
 sov-blob-sender = { path = "crates/full-node/sov-blob-sender", default-features = false, version = "0.3" }
+sov-celestia-common = { path = "crates/adapters/celestia-common", default-features = false, version = "0.3" }
+sov-celestia-fibre-adapter = { path = "crates/adapters/celestia-fibre", default-features = false, version = "0.3" }
 sov-celestia-adapter = { path = "crates/adapters/celestia", default-features = false, version = "0.3" }
 sov-risc0-adapter = { path = "crates/adapters/risc0", default-features = false, version = "0.3" }
 sov-sp1-adapter = { path = "crates/adapters/sp1", default-features = false, version = "0.3" }

@@ -6,14 +6,22 @@
 // With no DA feature the crate is only the `compile_error!` below; allow the dead-code /
 // unused-import warnings that result so that error is the single, clear diagnostic.
 #![cfg_attr(
-    not(any(feature = "mock_da", feature = "celestia_da")),
+    not(any(
+        feature = "mock_da",
+        feature = "celestia_da",
+        feature = "celestia_fibre_da"
+    )),
     allow(dead_code, unused_imports)
 )]
 
 // A DA layer must be selected at compile time. `mock_da` (mock + SP1 zkVMs) and
 // `celestia_da` (Risc0) are the two profiles; at least one must be enabled.
-#[cfg(not(any(feature = "mock_da", feature = "celestia_da")))]
-compile_error!("enable at least one DA feature: `mock_da` or `celestia_da`");
+#[cfg(not(any(
+    feature = "mock_da",
+    feature = "celestia_da",
+    feature = "celestia_fibre_da"
+)))]
+compile_error!("enable at least one DA feature: `mock_da`, `celestia_da`, or `celestia_fibre_da`");
 
 use std::str::FromStr;
 
@@ -58,6 +66,11 @@ mod celestia_rollup;
 #[cfg(feature = "celestia_da")]
 pub use celestia_rollup::*;
 
+#[cfg(feature = "celestia_fibre_da")]
+mod celestia_fibre_rollup;
+#[cfg(feature = "celestia_fibre_da")]
+pub use celestia_fibre_rollup::*;
+
 /// The zkVM a rollup runs on. Selected at runtime via the `--zk-vm` flag and
 /// shared by both the node binary (which picks the rollup to run) and the
 /// light-client binary (which picks the proof verifier).
@@ -71,14 +84,14 @@ pub enum SupportedZkVm {
 
 /// The rollup stores its data in the namespace b"sov-test" on Celestia
 /// You can change this constant by modifying BATCH_NAMESPACE in constants.toml
-#[cfg(feature = "celestia_da")]
+#[cfg(any(feature = "celestia_da", feature = "celestia_fibre_da"))]
 pub const ROLLUP_BATCH_NAMESPACE: sov_celestia_adapter::types::Namespace =
     sov_celestia_adapter::types::Namespace::const_v0(sov_modules_api::macros::config_value!(
         "BATCH_NAMESPACE"
     ));
 /// The rollup stores the zk proofs in the namespace b"sov-test-p" on Celestia.
 /// You can change this constant by modifying PROOF_NAMESPACE in constants.toml
-#[cfg(feature = "celestia_da")]
+#[cfg(any(feature = "celestia_da", feature = "celestia_fibre_da"))]
 pub const ROLLUP_PROOF_NAMESPACE: sov_celestia_adapter::types::Namespace =
     sov_celestia_adapter::types::Namespace::const_v0(sov_modules_api::macros::config_value!(
         "PROOF_NAMESPACE"

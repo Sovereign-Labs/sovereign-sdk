@@ -304,7 +304,6 @@ impl CelestiaDevNode {
             backoff_factor: default_factor(),
             compression: CompressOnSubmit::Off,
             compression_chunk_size: default_compression_chunk_size(),
-            fibre: None,
         })
     }
 }

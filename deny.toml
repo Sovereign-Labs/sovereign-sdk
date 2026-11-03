@@ -161,6 +161,16 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-celestia-fibre-adapter"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-celestia-common"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "sov-celestia-adapter"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []

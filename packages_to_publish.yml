@@ -58,6 +58,8 @@
 # Adapters
 - sov-risc0-adapter
 - sov-sp1-adapter
+- sov-celestia-common
 - sov-celestia-adapter
+- sov-celestia-fibre-adapter
 - sov-mock-da
 - sov-mock-zkvm

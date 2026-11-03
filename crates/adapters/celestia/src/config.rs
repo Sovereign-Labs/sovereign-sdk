@@ -1,46 +1,20 @@
 //! Configuration for [`crate::da_service::CelestiaService`]
-use std::fmt;
 use std::num::NonZero;
 
 use schemars::JsonSchema;
+use std::fmt;
 
-/// Configuration for a single gRPC fallback endpoint.
-#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct GrpcEndpointConfig {
-    /// The URL of the gRPC endpoint, for example `http://fallback1:9090`.
-    pub url: String,
-    /// Optional authentication token, sent as `x-token` metadata.
-    pub token: Option<String>,
-}
-
-impl fmt::Debug for GrpcEndpointConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("GrpcEndpointConfig")
-            .field("url", &self.url)
-            .field("token", &self.token.as_ref().map(|_| "REDACTED"))
-            .finish()
-    }
-}
-
-/// Configuration for a single fallback (secondary) RPC endpoint.
-#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct RpcEndpointConfig {
-    /// The URL of the RPC endpoint, for example `ws://fallback1:26658`.
-    pub url: String,
-    /// Optional JWT authentication token for this endpoint.
-    pub token: Option<String>,
-}
-
-impl fmt::Debug for RpcEndpointConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("RpcEndpointConfig")
-            .field("url", &self.url)
-            .field("token", &self.token.as_ref().map(|_| "REDACTED"))
-            .finish()
-    }
-}
+#[cfg(test)]
+use sov_celestia_common::config::validate_rpc_url;
+pub use sov_celestia_common::config::{
+    default_api_request_timeout_secs, default_background_stat_polling_interval_secs,
+    default_factor, default_grpc_auth_token, default_grpc_fallback_endpoints_from_env,
+    default_grpc_url, default_max_delay_ms, default_max_times, default_min_delay_ms,
+    default_request_timeout_seconds, default_rpc_auth_token,
+    default_rpc_fallback_endpoints_from_env, default_rpc_url_from_env, default_safe_lead_time_ms,
+    default_signer_private_key, default_tx_priority, default_tx_status_polling_millis,
+    GrpcEndpointConfig, RpcEndpointConfig, TxPriority, VerifyOnFetchMode,
+};
 
 /// Runtime configuration for the [`sov_rollup_interface::node::da::DaService`] implementation.
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
@@ -175,69 +149,6 @@ pub struct CelestiaConfig {
     /// the envelope non-canonical, so that batch is posted verbatim (uncompressed), not rejected.
     #[serde(default = "default_compression_chunk_size")]
     pub compression_chunk_size: usize,
-
-    /// Optional Fibre (share version 2) support. When set, the node downloads Fibre batch blobs
-    /// referenced on-chain, and submits batches through Fibre if `fibre.submit` is `true`.
-    /// Default: `None` (Fibre disabled).
-    #[serde(default)]
-    pub fibre: Option<FibreConfig>,
-}
-
-/// Configuration for reading (and optionally submitting) blobs through Celestia Fibre.
-#[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
-#[serde(deny_unknown_fields)]
-pub struct FibreConfig {
-    /// Submit batch blobs through Fibre instead of `MsgPayForBlobs`.
-    /// Requires `signer_private_key` and a funded Fibre escrow account for the signer.
-    /// Default: `false`.
-    #[serde(default)]
-    pub submit: bool,
-    /// gRPC endpoint used by the Fibre client. Default: `CelestiaConfig::grpc_url`.
-    #[serde(default)]
-    pub grpc_url: Option<String>,
-    /// Token for the Fibre gRPC endpoint, sent as `x-token` metadata.
-    /// Default: `CelestiaConfig::grpc_auth_token` when `grpc_url` is not overridden.
-    #[serde(default)]
-    pub grpc_auth_token: Option<String>,
-    /// Timeout for a single Fibre blob download, in seconds. Default: 120.
-    #[serde(default = "default_fibre_download_timeout_secs")]
-    pub download_timeout_secs: NonZero<u64>,
-    /// Directory where downloaded Fibre blobs are archived. Validators only retain shards for a
-    /// limited time (4h by default), so nodes that must sync older blocks need an archive.
-    #[serde(default)]
-    pub archive_dir: Option<std::path::PathBuf>,
-    /// Base URLs queried as `GET {url}/{blob_id_hex}` when a blob is not in the local archive.
-    #[serde(default)]
-    pub archive_fallback_urls: Vec<String>,
-}
-
-impl fmt::Debug for FibreConfig {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.debug_struct("FibreConfig")
-            .field("submit", &self.submit)
-            .field("grpc_url", &self.grpc_url)
-            .field(
-                "grpc_auth_token",
-                &self.grpc_auth_token.as_ref().map(|_| "REDACTED"),
-            )
-            .field("download_timeout_secs", &self.download_timeout_secs)
-            .field("archive_dir", &self.archive_dir)
-            .field("archive_fallback_urls", &self.archive_fallback_urls)
-            .finish()
-    }
-}
-
-impl Default for FibreConfig {
-    fn default() -> Self {
-        Self {
-            submit: false,
-            grpc_url: None,
-            grpc_auth_token: None,
-            download_timeout_secs: default_fibre_download_timeout_secs(),
-            archive_dir: None,
-            archive_fallback_urls: Vec::new(),
-        }
-    }
 }
 
 impl fmt::Debug for CelestiaConfig {
@@ -280,51 +191,8 @@ impl fmt::Debug for CelestiaConfig {
             .field("backoff_factor", &self.backoff_factor)
             .field("compression", &self.compression)
             .field("compression_chunk_size", &self.compression_chunk_size)
-            .field("fibre", &self.fibre)
             .finish()
     }
-}
-
-/// Custom type matching [`celestia_rpc::TxPriority`] but with `JsonSchema` support.
-#[derive(Debug, Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
-#[serde(rename_all = "snake_case")]
-pub enum TxPriority {
-    #[serde(alias = "Low")]
-    Low,
-    #[serde(alias = "Medium")]
-    Medium,
-    #[serde(alias = "High")]
-    High,
-}
-
-impl From<TxPriority> for celestia_client::tx::TxPriority {
-    fn from(value: TxPriority) -> Self {
-        match value {
-            TxPriority::Low => celestia_client::tx::TxPriority::Low,
-            TxPriority::Medium => celestia_client::tx::TxPriority::Medium,
-            TxPriority::High => celestia_client::tx::TxPriority::High,
-        }
-    }
-}
-
-/// Controls how fetched Celestia blocks are verified against their Data Availability Header
-/// before `get_block_at` returns.
-///
-/// Verification guards against silent consensus-breaking forks when the connected RPC node
-/// returns corrupted namespace data, at the cost of per-block overhead.
-#[derive(
-    Debug, Clone, Copy, Default, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema,
-)]
-#[serde(rename_all = "snake_case")]
-pub enum VerifyOnFetchMode {
-    /// Skip verification entirely.
-    #[default]
-    Off,
-    /// Run verification; on failure log via `tracing::error!` and return the block anyway.
-    /// Recommended during staged rollouts when visibility matters more than hard enforcement.
-    LogError,
-    /// Run verification; on failure propagate the error so `get_block_at` fails.
-    ReturnError,
 }
 
 /// Whether the adapter compresses batch blobs before posting them to Celestia.
@@ -388,7 +256,6 @@ impl CelestiaConfig {
             backoff_factor: default_factor(),
             compression: CompressOnSubmit::default(),
             compression_chunk_size: default_compression_chunk_size(),
-            fibre: None,
         }
     }
 
@@ -400,188 +267,44 @@ impl CelestiaConfig {
     }
 
     pub(crate) fn get_backoff_policy(&self) -> backon::ExponentialBuilder {
-        let backoff_policy = backon::ExponentialBuilder::default()
-            .with_min_delay(std::time::Duration::from_millis(self.backoff_min_delay_ms))
-            .with_max_times(self.backoff_max_times)
-            .with_max_delay(std::time::Duration::from_millis(self.backoff_max_delay_ms))
-            .with_factor(self.backoff_factor);
-
+        let backoff_policy = sov_celestia_common::config::backoff_policy(
+            self.backoff_min_delay_ms,
+            self.backoff_max_delay_ms,
+            self.backoff_max_times,
+            self.backoff_factor,
+        );
         tracing::debug!(?backoff_policy, "Configured backoff policy");
         backoff_policy
     }
 
     pub(crate) async fn build_client(&self) -> anyhow::Result<celestia_client::Client> {
-        self.validate_fibre()?;
-        let Some(fibre) = &self.fibre else {
-            return self.client_builder()?.build().await.map_err(Into::into);
-        };
-
-        // `FibreClientConfig` needs the chain id, which is only known once a client is connected.
-        let chain_id = self.client_builder()?.build().await?.chain_id().to_string();
-        let grpc_url = fibre
-            .grpc_url
-            .as_ref()
-            .or(self.grpc_url.as_ref())
-            .expect("checked by validate_fibre");
-        let grpc_auth_token = if fibre.grpc_url.is_some() {
-            fibre.grpc_auth_token.as_ref()
-        } else {
-            fibre
-                .grpc_auth_token
-                .as_ref()
-                .or(self.grpc_auth_token.as_ref())
-        };
-        let mut endpoint = celestia_client::Endpoint::new(grpc_url.clone());
-        if let Some(token) = grpc_auth_token {
-            endpoint = endpoint.metadata("x-token", token);
-        }
-        let fibre_client = celestia_client::api::fibre::FibreClient::from_endpoint(
-            endpoint,
-            celestia_client::api::fibre::FibreClientConfig::new(chain_id)?,
-        )?;
-        self.client_builder()?
-            .fibre_client(fibre_client)
-            .build()
-            .await
-            .map_err(Into::into)
-    }
-
-    fn validate_fibre(&self) -> anyhow::Result<()> {
-        let Some(fibre) = &self.fibre else {
-            return Ok(());
-        };
-        if fibre.submit && self.signer_private_key.is_none() {
-            anyhow::bail!("`fibre.submit` requires `signer_private_key` to be set");
-        }
-        match fibre.grpc_url.as_ref().or(self.grpc_url.as_ref()) {
-            Some(url) if !url.trim().is_empty() => {}
-            _ => anyhow::bail!("`fibre` requires `fibre.grpc_url` or `grpc_url` to be set"),
-        }
-        validate_fallback_endpoint_urls(
-            "fibre.archive_fallback_urls",
-            fibre.archive_fallback_urls.iter().map(String::as_str),
-        )
-    }
-
-    fn client_builder(&self) -> anyhow::Result<celestia_client::ClientBuilder> {
-        validate_rpc_url(&self.rpc_url)?;
-        validate_fallback_endpoint_urls(
-            "rpc_fallback_endpoints",
-            self.rpc_fallback_endpoints.iter().map(|ep| ep.url.as_str()),
-        )?;
-        validate_fallback_endpoint_urls(
-            "grpc_fallback_endpoints",
-            self.grpc_fallback_endpoints
-                .iter()
-                .map(|ep| ep.url.as_str()),
-        )?;
         validate_compression_chunk_size(self.compression_chunk_size)?;
-
-        let api_request_timeout =
-            std::time::Duration::from_secs(self.api_request_timeout_secs.get());
-        let mut builder = celestia_client::Client::builder()
-            .rpc_url(&self.rpc_url)
-            .timeout(api_request_timeout);
-
-        if let Some(rpc_auth_token) = &self.rpc_auth_token {
-            builder = builder.rpc_auth_token(rpc_auth_token);
-        }
-        // Secondary (fallback) RPC endpoints. The primary `rpc_url` above stays the
-        // most-preferred endpoint; these are appended after it, in order. The client
-        // fails over on transport errors and automatically switches back to the
-        // primary once it recovers.
-        if !self.rpc_fallback_endpoints.is_empty() {
-            let rpc_endpoints = self.rpc_fallback_endpoints.iter().map(|ep| {
-                let mut endpoint = celestia_client::RpcEndpoint::new(ep.url.clone());
-                if let Some(token) = &ep.token {
-                    endpoint = endpoint.auth_token(token);
-                }
-                endpoint
-            });
-            builder = builder.rpc_endpoints(rpc_endpoints);
-
-            // These switch-back knobs are only meaningful when there are fallback
-            // endpoints to switch away from and back to.
-            if let Some(interval) = self.rpc_health_check_interval_secs {
-                builder = builder
-                    .rpc_health_check_interval(std::time::Duration::from_secs(interval.get()));
-            }
-            if let Some(max_head_age) = self.rpc_max_head_age_secs {
-                builder =
-                    builder.rpc_max_head_age(std::time::Duration::from_secs(max_head_age.get()));
-            }
-        }
-        // Submission section.
-        if self.grpc_url.is_none() && !self.grpc_fallback_endpoints.is_empty() {
-            anyhow::bail!("`grpc_fallback_endpoints` requires `grpc_url` to be set");
-        }
-        if let Some(grpc_url) = &self.grpc_url {
-            let mut endpoint = celestia_client::Endpoint::new(grpc_url.clone());
-            if let Some(grpc_auth_token) = &self.grpc_auth_token {
-                endpoint = endpoint.metadata("x-token", grpc_auth_token);
-            }
-            builder = builder.grpc_endpoint(endpoint);
-            if !self.grpc_fallback_endpoints.is_empty() {
-                let fallback_endpoints = self.grpc_fallback_endpoints.iter().map(|ep| {
-                    let mut endpoint = celestia_client::Endpoint::new(ep.url.clone());
-                    if let Some(token) = &ep.token {
-                        endpoint = endpoint.metadata("x-token", token);
-                    }
-                    endpoint
-                });
-                builder = builder.grpc_endpoints(fallback_endpoints);
-            }
-            if let Some(signer_key_hex) = &self.signer_private_key {
-                builder = builder.private_key_hex(signer_key_hex);
-            }
-        }
-        Ok(builder)
+        sov_celestia_common::config::build_client(
+            sov_celestia_common::config::ClientEndpoints {
+                rpc_url: &self.rpc_url,
+                rpc_auth_token: self.rpc_auth_token.as_deref(),
+                rpc_fallback_endpoints: &self.rpc_fallback_endpoints,
+                rpc_health_check_interval_secs: self.rpc_health_check_interval_secs,
+                rpc_max_head_age_secs: self.rpc_max_head_age_secs,
+                grpc_url: self.grpc_url.as_deref(),
+                grpc_auth_token: self.grpc_auth_token.as_deref(),
+                grpc_fallback_endpoints: &self.grpc_fallback_endpoints,
+                signer_private_key: self.signer_private_key.as_deref(),
+                api_request_timeout: std::time::Duration::from_secs(
+                    self.api_request_timeout_secs.get(),
+                ),
+            },
+            |builder| builder,
+        )
+        .await
     }
 }
 
-const fn default_fibre_download_timeout_secs() -> NonZero<u64> {
-    NonZero::new(120).unwrap()
-}
-
-pub(crate) const fn default_safe_lead_time_ms() -> u64 {
-    500
-}
-
-/// Default chunk size: the per-chunk compressed cap [`crate::envelope::MAX_COMPRESSED_CHUNK_LEN`]
-/// (one signed-v1 first share minus the envelope and chunk headers). Tying the default to that cap
-/// keeps a default-config chunk within a single authenticated Celestia share and guarantees the
-/// uncompressed chunk size can never exceed the cap. A raw (incompressible) chunk then exactly
 /// fills the first share; a compressible one is smaller.
 pub(crate) const fn default_compression_chunk_size() -> usize {
     crate::envelope::MAX_COMPRESSED_CHUNK_LEN as usize
 }
 
-fn validate_rpc_url(rpc_url: &str) -> anyhow::Result<()> {
-    if rpc_url.trim().is_empty() {
-        anyhow::bail!("`rpc_url` must be set in the config or via `SOV_CELESTIA_RPC_URL`");
-    }
-
-    Ok(())
-}
-
-/// Rejects fallback endpoints with an empty/blank `url` at startup, so a misconfigured
-/// `[[da.<field>]]` entry fails fast with a clear, indexed message instead of surfacing
-/// later as an opaque connection error.
-fn validate_fallback_endpoint_urls<'a>(
-    field: &str,
-    urls: impl Iterator<Item = &'a str>,
-) -> anyhow::Result<()> {
-    for (index, url) in urls.enumerate() {
-        if url.trim().is_empty() {
-            anyhow::bail!("`{field}[{index}].url` must not be empty");
-        }
-    }
-
-    Ok(())
-}
-
-/// Validate `compression_chunk_size` against the verifier's per-chunk rollup cap.
-/// An out-of-range value would otherwise be silently clamped at encode time, so a
 /// misconfigured node would quietly emit different chunks than the operator requested.
 fn validate_compression_chunk_size(chunk_size: usize) -> anyhow::Result<()> {
     let max = crate::envelope::MAX_ROLLUP_CHUNK_LEN as usize;
@@ -594,115 +317,13 @@ fn validate_compression_chunk_size(chunk_size: usize) -> anyhow::Result<()> {
     Ok(())
 }
 
-fn default_rpc_url_from_env() -> String {
-    std::env::var("SOV_CELESTIA_RPC_URL").unwrap_or_default()
-}
-
-fn default_grpc_url() -> Option<String> {
-    std::env::var("SOV_CELESTIA_GRPC_URL").ok()
-}
-
-fn default_rpc_auth_token() -> Option<String> {
-    std::env::var("SOV_CELESTIA_RPC_AUTH_TOKEN").ok()
-}
-
-fn default_grpc_auth_token() -> Option<String> {
-    std::env::var("SOV_CELESTIA_GRPC_AUTH_TOKEN").ok()
-}
-
-fn default_signer_private_key() -> Option<String> {
-    std::env::var("SOV_CELESTIA_SIGNER_KEY").ok()
-}
-
-/// Reads a single secondary RPC endpoint from the environment, used as the fallback
-/// list when `rpc_fallback_endpoints` is omitted from the config. Both the URL and the
-/// (optional) token come from the environment, since for managed providers the URL itself
-/// is often a secret.
-fn default_rpc_fallback_endpoints_from_env() -> Vec<RpcEndpointConfig> {
-    match std::env::var("SOV_CELESTIA_RPC_SECONDARY_URL") {
-        Ok(url) if !url.trim().is_empty() => vec![RpcEndpointConfig {
-            url,
-            token: std::env::var("SOV_CELESTIA_RPC_SECONDARY_AUTH_TOKEN").ok(),
-        }],
-        _ => Vec::new(),
-    }
-}
-
-/// Reads a single secondary gRPC endpoint from the environment, used as the fallback
-/// list when `grpc_fallback_endpoints` is omitted from the config.
-fn default_grpc_fallback_endpoints_from_env() -> Vec<GrpcEndpointConfig> {
-    match std::env::var("SOV_CELESTIA_GRPC_SECONDARY_URL") {
-        Ok(url) if !url.trim().is_empty() => vec![GrpcEndpointConfig {
-            url,
-            token: std::env::var("SOV_CELESTIA_GRPC_SECONDARY_AUTH_TOKEN").ok(),
-        }],
-        _ => Vec::new(),
-    }
-}
-
-pub(crate) const fn default_tx_priority() -> TxPriority {
-    TxPriority::High
-}
-
-// Exponential backoff defaults:
-// **Timing for Each Attempt:**
-// 1. Attempt 1: 100ms
-// 2. Attempt 2: 200ms
-// 3. Attempt 3: 400ms
-// 4. Attempt 4: 800ms
-// 5. Attempt 5: 1.6s
-// 6. Attempt 6: 3.2s
-// 7. Attempt 7: 6.4s
-// 8. Attempt 8: 12.8s
-// 9. Attempt 9: 25.6s
-// 10. Attempt 10: 10s (capped at max_delay)
-// 11. Attempt 11-60: 10s each
-// **Total Number of Attempts:** 60 (as specified by ) `with_max_times(60)`
-// **Total Waiting Time:**
-// - First 9 attempts: 100ms + 200ms + 400ms + 800ms + 1.6s + 3.2s + 6.4s + 12.8s + 25.6s = ~51.1 seconds
-// - Remaining 51 attempts: 51 × 30s = 1,530 seconds (25.5 minutes)
-// - **Total waiting time: ~1,581 seconds (≈ 26.35 minutes)**
-pub(crate) fn default_min_delay_ms() -> u64 {
-    100
-}
-
-pub(crate) fn default_max_delay_ms() -> u64 {
-    12_000
-}
-
-pub(crate) fn default_max_times() -> usize {
-    60
-}
-
-pub(crate) fn default_factor() -> f32 {
-    2.0
-}
-
-pub(crate) fn default_request_timeout_seconds() -> NonZero<u64> {
-    // 6 blocks × 3 seconds + 2 seconds polling buffer
-    NonZero::new(20).unwrap()
-}
-
-pub(crate) fn default_api_request_timeout_secs() -> NonZero<u64> {
-    // one block time (3s) plus 2 seconds of wiggle room
-    NonZero::new(5).unwrap()
-}
-
-pub(crate) fn default_tx_status_polling_millis() -> u64 {
-    2_000
-}
-
-pub(crate) fn default_background_stat_polling_interval_secs() -> u64 {
-    30
-}
-
 #[cfg(test)]
 mod tests {
     use super::{
         default_api_request_timeout_secs, default_compression_chunk_size,
         default_request_timeout_seconds, validate_compression_chunk_size, validate_rpc_url,
-        CelestiaConfig, CompressOnSubmit, FibreConfig, GrpcEndpointConfig, RpcEndpointConfig,
-        TxPriority, VerifyOnFetchMode,
+        CelestiaConfig, CompressOnSubmit, GrpcEndpointConfig, RpcEndpointConfig, TxPriority,
+        VerifyOnFetchMode,
     };
 
     const RPC_ENV_VAR: &str = "SOV_CELESTIA_RPC_URL";
@@ -915,87 +536,6 @@ mod tests {
             error.to_string().contains("grpc_fallback_endpoints"),
             "unexpected error: {error}"
         );
-    }
-
-    #[tokio::test]
-    async fn build_client_rejects_fibre_submit_without_signer() {
-        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
-        config.grpc_url = Some("http://localhost:9090".to_string());
-        config.fibre = Some(FibreConfig {
-            submit: true,
-            ..Default::default()
-        });
-        let error = config.build_client().await.unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("`fibre.submit` requires `signer_private_key`"),
-            "unexpected error: {error}"
-        );
-    }
-
-    #[tokio::test]
-    async fn build_client_rejects_fibre_without_grpc_url() {
-        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
-        config.fibre = Some(FibreConfig::default());
-        let error = config.build_client().await.unwrap_err();
-        assert!(
-            error
-                .to_string()
-                .contains("`fibre` requires `fibre.grpc_url` or `grpc_url`"),
-            "unexpected error: {error}"
-        );
-    }
-
-    #[tokio::test]
-    async fn build_client_rejects_empty_fibre_archive_fallback_url() {
-        let mut config = CelestiaConfig::minimal("ws://localhost:26658".to_string());
-        config.fibre = Some(FibreConfig {
-            grpc_url: Some("http://localhost:9090".to_string()),
-            archive_fallback_urls: vec!["  ".to_string()],
-            ..Default::default()
-        });
-        let error = config.build_client().await.unwrap_err();
-        assert!(
-            error.to_string().contains("fibre.archive_fallback_urls"),
-            "unexpected error: {error}"
-        );
-    }
-
-    #[test]
-    fn fibre_is_disabled_by_default() {
-        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
-        let config = deserialize_config("{}").unwrap();
-        assert_eq!(config.fibre, None);
-    }
-
-    #[test]
-    fn fibre_section_parses_with_defaults() {
-        let _rpc_guard = EnvVarGuard::set(RPC_ENV_VAR, Some("ws://env-rpc:26658"));
-        let config = deserialize_config(
-            r#"{"fibre":{"submit":true,"archive_dir":"/var/fibre","archive_fallback_urls":["http://a:8080"]}}"#,
-        )
-        .unwrap();
-        assert_eq!(
-            config.fibre,
-            Some(FibreConfig {
-                submit: true,
-                archive_dir: Some("/var/fibre".into()),
-                archive_fallback_urls: vec!["http://a:8080".to_string()],
-                ..Default::default()
-            })
-        );
-    }
-
-    #[test]
-    fn fibre_debug_redacts_token() {
-        let fibre = FibreConfig {
-            grpc_auth_token: Some("super-secret".to_string()),
-            ..Default::default()
-        };
-        let debug_output = format!("{fibre:?}");
-        assert!(!debug_output.contains("super-secret"));
-        assert!(debug_output.contains("REDACTED"));
     }
 
     #[test]
