@@ -340,7 +340,6 @@ async fn preferred_sequencer_stays_ready_after_non_preferred_batch() {
 /// overwrites the result with the node's, so a divergence (e.g. in escrow accounting) does not
 /// crash it. Check its own soft-confirmations of the non-preferred transfers instead.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "preferred sequencer panics replaying a registered non-preferred batch; fixed later in the PR stack"]
 async fn preferred_sequencer_soft_confirms_non_preferred_txs() {
     let mut run = run_side_by_side().await;
     let first_tx = ledger_tx(&run.preferred, &run.standard_tx_hashes[0])
