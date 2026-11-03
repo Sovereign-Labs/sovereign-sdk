@@ -173,7 +173,7 @@ struct PyTransaction {
     inner: Transaction,
 }
 
-#[pyclass(name = "UniquenessData")]
+#[pyclass(name = "UniquenessData", skip_from_py_object)]
 #[derive(Clone)]
 struct PyUniquenessData {
     inner: UniquenessData,
