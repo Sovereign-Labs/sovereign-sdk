@@ -795,6 +795,7 @@ impl<S: Spec> BlobStorage<S> {
     /// For a batch retrieved from storage, checks that it has enough reserved gas to cover the pre-execution checks.
     /// If so, moves that gas to the bank and returns `true`. If not, discards the blob, refunds the reserved gas to the
     /// sequencer and returns `false`.
+    #[must_use]
     fn release_deferred_escrow(
         &mut self,
         batch: &mut ValidatedBlob<S, BatchWithId<S>>,
