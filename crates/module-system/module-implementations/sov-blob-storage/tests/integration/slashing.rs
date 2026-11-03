@@ -6,11 +6,15 @@
 //! (deferred in storage, or selected earlier in the same slot) does not make the STF panic when
 //! that blob executes and its escrow is returned.
 
+use sov_bank::{config_gas_token_id, Bank, IntoPayable};
 use sov_mock_da::{MockAddress, MockBlob};
+use sov_modules_api::{Amount, Gas, GasSpec, ModuleInfo};
 use sov_modules_stf_blueprint::Runtime;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_sequencer_registry::SequencerRegistry;
 use sov_test_utils::runtime::traits::MinimalGenesis;
+use sov_test_utils::runtime::BlobStorage;
 use sov_test_utils::SequencerInfo;
 
 use crate::helpers_basic_kernel::setup_basic_kernel;
@@ -95,12 +99,70 @@ fn last_slot_batch_senders<RT: Runtime<S> + MinimalGenesis<S>>(
         .collect()
 }
 
+fn registry_gas_balance<RT: Runtime<S> + MinimalGenesis<S>>(runner: &TestRunner<RT>) -> Amount {
+    runner.query_state(|state| {
+        let registry_id = *SequencerRegistry::<S>::default().id();
+        Bank::<S>::default()
+            .get_balance_of(registry_id.to_payable(), config_gas_token_id(), state)
+            .unwrap()
+            .unwrap_or(Amount::ZERO)
+    })
+}
+
+fn sequencer_stake<RT: Runtime<S> + MinimalGenesis<S>>(
+    runner: &TestRunner<RT>,
+    da: &MockAddress,
+) -> Amount {
+    runner.query_state(|state| {
+        SequencerRegistry::<S>::default()
+            .get_sender_balance_via_api(da, state)
+            .expect("sequencer must be registered")
+    })
+}
+
+/// Total escrow of all blobs still in deferred storage. Escrowed tokens stay in the registry's
+/// bank account and are only tracked in kernel state until the blob leaves storage.
+fn pending_escrow<RT: Runtime<S> + MinimalGenesis<S>>(runner: &TestRunner<RT>) -> Amount {
+    let true_slot = runner.true_slot_number().get();
+    runner.query_state(|state| {
+        let registry = SequencerRegistry::<S>::default();
+        let mut total = Amount::ZERO;
+        for slot in 0..=true_slot {
+            for holder in BlobStorage::<S>::default()
+                .get_deferred_escrow_holders(SlotNumber::new(slot), state)
+                .unwrap()
+            {
+                let amount = registry
+                    .get_escrowed_amount_via_api(&holder, state)
+                    .unwrap_or_else(|| {
+                        panic!("Deferred blob with holder {holder} has no escrow entry")
+                    });
+                total = total.checked_add(amount).unwrap();
+            }
+        }
+        total
+    })
+}
+
+/// Registry gas balance minus the stake of `registered_sequencer` and minus pending escrow.
+/// `registered_sequencer` must be the only sequencer whose stake changes between the compared
+/// slots.
+fn unowned_registry_balance<RT: Runtime<S> + MinimalGenesis<S>>(
+    runner: &TestRunner<RT>,
+    registered_sequencer: &MockAddress,
+) -> Amount {
+    registry_gas_balance(runner)
+        .checked_sub(sequencer_stake(runner, registered_sequencer))
+        .and_then(|balance| balance.checked_sub(pending_escrow(runner)))
+        .expect("Registry must hold at least the registered sequencer's stake and pending escrow")
+}
+
 /// - Slot A: a registered non-preferred sequencer posts a valid batch, which is deferred.
 /// - Slot B: the same DA address posts garbage and gets slashed (registry entry deleted).
 /// - Slot C: the preferred sequencer advances the visible slot over slot A, so the stored batch
-///   executes after its sender was slashed.
+///   executes after its sender was slashed, and its returned escrow goes to the registry.
 #[test]
-fn deferred_blob_of_slashed_sequencer_executes_without_panic() {
+fn deferred_blob_of_slashed_sequencer_executes_and_returns_escrow_to_registry() {
     let (
         TestData {
             preferred_sequencer,
@@ -132,6 +194,13 @@ fn deferred_blob_of_slashed_sequencer_executes_without_panic() {
         !is_registered(&runner, &da),
         "Garbage blob must slash the sender"
     );
+    assert!(
+        pending_escrow(&runner) > Amount::ZERO,
+        "The slashed sequencer's deferred batch must still hold escrow"
+    );
+
+    let unowned_registry_balance_before =
+        unowned_registry_balance(&runner, &preferred_sequencer.da_address);
 
     // Slot C
     let blobs = build_soft_confirmation_blobs(
@@ -151,6 +220,28 @@ fn deferred_blob_of_slashed_sequencer_executes_without_panic() {
         last_slot_batch_senders(&runner),
         vec![preferred_sequencer.da_address, da],
         "The preferred batch and the slashed sequencer's stored batch must both execute"
+    );
+    let unowned_registry_balance_after =
+        unowned_registry_balance(&runner, &preferred_sequencer.da_address);
+    let receipts = runner.receipts();
+    let slashed_batch = &receipts.last().unwrap().batch_receipts[1].inner;
+    // When a deferred batch is retrieved, its escrow is trimmed to the pre-exec check costs of its
+    // single transaction; the reserved storage costs are refunded to the sender's rollup address.
+    let escrow = <S as GasSpec>::max_tx_check_costs()
+        .checked_value(slashed_batch.gas_price)
+        .unwrap();
+    let rewards = &slashed_batch.outcome.rewards;
+    let expected_returned = escrow
+        .checked_sub(rewards.accumulated_penalty)
+        .unwrap()
+        .checked_add(rewards.accumulated_reward)
+        .unwrap();
+    assert_eq!(
+        unowned_registry_balance_after
+            .checked_sub(unowned_registry_balance_before)
+            .unwrap(),
+        expected_returned,
+        "The slashed sequencer's escrow, net of penalties and plus rewards, must be transferred to the registry"
     );
 }
 

@@ -381,6 +381,19 @@ impl<S: Spec> SequencerRegistry<S> {
             .map(|s| s.balance)
     }
 
+    /// Returns the amount escrowed for a deferred blob under the given holder, if any.
+    ///
+    /// The entry is removed when the blob is retrieved from storage or dropped, so a `Some` here
+    /// means the blob is still deferred.
+    #[cfg(feature = "native")]
+    pub fn get_escrowed_amount_via_api(
+        &self,
+        holder: &DerivedHolder,
+        state: &mut ApiStateAccessor<S>,
+    ) -> Option<Amount> {
+        self.escrow.get(holder, state).unwrap_infallible()
+    }
+
     /// Returns the rollup address of the sequencer with the given DA address.
     #[cfg(feature = "native")]
     pub fn get_sequencer_address(
