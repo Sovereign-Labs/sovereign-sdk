@@ -318,6 +318,7 @@ jobs:
       - name: Upload to codecov.io
         uses: codecov/codecov-action@v7
         with:
+          token: ${{ secrets.CODECOV_TOKEN }}
           # When retry is implemented, we can enable it again: https://github.com/codecov/codecov-action/issues/926
           fail_ci_if_error: false
 
