@@ -1,7 +1,9 @@
 //! A node running the preferred sequencer and a node running a registered, non-preferred
 //! standard sequencer, side by side on the same mock DA layer.
 
+use std::collections::HashSet;
 use std::future::Future;
+use std::time::Duration;
 
 use futures::{FutureExt, StreamExt};
 use sov_api_spec::types::{self as api_types, IntOrHash, TxReceiptResult};
@@ -39,6 +41,10 @@ struct SideBySide {
     /// Two transfers sent through the standard sequencer after it got registered, by an account
     /// that touches nothing else. Two, so they land in one multi-tx batch.
     standard_tx_hashes: [TxHash; 2],
+    /// The preferred sequencer's own soft-confirmations, subscribed to before the standard
+    /// transfers were sent.
+    preferred_tx_stream:
+        futures::stream::BoxStream<'static, anyhow::Result<api_types::ApiAcceptedTx>>,
 }
 
 fn create_genesis_params() -> (GenesisParams<GenesisConfig<S>>, Vec<TestUser<S>>) {
@@ -226,6 +232,12 @@ async fn run_side_by_side() -> SideBySide {
         "standard sequencer registration must succeed, otherwise its batches go down the unregistered path"
     );
 
+    // Live stream only: the sequencer emits its own results, never ones copied from the node's ledger.
+    let preferred_tx_stream = preferred
+        .api_client()
+        .subscribe_to_txs(None)
+        .await
+        .expect("should subscribe to preferred sequencer txs");
     let mut standard_tx_hashes = Vec::new();
     for generation in 0..2 {
         standard_tx_hashes.push(
@@ -265,6 +277,7 @@ async fn run_side_by_side() -> SideBySide {
         standard,
         preferred_tx_hash,
         standard_tx_hashes,
+        preferred_tx_stream,
     }
 }
 
@@ -321,4 +334,35 @@ async fn preferred_sequencer_stays_ready_after_non_preferred_batch() {
         run.preferred.is_sequencer_ready().await,
         "preferred sequencer should stay ready after replaying a non-preferred batch"
     );
+}
+
+/// The preferred sequencer executes non-preferred batches itself, and its next state update
+/// overwrites the result with the node's, so a divergence (e.g. in escrow accounting) does not
+/// crash it. Check its own soft-confirmations of the non-preferred transfers instead.
+#[tokio::test(flavor = "multi_thread")]
+async fn preferred_sequencer_soft_confirms_non_preferred_txs() {
+    let mut run = run_side_by_side().await;
+    let mut pending: HashSet<String> = run
+        .standard_tx_hashes
+        .iter()
+        .map(|hash| hash.to_string())
+        .collect();
+
+    while !pending.is_empty() {
+        let tx = tokio::time::timeout(Duration::from_secs(10), run.preferred_tx_stream.next())
+            .await
+            .unwrap_or_else(|_| {
+                panic!("preferred sequencer never soft-confirmed non-preferred txs {pending:?}")
+            })
+            .expect("preferred sequencer tx stream ended")
+            .expect("tx notification should deserialize");
+        if pending.remove(&tx.id.to_string()) {
+            assert_eq!(
+                tx.receipt.result,
+                TxReceiptResult::Successful,
+                "non-preferred tx {:?} should succeed in the preferred sequencer, as it does on the node",
+                tx.id
+            );
+        }
+    }
 }
