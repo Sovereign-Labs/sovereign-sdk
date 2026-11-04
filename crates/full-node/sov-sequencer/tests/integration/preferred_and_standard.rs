@@ -342,6 +342,17 @@ async fn preferred_sequencer_stays_ready_after_non_preferred_batch() {
 #[tokio::test(flavor = "multi_thread")]
 async fn preferred_sequencer_soft_confirms_non_preferred_txs() {
     let mut run = run_side_by_side().await;
+    let first_tx = ledger_tx(&run.preferred, &run.standard_tx_hashes[0])
+        .await
+        .unwrap();
+    let second_tx = ledger_tx(&run.preferred, &run.standard_tx_hashes[1])
+        .await
+        .unwrap();
+    assert_eq!(
+        first_tx.batch_number, second_tx.batch_number,
+        "standard transfers must share a batch to exercise multi-transaction escrow accounting"
+    );
+
     let mut pending: HashSet<String> = run
         .standard_tx_hashes
         .iter()

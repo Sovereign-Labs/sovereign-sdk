@@ -70,11 +70,12 @@ impl<S: Spec> BlobSelector for SoftConfirmationsKernel<'_, S> {
     fn get_non_preferred_blobs<CF: InjectedControlFlow<Self::Spec> + Clone>(
         &mut self,
         slot_range: impl Iterator<Item = SlotNumber>,
+        gas_price_for_new_block: &<<Self::Spec as Spec>::Gas as Gas>::Price,
         state: &mut KernelStateAccessor<'_, Self::Spec>,
         cf: CF,
     ) -> Vec<SelectedBlob<Self::Spec, IterableBatchWithId<S, CF>>> {
         self.blob_storage
-            .get_non_preferred_blobs(slot_range, state)
+            .get_non_preferred_blobs(slot_range, gas_price_for_new_block, state)
             .into_iter()
             .map(|blob| blob.into_selected_blob(cf.clone()))
             .collect()
