@@ -89,8 +89,6 @@ generate_optimistic_runtime_with_kernel!(
 
 pub(crate) type TestBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>>;
 
-use sov_test_utils::TEST_BLOB_PROCESSING_TIMEOUT;
-
 const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::OnBatchSubmit {
     block_wait_timeout_ms: None,
 };
@@ -240,15 +238,7 @@ async fn wait_for_many_values_item(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_transaction_priority() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -308,21 +298,10 @@ async fn test_transaction_priority() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_archival_state_is_immediately_available() {
-    let (genesis_params, admin) = create_genesis_params();
-    let dir = tempdir_inside_codebase_dir();
-    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
-        genesis_params
-            .runtime
-            .sequencer_registry
-            .sequencer_config
-            .seq_da_address,
-        genesis_params,
-    )
-    .dir(dir.clone())
-    // automatic_batch_production — disabled to prevent empty batches from advancing height
-    .automatic_batch_production(false)
-    .finalization_blocks(0)
-    .start()
+    let (test_rollup, admin) = create_test_rollup_with(|b| {
+        // automatic_batch_production — disabled to prevent empty batches from advancing height
+        b.automatic_batch_production(false).finalization_blocks(0)
+    })
     .await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -390,28 +369,20 @@ async fn test_archival_state_is_immediately_available() {
 /// `HeightNotAccessible`. Modeled on `test_archival_state_is_immediately_available`.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
-    let (genesis_params, admin) = create_genesis_params();
-    let dir = tempdir_inside_codebase_dir();
-    let seq_da_address = genesis_params
-        .runtime
-        .sequencer_registry
-        .sequencer_config
-        .seq_da_address;
     let versions_to_keep = 4u64;
 
-    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(seq_da_address, genesis_params)
-        .dir(dir.clone())
+    let (test_rollup, admin) = create_test_rollup_with(|b| {
         // automatic_batch_production — disabled to keep height deterministic
-        .automatic_batch_production(false)
-        .finalization_blocks(0)
-        // Prune every finalized block, retaining only the most recent few versions.
-        .pruner(PrunerConfig::Periodic {
-            block_interval: 1,
-            versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
-            max_batch_size: default_max_pruning_batch_size(),
-        })
-        .start()
-        .await;
+        b.automatic_batch_production(false)
+            .finalization_blocks(0)
+            // Prune every finalized block, retaining only the most recent few versions.
+            .pruner(PrunerConfig::Periodic {
+                block_interval: 1,
+                versions_to_keep: NonZeroU64::new(versions_to_keep).unwrap(),
+                max_batch_size: default_max_pruning_batch_size(),
+            })
+    })
+    .await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -568,21 +539,10 @@ async fn test_archival_state_is_accessible_even_with_delayed_checkpoint_update()
     const DELAY_ENV: &str = "SOV_TEST_DELAY_FORCE_UPDATE_API_STATE_MS";
     std::env::set_var(DELAY_ENV, "750");
 
-    let (genesis_params, admin) = create_genesis_params();
-    let dir = Arc::new(tempfile::tempdir().unwrap());
-    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
-        genesis_params
-            .runtime
-            .sequencer_registry
-            .sequencer_config
-            .seq_da_address,
-        genesis_params,
-    )
-    .dir(dir.clone())
-    // automatic_batch_production — disabled to isolate checkpoint ordering
-    .automatic_batch_production(false)
-    .finalization_blocks(0)
-    .start()
+    let (test_rollup, admin) = create_test_rollup_with(|b| {
+        // automatic_batch_production — disabled to isolate checkpoint ordering
+        b.automatic_batch_production(false).finalization_blocks(0)
+    })
     .await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -653,21 +613,9 @@ async fn test_archival_state_is_accessible_even_with_delayed_checkpoint_update()
 /// deterministically forcing archival reads through `uncommitted_changes`.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_archival_read_from_uncommitted_changes() {
-    let (genesis_params, admin) = create_genesis_params();
-    let dir = tempdir_inside_codebase_dir();
-    let test_rollup = SeqTestRollup::<TestRuntime<TestSpec>>::new(
-        genesis_params
-            .runtime
-            .sequencer_registry
-            .sequencer_config
-            .seq_da_address,
-        genesis_params,
-    )
-    .dir(dir.clone())
-    .automatic_batch_production(false)
-    .finalization_blocks(0)
-    .start()
-    .await;
+    let (test_rollup, admin) =
+        create_test_rollup_with(|b| b.automatic_batch_production(false).finalization_blocks(0))
+            .await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -821,38 +769,22 @@ pub(super) fn create_genesis_params() -> (GenesisParams<GenesisConfig<TestSpec>>
     )
 }
 
-async fn create_test_rollup(
-    minimum_profit_per_tx: u128,
-    max_batch_size: usize,
-    blob_processing_timeout_secs: u64,
-    max_batch_execution_time_millis: u64,
-    finality: u32,
-    block_producing_config: BlockProducingConfig,
+async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
+    create_test_rollup_with(|b| b).await
+}
+
+/// Starts a rollup with this file's genesis; `configure` overrides [`SeqTestRollup`] defaults.
+pub(crate) async fn create_test_rollup_with(
+    configure: impl FnOnce(SeqTestRollup<TestRuntime<TestSpec>>) -> SeqTestRollup<TestRuntime<TestSpec>>,
 ) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
     let (genesis_params, admin) = create_genesis_params();
-
-    let dir = tempdir_inside_codebase_dir();
-
-    (
-        SeqTestRollup::<TestRuntime<TestSpec>>::new(
-            genesis_params
-                .runtime
-                .sequencer_registry
-                .sequencer_config
-                .seq_da_address,
-            genesis_params,
-        )
-        .dir(dir.clone())
-        .minimum_profit_per_tx(minimum_profit_per_tx)
-        .max_batch_size_bytes(max_batch_size)
-        .block_producing_config(block_producing_config)
-        .blob_processing_timeout_secs(blob_processing_timeout_secs)
-        .max_batch_execution_time_millis(max_batch_execution_time_millis)
-        .finalization_blocks(finality)
-        .start()
-        .await,
-        admin,
-    )
+    let seq_da_address = genesis_params
+        .runtime
+        .sequencer_registry
+        .sequencer_config
+        .seq_da_address;
+    let builder = SeqTestRollup::<TestRuntime<TestSpec>>::new(seq_da_address, genesis_params);
+    (configure(builder).start().await, admin)
 }
 
 #[derive(Debug)]
@@ -905,15 +837,7 @@ impl Default for TestState {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn txs_below_min_fee_are_rejected() {
-    let (test_rollup, admin) = create_test_rollup(
-        1,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup_with(|b| b.minimum_profit_per_tx(1)).await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -933,15 +857,7 @@ async fn txs_below_min_fee_are_rejected() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn duplicate_txs_are_rejected() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -968,15 +884,7 @@ async fn duplicate_txs_are_rejected() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_tx_ws_submission() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -1014,15 +922,7 @@ async fn test_tx_ws_submission() {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "This test covers pruning behavior, which is currently disabled."]
 async fn test_archival_state_with_pruning() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -1213,15 +1113,7 @@ const SEQUENCER_RECOVERY_ERROR: &str = "The preferred sequencer is recovering fr
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_behind_deferred_slots_count_simple_lagging() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -1352,15 +1244,7 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_behind_deferred_slots_count_with_shutdown() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     let client = test_rollup.api_client().clone();
 
@@ -1590,14 +1474,11 @@ async fn seq_out_of_gas_for_pre_checks() {
 #[tokio::test(flavor = "multi_thread")]
 async fn max_batch_size() {
     let max_batch_size = 1024;
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        max_batch_size,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        0,
-        TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
-    )
+    let (test_rollup, admin) = create_test_rollup_with(|b| {
+        b.max_batch_size_bytes(max_batch_size)
+            .finalization_blocks(0)
+            .block_producing_config(TEST_DEFAULT_MOCK_DA_ON_SUBMIT)
+    })
     .await;
 
     test_rollup.produce_enough_finalized_slots().await;
@@ -1673,14 +1554,9 @@ async fn max_batch_size() {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_sequencer_getters() {
     use sov_api_spec::types::TxInfoWithConfirmation;
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        1000, // Timeout the batch after 1 second of execution time.
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
+    let (test_rollup, admin) = create_test_rollup_with(|b| {
+        b.max_batch_execution_time_millis(1000) // Timeout the batch after 1 second of execution time.
+    })
     .await;
 
     test_rollup.produce_enough_finalized_slots().await;
@@ -1844,14 +1720,9 @@ async fn test_sequencer_getters() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_sequencer_event_stream_filtering() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        1000, // Timeout the batch after 1 second of execution time.
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
+    let (test_rollup, admin) = create_test_rollup_with(|b| {
+        b.max_batch_execution_time_millis(1000) // Timeout the batch after 1 second of execution time.
+    })
     .await;
 
     // Set up the rollup the usual way.
@@ -2038,14 +1909,10 @@ async fn flaky_max_batch_execution_time() {
     // Timeout the batch after 2 seconds of **execution time**.
     let max_batch_exec_time_millis = 2000;
     let approx_batch_time_millis = 400;
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        max_batch_exec_time_millis,
-        TEST_FINALIZATION_BLOCKS,
-        TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
-    )
+    let (test_rollup, admin) = create_test_rollup_with(|b| {
+        b.max_batch_execution_time_millis(max_batch_exec_time_millis)
+            .block_producing_config(TEST_DEFAULT_MOCK_DA_ON_SUBMIT)
+    })
     .await;
 
     test_rollup.produce_enough_finalized_slots().await;
@@ -2263,15 +2130,7 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
 // this test ensures it correctly publishes all the expected slots
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rollup_emits_all_slot_notifications() {
-    let (test_rollup, _) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, _) = create_test_rollup().await;
 
     let nb_of_blocks = 10;
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
@@ -2297,15 +2156,7 @@ async fn test_rollup_emits_all_slot_notifications() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rollup_shuts_down_if_blob_sender_fails() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -2329,15 +2180,9 @@ async fn rollup_shuts_down_if_blob_sender_fails() {
 #[tokio::test(flavor = "multi_thread")]
 async fn rollup_shuts_down_if_blob_processing_timeouts() {
     let blob_processing_timeout_secs = 1;
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        blob_processing_timeout_secs,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) =
+        create_test_rollup_with(|b| b.blob_processing_timeout_secs(blob_processing_timeout_secs))
+            .await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -2363,15 +2208,8 @@ async fn rollup_shuts_down_if_blob_processing_timeouts() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn rollup_shuts_down_if_panic_is_triggered() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        60,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) =
+        create_test_rollup_with(|b| b.blob_processing_timeout_secs(60)).await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -2407,14 +2245,9 @@ async fn rollup_shuts_down_if_panic_is_triggered() {
 #[tokio::test(flavor = "multi_thread")]
 async fn sequencer_back_pressure() {
     let max_batch_execution_time_millis = 1_000;
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        max_batch_execution_time_millis,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
+    let (test_rollup, admin) = create_test_rollup_with(|b| {
+        b.max_batch_execution_time_millis(max_batch_execution_time_millis)
+    })
     .await;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -2513,15 +2346,7 @@ async fn print_blobs_at_head(da_service: &StorableMockDaService) {
 #[tokio::test(flavor = "multi_thread")]
 async fn seq_many_invalid_txs() {
     let txs = 1000u64;
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -2783,15 +2608,7 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
 
 #[tokio::test(flavor = "multi_thread")]
 async fn events_are_returned_in_tx_response() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -2805,15 +2622,7 @@ async fn events_are_returned_in_tx_response() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_no_crashes_on_resync_with_transactions() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     let (test_rollup, state) = setup_test_rollup_with_initial_state(test_rollup, &admin).await;
 
@@ -2886,15 +2695,7 @@ async fn test_no_crashes_on_resync_with_transactions() {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn delayed_tx_is_processed_after_delay() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -2952,15 +2753,9 @@ async fn flaky_txs_that_enter_before_downtime_are_dropped() {
         block_execution_time_ms * 2 < DELAYED_TX_DELAY_MS,
         "Test relies on delay being larger than 2 max batch times"
     );
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        block_execution_time_ms,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) =
+        create_test_rollup_with(|b| b.max_batch_execution_time_millis(block_execution_time_ms))
+            .await;
 
     let assert_response_is_overloaded = |response: Result<
         ResponseValue<TxInfoWithConfirmation>,
@@ -3498,15 +3293,7 @@ async fn batch_production_and_accept_tx() {
 // when the sender address is not configured as an admin in the sequencer config.
 #[tokio::test(flavor = "multi_thread")]
 async fn not_sequencer_safe_txs_are_restricted() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup
         .da_service
@@ -3541,15 +3328,7 @@ async fn not_sequencer_safe_txs_are_restricted() {
 // shifting every subsequent result by one and eventually tripping the tx hash assertion.
 #[tokio::test(flavor = "multi_thread")]
 async fn txs_after_not_sequencer_safe_tx_get_their_own_results() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -4306,15 +4085,7 @@ async fn read_event_epoch(test_rollup: &TestRollup<TestBlueprint>) -> Option<Str
 /// and the event stream knows exactly which events are still to be applied.
 #[tokio::test(flavor = "multi_thread")]
 async fn state_reads_report_the_last_event_number_they_reflect() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -4380,15 +4151,7 @@ async fn state_reads_report_the_last_event_number_they_reflect() {
 /// that deliberately reads older state.
 #[tokio::test(flavor = "multi_thread")]
 async fn historical_state_reads_report_no_last_event_number() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -4432,15 +4195,7 @@ async fn historical_state_reads_report_no_last_event_number() {
 /// still. A client that resynchronised on every batch would be useless.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_event_epoch_is_stable_while_the_sequencer_makes_progress() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -4497,15 +4252,7 @@ async fn the_event_epoch_is_stable_while_the_sequencer_makes_progress() {
 /// carry it too, and the two must agree.
 #[tokio::test(flavor = "multi_thread")]
 async fn streamed_events_carry_the_same_epoch_as_the_state_reply() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -4550,15 +4297,7 @@ async fn streamed_events_carry_the_same_epoch_as_the_state_reply() {
 /// events are labelled separately from the stream's. They must still carry the same epoch.
 #[tokio::test(flavor = "multi_thread")]
 async fn submitted_tx_reply_events_carry_the_same_epoch_as_the_state_reply() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
@@ -4588,15 +4327,7 @@ async fn submitted_tx_reply_events_carry_the_same_epoch_as_the_state_reply() {
 /// counts as zero. Only the sequencer labels the ledger-backed copies it serves itself.
 #[tokio::test(flavor = "multi_thread")]
 async fn committed_ledger_events_carry_no_epoch() {
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        TEST_FINALIZATION_BLOCKS,
-        BlockProducingConfig::Manual,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup().await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();

@@ -12,8 +12,7 @@ use sov_test_utils::test_rollup::get_height;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::{
     generate_operator_runtime_with_kernel, RtAgnosticBlueprint, TestSpec, TestUser,
-    TEST_BLOB_PROCESSING_TIMEOUT, TEST_DEFAULT_USER_BALANCE, TEST_FINALIZATION_BLOCKS,
-    TEST_MAX_BATCH_SIZE, TEST_NORMAL_SHUTDOWN_TIMEOUT,
+    TEST_DEFAULT_USER_BALANCE, TEST_FINALIZATION_BLOCKS, TEST_NORMAL_SHUTDOWN_TIMEOUT,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::sync::Arc;
@@ -75,14 +74,7 @@ async fn test_start_at_finalization_plus_one() {
 async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     let stop_at_height = RollupHeight::new(3);
 
-    let (test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        None,
-        finalization_blocks,
-    )
-    .await;
+    let (test_rollup, admin) = create_test_rollup(None, finalization_blocks).await;
 
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
     let api_client = test_rollup.api_client().clone();
@@ -138,14 +130,8 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
 
     let stop_at_height = RollupHeight::new((finalization_blocks + 12) as u64);
 
-    let (mut test_rollup, admin) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        Some(stop_at_height),
-        finalization_blocks,
-    )
-    .await;
+    let (mut test_rollup, admin) =
+        create_test_rollup(Some(stop_at_height), finalization_blocks).await;
 
     let expected_error = format!(
         "The preferred sequencer has reached the stop height {} and is no longer accepting transactions.",
@@ -247,14 +233,7 @@ async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finaliza
     assert!(finalization_blocks < 10);
     let stop_at_height = RollupHeight::new(15);
 
-    let (test_rollup, _) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        Some(stop_at_height),
-        finalization_blocks,
-    )
-    .await;
+    let (test_rollup, _) = create_test_rollup(Some(stop_at_height), finalization_blocks).await;
 
     // Produce a few blocks to DA blocks to make sure there's a finalized slot after genesis.
     // This is for make rollup operational, so rollup will give out slot notifications.
@@ -301,14 +280,7 @@ async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finaliza
 async fn check_start_at(finalization_blocks: u32) {
     let stop_at_height = RollupHeight::new(15);
 
-    let (test_rollup, _) = create_test_rollup(
-        0,
-        TEST_MAX_BATCH_SIZE,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        Some(stop_at_height),
-        finalization_blocks,
-    )
-    .await;
+    let (test_rollup, _) = create_test_rollup(Some(stop_at_height), finalization_blocks).await;
 
     let client = test_rollup.client.clone();
 
@@ -407,11 +379,7 @@ async fn get_slot_number(client: &NodeClient, finalized: bool) -> u64 {
     slot.number
 }
 
-#[allow(clippy::too_many_arguments)]
 async fn create_test_rollup(
-    minimum_profit_per_tx: u128,
-    max_batch_size: usize,
-    blob_processing_timeout_secs: u64,
     stop_at_rollup_height: Option<RollupHeight>,
     finalization_blocks: u32,
 ) -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
@@ -448,9 +416,6 @@ async fn create_test_rollup(
             genesis_params,
         )
         .dir(dir.clone())
-        .minimum_profit_per_tx(minimum_profit_per_tx)
-        .max_batch_size_bytes(max_batch_size)
-        .blob_processing_timeout_secs(blob_processing_timeout_secs)
         .stop_at_rollup_height(stop_at_rollup_height)
         .finalization_blocks(finalization_blocks)
         .start()
