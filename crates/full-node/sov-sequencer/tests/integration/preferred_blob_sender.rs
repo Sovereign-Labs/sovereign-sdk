@@ -6,64 +6,25 @@ use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::prelude::*;
 use sov_modules_api::{DispatchCall, RawTx, Runtime};
-use sov_modules_stf_blueprint::GenesisParams;
-use sov_paymaster::PaymasterConfig;
 use sov_rollup_interface::stf::BlobDiscardReason;
-use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::{default_test_signed_transaction_with_nonce, TestSpec, TestUser};
-use sov_value_setter::ValueSetterConfig;
 
 #[allow(unused_imports)]
 use crate::preferred_end_to_end::{
-    run_action_against_test_rollup, run_actions_against_test_rollup,
+    create_test_rollup_with, run_action_against_test_rollup, run_actions_against_test_rollup,
     setup_test_rollup_with_initial_state, InvalidGeneration, TestBlueprint, TestRuntime, TestState,
     TestingAction,
 };
-use crate::utils::{tempdir_inside_codebase_dir, SeqTestRollup};
 
 const PREFERRED_SEQUENCER_DB_NAME: &str = "preferred_sequencer";
 
 async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>) {
-    let genesis_config =
-        HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
-    let admin = genesis_config.additional_accounts()[0].clone();
-
-    let rt_genesis_config =
-        <TestRuntime<TestSpec> as Runtime<TestSpec>>::GenesisConfig::from_minimal_config(
-            genesis_config.into(),
-            ValueSetterConfig {
-                admin: admin.address(),
-            },
-            (),
-            PaymasterConfig::default(),
-            (),
-            (),
-        );
-
-    let genesis_params = GenesisParams {
-        runtime: rt_genesis_config.clone(),
-    };
-
-    let dir = tempdir_inside_codebase_dir();
-
-    (
-        SeqTestRollup::<TestRuntime<TestSpec>>::new(
-            genesis_params
-                .runtime
-                .sequencer_registry
-                .sequencer_config
-                .seq_da_address,
-            genesis_params,
-        )
-        .dir(dir)
-        .block_producing_config(BlockProducingConfig::Periodic { block_time_ms: 300 })
-        //BlockProducingConfig::Manual,
-        .finalization_blocks(0)
-        .start()
-        .await,
-        admin,
-    )
+    create_test_rollup_with(|b| {
+        b.block_producing_config(BlockProducingConfig::Periodic { block_time_ms: 300 })
+            .finalization_blocks(0)
+    })
+    .await
 }
 
 #[tokio::test(flavor = "multi_thread")]
