@@ -966,7 +966,7 @@ where
 
     /// Generic helper for waiting on a condition with timeout and polling.
     ///  * condition_string: inserted into "Timeout waiting for {condition_string}", format accordingly
-    async fn wait_for_condition<F, Fut>(
+    pub async fn wait_for_condition<F, Fut>(
         &self,
         mut condition_check: F,
         condition_string: &str,
