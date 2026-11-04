@@ -1,7 +1,9 @@
 //! A node running the preferred sequencer and a node running a registered, non-preferred
 //! standard sequencer, side by side on the same mock DA layer.
 
+use std::collections::HashSet;
 use std::future::Future;
+use std::time::Duration;
 
 use futures::{FutureExt, StreamExt};
 use sov_api_spec::types::{self as api_types, IntOrHash, TxReceiptResult};
@@ -36,9 +38,13 @@ struct SideBySide {
     standard: TestRollup<TestBlueprint>,
     /// Transfer sent through the preferred sequencer, by an account that touches nothing else.
     preferred_tx_hash: TxHash,
-    /// Transfer sent through the standard sequencer after it got registered, by an account that
-    /// touches nothing else.
-    standard_tx_hash: TxHash,
+    /// Two transfers sent through the standard sequencer after it got registered, by an account
+    /// that touches nothing else. Two, so they land in one multi-tx batch.
+    standard_tx_hashes: [TxHash; 2],
+    /// The preferred sequencer's own soft-confirmations, subscribed to before the standard
+    /// transfers were sent.
+    preferred_tx_stream:
+        futures::stream::BoxStream<'static, anyhow::Result<api_types::ApiAcceptedTx>>,
 }
 
 fn create_genesis_params() -> (GenesisParams<GenesisConfig<S>>, Vec<TestUser<S>>) {
@@ -49,10 +55,10 @@ fn create_genesis_params() -> (GenesisParams<GenesisConfig<S>>, Vec<TestUser<S>>
     (GenesisParams { runtime }, users)
 }
 
-fn transfer(sender: &TestUser<S>, recipient: &TestUser<S>) -> RawTx {
+fn transfer(sender: &TestUser<S>, recipient: &TestUser<S>, generation: u64) -> RawTx {
     encode_call::<RT>(
         &sender.private_key,
-        0,
+        generation,
         &TestRuntimeCall::Bank(sov_test_utils::sov_bank::CallMessage::Transfer {
             to: recipient.address(),
             coins: sov_test_utils::runtime::Coins {
@@ -124,6 +130,12 @@ async fn produce_blocks_until<F, Fut>(
                     );
                     if !done {
                         preferred.tenderly_produce_blocks(1).await?;
+                        // Two nodes on one machine process slots slower than blocks are
+                        // produced. Without waiting, the lag grows until the preferred
+                        // sequencer pauses as `Syncing`.
+                        for node in [preferred, standard] {
+                            node.wait_for_node_synced().await?;
+                        }
                     }
                     Ok(done)
                 }
@@ -220,14 +232,26 @@ async fn run_side_by_side() -> SideBySide {
         "standard sequencer registration must succeed, otherwise its batches go down the unregistered path"
     );
 
-    let standard_tx_hash = accept_tx(
-        standard.api_client(),
-        &transfer(standard_sender, standard_recipient),
-    )
-    .await;
+    // Live stream only: the sequencer emits its own results, never ones copied from the node's ledger.
+    let preferred_tx_stream = preferred
+        .api_client()
+        .subscribe_to_txs(None)
+        .await
+        .expect("should subscribe to preferred sequencer txs");
+    let mut standard_tx_hashes = Vec::new();
+    for generation in 0..2 {
+        standard_tx_hashes.push(
+            accept_tx(
+                standard.api_client(),
+                &transfer(standard_sender, standard_recipient, generation),
+            )
+            .await,
+        );
+    }
+    let standard_tx_hashes: [TxHash; 2] = standard_tx_hashes.try_into().unwrap();
     let preferred_tx_hash = accept_tx(
         preferred.api_client(),
-        &transfer(preferred_sender, preferred_recipient),
+        &transfer(preferred_sender, preferred_recipient, 0),
     )
     .await;
     preferred.force_close_batch().await.unwrap();
@@ -237,7 +261,7 @@ async fn run_side_by_side() -> SideBySide {
         "both transfers to execute on both nodes",
         || async {
             for node in [&preferred, &standard] {
-                for hash in [&preferred_tx_hash, &standard_tx_hash] {
+                for hash in std::iter::once(&preferred_tx_hash).chain(&standard_tx_hashes) {
                     if ledger_tx(node, hash).await.is_none() {
                         return false;
                     }
@@ -252,7 +276,8 @@ async fn run_side_by_side() -> SideBySide {
         preferred,
         standard,
         preferred_tx_hash,
-        standard_tx_hash,
+        standard_tx_hashes,
+        preferred_tx_stream,
     }
 }
 
@@ -262,10 +287,9 @@ async fn txs_from_both_sequencers_succeed_on_both_nodes() {
     let run = run_side_by_side().await;
 
     for (node_name, node) in [("preferred", &run.preferred), ("standard", &run.standard)] {
-        for (seq_name, hash) in [
-            ("preferred", &run.preferred_tx_hash),
-            ("standard", &run.standard_tx_hash),
-        ] {
+        for (seq_name, hash) in std::iter::once(("preferred", &run.preferred_tx_hash))
+            .chain(run.standard_tx_hashes.iter().map(|h| ("standard", h)))
+        {
             assert_eq!(
                 ledger_tx(node, hash).await.unwrap().receipt.result,
                 TxReceiptResult::Successful,
@@ -282,7 +306,7 @@ async fn txs_from_both_sequencers_succeed_on_both_nodes() {
 #[ignore = "preferred sequencer panics replaying a registered non-preferred batch; fixed later in the PR stack"]
 async fn preferred_sequencer_stays_ready_after_non_preferred_batch() {
     let run = run_side_by_side().await;
-    let target_slot = slot_number_containing(&run.preferred, &run.standard_tx_hash).await;
+    let target_slot = slot_number_containing(&run.preferred, &run.standard_tx_hashes[0]).await;
     let mut state_updates = run
         .preferred
         .subscribe_state_updates()
@@ -312,4 +336,47 @@ async fn preferred_sequencer_stays_ready_after_non_preferred_batch() {
         run.preferred.is_sequencer_ready().await,
         "preferred sequencer should stay ready after replaying a non-preferred batch"
     );
+}
+
+/// The preferred sequencer executes non-preferred batches itself, and its next state update
+/// overwrites the result with the node's, so a divergence (e.g. in escrow accounting) does not
+/// crash it. Check its own soft-confirmations of the non-preferred transfers instead.
+#[tokio::test(flavor = "multi_thread")]
+#[ignore = "preferred sequencer panics replaying a registered non-preferred batch; fixed later in the PR stack"]
+async fn preferred_sequencer_soft_confirms_non_preferred_txs() {
+    let mut run = run_side_by_side().await;
+    let first_tx = ledger_tx(&run.preferred, &run.standard_tx_hashes[0])
+        .await
+        .unwrap();
+    let second_tx = ledger_tx(&run.preferred, &run.standard_tx_hashes[1])
+        .await
+        .unwrap();
+    assert_eq!(
+        first_tx.batch_number, second_tx.batch_number,
+        "standard transfers must share a batch to exercise multi-transaction escrow accounting"
+    );
+
+    let mut pending: HashSet<String> = run
+        .standard_tx_hashes
+        .iter()
+        .map(|hash| hash.to_string())
+        .collect();
+
+    while !pending.is_empty() {
+        let tx = tokio::time::timeout(Duration::from_secs(10), run.preferred_tx_stream.next())
+            .await
+            .unwrap_or_else(|_| {
+                panic!("preferred sequencer never soft-confirmed non-preferred txs {pending:?}")
+            })
+            .expect("preferred sequencer tx stream ended")
+            .expect("tx notification should deserialize");
+        if pending.remove(&*tx.id) {
+            assert_eq!(
+                tx.receipt.result,
+                TxReceiptResult::Successful,
+                "non-preferred tx {:?} should succeed in the preferred sequencer, as it does on the node",
+                tx.id
+            );
+        }
+    }
 }
