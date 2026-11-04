@@ -414,8 +414,9 @@ impl<S: Spec> BlobStorage<S> {
 
         // The virtual height increase is either 1 (if the delta is 0) or 2.
         let gas_price_for_new_block = self.get_new_gas_price(delta.min(2), state);
+        let visible_slot = state.visible_slot_number().as_true();
         self.retrieve_stored_blobs_and_add_to_selection(
-            slots_needed_from_storage,
+            (1..=slots_needed_from_storage).map(|slot| visible_slot.saturating_add(slot)),
             &gas_price_for_new_block,
             &mut blobs_with_total_size_limit,
             discarded_blobs,
@@ -575,8 +576,9 @@ impl<S: Spec> BlobStorage<S> {
         // TODO: If we start dropping blobs on the *second* slot in this loop, the preferred sequencer is doing some sneaky censorship
         // The attack is not economically feasible (analysis available upon request).
         // by increasing the visible slot number too quickly, causing blobs to be dropped. We should consider slashing in this case.
+        let visible_slot = state.visible_slot_number().as_true();
         self.retrieve_stored_blobs_and_add_to_selection(
-            visible_height_increase as u64,
+            (1..=visible_height_increase as u64).map(|slot| visible_slot.saturating_add(slot)),
             &gas_price_for_new_block,
             &mut blobs_to_select,
             discarded_blobs,
@@ -759,37 +761,28 @@ impl<S: Spec> BlobStorage<S> {
 
     fn retrieve_stored_blobs_and_add_to_selection(
         &mut self,
-        slots_needed_from_storage: u64,
+        slot_range: impl Iterator<Item = SlotNumber>,
         gas_price_for_new_block: &<S::Gas as Gas>::Price,
         blobs_with_total_size_limit: &mut BlobsAccumulatorWithSizeLimit<S>,
         discarded_blobs: &mut Vec<DiscardedBlob>,
         state: &mut KernelStateAccessor<'_, S>,
     ) {
-        for slot in 1..=slots_needed_from_storage {
-            let slot_to_check = state.visible_slot_number().saturating_add(slot);
+        for slot_to_check in slot_range {
             let batches_from_next_slot = self.take_blobs_for_slot(slot_to_check, state);
+            tracing::trace!(
+                "Found {} additional blobs in slot {} ",
+                batches_from_next_slot.len(),
+                slot_to_check
+            );
 
             for mut batch in batches_from_next_slot {
-                // For each batch we retrieve from storage, we check if it has enough reserved gas to cover the pre-execution checks.
-                // If so, we select it for execution. If not, we drop the blob and refund the reserved gas to the sequencer.
-                let balance_store = &batch.balance_store;
-                match balance_store {
-                    Escrow::DerivedHolder(reserved_balance) => {
-                        if let Ok(retrieved_token_amount) = self.move_funds_from_escrow_to_bank(&batch, reserved_balance, *gas_price_for_new_block, state) {
-                            let _ = std::mem::replace(&mut batch.balance_store, Escrow::Direct(retrieved_token_amount));
-                        } else {
-                            Self::discard(
-                                discarded_blobs,
-                                &batch.sender,
-                                batch.blob.id(),
-                                BlobDiscardReason::InsufficientReservedGas,
-                            );
-                            // If we can't retrieve enough funds from escrow, we drop the blob and move on to the next one.
-                            continue;
-                        }
-                    }
-                    Escrow::Direct(_) => unreachable!("Deferred blobs must store their gas in a derived account until it's ready to be used."),
-                    Escrow::None => {}
+                if !self.release_deferred_escrow(
+                    &mut batch,
+                    *gas_price_for_new_block,
+                    discarded_blobs,
+                    state,
+                ) {
+                    continue;
                 }
                 if let PushOrIgnore::IgnoredBlob(id, sender) =
                     blobs_with_total_size_limit.push_or_ignore(SequencerType::NonPreferred, batch)
@@ -805,6 +798,37 @@ impl<S: Spec> BlobStorage<S> {
         }
     }
 
+    /// For a batch retrieved from storage, checks that it has enough reserved gas to cover the pre-execution checks.
+    /// If so, moves that gas to the bank and returns `true`. If not, discards the blob, refunds the reserved gas to the
+    /// sequencer and returns `false`.
+    #[must_use]
+    fn release_deferred_escrow(
+        &mut self,
+        batch: &mut ValidatedBlob<S, BatchWithId<S>>,
+        gas_price_for_new_block: <S::Gas as Gas>::Price,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
+        state: &mut KernelStateAccessor<'_, S>,
+    ) -> bool {
+        match &batch.balance_store {
+            Escrow::DerivedHolder(reserved_balance) => {
+                // Every error means the escrow can't cover the pre-execution checks. The callee has already logged the cause and refunded the escrow.
+                let Ok(retrieved_token_amount) = self.move_funds_from_escrow_to_bank(batch, reserved_balance, gas_price_for_new_block, state) else {
+                    Self::discard(
+                        discarded_blobs,
+                        &batch.sender,
+                        batch.blob.id(),
+                        BlobDiscardReason::InsufficientReservedGas,
+                    );
+                    return false;
+                };
+                batch.balance_store = Escrow::Direct(retrieved_token_amount);
+            }
+            Escrow::Direct(_) => unreachable!("Deferred blobs must store their gas in a derived account until it's ready to be used."),
+            Escrow::None => {}
+        }
+        true
+    }
+
     fn move_funds_from_escrow_to_bank(
         &mut self,
         batch: &ValidatedBlob<S, BatchWithId<S>>,
@@ -817,28 +841,31 @@ impl<S: Spec> BlobStorage<S> {
             BlobDataWithId::EmergencyRegistration { .. } => panic!("Emergency registrations don't reserve gas because the sender is unknown. This is a bug!"),
             BlobDataWithId::Proof { sequencer_address, .. } => sequencer_address,
         };
-        if let Some(gas_needed_for_pre_exec_checks) = <S as GasSpec>::max_tx_check_costs()
+        let result = <S as GasSpec>::max_tx_check_costs()
             .checked_scalar_product(Self::num_pre_exec_checks_needed(&batch.blob) as u64)
             .and_then(|gas_needed| gas_needed.checked_value(gas_price_for_new_block))
-        {
-            let retrieval_result = self.sequencer_registry.retrieve_funds_from_escrow(
-                escrow,
-                refund_recipient,
-                gas_needed_for_pre_exec_checks,
-                state,
-            );
-            if retrieval_result.is_ok() {
-                return Ok(gas_needed_for_pre_exec_checks);
-            }
-        }
+            .ok_or_else(|| anyhow::anyhow!("Overflow computing the cost of pre-execution checks"))
+            .and_then(|gas_needed_for_pre_exec_checks| {
+                self.sequencer_registry
+                    .retrieve_funds_from_escrow(
+                        escrow,
+                        refund_recipient,
+                        gas_needed_for_pre_exec_checks,
+                        state,
+                    )
+                    .map(|()| gas_needed_for_pre_exec_checks)
+            });
 
-        tracing::warn!(
-            bash_id = %HexHash::new(batch.blob.id()),
-            %refund_recipient,
-            "Unable to pay pre-execution costs out of reserved gas balance for batch Dropping it. Recipient will have their remaining reserved balance refunded.");
-        self.sequencer_registry
-            .refund_all_reserved_gas(escrow, refund_recipient, state);
-        anyhow::bail!("Unable to reserve all needed gas.");
+        if let Err(error) = &result {
+            tracing::warn!(
+                batch_id = %HexHash::new(batch.blob.id()),
+                %refund_recipient,
+                %error,
+                "Unable to pay pre-execution costs out of reserved gas balance for batch. Dropping it. Recipient will have their remaining reserved balance refunded.");
+            self.sequencer_registry
+                .refund_all_reserved_gas(escrow, refund_recipient, state);
+        }
+        result
     }
 
     #[allow(clippy::too_many_arguments)]
@@ -1297,38 +1324,22 @@ impl<S: Spec> BlobStorage<S> {
         )
     }
 
-    /// Extracts all delayed non-preferred blobs that belong to the given slots.
+    /// Extracts all delayed non-preferred blobs that belong to the given slots, releasing their
+    /// deferred escrow at `gas_price_for_new_block`, the same way [`Self::get_blobs_for_this_slot`] does.
     pub fn get_non_preferred_blobs(
         &mut self,
         slot_range: impl Iterator<Item = SlotNumber>,
+        gas_price_for_new_block: &<S::Gas as Gas>::Price,
         state: &mut KernelStateAccessor<'_, S>,
     ) -> Vec<ValidatedBlob<S, BatchWithId<S>>> {
-        let discarded_blobs = &mut Vec::default();
         let mut blobs_with_total_size_limit = BlobsAccumulatorWithSizeLimit::<S>::new();
-
-        // Load all the necessary batches from storage.
-        for slot_to_check in slot_range {
-            let batches_from_next_slot = self.take_blobs_for_slot(slot_to_check, state);
-            tracing::trace!(
-                "Found {} additional blobs in slot {} ",
-                batches_from_next_slot.len(),
-                slot_to_check
-            );
-            for batch in batches_from_next_slot {
-                // Only push the blobs that are within the total size limit.
-                if let PushOrIgnore::IgnoredBlob(id, sender) =
-                    blobs_with_total_size_limit.push_or_ignore(SequencerType::NonPreferred, batch)
-                {
-                    Self::discard(
-                        discarded_blobs,
-                        &sender,
-                        id,
-                        BlobDiscardReason::OutOfCapacity,
-                    );
-                }
-            }
-        }
-
+        self.retrieve_stored_blobs_and_add_to_selection(
+            slot_range,
+            gas_price_for_new_block,
+            &mut blobs_with_total_size_limit,
+            &mut Vec::default(),
+            state,
+        );
         blobs_with_total_size_limit.inner()
     }
 }
