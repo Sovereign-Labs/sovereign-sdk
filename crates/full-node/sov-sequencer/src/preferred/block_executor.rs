@@ -1002,6 +1002,7 @@ where
                     .as_true()
                     .next()
                     .range_inclusive(next_visible_slot_number.as_true()),
+                &next_gas_price,
                 &mut accessor,
                 NoOpControlFlow,
             )
