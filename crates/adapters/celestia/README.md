@@ -151,6 +151,35 @@ grpc_auth_token = "your-api-token"
 signer_private_key = "798f316d2feecd1c1af5cf7c40abeae2d719c12afef8ba10ea0d785eb2595322"
 ```
 
+### Fibre (share version 2) batch blobs
+
+[Fibre](https://cips.celestia.org/cip-051.html) is Celestia's off-chain DA protocol. A Fibre blob is uploaded
+to validators, and only a 36-byte pointer (`blob_version` and a 32-byte commitment) lands on-chain, as a single
+share-version-2 share in the blob's namespace. The adapter can read such blobs from the rollup **batch**
+namespace and, optionally, submit batches through Fibre.
+
+* **Activation height.** Fibre reads are gated by `RollupParams::fibre_activation_height`, set in the demo
+  rollup from `FIBRE_ACTIVATION_HEIGHT` in [`constants.toml`](../../../constants.toml) (`0` = disabled).
+  Before that height (or when disabled) share-version-2 blobs are skipped exactly as before. Choose a height
+  greater than any block already processed by nodes without Fibre support, and upgrade nodes and provers
+  together: the witness wire types changed, and the guest image ID changes.
+* **Trust model.** The ZK guest checks the pointer share against the namespace Merkle tree (Celestia consensus,
+  as for ordinary blobs), then checks only SHA-256 row inclusion proofs binding the bytes the rollup read to the
+  commitment. It does not re-check erasure coding: validators did that before signing, and the chain before
+  accepting the pointer. Retrievability relies on an honest majority of validators during retention.
+* **Retention and archive.** Validators keep shards for 4 hours by default. Nodes must archive blobs
+  (`da.fibre.archive_dir`, optionally `archive_fallback_urls`) to sync or re-prove older blocks. Archived bytes
+  are untrusted and always re-verified against the on-chain commitment. A block whose Fibre data cannot be
+  fetched fails to load; it is never skipped.
+* **Cost and DoS bound.** After activation every pointer in the batch namespace forces the node to download
+  and re-encode the blob (up to 128 MiB). Spam is bounded by the Fibre payment the sender makes.
+* **Submitting.** `da.fibre.submit = true` requires `signer_private_key`, a pre-funded Fibre escrow account for
+  that signer, and a non-zero activation height. The batch receipt hash is the Fibre commitment.
+* **Not supported.** Fibre blobs in the proof namespace are skipped, before and after activation.
+
+See the documented `[da.fibre]` block in
+[`celestia_rollup_config.toml`](../../../examples/demo-rollup/configs/celestia_rollup_config.toml).
+
 ### Upgrading Celestia version
 
 When upgrading to a new version of Celestia, you'll need to update the docker images used for testing and development. 

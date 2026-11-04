@@ -15,6 +15,7 @@ pub const ROLLUP_PROOF_NAMESPACE: Namespace = Namespace::const_v0(*b"sov-test-p"
 pub const ROLLUP_PARAMS_DEV: RollupParams = RollupParams {
     rollup_batch_namespace: ROLLUP_BATCH_NAMESPACE,
     rollup_proof_namespace: ROLLUP_PROOF_NAMESPACE,
+    fibre_activation_height: None,
 };
 
 const ROLLUP_OTHER_NAMESPACE_PRECEDING: Namespace = Namespace::const_v0(*b"\0\0sov-aaaa");

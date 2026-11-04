@@ -43,6 +43,13 @@ BATCH_NAMESPACE = { byte_string = "sov-test-b" }
 # Should be 10 bytes long for Celestia
 PROOF_NAMESPACE = { hex = "0x736f762d746573742d70" }
 
+# Celestia Fibre (share version 2) batch blobs are read, and verified in the ZK guest, only from this
+# DA block height onward. Below it, share-version-2 blobs are skipped exactly as before, so chains that
+# already contain version-2 blobs in the batch namespace keep their state. `0` disables Fibre reads.
+# Consensus-relevant: it must be greater than the height of every block already processed by nodes
+# running an adapter without Fibre support, and identical for every node and prover of a deployment.
+FIBRE_ACTIVATION_HEIGHT = 0
+
 # The number of bytes a transaction can have.
 MAX_TX_SIZE=1_048_576
 

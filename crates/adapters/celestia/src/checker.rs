@@ -118,6 +118,15 @@ pub async fn check_da_service(da_service: &CelestiaService, rounds: usize) -> an
     if rounds == 0 {
         anyhow::bail!("Cannot run test with 0 rounds");
     }
+    tracing::info!(
+        fibre = da_service.submits_through_fibre(),
+        "Checking batch submission through {}",
+        if da_service.submits_through_fibre() {
+            "Fibre"
+        } else {
+            "MsgPayForBlob"
+        }
+    );
     // 478 bytes - Fills a single share exactly. No padding, no continuation.
     // 479 bytes - Triggers 2 shares. 1 byte spills into second share, most of second is padding.
     let around_1_share = 477..481;
