@@ -13,10 +13,11 @@ impl std::fmt::Display for RollupNamespace {
     }
 }
 
-use celestia_types::namespace_data::NamespaceData;
-use sov_metrics::Metric;
 use std::io::Write;
 use std::marker::PhantomData;
+
+use celestia_types::namespace_data::NamespaceData;
+use sov_metrics::Metric;
 
 /// Trait to define measurement names for different API calls
 pub trait ApiCall: std::fmt::Debug + Sync + Send {

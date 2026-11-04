@@ -6,16 +6,15 @@ use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use futures::stream::BoxStream;
 use futures::StreamExt;
+pub use sov_rollup_interface::node::da::{
+    run_maybe_retryable_async_fn_with_retries, MaybeRetryable,
+};
 
 use crate::config::VerifyOnFetchMode;
 use crate::header::CelestiaHeader;
 use crate::metrics::{
     GetBlockHeaderMeasurement, GetBlockMeasurement, GetChainHeadMeasurement,
     GetNamespaceDataMeasurement, NamespaceDataMetrics, RollupNamespace,
-};
-
-pub use sov_rollup_interface::node::da::{
-    run_maybe_retryable_async_fn_with_retries, MaybeRetryable,
 };
 
 pub type HeaderStream = BoxStream<'static, Result<CelestiaHeader, anyhow::Error>>;
@@ -198,9 +197,8 @@ pub fn flatten_timeout<T>(
 
 #[cfg(test)]
 mod tests {
-    use crate::config::VerifyOnFetchMode;
-
     use super::*;
+    use crate::config::VerifyOnFetchMode;
 
     #[test]
     fn verify_on_fetch_off_does_not_run_the_check() {
