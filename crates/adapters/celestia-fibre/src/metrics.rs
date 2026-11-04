@@ -1,5 +1,6 @@
-use sov_metrics::Metric;
 use std::io::Write;
+
+use sov_metrics::Metric;
 
 #[derive(Debug)]
 pub struct FibreDownloadMeasurement {

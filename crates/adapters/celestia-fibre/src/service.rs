@@ -630,10 +630,15 @@ mod tests {
     use sov_celestia_common::fixtures::{load_block_fixture, BlockFixture};
     use sov_celestia_common::header::ProtobufHash;
     use sov_celestia_common::shares::shares_needed_for_bytes_with_signer;
-    use sov_celestia_common::types::NamespaceData;
+    use sov_celestia_common::types::{
+        BlobDataError, NamespaceData, NamespaceType, NamespaceValidationError, ProofError,
+        RowProofError, ValidationError,
+    };
     use sov_rollup_interface::da::{BlobReaderTrait, BlockHeaderTrait, DaVerifier};
 
     use super::*;
+    use crate::proof::FibreRowsProof;
+    use crate::verifier::FIBRE_HEADER_LEN;
 
     fn tail_padding() -> Share {
         let mut raw = vec![0u8; SHARE_SIZE];
@@ -763,6 +768,111 @@ mod tests {
         CelestiaFibreVerifier::new(params)
             .verify_relevant_tx_list(block.header(), &blobs, proofs)
             .unwrap();
+    }
+
+    #[tokio::test]
+    async fn fibre_round_trip_verifies_a_zero_read() {
+        let (block, _, params) = fibre_block(false).await;
+        let blobs = verify_supplied(&block, params, 0).await;
+        assert_eq!(blobs.batch_blobs[0].verified_data(), &[] as &[u8]);
+    }
+
+    async fn verify_with_tampered_rows(
+        tamper: impl FnOnce(&mut Option<FibreRowsProof>),
+    ) -> Result<(), ValidationError> {
+        let (block, data, params) = fibre_block(false).await;
+        let mut blobs = extract_relevant_blobs(&block);
+        blobs.batch_blobs[0].advance(data.len());
+        let mut proofs = get_extraction_proof(&block, &blobs).await;
+        tamper(&mut proofs.batch.inclusion_proof[0].rows);
+        CelestiaFibreVerifier::new(params).verify_relevant_tx_list(block.header(), &blobs, proofs)
+    }
+
+    #[tokio::test]
+    async fn verifier_rejects_a_fibre_pointer_without_rows_proof() {
+        let error = verify_with_tampered_rows(|rows| *rows = None)
+            .await
+            .unwrap_err();
+        assert!(
+            matches!(
+                error,
+                ValidationError::NamespaceValidationError {
+                    namespace: NamespaceType::Batch,
+                    error: NamespaceValidationError::InvalidRowProof(RowProofError::ProofError(
+                        ProofError::Missing
+                    )),
+                }
+            ),
+            "{error:?}"
+        );
+    }
+
+    #[tokio::test]
+    async fn verifier_rejects_tampered_fibre_rows_proofs() {
+        type Tamper = fn(&mut FibreRowsProof);
+        let tampers: [(&str, Tamper); 3] = [
+            ("rows", |proof| proof.rows[FIBRE_HEADER_LEN] ^= 1),
+            ("siblings", |proof| proof.siblings[0][0] ^= 1),
+            ("rlc_root", |proof| proof.rlc_root[0] ^= 1),
+        ];
+        for (name, tamper) in tampers {
+            let error = verify_with_tampered_rows(|rows| tamper(rows.as_mut().unwrap()))
+                .await
+                .unwrap_err();
+            assert!(
+                matches!(
+                    error,
+                    ValidationError::NamespaceValidationError {
+                        namespace: NamespaceType::Batch,
+                        error: NamespaceValidationError::InvalidBlobData(
+                            BlobDataError::NonMatchingShare
+                        ),
+                    }
+                ),
+                "tampered {name} must not verify: {error:?}"
+            );
+        }
+    }
+
+    fn bincode_and_risc0_round_trip<T: serde::Serialize + serde::de::DeserializeOwned>(
+        value: &T,
+    ) -> [T; 2] {
+        [
+            bincode::deserialize(&bincode::serialize(value).unwrap()).unwrap(),
+            risc0_zkvm::serde::from_slice(&risc0_zkvm::serde::to_vec(value).unwrap()).unwrap(),
+        ]
+    }
+
+    #[tokio::test]
+    async fn filtered_block_round_trips_and_still_proves() {
+        let (block, data, params) = fibre_block(true).await;
+        for decoded in bincode_and_risc0_round_trip(&block) {
+            assert_eq!(decoded, block);
+            verify_supplied(&decoded, params, data.len()).await;
+        }
+    }
+
+    #[tokio::test]
+    async fn pruned_blobs_and_proofs_round_trip_and_verify() {
+        let (block, _, params) = fibre_block(true).await;
+        let mut blobs = extract_relevant_blobs(&block);
+        blobs.batch_blobs[0].advance(1000);
+        let proofs = get_extraction_proof(&block, &blobs).await;
+        let decoded_blobs = bincode_and_risc0_round_trip(&blobs);
+        let decoded_proofs = bincode_and_risc0_round_trip(&proofs);
+        for (decoded_blobs, decoded_proofs) in decoded_blobs.into_iter().zip(decoded_proofs) {
+            assert_eq!(
+                decoded_proofs.batch.inclusion_proof,
+                proofs.batch.inclusion_proof
+            );
+            assert_eq!(
+                decoded_blobs.batch_blobs[0].verified_data(),
+                blobs.batch_blobs[0].verified_data()
+            );
+            CelestiaFibreVerifier::new(params)
+                .verify_relevant_tx_list(block.header(), &decoded_blobs, decoded_proofs)
+                .unwrap();
+        }
     }
 
     #[tokio::test]
