@@ -15,6 +15,7 @@ futures = { workspace = true }
 reqwest = { workspace = true, features = ["json"] }
 serde = { workspace = true }
 serde_json = { workspace = true }
+tokio = { workspace = true, features = ["time"] }
 
 sov-api-spec = { workspace = true }
 sov-bank = { workspace = true, features = ["native"] }
@@ -22,6 +23,9 @@ sov-sequencer-registry = { workspace = true, features = ["native"] }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 tracing = { workspace = true }
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt", "test-util", "time"] }
 
 [lints]
 workspace = true
