@@ -20,19 +20,20 @@ use sov_rollup_interface::node::da::{DaService, SlotData, SubmitBlobReceipt};
 use tokio::sync::oneshot;
 
 use crate::commitment::prove_rows_prefix;
-use crate::namespace::{verify_namespace, FIBRE_BLOB_VERSION};
+use crate::namespace::{prove_namespace, verify_namespace_proof, FIBRE_BLOB_VERSION};
 use crate::{
-    CelestiaFibreConfig, CelestiaFibreSpec, CelestiaFibreVerifier, FibreBlob, FibreRowsProof,
+    CelestiaFibreConfig, CelestiaFibreSpec, CelestiaFibreVerifier, FibreBlob, FibreNamespaceProof,
+    FibreRowsProof,
 };
 
-/// Celestia block header, the rollup namespaces' shares, and the Fibre blobs they reference,
-/// already downloaded from validators.
+/// Celestia block header, the proofs of the rollup namespaces' sequences, and the Fibre blobs
+/// they reference, already downloaded from validators.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FilteredFibreBlock {
     pub(crate) header: CelestiaHeader,
-    pub(crate) batch_namespace_data: NamespaceData,
+    pub(crate) batch_namespace_proof: FibreNamespaceProof,
     pub(crate) batch_blobs: Vec<DownloadedFibreBlob>,
-    pub(crate) proof_namespace_data: NamespaceData,
+    pub(crate) proof_namespace_proof: FibreNamespaceProof,
     pub(crate) proof_blobs: Vec<DownloadedFibreBlob>,
 }
 
@@ -130,17 +131,19 @@ impl CelestiaFibreDaService {
         })
     }
 
-    /// Selects the Fibre references in `namespace_data` exactly like the verifier does, and
-    /// downloads the blobs they reference.
+    /// Proves the sequences of `namespace`, selects the Fibre references among them by verifying
+    /// that proof like the verifier does, and downloads the blobs they reference.
     async fn download_fibre_blobs(
         &self,
         header: &CelestiaHeader,
         namespace: Namespace,
-        namespace_data: &NamespaceData,
-    ) -> anyhow::Result<Vec<DownloadedFibreBlob>> {
+        namespace_data: NamespaceData,
+    ) -> anyhow::Result<(FibreNamespaceProof, Vec<DownloadedFibreBlob>)> {
         let height = header.height();
-        let refs = verify_namespace(header, namespace, namespace_data)
+        let namespace_proof = prove_namespace(header, namespace, namespace_data)
             .with_context(|| format!("Invalid namespace data at height {height}"))?;
+        let refs = verify_namespace_proof(header, namespace, &namespace_proof)
+            .with_context(|| format!("Invalid namespace proof at height {height}"))?;
 
         let mut fibre_blobs = Vec::with_capacity(refs.len());
         // TODO: downloads run sequentially, parallelize if blocks carry many Fibre blobs.
@@ -157,7 +160,7 @@ impl CelestiaFibreDaService {
                 data: downloaded.into_data(),
             });
         }
-        Ok(fibre_blobs)
+        Ok((namespace_proof, fibre_blobs))
     }
 
     async fn submit(
@@ -253,15 +256,15 @@ impl DaService for CelestiaFibreDaService {
                     .await?)
             },
         )?;
-        let (batch_blobs, proof_blobs) = tokio::try_join!(
-            self.download_fibre_blobs(&header, self.rollup_batch_namespace, &batch_namespace_data),
-            self.download_fibre_blobs(&header, self.rollup_proof_namespace, &proof_namespace_data),
+        let ((batch_namespace_proof, batch_blobs), (proof_namespace_proof, proof_blobs)) = tokio::try_join!(
+            self.download_fibre_blobs(&header, self.rollup_batch_namespace, batch_namespace_data),
+            self.download_fibre_blobs(&header, self.rollup_proof_namespace, proof_namespace_data),
         )?;
         Ok(FilteredFibreBlock {
             header,
-            batch_namespace_data,
+            batch_namespace_proof,
             batch_blobs,
-            proof_namespace_data,
+            proof_namespace_proof,
             proof_blobs,
         })
     }
@@ -296,7 +299,7 @@ impl DaService for CelestiaFibreDaService {
         &self,
         block: &Self::FilteredBlock,
         blobs: &RelevantBlobs<FibreBlob>,
-    ) -> RelevantProofs<Vec<Option<FibreRowsProof>>, NamespaceData> {
+    ) -> RelevantProofs<Vec<Option<FibreRowsProof>>, FibreNamespaceProof> {
         let read_lens = |blobs: &[FibreBlob]| -> Vec<usize> {
             blobs
                 .iter()
@@ -320,11 +323,11 @@ impl DaService for CelestiaFibreDaService {
         RelevantProofs {
             batch: DaProof {
                 inclusion_proof: batch,
-                completeness_proof: block.batch_namespace_data.clone(),
+                completeness_proof: block.batch_namespace_proof.clone(),
             },
             proof: DaProof {
                 inclusion_proof: proof,
-                completeness_proof: block.proof_namespace_data.clone(),
+                completeness_proof: block.proof_namespace_proof.clone(),
             },
         }
     }
@@ -365,8 +368,8 @@ impl DaService for CelestiaFibreDaService {
                 .get_namespace_data(height, self.rollup_proof_namespace)
                 .await?)
         },)?;
-        let blobs = self
-            .download_fibre_blobs(&header, self.rollup_proof_namespace, &namespace_data)
+        let (_, blobs) = self
+            .download_fibre_blobs(&header, self.rollup_proof_namespace, namespace_data)
             .await?;
         Ok(blobs.into_iter().map(|blob| blob.data.to_vec()).collect())
     }

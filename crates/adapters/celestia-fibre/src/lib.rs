@@ -15,4 +15,5 @@ pub use commitment::{verify_rows_prefix, FibreProofError, FibreRowsProof, Verifi
 pub use config::CelestiaFibreConfig;
 #[cfg(feature = "native")]
 pub use da_service::{CelestiaFibreDaService, FilteredFibreBlock};
+pub use namespace::{FibreNamespaceProof, ProvenShare};
 pub use spec::{CelestiaFibreSpec, CelestiaFibreVerifier, FibreBlob};

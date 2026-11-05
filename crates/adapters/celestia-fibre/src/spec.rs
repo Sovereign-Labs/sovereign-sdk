@@ -2,7 +2,6 @@ use std::borrow::Cow;
 use std::fmt;
 
 use anyhow::Context;
-use celestia_types::namespace_data::NamespaceData;
 use celestia_types::nmt::Namespace;
 use sov_celestia_adapter::types::TmHash;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
@@ -13,8 +12,8 @@ use sov_rollup_interface::da::{
 };
 
 use crate::commitment::MAX_DATA_SIZE;
-use crate::namespace::{verify_namespace, FibreRef};
-use crate::{verify_rows_prefix, FibreRowsProof};
+use crate::namespace::{verify_namespace_proof, FibreRef};
+use crate::{verify_rows_prefix, FibreNamespaceProof, FibreRowsProof};
 
 /// [`DaSpec`] for Celestia Fibre: Celestia headers and addresses, with blobs stored off-chain.
 #[derive(
@@ -40,9 +39,9 @@ impl DaSpec for CelestiaFibreSpec {
     /// Rows covering the read prefix of each blob, in blob order. `None` when the node couldn't
     /// rebuild the rows, which makes the block unprovable.
     type InclusionMultiProof = Vec<Option<FibreRowsProof>>;
-    /// All shares of the namespace with their row proofs. They hold the Fibre references that
-    /// the blobs must match one to one.
-    type CompletenessProof = NamespaceData;
+    /// First share of every sequence in the namespace. The Fibre references among them must
+    /// match the blobs one to one.
+    type CompletenessProof = FibreNamespaceProof;
     type ChainParams = RollupParams;
 }
 
@@ -233,7 +232,7 @@ impl DaVerifier for CelestiaFibreVerifier {
         &self,
         block_header: &CelestiaHeader,
         relevant_blobs: &RelevantBlobs<FibreBlob>,
-        relevant_proofs: RelevantProofs<Vec<Option<FibreRowsProof>>, NamespaceData>,
+        relevant_proofs: RelevantProofs<Vec<Option<FibreRowsProof>>, FibreNamespaceProof>,
     ) -> Result<(), Self::Error> {
         verify_namespace_blobs(
             block_header,
@@ -256,9 +255,9 @@ fn verify_namespace_blobs(
     header: &CelestiaHeader,
     namespace: Namespace,
     blobs: &[FibreBlob],
-    proof: &DaProof<Vec<Option<FibreRowsProof>>, NamespaceData>,
+    proof: &DaProof<Vec<Option<FibreRowsProof>>, FibreNamespaceProof>,
 ) -> anyhow::Result<()> {
-    let refs = verify_namespace(header, namespace, &proof.completeness_proof)?;
+    let refs = verify_namespace_proof(header, namespace, &proof.completeness_proof)?;
     verify_blobs(&refs, blobs, &proof.inclusion_proof)
 }
 
@@ -595,6 +594,8 @@ mod tests {
             batch_row_proofs: Vec<Option<FibreRowsProof>>,
         ) -> anyhow::Result<()> {
             let block = fixture(FIBRE_BLOCK);
+            let batch_proof = block.prove(BATCH_NAMESPACE, &block.batch_rows);
+            let proof_proof = block.prove(PROOF_NAMESPACE, &block.proof_rows);
             let verifier = CelestiaFibreVerifier::new(RollupParams {
                 rollup_batch_namespace: BATCH_NAMESPACE,
                 rollup_proof_namespace: PROOF_NAMESPACE,
@@ -608,11 +609,11 @@ mod tests {
                 RelevantProofs {
                     batch: DaProof {
                         inclusion_proof: batch_row_proofs,
-                        completeness_proof: block.batch_rows,
+                        completeness_proof: batch_proof,
                     },
                     proof: DaProof {
                         inclusion_proof: vec![],
-                        completeness_proof: block.proof_rows,
+                        completeness_proof: proof_proof,
                     },
                 },
             )
@@ -646,10 +647,10 @@ mod tests {
             let block = fixture(FIBRE_BLOCK);
             let proof = DaProof {
                 inclusion_proof: vec![],
-                completeness_proof: block.proof_rows,
+                completeness_proof: block.prove(PROOF_NAMESPACE, &block.proof_rows),
             };
 
-            verify_namespace_blobs(&block.header.into(), PROOF_NAMESPACE, &[], &proof).unwrap();
+            verify_namespace_blobs(&block.celestia_header(), PROOF_NAMESPACE, &[], &proof).unwrap();
         }
     }
 }
