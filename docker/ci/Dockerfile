@@ -61,6 +61,17 @@ RUN sudo npm install -g pnpm@9 doctoc bun@1.2.5
 RUN sudo wget https://github.com/mikefarah/yq/releases/download/v4.53.2/yq_linux_amd64 -O /usr/bin/yq \
     && sudo chmod +x /usr/bin/yq
 
+# wasm-pack and the tools it would otherwise download from GitHub on every
+# build of typescript/packages/universal-wallet-wasm. wasm-pack only uses a
+# wasm-bindgen on PATH whose version matches that package's Cargo.lock —
+# bump BOTH in lockstep. binaryen version_117 is what wasm-pack 0.13.1 fetches.
+RUN curl -fsSL https://github.com/wasm-bindgen/wasm-pack/releases/download/v0.13.1/wasm-pack-v0.13.1-x86_64-unknown-linux-musl.tar.gz \
+        | sudo tar xz -C /usr/local/bin --strip-components=1 wasm-pack-v0.13.1-x86_64-unknown-linux-musl/wasm-pack \
+    && curl -fsSL https://github.com/wasm-bindgen/wasm-bindgen/releases/download/0.2.100/wasm-bindgen-0.2.100-x86_64-unknown-linux-musl.tar.gz \
+        | sudo tar xz -C /usr/local/bin --strip-components=1 wasm-bindgen-0.2.100-x86_64-unknown-linux-musl/wasm-bindgen \
+    && curl -fsSL https://github.com/WebAssembly/binaryen/releases/download/version_117/binaryen-version_117-x86_64-linux.tar.gz \
+        | sudo tar xz -C /usr/local/bin --strip-components=2 binaryen-version_117/bin/wasm-opt
+
 # Pre-install Playwright system deps + Chromium so the demo-rollup phantom
 # e2e job doesn't apt-install/download on every run. The Chromium build is
 # tied to @playwright/test in typescript/examples/phantom/package.json —

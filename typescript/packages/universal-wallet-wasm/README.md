@@ -46,7 +46,8 @@ This package uses [wasm-pack](https://rustwasm.github.io/wasm-pack/) to compile 
 ### Prerequisites
 
 1. Install Rust (version 1.79 or later)
-2. Install Node.js dependencies: `pnpm install`
+2. Install [wasm-pack](https://rustwasm.github.io/wasm-pack/installer/) and make sure it is on your `PATH`
+3. Install Node.js dependencies: `pnpm install`
 
 ### Build Commands
 

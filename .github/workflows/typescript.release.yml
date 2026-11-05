@@ -42,6 +42,11 @@ jobs:
       - uses: oven-sh/setup-bun@v2
         with:
           bun-version: 1.2.5
+      # CI jobs get wasm-pack from the base image (docker/ci/Dockerfile); keep the version in sync.
+      - name: Install wasm-pack
+        run: |
+          curl -fsSL https://github.com/wasm-bindgen/wasm-pack/releases/download/v0.13.1/wasm-pack-v0.13.1-x86_64-unknown-linux-musl.tar.gz \
+            | sudo tar xz -C /usr/local/bin --strip-components=1 wasm-pack-v0.13.1-x86_64-unknown-linux-musl/wasm-pack
       - name: Install dependencies
         run: pnpm install
         working-directory: ./typescript
