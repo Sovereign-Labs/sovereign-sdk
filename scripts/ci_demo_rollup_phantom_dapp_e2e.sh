@@ -50,12 +50,6 @@ fi
 
 cd "$DAPP_DIR"
 pnpm --dir "$TS_DIR" install --frozen-lockfile
-# shortcut: the npm wasm-pack shim downloads its binary from GitHub on first run with no retry (504s seen in CI); drop once wasm-pack is baked into the CI image.
-for i in 1 2 3; do
-    pnpm --dir "$TS_DIR" --filter @sovereign-sdk/universal-wallet-wasm exec wasm-pack --version && break
-    [[ "$i" == 3 ]] && exit 1
-    sleep 10
-done
 pnpm --dir "$TS_DIR" --filter "${DAPP_PACKAGE}..." build
 # System deps + the pinned Chromium build are baked into the CI base image
 # (see docker/ci/Dockerfile). This resolves to a fast no-op there; the

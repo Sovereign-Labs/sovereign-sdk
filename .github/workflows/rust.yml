@@ -587,9 +587,6 @@ jobs:
           cache: |
             rust
             pnpm
-          # wasm-pack's downloaded wasm-bindgen/wasm-opt binaries (fetched from GitHub releases).
-          path: |
-            /home/runner/.cache/.wasm-pack
       # CI always operates on the entire workspace
       - run: cargo switcheroo disable
         shell: bash
