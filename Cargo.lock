@@ -11437,6 +11437,26 @@ dependencies = [
 ]
 
 [[package]]
+name = "sov-celestia-fibre-adapter"
+version = "0.3.0"
+dependencies = [
+ "anyhow",
+ "async-trait",
+ "borsh",
+ "bytes",
+ "celestia-client",
+ "celestia-grpc",
+ "hex",
+ "schemars 1.2.1",
+ "serde",
+ "sov-celestia-adapter",
+ "sov-celestia-fibre-adapter",
+ "sov-rollup-interface",
+ "tokio",
+ "tracing",
+]
+
+[[package]]
 name = "sov-chain-state"
 version = "0.3.0"
 dependencies = [
@@ -11583,6 +11603,7 @@ dependencies = [
  "sov-bank",
  "sov-blob-storage",
  "sov-celestia-adapter",
+ "sov-celestia-fibre-adapter",
  "sov-chain-state",
  "sov-cli",
  "sov-db",

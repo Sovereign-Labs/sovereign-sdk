@@ -102,6 +102,7 @@ members = [
     # TODO: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/498
     # "crates/adapters/avail",
     "crates/adapters/celestia",
+    "crates/adapters/celestia-fibre",
     "crates/adapters/risc0",
     "crates/adapters/sp1",
     "crates/web3",

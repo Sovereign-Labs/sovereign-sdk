@@ -52,3 +52,5 @@ constants_output.csv
 examples/demo-rollup/tests/resync/data/.tmp*
 
 .mcp.json
+# Local Celestia Fibre config: holds auth tokens and a signer key
+examples/demo-rollup/configs/mocha_fibre_config.toml

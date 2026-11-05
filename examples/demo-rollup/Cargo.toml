@@ -58,6 +58,7 @@ sp1 = { path = "./provers/sp1", optional = true }
 sov-celestia-adapter = { workspace = true, features = ["native"], optional = true }
 sov-risc0-adapter = { workspace = true, features = ["native"], optional = true }
 risc0 = { path = "./provers/risc0", optional = true }
+sov-celestia-fibre-adapter = { path = "../../crates/adapters/celestia-fibre", features = ["native"], optional = true }
 
 borsh = { workspace = true, features = ["bytes", "derive"] }
 async-trait = { workspace = true }
@@ -164,6 +165,8 @@ default = ["mock_da"]
 # extra flags. A combo whose feature isn't compiled in bails at startup.
 mock_da = ["dep:sov-mock-da", "dep:sov-sp1-adapter", "dep:sp1"]
 celestia_da = ["dep:sov-celestia-adapter", "dep:sov-risc0-adapter", "dep:risc0"]
+# Celestia Fibre rollup w/ MockZkvm only: no zkVM guests are built.
+celestia_fibre_da = ["dep:sov-celestia-adapter", "dep:sov-celestia-fibre-adapter"]
 
 da-migration-script = [
     # The migration binary bridges both DAs (references MockDemoRollup + CelestiaDemoRollup).
