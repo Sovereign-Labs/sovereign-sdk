@@ -33,8 +33,8 @@ impl schemars::JsonSchema for HexString {
     fn json_schema(_gen: &mut schemars::SchemaGenerator) -> schemars::Schema {
         schemars::json_schema!({
             "type": "string",
-            "pattern": "^0x(?:[a-fA-F0-9]{2})+$",
-            "description": "A `0x`-prefixed hexadecimal string (uppercase or lowercase) of variable length, with an even number of hex digits.",
+            "pattern": "^0x(?:[a-fA-F0-9]{2})*$",
+            "description": "A `0x`-prefixed hexadecimal string (uppercase or lowercase) of variable length, including zero bytes, with an even number of hex digits.",
         })
     }
 }
@@ -272,5 +272,22 @@ mod tests {
     #[test_strategy::proptest]
     fn hex_string_str_roundtrip(item: HexString) {
         test_str_roundtrip(item);
+    }
+
+    #[test]
+    fn variable_length_hex_string_json_schema_allows_empty_string() {
+        let empty_hex = HexString(Vec::<u8>::new());
+
+        assert_eq!(serde_json::to_string(&empty_hex).unwrap(), "\"0x\"");
+        assert_eq!(
+            HexString::<Vec<u8>>::from_str("0x").unwrap(),
+            HexString(Vec::new())
+        );
+
+        let mut schema_generator = schemars::SchemaGenerator::default();
+        let schema = <HexString as schemars::JsonSchema>::json_schema(&mut schema_generator);
+        let schema = serde_json::to_value(schema).unwrap();
+
+        assert_eq!(schema["pattern"], "^0x(?:[a-fA-F0-9]{2})*$");
     }
 }
