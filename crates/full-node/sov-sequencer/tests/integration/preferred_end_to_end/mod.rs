@@ -41,7 +41,9 @@ use sov_test_utils::runtime::genesis::optimistic::{
 };
 use sov_test_utils::test_rollup::FullNodeBlueprint;
 use sov_test_utils::test_rollup::StoragePath;
-use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, RollupProverConfig, TestRollup};
+use sov_test_utils::test_rollup::{
+    next_within, GenesisSource, RollupBuilder, RollupProverConfig, TestRollup,
+};
 use sov_test_utils::{
     generate_optimistic_runtime_with_kernel, RtAgnosticBlueprint, TestSpec, TestUser,
     TEST_DEFAULT_MOCK_DA_ON_SUBMIT, TEST_FINALIZATION_BLOCKS, TEST_MAX_BATCH_SIZE,
@@ -156,18 +158,14 @@ impl DaLayerWithSubscription {
         let subscription = self.slot_subscription.as_mut().unwrap();
         while self.back_slot_notifications > 1 {
             self.back_slot_notifications -= 1;
-            tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+            next_within(subscription, NOTIFICATION_TIMEOUT)
                 .await
-                .expect("timeout waiting for slot notification")
-                .unwrap()
                 .unwrap();
         }
 
         self.back_slot_notifications -= 1;
-        tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+        next_within(subscription, NOTIFICATION_TIMEOUT)
             .await
-            .expect("timeout waiting for slot notification")
-            .unwrap()
             .unwrap()
     }
 
@@ -177,10 +175,8 @@ impl DaLayerWithSubscription {
     /// how many state update notifications we should ultimately be receiving.
     pub async fn next_state_update_notification(&mut self) -> StateUpdateNotification {
         let subscription = self.state_update_subscription.as_mut().unwrap();
-        tokio::time::timeout(NOTIFICATION_TIMEOUT, subscription.next())
+        next_within(subscription, NOTIFICATION_TIMEOUT)
             .await
-            .expect("timeout waiting for state update notification")
-            .unwrap()
             .unwrap()
     }
 
