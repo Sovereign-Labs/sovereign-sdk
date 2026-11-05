@@ -91,15 +91,20 @@ impl<S: Spec> SequencerRegistry<S> {
         amount: Amount,
         state: &mut Accessor,
     ) -> Result<(), AddToStakeError<S>> {
+        let (sequencer, retired_sequencer) = self.da_address_for_refund(sequencer, state)?;
         if let Some(KnownSequencer {
             address,
             balance,
             balance_state,
         }) = self
             .known_sequencers
-            .get(sequencer, state)
+            .get(&sequencer, state)
             .unwrap_infallible()
         {
+            if retired_sequencer.is_some_and(|retired_sequencer| address != retired_sequencer) {
+                return Err(AddToStakeError::SequencerNotRegistered { sequencer });
+            }
+
             // Note that we don't check if the sequencer is active here, because the sequencer can get
             // refunded from escrow while their withdrawal is pending. In fact, that's the whole point of the
             // withdrawal period - to wait until all possible escrows involving the sequencer are resolved.
@@ -107,7 +112,7 @@ impl<S: Spec> SequencerRegistry<S> {
                 balance
                     .checked_add(amount)
                     .ok_or_else(|| AddToStakeError::BalanceOverflow {
-                        sequencer: *sequencer,
+                        sequencer,
                         original_balance: balance,
                         amount_to_add: amount,
                     })?;
@@ -121,7 +126,7 @@ impl<S: Spec> SequencerRegistry<S> {
 
             self.known_sequencers
                 .set(
-                    sequencer,
+                    &sequencer,
                     &KnownSequencer {
                         address,
                         balance: new_balance,
@@ -133,10 +138,48 @@ impl<S: Spec> SequencerRegistry<S> {
 
             Ok(())
         } else {
-            Err(AddToStakeError::SequencerNotRegistered {
-                sequencer: *sequencer,
-            })
+            Err(AddToStakeError::SequencerNotRegistered { sequencer })
         }
+    }
+
+    #[allow(clippy::type_complexity)]
+    fn da_address_for_refund<
+        Accessor: StateReader<Kernel, Error = Infallible> + StateReader<User, Error = Infallible>,
+    >(
+        &self,
+        sequencer: &<S::Da as DaSpec>::Address,
+        state: &mut Accessor,
+    ) -> Result<(<S::Da as DaSpec>::Address, Option<S::Address>), AddToStakeError<S>> {
+        if self
+            .known_sequencers
+            .get(sequencer, state)
+            .unwrap_infallible()
+            .is_some()
+        {
+            return Ok((*sequencer, None));
+        }
+
+        let Some(retired) = self
+            .retired_da_addresses
+            .get(sequencer, state)
+            .unwrap_infallible()
+        else {
+            return Ok((*sequencer, None));
+        };
+
+        let Some(current) = self
+            .current_da_address_by_sequencer
+            .get(&retired.sequencer, state)
+            .unwrap_infallible()
+        else {
+            return Ok((*sequencer, Some(retired.sequencer)));
+        };
+
+        if current.registration_da_address != retired.registration_da_address {
+            return Ok((*sequencer, Some(retired.sequencer)));
+        }
+
+        Ok((current.current_da_address, Some(retired.sequencer)))
     }
 }
 

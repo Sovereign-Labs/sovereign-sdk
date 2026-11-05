@@ -1,3 +1,10 @@
+# 2026-11-05
+- #2766 **Breaking change (code, wire, consensus)**: `sov-sequencer-registry` adds an `UpdateDaAddress { old_da_address, new_da_address }` variant to `CallMessage`, changing the borsh encoding surface and the chain hash.
+  Rotation is authorized by the rollup key (`context.sender()`), so a sequencer whose DA signing key is compromised (but whose rollup key is safe) can recover without going through withdrawal.
+  Balance, balance state, and the preferred-sequencer pointer are preserved; the old DA is marked retired (cannot be re-registered or rotated to).
+  Recovery procedure:
+    1. sign and submit `UpdateDaAddress` from the rollup key while the old DA is still valid
+    2. once the tx lands, restart the sequencer binary with the new DA signing keys. Blobs signed with the old key after the rotation lands are rejected as `NotRegistered` (no security impact, only lost throughput during the restart window).
 # 2026-11-02
 - #3106 Dependencies: Updated `quinn-proto` to 0.11.15 (GHSA-4w2j-m93h-cj5j), `rustls` to 0.23.45 (GHSA-2mjx-qc3c-rqvc), `serde_with` to 3.21.0 (GHSA-7gcf-g7xr-8hxj; the workspace now requires `serde_with = "3.21"`) and `pyo3` to 0.29 (`py_sovereign_web3` only). To apply the same updates to a rollup (e.g. rollup-starter), run these commands in the workspace root and again in each zkVM guest crate with `--manifest-path <guest>/Cargo.toml`, skipping any package that isn't in that lockfile:
     - `cargo update -p quinn-proto --precise 0.11.15`
