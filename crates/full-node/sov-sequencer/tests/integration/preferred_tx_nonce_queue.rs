@@ -26,8 +26,8 @@ use tokio::task::JoinHandle;
 use tokio::time::Duration;
 
 use crate::utils::{
-    tempdir_inside_codebase_dir, ModuleWithVersionedStateAccessInSlotHook,
-    MAX_BATCH_EXECUTION_TIME_MILLIS,
+    query_set_value, tempdir_inside_codebase_dir, tx_set_value_nonce,
+    ModuleWithVersionedStateAccessInSlotHook, MAX_BATCH_EXECUTION_TIME_MILLIS,
 };
 
 generate_optimistic_runtime_with_kernel!(
@@ -104,23 +104,7 @@ async fn create_test_rollup(
 
 /// Helper to create a ValueSetter transaction with a specific nonce.
 fn tx_set_value(key: &Ed25519PrivateKey, nonce: u64, value_to_set: u64) -> RawTx {
-    let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
-        sov_value_setter::CallMessage::SetValue {
-            value: value_to_set as u32,
-            gas: None,
-        },
-    );
-
-    let tx_details = default_test_tx_details::<TestSpec>();
-    let tx = test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
-        key,
-        &msg,
-        UniquenessData::Nonce(nonce),
-        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
-        tx_details,
-    );
-
-    RawTx::new(borsh::to_vec(&tx).unwrap())
+    tx_set_value_nonce::<TestRuntime<TestSpec>>(key, nonce, value_to_set, None)
 }
 
 /// Helper that creates a rejected transaction. Uses AssertVisibleSlotNumber with an impossibly
@@ -194,34 +178,6 @@ async fn submit_parallel_txs(
     handles
 }
 
-/// Helper to query the current value from the ValueSetter module.
-async fn query_set_value(
-    test_rollup: &TestRollup<TestBlueprint>,
-    expected: u64,
-) -> anyhow::Result<()> {
-    let url = "/modules/value-setter/state/value";
-    let response = test_rollup
-        .client
-        .query_rest_endpoint::<serde_json::Value>(url)
-        .await?;
-
-    // Quick check if the request returned an error
-    if response.get("message").is_some() {
-        return Err(anyhow::anyhow!("API request failed: {:?}", response));
-    }
-
-    let found_value = response["value"].as_u64().unwrap_or_default();
-
-    anyhow::ensure!(
-        found_value == expected,
-        "Expected value {}, found {}",
-        expected,
-        found_value
-    );
-
-    Ok(())
-}
-
 /// Test that transactions with normal consecutive nonces are accepted and executed in order.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_consecutive_nonces() {
@@ -234,7 +190,7 @@ async fn test_consecutive_nonces() {
     }
 
     // Sanity check
-    query_set_value(&test_rollup, 4).await.unwrap();
+    query_set_value(&test_rollup, None, Some(4)).await.unwrap();
 }
 
 /// Test that transactions with reordered nonces still all get in.
@@ -253,7 +209,7 @@ async fn test_out_of_order_nonces() {
     }
 
     // Sanity check
-    query_set_value(&test_rollup, 4).await.unwrap();
+    query_set_value(&test_rollup, None, Some(4)).await.unwrap();
 }
 
 #[tokio::test(flavor = "multi_thread")]
@@ -314,7 +270,7 @@ async fn test_failed_transaction_aborts_drain() {
     }
 
     // Sanity check
-    query_set_value(&test_rollup, 1).await.unwrap();
+    query_set_value(&test_rollup, None, Some(1)).await.unwrap();
 }
 
 /// Test transactions timing out from the queue.
@@ -351,7 +307,7 @@ async fn test_nonce_queue_timeout() {
     }
 
     // Sanity check: transaction with nonce 4 should have been the last to set value
-    query_set_value(&test_rollup, 4).await.unwrap();
+    query_set_value(&test_rollup, None, Some(4)).await.unwrap();
 }
 
 /// Test transaction rejection with a zero-length queue
@@ -376,7 +332,7 @@ async fn test_zero_length_queue() {
         handle.await.unwrap();
     }
     // Sanity check
-    query_set_value(&test_rollup, 0).await.unwrap();
+    query_set_value(&test_rollup, None, Some(0)).await.unwrap();
 }
 
 /// Test a very large number of out-of-order transactions with a tight timeout timer.
@@ -429,5 +385,7 @@ async fn test_repeated_timeouts_with_race_conditions() {
     }
 
     // Verify all transactions executed successfully
-    query_set_value(&test_rollup, NUM_TXS).await.unwrap();
+    query_set_value(&test_rollup, None, Some(NUM_TXS))
+        .await
+        .unwrap();
 }
