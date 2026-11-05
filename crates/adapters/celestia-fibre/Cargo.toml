@@ -21,6 +21,9 @@ serde = { workspace = true, default-features = false, features = [
     "alloc",
     "derive",
 ] }
+sha2 = { workspace = true }
+# Only for its GF(2^16) log/exp tables, which must match the ones Fibre encodes with.
+reed-solomon-simd = { version = "3.1.0", default-features = false }
 
 sov-celestia-adapter = { workspace = true }
 sov-rollup-interface = { workspace = true }
@@ -31,13 +34,14 @@ celestia-client = { version = "1.2.0", default-features = false, features = [
 ], optional = true }
 celestia-grpc = { version = "1.2.0", default-features = false, optional = true }
 hex = { workspace = true, optional = true }
-tokio = { workspace = true, optional = true, features = ["sync"] }
+tokio = { workspace = true, optional = true, features = ["rt", "sync"] }
 tracing = { workspace = true, optional = true }
 
 [dev-dependencies]
 # Tests and benches exercise the native service, and workspace builds can enable
 # `sov-rollup-interface/native` (which adds `BlobReaderTrait::advance`) without ours.
 sov-celestia-fibre-adapter = { path = ".", features = ["native"] }
+serde_json = { workspace = true, features = ["std"] }
 
 [features]
 default = []
