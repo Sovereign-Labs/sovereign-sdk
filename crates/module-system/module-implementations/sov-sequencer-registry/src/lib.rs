@@ -4,12 +4,16 @@
 //! during the rollup deployment.
 //!
 #![deny(missing_docs)]
+#[cfg(test)]
+mod activation_tests;
 mod call;
 mod capabilities;
 mod event;
 mod genesis;
 mod hooks;
 mod registration;
+#[cfg(feature = "native")]
+pub mod upgrade;
 
 use std::convert::Infallible;
 
