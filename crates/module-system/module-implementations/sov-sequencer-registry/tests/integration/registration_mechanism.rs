@@ -1633,6 +1633,109 @@ fn test_retired_refund_does_not_credit_reused_da_address() {
 }
 
 #[test]
+fn test_reregister_original_da_after_withdrawal_does_not_reserve_retired_da() {
+    let (
+        TestRoles {
+            additional_sequencer,
+            admin,
+            ..
+        },
+        mut runner,
+    ) = setup();
+
+    let da_a: MockAddress = NON_DEFAULT_SEQUENCER_DA_ADDRESS.into();
+    let da_b: MockAddress = ANOTHER_SEQUENCER_DA_ADDRESS.into();
+    let da_c: MockAddress = ROTATED_DA_ADDRESS.into();
+
+    runner.execute(register_sequencer(&additional_sequencer, da_a));
+    runner.execute(rotate_da_address(&additional_sequencer, da_a, da_b));
+    runner.execute(rotate_da_address(&additional_sequencer, da_b, da_c));
+    runner.execute(
+        additional_sequencer.create_plain_message::<RT, TestSequencerRegistry>(
+            CallMessage::InitiateWithdrawal { da_address: da_c },
+        ),
+    );
+    runner.advance_slots(config_value!("DEFERRED_SLOTS_COUNT") + 1);
+    runner.execute(
+        additional_sequencer.create_plain_message::<RT, TestSequencerRegistry>(
+            CallMessage::Withdraw { da_address: da_c },
+        ),
+    );
+    runner.execute(register_sequencer(&additional_sequencer, da_a));
+
+    let original_rollup = additional_sequencer.address();
+    let new_rollup = admin.address();
+    runner.execute_transaction(TransactionTestCase {
+        input: register_sequencer(&admin, da_b),
+        assert: Box::new(move |result, state| {
+            assert!(
+                result.tx_receipt.is_successful(),
+                "Re-registering A must not reserve B from the withdrawn registration: {:?}",
+                result.tx_receipt
+            );
+            assert_eq!(known_sequencer(&da_a, state).address, original_rollup);
+            assert_eq!(known_sequencer(&da_b, state).address, new_rollup);
+            assert_unknown_sequencer(&da_c, state);
+        }),
+    });
+}
+
+#[test]
+fn test_reregister_original_da_after_slashing_does_not_receive_retired_refund() {
+    let (
+        TestRoles {
+            additional_sequencer,
+            ..
+        },
+        mut runner,
+    ) = setup();
+
+    let da_a: MockAddress = NON_DEFAULT_SEQUENCER_DA_ADDRESS.into();
+    let da_b: MockAddress = ANOTHER_SEQUENCER_DA_ADDRESS.into();
+    let da_c: MockAddress = ROTATED_DA_ADDRESS.into();
+    let refund_amount = Amount::new(777);
+
+    runner.execute(register_sequencer(&additional_sequencer, da_a));
+    runner.execute(rotate_da_address(&additional_sequencer, da_a, da_b));
+    runner.__apply_to_state(move |state| {
+        TestSequencerRegistry::default()
+            .remove_part_of_the_stake(
+                &da_b,
+                Bank::<S>::default().id().clone().to_payable(),
+                refund_amount,
+                state,
+            )
+            .unwrap();
+    });
+    runner.execute(rotate_da_address(&additional_sequencer, da_b, da_c));
+    runner.__apply_to_state(move |state| {
+        TestSequencerRegistry::default().slash_sequencer(&da_c, state);
+    });
+    runner.execute(register_sequencer(&additional_sequencer, da_a));
+
+    runner.__apply_to_state(move |state| {
+        let mut reg = TestSequencerRegistry::default();
+        let before = reg.is_sender_known(&da_a, state).unwrap();
+        assert_eq!(before.balance, SEQUENCE_STAKE);
+
+        let error = reg
+            .add_to_stake(
+                Bank::<S>::default().id().clone().to_payable(),
+                &da_b,
+                refund_amount,
+                state,
+            )
+            .expect_err("Refund to retired B must not credit the new registration at A");
+        assert!(matches!(
+            error,
+            sov_sequencer_registry::AddToStakeError::SequencerNotRegistered { sequencer }
+                if sequencer == da_b
+        ));
+        assert_eq!(reg.is_sender_known(&da_a, state).unwrap(), before);
+    });
+}
+
+#[test]
 fn test_reused_retired_da_address_receives_direct_current_refund() {
     let (
         TestRoles {

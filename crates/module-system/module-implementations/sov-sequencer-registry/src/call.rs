@@ -132,10 +132,19 @@ impl<S: Spec> SequencerRegistry<S> {
         };
         self.known_sequencers
             .set(da_address, &new_sequencer, state)?;
+        let registration_id = self
+            .registration_id_counter
+            .get(state)?
+            .expect("Sequencer DA rotation tracking must be initialized")
+            .checked_add(1)
+            .ok_or(RegistrationError::Custom(
+                CustomError::RegistrationIdsExhausted,
+            ))?;
+        self.registration_id_counter.set(&registration_id, state)?;
         self.current_da_address_by_sequencer.set(
             &address,
             &CurrentDaAddress {
-                registration_da_address: *da_address,
+                registration_id,
                 current_da_address: *da_address,
             },
             state,
@@ -394,22 +403,23 @@ impl<S: Spec> SequencerRegistry<S> {
         self.known_sequencers.delete(old_da_address, state)?;
         self.known_sequencers
             .set(new_da_address, existing_sequencer, state)?;
-        let registration_da_address = self
+        let registration_id = self
             .current_da_address_by_sequencer
             .get(&existing_sequencer.address, state)?
-            .map_or(*old_da_address, |current| current.registration_da_address);
+            .expect("Rotating sequencer must have a registration ID")
+            .registration_id;
         self.retired_da_addresses.set(
             old_da_address,
             &RetiredDaAddress {
                 sequencer: existing_sequencer.address,
-                registration_da_address,
+                registration_id,
             },
             state,
         )?;
         self.current_da_address_by_sequencer.set(
             &existing_sequencer.address,
             &CurrentDaAddress {
-                registration_da_address,
+                registration_id,
                 current_da_address: *new_da_address,
             },
             state,

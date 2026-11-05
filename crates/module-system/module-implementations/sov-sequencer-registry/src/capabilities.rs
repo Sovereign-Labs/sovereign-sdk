@@ -175,7 +175,7 @@ impl<S: Spec> SequencerRegistry<S> {
         else {
             return Ok(None);
         };
-        if current.registration_da_address != retired.registration_da_address {
+        if current.registration_id != retired.registration_id {
             return Ok(None);
         }
 

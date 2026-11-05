@@ -30,8 +30,8 @@ use sov_modules_api::registration_lib::RegistrationError;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
     BasicAddress, Context, DaSpec, GenesisState, InfallibleStateAccessor, KernelStateAccessor,
-    KernelStateMap, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, StateAccessor, StateReader,
-    StateValue, StateWriter, TxState, VisibleSlotNumber,
+    KernelStateMap, KernelStateValue, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
+    StateAccessor, StateReader, StateValue, StateWriter, TxState, VisibleSlotNumber,
 };
 use sov_state::{Kernel, User};
 use thiserror::Error;
@@ -92,7 +92,7 @@ struct PendingDaAddressUpdate<S: Spec> {
     bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned, <S::Da as DaSpec>::Address: serde::Serialize + serde::de::DeserializeOwned"
 )]
 struct CurrentDaAddress<S: Spec> {
-    registration_da_address: <S::Da as DaSpec>::Address,
+    registration_id: u64,
     current_da_address: <S::Da as DaSpec>::Address,
 }
 
@@ -102,7 +102,7 @@ struct CurrentDaAddress<S: Spec> {
 )]
 struct RetiredDaAddress<S: Spec> {
     sequencer: S::Address,
-    registration_da_address: <S::Da as DaSpec>::Address,
+    registration_id: u64,
 }
 
 /// The status of the sequencer's balance.
@@ -180,11 +180,18 @@ pub struct SequencerRegistry<S: Spec> {
     /// Current DA address for each active rollup sequencer address.
     #[state]
     current_da_address_by_sequencer: KernelStateMap<S::Address, CurrentDaAddress<S>>,
+
+    /// Last allocated registration ID. Presence also marks rotation tracking as initialized.
+    #[state]
+    registration_id_counter: KernelStateValue<u64>,
 }
 
 /// A special error type that can be raised when calling a method from the sequencer registry
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum CustomError<RollupAddress: BasicAddress, DaAddress: BasicAddress> {
+    /// All registration IDs have been allocated.
+    #[error("Sequencer registration IDs exhausted")]
+    RegistrationIdsExhausted,
     /// The sequencer tried to unregister itself during the execution of its own batch.
     #[error("Sequencers may not unregister during execution of their own batch")]
     CannotUnregisterDuringOwnBatch(DaAddress),
@@ -258,6 +265,7 @@ impl<S: Spec> Module for SequencerRegistry<S> {
         config: &Self::Config,
         state: &mut impl GenesisState<S>,
     ) -> Result<(), Self::Error> {
+        self.registration_id_counter.set(&0, state)?;
         self.init_module(config, state)
     }
 
