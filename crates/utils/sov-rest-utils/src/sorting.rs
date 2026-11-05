@@ -121,7 +121,6 @@ mod tests {
     fn ok_cases() {
         try_deserialize(&[("sort", "+100")]).unwrap();
         try_deserialize(&[("sort", "-100")]).unwrap();
-        try_deserialize(&[("sort", "+100")]).unwrap();
         try_deserialize(&[("sort", "--100")]).unwrap();
         try_deserialize(&[("sort", "+0")]).unwrap();
     }
