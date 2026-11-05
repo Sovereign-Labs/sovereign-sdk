@@ -260,6 +260,10 @@ pub struct LedgerDb {
 
 // Db key for the latest height of the written STF info.
 const WRITE_ROLLUP_HEIGHT_ID: StfInfoUniqueId = StfInfoUniqueId(0);
+// ID 1 was previously used for the next STF-info cursor. Do not reuse it because
+// existing databases can retain that value.
+// Db key for the latest optimistic attestation recorded in durable local metadata.
+const LATEST_OPTIMISTIC_ATTESTATION_ID: StfInfoUniqueId = StfInfoUniqueId(3);
 // Db key for the oldest saved STF info.
 const LAST_SLOT_NUMBER_ID: StfInfoUniqueId = StfInfoUniqueId(2);
 
@@ -651,6 +655,23 @@ impl LedgerDb {
     pub async fn get_stf_info_write_slot_number(&self) -> anyhow::Result<Option<SlotNumber>> {
         let db = self.db.read().expect(DB_LOCK_POISONED).clone();
         db.get_async::<StfInfoMetadata>(&WRITE_ROLLUP_HEIGHT_ID)
+            .await
+    }
+
+    /// Materializes the latest optimistic attestation in durable local metadata.
+    pub fn materialize_latest_optimistic_attestation(
+        &self,
+        slot_number: SlotNumber,
+    ) -> anyhow::Result<SchemaBatch> {
+        let mut schema_batch = SchemaBatch::new();
+        schema_batch.put::<StfInfoMetadata>(&LATEST_OPTIMISTIC_ATTESTATION_ID, &slot_number)?;
+        Ok(schema_batch)
+    }
+
+    /// Gets the latest optimistic attestation recorded in durable local metadata.
+    pub async fn get_latest_optimistic_attestation(&self) -> anyhow::Result<Option<SlotNumber>> {
+        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
+        db.get_async::<StfInfoMetadata>(&LATEST_OPTIMISTIC_ATTESTATION_ID)
             .await
     }
 
