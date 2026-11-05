@@ -8,16 +8,16 @@
 
 use sov_bank::{config_gas_token_id, Bank, IntoPayable};
 use sov_mock_da::{MockAddress, MockBlob};
-use sov_modules_api::{Amount, Gas, GasSpec, ModuleInfo};
+use sov_modules_api::{Amount, Gas, GasSpec, ModuleInfo, PrivateKey};
 use sov_modules_stf_blueprint::Runtime;
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_sequencer_registry::SequencerRegistry;
 use sov_test_utils::runtime::traits::MinimalGenesis;
-use sov_test_utils::SequencerInfo;
+use sov_test_utils::{AsUser, BatchType, SequencerInfo, SoftConfirmationBlobInfo};
 
 use crate::helpers_basic_kernel::setup_basic_kernel;
 use crate::helpers_soft_confirmations::{
-    build_soft_confirmation_blobs, setup_with_registration_soft_confirmation_kernel,
+    build_soft_confirmation_blobs, setup_with_registration_soft_confirmation_kernel, SoftConfRT,
 };
 use crate::{visible_slot, TestData, TestRunner, S};
 
@@ -254,5 +254,54 @@ fn same_slot_valid_then_garbage_from_sequencer_executes_without_panic() {
         last_slot_batch_senders(&runner),
         vec![preferred_sequencer.da_address, da],
         "The preferred batch and the slashed sequencer's selected batch must both execute"
+    );
+}
+
+/// Slashing removes the sequencer's tracked DA address, so its rollup address can register a new one.
+#[test]
+fn slashed_sequencer_rollup_address_can_register_new_da_address() {
+    let (
+        TestData {
+            preferred_sequencer,
+            regular_sequencer,
+            ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+    let slashed_da = regular_sequencer.da_address;
+    let new_da = MockAddress::new([77; 32]);
+    let bond = sequencer_stake(&runner, &slashed_da);
+
+    runner.execute::<RelevantBlobs<MockBlob>>(garbage_blob(slashed_da));
+    assert!(
+        !is_registered(&runner, &slashed_da),
+        "Garbage blob must slash the sender"
+    );
+
+    let mut nonces = runner.nonces().clone();
+    // The setup's registration transaction was built from a clone of the runner's nonces.
+    nonces.insert(regular_sequencer.user_info.private_key().pub_key(), 1);
+    let blob = TestRunner::<SoftConfRT>::soft_confirmation_batches_to_blobs(
+        vec![SoftConfirmationBlobInfo {
+            batch_type: BatchType(vec![regular_sequencer
+                .create_plain_message::<SoftConfRT, SequencerRegistry<S>>(
+                    sov_sequencer_registry::CallMessage::Register {
+                        da_address: new_da,
+                        amount: bond,
+                    },
+                )]),
+            sequencer_address: preferred_sequencer.da_address,
+            sequencer_info: SequencerInfo::Preferred {
+                slots_to_advance: 1,
+                sequence_number: 1,
+            },
+        }],
+        &mut nonces,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blob);
+
+    assert!(
+        is_registered(&runner, &new_da),
+        "The slashed sequencer's rollup address must be able to register a new DA address"
     );
 }

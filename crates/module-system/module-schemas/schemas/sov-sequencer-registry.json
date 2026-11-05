@@ -100,6 +100,33 @@
       "required": [
         "withdraw"
       ]
+    },
+    {
+      "description": "Rotates the sequencer's DA address without unstaking.\n\nThe caller must own `old_da_address`. The rotation preserves balance,\nbalance state, and the preferred-sequencer pointer. Preferred sequencer\nself-rotations during their own batch are applied at end-of-block.",
+      "type": "object",
+      "properties": {
+        "update_da_address": {
+          "type": "object",
+          "properties": {
+            "new_da_address": {
+              "description": "The new DA address. Must not already be registered.",
+              "$ref": "#/$defs/MockAddress"
+            },
+            "old_da_address": {
+              "description": "The sequencer's current DA address (the one being rotated away from).",
+              "$ref": "#/$defs/MockAddress"
+            }
+          },
+          "required": [
+            "old_da_address",
+            "new_da_address"
+          ]
+        }
+      },
+      "additionalProperties": false,
+      "required": [
+        "update_da_address"
+      ]
     }
   ],
   "$defs": {

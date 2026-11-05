@@ -4,10 +4,13 @@
 //! during the rollup deployment.
 //!
 #![deny(missing_docs)]
+#[cfg(test)]
+mod activation_tests;
 mod call;
 mod capabilities;
 mod event;
 mod genesis;
+mod hooks;
 mod registration;
 
 use std::convert::Infallible;
@@ -23,14 +26,15 @@ use serde::{Deserialize, Serialize};
 use sov_bank::derived_holder::DerivedHolder;
 use sov_bank::{Amount, IntoPayable};
 use sov_modules_api::capabilities::AllowedSequencer;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::registration_lib::RegistrationError;
 #[cfg(feature = "native")]
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
     BasicAddress, Context, DaSpec, GenesisState, InfallibleStateAccessor, KernelStateAccessor,
-    KernelStateMap, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec, StateAccessor, StateReader,
-    StateValue, StateWriter, TxState, VisibleSlotNumber,
+    KernelStateMap, KernelStateValue, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
+    StateAccessor, StateReader, StateValue, StateWriter, TxState, VersionReader, VisibleSlotNumber,
 };
 use sov_state::{Kernel, User};
 use thiserror::Error;
@@ -74,6 +78,34 @@ impl<S: Spec> TryFrom<KnownSequencer<S>> for AllowedSequencer<S> {
             Err(anyhow::anyhow!("Sequencer is not active"))
         }
     }
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
+#[serde(
+    bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned, <S::Da as DaSpec>::Address: serde::Serialize + serde::de::DeserializeOwned"
+)]
+struct PendingDaAddressUpdate<S: Spec> {
+    sequencer: S::Address,
+    old_da_address: <S::Da as DaSpec>::Address,
+    new_da_address: <S::Da as DaSpec>::Address,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
+#[serde(
+    bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned, <S::Da as DaSpec>::Address: serde::Serialize + serde::de::DeserializeOwned"
+)]
+struct CurrentDaAddress<S: Spec> {
+    registration_id: u64,
+    current_da_address: <S::Da as DaSpec>::Address,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize, BorshSerialize, BorshDeserialize, Eq, PartialEq)]
+#[serde(
+    bound = "S::Address: serde::Serialize + serde::de::DeserializeOwned, <S::Da as DaSpec>::Address: serde::Serialize + serde::de::DeserializeOwned"
+)]
+struct RetiredDaAddress<S: Spec> {
+    sequencer: S::Address,
+    registration_id: u64,
 }
 
 /// The status of the sequencer's balance.
@@ -138,11 +170,35 @@ pub struct SequencerRegistry<S: Spec> {
     /// Minimum bond for the sequencer to be registered.
     #[state]
     pub(crate) minimum_bond: StateValue<Amount>,
+
+    /// A preferred sequencer DA address rotation scheduled for the end of the current rollup block.
+    #[state]
+    pending_da_address_update: StateValue<PendingDaAddressUpdate<S>>,
+
+    /// DA addresses retired by rotation. Active retired addresses cannot sequence or be reused, but
+    /// escrow refunds already addressed to them are redirected to the sequencer's current DA.
+    #[state]
+    retired_da_addresses: KernelStateMap<<S::Da as DaSpec>::Address, RetiredDaAddress<S>>,
+
+    /// Current DA address for each active rollup sequencer address.
+    #[state]
+    current_da_address_by_sequencer: KernelStateMap<S::Address, CurrentDaAddress<S>>,
+
+    /// Last allocated registration ID; absent until the first registration or rotation after activation.
+    #[state]
+    registration_id_counter: KernelStateValue<u64>,
 }
 
 /// A special error type that can be raised when calling a method from the sequencer registry
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum CustomError<RollupAddress: BasicAddress, DaAddress: BasicAddress> {
+    /// DA rotation is not enabled at the current execution height.
+    #[error("Sequencer DA rotation has not been activated")]
+    DaRotationNotActivated,
+
+    /// All registration IDs have been allocated.
+    #[error("Sequencer registration IDs exhausted")]
+    RegistrationIdsExhausted,
     /// The sequencer tried to unregister itself during the execution of its own batch.
     #[error("Sequencers may not unregister during execution of their own batch")]
     CannotUnregisterDuringOwnBatch(DaAddress),
@@ -170,6 +226,23 @@ pub enum CustomError<RollupAddress: BasicAddress, DaAddress: BasicAddress> {
         /// The address of the transaction sender.
         sender: RollupAddress,
     },
+
+    /// The sequencer attempted to update its DA address to the same value.
+    #[error("Cannot update DA address to the same value: {0}")]
+    NewDaAddressSameAsOld(DaAddress),
+
+    /// A DA address update is already scheduled for the end of the current rollup block.
+    #[error("Sequencer {sequencer} has a DA address update to {new_da_address} pending until the end of the rollup block")]
+    PendingDaAddressUpdate {
+        /// The rollup address of the sequencer whose update is pending.
+        sequencer: RollupAddress,
+        /// The DA address the pending update rotates to.
+        new_da_address: DaAddress,
+    },
+
+    /// The supplied DA address is not the caller's tracked current registration.
+    #[error("DA address {0} is not the sequencer's current DA address and cannot be rotated")]
+    NotCurrentDaAddress(DaAddress),
 }
 
 /// The different errors that can be raised by the sequencer registry
@@ -223,11 +296,21 @@ impl<S: Spec> Module for SequencerRegistry<S> {
             CallMessage::Withdraw { da_address } => {
                 Ok(self.withdraw(&da_address, context, state)?)
             }
+
+            CallMessage::UpdateDaAddress {
+                old_da_address,
+                new_da_address,
+            } => Ok(self.update_da_address(&old_da_address, &new_da_address, context, state)?),
         }
     }
 }
 
 impl<S: Spec> SequencerRegistry<S> {
+    fn rotation_enabled(state: &impl VersionReader) -> bool {
+        state.rollup_height_to_access().get()
+            >= config_value!("SEQUENCER_DA_ROTATION_ACTIVATION_HEIGHT")
+    }
+
     /// Returns the preferred sequencer, or [`None`] it wasn't set.
     ///
     /// Read about [`SequencerConfig::is_preferred_sequencer`] to learn about
@@ -396,7 +479,8 @@ impl<S: Spec> SequencerRegistry<S> {
 
     /// Slash the sequencer with the given address.
     pub fn slash_sequencer<
-        Accessor: StateWriter<Kernel, Error = Infallible>
+        Accessor: StateReader<Kernel, Error = Infallible>
+            + StateWriter<Kernel, Error = Infallible>
             + StateReader<User, Error = Infallible>
             + StateWriter<User, Error = Infallible>,
     >(
@@ -404,9 +488,25 @@ impl<S: Spec> SequencerRegistry<S> {
         da_address: &<S::Da as DaSpec>::Address,
         state: &mut Accessor,
     ) {
-        self.known_sequencers
-            .delete(da_address, state)
-            .unwrap_infallible();
+        if let Some(slashed) = self
+            .known_sequencers
+            .remove(da_address, state)
+            .unwrap_infallible()
+        {
+            self.clear_current_da_address(&slashed.address, da_address, state)
+                .unwrap_infallible();
+            // A rotation this sequencer scheduled earlier in the block has nothing left to move.
+            if self
+                .pending_da_address_update
+                .get(state)
+                .unwrap_infallible()
+                .is_some_and(|pending| &pending.old_da_address == da_address)
+            {
+                self.pending_da_address_update
+                    .delete(state)
+                    .unwrap_infallible();
+            }
+        }
 
         if let Some(preferred_sequencer) = self.preferred_sequencer.get(state).unwrap_infallible() {
             if da_address == &preferred_sequencer {

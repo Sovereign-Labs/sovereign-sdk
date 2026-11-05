@@ -15,6 +15,8 @@ CHAIN_HASH_OVERRIDES = []
 # Note that rollup height obviously counts from genesis; so if the rollup upgrades at height N,
 # then to give M blocks of grace period for clients to update, set this to N + M.
 ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT = 0
+# `UpdateDaAddress` is accepted from this rollup execution height onward.
+SEQUENCER_DA_ROTATION_ACTIVATION_HEIGHT = 0
 # The number of bytes a transaction can have.
 MAX_TX_SIZE=1_048_576
 
