@@ -1,16 +1,20 @@
 use std::borrow::Cow;
 use std::fmt;
 
+use anyhow::Context;
+use celestia_types::namespace_data::NamespaceData;
+use celestia_types::nmt::Namespace;
 use sov_celestia_adapter::types::TmHash;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::RollupParams;
 use sov_celestia_adapter::CelestiaHeader;
 use sov_rollup_interface::da::{
-    BlobReaderTrait, CountedBufReader, DaSpec, DaVerifier, RelevantBlobs, RelevantProofs,
+    BlobReaderTrait, CountedBufReader, DaProof, DaSpec, DaVerifier, RelevantBlobs, RelevantProofs,
 };
 
 use crate::commitment::MAX_DATA_SIZE;
-use crate::FibreRowsProof;
+use crate::namespace::{verify_namespace, FibreRef};
+use crate::{verify_rows_prefix, FibreRowsProof};
 
 /// [`DaSpec`] for Celestia Fibre: Celestia headers and addresses, with blobs stored off-chain.
 #[derive(
@@ -35,10 +39,10 @@ impl DaSpec for CelestiaFibreSpec {
     type Address = CelestiaAddress;
     /// Rows covering the read prefix of each blob, in blob order. `None` when the node couldn't
     /// rebuild the rows, which makes the block unprovable.
-    // TODO: add namespace inclusion proofs of the v2 shares.
     type InclusionMultiProof = Vec<Option<FibreRowsProof>>;
-    // TODO: namespace completeness proof.
-    type CompletenessProof = ();
+    /// All shares of the namespace with their row proofs. They hold the Fibre references that
+    /// the blobs must match one to one.
+    type CompletenessProof = NamespaceData;
     type ChainParams = RollupParams;
 }
 
@@ -206,28 +210,109 @@ impl BlobReaderTrait for FibreBlob {
     }
 }
 
-/// Placeholder verifier that rejects every block until Fibre blob proofs are implemented.
+/// Checks that the relevant blobs are exactly the Fibre blobs referenced from the rollup
+/// namespaces, and that the data they expose matches the referenced commitments.
 #[derive(Clone)]
-pub struct CelestiaFibreVerifier;
+pub struct CelestiaFibreVerifier {
+    rollup_batch_namespace: Namespace,
+    rollup_proof_namespace: Namespace,
+}
 
 impl DaVerifier for CelestiaFibreVerifier {
     type Spec = CelestiaFibreSpec;
     type Error = anyhow::Error;
 
-    fn new(_params: RollupParams) -> Self {
-        Self
+    fn new(params: RollupParams) -> Self {
+        Self {
+            rollup_batch_namespace: params.rollup_batch_namespace,
+            rollup_proof_namespace: params.rollup_proof_namespace,
+        }
     }
 
     fn verify_relevant_tx_list(
         &self,
-        _block_header: &CelestiaHeader,
-        _relevant_blobs: &RelevantBlobs<FibreBlob>,
-        _relevant_proofs: RelevantProofs<Vec<Option<FibreRowsProof>>, ()>,
+        block_header: &CelestiaHeader,
+        relevant_blobs: &RelevantBlobs<FibreBlob>,
+        relevant_proofs: RelevantProofs<Vec<Option<FibreRowsProof>>, NamespaceData>,
     ) -> Result<(), Self::Error> {
-        // Fail closed: row proofs alone don't show that the blobs are exactly the v2 shares of the
-        // rollup namespace, that needs namespace inclusion and completeness proofs.
-        anyhow::bail!("Celestia Fibre blob verification is not implemented")
+        verify_namespace_blobs(
+            block_header,
+            self.rollup_batch_namespace,
+            &relevant_blobs.batch_blobs,
+            &relevant_proofs.batch,
+        )
+        .context("Invalid blobs in the batch namespace")?;
+        verify_namespace_blobs(
+            block_header,
+            self.rollup_proof_namespace,
+            &relevant_blobs.proof_blobs,
+            &relevant_proofs.proof,
+        )
+        .context("Invalid blobs in the proof namespace")
     }
+}
+
+fn verify_namespace_blobs(
+    header: &CelestiaHeader,
+    namespace: Namespace,
+    blobs: &[FibreBlob],
+    proof: &DaProof<Vec<Option<FibreRowsProof>>, NamespaceData>,
+) -> anyhow::Result<()> {
+    let refs = verify_namespace(header, namespace, &proof.completeness_proof)?;
+    verify_blobs(&refs, blobs, &proof.inclusion_proof)
+}
+
+/// Checks that `blobs` are the blobs of `refs`, in the same order.
+fn verify_blobs(
+    refs: &[FibreRef],
+    blobs: &[FibreBlob],
+    row_proofs: &[Option<FibreRowsProof>],
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        blobs.len() == refs.len() && row_proofs.len() == refs.len(),
+        "Expected {} blobs and row proofs, got {} blobs and {} row proofs",
+        refs.len(),
+        blobs.len(),
+        row_proofs.len()
+    );
+    for (index, ((fibre_ref, blob), row_proof)) in
+        refs.iter().zip(blobs).zip(row_proofs).enumerate()
+    {
+        verify_blob(fibre_ref, blob, row_proof.as_ref())
+            .with_context(|| format!("Invalid Fibre blob {index}"))?;
+    }
+    Ok(())
+}
+
+/// Checks that `blob` is the blob of `fibre_ref`, and that its length and the data read from it
+/// are authenticated by `row_proof`.
+fn verify_blob(
+    fibre_ref: &FibreRef,
+    blob: &FibreBlob,
+    row_proof: Option<&FibreRowsProof>,
+) -> anyhow::Result<()> {
+    anyhow::ensure!(
+        blob.sender == fibre_ref.sender,
+        "Sender {} doesn't match the reference",
+        blob.sender
+    );
+    anyhow::ensure!(
+        blob.hash == TmHash::from(fibre_ref.commitment),
+        "Commitment doesn't match the reference"
+    );
+    let row_proof = row_proof.context("Row proof is missing")?;
+    let verified = verify_rows_prefix(&fibre_ref.commitment, row_proof)?;
+    anyhow::ensure!(
+        blob.total_len() == verified.data_size as usize,
+        "Length {} doesn't match the blob header length {}",
+        blob.total_len(),
+        verified.data_size
+    );
+    anyhow::ensure!(
+        verified.data.starts_with(blob.verified_data()),
+        "Read data isn't covered by the row proof"
+    );
+    Ok(())
 }
 
 #[cfg(test)]
@@ -318,5 +403,253 @@ mod tests {
             error,
             PrunedFibreBlobError::TotalLenTooLarge(total_len).to_string()
         );
+    }
+
+    mod verifier {
+        use super::*;
+        use crate::commitment::prove_rows_prefix;
+        use crate::namespace::tests::{
+            fixture, last_share_ref, BATCH_NAMESPACE, FIBRE_BLOCK, PROOF_NAMESPACE,
+        };
+
+        const BLOB_LEN: usize = 10_000;
+        /// More than the 59 data bytes in row 0, as rows are 64 bytes for this length.
+        const BLOB_READ_LEN: usize = 500;
+
+        struct Case {
+            data: Vec<u8>,
+            fibre_ref: FibreRef,
+            blob: FibreBlob,
+            row_proof: FibreRowsProof,
+        }
+
+        fn case() -> Case {
+            let data: Vec<u8> = (0..BLOB_LEN).map(|i| (i * 13 + i / 241) as u8).collect();
+            let config = celestia_client::api::fibre::BlobConfig::for_version(0).unwrap();
+            let commitment = celestia_client::api::fibre::EncodedFibreBlob::new(&data, config)
+                .unwrap()
+                .id()
+                .commitment();
+            let fibre_ref = FibreRef {
+                sender: CelestiaAddress::try_from([0xAB; 20].as_slice()).unwrap(),
+                commitment,
+            };
+            let mut blob = FibreBlob::new(
+                fibre_ref.sender,
+                commitment,
+                bytes::Bytes::from(data.clone()),
+            );
+            blob.advance(BLOB_READ_LEN);
+            let row_proof = prove_rows_prefix(&commitment, &data, BLOB_READ_LEN).unwrap();
+            Case {
+                data,
+                fibre_ref,
+                blob,
+                row_proof,
+            }
+        }
+
+        fn verify_case(case: &Case) -> anyhow::Result<()> {
+            verify_blobs(
+                &[case.fibre_ref],
+                std::slice::from_ref(&case.blob),
+                &[Some(case.row_proof.clone())],
+            )
+        }
+
+        fn root_cause(result: anyhow::Result<()>) -> String {
+            result.unwrap_err().root_cause().to_string()
+        }
+
+        /// Rebuilds the blob from its witness form after `modify` changes it.
+        fn forge(blob: &FibreBlob, modify: impl FnOnce(&mut serde_json::Value)) -> FibreBlob {
+            let mut wire = serde_json::to_value(blob).unwrap();
+            modify(&mut wire);
+            serde_json::from_value(wire).unwrap()
+        }
+
+        #[test]
+        fn accepts_read_blob_matching_reference() {
+            verify_case(&case()).unwrap();
+        }
+
+        #[test]
+        fn accepts_witness_blob_matching_reference() {
+            let mut case = case();
+            case.blob = round_trip(&case.blob);
+
+            verify_case(&case).unwrap();
+        }
+
+        #[test]
+        fn rejects_blob_from_other_sender() {
+            let mut case = case();
+            case.fibre_ref.sender = CelestiaAddress::try_from([0xCD; 20].as_slice()).unwrap();
+
+            assert_eq!(
+                root_cause(verify_case(&case)),
+                format!("Sender {} doesn't match the reference", case.blob.sender)
+            );
+        }
+
+        #[test]
+        fn rejects_blob_with_other_commitment() {
+            let mut case = case();
+            case.blob = FibreBlob::new(
+                case.fibre_ref.sender,
+                [0x12; 32],
+                bytes::Bytes::from(case.data.clone()),
+            );
+
+            assert_eq!(
+                root_cause(verify_case(&case)),
+                "Commitment doesn't match the reference"
+            );
+        }
+
+        #[test]
+        fn rejects_missing_row_proof() {
+            let case = case();
+
+            let result = verify_blobs(&[case.fibre_ref], &[case.blob], &[None]);
+
+            assert_eq!(root_cause(result), "Row proof is missing");
+        }
+
+        #[test]
+        fn rejects_row_proof_of_other_blob() {
+            let mut case = case();
+            case.row_proof.rows[100] ^= 0x01;
+
+            assert_eq!(
+                root_cause(verify_case(&case)),
+                crate::FibreProofError::CommitmentMismatch.to_string()
+            );
+        }
+
+        #[test]
+        fn rejects_forged_total_len() {
+            let mut case = case();
+            case.blob = forge(&case.blob, |wire| wire["total_len"] = (BLOB_LEN + 1).into());
+
+            assert_eq!(
+                root_cause(verify_case(&case)),
+                format!(
+                    "Length {} doesn't match the blob header length {BLOB_LEN}",
+                    BLOB_LEN + 1
+                )
+            );
+        }
+
+        #[test]
+        fn rejects_forged_read_data() {
+            let mut case = case();
+            case.blob = forge(&case.blob, |wire| {
+                let byte = &mut wire["accumulator"][BLOB_READ_LEN - 1];
+                *byte = (byte.as_u64().unwrap() ^ 0x01).into();
+            });
+
+            assert_eq!(
+                root_cause(verify_case(&case)),
+                "Read data isn't covered by the row proof"
+            );
+        }
+
+        #[test]
+        fn rejects_read_beyond_row_proof() {
+            let mut case = case();
+            case.row_proof = prove_rows_prefix(&case.fibre_ref.commitment, &case.data, 0).unwrap();
+
+            assert_eq!(
+                root_cause(verify_case(&case)),
+                "Read data isn't covered by the row proof"
+            );
+        }
+
+        #[test]
+        fn rejects_missing_blob() {
+            let case = case();
+
+            let result = verify_blobs(&[case.fibre_ref], &[], &[]);
+
+            assert_eq!(
+                root_cause(result),
+                "Expected 1 blobs and row proofs, got 0 blobs and 0 row proofs"
+            );
+        }
+
+        #[test]
+        fn rejects_extra_blob() {
+            let case = case();
+
+            let result = verify_blobs(&[], &[case.blob], &[Some(case.row_proof)]);
+
+            assert_eq!(
+                root_cause(result),
+                "Expected 0 blobs and row proofs, got 1 blobs and 1 row proofs"
+            );
+        }
+
+        fn verify_fixture(
+            batch_blobs: Vec<FibreBlob>,
+            batch_row_proofs: Vec<Option<FibreRowsProof>>,
+        ) -> anyhow::Result<()> {
+            let block = fixture(FIBRE_BLOCK);
+            let verifier = CelestiaFibreVerifier::new(RollupParams {
+                rollup_batch_namespace: BATCH_NAMESPACE,
+                rollup_proof_namespace: PROOF_NAMESPACE,
+            });
+            verifier.verify_relevant_tx_list(
+                &block.header.into(),
+                &RelevantBlobs {
+                    batch_blobs,
+                    proof_blobs: vec![],
+                },
+                RelevantProofs {
+                    batch: DaProof {
+                        inclusion_proof: batch_row_proofs,
+                        completeness_proof: block.batch_rows,
+                    },
+                    proof: DaProof {
+                        inclusion_proof: vec![],
+                        completeness_proof: block.proof_rows,
+                    },
+                },
+            )
+        }
+
+        #[test]
+        fn rejects_block_without_referenced_blob() {
+            assert_eq!(
+                root_cause(verify_fixture(vec![], vec![])),
+                "Expected 1 blobs and row proofs, got 0 blobs and 0 row proofs"
+            );
+        }
+
+        #[test]
+        fn rejects_referenced_blob_without_row_proof() {
+            let fibre_ref = last_share_ref(&fixture(FIBRE_BLOCK).batch_rows);
+            let blob = FibreBlob::new(
+                fibre_ref.sender,
+                fibre_ref.commitment,
+                bytes::Bytes::from_static(b"unknown data"),
+            );
+
+            assert_eq!(
+                root_cause(verify_fixture(vec![blob], vec![None])),
+                "Row proof is missing"
+            );
+        }
+
+        #[test]
+        fn accepts_namespace_without_references() {
+            let block = fixture(FIBRE_BLOCK);
+            let proof = DaProof {
+                inclusion_proof: vec![],
+                completeness_proof: block.proof_rows,
+            };
+
+            verify_namespace_blobs(&block.header.into(), PROOF_NAMESPACE, &[], &proof).unwrap();
+        }
     }
 }

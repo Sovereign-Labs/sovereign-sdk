@@ -11456,6 +11456,7 @@ dependencies = [
  "bytes",
  "celestia-client",
  "celestia-grpc",
+ "celestia-types",
  "hex",
  "reed-solomon-simd",
  "schemars 1.2.1",

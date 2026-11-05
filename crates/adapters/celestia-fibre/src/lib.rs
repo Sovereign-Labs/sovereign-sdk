@@ -7,6 +7,7 @@ mod commitment;
 mod config;
 #[cfg(feature = "native")]
 mod da_service;
+mod namespace;
 mod spec;
 
 pub use commitment::{verify_rows_prefix, FibreProofError, FibreRowsProof, VerifiedFibreData};

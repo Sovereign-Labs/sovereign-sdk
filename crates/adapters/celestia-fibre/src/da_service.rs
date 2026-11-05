@@ -5,28 +5,34 @@ use anyhow::Context;
 use async_trait::async_trait;
 use celestia_client::api::fibre::{BlobID, DownloadOptions, FibreClient, FibreClientConfig};
 use celestia_client::tx::{SigningKey, TxConfig};
+use celestia_client::types::namespace_data::NamespaceData;
 use celestia_client::types::nmt::Namespace;
 use celestia_client::types::state::AddressTrait;
-use celestia_client::types::Blob;
 use sov_celestia_adapter::types::TmHash;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::RollupParams;
 use sov_celestia_adapter::CelestiaHeader;
 use sov_rollup_interface::common::HexHash;
-use sov_rollup_interface::da::{BlobReaderTrait, DaProof, RelevantBlobs, RelevantProofs};
+use sov_rollup_interface::da::{
+    BlobReaderTrait, BlockHeaderTrait, DaProof, RelevantBlobs, RelevantProofs,
+};
 use sov_rollup_interface::node::da::{DaService, SlotData, SubmitBlobReceipt};
 use tokio::sync::oneshot;
 
 use crate::commitment::prove_rows_prefix;
+use crate::namespace::{verify_namespace, FIBRE_BLOB_VERSION};
 use crate::{
     CelestiaFibreConfig, CelestiaFibreSpec, CelestiaFibreVerifier, FibreBlob, FibreRowsProof,
 };
 
-/// Celestia block header plus the rollup's Fibre blobs, already downloaded from validators.
+/// Celestia block header, the rollup namespaces' shares, and the Fibre blobs they reference,
+/// already downloaded from validators.
 #[derive(Debug, Clone, PartialEq, serde::Serialize, serde::Deserialize)]
 pub struct FilteredFibreBlock {
     pub(crate) header: CelestiaHeader,
+    pub(crate) batch_namespace_data: NamespaceData,
     pub(crate) batch_blobs: Vec<DownloadedFibreBlob>,
+    pub(crate) proof_namespace_data: NamespaceData,
     pub(crate) proof_blobs: Vec<DownloadedFibreBlob>,
 }
 
@@ -124,33 +130,30 @@ impl CelestiaFibreDaService {
         })
     }
 
-    async fn get_fibre_blobs(
+    /// Selects the Fibre references in `namespace_data` exactly like the verifier does, and
+    /// downloads the blobs they reference.
+    async fn download_fibre_blobs(
         &self,
-        height: u64,
+        header: &CelestiaHeader,
         namespace: Namespace,
+        namespace_data: &NamespaceData,
     ) -> anyhow::Result<Vec<DownloadedFibreBlob>> {
-        let blobs = self
-            .client
-            .blob()
-            .get_all(height, &[namespace])
-            .await?
-            .unwrap_or_default();
+        let height = header.height();
+        let refs = verify_namespace(header, namespace, namespace_data)
+            .with_context(|| format!("Invalid namespace data at height {height}"))?;
 
-        let mut fibre_blobs = Vec::with_capacity(blobs.len());
+        let mut fibre_blobs = Vec::with_capacity(refs.len());
         // TODO: downloads run sequentially, parallelize if blocks carry many Fibre blobs.
-        for blob in blobs {
-            let Some((blob_id, sender)) = fibre_blob_ref(&blob) else {
-                tracing::debug!(height, ?namespace, "Skipping non-Fibre blob");
-                continue;
-            };
+        for fibre_ref in refs {
+            let blob_id = BlobID::new(FIBRE_BLOB_VERSION, fibre_ref.commitment);
             let downloaded = self
                 .fibre
                 .download(&blob_id, DownloadOptions::default())
                 .await
                 .with_context(|| format!("Failed to download Fibre blob at height {height}"))?;
             fibre_blobs.push(DownloadedFibreBlob {
-                sender,
-                commitment: blob_id.commitment(),
+                sender: fibre_ref.sender,
+                commitment: fibre_ref.commitment,
                 data: downloaded.into_data(),
             });
         }
@@ -227,18 +230,6 @@ fn prove_read_prefixes(
         .collect()
 }
 
-/// Extracts the Fibre reference from a v2 blob.
-///
-/// Anyone can post to the rollup namespace, so blobs that aren't well-formed Fibre
-/// references are ignored instead of failing the block.
-fn fibre_blob_ref(blob: &Blob) -> Option<(BlobID, CelestiaAddress)> {
-    let version = u8::try_from(blob.fibre_blob_version()?).ok()?;
-    let blob_id = BlobID::new(version, blob.fibre_commitment()?);
-    blob_id.validate().ok()?;
-    let sender = CelestiaAddress::try_from(blob.signer.as_ref()?.as_bytes()).ok()?;
-    Some((blob_id, sender))
-}
-
 #[async_trait]
 impl DaService for CelestiaFibreDaService {
     type Spec = CelestiaFibreSpec;
@@ -248,14 +239,29 @@ impl DaService for CelestiaFibreDaService {
     type Error = anyhow::Error;
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        let (header, batch_blobs, proof_blobs) = tokio::try_join!(
+        let shares = self.client.share();
+        let (header, batch_namespace_data, proof_namespace_data) = tokio::try_join!(
             self.get_block_header_at(height),
-            self.get_fibre_blobs(height, self.rollup_batch_namespace),
-            self.get_fibre_blobs(height, self.rollup_proof_namespace),
+            async {
+                Ok(shares
+                    .get_namespace_data(height, self.rollup_batch_namespace)
+                    .await?)
+            },
+            async {
+                Ok(shares
+                    .get_namespace_data(height, self.rollup_proof_namespace)
+                    .await?)
+            },
+        )?;
+        let (batch_blobs, proof_blobs) = tokio::try_join!(
+            self.download_fibre_blobs(&header, self.rollup_batch_namespace, &batch_namespace_data),
+            self.download_fibre_blobs(&header, self.rollup_proof_namespace, &proof_namespace_data),
         )?;
         Ok(FilteredFibreBlock {
             header,
+            batch_namespace_data,
             batch_blobs,
+            proof_namespace_data,
             proof_blobs,
         })
     }
@@ -290,7 +296,7 @@ impl DaService for CelestiaFibreDaService {
         &self,
         block: &Self::FilteredBlock,
         blobs: &RelevantBlobs<FibreBlob>,
-    ) -> RelevantProofs<Vec<Option<FibreRowsProof>>, ()> {
+    ) -> RelevantProofs<Vec<Option<FibreRowsProof>>, NamespaceData> {
         let read_lens = |blobs: &[FibreBlob]| -> Vec<usize> {
             blobs
                 .iter()
@@ -314,11 +320,11 @@ impl DaService for CelestiaFibreDaService {
         RelevantProofs {
             batch: DaProof {
                 inclusion_proof: batch,
-                completeness_proof: (),
+                completeness_proof: block.batch_namespace_data.clone(),
             },
             proof: DaProof {
                 inclusion_proof: proof,
-                completeness_proof: (),
+                completeness_proof: block.proof_namespace_data.clone(),
             },
         }
     }
@@ -352,8 +358,15 @@ impl DaService for CelestiaFibreDaService {
     }
 
     async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
+        let (header, namespace_data) = tokio::try_join!(self.get_block_header_at(height), async {
+            Ok(self
+                .client
+                .share()
+                .get_namespace_data(height, self.rollup_proof_namespace)
+                .await?)
+        },)?;
         let blobs = self
-            .get_fibre_blobs(height, self.rollup_proof_namespace)
+            .download_fibre_blobs(&header, self.rollup_proof_namespace, &namespace_data)
             .await?;
         Ok(blobs.into_iter().map(|blob| blob.data.to_vec()).collect())
     }
@@ -369,51 +382,7 @@ impl DaService for CelestiaFibreDaService {
 
 #[cfg(test)]
 mod tests {
-    use celestia_client::types::blob::RawBlob;
-
     use super::*;
-
-    fn raw_blob(share_version: u32, data: Vec<u8>) -> RawBlob {
-        RawBlob {
-            namespace_id: Namespace::new_v0(b"fibre").unwrap().id().to_vec(),
-            namespace_version: 0,
-            share_version,
-            data,
-            signer: vec![0xAA; 20],
-        }
-    }
-
-    #[test]
-    fn fibre_blob_ref_reads_v2_reference() {
-        let commitment = [0x12; 32];
-        let mut data = 0u32.to_be_bytes().to_vec();
-        data.extend_from_slice(&commitment);
-        let blob = Blob::from_raw(raw_blob(2, data)).unwrap();
-
-        let (blob_id, sender) = fibre_blob_ref(&blob).unwrap();
-
-        assert_eq!(blob_id, BlobID::new(0, commitment));
-        assert_eq!(
-            sender,
-            CelestiaAddress::try_from([0xAA; 20].as_slice()).unwrap()
-        );
-    }
-
-    #[test]
-    fn fibre_blob_ref_skips_unsupported_fibre_version() {
-        let mut data = 0x0102u32.to_be_bytes().to_vec();
-        data.extend_from_slice(&[0x12; 32]);
-        let blob = Blob::from_raw(raw_blob(2, data)).unwrap();
-
-        assert_eq!(fibre_blob_ref(&blob), None);
-    }
-
-    #[test]
-    fn fibre_blob_ref_skips_regular_blob() {
-        let blob = Blob::from_raw(raw_blob(1, vec![0x12; 36])).unwrap();
-
-        assert_eq!(fibre_blob_ref(&blob), None);
-    }
 
     #[test]
     fn unprovable_blob_gets_no_proof_without_affecting_others() {

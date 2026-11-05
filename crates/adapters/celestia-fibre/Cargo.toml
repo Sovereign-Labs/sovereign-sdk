@@ -25,6 +25,8 @@ sha2 = { workspace = true }
 # Only for its GF(2^16) log/exp tables, which must match the ones Fibre encodes with.
 reed-solomon-simd = { version = "3.1.0", default-features = false }
 
+# Same version as `sov-celestia-adapter`, whose header types this crate verifies against.
+celestia-types = { version = "1.2.0", default-features = false }
 sov-celestia-adapter = { workspace = true }
 sov-rollup-interface = { workspace = true }
 
