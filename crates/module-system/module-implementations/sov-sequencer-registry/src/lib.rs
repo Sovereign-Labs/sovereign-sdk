@@ -12,8 +12,6 @@ mod event;
 mod genesis;
 mod hooks;
 mod registration;
-#[cfg(feature = "native")]
-pub mod upgrade;
 
 use std::convert::Infallible;
 
@@ -186,7 +184,7 @@ pub struct SequencerRegistry<S: Spec> {
     #[state]
     current_da_address_by_sequencer: KernelStateMap<S::Address, CurrentDaAddress<S>>,
 
-    /// Last allocated registration ID. Presence also marks rotation tracking as initialized.
+    /// Last allocated registration ID; absent until the first registration or rotation after activation.
     #[state]
     registration_id_counter: KernelStateValue<u64>,
 }
@@ -273,15 +271,6 @@ impl<S: Spec> Module for SequencerRegistry<S> {
         config: &Self::Config,
         state: &mut impl GenesisState<S>,
     ) -> Result<(), Self::Error> {
-        if Self::rotation_enabled(state) {
-            anyhow::ensure!(
-                config_value!("SEQUENCER_DA_ROTATION_UPGRADE_ADDRESSES")
-                    .trim()
-                    .is_empty(),
-                "Genesis activation requires an empty sequencer DA upgrade list"
-            );
-            self.registration_id_counter.set(&0, state)?;
-        }
         self.init_module(config, state)
     }
 
@@ -506,6 +495,17 @@ impl<S: Spec> SequencerRegistry<S> {
         {
             self.clear_current_da_address(&slashed.address, da_address, state)
                 .unwrap_infallible();
+            // A rotation this sequencer scheduled earlier in the block has nothing left to move.
+            if self
+                .pending_da_address_update
+                .get(state)
+                .unwrap_infallible()
+                .is_some_and(|pending| &pending.old_da_address == da_address)
+            {
+                self.pending_da_address_update
+                    .delete(state)
+                    .unwrap_infallible();
+            }
         }
 
         if let Some(preferred_sequencer) = self.preferred_sequencer.get(state).unwrap_infallible() {

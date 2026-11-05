@@ -1,6 +1,9 @@
 //! Historical roots and receipts captured with this scenario on dev commit
 //! 509a482949d553e3b178cac77290d9ecea15d9f2. The fixture must not be regenerated
-//! from the upgraded implementation.
+//! from the upgraded implementation: check out that commit, copy this file, the fixture and
+//! the `mod legacy_replay;` line into it, run `replay` there and copy the output back.
+//! `PINNED_ROOTS` fails the test if the fixture is regenerated from code that changed
+//! pre-activation gas.
 
 use std::collections::HashMap;
 
@@ -26,6 +29,16 @@ use crate::helpers::{GenesisConfig, RT, S};
 
 const BOND: Amount = Amount::new(100_000_000_000);
 const BASELINE: &str = include_str!("legacy_replay.json");
+const PINNED_ROOTS: [(&str, &str); 2] = [
+    (
+        "register",
+        "5d618ac4865ed6c968320cc5a69b5d1de26247a26f4b6a195628571abe5a06bd650e53fea92aae89aa5a1aca32f560a5bfff85ecc0b737886a0e7c007edfbd29",
+    ),
+    (
+        "withdraw",
+        "3ebbdc1a19034fba846278507155894c658f2cd21797a15ff7ca258b3dfd5493117abc924dfe011d57b66c0575a4b8fbd9cb673ec4067551cf27025ed9062f4f",
+    ),
+];
 
 fn user(seed: u8) -> TestUser<S> {
     type Key = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey;
@@ -312,6 +325,16 @@ fn historical_registry_execution_matches_dev() {
     let actual = replay(chain_hash);
     let actual_blocks = actual["blocks"].as_array().unwrap();
     let expected_blocks = expected["blocks"].as_array().unwrap();
+    for (name, root) in PINNED_ROOTS {
+        let block = expected_blocks
+            .iter()
+            .find(|block| block["name"] == name)
+            .unwrap();
+        assert_eq!(
+            block["root"], root,
+            "fixture root for {name} was regenerated"
+        );
+    }
     assert_eq!(actual_blocks.len(), expected_blocks.len());
     for (actual, expected) in actual_blocks.iter().zip(expected_blocks) {
         assert_eq!(

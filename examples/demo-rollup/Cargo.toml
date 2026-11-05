@@ -175,8 +175,6 @@ da-migration-script = [
     "sov-db/migration-script",
 ]
 
-sequencer-registry-upgrade = ["sov-db/migration-script"]
-
 [[bin]]
 name = "sov-cli"
 path = "src/sov-cli/main.rs"
@@ -206,11 +204,6 @@ required-features = ["da-migration-script"]
 name = "migrate_to_v1"
 path = "src/migrations/legacy_accounts.rs"
 required-features = ["mock_da"]
-
-[[bin]]
-name = "sequencer-registry-upgrade"
-path = "src/migrations/sequencer_registry_upgrade.rs"
-required-features = ["sequencer-registry-upgrade"]
 
 [[bin]]
 name = "sov-hive-genesis-adapter"

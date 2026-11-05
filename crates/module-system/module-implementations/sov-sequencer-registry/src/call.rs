@@ -97,7 +97,7 @@ impl<S: Spec> SequencerRegistry<S> {
             ));
         }
         if Self::rotation_enabled(state) {
-            self.ensure_not_pending_new_da_address(da_address, state)?;
+            self.ensure_not_pending_da_address(da_address, state)?;
             self.ensure_sequencer_has_no_current_da_address(&address, state)?;
             self.ensure_retired_da_address_available(da_address, state)?;
         }
@@ -135,15 +135,7 @@ impl<S: Spec> SequencerRegistry<S> {
         self.known_sequencers
             .set(da_address, &new_sequencer, state)?;
         if Self::rotation_enabled(state) {
-            let registration_id = self
-                .registration_id_counter
-                .get(state)?
-                .expect("Sequencer DA rotation tracking must be initialized")
-                .checked_add(1)
-                .ok_or(RegistrationError::Custom(
-                    CustomError::RegistrationIdsExhausted,
-                ))?;
-            self.registration_id_counter.set(&registration_id, state)?;
+            let registration_id = self.next_registration_id(state)?;
             self.current_da_address_by_sequencer.set(
                 &address,
                 &CurrentDaAddress {
@@ -287,8 +279,12 @@ impl<S: Spec> SequencerRegistry<S> {
                 ready_at,
             }));
         }
+        let rotation_enabled = Self::rotation_enabled(state);
+        if rotation_enabled {
+            self.ensure_not_pending_da_address(da_address, state)?;
+        }
         self.known_sequencers.delete(da_address, state)?;
-        if Self::rotation_enabled(state) {
+        if rotation_enabled {
             self.clear_current_da_address(&existing_sequencer.address, da_address, state)?;
         }
         self.bank
@@ -343,10 +339,12 @@ impl<S: Spec> SequencerRegistry<S> {
 
         let existing_sequencer =
             self.get_owned_sequencer(old_da_address, context.sender(), state)?;
-        if self
+        let current = self
             .current_da_address_by_sequencer
-            .get(&existing_sequencer.address, state)?
-            .is_none_or(|current| current.current_da_address != *old_da_address)
+            .get(&existing_sequencer.address, state)?;
+        if current
+            .as_ref()
+            .is_some_and(|current| current.current_da_address != *old_da_address)
         {
             return Err(RegistrationError::Custom(CustomError::NotCurrentDaAddress(
                 *old_da_address,
@@ -360,12 +358,23 @@ impl<S: Spec> SequencerRegistry<S> {
 
         // Only one rotation may be pending per rollup block.
         if let Some(pending) = self.pending_da_address_update.get(state)? {
-            return Err(RegistrationError::Custom(
-                CustomError::PendingDaAddressUpdate {
-                    sequencer: pending.sequencer,
-                    new_da_address: pending.new_da_address,
+            return Err(RegistrationError::Custom(Self::pending_update_error(
+                pending,
+            )));
+        }
+
+        // Registrations that predate activation are not tracked yet. Start tracking at the
+        // address being rotated so `apply_da_rotation` has a registration ID to carry over.
+        if current.is_none() {
+            let registration_id = self.next_registration_id(state)?;
+            self.current_da_address_by_sequencer.set(
+                &existing_sequencer.address,
+                &CurrentDaAddress {
+                    registration_id,
+                    current_da_address: *old_da_address,
                 },
-            ));
+                state,
+            )?;
         }
 
         // The producing DA's bond is reserved for the whole batch, so only the preferred
@@ -502,25 +511,55 @@ impl<S: Spec> SequencerRegistry<S> {
         Ok(())
     }
 
-    fn ensure_not_pending_new_da_address<ST: TxState<S>>(
+    /// Rejects `da_address` while a rotation scheduled earlier in this rollup block moves
+    /// away from it (the entry must still exist at end of block) or onto it (it is reserved).
+    fn ensure_not_pending_da_address<ST: TxState<S>>(
         &self,
         da_address: &<S::Da as DaSpec>::Address,
         state: &mut ST,
     ) -> Result<(), SequencerRegistryError<S, ST>> {
         if let Some(pending) = self.pending_da_address_update.get(state)? {
-            if &pending.new_da_address == da_address {
-                return Err(RegistrationError::Custom(
-                    CustomError::PendingDaAddressUpdate {
-                        sequencer: pending.sequencer,
-                        new_da_address: pending.new_da_address,
-                    },
-                ));
+            if &pending.old_da_address == da_address || &pending.new_da_address == da_address {
+                return Err(RegistrationError::Custom(Self::pending_update_error(
+                    pending,
+                )));
             }
         }
 
         Ok(())
     }
 
+    fn pending_update_error(
+        pending: PendingDaAddressUpdate<S>,
+    ) -> CustomError<S::Address, <S::Da as DaSpec>::Address> {
+        CustomError::PendingDaAddressUpdate {
+            sequencer: pending.sequencer,
+            new_da_address: pending.new_da_address,
+        }
+    }
+
+    fn next_registration_id<ST: TxState<S>>(
+        &mut self,
+        state: &mut ST,
+    ) -> Result<u64, SequencerRegistryError<S, ST>> {
+        let registration_id = self
+            .registration_id_counter
+            .get(state)?
+            .unwrap_or(0)
+            .checked_add(1)
+            .ok_or(RegistrationError::Custom(
+                CustomError::RegistrationIdsExhausted,
+            ))?;
+        self.registration_id_counter.set(&registration_id, state)?;
+        Ok(registration_id)
+    }
+
+    /// Checks that `da_address` is registered and owned by `sender`.
+    ///
+    /// `deposit`, `initiate_withdrawal` and `withdraw` re-read the entry afterwards instead of
+    /// using the returned value: the second metered read keeps their gas identical to the
+    /// released code, which is replayed below `SEQUENCER_DA_ROTATION_ACTIVATION_HEIGHT`.
+    /// Do not merge the two reads.
     fn get_owned_sequencer<ST: TxState<S>>(
         &self,
         da_address: &<S::Da as DaSpec>::Address,
