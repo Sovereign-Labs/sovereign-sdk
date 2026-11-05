@@ -121,33 +121,32 @@ fn test_demo_values_in_cache() -> Result<(), Infallible> {
 
 // Ensure 1 sequencer be registered per batch
 // This test has 2 batches each submitted by unregistered sequencers, given they are in different
-// batches then both unregistered sequencers should be registered
+// batches then both unregistered sequencers should be registered. Each registration is signed by a
+// different user, because a rollup address can only register one DA address.
 #[test]
 fn test_multiple_batches_registering_unregistered_sequencers_allows_both_to_register() {
     reset_constants();
-    let (mut runner, mut users, _) = setup(1);
-    let tx_signer = users.pop().unwrap();
+    let (mut runner, users, _) = setup(2);
 
     let direct_sequencer_da_address = MockAddress::new([121; 32]);
     let other_sequencer_da_address = MockAddress::new([86; 32]);
 
-    let mut txs = simulate_da_with_multiple_direct_registration_msg(
-        vec![
-            direct_sequencer_da_address.as_ref().to_vec(),
-            other_sequencer_da_address.as_ref().to_vec(),
-        ],
-        tx_signer.private_key.clone(),
-    );
-
-    let blob1 = MockBlob::new_with_hash(
-        borsh::to_vec(&txs.remove(0)).unwrap(),
-        MockAddress::new([0; 32]),
-    );
-
-    let blob2 = MockBlob::new_with_hash(
-        borsh::to_vec(&txs.remove(0)).unwrap(),
-        MockAddress::new([0; 32]),
-    );
+    let [blob1, blob2] = [direct_sequencer_da_address, other_sequencer_da_address]
+        .into_iter()
+        .zip(&users)
+        .map(|(da_address, user)| {
+            let mut txs = simulate_da_with_multiple_direct_registration_msg(
+                vec![da_address.as_ref().to_vec()],
+                user.private_key.clone(),
+            );
+            MockBlob::new_with_hash(
+                borsh::to_vec(&txs.remove(0)).unwrap(),
+                MockAddress::new([0; 32]),
+            )
+        })
+        .collect::<Vec<_>>()
+        .try_into()
+        .unwrap();
 
     let relevant_blobs = RelevantBlobs {
         proof_blobs: Default::default(),

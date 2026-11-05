@@ -1256,10 +1256,17 @@ fn test_second_preferred_self_rotation_in_same_batch_fails() {
             let receipt = result.batch_receipt.expect("Batch should be processed");
             assert_eq!(receipt.tx_receipts.len(), 2);
             assert!(receipt.tx_receipts[0].receipt.is_successful());
-            assert!(matches!(
-                receipt.tx_receipts[1].receipt,
-                TxEffect::Reverted(_)
-            ));
+            let TxEffect::Reverted(reverted) = &receipt.tx_receipts[1].receipt else {
+                panic!("Expected revert, got: {:?}", receipt.tx_receipts[1].receipt);
+            };
+            assert_eq!(
+                reverted.reason.to_string(),
+                TestSequencerRegistryError::Custom(CustomError::PendingDaAddressUpdate {
+                    sequencer: preferred_rollup,
+                    new_da_address: new_da,
+                })
+                .to_string(),
+            );
 
             let reg = TestSequencerRegistry::default();
             assert_eq!(
@@ -1298,10 +1305,17 @@ fn test_pending_preferred_self_rotation_reserves_new_da_address() {
             let receipt = result.batch_receipt.expect("Batch should be processed");
             assert_eq!(receipt.tx_receipts.len(), 2);
             assert!(receipt.tx_receipts[0].receipt.is_successful());
-            assert!(matches!(
-                receipt.tx_receipts[1].receipt,
-                TxEffect::Reverted(_)
-            ));
+            let TxEffect::Reverted(reverted) = &receipt.tx_receipts[1].receipt else {
+                panic!("Expected revert, got: {:?}", receipt.tx_receipts[1].receipt);
+            };
+            assert_eq!(
+                reverted.reason.to_string(),
+                TestSequencerRegistryError::Custom(CustomError::PendingDaAddressUpdate {
+                    sequencer: preferred_rollup,
+                    new_da_address: new_da,
+                })
+                .to_string(),
+            );
 
             let entry = known_sequencer(&new_da, state);
             assert_eq!(entry.address, preferred_rollup);

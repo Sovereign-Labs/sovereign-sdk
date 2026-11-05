@@ -1,7 +1,8 @@
 # 2026-11-05
 - #2766 **Breaking change (code, wire, consensus)**: `sov-sequencer-registry` adds an `UpdateDaAddress { old_da_address, new_da_address }` variant to `CallMessage`, changing the borsh encoding surface and the chain hash.
   Rotation is authorized by the rollup key (`context.sender()`), so a sequencer whose DA signing key is compromised (but whose rollup key is safe) can recover without going through withdrawal.
-  Balance, balance state, and the preferred-sequencer pointer are preserved; the old DA is marked retired (cannot be re-registered or rotated to).
+  Balance, balance state, and the preferred-sequencer pointer are preserved. The old DA address is retired: escrow refunds addressed to it go to the sequencer's current DA address, and it cannot be registered or rotated to until the sequencer withdraws or is slashed.
+  A rollup address can now own only one DA address: registering a second one fails. Rollup addresses that registered several DA addresses before this change keep them, but can rotate only one of them.
   Recovery procedure:
     1. sign and submit `UpdateDaAddress` from the rollup key while the old DA is still valid
     2. once the tx lands, restart the sequencer binary with the new DA signing keys. Blobs signed with the old key after the rotation lands are rejected as `NotRegistered` (no security impact, only lost throughput during the restart window).

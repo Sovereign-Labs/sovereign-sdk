@@ -6,7 +6,7 @@ use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{Amount, DaSpec, InfallibleStateAccessor, Spec, StateReader, StateWriter};
 use sov_state::{Kernel, User};
 
-use crate::{BalanceState, KnownSequencer, SequencerRegistry};
+use crate::{BalanceState, KnownSequencer, RetiredDaAddress, SequencerRegistry};
 
 impl<S: Spec> SequencerRegistry<S> {
     /// Returns the preferred sequencer, or [`None`] it wasn't set.
@@ -91,7 +91,11 @@ impl<S: Spec> SequencerRegistry<S> {
         amount: Amount,
         state: &mut Accessor,
     ) -> Result<(), AddToStakeError<S>> {
-        let (sequencer, retired_sequencer) = self.da_address_for_refund(sequencer, state)?;
+        let Some(sequencer) = self.refund_da_address(sequencer, state) else {
+            return Err(AddToStakeError::SequencerNotRegistered {
+                sequencer: *sequencer,
+            });
+        };
         if let Some(KnownSequencer {
             address,
             balance,
@@ -101,10 +105,6 @@ impl<S: Spec> SequencerRegistry<S> {
             .get(&sequencer, state)
             .unwrap_infallible()
         {
-            if retired_sequencer.is_some_and(|retired_sequencer| address != retired_sequencer) {
-                return Err(AddToStakeError::SequencerNotRegistered { sequencer });
-            }
-
             // Note that we don't check if the sequencer is active here, because the sequencer can get
             // refunded from escrow while their withdrawal is pending. In fact, that's the whole point of the
             // withdrawal period - to wait until all possible escrows involving the sequencer are resolved.
@@ -142,44 +142,48 @@ impl<S: Spec> SequencerRegistry<S> {
         }
     }
 
-    #[allow(clippy::type_complexity)]
-    fn da_address_for_refund<
+    /// Returns the DA address whose stake receives funds addressed to `da_address`: the address
+    /// itself, or, if it was retired by a rotation, the sequencer's current DA address.
+    fn refund_da_address<
         Accessor: StateReader<Kernel, Error = Infallible> + StateReader<User, Error = Infallible>,
     >(
         &self,
-        sequencer: &<S::Da as DaSpec>::Address,
+        da_address: &<S::Da as DaSpec>::Address,
         state: &mut Accessor,
-    ) -> Result<(<S::Da as DaSpec>::Address, Option<S::Address>), AddToStakeError<S>> {
-        if self
-            .known_sequencers
-            .get(sequencer, state)
-            .unwrap_infallible()
-            .is_some()
-        {
-            return Ok((*sequencer, None));
-        }
-
-        let Some(retired) = self
+    ) -> Option<<S::Da as DaSpec>::Address> {
+        // A retired DA address is never registered: registering it deletes the retired entry.
+        match self
             .retired_da_addresses
-            .get(sequencer, state)
+            .get(da_address, state)
             .unwrap_infallible()
-        else {
-            return Ok((*sequencer, None));
-        };
+        {
+            Some(retired) => self.active_successor(&retired, state).unwrap_infallible(),
+            None => Some(*da_address),
+        }
+    }
 
+    /// Returns the registered DA address that `retired` was rotated into, or [`None`] if that
+    /// registration has since been withdrawn or slashed.
+    pub(crate) fn active_successor<E>(
+        &self,
+        retired: &RetiredDaAddress<S>,
+        state: &mut impl StateReader<Kernel, Error = E>,
+    ) -> Result<Option<<S::Da as DaSpec>::Address>, E> {
         let Some(current) = self
             .current_da_address_by_sequencer
-            .get(&retired.sequencer, state)
-            .unwrap_infallible()
+            .get(&retired.sequencer, state)?
         else {
-            return Ok((*sequencer, Some(retired.sequencer)));
+            return Ok(None);
         };
-
         if current.registration_da_address != retired.registration_da_address {
-            return Ok((*sequencer, Some(retired.sequencer)));
+            return Ok(None);
         }
 
-        Ok((current.current_da_address, Some(retired.sequencer)))
+        Ok(self
+            .known_sequencers
+            .get(&current.current_da_address, state)?
+            .is_some_and(|known| known.address == retired.sequencer)
+            .then_some(current.current_da_address))
     }
 }
 

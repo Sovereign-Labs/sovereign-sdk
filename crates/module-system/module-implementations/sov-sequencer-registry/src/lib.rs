@@ -216,6 +216,20 @@ pub enum CustomError<RollupAddress: BasicAddress, DaAddress: BasicAddress> {
     /// The sequencer attempted to update its DA address to the same value.
     #[error("Cannot update DA address to the same value: {0}")]
     NewDaAddressSameAsOld(DaAddress),
+
+    /// A DA address update is already scheduled for the end of the current rollup block.
+    #[error("Sequencer {sequencer} has a DA address update to {new_da_address} pending until the end of the rollup block")]
+    PendingDaAddressUpdate {
+        /// The rollup address of the sequencer whose update is pending.
+        sequencer: RollupAddress,
+        /// The DA address the pending update rotates to.
+        new_da_address: DaAddress,
+    },
+
+    /// The rollup address registered several DA addresses before rotation was introduced, and
+    /// only its tracked current DA address can be rotated.
+    #[error("DA address {0} is not the sequencer's current DA address and cannot be rotated")]
+    NotCurrentDaAddress(DaAddress),
 }
 
 /// The different errors that can be raised by the sequencer registry
@@ -447,7 +461,8 @@ impl<S: Spec> SequencerRegistry<S> {
 
     /// Slash the sequencer with the given address.
     pub fn slash_sequencer<
-        Accessor: StateWriter<Kernel, Error = Infallible>
+        Accessor: StateReader<Kernel, Error = Infallible>
+            + StateWriter<Kernel, Error = Infallible>
             + StateReader<User, Error = Infallible>
             + StateWriter<User, Error = Infallible>,
     >(
@@ -455,9 +470,14 @@ impl<S: Spec> SequencerRegistry<S> {
         da_address: &<S::Da as DaSpec>::Address,
         state: &mut Accessor,
     ) {
-        self.known_sequencers
-            .delete(da_address, state)
-            .unwrap_infallible();
+        if let Some(slashed) = self
+            .known_sequencers
+            .remove(da_address, state)
+            .unwrap_infallible()
+        {
+            self.clear_current_da_address(&slashed.address, da_address, state)
+                .unwrap_infallible();
+        }
 
         if let Some(preferred_sequencer) = self.preferred_sequencer.get(state).unwrap_infallible() {
             if da_address == &preferred_sequencer {

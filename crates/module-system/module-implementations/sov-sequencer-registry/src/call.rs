@@ -268,8 +268,7 @@ impl<S: Spec> SequencerRegistry<S> {
             }));
         }
         self.known_sequencers.delete(da_address, state)?;
-        self.current_da_address_by_sequencer
-            .delete(&existing_sequencer.address, state)?;
+        self.clear_current_da_address(&existing_sequencer.address, da_address, state)?;
         self.bank
             .transfer_from(
                 self.id().clone().to_payable(),
@@ -297,17 +296,12 @@ impl<S: Spec> SequencerRegistry<S> {
     /// impersonation of another sequencer's DA.
     ///
     /// # Errors
-    /// - If `new_da_address` equals `old_da_address`.
-    /// - If `old_da_address` is not registered.
-    /// - If the caller's rollup key does not own the entry at `old_da_address`.
-    /// - If another DA address update is already pending for this rollup block
-    ///   (by any sequencer — at most one rotation may be pending per block).
-    /// - If `old_da_address` is the DA address the caller is actively sequencing from
-    ///   for this slot and the caller is not the preferred sequencer
-    ///   (`CannotUnregisterDuringOwnBatch`). The preferred sequencer may rotate its own
-    ///   producing DA; that rotation is deferred until the end of the rollup block.
-    /// - If `new_da_address` is already registered.
-    /// - If `new_da_address` was retired by a previous rotation.
+    /// - If a DA address update is already pending in this rollup block (by any sequencer).
+    /// - If `old_da_address` is producing the current batch and the caller is not the preferred
+    ///   sequencer.
+    /// - If `old_da_address` is not the caller's tracked current DA address. This only happens for
+    ///   rollup addresses that registered several DA addresses before rotation was introduced.
+    /// - If `new_da_address` is registered, or retired by a sequencer that is still registered.
     pub(crate) fn update_da_address<ST: TxState<S>>(
         &mut self,
         old_da_address: &<S::Da as DaSpec>::Address,
@@ -323,27 +317,33 @@ impl<S: Spec> SequencerRegistry<S> {
 
         let existing_sequencer =
             self.get_owned_sequencer(old_da_address, context.sender(), state)?;
+        if self
+            .current_da_address_by_sequencer
+            .get(&existing_sequencer.address, state)?
+            .is_some_and(|current| current.current_da_address != *old_da_address)
+        {
+            return Err(RegistrationError::Custom(CustomError::NotCurrentDaAddress(
+                *old_da_address,
+            )));
+        }
 
         if let Some(conflict) = self.known_sequencers.get(new_da_address, state)? {
             return Err(RegistrationError::AlreadyRegistered(conflict.address));
         }
         self.ensure_retired_da_address_available(new_da_address, state)?;
 
-        // Only one rotation may be pending per rollup block. This unconditional check also
-        // covers the case where `new_da_address` is itself the pending target, so a separate
-        // `ensure_not_pending_new_da_address` call here would be redundant.
+        // Only one rotation may be pending per rollup block.
         if let Some(pending) = self.pending_da_address_update.get(state)? {
-            return Err(RegistrationError::AlreadyRegistered(pending.sequencer));
+            return Err(RegistrationError::Custom(
+                CustomError::PendingDaAddressUpdate {
+                    sequencer: pending.sequencer,
+                    new_da_address: pending.new_da_address,
+                },
+            ));
         }
 
-        // Dispatch on whether `old_da_address` is the DA address producing the current
-        // batch. `context.sequencer_da_address()` is the authenticated DA address of the
-        // batch currently executing; its bond is reserved for the whole batch, so its
-        // registry entry must not be mutated mid-batch. The preferred sequencer is the
-        // sole exception: it may rotate its own producing DA, but the move is deferred to
-        // end-of-block (applied by `BlockHooks::end_rollup_block_hook`) to preserve batch
-        // ordering. Rotating any other DA the caller owns is unrelated to the current
-        // batch and applies immediately.
+        // The producing DA's bond is reserved for the whole batch, so only the preferred
+        // sequencer may rotate it, and the move is deferred to `end_rollup_block_hook`.
         if old_da_address == context.sequencer_da_address() {
             if !context.sequencer_is_preferred() {
                 return Err(RegistrationError::Custom(
@@ -377,12 +377,7 @@ impl<S: Spec> SequencerRegistry<S> {
     /// Moves the `known_sequencers` entry from `old_da_address` to `new_da_address`,
     /// records `old_da_address` as retired (so escrow refunds addressed to it follow the
     /// sequencer to its current DA), and moves the `preferred_sequencer` pointer if it
-    /// referenced the old address.
-    ///
-    /// Shared by the immediate path ([`Self::update_da_address`]) and the deferred
-    /// end-of-block path (`BlockHooks::end_rollup_block_hook`) so the two cannot drift.
-    /// The caller is responsible for all validation and for emitting
-    /// [`Event::DaAddressUpdated`].
+    /// referenced the old address. Performs no validation.
     pub(crate) fn apply_da_rotation<E, Accessor>(
         &mut self,
         old_da_address: &<S::Da as DaSpec>::Address,
@@ -427,13 +422,35 @@ impl<S: Spec> SequencerRegistry<S> {
         Ok(())
     }
 
+    /// Forgets `sequencer`'s tracked DA address if it is `da_address`.
+    pub(crate) fn clear_current_da_address<E, Accessor>(
+        &mut self,
+        sequencer: &S::Address,
+        da_address: &<S::Da as DaSpec>::Address,
+        state: &mut Accessor,
+    ) -> Result<(), E>
+    where
+        Accessor: StateReader<Kernel, Error = E> + StateWriter<Kernel, Error = E>,
+    {
+        if self
+            .current_da_address_by_sequencer
+            .get(sequencer, state)?
+            .is_some_and(|current| &current.current_da_address == da_address)
+        {
+            self.current_da_address_by_sequencer
+                .delete(sequencer, state)?;
+        }
+
+        Ok(())
+    }
+
     fn ensure_retired_da_address_available<ST: TxState<S>>(
         &mut self,
         da_address: &<S::Da as DaSpec>::Address,
         state: &mut ST,
     ) -> Result<(), SequencerRegistryError<S, ST>> {
         if let Some(retired) = self.retired_da_addresses.get(da_address, state)? {
-            if self.retired_da_address_is_active(&retired, state)? {
+            if self.active_successor(&retired, state)?.is_some() {
                 return Err(RegistrationError::AlreadyRegistered(retired.sequencer));
             }
             self.retired_da_addresses.delete(da_address, state)?;
@@ -458,27 +475,6 @@ impl<S: Spec> SequencerRegistry<S> {
         Ok(())
     }
 
-    fn retired_da_address_is_active<ST: TxState<S>>(
-        &self,
-        retired: &RetiredDaAddress<S>,
-        state: &mut ST,
-    ) -> Result<bool, SequencerRegistryError<S, ST>> {
-        let Some(current) = self
-            .current_da_address_by_sequencer
-            .get(&retired.sequencer, state)?
-        else {
-            return Ok(false);
-        };
-        if current.registration_da_address != retired.registration_da_address {
-            return Ok(false);
-        }
-
-        Ok(self
-            .known_sequencers
-            .get(&current.current_da_address, state)?
-            .is_some_and(|known| known.address == retired.sequencer))
-    }
-
     fn ensure_not_pending_new_da_address<ST: TxState<S>>(
         &self,
         da_address: &<S::Da as DaSpec>::Address,
@@ -486,7 +482,12 @@ impl<S: Spec> SequencerRegistry<S> {
     ) -> Result<(), SequencerRegistryError<S, ST>> {
         if let Some(pending) = self.pending_da_address_update.get(state)? {
             if &pending.new_da_address == da_address {
-                return Err(RegistrationError::AlreadyRegistered(pending.sequencer));
+                return Err(RegistrationError::Custom(
+                    CustomError::PendingDaAddressUpdate {
+                        sequencer: pending.sequencer,
+                        new_da_address: pending.new_da_address,
+                    },
+                ));
             }
         }
 
