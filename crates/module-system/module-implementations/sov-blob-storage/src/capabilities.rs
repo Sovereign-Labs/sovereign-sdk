@@ -770,26 +770,13 @@ impl<S: Spec> BlobStorage<S> {
             let batches_from_next_slot = self.take_blobs_for_slot(slot_to_check, state);
 
             for mut batch in batches_from_next_slot {
-                // For each batch we retrieve from storage, we check if it has enough reserved gas to cover the pre-execution checks.
-                // If so, we select it for execution. If not, we drop the blob and refund the reserved gas to the sequencer.
-                let balance_store = &batch.balance_store;
-                match balance_store {
-                    Escrow::DerivedHolder(reserved_balance) => {
-                        if let Ok(retrieved_token_amount) = self.move_funds_from_escrow_to_bank(&batch, reserved_balance, *gas_price_for_new_block, state) {
-                            let _ = std::mem::replace(&mut batch.balance_store, Escrow::Direct(retrieved_token_amount));
-                        } else {
-                            Self::discard(
-                                discarded_blobs,
-                                &batch.sender,
-                                batch.blob.id(),
-                                BlobDiscardReason::InsufficientReservedGas,
-                            );
-                            // If we can't retrieve enough funds from escrow, we drop the blob and move on to the next one.
-                            continue;
-                        }
-                    }
-                    Escrow::Direct(_) => unreachable!("Deferred blobs must store their gas in a derived account until it's ready to be used."),
-                    Escrow::None => {}
+                if !self.release_deferred_escrow(
+                    &mut batch,
+                    gas_price_for_new_block,
+                    discarded_blobs,
+                    state,
+                ) {
+                    continue;
                 }
                 if let PushOrIgnore::IgnoredBlob(id, sender) =
                     blobs_with_total_size_limit.push_or_ignore(SequencerType::NonPreferred, batch)
@@ -803,6 +790,47 @@ impl<S: Spec> BlobStorage<S> {
                 }
             }
         }
+    }
+
+    /// For a batch retrieved from storage, checks that it has enough reserved gas to cover the
+    /// pre-execution checks and moves those funds out of the deferred escrow. Returns `false` if
+    /// it does not, in which case the blob is discarded, the reserved gas is refunded to the
+    /// sequencer, and the caller must drop the blob.
+    ///
+    /// Both the node (`retrieve_stored_blobs_and_add_to_selection`) and the preferred sequencer
+    /// (`get_non_preferred_blobs`) must use this, so that they produce the same state.
+    ///
+    /// TODO(@preston-evans98): Callers release the escrow *before* checking the blob against the size limit. If the
+    /// blob is then dropped as `OutOfCapacity`, its sender has already paid for pre-execution checks.
+    /// Checking capacity first (and efunding the whole escrow on `OutOfCapacity`) would fix this, but we should analyze
+    /// the game theory before fixing. This would be a breaking change for any chains that have already dropped deferred blobs.
+    fn release_deferred_escrow(
+        &mut self,
+        batch: &mut ValidatedBlob<S, BatchWithId<S>>,
+        gas_price_for_new_block: &<S::Gas as Gas>::Price,
+        discarded_blobs: &mut Vec<DiscardedBlob>,
+        state: &mut KernelStateAccessor<'_, S>,
+    ) -> bool {
+        let balance_store = &batch.balance_store;
+        match balance_store {
+            Escrow::DerivedHolder(reserved_balance) => {
+                if let Ok(retrieved_token_amount) = self.move_funds_from_escrow_to_bank(batch, reserved_balance, *gas_price_for_new_block, state) {
+                    let _ = std::mem::replace(&mut batch.balance_store, Escrow::Direct(retrieved_token_amount));
+                } else {
+                    Self::discard(
+                        discarded_blobs,
+                        &batch.sender,
+                        batch.blob.id(),
+                        BlobDiscardReason::InsufficientReservedGas,
+                    );
+                    // If we can't retrieve enough funds from escrow, we drop the blob and move on to the next one.
+                    return false;
+                }
+            }
+            Escrow::Direct(_) => unreachable!("Deferred blobs must store their gas in a derived account until it's ready to be used."),
+            Escrow::None => {}
+        }
+        true
     }
 
     fn move_funds_from_escrow_to_bank(
@@ -1298,6 +1326,13 @@ impl<S: Spec> BlobStorage<S> {
     }
 
     /// Extracts all delayed non-preferred blobs that belong to the given slots.
+    ///
+    /// Like the node (see `retrieve_stored_blobs_and_add_to_selection`), this moves each blob's
+    /// reserved gas out of its deferred escrow, and drops (and refunds) blobs whose escrow cannot
+    /// cover their pre-execution checks.
+    ///
+    /// Must be called *after* the rollup height has been incremented for the new rollup block, so
+    /// that the base fee read here is the gas price of that block.
     pub fn get_non_preferred_blobs(
         &mut self,
         slot_range: impl Iterator<Item = SlotNumber>,
@@ -1305,6 +1340,13 @@ impl<S: Spec> BlobStorage<S> {
     ) -> Vec<ValidatedBlob<S, BatchWithId<S>>> {
         let discarded_blobs = &mut Vec::default();
         let mut blobs_with_total_size_limit = BlobsAccumulatorWithSizeLimit::<S>::new();
+        // After `increment_rollup_height`, the base fee at the current height is computed exactly
+        // as the node's `get_new_gas_price` computes it before incrementing the height.
+        let gas_price_for_new_block = self
+            .chain_state
+            .base_fee_per_gas(state)
+            .unwrap_infallible()
+            .unwrap_or(S::initial_base_fee_per_gas());
 
         // Load all the necessary batches from storage.
         for slot_to_check in slot_range {
@@ -1314,7 +1356,15 @@ impl<S: Spec> BlobStorage<S> {
                 batches_from_next_slot.len(),
                 slot_to_check
             );
-            for batch in batches_from_next_slot {
+            for mut batch in batches_from_next_slot {
+                if !self.release_deferred_escrow(
+                    &mut batch,
+                    &gas_price_for_new_block,
+                    discarded_blobs,
+                    state,
+                ) {
+                    continue;
+                }
                 // Only push the blobs that are within the total size limit.
                 if let PushOrIgnore::IgnoredBlob(id, sender) =
                     blobs_with_total_size_limit.push_or_ignore(SequencerType::NonPreferred, batch)

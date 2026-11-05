@@ -4,8 +4,9 @@ use tracing::{error, warn};
 
 use crate::{SequencerType, ValidatedBlob};
 
-/// We put a cap on how much space preferred blobs can use, but we allow
-/// non-preferred blobs to use any and all space if needed.
+/// Tracks the remaining space for preferred and non-preferred blobs as two separate budgets.
+/// Preferred blobs get `PREFERRED_DATA_FRACTION` of the total limit and non-preferred blobs get
+/// the rest.
 struct BlobSizeChecker {
     remaining_preferred_size: u32,
     remaining_non_preferred_size: u32,
