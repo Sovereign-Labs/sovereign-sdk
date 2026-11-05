@@ -96,9 +96,11 @@ impl<S: Spec> SequencerRegistry<S> {
                 existing_sequencer.address,
             ));
         }
-        self.ensure_not_pending_new_da_address(da_address, state)?;
-        self.ensure_sequencer_has_no_current_da_address(&address, state)?;
-        self.ensure_retired_da_address_available(da_address, state)?;
+        if Self::rotation_enabled(state) {
+            self.ensure_not_pending_new_da_address(da_address, state)?;
+            self.ensure_sequencer_has_no_current_da_address(&address, state)?;
+            self.ensure_retired_da_address_available(da_address, state)?;
+        }
 
         let Some(minimum_bond) = self.minimum_bond.get(state)? else {
             return Err(SequencerRegistryError::<S, ST>::NoMinimumBondSet);
@@ -132,23 +134,25 @@ impl<S: Spec> SequencerRegistry<S> {
         };
         self.known_sequencers
             .set(da_address, &new_sequencer, state)?;
-        let registration_id = self
-            .registration_id_counter
-            .get(state)?
-            .expect("Sequencer DA rotation tracking must be initialized")
-            .checked_add(1)
-            .ok_or(RegistrationError::Custom(
-                CustomError::RegistrationIdsExhausted,
-            ))?;
-        self.registration_id_counter.set(&registration_id, state)?;
-        self.current_da_address_by_sequencer.set(
-            &address,
-            &CurrentDaAddress {
-                registration_id,
-                current_da_address: *da_address,
-            },
-            state,
-        )?;
+        if Self::rotation_enabled(state) {
+            let registration_id = self
+                .registration_id_counter
+                .get(state)?
+                .expect("Sequencer DA rotation tracking must be initialized")
+                .checked_add(1)
+                .ok_or(RegistrationError::Custom(
+                    CustomError::RegistrationIdsExhausted,
+                ))?;
+            self.registration_id_counter.set(&registration_id, state)?;
+            self.current_da_address_by_sequencer.set(
+                &address,
+                &CurrentDaAddress {
+                    registration_id,
+                    current_da_address: *da_address,
+                },
+                state,
+            )?;
+        }
 
         self.emit_event(
             state,
@@ -167,8 +171,10 @@ impl<S: Spec> SequencerRegistry<S> {
         context: &Context<S>,
         state: &mut ST,
     ) -> Result<(), SequencerRegistryError<S, ST>> {
-        let mut existing_sequencer =
-            self.get_owned_sequencer(da_address, context.sender(), state)?;
+        self.get_owned_sequencer(da_address, context.sender(), state)?;
+        let Some(mut existing_sequencer) = self.known_sequencers.get(da_address, state)? else {
+            return Err(RegistrationError::IsNotRegistered(*da_address));
+        };
         let address = existing_sequencer.address;
         existing_sequencer.balance = existing_sequencer.balance.checked_add(amount).ok_or(
             SequencerRegistryError::<S, ST>::ToppingAccountMakesBalanceOverflow {
@@ -224,8 +230,10 @@ impl<S: Spec> SequencerRegistry<S> {
         context: &Context<S>,
         state: &mut ST,
     ) -> Result<(), SequencerRegistryError<S, ST>> {
-        let mut existing_sequencer =
-            self.get_owned_sequencer(da_address, context.sender(), state)?;
+        self.get_owned_sequencer(da_address, context.sender(), state)?;
+        let Some(mut existing_sequencer) = self.known_sequencers.get(da_address, state)? else {
+            return Err(RegistrationError::IsNotRegistered(*da_address));
+        };
 
         if &existing_sequencer.address == context.sequencer() {
             return Err(RegistrationError::Custom(
@@ -263,7 +271,10 @@ impl<S: Spec> SequencerRegistry<S> {
         context: &Context<S>,
         state: &mut ST,
     ) -> Result<(), SequencerRegistryError<S, ST>> {
-        let existing_sequencer = self.get_owned_sequencer(da_address, context.sender(), state)?;
+        self.get_owned_sequencer(da_address, context.sender(), state)?;
+        let Some(existing_sequencer) = self.known_sequencers.get(da_address, state)? else {
+            return Err(RegistrationError::IsNotRegistered(*da_address));
+        };
         let BalanceState::PendingWithdrawal { ready_at } = existing_sequencer.balance_state else {
             return Err(RegistrationError::Custom(
                 CustomError::WithdrawalNotInitiated(*da_address),
@@ -277,7 +288,9 @@ impl<S: Spec> SequencerRegistry<S> {
             }));
         }
         self.known_sequencers.delete(da_address, state)?;
-        self.clear_current_da_address(&existing_sequencer.address, da_address, state)?;
+        if Self::rotation_enabled(state) {
+            self.clear_current_da_address(&existing_sequencer.address, da_address, state)?;
+        }
         self.bank
             .transfer_from(
                 self.id().clone().to_payable(),
@@ -308,8 +321,7 @@ impl<S: Spec> SequencerRegistry<S> {
     /// - If a DA address update is already pending in this rollup block (by any sequencer).
     /// - If `old_da_address` is producing the current batch and the caller is not the preferred
     ///   sequencer.
-    /// - If `old_da_address` is not the caller's tracked current DA address. This only happens for
-    ///   rollup addresses that registered several DA addresses before rotation was introduced.
+    /// - If rotation has not been activated, or `old_da_address` is not tracked for the caller.
     /// - If `new_da_address` is registered, or retired by a sequencer that is still registered.
     pub(crate) fn update_da_address<ST: TxState<S>>(
         &mut self,
@@ -318,6 +330,11 @@ impl<S: Spec> SequencerRegistry<S> {
         context: &Context<S>,
         state: &mut ST,
     ) -> Result<(), SequencerRegistryError<S, ST>> {
+        if !Self::rotation_enabled(state) {
+            return Err(RegistrationError::Custom(
+                CustomError::DaRotationNotActivated,
+            ));
+        }
         if old_da_address == new_da_address {
             return Err(RegistrationError::Custom(
                 CustomError::NewDaAddressSameAsOld(*old_da_address),
@@ -329,7 +346,7 @@ impl<S: Spec> SequencerRegistry<S> {
         if self
             .current_da_address_by_sequencer
             .get(&existing_sequencer.address, state)?
-            .is_some_and(|current| current.current_da_address != *old_da_address)
+            .is_none_or(|current| current.current_da_address != *old_da_address)
         {
             return Err(RegistrationError::Custom(CustomError::NotCurrentDaAddress(
                 *old_da_address,

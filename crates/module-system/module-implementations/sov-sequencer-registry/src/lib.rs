@@ -24,6 +24,7 @@ use serde::{Deserialize, Serialize};
 use sov_bank::derived_holder::DerivedHolder;
 use sov_bank::{Amount, IntoPayable};
 use sov_modules_api::capabilities::AllowedSequencer;
+use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::registration_lib::RegistrationError;
 #[cfg(feature = "native")]
@@ -31,7 +32,7 @@ use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::{
     BasicAddress, Context, DaSpec, GenesisState, InfallibleStateAccessor, KernelStateAccessor,
     KernelStateMap, KernelStateValue, Module, ModuleId, ModuleInfo, ModuleRestApi, Spec,
-    StateAccessor, StateReader, StateValue, StateWriter, TxState, VisibleSlotNumber,
+    StateAccessor, StateReader, StateValue, StateWriter, TxState, VersionReader, VisibleSlotNumber,
 };
 use sov_state::{Kernel, User};
 use thiserror::Error;
@@ -189,6 +190,10 @@ pub struct SequencerRegistry<S: Spec> {
 /// A special error type that can be raised when calling a method from the sequencer registry
 #[derive(Debug, Error, PartialEq, Eq)]
 pub enum CustomError<RollupAddress: BasicAddress, DaAddress: BasicAddress> {
+    /// DA rotation is not enabled at the current execution height.
+    #[error("Sequencer DA rotation has not been activated")]
+    DaRotationNotActivated,
+
     /// All registration IDs have been allocated.
     #[error("Sequencer registration IDs exhausted")]
     RegistrationIdsExhausted,
@@ -233,8 +238,7 @@ pub enum CustomError<RollupAddress: BasicAddress, DaAddress: BasicAddress> {
         new_da_address: DaAddress,
     },
 
-    /// The rollup address registered several DA addresses before rotation was introduced, and
-    /// only its tracked current DA address can be rotated.
+    /// The supplied DA address is not the caller's tracked current registration.
     #[error("DA address {0} is not the sequencer's current DA address and cannot be rotated")]
     NotCurrentDaAddress(DaAddress),
 }
@@ -265,7 +269,15 @@ impl<S: Spec> Module for SequencerRegistry<S> {
         config: &Self::Config,
         state: &mut impl GenesisState<S>,
     ) -> Result<(), Self::Error> {
-        self.registration_id_counter.set(&0, state)?;
+        if Self::rotation_enabled(state) {
+            anyhow::ensure!(
+                config_value!("SEQUENCER_DA_ROTATION_UPGRADE_ADDRESSES")
+                    .trim()
+                    .is_empty(),
+                "Genesis activation requires an empty sequencer DA upgrade list"
+            );
+            self.registration_id_counter.set(&0, state)?;
+        }
         self.init_module(config, state)
     }
 
@@ -301,6 +313,11 @@ impl<S: Spec> Module for SequencerRegistry<S> {
 }
 
 impl<S: Spec> SequencerRegistry<S> {
+    fn rotation_enabled(state: &impl VersionReader) -> bool {
+        state.rollup_height_to_access().get()
+            >= config_value!("SEQUENCER_DA_ROTATION_ACTIVATION_HEIGHT")
+    }
+
     /// Returns the preferred sequencer, or [`None`] it wasn't set.
     ///
     /// Read about [`SequencerConfig::is_preferred_sequencer`] to learn about

@@ -27,6 +27,11 @@ STATE_VERSION = 1
 # Example: CHAIN_HASH_OVERRIDES = [{ start_height = 0, end_height = 1000, chain_hash = "0xabc...32_bytes_hex", grace_period = 100 }]
 CHAIN_HASH_OVERRIDES = []
 
+# Existing chains must configure the activation execution height and a verified list of all registered DA addresses at H-1.
+# Fresh chains enable rotation at genesis and require an empty list. Addresses are canonical strings separated by whitespace.
+SEQUENCER_DA_ROTATION_ACTIVATION_HEIGHT = 0
+SEQUENCER_DA_ROTATION_UPGRADE_ADDRESSES = ""
+
 # Legacy V0 transactions are accepted only below this rollup execution height.
 # Note that rollup height obviously counts from genesis; so if the rollup upgrades at height N,
 # then to give M blocks of grace period for clients to update, set this to N + M.
