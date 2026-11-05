@@ -1,3 +1,5 @@
+# 2026-11-05
+- #3122 Tests: Split the sov-sequencer `preferred_end_to_end.rs` integration tests into a `preferred_end_to_end/` module with one file per concern.
 # 2026-11-02
 - #3100 Tests: Surface hidden sequencer test failures, bound `TestRollup::wait_for_height` by `POLLING_TIMEOUT`, and replace blob-publication sleeps with `TestRollup::force_close_batch_and_wait_for_publication`.
 - #3101 Tests: Re-enable passing ignored sequencer tests and run `heavy_` tests in the nightly workflow.
