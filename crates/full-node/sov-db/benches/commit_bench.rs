@@ -10,8 +10,8 @@
 //! - ledger: 5k transactions in 2 batches, 1-2 events each.
 //! - accessory: 4k items.
 //!
-//! Prints `commit_ms_p50:` (the campaign metric) and a few informational lines.
-//! Env overrides (for calibration only): `BENCH_DIR`, `BENCH_USER_WRITES`, `BENCH_SLOTS`.
+//! Prints `commit_ms_p50`, `commit_ms_p90`, `commit_ms_mean` and prefill/total time.
+//! `BENCH_DIR` sets the parent directory for the database (default: system temp dir).
 
 use std::collections::BTreeMap;
 use std::time::{Duration, Instant};
@@ -71,24 +71,13 @@ impl InitializableNativeNomtStorage<Sha256, MockHash> for BenchStorage {
 
 type Manager = NomtStorageManager<MockDaSpec, Sha256, BenchStorage>;
 
-fn env_or<T: std::str::FromStr>(name: &str, default: T) -> T {
-    std::env::var(name)
-        .ok()
-        .and_then(|v| v.parse().ok())
-        .unwrap_or(default)
-}
-
 fn header(height: u64) -> MockBlockHeader {
     MockBlockHeader::new(height, Time::from_secs(1_700_000_000 + height as i64))
 }
 
 /// Deterministic user key for an index: 2-byte prefix + hash-derived body.
 fn user_key(idx: u64) -> Vec<u8> {
-    let len = match idx % 20 {
-        0..=10 => 64,
-        11..=13 => 56,
-        _ => 34,
-    };
+    let len = user_key_len(idx);
     let digest = Sha256::digest(idx.to_le_bytes());
     let mut key = Vec::with_capacity(len);
     key.push(10);
@@ -148,18 +137,19 @@ struct SlotInput {
 }
 
 /// Tracks which user/kernel keys exist so updates and deletes hit live keys.
+#[derive(Default)]
 struct KeySpace {
-    /// Keys `[0, next_user)` were inserted; `[deleted_below, delete_cursor)` were deleted.
+    /// Live user keys are `[delete_cursor, next_user)`.
     next_user: u64,
     delete_cursor: u64,
     next_kernel: u64,
 }
 
 impl KeySpace {
-    fn slot(&mut self, rng: &mut StdRng, user_writes: usize, slot: u64) -> SlotInput {
+    fn slot(&mut self, rng: &mut StdRng, slot: u64) -> SlotInput {
         let mut user = Writes::new();
-        let inserts = user_writes / 10;
-        let deletes = user_writes / 20;
+        let inserts = USER_WRITES_PER_SLOT / 10;
+        let deletes = USER_WRITES_PER_SLOT / 20;
         for _ in 0..inserts {
             let idx = self.next_user;
             self.next_user += 1;
@@ -170,7 +160,7 @@ impl KeySpace {
             self.delete_cursor += 1;
             user.insert(user_key(idx), None);
         }
-        while user.len() < user_writes {
+        while user.len() < USER_WRITES_PER_SLOT {
             let idx = rng.gen_range(self.delete_cursor..self.next_user);
             user.insert(user_key(idx), Some(user_value(idx, rng)));
         }
@@ -262,7 +252,7 @@ fn ledger_commit(height: u64, txs: usize, rng: &mut StdRng) -> SlotCommit<MockBl
     commit
 }
 
-/// Builds and saves the change set for `height`; returns nothing, the caller times `finalize`.
+/// Builds and saves the change set for `height`, without finalizing it.
 fn save_slot(manager: &mut Manager, height: u64, input: SlotInput, rng: &mut StdRng) {
     let hdr = header(height);
     let (storage, ledger_reader) = manager.create_state_for(&hdr).unwrap();
@@ -323,12 +313,12 @@ fn main() {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|_| std::env::temp_dir());
     let tmp = tempfile::tempdir_in(base_dir).unwrap();
-    let user_writes = env_or("BENCH_USER_WRITES", USER_WRITES_PER_SLOT);
-    let measured_slots = env_or("BENCH_SLOTS", MEASURED_SLOTS);
 
     let config = RollupDbConfig {
         path: tmp.path().to_path_buf(),
+        live_db_path: None,
         ledger_db_path: None,
+        user_nomt_db_path: None,
         state_cache_size: None,
         user_commit_concurrency: Some(4),
         user_hashtable_buckets: Some(4_000_000),
@@ -346,11 +336,7 @@ fn main() {
     };
     let mut manager = Manager::new(config, false).unwrap();
     let mut rng = StdRng::seed_from_u64(SEED);
-    let mut keys = KeySpace {
-        next_user: 0,
-        delete_cursor: 0,
-        next_kernel: 0,
-    };
+    let mut keys = KeySpace::default();
 
     // Prefill: large commits that build the initial state.
     let prefill_start = Instant::now();
@@ -380,9 +366,9 @@ fn main() {
     }
     let prefill = prefill_start.elapsed();
 
-    let mut timings = Vec::with_capacity(measured_slots as usize);
-    for i in 0..WARMUP_SLOTS + measured_slots {
-        let input = keys.slot(&mut rng, user_writes, height);
+    let mut timings = Vec::with_capacity(MEASURED_SLOTS as usize);
+    for i in 0..WARMUP_SLOTS + MEASURED_SLOTS {
+        let input = keys.slot(&mut rng, height);
         save_slot(&mut manager, height, input, &mut rng);
         let start = Instant::now();
         manager.finalize(&header(height)).unwrap();
