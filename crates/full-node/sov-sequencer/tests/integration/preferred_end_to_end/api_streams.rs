@@ -118,7 +118,9 @@ async fn test_sequencer_getters() {
             tx_number += 1;
         }
         test_rollup.da_service.produce_block_now().await.unwrap();
-        slot_subscription.next().await;
+        next_within(&mut slot_subscription, NOTIFICATION_TIMEOUT)
+            .await
+            .unwrap();
         check_responses(0, responses.clone(), test_rollup.api_client().clone()).await;
         check_responses(5, responses.clone(), test_rollup.api_client().clone()).await;
     }
@@ -295,7 +297,9 @@ async fn test_sequencer_event_stream_lag_message() {
             .unwrap();
         if i < 2 {
             for j in 0..events_per_tx {
-                let event = events.next().await.unwrap().unwrap();
+                let event = next_within(&mut events, NOTIFICATION_TIMEOUT)
+                    .await
+                    .unwrap();
                 assert_eq!(event.number, i as u64 * events_per_tx as u64 + j as u64);
             }
         }

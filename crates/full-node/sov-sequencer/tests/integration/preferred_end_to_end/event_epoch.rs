@@ -358,7 +358,7 @@ async fn standard_sequencer_state_reads_report_the_nodes_last_event() {
     let mut last_event_number = None;
     for _ in 0..10 {
         test_rollup.da_service.produce_block_now().await.unwrap();
-        slots.next().await.unwrap().unwrap();
+        next_within(&mut slots, NOTIFICATION_TIMEOUT).await.unwrap();
         let (number, value) = read_value_and_last_event_number(&test_rollup, "").await;
         if value == Some(0x1234_5678) {
             last_event_number = number;
