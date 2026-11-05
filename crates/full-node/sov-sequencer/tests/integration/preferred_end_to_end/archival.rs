@@ -50,7 +50,7 @@ async fn test_archival_state_is_immediately_available() {
         test_rollup.wait_for_sequencer_ready().await.unwrap();
         // Wait for slot notifications to arrive, this means API state got all updates.
         for _ in 0..extra_blocks {
-            let _slot = slots.next().await.unwrap().unwrap();
+            let _slot = next_within(&mut slots, NOTIFICATION_TIMEOUT).await.unwrap();
         }
         for (j, past_height) in (height_at_start..height).enumerate() {
             let expected_value = (j + 1) as u64;
@@ -266,7 +266,7 @@ async fn test_archival_state_is_accessible_even_with_delayed_checkpoint_update()
         let mut slots = test_rollup.api_client().subscribe_slots().await.unwrap();
         test_rollup.tenderly_produce_blocks(2).await.unwrap();
         for _ in 0..2 {
-            let _slot = slots.next().await.unwrap().unwrap();
+            let _slot = next_within(&mut slots, NOTIFICATION_TIMEOUT).await.unwrap();
         }
 
         let queried_height = test_rollup.height().await.get();

@@ -2,9 +2,13 @@ use futures::stream::StreamExt;
 use sov_api_spec::types::TxStatus;
 use sov_sequencer::Sequencer;
 use sov_test_utils::sequencer::TestSequencerSetup;
+use sov_test_utils::test_rollup::next_within;
 use std::net::{IpAddr, Ipv4Addr};
+use std::time::Duration;
 
 use crate::utils::{generate_txs, RT};
+
+const STREAM_TIMEOUT: Duration = Duration::from_secs(30);
 
 #[tokio::test(flavor = "multi_thread")]
 async fn mempool_eviction_event() {
@@ -26,7 +30,10 @@ async fn mempool_eviction_event() {
 
     // Before submitting a transaction, its status is unknown.
     assert_eq!(
-        subscription.next().await.unwrap().unwrap().status,
+        next_within(&mut subscription, STREAM_TIMEOUT)
+            .await
+            .unwrap()
+            .status,
         TxStatus::Unknown
     );
 
@@ -38,7 +45,10 @@ async fn mempool_eviction_event() {
 
     // The transaction enters the mempool.
     assert_eq!(
-        subscription.next().await.unwrap().unwrap().status,
+        next_within(&mut subscription, STREAM_TIMEOUT)
+            .await
+            .unwrap()
+            .status,
         TxStatus::Submitted
     );
 
@@ -51,7 +61,10 @@ async fn mempool_eviction_event() {
         .unwrap();
 
     assert_eq!(
-        subscription.next().await.unwrap().unwrap().status,
+        next_within(&mut subscription, STREAM_TIMEOUT)
+            .await
+            .unwrap()
+            .status,
         TxStatus::Dropped,
     );
 
@@ -75,7 +88,10 @@ async fn rpc_subscribe() {
 
     // Before submitting a transaction, its status is unknown.
     assert_eq!(
-        subscription.next().await.unwrap().unwrap().status,
+        next_within(&mut subscription, STREAM_TIMEOUT)
+            .await
+            .unwrap()
+            .status,
         TxStatus::Unknown
     );
 
@@ -85,13 +101,19 @@ async fn rpc_subscribe() {
 
     // The transaction status should change once it enters the mempool...
     assert_eq!(
-        subscription.next().await.unwrap().unwrap().status,
+        next_within(&mut subscription, STREAM_TIMEOUT)
+            .await
+            .unwrap()
+            .status,
         TxStatus::Submitted
     );
 
     // ...and then change again shortly after, once it gets included in a block.
     assert_eq!(
-        subscription.next().await.unwrap().unwrap().status,
+        next_within(&mut subscription, STREAM_TIMEOUT)
+            .await
+            .unwrap()
+            .status,
         TxStatus::Published,
     );
 

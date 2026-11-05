@@ -22,7 +22,7 @@ use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::genesis::zk::MinimalZkGenesisConfig;
 use sov_test_utils::sov_bank::{config_gas_token_id, CallMessageDiscriminants, Coins};
-use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder};
+use sov_test_utils::test_rollup::{next_within, GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_tx_details, generate_runtime, RtAgnosticBlueprint, TestSpec, TestUser,
     TransactionType, TEST_DEFAULT_USER_BALANCE,
@@ -269,11 +269,11 @@ async fn test_stream_of_transactions(
     // Test considers rollup ready when it has produced at least finalized slot with rollup_height = 1
     // TODO: Rollup is incapable to accept txs if it hasn't produced first finalized slot
     for _ in 0..2 {
-        let slot = finalized_slots
-            .next()
-            .await
-            .transpose()?
-            .expect("Empty response in finalize slots");
+        let slot = next_within(
+            &mut finalized_slots,
+            TestRollup::<RollupBlueprint>::POLLING_TIMEOUT,
+        )
+        .await?;
         tracing::info!(
             slot_number = slot.number,
             "Test received finalized slot notification"

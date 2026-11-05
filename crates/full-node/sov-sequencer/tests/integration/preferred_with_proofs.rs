@@ -4,8 +4,9 @@ use sov_modules_stf_blueprint::GenesisParams;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::{
-    generate_zk_runtime_with_kernel, test_rollup::TestRollup, RtAgnosticBlueprint, TestSpec,
-    TestUser, TEST_DEFAULT_MAX_FEE,
+    generate_zk_runtime_with_kernel,
+    test_rollup::{next_within, TestRollup},
+    RtAgnosticBlueprint, TestSpec, TestUser, TEST_DEFAULT_MAX_FEE,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use tokio_stream::StreamExt;
@@ -118,7 +119,12 @@ async fn flaky_test_proof_generation_doesnt_break_sequencer() -> anyhow::Result<
 
         // Produce one block and wait for the corresponding slot notification.
         test_rollup.da_service.produce_block_now().await?;
-        let _slot = slot_subscription.next().await.unwrap().unwrap();
+        let _slot = next_within(
+            &mut slot_subscription,
+            TestRollup::<TestBlueprint>::POLLING_TIMEOUT,
+        )
+        .await
+        .unwrap();
 
         while let Ok(Some(Ok(_proof))) = tokio::time::timeout(
             std::time::Duration::from_millis(150),
