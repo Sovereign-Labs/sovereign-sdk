@@ -5,7 +5,7 @@ use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::Address;
 use sov_address::{EthereumAddress, MultiAddress};
 use sov_evm::{AccountData, ContractCreationPolicy, EvmChainSpec, EvmGenesisConfig, SpecId};
-use sov_modules_api::{Amount, CryptoSpec, Spec};
+use sov_modules_api::{Amount, Spec};
 use sov_paymaster::{
     AuthorizedSequencers, PayeePolicy, PayerGenesisConfig, PaymasterConfig,
     PaymasterPolicyInitializer, SafeVec,
@@ -25,8 +25,8 @@ pub struct TestGenesis {
     pub seq_da_address: <<EvmTestSpec as Spec>::Da as sov_rollup_interface::da::DaSpec>::Address,
     /// The paymaster (sov user) registered in this genesis, if any.
     pub paymaster: Option<TestUser<EvmTestSpec>>,
-    /// Private key of the admin used for the EVM genesis config (sequencer's user).
-    pub admin_private_key: <<EvmTestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    /// Admin used for the EVM genesis config (sequencer's user).
+    pub admin: TestUser<EvmTestSpec>,
 }
 
 /// Constructs a default genesis matching `chain_state_zk.json` + `bank.json` + `evm.json`
@@ -117,8 +117,8 @@ pub fn build_genesis(opts: GenesisOptions) -> TestGenesis {
     // and for routing blobs at runtime.
     let seq_da_address = hl_genesis.initial_sequencer.da_address;
 
-    let admin_address = hl_genesis.initial_sequencer.user_info.address();
-    let admin_private_key = hl_genesis.initial_sequencer.user_info.private_key.clone();
+    let admin = hl_genesis.initial_sequencer.user_info.clone();
+    let admin_address = admin.address();
 
     // Mirror `examples/test-data/genesis/integration-tests/evm.json`: tests cross-check
     // `gas_used_ratio` against the block header, so the block gas limit must match.
@@ -230,7 +230,7 @@ pub fn build_genesis(opts: GenesisOptions) -> TestGenesis {
         genesis,
         seq_da_address,
         paymaster: paymaster_user,
-        admin_private_key,
+        admin,
     }
 }
 
