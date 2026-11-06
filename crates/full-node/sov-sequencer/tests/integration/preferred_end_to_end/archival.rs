@@ -339,7 +339,7 @@ async fn test_archival_read_from_uncommitted_changes() {
     // Pause the sequencer's update_state task. The sequencer will not receive
     // any further state updates from the node, keeping its storage stale.
     // Batch 2 data will only be reachable via uncommitted_changes.
-    pause_update_state::set(true);
+    test_rollup.pause_preferred_batches().await;
 
     // Batch 2: set value to 0x5678, produce DA blocks.
     // The node commits to NOMT, but the sequencer never learns about it.
@@ -389,7 +389,7 @@ async fn test_archival_read_from_uncommitted_changes() {
         "finalize-hook-count at new_height ({new_hook_count}) should be greater than at settled_height ({settled_hook_count})"
     );
 
-    pause_update_state::set(false);
+    test_rollup.resume_preferred_batches().await;
 }
 
 #[tokio::test(flavor = "multi_thread")]

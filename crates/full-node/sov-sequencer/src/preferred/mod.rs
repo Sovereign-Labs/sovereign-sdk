@@ -154,6 +154,9 @@ where
     #[cfg(feature = "test-utils")]
     #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
     test_only_state_update_notification_sender: broadcast::Sender<StateUpdateNotification>,
+    /// See [`Sequencer::set_update_state_paused`].
+    #[cfg(feature = "test-utils")]
+    test_only_update_state_paused: std::sync::atomic::AtomicBool,
     #[allow(dead_code)] // Used only for testing; unused with some feature combinations.
     test_only_forced_tx_batch_notification_receiver: broadcast::Receiver<ForcedTxBatchNotification>,
     runtime: Rt,
@@ -657,17 +660,6 @@ pub(crate) enum PreferredSeqOperation<S: Spec, Rt: Runtime<S>> {
     ),
 }
 
-/// Returns `true` when the test pause flag is set and applies to this node.
-///
-/// * `"1"` pauses all nodes (backward-compatible).
-/// * A specific `node_id` pauses only the node whose postgres config matches.
-fn should_skip_update_state(postgres_config: Option<&PostgresConfig>) -> bool {
-    let Ok(flag_value) = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE") else {
-        return false;
-    };
-    flag_value == "1" || postgres_config.is_some_and(|c| c.node_id == flag_value)
-}
-
 #[tracing::instrument(skip_all, level = "debug")]
 async fn update_state_task_inner<S, Rt, Da>(
     seq: PreferredSequencer<S, Rt, Da>,
@@ -682,21 +674,17 @@ where
     let info =
         poll_state_update::<S>(state_update_receiver, primary_shutdown, "update_state").await?;
 
-    if cfg!(debug_assertions)
-        && should_skip_update_state(seq.config.sequencer_kind_config.postgres_config.as_ref())
-    {
-        tracing::warn!("skipping state update due to env var flag");
-        #[cfg(feature = "test-utils")]
-        {
-            let _ = seq
-                .test_only_state_update_notification_sender
-                .send(StateUpdateNotification {
-                    slot_number: info.slot_number,
-                    finalized_slot_number: info.latest_finalized_slot_number,
-                    update_skipped_due_to_pause: true,
-                    triggered_recovery: false,
-                });
-        }
+    #[cfg(feature = "test-utils")]
+    if seq.test_only_update_state_paused.load(Ordering::SeqCst) {
+        tracing::warn!("skipping state update because state updates are paused");
+        let _ = seq
+            .test_only_state_update_notification_sender
+            .send(StateUpdateNotification {
+                slot_number: info.slot_number,
+                finalized_slot_number: info.latest_finalized_slot_number,
+                update_skipped_due_to_pause: true,
+                triggered_recovery: false,
+            });
         return Ok(());
     }
 
@@ -836,6 +824,12 @@ where
             .force_close_current_batch_msg("force_close_current_batch")
             .await
             .map_err(|e| e.into_state_update_error())?)
+    }
+
+    #[cfg(feature = "test-utils")]
+    fn set_update_state_paused(&self, paused: bool) -> bool {
+        self.test_only_update_state_paused
+            .swap(paused, Ordering::SeqCst)
     }
 
     #[cfg(feature = "test-utils")]
