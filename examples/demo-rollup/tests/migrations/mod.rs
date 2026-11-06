@@ -20,9 +20,9 @@ use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_state::{
     BorshCodec, Kernel, NativeStorage as _, Prefix, SlotKey, SlotValue, StateUpdate as _,
 };
-use sov_test_utils::test_rollup::{read_private_key, RollupBuilder};
+use sov_test_utils::test_rollup::RollupBuilder;
 
-use crate::test_helpers::{build_transfer_token_tx, test_genesis_source, DemoRollupSpec};
+use crate::test_helpers::{test_genesis_source, transfer_token_msg, tx_signer, DemoRollupSpec};
 
 type Rollup = MockDemoRollup<Native>;
 type Hasher = <<DemoRollupSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher;
@@ -139,19 +139,12 @@ async fn build_and_force_v0_demo_state() -> anyhow::Result<(
     test_rollup.wait_for_node_synced().await?;
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await?;
-    let tx_signer = read_private_key::<DemoRollupSpec>("tx_signer_private_key.json");
-    let tx = build_transfer_token_tx(
-        &tx_signer.private_key,
-        config_gas_token_id(),
-        account_address,
-        1,
-        0,
-    );
-    test_rollup.send_tx_to_sequencer(&tx).await?;
-    let initial_height = test_rollup.height().await.get();
-    test_rollup.force_close_batch().await?;
-    test_rollup.produce_enough_finalized_slots().await;
-    test_rollup.wait_for_height(initial_height + 1).await;
+    test_rollup
+        .submit_and_wait_included(
+            &tx_signer::<DemoRollupSpec>(),
+            transfer_token_msg(config_gas_token_id(), account_address, 1),
+        )
+        .await?;
     test_rollup.wait_for_node_synced().await?;
 
     let storage_config = test_rollup.rollup_config.storage.clone();
