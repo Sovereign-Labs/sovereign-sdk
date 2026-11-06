@@ -246,6 +246,13 @@ pub trait Sequencer: Clone + Send + Sync + 'static {
         panic!("Not implemented")
     }
 
+    /// Pauses or resumes processing of state updates from the node. While paused, no new
+    /// batches are produced. Returns whether processing was paused before this call.
+    #[cfg(feature = "test-utils")]
+    fn set_update_state_paused(&self, _paused: bool) -> bool {
+        panic!("Not implemented")
+    }
+
     /// Subscribe to state update completion notifications. Note that notifications may be delivered out of order.
     async fn subscribe_state_updates_unstable(
         &self,
@@ -290,7 +297,7 @@ pub struct StateUpdateNotification {
     /// The finalized slot number.
     pub finalized_slot_number: SlotNumber,
     /// True when the update loop explicitly skipped processing because
-    /// `SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE=1` was observed.
+    /// state updates were paused via [`Sequencer::set_update_state_paused`].
     #[cfg(feature = "test-utils")]
     #[serde(default)]
     pub update_skipped_due_to_pause: bool,
@@ -499,19 +506,7 @@ pub async fn loop_call_update_state<Seq: Sequencer>(
         state_update_receiver,
         primary_shutdown,
         "loop_call_update_state",
-        |info| async {
-            if cfg!(debug_assertions) {
-                let skip_flag = std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
-                if skip_flag == Ok("1".to_string()) {
-                    tracing::warn!("skipping state update due to env var flag");
-                    Ok(())
-                } else {
-                    seq.update_state(info).await
-                }
-            } else {
-                seq.update_state(info).await
-            }
-        },
+        |info| async { seq.update_state(info).await },
     )
     .await;
 }
