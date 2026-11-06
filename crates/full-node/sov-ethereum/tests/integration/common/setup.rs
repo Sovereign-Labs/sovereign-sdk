@@ -95,19 +95,19 @@ pub async fn setup_test_rollup_with_rate_limiter(
     .await
 }
 
-/// Like `setup_test_rollup`, but also returns the admin private key used by the EVM genesis.
-pub async fn setup_test_rollup_with_admin_key(
+/// Like `setup_test_rollup`, but also returns the admin used by the EVM genesis.
+pub async fn setup_test_rollup_with_admin(
     finalization_blocks: u32,
     extension: SeqConfigExtension,
 ) -> (
     TestRollup<EvmBlueprint>,
-    <<crate::runtime::EvmTestSpec as sov_modules_api::Spec>::CryptoSpec as sov_modules_api::CryptoSpec>::PrivateKey,
-){
+    sov_test_utils::TestUser<crate::runtime::EvmTestSpec>,
+) {
     let test_genesis = default_genesis();
-    let admin_private_key = test_genesis.admin_private_key.clone();
+    let admin = test_genesis.admin.clone();
     let rollup =
         start_node_with_genesis(test_genesis, finalization_blocks, Some(extension), None, 3).await;
-    (rollup, admin_private_key)
+    (rollup, admin)
 }
 
 pub async fn setup_test_rollup_with_ideal_lag(
