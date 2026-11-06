@@ -2,7 +2,7 @@ use std::str::FromStr;
 use std::time::Duration;
 
 use anyhow::Context;
-use demo_stf::runtime::{Runtime, RuntimeCall};
+use demo_stf::runtime::RuntimeCall;
 use demo_stf_json_client::types::RuntimeError;
 use demo_stf_json_client::Error;
 use futures::{SinkExt, StreamExt};
@@ -11,15 +11,11 @@ use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_demo_rollup::MockDemoRollup;
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::transaction::Transaction;
 use sov_modules_api::OperatingMode;
-use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
-use sov_test_utils::{
-    default_test_signed_transaction_with_nonce, TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
-    TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
-};
+use sov_test_utils::test_rollup::{RollupBuilder, TestRollup};
+use sov_test_utils::{TEST_DEFAULT_MOCK_DA_ON_SUBMIT, TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING};
 
-use crate::test_helpers::{test_genesis_source, DemoRollupSpec, CHAIN_HASH};
+use crate::test_helpers::{test_genesis_source, tx_signer, DemoRollupSpec};
 
 type TestSpec = DemoRollupSpec;
 
@@ -84,43 +80,34 @@ async fn start_warm_rollup() -> anyhow::Result<TestRollup<MockDemoRollup<Native>
     Ok(test_rollup)
 }
 
-fn synthetic_load_tx() -> Transaction<Runtime<TestSpec>, TestSpec> {
-    // Based on an assumption that this key is admin in sov-value-setter
-    let key_and_address = read_private_key::<TestSpec>("tx_signer_private_key.json");
-    let msg = RuntimeCall::<TestSpec>::SyntheticLoad(
-        sov_synthetic_load::CallMessage::ReadAndSetHeavyState {
-            number_of_new_values: 10,
-            max_heavy_state_size: 30,
-            salt: 10_000,
-        },
-    );
-
-    default_test_signed_transaction_with_nonce::<Runtime<TestSpec>, TestSpec>(
-        &key_and_address.private_key,
-        &msg,
-        0,
-        &CHAIN_HASH,
-    )
+fn synthetic_load_msg() -> RuntimeCall<TestSpec> {
+    RuntimeCall::<TestSpec>::SyntheticLoad(sov_synthetic_load::CallMessage::ReadAndSetHeavyState {
+        number_of_new_values: 10,
+        max_heavy_state_size: 30,
+        salt: 10_000,
+    })
 }
 
-async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
+/// Returns the rollup too: dropping a `TestRollup` shuts the node down.
+async fn setup() -> anyhow::Result<(
+    TestRollup<MockDemoRollup<Native>>,
+    demo_stf_json_client::Client,
+)> {
     let test_rollup = start_warm_rollup().await?;
 
-    let tx = synthetic_load_tx();
-    let mut slot_subscription = test_rollup.client.client.subscribe_slots().await?;
-    test_rollup.client.client.send_tx_to_sequencer(&tx).await?;
-    slot_subscription.next().await;
+    test_rollup
+        .submit_and_wait_included(&tx_signer(), synthetic_load_msg())
+        .await?;
 
     test_rollup.da_service.produce_n_blocks_now(3).await?;
 
-    Ok(demo_stf_json_client::Client::new(
-        &test_rollup.client.base_url,
-    ))
+    let client = demo_stf_json_client::Client::new(&test_rollup.client.base_url);
+    Ok((test_rollup, client))
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_test_runtime_spec_with_gen_client() -> anyhow::Result<()> {
-    let runtime_client = setup().await?;
+    let (_test_rollup, runtime_client) = setup().await?;
 
     check_base_runtime_info(&runtime_client)
         .await
@@ -363,8 +350,9 @@ async fn chain_state_rollup_height_subscription_streams_live_height() -> anyhow:
         .context("subscription closed before sending the initial rollup height")??;
 
     // Submit a transaction and produce more blocks to advance the chain.
-    let tx = synthetic_load_tx();
-    test_rollup.client.client.send_tx_to_sequencer(&tx).await?;
+    test_rollup
+        .submit(&tx_signer(), synthetic_load_msg())
+        .await?;
     test_rollup.da_service.produce_n_blocks_now(3).await?;
 
     // Heights are pushed in order without skips or repeats, so the first push after the
