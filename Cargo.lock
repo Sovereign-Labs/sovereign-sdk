@@ -11452,6 +11452,7 @@ version = "0.3.0"
 dependencies = [
  "anyhow",
  "async-trait",
+ "backon",
  "borsh",
  "bytes",
  "celestia-client",

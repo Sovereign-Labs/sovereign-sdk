@@ -3,6 +3,7 @@ use std::time::Duration;
 
 use anyhow::Context;
 use async_trait::async_trait;
+use backon::Retryable;
 use celestia_client::api::fibre::{BlobID, DownloadOptions, FibreClient, FibreClientConfig};
 use celestia_client::tx::{SigningKey, TxConfig};
 use celestia_client::types::namespace_data::NamespaceData;
@@ -149,9 +150,18 @@ impl CelestiaFibreDaService {
         // TODO: downloads run sequentially, parallelize if blocks carry many Fibre blobs.
         for fibre_ref in refs {
             let blob_id = BlobID::new(FIBRE_BLOB_VERSION, fibre_ref.commitment);
-            let downloaded = self
-                .fibre
-                .download(&blob_id, DownloadOptions::default())
+            // Validators signed that they store this blob, so a failure is transient.
+            let downloaded = (|| self.fibre.download(&blob_id, DownloadOptions::default()))
+                .retry(download_backoff())
+                .notify(|error, delay| {
+                    tracing::warn!(
+                        height,
+                        commitment = %HexHash::new(fibre_ref.commitment),
+                        %error,
+                        ?delay,
+                        "Failed to download Fibre blob, retrying"
+                    );
+                })
                 .await
                 .with_context(|| format!("Failed to download Fibre blob at height {height}"))?;
             fibre_blobs.push(DownloadedFibreBlob {
@@ -202,9 +212,18 @@ impl CelestiaFibreDaService {
     }
 }
 
+/// Retries for a Fibre download: about a minute in total before the block fails.
+fn download_backoff() -> backon::ExponentialBuilder {
+    backon::ExponentialBuilder::default()
+        .with_min_delay(Duration::from_millis(500))
+        .with_max_delay(Duration::from_secs(16))
+        .with_max_times(8)
+}
+
 /// Builds the row proof for the read prefix of each downloaded blob; `read_lens` follows the same
-/// order. A blob the node can't prove gets `None` and makes the block unprovable, but must not stop
-/// the node: anyone can post such a blob to the rollup namespace.
+/// order. Validators checked the blobs against their commitments, so a failure here is a bug in
+/// this crate. The blob then gets `None`, which makes the block unprovable without stopping the
+/// node.
 fn prove_read_prefixes(
     blobs: &[DownloadedFibreBlob],
     read_lens: &[usize],

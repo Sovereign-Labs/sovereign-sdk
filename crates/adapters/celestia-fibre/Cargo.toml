@@ -31,6 +31,7 @@ sov-celestia-adapter = { workspace = true }
 sov-rollup-interface = { workspace = true }
 
 async-trait = { workspace = true, optional = true }
+backon = { workspace = true, optional = true }
 celestia-client = { version = "1.2.0", default-features = false, features = [
     "tls-native-roots",
 ], optional = true }
@@ -49,6 +50,7 @@ serde_json = { workspace = true, features = ["std"] }
 default = []
 native = [
     "dep:async-trait",
+    "dep:backon",
     "dep:celestia-client",
     "dep:celestia-grpc",
     "dep:hex",
