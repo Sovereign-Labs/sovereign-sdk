@@ -256,6 +256,12 @@ where
             test_only_state_update_notification_receiver,
             #[cfg(feature = "test-utils")]
             test_only_state_update_notification_sender,
+            // Seeding from the environment lets a test start a node with state updates already
+            // paused, which the REST endpoint cannot do before the node is up.
+            #[cfg(feature = "test-utils")]
+            test_only_update_state_paused: std::sync::atomic::AtomicBool::new(
+                std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").is_ok_and(|v| v == "1"),
+            ),
             test_only_forced_tx_batch_notification_receiver: forced_tx_batch_notifier.subscribe(),
             runtime: Rt::default(),
         }));
