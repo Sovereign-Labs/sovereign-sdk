@@ -6,30 +6,28 @@ use alloy_primitives::{Address, U256};
 use alloy_provider::DynProvider;
 use alloy_rpc_types_eth::TransactionInput;
 use sov_evm::EvmRuntimeConfigUpdate;
-use sov_modules_api::{CryptoSpec, Spec};
 use sov_test_utils::test_rollup::TestRollup;
+use sov_test_utils::TestUser;
 
 use crate::common::{
-    alloy_client_with_signer, setup_test_rollup_with_admin_key, EVM_EXTENSION, SENDER_PRIV_KEY,
+    alloy_client_with_signer, setup_test_rollup_with_admin, EVM_EXTENSION, SENDER_PRIV_KEY,
 };
 use crate::runtime::{EvmBlueprint, EvmTestSpec};
 
 const GAS_LIMIT: u64 = 100_000;
 
-type AdminPrivateKey = <<EvmTestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey;
-
 /// Sets up a test rollup and client, waiting for initial blocks and pausing batches
-async fn setup() -> (TestRollup<EvmBlueprint>, DynProvider, AdminPrivateKey) {
-    let (rollup, admin_key) = setup_test_rollup_with_admin_key(0, EVM_EXTENSION).await;
+async fn setup() -> (TestRollup<EvmBlueprint>, DynProvider, TestUser<EvmTestSpec>) {
+    let (rollup, admin) = setup_test_rollup_with_admin(0, EVM_EXTENSION).await;
     let client = alloy_client_with_signer(rollup.http_addr, SENDER_PRIV_KEY);
     rollup.wait_for_sequencer_ready().await.unwrap();
-    (rollup, client, admin_key)
+    (rollup, client, admin)
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_disable_max_fee_check() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_EVM_MAX_FEE_CHECK_HEIGHT", "0");
-    let (rollup, client, admin_key) = setup().await;
+    let (rollup, client, admin) = setup().await;
 
     let low_fee = 1;
     let high_fee = 1_000_000;
@@ -50,7 +48,7 @@ async fn test_disable_max_fee_check() -> anyhow::Result<()> {
     .await;
 
     // Disable the max fee check via admin config update
-    disable_max_fee_check(&rollup, &admin_key).await?;
+    disable_max_fee_check(&rollup, &admin).await?;
 
     // Now both low and high fee transactions should succeed
     send_tx_expect_success(
@@ -75,7 +73,7 @@ async fn test_max_fee_check_height_is_respected() -> anyhow::Result<()> {
     // Set a higher threshold so we can test before/after behavior
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_EVM_MAX_FEE_CHECK_HEIGHT", "15");
 
-    let (rollup, client, _admin_key) = setup().await;
+    let (rollup, client, _admin) = setup().await;
 
     let low_fee = 1;
     let high_fee = 1_000_000;
@@ -116,7 +114,7 @@ async fn test_max_fee_check_height_is_respected() -> anyhow::Result<()> {
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_big_call_data() {
-    let (rollup, client, _admin_key) = setup().await;
+    let (rollup, client, _admin) = setup().await;
     rollup.wait_for_rollup_height_advance_by(1).await;
     let mut tx = TransactionRequest::default().with_to(Address::ZERO);
 
@@ -169,8 +167,8 @@ async fn send_tx_expect_failure(client: &DynProvider, fee: u128, msg: &str) {
 /// Sends an empty EvmRuntimeConfigUpdate to disable the max fee check.
 async fn disable_max_fee_check(
     rollup: &TestRollup<EvmBlueprint>,
-    admin_key: &AdminPrivateKey,
+    admin: &TestUser<EvmTestSpec>,
 ) -> anyhow::Result<()> {
     let update = EvmRuntimeConfigUpdate::<EvmTestSpec>::empty();
-    super::send_evm_runtime_config_update(rollup, admin_key, update).await
+    super::send_evm_runtime_config_update(rollup, admin, update).await
 }
