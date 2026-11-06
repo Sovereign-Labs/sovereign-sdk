@@ -10,7 +10,10 @@ use std::sync::Arc;
 
 use crate::postgres::create_postgres_container;
 use crate::postgres::CreatePostgresError;
-use crate::{Transaction, TEST_MOCK_DA_POLLING_INTERVAL};
+use crate::{
+    default_test_signed_transaction_with_nonce, TestUser, Transaction,
+    TEST_MOCK_DA_POLLING_INTERVAL,
+};
 use crate::{
     TEST_DEFAULT_PROVER_ADDRESS, TEST_DEFAULT_SEQUENCER_ADDRESS, TEST_MAX_BATCH_SIZE,
     TEST_MAX_CONCURRENT_BATCH_BLOBS, TEST_MAX_CONCURRENT_PROOF_BLOBS,
@@ -37,8 +40,11 @@ use sov_modules_api::execution_mode::Native;
 use sov_modules_api::prelude::axum;
 use sov_modules_api::prelude::axum::extract::Request;
 use sov_modules_api::prelude::axum::ServiceExt;
-use sov_modules_api::ModuleExecutionConfig;
 use sov_modules_api::Spec;
+use sov_modules_api::{
+    ApiTxEffect, CredentialId, DispatchCall, EventModuleName, ModuleExecutionConfig,
+    RuntimeEventProcessor, TxReceiptContents,
+};
 use sov_modules_api::{BlobReaderTrait, FullyBakedTx};
 pub use sov_modules_rollup_blueprint::FullNodeBlueprint;
 use sov_modules_rollup_blueprint::RollupBlueprint;
@@ -345,6 +351,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             secondary_test_sequencer_client: None,
             _secondary_sequencer_state_sender: None,
             other_handles,
+            nonces: Default::default(),
         })
     }
 
@@ -733,6 +740,18 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>> {
     _secondary_sequencer_state_sender:
         Option<watch::Sender<StateUpdateInfo<<R::Spec as Spec>::Storage>>>,
     _shutdown_on_drop: ShutdownOnDrop,
+    /// Next nonce per user for [`Self::submit`], seeded lazily from the rollup's dedup endpoint.
+    nonces: tokio::sync::Mutex<std::collections::BTreeMap<CredentialId, u64>>,
+}
+
+/// A transaction that the node has executed, as returned by [`TestRollup::submit_and_wait_included`].
+pub struct IncludedTx<R: FullNodeBlueprint<Native>> {
+    #[allow(missing_docs)]
+    pub tx_hash: TxHash,
+    #[allow(missing_docs)]
+    pub receipt: ApiTxEffect<TxReceiptContents<R::Spec>>,
+    /// The events emitted by the transaction, in emission order.
+    pub events: Vec<<R::Runtime as RuntimeEventProcessor>::RuntimeEvent>,
 }
 
 /// Triggers the rollup's primary shutdown when the owning [`TestRollup`] is dropped.
@@ -1211,6 +1230,76 @@ where
         Ok(resp.into_inner())
     }
 
+    /// Signs `msg` as `user` with the user's next nonce and sends it to the sequencer.
+    ///
+    /// The first submission for a user reads its next nonce from the rollup's dedup endpoint,
+    /// so nonces used before this [`TestRollup`] was started are respected. The nonce only
+    /// advances when the sequencer accepts the transaction.
+    pub async fn submit(
+        &self,
+        user: &TestUser<R::Spec>,
+        msg: <R::Runtime as DispatchCall>::Decodable,
+    ) -> anyhow::Result<TxInfoWithConfirmation> {
+        let credential_id = user.credential_id();
+        let mut nonces = self.nonces.lock().await;
+        let nonce = match nonces.get(&credential_id) {
+            Some(nonce) => *nonce,
+            None => self.client.client.get_next_nonce(&credential_id).await?,
+        };
+        let tx = default_test_signed_transaction_with_nonce::<R::Runtime, R::Spec>(
+            user.private_key(),
+            &msg,
+            nonce,
+            &<R::Runtime as Runtime<R::Spec>>::CHAIN_HASH,
+        );
+        let info = self.send_tx_to_sequencer(&tx).await?;
+        nonces.insert(credential_id, nonce + 1);
+        Ok(info)
+    }
+
+    /// Returns the transaction from the node's ledger, or `None` if the node hasn't executed it yet.
+    async fn included_tx(&self, tx_hash: TxHash) -> anyhow::Result<Option<IncludedTx<R>>> {
+        let tx = match self
+            .api_client()
+            .get_tx_by_id(
+                &types::IntOrHash::Hash(types::Hash::from_str(&tx_hash.to_string())?),
+                Some(types::GetTxByIdChildren::X1),
+            )
+            .await
+        {
+            Ok(tx) => tx.into_inner(),
+            Err(sov_api_spec::Error::ErrorResponse(resp))
+                if resp.status() == reqwest::StatusCode::NOT_FOUND =>
+            {
+                return Ok(None)
+            }
+            Err(e) => return Err(e.into()),
+        };
+        let receipt = serde_json::from_value(serde_json::to_value(tx.receipt)?)?;
+        let events = tx
+            .events
+            .into_iter()
+            .map(|event| {
+                let decoded: <R::Runtime as RuntimeEventProcessor>::RuntimeEvent =
+                    serde_json::from_value(serde_json::Value::Object(event.value))?;
+                // The runtime event enum is `#[serde(untagged)]`, so a payload that fits several
+                // modules' events decodes as the first one.
+                anyhow::ensure!(
+                    decoded.module_name() == event.module.name,
+                    "Event from module {} decoded as an event of module {}",
+                    event.module.name,
+                    decoded.module_name()
+                );
+                Ok(decoded)
+            })
+            .collect::<anyhow::Result<_>>()?;
+        Ok(Some(IncludedTx {
+            tx_hash,
+            receipt,
+            events,
+        }))
+    }
+
     pub async fn subscribe_finalized_slots(&self) -> WsSubscription<types::Slot> {
         self.client.client.subscribe_finalized_slots().await
     }
@@ -1324,6 +1413,76 @@ where
         })
         .await
         .expect("timed out waiting for the submitted txs to be published on the DA layer")
+    }
+
+    /// Like [`Self::submit`], then waits until the node has executed the transaction and returns
+    /// its receipt and events from the ledger.
+    ///
+    /// With [`BlockProducingConfig::Manual`] this drives inclusion itself: it closes the preferred
+    /// sequencer's batch, waits for the blob to be published, then produces one DA block at a time
+    /// until the node has executed the transaction. Otherwise it only waits for new slots.
+    /// Panics after [`TestRollup::POLLING_TIMEOUT`].
+    pub async fn submit_and_wait_included(
+        &self,
+        user: &TestUser<R::Spec>,
+        msg: <R::Runtime as DispatchCall>::Decodable,
+    ) -> anyhow::Result<IncludedTx<R>> {
+        let manual = matches!(
+            self.rollup_config.da.block_producing,
+            BlockProducingConfig::Manual
+        );
+        let preferred = matches!(
+            self.rollup_config.sequencer.sequencer_kind_config,
+            SequencerKindConfig::Preferred(_)
+        );
+        // Subscribe before submitting, so neither the slot nor the blob publication can be missed.
+        let mut slots = self.api_client().subscribe_slots().await?;
+        let mut blobs = if manual && preferred {
+            Some(self.subscribe_to_blobs_from_blob_sender().await?)
+        } else {
+            None
+        };
+
+        let info = self.submit(user, msg).await?;
+        let tx_hash = TxHash::from_str(&info.id.to_string())?;
+
+        timeout(Self::POLLING_TIMEOUT, async {
+            if let Some(blobs) = blobs.as_mut() {
+                self.force_close_batch().await?;
+                // The batch may already have been closed automatically, in which case this
+                // observes that publication instead.
+                loop {
+                    let status = blobs.next().await.context(
+                        "BlobSender status stream closed before the batch was published",
+                    )??;
+                    if matches!(
+                        status.blob_submission_status,
+                        BlobSubmissionStatus::Published { .. }
+                    ) {
+                        break;
+                    }
+                }
+            }
+            loop {
+                if let Some(included) = self.included_tx(tx_hash).await? {
+                    return Ok(included);
+                }
+                if manual {
+                    self.da_service.produce_block_now().await?;
+                }
+                slots
+                    .next()
+                    .await
+                    .context("Slot subscription closed before the transaction was included")??;
+            }
+        })
+        .await
+        .unwrap_or_else(|_| {
+            panic!(
+                "Transaction {tx_hash} was not included within {:?}",
+                Self::POLLING_TIMEOUT
+            )
+        })
     }
 
     /// Produce DA blocks, but wait enough time in between, that finalized header poller sees each of them.
