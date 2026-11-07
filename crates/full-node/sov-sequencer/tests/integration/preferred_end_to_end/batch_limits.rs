@@ -243,29 +243,20 @@ async fn flaky_max_batch_execution_time() {
         .unwrap();
 
     // Tx1: Takes longer than the batch timeout, causing batch 0 to close
-    let tx_1 = tx_set_value_and_sleep(
-        &admin.private_key,
-        0,
-        1,
-        max_batch_exec_time_millis + approx_batch_time_millis,
-    );
+    let tx_1 = set_value_and_sleep(1, max_batch_exec_time_millis + approx_batch_time_millis);
     // After tx 2, batch 1: execution time: 50%
-    let tx_2 = tx_set_value_and_sleep(&admin.private_key, 0, 2, max_batch_exec_time_millis / 2);
+    let tx_2 = set_value_and_sleep(2, max_batch_exec_time_millis / 2);
     // After tx 3, batch 1: execution time: 100% + cushion. Close batch 1 and create batch 2
-    let tx_3 = tx_set_value_and_sleep(
-        &admin.private_key,
-        1,
+    let tx_3 = set_value_and_sleep(
         3,
         (max_batch_exec_time_millis / 2) + approx_batch_time_millis,
     );
     // After tx 4, batch 2: execution time: 33%
-    let tx_4 = tx_set_value_and_sleep(&admin.private_key, 1, 4, max_batch_exec_time_millis / 3);
+    let tx_4 = set_value_and_sleep(4, max_batch_exec_time_millis / 3);
     // After tx 5, batch 2: execution time: 66%
-    let tx_5 = tx_set_value_and_sleep(&admin.private_key, 2, 5, max_batch_exec_time_millis / 3);
+    let tx_5 = set_value_and_sleep(5, max_batch_exec_time_millis / 3);
     // After tx 6, batch 2: execution time: 100% + cushion. Close batch 2
-    let tx_6 = tx_set_value_and_sleep(
-        &admin.private_key,
-        3,
+    let tx_6 = set_value_and_sleep(
         6,
         (max_batch_exec_time_millis / 3) + approx_batch_time_millis,
     );
@@ -273,18 +264,18 @@ async fn flaky_max_batch_execution_time() {
     // txs per slot, where each slot will have only single batch, because we only produce block on submit
     let expected_tx_placement = vec![1, 2, 3];
 
-    let _ = client.send_raw_tx_to_sequencer(&tx_1).await.unwrap();
-    let _ = client.send_raw_tx_to_sequencer(&tx_2).await.unwrap();
-    let _ = client.send_raw_tx_to_sequencer(&tx_3).await.unwrap();
+    test_rollup.submit(&admin, tx_1).await.unwrap();
+    test_rollup.submit(&admin, tx_2).await.unwrap();
+    test_rollup.submit(&admin, tx_3).await.unwrap();
     // Wait until tx_2 and tx_3 have accumulated execution time in the current batch.
     // This creates the intended boundary before sending tx_4..tx_6.
     tokio::time::sleep(std::time::Duration::from_millis(
         max_batch_exec_time_millis / 2,
     ))
     .await;
-    let _ = client.send_raw_tx_to_sequencer(&tx_4).await.unwrap();
-    let _ = client.send_raw_tx_to_sequencer(&tx_5).await.unwrap();
-    let _ = client.send_raw_tx_to_sequencer(&tx_6).await.unwrap();
+    test_rollup.submit(&admin, tx_4).await.unwrap();
+    test_rollup.submit(&admin, tx_5).await.unwrap();
+    test_rollup.submit(&admin, tx_6).await.unwrap();
 
     let wait_slot_timeout = std::time::Duration::from_millis(max_batch_exec_time_millis) * 4;
     let mut slot_summaries = Vec::new();

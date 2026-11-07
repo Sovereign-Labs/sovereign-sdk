@@ -347,9 +347,7 @@ async fn events_are_returned_in_tx_response() {
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let client = test_rollup.api_client().clone();
-    let tx = tx_set_value(&admin.private_key, 0, 7);
-    let response = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
+    let response = test_rollup.submit(&admin, set_value(7)).await.unwrap();
 
     assert_eq!(response.events.len(), 1);
 }
@@ -446,17 +444,15 @@ async fn txs_after_not_sequencer_safe_tx_get_their_own_results() {
     );
 
     // With a duplicated result, this tx receives the rejected tx's (unsuccessful) result.
-    let first_tx = tx_set_value(&admin.private_key, 0, 1000);
-    client
-        .send_raw_tx_to_sequencer(&first_tx)
+    test_rollup
+        .submit(&admin, set_value(1000))
         .await
         .expect("First valid tx after the rejected one should be accepted");
 
     // With a duplicated result, this tx receives the first tx's (successful) result, which trips
     // the sequencer's tx hash assertion and crashes the rollup.
-    let second_tx = tx_set_value(&admin.private_key, 1, 1001);
-    client
-        .send_raw_tx_to_sequencer(&second_tx)
+    test_rollup
+        .submit(&admin, set_value(1001))
         .await
         .expect("Second valid tx after the rejected one should be accepted");
 

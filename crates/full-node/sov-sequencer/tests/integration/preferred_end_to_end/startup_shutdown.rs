@@ -7,11 +7,8 @@ async fn rollup_shuts_down_if_blob_sender_fails() {
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let client = test_rollup.api_client().clone();
-    let tx = tx_set_value(&admin.private_key, 0, 9);
-
     tracing::warn!("accepting tx");
-    client.send_raw_tx_to_sequencer(&tx).await.unwrap();
+    test_rollup.submit(&admin, set_value(9)).await.unwrap();
 
     test_rollup.da_service.set_fail_send_blob();
     tracing::warn!("setting fail send blob");
@@ -34,12 +31,7 @@ async fn rollup_shuts_down_if_blob_processing_timeouts() {
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Send a transaction to ensure a batch is created.
-    let tx = tx_set_value(&admin.private_key, 0, 9);
-    test_rollup
-        .api_client()
-        .send_raw_tx_to_sequencer(&tx)
-        .await
-        .unwrap();
+    test_rollup.submit(&admin, set_value(9)).await.unwrap();
 
     // Close the batch and submit it. It won't be received because we don't create any more blocks
     test_rollup.force_close_batch().await.unwrap();
@@ -63,11 +55,7 @@ async fn rollup_shuts_down_if_panic_is_triggered() {
     let client = test_rollup.api_client().clone();
 
     // Send a test transaction to make sure everything is working.
-    let tx = tx_set_value(&admin.private_key, 0, 9);
-    client
-        .send_raw_tx_to_sequencer_with_retry(&tx)
-        .await
-        .unwrap();
+    test_rollup.submit(&admin, set_value(9)).await.unwrap();
 
     // Cause a panic in the sequencer.
     let tx = tx_panic(&admin.private_key, 1);

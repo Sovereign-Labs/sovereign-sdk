@@ -374,14 +374,7 @@ async fn do_manual_block_production_test<Fut: Future<Output = ()>>(
 
     // Note: The exact number height asserted here is not important, as long as it's correct
     // at the time we submit the transaction - if we change the sequencer logic, this number may need to be updated.
-    let tx = tx_set_value(&admin.private_key, 0, 0);
-    test_rollup
-        .api_client()
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
+    test_rollup.submit(&admin, set_value(0)).await.unwrap();
     // Without waiting for publication, the next block can be produced before the batch is visible in DA.
     test_rollup
         .force_close_batch_and_wait_for_publication()
@@ -684,11 +677,19 @@ pub(super) fn tx_set_value(key: &Ed25519PrivateKey, generation: u64, value_to_se
     )
 }
 
-fn tx_event_emitter(key: &Ed25519PrivateKey, events: Vec<bool>, generation: u64) -> RawTx {
-    let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::EventEmitter(
+fn set_value(value_to_set: u64) -> <TestRuntime<TestSpec> as DispatchCall>::Decodable {
+    <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
+        sov_value_setter::CallMessage::SetValue {
+            value: value_to_set as u32,
+            gas: None,
+        },
+    )
+}
+
+fn emit_events(events: Vec<bool>) -> <TestRuntime<TestSpec> as DispatchCall>::Decodable {
+    <TestRuntime<TestSpec> as DispatchCall>::Decodable::EventEmitter(
         crate::utils::EventEmitterCallMessage::EmitEvents { events },
-    );
-    encode_call::<TestRuntime<TestSpec>>(key, generation, &msg)
+    )
 }
 
 fn tx_delayed_call(key: &Ed25519PrivateKey, generation: u64) -> RawTx {
@@ -698,11 +699,28 @@ fn tx_delayed_call(key: &Ed25519PrivateKey, generation: u64) -> RawTx {
     encode_call::<TestRuntime<TestSpec>>(key, generation, &msg)
 }
 
-fn tx_set_many_values(key: &Ed25519PrivateKey, generation: u64, values_to_set: Vec<u8>) -> RawTx {
-    let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
+pub(crate) fn set_many_values(
+    values_to_set: Vec<u8>,
+) -> <TestRuntime<TestSpec> as DispatchCall>::Decodable {
+    <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
         sov_value_setter::CallMessage::SetManyValues(values_to_set),
-    );
-    encode_call::<TestRuntime<TestSpec>>(key, generation, &msg)
+    )
+}
+
+fn tx_set_many_values(key: &Ed25519PrivateKey, generation: u64, values_to_set: Vec<u8>) -> RawTx {
+    encode_call::<TestRuntime<TestSpec>>(key, generation, &set_many_values(values_to_set))
+}
+
+fn set_value_and_sleep(
+    value_to_set: u64,
+    sleep_millis: u64,
+) -> <TestRuntime<TestSpec> as DispatchCall>::Decodable {
+    <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
+        sov_value_setter::CallMessage::SetValueAndSleep {
+            value: value_to_set as u32,
+            sleep_millis,
+        },
+    )
 }
 
 fn tx_set_value_and_sleep(
@@ -711,13 +729,11 @@ fn tx_set_value_and_sleep(
     value_to_set: u64,
     sleep_millis: u64,
 ) -> RawTx {
-    let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
-        sov_value_setter::CallMessage::SetValueAndSleep {
-            value: value_to_set as u32,
-            sleep_millis,
-        },
-    );
-    encode_call::<TestRuntime<TestSpec>>(key, generation, &msg)
+    encode_call::<TestRuntime<TestSpec>>(
+        key,
+        generation,
+        &set_value_and_sleep(value_to_set, sleep_millis),
+    )
 }
 
 fn tx_panic(key: &Ed25519PrivateKey, nonce: u64) -> RawTx {
@@ -741,16 +757,12 @@ fn tx_assert_visible_slot_number(
     encode_call::<TestRuntime<TestSpec>>(key, nonce, &msg)
 }
 
-fn tx_assert_state_root(
-    key: &Ed25519PrivateKey,
-    nonce: u64,
+fn assert_state_root(
     expected_state_root: Vec<u8>,
-) -> RawTx {
-    let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::HooksCount(
+) -> <TestRuntime<TestSpec> as DispatchCall>::Decodable {
+    <TestRuntime<TestSpec> as DispatchCall>::Decodable::HooksCount(
         sov_test_modules::hooks_count::CallMessage::AssertStateRoot {
             expected_state_root,
         },
-    );
-
-    encode_call::<TestRuntime<TestSpec>>(key, nonce, &msg)
+    )
 }

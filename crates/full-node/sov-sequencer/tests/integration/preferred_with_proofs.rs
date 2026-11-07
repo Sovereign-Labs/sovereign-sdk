@@ -1,17 +1,16 @@
-use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
-use sov_modules_api::{RawTx, Runtime};
+use sov_modules_api::{DispatchCall, Runtime};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::{
     generate_zk_runtime_with_kernel,
     test_rollup::{next_within, TestRollup},
-    RtAgnosticBlueprint, TestSpec, TestUser, TEST_DEFAULT_MAX_FEE,
+    RtAgnosticBlueprint, TestSpec, TestUser,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use tokio_stream::StreamExt;
 
-use crate::utils::{tempdir_inside_codebase_dir, tx_set_value_with_gas, SeqTestRollup};
+use crate::utils::{tempdir_inside_codebase_dir, SeqTestRollup};
 
 generate_zk_runtime_with_kernel!(
     kernel_type: sov_kernels::soft_confirmations::SoftConfirmationsKernel<'a, S>,
@@ -40,13 +39,12 @@ fn create_genesis_params() -> (GenesisParams<GenesisConfig<TestSpec>>, TestUser<
     )
 }
 
-fn tx_set_value(key: &Ed25519PrivateKey, generation: u64, value_to_set: u64) -> RawTx {
-    tx_set_value_with_gas::<TestRuntime<TestSpec>>(
-        key,
-        generation,
-        value_to_set,
-        None,
-        TEST_DEFAULT_MAX_FEE,
+fn set_value(value_to_set: u64) -> <TestRuntime<TestSpec> as DispatchCall>::Decodable {
+    <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
+        sov_value_setter::CallMessage::SetValue {
+            value: value_to_set as u32,
+            gas: None,
+        },
     )
 }
 
@@ -92,16 +90,14 @@ async fn flaky_test_proof_generation_doesnt_break_sequencer() -> anyhow::Result<
     let mut aggregated_proofs = client.subscribe_aggregated_proof().await.unwrap();
 
     let mut proofs = 0usize;
-    let mut tx_generation = 0u64;
+    let mut accepted_txs = 0u64;
 
     for _ in 0..50 {
-        let tx = tx_set_value(&admin.private_key, tx_generation, tx_generation);
-
         // Retry sending the tx 10 times, with a 3 second delay between attempts.
         for attempt in 0..10 {
-            match client.send_raw_tx_to_sequencer(&tx).await {
+            match test_rollup.submit(&admin, set_value(accepted_txs)).await {
                 Ok(_) => {
-                    tx_generation += 1;
+                    accepted_txs += 1;
                     break;
                 }
                 Err(e) => {
