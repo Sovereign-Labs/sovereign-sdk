@@ -22,7 +22,6 @@ use sov_modules_api::RawTx;
 use sov_modules_api::Spec;
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_modules_stf_blueprint::Runtime;
-use sov_test_utils::default_test_signed_transaction;
 use sov_test_utils::generate_optimistic_runtime_with_kernel;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::Coins;
@@ -31,6 +30,7 @@ use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::test_signed_transaction;
 use sov_test_utils::RtAgnosticBlueprint;
 use sov_test_utils::TestSpec;
+use sov_test_utils::TestUser;
 use sov_test_utils::{sov_bank, sov_sequencer_registry};
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 
@@ -52,19 +52,12 @@ generate_optimistic_runtime_with_kernel!(
 async fn test_gasless_setup_mode_with_explicit_disable() {
     let disable_setup_mode_fn = |rollup: TestRollup<TestBlueprint>,
                                  mut da_layer: DaLayerWithSubscription,
-                                 admin_key: Ed25519PrivateKey| async move {
+                                 admin: TestUser<TestSpec>| async move {
         // Send the call to disable setup mode. Should succeed.
-        {
-            let tx = encode_call(&admin_key, 0, &remove_setup_mode_call());
-            rollup
-                .client
-                .client
-                .accept_tx(&api_types::AcceptTxBody {
-                    body: BASE64_STANDARD.encode(&tx),
-                })
-                .await
-                .expect("Transaction should succeed");
-        }
+        rollup
+            .submit(&admin, remove_setup_mode_call())
+            .await
+            .expect("Transaction should succeed");
 
         // Kick off the next slot.
         rollup.force_close_batch().await.unwrap();
@@ -79,16 +72,11 @@ async fn test_gasless_setup_mode_with_explicit_disable() {
 async fn test_gasless_setup_mode_with_implicit_disable() {
     let disable_setup_mode_fn = |rollup: TestRollup<TestBlueprint>,
                                  mut da_layer: DaLayerWithSubscription,
-                                 admin_key: Ed25519PrivateKey| async move {
+                                 admin: TestUser<TestSpec>| async move {
         for i in 1..=TEST_SETUP_MODE_DISABLE_AT_SLOT {
             // Kick off the next slot. Send a tx to ensure that a batch is in progress before force closing.
-            let tx = encode_call(&admin_key, i, &value_setter_call(i as u32));
             rollup
-                .client
-                .client
-                .accept_tx(&api_types::AcceptTxBody {
-                    body: BASE64_STANDARD.encode(&tx),
-                })
+                .submit(&admin, value_setter_call(i as u32))
                 .await
                 .expect("Transaction should succeed");
             rollup.force_close_batch().await.unwrap();
@@ -102,7 +90,7 @@ async fn test_gasless_setup_mode_with_implicit_disable() {
 async fn test_gasless_setup_mode<F, Fut>(disable_fn: F)
 where
     // Note: We pass all the arguments by value because rustc's lifetime analysis on async functions isn't very smart
-    F: FnOnce(TestRollup<TestBlueprint>, DaLayerWithSubscription, Ed25519PrivateKey) -> Fut,
+    F: FnOnce(TestRollup<TestBlueprint>, DaLayerWithSubscription, TestUser<TestSpec>) -> Fut,
     Fut: Future<Output = TestRollup<TestBlueprint>>,
 {
     std::env::set_var(
@@ -217,35 +205,27 @@ where
 
     // Bond some tokens for the preferred sequencer
     {
-        let tx = encode_call(
-            &admin.private_key,
-            0,
-            &mint_gas_token_call(
-                default_balance.saturating_mul(2u64.into()),
-                preferred_sequencer.user_info.address(),
-            ),
-        );
-        client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
+        test_rollup
+            .submit(
+                &admin,
+                mint_gas_token_call(
+                    default_balance.saturating_mul(2u64.into()),
+                    preferred_sequencer.user_info.address(),
+                ),
+            )
             .await
             .expect("Transaction should succeed");
 
-        let tx = encode_call(
-            &preferred_sequencer.user_info.private_key,
-            0,
-            &deposit_call(default_balance, preferred_sequencer.da_address),
-        );
-        client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
+        test_rollup
+            .submit(
+                &preferred_sequencer.user_info,
+                deposit_call(default_balance, preferred_sequencer.da_address),
+            )
             .await
             .expect("Transaction should succeed");
     }
 
-    let test_rollup = disable_fn(test_rollup, da_layer, admin.private_key().clone()).await;
+    let test_rollup = disable_fn(test_rollup, da_layer, admin.clone()).await;
 
     // Send a transaction with a zero fee. Should fail because setup mode is now disabled.
     {
@@ -264,15 +244,10 @@ where
     }
 
     // Send another transaction with a non-zero fee. Should succeed.
-    {
-        let tx = encode_call(&admin.private_key, 100, &value_setter_call(7));
-        client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .expect("Transaction should succeed");
-    }
+    test_rollup
+        .submit(&admin, value_setter_call(7))
+        .await
+        .expect("Transaction should succeed");
 
     test_rollup.shutdown().await.unwrap();
 }
@@ -331,21 +306,6 @@ fn encode_zero_gas_tx(
         UniquenessData::Generation(generation),
         &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
         details,
-    );
-
-    RawTx::new(borsh::to_vec(&tx).unwrap())
-}
-
-fn encode_call(
-    key: &Ed25519PrivateKey,
-    generation: u64,
-    call_message: &<TestRuntime<TestSpec> as DispatchCall>::Decodable,
-) -> RawTx {
-    let tx = default_test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
-        key,
-        call_message,
-        generation,
-        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
     );
 
     RawTx::new(borsh::to_vec(&tx).unwrap())

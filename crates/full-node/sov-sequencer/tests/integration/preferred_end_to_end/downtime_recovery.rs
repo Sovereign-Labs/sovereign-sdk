@@ -63,11 +63,7 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
 
     // Sanity check tx that the rollup works
-    let tx_update_one = tx_set_value(&admin.private_key, 0, 8);
-    client
-        .send_raw_tx_to_sequencer(&tx_update_one)
-        .await
-        .unwrap();
+    test_rollup.submit(&admin, set_value(8)).await.unwrap();
 
     tracing::info!("Producing DA blocks for inclusion sanity check tx inclusion");
     da_layer.produce_and_wait_for_n_slots(10).await;
@@ -79,9 +75,8 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     // Preferred sequencer should accept the transaction (and keep it as an in-progress batch since
     // we've stopped update_state and thus aren't producing batches)
     const UPDATE_TWO_VALUE: u64 = 19;
-    let tx_update_two = tx_set_value(&admin.private_key, 0, UPDATE_TWO_VALUE);
-    client
-        .send_raw_tx_to_sequencer(&tx_update_two)
+    test_rollup
+        .submit(&admin, set_value(UPDATE_TWO_VALUE))
         .await
         .unwrap();
 
@@ -186,32 +181,21 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
     let (test_rollup, admin) = create_test_rollup().await;
 
-    let client = test_rollup.api_client().clone();
-
     // Finalise some blocks
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
     da_layer.produce_and_wait_for_n_slots(8).await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Sanity check tx that the rollup works
-    let tx_update_one = tx_set_value(&admin.private_key, 0, 8);
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx_update_one),
-        })
-        .await
-        .unwrap();
+    test_rollup.submit(&admin, set_value(8)).await.unwrap();
 
     tracing::info!("Producing DA blocks for inclusion sanity check tx inclusion");
     da_layer.produce_and_wait_for_n_slots(10).await;
 
     // Send a transaction that will be queued while rollup is shut down
     const UPDATE_TWO_VALUE: u64 = 19;
-    let tx_update_two = tx_set_value(&admin.private_key, 0, UPDATE_TWO_VALUE);
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx_update_two),
-        })
+    test_rollup
+        .submit(&admin, set_value(UPDATE_TWO_VALUE))
         .await
         .unwrap();
 
@@ -373,13 +357,11 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
         .set_delay_blobs_by(blocks_to_delay as u32)
         .await;
 
-    let client = test_rollup.api_client().clone();
     let mut slot_subscription = test_rollup.api_client().subscribe_slots().await.unwrap();
     // In this loop, transactions should be accepted, but node sees empty DA blocks, because current blobs are delayed
     for i in 0..blocks_to_delay {
         test_rollup.wait_for_node_synced().await.unwrap();
-        let tx = tx_set_value(&admin.private_key, i, i);
-        client.send_raw_tx_to_sequencer(&tx).await.unwrap();
+        test_rollup.submit(&admin, set_value(i)).await.unwrap();
         test_rollup.da_service.produce_block_now().await.unwrap();
         let _slot = next_within(&mut slot_subscription, NOTIFICATION_TIMEOUT)
             .await

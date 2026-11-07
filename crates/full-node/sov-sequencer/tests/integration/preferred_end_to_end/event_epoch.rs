@@ -63,13 +63,9 @@ async fn state_reads_report_the_last_event_number_they_reflect() {
     // the submitter, so by the time this returns a state read must show both.
     let value_to_set = 0x1234_5678;
     let response = test_rollup
-        .api_client()
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, value_to_set)),
-        })
+        .submit(&admin, set_value(value_to_set))
         .await
-        .unwrap()
-        .into_inner();
+        .unwrap();
     let tx_event_numbers: Vec<u64> = response.events.iter().map(|event| event.number).collect();
     let last_tx_event_number = tx_event_numbers
         .last()
@@ -124,10 +120,7 @@ async fn historical_state_reads_report_no_last_event_number() {
 
     // Emit an event, so that there is a frontier to report in the first place.
     test_rollup
-        .api_client()
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
-        })
+        .submit(&admin, set_value(0x1234_5678))
         .await
         .unwrap();
 
@@ -163,16 +156,9 @@ async fn the_event_epoch_is_stable_while_the_sequencer_makes_progress() {
     let mut epochs = Vec::new();
     let mut numbers = Vec::new();
 
-    for generation in 0..3u64 {
+    for i in 0..3u64 {
         test_rollup
-            .api_client()
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(tx_set_value(
-                    &admin.private_key,
-                    generation,
-                    0x1234_5678 + generation,
-                )),
-            })
+            .submit(&admin, set_value(0x1234_5678 + i))
             .await
             .unwrap();
 
@@ -224,10 +210,7 @@ async fn streamed_events_carry_the_same_epoch_as_the_state_reply() {
         .unwrap();
 
     test_rollup
-        .api_client()
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
-        })
+        .submit(&admin, set_value(0x1234_5678))
         .await
         .unwrap();
 
@@ -263,8 +246,7 @@ async fn submitted_tx_reply_events_carry_the_same_epoch_as_the_state_reply() {
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let response = test_rollup
-        .api_client()
-        .send_raw_tx_to_sequencer(&tx_set_value(&admin.private_key, 0, 0x1234_5678))
+        .submit(&admin, set_value(0x1234_5678))
         .await
         .unwrap();
     let event = response
@@ -292,18 +274,11 @@ async fn committed_ledger_events_carry_no_epoch() {
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
+    // Drive the transaction all the way into the ledger.
     test_rollup
-        .api_client()
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
-        })
+        .submit_and_wait_included(&admin, set_value(0x1234_5678))
         .await
         .unwrap();
-
-    // Drive the transaction all the way into the ledger.
-    test_rollup.force_close_batch().await.unwrap();
-    test_rollup.produce_enough_finalized_slots().await;
-    test_rollup.wait_for_node_synced().await.unwrap();
 
     let event = test_rollup
         .api_client()
@@ -346,10 +321,7 @@ async fn standard_sequencer_state_reads_report_the_nodes_last_event() {
 
     let mut slots = test_rollup.api_client().subscribe_slots().await.unwrap();
     test_rollup
-        .api_client()
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(tx_set_value(&admin.private_key, 0, 0x1234_5678)),
-        })
+        .submit(&admin, set_value(0x1234_5678))
         .await
         .unwrap();
 
