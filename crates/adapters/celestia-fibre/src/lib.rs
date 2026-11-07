@@ -2,14 +2,18 @@
 //!
 //! Blob data lives off-chain with Fibre validators; the Celestia namespace only carries
 //! v2 shares referencing it (blob version + commitment).
+mod commitment;
 #[cfg(feature = "native")]
 mod config;
 #[cfg(feature = "native")]
 mod da_service;
+mod namespace;
 mod spec;
 
+pub use commitment::{verify_rows_prefix, FibreProofError, FibreRowsProof, VerifiedFibreData};
 #[cfg(feature = "native")]
 pub use config::CelestiaFibreConfig;
 #[cfg(feature = "native")]
 pub use da_service::{CelestiaFibreDaService, FilteredFibreBlock};
+pub use namespace::{FibreNamespaceProof, ProvenShare};
 pub use spec::{CelestiaFibreSpec, CelestiaFibreVerifier, FibreBlob};
