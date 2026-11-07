@@ -3,18 +3,16 @@ use std::{env, fs, time::Duration};
 use futures::StreamExt;
 use sov_blob_sender::{BlobSelectorStatus, BlobSubmissionStatus};
 use sov_mock_da::BlockProducingConfig;
-use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::prelude::*;
-use sov_modules_api::{DispatchCall, RawTx, Runtime};
 use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_test_utils::test_rollup::{next_within, TestRollup};
-use sov_test_utils::{default_test_signed_transaction_with_nonce, TestSpec, TestUser};
+use sov_test_utils::{TestSpec, TestUser};
 
 #[allow(unused_imports)]
 use crate::preferred_end_to_end::{
     create_test_rollup_with, run_action_against_test_rollup, run_actions_against_test_rollup,
-    setup_test_rollup_with_initial_state, InvalidGeneration, TestBlueprint, TestRuntime, TestState,
-    TestingAction,
+    set_many_values, setup_test_rollup_with_initial_state, InvalidGeneration, TestBlueprint,
+    TestRuntime, TestState, TestingAction,
 };
 
 const PREFERRED_SEQUENCER_DB_NAME: &str = "preferred_sequencer";
@@ -35,9 +33,10 @@ async fn test_startup_fails_if_blob_sender_db_is_ahead_of_preferred_db() {
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let client = test_rollup.api_client().clone();
-    let tx = tx_set_many_values(&admin.private_key, 0, vec![7; 100]);
-    client.send_raw_tx_to_sequencer(&tx).await.unwrap();
+    test_rollup
+        .submit(&admin, set_many_values(vec![7; 100]))
+        .await
+        .unwrap();
 
     let mut blob_sender_statuses = test_rollup
         .subscribe_to_blobs_from_blob_sender()
@@ -104,11 +103,12 @@ async fn test_discard_oversized_blobs() {
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
-    let client = test_rollup.api_client().clone();
 
     // Blob with this transaction will be discarded becuse the blob is bigger than `MAX_ALLOWED_DATA_SIZE_RETURNED_BY_BLOB_STORAGE`
-    let tx = tx_set_many_values(&admin.private_key, 0, vec![7; 10000]);
-    let _ = client.send_raw_tx_to_sequencer(&tx).await.unwrap();
+    test_rollup
+        .submit(&admin, set_many_values(vec![7; 10000]))
+        .await
+        .unwrap();
     let mut sub = test_rollup
         .subscribe_to_blobs_from_blob_sender()
         .await
@@ -173,26 +173,4 @@ async fn test_blobs_are_send_after_rollup_resync() {
             panic!("In a resync scenario, the state update notification should occur before the blob sender transmits the blobs.")
         }
     }
-}
-
-fn tx_set_many_values(key: &Ed25519PrivateKey, nonce: u64, values_to_set: Vec<u8>) -> RawTx {
-    let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
-        sov_value_setter::CallMessage::SetManyValues(values_to_set),
-    );
-    encode_call(key, nonce, &msg)
-}
-
-fn encode_call(
-    key: &Ed25519PrivateKey,
-    nonce: u64,
-    call_message: &<TestRuntime<TestSpec> as DispatchCall>::Decodable,
-) -> RawTx {
-    let tx = default_test_signed_transaction_with_nonce::<TestRuntime<TestSpec>, TestSpec>(
-        key,
-        call_message,
-        nonce,
-        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
-    );
-
-    RawTx::new(borsh::to_vec(&tx).unwrap())
 }

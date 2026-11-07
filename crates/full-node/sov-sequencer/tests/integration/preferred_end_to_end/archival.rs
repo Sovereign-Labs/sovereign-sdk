@@ -10,19 +10,10 @@ async fn test_archival_state_is_immediately_available() {
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    // Send a transaction and close the batch
-    let mut generation = 0;
-    let tx = tx_set_value(&admin.private_key, generation, 1);
-    generation += 1;
     test_rollup
-        .api_client()
-        .send_raw_tx_to_sequencer(&tx)
+        .submit_and_wait_included(&admin, set_value(1))
         .await
         .unwrap();
-
-    test_rollup.force_close_batch().await.unwrap();
-    test_rollup.tenderly_produce_blocks(2).await.unwrap();
-    test_rollup.wait_for_node_synced().await.unwrap();
     // Height after the first value has been set, we don't care much about before that.
     let height_at_start = test_rollup.height().await.get();
 
@@ -33,13 +24,10 @@ async fn test_archival_state_is_immediately_available() {
     for (i, height) in (height_at_start..=final_height).enumerate() {
         // Send a transaction to ensure the previous batch is closed.
         let value_to_set = i + 2;
-        let tx = tx_set_value(&admin.private_key, generation, value_to_set as u64);
         test_rollup
-            .api_client()
-            .send_raw_tx_to_sequencer(&tx)
+            .submit(&admin, set_value(value_to_set as u64))
             .await
             .unwrap();
-        generation += 1;
         test_rollup.force_close_batch().await.unwrap();
         // Produce a some extra slots to ensure that the rollup height and slot number aren't the same.
         // This increases coverage for free.
@@ -90,19 +78,12 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    // Set a distinctive value, close the batch, and record the height we'll hammer.
-    let mut generation = 0u64;
+    // Set a distinctive value, wait for it to be included, and record the height we'll hammer.
     let target_value = 0x1234u64; // multi-byte / asymmetric to catch encoding bugs
-    let tx = tx_set_value(&admin.private_key, generation, target_value);
-    generation += 1;
     test_rollup
-        .api_client()
-        .send_raw_tx_to_sequencer(&tx)
+        .submit_and_wait_included(&admin, set_value(target_value))
         .await
         .unwrap();
-    test_rollup.force_close_batch().await.unwrap();
-    test_rollup.tenderly_produce_blocks(2).await.unwrap();
-    test_rollup.wait_for_node_synced().await.unwrap();
     let target_height = test_rollup.height().await.get();
 
     // Background hammer: query the FIXED target height in a loop. The only acceptable outcomes are
@@ -157,11 +138,8 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
     // Writer: advance the chain well past `versions_to_keep` so the pruner removes `target_height`.
     let iterations = versions_to_keep + 12;
     for i in 0..iterations {
-        let tx = tx_set_value(&admin.private_key, generation, target_value + 1 + i);
-        generation += 1;
         test_rollup
-            .api_client()
-            .send_raw_tx_to_sequencer(&tx)
+            .submit(&admin, set_value(target_value + 1 + i))
             .await
             .unwrap();
         test_rollup.force_close_batch().await.unwrap();
@@ -253,11 +231,9 @@ async fn test_archival_state_is_accessible_even_with_delayed_checkpoint_update()
 
     let mut saw_invalid_height = false;
 
-    for (generation, value_to_set) in (1..=20_u64).enumerate() {
-        let tx = tx_set_value(&admin.private_key, generation as u64, value_to_set);
+    for value_to_set in 1..=20_u64 {
         test_rollup
-            .api_client()
-            .send_raw_tx_to_sequencer(&tx)
+            .submit(&admin, set_value(value_to_set))
             .await
             .unwrap();
 
@@ -324,12 +300,7 @@ async fn test_archival_read_from_uncommitted_changes() {
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Batch 1: set value to 0x1234, let the node fully commit it.
-    let tx = tx_set_value(&admin.private_key, 0, 0x1234);
-    test_rollup
-        .api_client()
-        .send_raw_tx_to_sequencer(&tx)
-        .await
-        .unwrap();
+    test_rollup.submit(&admin, set_value(0x1234)).await.unwrap();
     test_rollup.force_close_batch().await.unwrap();
     test_rollup.tenderly_produce_blocks(2).await.unwrap();
     test_rollup.wait_for_node_synced().await.unwrap();
@@ -343,12 +314,7 @@ async fn test_archival_read_from_uncommitted_changes() {
 
     // Batch 2: set value to 0x5678, produce DA blocks.
     // The node commits to NOMT, but the sequencer never learns about it.
-    let tx = tx_set_value(&admin.private_key, 1, 0x5678);
-    test_rollup
-        .api_client()
-        .send_raw_tx_to_sequencer(&tx)
-        .await
-        .unwrap();
+    test_rollup.submit(&admin, set_value(0x5678)).await.unwrap();
     test_rollup.force_close_batch().await.unwrap();
     test_rollup.tenderly_produce_blocks(2).await.unwrap();
 
@@ -401,16 +367,9 @@ async fn test_archival_state_with_pruning() {
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-    let client = test_rollup.api_client().clone();
 
     for i in 0..150 {
-        let tx = tx_set_value(&admin.private_key, i, i);
-        client
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
-            .await
-            .unwrap();
+        test_rollup.submit(&admin, set_value(i)).await.unwrap();
         da_layer.produce_and_wait_for_slot().await;
     }
 
@@ -447,18 +406,14 @@ async fn test_archival_state_with_pruning() {
     test_rollup.shutdown().await.unwrap();
 }
 
-/// Ensure that we use the correct visible slot number when replaying transactions after a call to `update_state` in the sequencer.
-/// The key thing that this test does is to execute the same transaction 3 times - once in the sequencer via `accept_tx`, once via `update_state`
-/// and once in the node. Everything else is implementation details.
+/// Checks that historical `ValueSetter` reads return the value as of the requested rollup height
+/// or slot number.
 ///
-/// # How it works (currently)
-/// Here's how the test works currently - feel free to change this as the sequencer logic evolves.
-///  1. Produce enough empty *DA blocks* that the sequencer will produce an empty batch
-///  2. Before including that first empty batch on DA, submit a transaction to the sequencer which asserts the correct visible slot number.
-///      This will cause the sequencer to start building a new batch on top of the updated state.
-///  3. Include the empty batch on DA, and wait for the node to process it. This triggers a call to `update_state` in the sequencer, which will panic on error.
-///  4. Accept the sequencer's new batch (which contains the transaction asserting the correct visible slot number) onto the DA layer. Defensively assert that it
-///     gets processed correctly by the node.
+/// [`do_manual_block_production_test`] sets the value to 0 and then to 7 in two consecutive
+/// batches. This test then queries both by `rollup_height` and by `slot_number`: points before the
+/// first write have no value, later points see 0 or 7 depending on which batch they follow, and
+/// far-future heights or slot numbers return an error. A panic hook ensures that none of these
+/// queries panicked anywhere in the rollup.
 #[tokio::test(flavor = "multi_thread")]
 async fn query_historical_values() {
     let panicked: Arc<std::sync::atomic::AtomicBool> =
