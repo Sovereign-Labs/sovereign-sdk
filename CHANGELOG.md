@@ -4,6 +4,7 @@
 - #3123 Tests: Dropping a `TestRollup` now triggers the rollup shutdown signal, so a panicking test no longer leaks the node.
 - #3124 Tests: Add `sov_test_utils::test_rollup::next_within` for stream reads bounded by a timeout, and use it for stream reads in sov-sequencer tests.
 - #3125 Tests: Replace the process-wide `SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE` pause knob with per-node `POST /sequencer/test-utils/pause-update-state` and `/resume-update-state` endpoints; the env var now only seeds the initial state at construction.
+- #3128 Tests: Add `TestRollup::submit`, which signs with tracked per-user nonces, and `TestRollup::submit_and_wait_included`, which returns the receipt and typed runtime events; migrate sov-sequencer, sov-ethereum and demo-rollup tests to them.
 # 2026-11-05
 - #3122 Tests: Split the sov-sequencer `preferred_end_to_end.rs` integration tests into a `preferred_end_to_end/` module with one file per concern.
 # 2026-11-02
