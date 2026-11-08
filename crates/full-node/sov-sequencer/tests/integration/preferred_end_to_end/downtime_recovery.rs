@@ -129,10 +129,14 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    while !test_rollup.is_sequencer_ready().await {
-        let _ = da_layer.produce_block().await;
-        sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
-    }
+    tokio::time::timeout(TestRollup::<TestBlueprint>::POLLING_TIMEOUT, async {
+        while !test_rollup.is_sequencer_ready().await {
+            let _ = da_layer.produce_block().await;
+            sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
+        }
+    })
+    .await
+    .expect("Sequencer did not become ready while producing DA blocks");
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
@@ -255,10 +259,14 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    while !test_rollup.is_sequencer_ready().await {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        sleep(Duration::from_millis(50)).await;
-    }
+    tokio::time::timeout(TestRollup::<TestBlueprint>::POLLING_TIMEOUT, async {
+        while !test_rollup.is_sequencer_ready().await {
+            test_rollup.da_service.produce_block_now().await.unwrap();
+            sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("Sequencer did not become ready while producing DA blocks");
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
