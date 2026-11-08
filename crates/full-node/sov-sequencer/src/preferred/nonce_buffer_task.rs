@@ -1746,7 +1746,7 @@ mod tests {
             .collect()
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_rejects_stale_nonces() {
         let (backend, sender, _shutdown) = default_test_buffer_task();
         let backend = backend.with_current_nonce(5);
@@ -1767,7 +1767,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 6);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_rejects_too_far_future_nonce() {
         let (backend, sender, _shutdown) = default_test_buffer_task();
 
@@ -1795,7 +1795,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 0);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_execution_stops_at_gap_and_times_out() {
         let (backend, sender, _shutdown) = default_test_buffer_task();
 
@@ -1817,7 +1817,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_execution_triggers_drain_of_queued_txs() {
         let backend = MockTxExecutionBackend::new();
         let (sender, _shutdown) = test_buffer_task(&backend, Some(500));
@@ -1837,7 +1837,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 4);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     #[ignore = "Pre-requisite checks are disabled, so transactions time out immediately"]
     async fn test_queued_tx_timeout_loops_if_all_prerequisites_present() {
         // Timeout longer than execution delay but shorter than total time to execute all
@@ -1861,7 +1861,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 11);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_non_persisted_nonce_tracking_slow_db() {
         // This test verifies that the queue correctly tracks nonces before they're persisted to
         // the DB.
@@ -1889,7 +1889,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     #[ignore = "Pre-requisite checks are disabled, so tx 1 times out immediately"]
     async fn test_non_persisted_nonce_tracking_slow_execution() {
         // This test verifies that the queue avoids evicting transactions if a current one is
@@ -1912,7 +1912,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     #[ignore = "Pre-requisite checks are disabled, so tx 1 times out immediately and the test \
                 passes without exercising the in-flight path"]
     async fn test_non_persisted_nonce_tracking_slow_execution_with_rejection() {
@@ -1941,7 +1941,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 0);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_replacement_of_queued_transaction() {
         let backend =
             MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
@@ -1972,7 +1972,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_replacement_with_same_hash() {
         let backend =
             MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
@@ -2003,7 +2003,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_replacement_of_inflight_transaction_success() {
         let backend =
             MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(300));
@@ -2031,7 +2031,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_replacement_of_inflight_transaction_failure() {
         let backend = MockTxExecutionBackend::new()
             .with_execution_delay(Duration::from_millis(300))
@@ -2056,7 +2056,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_queue_id_increment_invalidates_buffer() {
         let backend =
             MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(300));
@@ -2091,7 +2091,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 3);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_sequencer_downtime_invalidates_buffer() {
         let backend = MockTxExecutionBackend::new().with_downtime_after_nonce(1);
         let (sender, _shutdown) = test_buffer_task(&backend, Some(2000)); // Long timeout
@@ -2116,7 +2116,7 @@ mod tests {
         assert_eq!(get_test_nonce(&backend), 2);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_shutdown_invalidates_buffer() {
         let backend =
             MockTxExecutionBackend::new().with_execution_delay(Duration::from_millis(200));
@@ -2139,7 +2139,7 @@ mod tests {
         assert_eq!(backend.get_executed_nonces(), expected_nonces);
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_shutdown_drains_pending_messages() {
         let backend = MockTxExecutionBackend::new();
         let (mut task, input_sender, primary_shutdown) = build_task_with_channels(backend);
@@ -2193,7 +2193,7 @@ mod tests {
         .await;
     }
 
-    #[tokio::test]
+    #[tokio::test(start_paused = true)]
     async fn test_wipe_drains_pending_messages() {
         let backend = MockTxExecutionBackend::new().with_tx_queue_id(1);
         let (mut task, input_sender, primary_shutdown) = build_task_with_channels(backend);
