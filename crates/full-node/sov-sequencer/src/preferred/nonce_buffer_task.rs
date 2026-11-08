@@ -86,7 +86,9 @@ struct TimeoutRequest {
     credential_id: CredentialId,
     tx_nonce: u64,
     tx_hash: TxHash,
-    queued_at: Instant,
+    /// Tokio's clock, so the deadline agrees with the `tokio::time::sleep` in
+    /// [`TimeoutQueueTask::run`] when tests pause time.
+    queued_at: tokio::time::Instant,
 }
 
 struct QueuedTx<S: Spec, Rt: Runtime<S>> {
@@ -438,7 +440,7 @@ impl<E: TxExecutionBackend<S, Rt> + Clone + Send + Sync + 'static, S: Spec, Rt: 
             credential_id,
             tx_nonce,
             tx_hash,
-            queued_at: Instant::now(),
+            queued_at: tokio::time::Instant::now(),
         };
 
         match send_and_measure_block_time(
