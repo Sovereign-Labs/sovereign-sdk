@@ -365,54 +365,6 @@ async fn test_archival_read_from_uncommitted_changes() {
     test_rollup.resume_preferred_batches().await;
 }
 
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "This test covers pruning behavior, which is currently disabled."]
-async fn test_archival_state_with_pruning() {
-    let (test_rollup, admin) = create_test_rollup().await;
-
-    test_rollup.produce_enough_finalized_slots().await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-
-    for i in 0..150 {
-        test_rollup.submit(&admin, set_value(i)).await.unwrap();
-        da_layer.produce_and_wait_for_slot().await;
-    }
-
-    // Assert that the earlier transactions sent just before the sequencer went into recovery was
-    // flushed and processed by the node
-
-    let mut success_count = 0;
-    let mut pruned_count = 0;
-    for i in 0..150 {
-        let state = test_rollup
-            .client
-            .query_rest_endpoint::<serde_json::Value>(
-                format!("/modules/value-setter/state/value?slot_number={i}").as_str(),
-            )
-            .await;
-        assert!(state.is_ok(), "Error from archival state query: {state:?}",);
-        let state = state.unwrap();
-        if state
-            .to_string()
-            .contains("The requested height may have been pruned")
-        {
-            pruned_count += 1;
-        } else {
-            let value: ValueResponse =
-                serde_json::from_value(state).expect("Failed to deserialize into ValueResponse");
-            assert!(value.value < 150);
-            success_count += 1;
-        }
-    }
-
-    // Check that we ran into some pruned slots to sanity check that the test is working. If this fails, we just need to update the test logic
-    assert!(pruned_count > 0, "No pruned slots found");
-    assert!(success_count > 0, "No successful queries found");
-    test_rollup.shutdown().await.unwrap();
-}
-
 /// Checks that historical `ValueSetter` reads return the value as of the requested rollup height
 /// or slot number.
 ///

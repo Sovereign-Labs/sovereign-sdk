@@ -28,7 +28,6 @@ use sov_modules_api::{
     Amount, DispatchCall, Gas, GasArray, GasPrice, GasUnit, PrivateKey, PublicKey, RawTx, Runtime,
 };
 use sov_modules_stf_blueprint::GenesisParams;
-use sov_node_client::NodeClient;
 use sov_paymaster::{Paymaster, PaymasterConfig};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::execution_mode::Native;

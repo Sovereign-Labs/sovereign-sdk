@@ -516,7 +516,7 @@ async fn test_small_shuffle_rewind() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Node gets stuck on reorg: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2399"]
+#[ignore = "After the reorg, a resubmitted tx is rejected with CheckUniquenessFailed: https://github.com/Sovereign-Labs/sovereign-sdk-wip/issues/2399"]
 async fn test_small_reshuffle_half_dropped() -> anyhow::Result<()> {
     // sov_test_utils::initialize_logging();
     let finality = 10;
