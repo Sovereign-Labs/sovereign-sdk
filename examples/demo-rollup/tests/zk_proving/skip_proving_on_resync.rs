@@ -1,7 +1,8 @@
-use futures::StreamExt;
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
 use sov_demo_rollup::ExternalMockDemoRollup;
 use sov_modules_api::execution_mode::Native;
 use sov_rollup_interface::common::SlotNumber;
+use sov_test_utils::test_rollup::next_within;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 
@@ -15,7 +16,9 @@ async fn skip_proving_on_resync() -> anyhow::Result<()> {
     let mut proof_sub = test_rollup.subscribe_aggregated_proof().await?;
 
     for _ in 0..5 {
-        let _ = proof_sub.next().await.unwrap().unwrap();
+        let _ = next_within(&mut proof_sub, NOTIFICATION_TIMEOUT)
+            .await
+            .unwrap();
     }
 
     let agg_pub_data = query_verified_proofs(&test_rollup).await?;

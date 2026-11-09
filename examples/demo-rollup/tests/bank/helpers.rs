@@ -1,4 +1,5 @@
 use crate::test_helpers::build_transfer_token_tx;
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
 use anyhow::Context;
 use demo_stf::runtime::{Runtime, RuntimeCall};
 use futures::StreamExt;
@@ -17,6 +18,7 @@ use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::node::ledger_api::FinalityStatus;
 use sov_rollup_interface::zk::aggregated_proof::AggregateProofVerifier;
 use sov_stf_runner::processes::RollupProverConfig;
+use sov_test_utils::test_rollup::next_within;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction_with_nonce, TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS,
@@ -244,18 +246,22 @@ pub(crate) async fn send_tx_and_wait_for_status(
         .context("Failed to subscribe to tx status")?;
 
     let mut c = 0;
-    while let Some(Ok(info)) = tx_subscription.next().await {
-        if info.status == sov_api_spec::types::TxStatus::Processed {
-            break;
+    tokio::time::timeout(NOTIFICATION_TIMEOUT, async {
+        while let Some(Ok(info)) = tx_subscription.next().await {
+            if info.status == sov_api_spec::types::TxStatus::Processed {
+                break;
+            }
+            // A transaction can only change status three times.
+            // The condition below is never met, but it's included as a sanity check
+            // in case something goes terribly wrong and we receive an unexpectedly large number of status updates (which should be impossible).
+            if c > 5 {
+                panic!("Invalid status {info:?}, too many status transitions!")
+            }
+            c += 1;
         }
-        // A transaction can only change status three times.
-        // The condition below is never met, but it's included as a sanity check
-        // in case something goes terribly wrong and we receive an unexpectedly large number of status updates (which should be impossible).
-        if c > 5 {
-            panic!("Invalid status {info:?}, too many status transitions!")
-        }
-        c += 1;
-    }
+    })
+    .await
+    .context("Timed out waiting for the last transaction to be processed")?;
 
     let res = client.client.get_latest_slot(None).await?;
     // We are certain that the transaction result will be visible after this height.
@@ -308,7 +314,7 @@ pub async fn start_test_rollup(
 
     let mut slots = test_rollup.client.client.subscribe_slots().await?;
     for _ in 0..warm_up_blocks {
-        let _slot = slots.next().await;
+        let _slot = next_within(&mut slots, NOTIFICATION_TIMEOUT).await;
     }
 
     test_rollup.wait_for_sequencer_ready().await?;

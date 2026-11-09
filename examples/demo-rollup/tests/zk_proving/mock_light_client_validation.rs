@@ -2,13 +2,14 @@
 //! a [`MockLightClient`] independently fetches and verifies the latest one from
 //! the node's REST API — exactly as the real light-client binary would.
 
-use futures::StreamExt;
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
 use sov_demo_rollup::read_mock_code_commitments_from_env;
 use sov_mock_zkvm::light_client::MockLightClient;
 use sov_modules_api::{CodeCommitmentTrait, Spec};
 use sov_node_client::NodeClient;
 use sov_rollup_interface::zk::ZkLightClient;
 use sov_state::Storage;
+use sov_test_utils::test_rollup::next_within;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 
 use crate::external_mock_da::start_external_mock_da;
@@ -29,7 +30,7 @@ async fn light_client_validates_aggregated_proof() -> anyhow::Result<()> {
     // 1. Rollup creates some aggregated proofs. Wait until at least one has been
     //    produced and served by the node.
     let mut aggregated_proof_subscription = test_rollup.subscribe_aggregated_proof().await?;
-    let _ = aggregated_proof_subscription.next().await.unwrap()?;
+    let _ = next_within(&mut aggregated_proof_subscription, NOTIFICATION_TIMEOUT).await?;
 
     // 2. Validate the latest aggregated proof with a MockLightClient. The
     //    NodeClient talks to the node's `/ledger/aggregated-proofs/latest`

@@ -1,6 +1,7 @@
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
+use sov_test_utils::test_rollup::next_within;
 use std::time::Duration;
 
-use futures::StreamExt;
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 
 use crate::external_mock_da::start_external_mock_da;
@@ -22,13 +23,15 @@ async fn max_concurrent_proof() -> anyhow::Result<()> {
     let test_rollup = start_test_rollup(0, &external_da, 2, false, None).await?;
 
     let mut aggregated_proof_subscription = test_rollup.subscribe_aggregated_proof().await?;
-    let _ = aggregated_proof_subscription.next().await.unwrap().unwrap();
+    let _ = next_within(&mut aggregated_proof_subscription, NOTIFICATION_TIMEOUT)
+        .await
+        .unwrap();
 
     stop_proving();
     let mut finalized_slots = test_rollup.subscribe_finalized_slots().await?;
 
     for _ in 0..20 {
-        let _ = finalized_slots.next().await.unwrap()?;
+        let _ = next_within(&mut finalized_slots, NOTIFICATION_TIMEOUT).await?;
     }
     resume_proving();
 
