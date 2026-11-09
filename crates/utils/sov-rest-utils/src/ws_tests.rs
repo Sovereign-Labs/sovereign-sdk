@@ -250,7 +250,6 @@ mod tests {
             axum::serve(listener, app).await.unwrap();
         });
 
-        tokio::time::sleep(Duration::from_millis(10)).await;
         addr
     }
 

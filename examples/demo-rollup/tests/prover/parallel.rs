@@ -96,16 +96,20 @@ async fn test_parallel_proof_generation() {
     );
 
     // Poll until the aggregated proof is ready.
-    let status = loop {
-        match prover_service.create_aggregated_proof(&block_headers).await {
-            Ok(ProofAggregationStatus::Success(proof)) => break proof,
-            Ok(ProofAggregationStatus::ProofGenerationInProgress) => {
-                tracing::info!("Inner proofs still in progress, polling again in 5s...");
-                tokio::time::sleep(Duration::from_secs(5)).await;
+    let status = tokio::time::timeout(Duration::from_secs(300), async {
+        loop {
+            match prover_service.create_aggregated_proof(&block_headers).await {
+                Ok(ProofAggregationStatus::Success(proof)) => break proof,
+                Ok(ProofAggregationStatus::ProofGenerationInProgress) => {
+                    tracing::info!("Inner proofs still in progress, polling again in 5s...");
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+                Err(e) => panic!("Aggregation failed: {e}"),
             }
-            Err(e) => panic!("Aggregation failed: {e}"),
         }
-    };
+    })
+    .await
+    .expect("aggregated proof was not ready within 300s");
 
     tracing::info!(
         "Aggregated proof generated successfully ({} bytes)",

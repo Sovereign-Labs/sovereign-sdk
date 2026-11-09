@@ -258,16 +258,6 @@ impl TestCase {
 
         let filter = self.filter();
 
-        let logs_from_subscription = get_filtered_logs(
-            self.nb_of_txs,
-            self.nb_of_logs_per_tx,
-            &filter,
-            contract_address,
-            &evm_client,
-            &test_rollup,
-        )
-        .await;
-
         // Topic2 selects a single tx, and Topic3 selects a single log from that tx.
         let mut nb_of_txs = self.nb_of_txs;
         if self.raw_topic2.is_some() {
@@ -280,6 +270,17 @@ impl TestCase {
         }
 
         let expected_nb_of_logs = nb_of_txs * nb_of_logs_per_tx;
+
+        let logs_from_subscription = get_filtered_logs(
+            self.nb_of_txs,
+            self.nb_of_logs_per_tx,
+            expected_nb_of_logs as usize,
+            &filter,
+            contract_address,
+            &evm_client,
+            &test_rollup,
+        )
+        .await;
 
         assert_eq!(logs_from_subscription.len(), expected_nb_of_logs as usize);
 
@@ -391,6 +392,7 @@ async fn fetch_logs(
 async fn get_filtered_logs(
     number_of_txs: u32,
     nb_of_logs: u32,
+    expected_nb_of_logs: usize,
     filter: &Filter,
     contract_address: Address,
     evm_client: &SimpleStorageClient,
@@ -412,7 +414,15 @@ async fn get_filtered_logs(
         }
     }
 
-    tokio::time::sleep(Duration::from_secs(2)).await;
+    tokio::time::timeout(Duration::from_secs(30), async {
+        while log_collector.logs().await.len() < expected_nb_of_logs {
+            tokio::time::sleep(Duration::from_millis(50)).await;
+        }
+    })
+    .await
+    .expect("expected logs did not arrive over the subscription");
+    // One more block, so unexpected extra logs would also have been delivered by now.
+    test_rollup.wait_for_rollup_height_advance_by(1).await;
 
     evm_client.alloy_unsubscribe(sub_id);
     log_collector.wait().await;
