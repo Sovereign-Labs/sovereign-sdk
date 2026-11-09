@@ -181,6 +181,28 @@ impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
     }
 }
 
+#[cfg(test)]
+impl<Da: DaService> DaServiceWithCachedFinalizedHeaders<Da> {
+    /// Waits until the background poller has published a finalized header at least
+    /// as high as the DA service's current one.
+    pub(crate) async fn wait_until_caught_up(&self) -> anyhow::Result<()> {
+        const TIMEOUT: std::time::Duration = std::time::Duration::from_secs(10);
+        let target = self
+            .da_service
+            .get_last_finalized_block_header()
+            .await
+            .map_err(|e| anyhow::anyhow!(e))?
+            .height();
+        let mut receiver = self.last_finalized.clone();
+        tokio::time::timeout(TIMEOUT, receiver.wait_for(|h| h.height() >= target))
+            .await
+            .map_err(|_| {
+                anyhow::anyhow!("Cached finalized header did not reach height {target}")
+            })??;
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 struct FinalizedDaHeadersCacheContainer<Da: DaService> {
     recent_headers: std::sync::RwLock<BTreeMap<u64, <Da::Spec as DaSpec>::BlockHeader>>,
@@ -313,6 +335,18 @@ mod tests {
     use sov_mock_da::storable::StorableMockDaService;
     use std::time::Duration;
 
+    async fn wait_until_task_finished(
+        cache: &DaServiceWithCachedFinalizedHeaders<StorableMockDaService>,
+    ) {
+        tokio::time::timeout(Duration::from_secs(10), async {
+            while !cache.finalized_headers_task.is_finished() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .expect("background header task did not finish");
+    }
+
     #[tokio::test]
     async fn test_last_finalized_header_is_cached() -> anyhow::Result<()> {
         let da_service = StorableMockDaService::new_in_memory(Default::default(), 0).await;
@@ -336,7 +370,7 @@ mod tests {
         // If/when background task will switch to subscription, this test is going to break.
         let cached_header = cache.get_last_finalized_block_header()?;
         assert_eq!(cached_header.height(), 5);
-        tokio::time::sleep(Duration::from_millis(600)).await;
+        cache.wait_until_caught_up().await?;
         let cached_header = cache.get_last_finalized_block_header()?;
         assert_eq!(cached_header.height(), 6);
         da_service.send_transaction(&[3; 32]).await.await??;
@@ -362,7 +396,7 @@ mod tests {
         )
         .await?;
 
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        cache.wait_until_caught_up().await?;
 
         let header_5 = cache.get_block_header_at(5).await?;
         assert_eq!(header_5.height(), 5);
@@ -392,7 +426,7 @@ mod tests {
         )
         .await?;
 
-        tokio::time::sleep(Duration::from_millis(500)).await;
+        cache.wait_until_caught_up().await?;
 
         // Cache should have at most MAX_RECENT_HEADERS entries
         let cache_size = cache
@@ -430,8 +464,7 @@ mod tests {
 
         secondary_shutdown_controller.shutdown();
 
-        // Wait a bit for the task to finish
-        tokio::time::sleep(Duration::from_millis(200)).await;
+        wait_until_task_finished(&cache).await;
 
         assert!(cache.finalized_headers_task.is_finished());
 
@@ -522,8 +555,7 @@ mod tests {
         // Abort the background task to simulate failure
         cache.finalized_headers_task.abort();
 
-        // Wait for it to finish
-        tokio::time::sleep(Duration::from_millis(100)).await;
+        wait_until_task_finished(&cache).await;
 
         // Trying to get the last finalized header should now fail
         let result = cache.get_last_finalized_block_header();
