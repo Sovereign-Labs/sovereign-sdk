@@ -1,4 +1,6 @@
 //! Tests for shutdown/restart cases.
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
+use sov_test_utils::test_rollup::next_within;
 use std::collections::HashSet;
 use std::env;
 use std::str::FromStr;
@@ -545,7 +547,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         if rollup_height < first_chunk as u64 {
             let till = first_chunk - rollup_height as usize;
             for _ in 0..till {
-                let _ = slot_subscription.next().await.unwrap();
+                let _ = next_within(&mut slot_subscription, NOTIFICATION_TIMEOUT).await;
             }
         }
         drop(slot_subscription);
@@ -586,7 +588,7 @@ async fn test_start_prover_manual() -> anyhow::Result<()> {
         if rollup_height < second_chunk as u64 {
             let till = second_chunk - rollup_height as usize;
             for _ in 0..till {
-                let _ = slot_subscription.next().await.unwrap();
+                let _ = next_within(&mut slot_subscription, NOTIFICATION_TIMEOUT).await;
             }
         }
         drop(slot_subscription);
