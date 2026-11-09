@@ -146,8 +146,7 @@ async fn rollup_startup_rejects_mismatched_state_version() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore = "Fails too often on my machine"]
-async fn flaky_test_rollup_shutdown_works_as_expected() {
+async fn test_rollup_shutdown_works_as_expected() {
     let _guard = initialize_logging();
 
     let dir = Arc::new(tempfile::tempdir().unwrap());
