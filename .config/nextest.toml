@@ -53,3 +53,15 @@ default-filter = 'all()'
 
 [profile.ci.junit]
 path = "junit.xml"
+
+# For machines that can't run docker: `NEXTEST_PROFILE=no-docker`.
+# Reports the postgres-backed tests as skipped. Without this profile they
+# return early and count as passed (see `should_skip_postgres` in sov-test-utils).
+# `test(/./)` makes nextest filter per test, so they are counted as skipped
+# tests instead of the whole binary being dropped silently.
+[profile.no-docker]
+default-filter = """not (
+    (package(sov-sequencer) & test(/^preferred::(db::postgres::tests|replica::replica_sync_task::tests)::/))
+    | (package(sov-proxy-utils) & kind(test) & test(/./))
+    | (package(sov-demo-rollup) & test(/^replica::/))
+)"""

@@ -43,7 +43,7 @@ cargo nextest run -p <package_name> <test_name>
 - `PROPTEST_CASES=50` - Faster local proptest runs (CI uses more)
 - `SKIP_GUEST_BUILD=1` - Skip risc0 guest builds during development
 - `SP1_SKIP_PROGRAM_BUILD=1` - Skip SP1 program builds during development
-- `SOV_TEST_SKIP_DOCKER=1` - Skip docker-based tests, useful for local development without docker
+- `SOV_TEST_SKIP_DOCKER=1` - Skip docker-based tests, useful for local development without docker. Add `NEXTEST_PROFILE=no-docker` so the postgres-backed ones show up as skipped instead of passed
 
 Always use `SKIP_GUEST_BUILD=1` unless performing specific ZK related changes, because it massively speeds up compilation time.
 
