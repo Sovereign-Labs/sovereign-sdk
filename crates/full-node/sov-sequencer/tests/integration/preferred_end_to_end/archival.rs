@@ -92,6 +92,8 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
     let stop = Arc::new(AtomicBool::new(false));
     let reader_client = test_rollup.client.clone();
     let reader_stop = stop.clone();
+    let saw_pruned = Arc::new(tokio::sync::Notify::new());
+    let reader_saw_pruned = saw_pruned.clone();
     let target_url = format!("/modules/value-setter/state/value?rollup_height={target_height}");
     let hammer_url = target_url.clone();
     let hammer = tokio::spawn(async move {
@@ -126,6 +128,7 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
                         // HeightNotAccessible — the expected terminal state once pruned.
                         query_count += 1;
                         saw_not_accessible = true;
+                        reader_saw_pruned.notify_one();
                     }
                     // Otherwise a transient transport error: ignore and retry.
                 }
@@ -175,9 +178,13 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
         "target height {target_height} should be HeightNotAccessible after advancing past versions_to_keep",
     );
 
-    // Let the hammer observe the pruned state for a moment, then stop and join it (this also
+    // Wait for the hammer to observe the pruned state, then stop and join it (this also
     // surfaces any assertion failure that fired inside the task).
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::timeout(NOTIFICATION_TIMEOUT, saw_pruned.notified())
+        .await
+        .expect(
+            "the concurrent reader should have observed HeightNotAccessible for the pruned height",
+        );
     stop.store(true, Ordering::Relaxed);
     let (saw_not_accessible, query_count) = hammer.await.unwrap();
     assert!(
