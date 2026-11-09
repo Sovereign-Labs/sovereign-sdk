@@ -669,7 +669,8 @@ async fn check_with_increasing_stf_infos(
     })
     .with_preferred_seq_config(|seq| {
         seq.ideal_lag_behind_finalized_slot = 3;
-    });
+    })
+    .set_persistent_da();
 
     let mut last_processed_slot_number = 0;
     for idx in 0..restarts {
@@ -730,7 +731,8 @@ async fn try_to_clog_channel_instant_finality(operating_mode: OperatingMode) -> 
 
     // Never produce aggregated proof
     let aggregated_proof_jump: usize = 200;
-    let max_infos_in_db = 500;
+    // At least `max_channel_size + 7 * aggregated_proof_jump`, the minimum the runner accepts.
+    let max_infos_in_db = 1500;
 
     tokio::time::timeout(
         FULL_TEST_TIMEOUT,
@@ -748,16 +750,12 @@ async fn try_to_clog_channel_instant_finality(operating_mode: OperatingMode) -> 
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore]
-// Flaky because of an existing problem: "Error: IO error: lock hold by current process,"
-async fn flaky_test_increasing_stf_infos_zk_instant_finality() -> anyhow::Result<()> {
+async fn test_increasing_stf_infos_zk_instant_finality() -> anyhow::Result<()> {
     try_to_clog_channel_instant_finality(OperatingMode::Zk).await
 }
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore]
-// Flaky because of an existing problem: "Error: IO error: lock hold by current process,"
-async fn flaky_test_increasing_stf_infos_optimistic_instant_finality() -> anyhow::Result<()> {
+async fn test_increasing_stf_infos_optimistic_instant_finality() -> anyhow::Result<()> {
     try_to_clog_channel_instant_finality(OperatingMode::Optimistic).await
 }
 
