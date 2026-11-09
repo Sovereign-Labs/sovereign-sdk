@@ -407,8 +407,6 @@ async fn sequencer_back_pressure() {
     let end_padding_blocks = 30;
     for _ in 0..end_padding_blocks {
         test_rollup.da_service.produce_block_now().await.unwrap();
-        // Give the node time to ingest each padding block so debug output reflects progress.
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         print_blobs_at_head(&test_rollup.da_service).await;
     }
 

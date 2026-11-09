@@ -207,15 +207,9 @@ impl<Da: DaSpec> Drop for SubscriptionDropper<Da> {
 
 #[cfg(test)]
 mod tests {
-    use std::time::Duration;
-
     use sov_mock_da::{MockDaSpec, MockHash};
 
     use super::*;
-
-    async fn wait() {
-        tokio::time::sleep(Duration::from_millis(100)).await;
-    }
 
     #[tokio::test(flavor = "multi_thread")]
     async fn get_cached() {
@@ -229,8 +223,6 @@ mod tests {
                 da_tx_id: MockHash([100; 32]),
             },
         );
-
-        wait().await;
 
         // ...the cache will know the status of both txs (and, most
         // importantly, have the *correct* tx status!).
@@ -266,8 +258,6 @@ mod tests {
             assert_eq!(txsm.senders.read().unwrap().len(), 1);
         }
 
-        wait().await;
-
         // Both subscriptions have been dropped, so the sender should be gone.
         assert_eq!(txsm.senders.read().unwrap().len(), 0);
     }
@@ -295,7 +285,6 @@ mod tests {
                     da_tx_id: MockHash([101; 32]),
                 },
             );
-            wait().await;
 
             assert_eq!(sub1a.len(), 2);
             assert_eq!(sub1b.len(), 2);
@@ -324,8 +313,6 @@ mod tests {
             // Before cleanup, the senders should still be present.
             assert!(!txsm.senders.read().unwrap().is_empty());
         }
-
-        wait().await;
 
         // After cleanup, all senders should be gone.
         assert_eq!(txsm.senders.read().unwrap().len(), 0);
