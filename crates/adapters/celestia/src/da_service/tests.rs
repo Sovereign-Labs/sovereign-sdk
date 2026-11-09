@@ -267,9 +267,7 @@ async fn wait_until_head_at_least(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_blob_correct() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
     let secondary_shutdown_controller = SecondaryShutdownController::new();
     let da_service =
@@ -297,9 +295,7 @@ async fn test_submit_blob_correct() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_compressed_batch_round_trips() -> anyhow::Result<()> {
     let rollup_params = ROLLUP_PARAMS_DEV;
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let mut config = dev_node.get_config().await?;
     config.compression = crate::config::CompressOnSubmit::Lz4;
     let secondary_shutdown_controller = SecondaryShutdownController::new();
@@ -336,9 +332,7 @@ async fn test_submit_compressed_batch_round_trips() -> anyhow::Result<()> {
 /// blobs. Each chunk carries its own framing, so decode never consults the encoder's size.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_two_senders_different_chunk_sizes_decode_identically() -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let base = dev_node.get_config().await?;
 
     // Sender A: default share-aligned chunk size.
@@ -412,9 +406,7 @@ async fn test_two_senders_different_chunk_sizes_decode_identically() -> anyhow::
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_submit_proof_correct() -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
     let secondary_shutdown_controller = SecondaryShutdownController::new();
     let da_service =
@@ -444,9 +436,7 @@ async fn test_submit_proof_correct() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyhow::Result<()> {
     sov_test_utils::initialize_logging();
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let base_config = dev_node.get_config().await?;
 
     let active_rollup_params = [
@@ -728,9 +718,7 @@ async fn test_multi_sender_multi_namespace_full_verification_roundtrip() -> anyh
 
 #[tokio::test(flavor = "multi_thread")]
 async fn test_raw_v0_and_v1_blobs_across_namespaces() -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let base_config = dev_node.get_config().await?;
 
     // 5 namespaces in lexicographic order. Batch and proof are the rollup's own.
@@ -935,9 +923,7 @@ fn bytes_for_shares_accounts_for_signer_overhead() {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "when toxiproxy added"]
 async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
     let secondary_shutdown_controller = SecondaryShutdownController::new();
     // TODO: disable retries
@@ -960,9 +946,7 @@ async fn test_submit_blob_application_level_error() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "when toxiproxy added"]
 async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
     let secondary_shutdown_controller = SecondaryShutdownController::new();
     // TODO: disable retries
@@ -988,9 +972,7 @@ async fn test_submit_blob_internal_server_error() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "when toxiproxy added"]
 async fn test_submit_blob_response_timeout() -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let config = dev_node.get_config().await?;
     let secondary_shutdown_controller = SecondaryShutdownController::new();
     // TODO: disable retries
@@ -1753,9 +1735,7 @@ async fn verification_rejects_compressed_envelope_witness_without_header() -> an
     use sov_rollup_interface::da::CountedBufReader;
 
     let rollup_params = ROLLUP_PARAMS_DEV;
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let mut config = dev_node.get_config().await?;
     config.compression = crate::config::CompressOnSubmit::Lz4;
     let secondary_shutdown_controller = SecondaryShutdownController::new();
@@ -2021,9 +2001,7 @@ async fn generate_synthetic_test_blocks() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "manual fixture generation; starts dockerized celestia devnet"]
 async fn generate_parity_boundary_fixture_with_docker() -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let signer = dev_node.get_signer_address(0).await?;
     let signer_private_key = dev_node.export_signer_key(0).await?;
     let rpc_url = format!("ws://127.0.0.1:{}", dev_node.bridge_port_ipv4().await?);
@@ -2042,9 +2020,7 @@ async fn generate_parity_boundary_fixture_with_docker() -> anyhow::Result<()> {
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "manual fixture generation; starts dockerized celestia devnet"]
 async fn generate_mixed_multi_v1_parity_boundary_fixture_with_docker() -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let signer = dev_node.get_signer_address(0).await?;
     let signer_private_key = dev_node.export_signer_key(0).await?;
     let rpc_url = format!("ws://127.0.0.1:{}", dev_node.bridge_port_ipv4().await?);
@@ -2067,9 +2043,7 @@ async fn generate_mixed_multi_v1_parity_boundary_fixture_with_docker() -> anyhow
 #[tokio::test(flavor = "multi_thread")]
 #[ignore = "manual fixture generation; starts dockerized celestia devnet"]
 async fn generate_mainnet_compression_bench_fixtures() -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let signer = dev_node.get_signer_address(0).await?;
     let signer_private_key = dev_node.export_signer_key(0).await?;
     let rpc_url = format!("ws://127.0.0.1:{}", dev_node.bridge_port_ipv4().await?);
@@ -2269,9 +2243,7 @@ async fn test_rpc_secondary_endpoint_failover_and_switchback() -> anyhow::Result
     const SECONDARY_MIN_LATENCY: Duration = Duration::from_millis(1000);
     const PHASE_TIMEOUT: Duration = Duration::from_secs(30);
 
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let bridge_rpc_port = dev_node.bridge_port_ipv4().await?;
 
     let toxi = CelestiaRpcProxyFleet::start(bridge_rpc_port, 2).await;
@@ -2479,9 +2451,7 @@ async fn inject_rpc_failure(fleet: &CelestiaRpcProxyFleet, index: usize, failure
 /// head can only come from the third — proving the cascade. Run for both transport failure
 /// modes via the two `#[tokio::test]` wrappers below.
 async fn run_three_endpoint_cascade(failure: RpcFailure) -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let bridge_rpc_port = dev_node.bridge_port_ipv4().await?;
     let fleet = CelestiaRpcProxyFleet::start(bridge_rpc_port, 3).await;
 
@@ -2555,9 +2525,7 @@ async fn test_rpc_three_endpoint_cascade_timeout() -> anyhow::Result<()> {
 /// provider is down; the primary is connection-reset before the service is built.
 #[tokio::test(flavor = "multi_thread")]
 async fn test_rpc_startup_with_primary_down_uses_secondary() -> anyhow::Result<()> {
-    let Some(dev_node) = crate::test_helper::docker::CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = crate::test_helper::docker::CelestiaDevNode::start().await?;
     let bridge_rpc_port = dev_node.bridge_port_ipv4().await?;
     let fleet = CelestiaRpcProxyFleet::start(bridge_rpc_port, 2).await;
 

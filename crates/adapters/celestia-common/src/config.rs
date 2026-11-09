@@ -4,6 +4,10 @@ use std::time::Duration;
 
 use schemars::JsonSchema;
 
+pub fn redacted(secret: &Option<String>) -> Option<&'static str> {
+    secret.as_ref().map(|_| "REDACTED")
+}
+
 /// Configuration for a single gRPC fallback endpoint.
 #[derive(Clone, PartialEq, serde::Deserialize, serde::Serialize, JsonSchema)]
 #[serde(deny_unknown_fields)]
@@ -18,7 +22,7 @@ impl fmt::Debug for GrpcEndpointConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GrpcEndpointConfig")
             .field("url", &self.url)
-            .field("token", &self.token.as_ref().map(|_| "REDACTED"))
+            .field("token", &redacted(&self.token))
             .finish()
     }
 }
@@ -37,7 +41,7 @@ impl fmt::Debug for RpcEndpointConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("RpcEndpointConfig")
             .field("url", &self.url)
-            .field("token", &self.token.as_ref().map(|_| "REDACTED"))
+            .field("token", &redacted(&self.token))
             .finish()
     }
 }
@@ -227,6 +231,7 @@ pub fn backoff_policy(
         .with_factor(factor)
 }
 
+#[derive(Clone, Copy)]
 pub struct ClientEndpoints<'a> {
     pub rpc_url: &'a str,
     pub rpc_auth_token: Option<&'a str>,

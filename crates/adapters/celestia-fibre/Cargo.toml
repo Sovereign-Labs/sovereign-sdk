@@ -35,11 +35,6 @@ tokio = { workspace = true, optional = true, features = ["rt", "sync", "time"] }
 
 [dev-dependencies]
 sov-celestia-fibre-adapter = { path = ".", features = ["native"] }
-bincode = { workspace = true }
-risc0-zkvm = { workspace = true, features = ["std"] }
-serde_json = { workspace = true, features = ["alloc"] }
-sov-test-utils = { workspace = true }
-tokio = { workspace = true, features = ["macros", "rt-multi-thread"] }
 
 [features]
 default = []
@@ -64,5 +59,4 @@ arbitrary = [
     "sov-celestia-common/arbitrary",
     "sov-rollup-interface/arbitrary",
     "sov-celestia-fibre-adapter/arbitrary",
-    "sov-test-utils/arbitrary",
 ]

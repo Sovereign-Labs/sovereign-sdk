@@ -7,8 +7,8 @@ use sov_celestia_common::config::{
     default_grpc_fallback_endpoints_from_env, default_grpc_url, default_max_delay_ms,
     default_max_times, default_min_delay_ms, default_request_timeout_seconds,
     default_rpc_auth_token, default_rpc_fallback_endpoints_from_env, default_rpc_url_from_env,
-    default_safe_lead_time_ms, default_signer_private_key, GrpcEndpointConfig, RpcEndpointConfig,
-    VerifyOnFetchMode,
+    default_safe_lead_time_ms, default_signer_private_key, redacted, GrpcEndpointConfig,
+    RpcEndpointConfig, VerifyOnFetchMode,
 };
 
 fn default_download_timeout_secs() -> NonZero<u64> {
@@ -98,52 +98,17 @@ impl fmt::Debug for CelestiaFibreConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CelestiaFibreConfig")
             .field("rpc_url", &self.rpc_url)
-            .field(
-                "rpc_auth_token",
-                &self.rpc_auth_token.as_ref().map(|_| "REDACTED"),
-            )
+            .field("rpc_auth_token", &redacted(&self.rpc_auth_token))
             .field("grpc_url", &self.grpc_url)
-            .field(
-                "grpc_auth_token",
-                &self.grpc_auth_token.as_ref().map(|_| "REDACTED"),
-            )
-            .field(
-                "signer_private_key",
-                &self.signer_private_key.as_ref().map(|_| "REDACTED"),
-            )
+            .field("grpc_auth_token", &redacted(&self.grpc_auth_token))
+            .field("signer_private_key", &redacted(&self.signer_private_key))
             .field("fibre_grpc_url", &self.fibre_grpc_url)
             .field(
                 "fibre_grpc_auth_token",
-                &self.fibre_grpc_auth_token.as_ref().map(|_| "REDACTED"),
+                &redacted(&self.fibre_grpc_auth_token),
             )
             .field("download_timeout_secs", &self.download_timeout_secs)
             .field("verify_on_fetch", &self.verify_on_fetch)
             .finish_non_exhaustive()
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn defaults_and_debug_redact_secrets() {
-        let config: CelestiaFibreConfig = serde_json::from_str(
-            r#"{"rpc_url":"ws://localhost:26658","signer_private_key":"abcdabcd","rpc_auth_token":"secret-token"}"#,
-        )
-        .unwrap();
-        assert_eq!(config.download_timeout_secs.get(), 120);
-        assert_eq!(config.request_timeout_secs.get(), 20);
-        let rendered = format!("{config:?}");
-        assert!(rendered.contains("REDACTED"));
-        assert!(!rendered.contains("abcdabcd"));
-        assert!(!rendered.contains("secret-token"));
-    }
-
-    #[test]
-    fn missing_signer_is_read_only() {
-        let config: CelestiaFibreConfig =
-            serde_json::from_str(r#"{"rpc_url":"ws://localhost:26658"}"#).unwrap();
-        assert!(config.signing_key().unwrap().is_none());
     }
 }

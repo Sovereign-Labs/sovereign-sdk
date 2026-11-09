@@ -25,6 +25,7 @@ use backon::ExponentialBuilder;
 use celestia_types::blob::Blob as JsonBlob;
 use celestia_types::nmt::Namespace;
 use futures::stream::BoxStream;
+use sov_celestia_common::node::flatten_timeout;
 use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{
     BlobReaderTrait, DaProof, DaSpec, DaVerifier, RelevantBlobs, RelevantProofs,
@@ -425,15 +426,9 @@ fn verify_block_integrity_for_params(
     block: &FilteredCelestiaBlock,
     rollup_params: RollupParams,
 ) -> anyhow::Result<()> {
-    std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+    sov_celestia_common::node::catch_integrity_panic("Celestia", || {
         verify_block_integrity_inner(block, rollup_params)
-    }))
-    .map_err(|panic| {
-        anyhow::anyhow!(
-            "Celestia block integrity verification panicked: {}",
-            panic_payload_to_string(panic.as_ref())
-        )
-    })?
+    })
 }
 
 fn verify_block_integrity_inner(
@@ -456,16 +451,6 @@ fn verify_block_integrity_inner(
     verifier.verify_relevant_tx_list(&block.header, &relevant_blobs, relevant_proofs)?;
 
     Ok(())
-}
-
-fn panic_payload_to_string(payload: &(dyn std::any::Any + Send)) -> String {
-    if let Some(message) = payload.downcast_ref::<&str>() {
-        (*message).to_owned()
-    } else if let Some(message) = payload.downcast_ref::<String>() {
-        message.clone()
-    } else {
-        "non-string panic payload".to_owned()
-    }
 }
 
 #[async_trait]
@@ -708,16 +693,6 @@ pub fn filtered_block_from_json_path(
         NamespaceRelevantData::new(proof_namespace, fixture.proof_rows),
         fixture.header,
     )
-}
-
-fn flatten_timeout<T>(
-    response: Result<Result<T, celestia_client::Error>, tokio::time::error::Elapsed>,
-) -> Result<T, MaybeRetryable<anyhow::Error>> {
-    match response {
-        Ok(Ok(response)) => Ok(response),
-        Ok(Err(e)) => Err(MaybeRetryable::Transient(e.into())),
-        Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("await timeout"))),
-    }
 }
 
 async fn stat_collection_task(

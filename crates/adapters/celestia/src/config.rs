@@ -2,6 +2,7 @@
 use std::num::NonZero;
 
 use schemars::JsonSchema;
+use sov_celestia_common::config::redacted;
 use std::fmt;
 
 #[cfg(test)]
@@ -155,10 +156,7 @@ impl fmt::Debug for CelestiaConfig {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("CelestiaConfig")
             .field("rpc_url", &self.rpc_url)
-            .field(
-                "rpc_auth_token",
-                &self.rpc_auth_token.as_ref().map(|_| "REDACTED"),
-            )
+            .field("rpc_auth_token", &redacted(&self.rpc_auth_token))
             .field("rpc_fallback_endpoints", &self.rpc_fallback_endpoints)
             .field(
                 "rpc_health_check_interval_secs",
@@ -166,15 +164,9 @@ impl fmt::Debug for CelestiaConfig {
             )
             .field("rpc_max_head_age_secs", &self.rpc_max_head_age_secs)
             .field("grpc_url", &self.grpc_url)
-            .field(
-                "grpc_auth_token",
-                &self.grpc_auth_token.as_ref().map(|_| "REDACTED"),
-            )
+            .field("grpc_auth_token", &redacted(&self.grpc_auth_token))
             .field("grpc_fallback_endpoints", &self.grpc_fallback_endpoints)
-            .field(
-                "signer_private_key",
-                &self.signer_private_key.as_ref().map(|_| "REDACTED"),
-            )
+            .field("signer_private_key", &redacted(&self.signer_private_key))
             .field("request_timeout_secs", &self.request_timeout_secs)
             .field("api_request_timeout_secs", &self.api_request_timeout_secs)
             .field("tx_status_polling_millis", &self.tx_status_polling_millis)

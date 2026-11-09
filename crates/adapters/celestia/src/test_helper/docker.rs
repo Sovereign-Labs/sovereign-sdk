@@ -89,11 +89,7 @@ pub struct CelestiaDevNode {
 }
 
 impl CelestiaDevNode {
-    pub async fn start() -> anyhow::Result<Option<Self>> {
-        if std::env::var("SOV_TEST_SKIP_DOCKER").as_deref() == Ok("1") {
-            eprintln!("skipping celestia docker test: SOV_TEST_SKIP_DOCKER=1");
-            return Ok(None);
-        }
+    pub async fn start() -> anyhow::Result<Self> {
         let _ = rustls::crypto::ring::default_provider().install_default();
         let start = std::time::Instant::now();
         prepull_image_best_effort(CelestiaValidator).await;
@@ -159,7 +155,7 @@ impl CelestiaDevNode {
 
         let rpc_port = bridge.get_host_port_ipv4(BRIDGE_RPC_PORT).await?;
         tracing::info!(time = ?start.elapsed(), grpc_port = validator_grpc_port, rpc_port, "CelestiaDevNode has started");
-        Ok(Some(Self { validator, bridge }))
+        Ok(Self { validator, bridge })
     }
 
     pub async fn validator_port_ipv4(&self) -> anyhow::Result<u16> {
@@ -317,9 +313,7 @@ async fn test_service_starts() -> anyhow::Result<()> {
     // sov_test_utils::logging::initialize_or_change_logging_with_filter(
     //     "debug,bollard=info,h2=warn,hyper=warn,jsonrpsee=warn,sov_metrics=off,tower=warn,",
     // );
-    let Some(dev_node) = CelestiaDevNode::start().await? else {
-        return Ok(());
-    };
+    let dev_node = CelestiaDevNode::start().await?;
 
     let config = dev_node.get_config().await?;
     tracing::info!("CONFIG: {:?}", config);

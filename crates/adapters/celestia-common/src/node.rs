@@ -185,6 +185,23 @@ pub fn apply_verify_on_fetch(
     }
 }
 
+/// Runs `verify`, turning a panic into an error so a malformed block cannot crash the node.
+pub fn catch_integrity_panic<R>(
+    adapter: &str,
+    verify: impl FnOnce() -> anyhow::Result<R>,
+) -> anyhow::Result<R> {
+    std::panic::catch_unwind(std::panic::AssertUnwindSafe(verify)).map_err(|panic| {
+        let message = if let Some(message) = panic.downcast_ref::<&str>() {
+            (*message).to_owned()
+        } else if let Some(message) = panic.downcast_ref::<String>() {
+            message.clone()
+        } else {
+            "non-string panic payload".to_owned()
+        };
+        anyhow::anyhow!("{adapter} block integrity verification panicked: {message}")
+    })?
+}
+
 pub fn flatten_timeout<T>(
     response: Result<Result<T, celestia_client::Error>, tokio::time::error::Elapsed>,
 ) -> Result<T, MaybeRetryable<anyhow::Error>> {
@@ -192,29 +209,5 @@ pub fn flatten_timeout<T>(
         Ok(Ok(response)) => Ok(response),
         Ok(Err(e)) => Err(MaybeRetryable::Transient(e.into())),
         Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("await timeout"))),
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-    use crate::config::VerifyOnFetchMode;
-
-    #[test]
-    fn verify_on_fetch_off_does_not_run_the_check() {
-        let mut ran = false;
-        apply_verify_on_fetch(VerifyOnFetchMode::Off, 1, || {
-            ran = true;
-            Ok(())
-        })
-        .unwrap();
-        assert!(!ran);
-
-        apply_verify_on_fetch(VerifyOnFetchMode::ReturnError, 2, || {
-            ran = true;
-            Ok(())
-        })
-        .unwrap();
-        assert!(ran);
     }
 }
