@@ -106,7 +106,7 @@ async fn setup() -> anyhow::Result<(
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_runtime_spec_with_gen_client() -> anyhow::Result<()> {
+async fn test_runtime_spec_with_gen_client() -> anyhow::Result<()> {
     let (_test_rollup, runtime_client) = setup().await?;
 
     check_base_runtime_info(&runtime_client)

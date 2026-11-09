@@ -13,7 +13,7 @@ use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
 use crate::test_helpers::*;
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_bank_tx_tests_secured_by_operator() -> anyhow::Result<()> {
+async fn bank_tx_tests_secured_by_operator() -> anyhow::Result<()> {
     let test_case = TestCase {
         wait_for_aggregated_proof: false,
         finalization_blocks: 0,

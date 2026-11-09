@@ -315,7 +315,7 @@ mod tests {
     }
 
     #[tokio::test(flavor = "multi_thread")]
-    async fn flaky_test_sequencer_rocksdb_db_performance_can_run_10k_batches_in_2_minutes() {
+    async fn test_sequencer_rocksdb_db_performance_can_run_10k_batches_in_2_minutes() {
         let handle = tokio::task::spawn(run_rocksdb_test(10_000));
 
         let _ = tokio::time::timeout(std::time::Duration::from_secs(120), handle)
