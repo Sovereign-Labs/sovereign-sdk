@@ -30,6 +30,7 @@ cargo nextest run -p <package_name> <test_name>
 - Always use `cargo nextest` over regular `cargo test`. Cargo nextest runs each test in a separate process which gives isolation of environment variables.
 - This project has strict testing practices. It means that tests on base branch(`dev`) are always passing. 
   Any consistent failure in the branch is certainly introduced in the branch.
+- A test whose name contains `flaky_` gets 5 silent retries (`.config/nextest.toml`), so its failures only show up in the CI flaky-test summary. Fix the test instead when you can. If you do rename a test to `flaky_`, open an issue first and link it in a `// Flaky: <issue URL>` comment directly above the test.
 
 ### Debugging
 
