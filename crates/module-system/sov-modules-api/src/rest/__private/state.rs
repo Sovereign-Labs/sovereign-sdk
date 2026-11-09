@@ -75,14 +75,22 @@ where
         state
             .api_state
             .build_api_state_accessor(height_param)
-            .map_err(|e| ErrorObject {
-                status: StatusCode::NOT_FOUND,
-                message: "invalid rollup height".to_string(),
-                details: json_obj!({
-                    "error": e.to_string(),
-                }),
-            })
+            .map_err(invalid_height_error)
     }
+}
+
+fn invalid_height_error(e: impl Display) -> ErrorObject {
+    ErrorObject {
+        status: StatusCode::NOT_FOUND,
+        message: "invalid rollup height".to_string(),
+        details: json_obj!({
+            "error": e.to_string(),
+        }),
+    }
+}
+
+fn invalid_height_response(e: impl Display) -> Response {
+    axum::response::IntoResponse::into_response(invalid_height_error(e))
 }
 
 struct StateMapItemsQuery {
@@ -170,6 +178,10 @@ where
         let state_value = NamespacedStateValue::<N, T, Codec>::with_codec(prefix, Codec::default());
 
         let value = state_value.get(&mut accessor).unwrap_infallible();
+        // The height may have been pruned after the accessor was built.
+        accessor
+            .check_reads_not_pruned()
+            .map_err(invalid_height_response)?;
         Ok(StateItemContents::Value { value }.into())
     }
 }
@@ -214,6 +226,10 @@ where
     ) -> ApiResult<StateItemContents<T, T>> {
         let state_vec = state.vec();
         let length = state_vec.len(&mut accessor).unwrap_infallible();
+        // The height may have been pruned after the accessor was built.
+        accessor
+            .check_reads_not_pruned()
+            .map_err(invalid_height_response)?;
 
         Ok(StateItemContents::Vec { length }.into())
     }
@@ -225,7 +241,12 @@ where
     ) -> ApiResult<StateItemContents<T, T>> {
         let state_vec = state.vec();
 
-        let value = match state_vec.get(item_index, &mut accessor).unwrap_infallible() {
+        let value = state_vec.get(item_index, &mut accessor).unwrap_infallible();
+        // The height may have been pruned after the accessor was built.
+        accessor
+            .check_reads_not_pruned()
+            .map_err(invalid_height_response)?;
+        let value = match value {
             None => {
                 return Err(not_found_404(&state.state_item_info.name, item_index));
             }
@@ -303,6 +324,10 @@ where
         );
 
         let value = state_map.get(&key, &mut accessor).unwrap_infallible();
+        // The height may have been pruned after the accessor was built.
+        accessor
+            .check_reads_not_pruned()
+            .map_err(invalid_height_response)?;
         match value {
             None => Err(not_found_404(&state.state_item_info.name, input_key)),
             Some(value) => Ok(StateItemContents::MapElement { key, value }.into()),
@@ -442,6 +467,10 @@ where
         let state_map = VersionedStateValue::<V, Codec>::with_codec(prefix, Codec::default());
 
         let value = state_map.get_current(&mut accessor).unwrap_infallible();
+        // The height may have been pruned after the accessor was built.
+        accessor
+            .check_reads_not_pruned()
+            .map_err(invalid_height_response)?;
         Ok(StateItemContents::Value { value }.into())
     }
 }

@@ -760,6 +760,19 @@ impl<S: Spec + 'static> ApiStateAccessor<S> {
         self.event_frontier
     }
 
+    /// Returns [`ApiStateAccessorError::HeightNotAccessible`] if a read through this accessor hit
+    /// pruned data.
+    ///
+    /// Such reads return `None` instead of an error, and the pruner can remove a height after the
+    /// accessor for it was built. Callers that must not report pruned data as absent should check
+    /// this after reading.
+    pub fn check_reads_not_pruned(&self) -> Result<(), ApiStateAccessorError> {
+        match self.encountered_pruning_error {
+            Some(_) => Err(ApiStateAccessorError::HeightNotAccessible),
+            None => Ok(()),
+        }
+    }
+
     /// Creates a new [`ApiStateAccessor`] which queries all state at the provided slot number.
     pub fn new_archival_with_true_slot_number(
         state_checkpoint: Arc<ConcurrentStateCheckpoint<S>>,
