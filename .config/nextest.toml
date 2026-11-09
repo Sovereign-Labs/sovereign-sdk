@@ -50,3 +50,6 @@ threads-required = 3
 
 [profile.ci]
 default-filter = 'all()'
+
+[profile.ci.junit]
+path = "junit.xml"

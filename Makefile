@@ -80,7 +80,7 @@ test:  ## Runs test suite using next test
 test-all: ## Runs test suite using nextest, across the whole workspace
 	cargo switcheroo save _backup
 	cargo switcheroo disable
-	$(MAKE) test
+	NEXTEST_PROFILE=ci $(MAKE) test
 	cargo switcheroo set _backup
 
 test-default-features:  ## Runs test suite using default features
