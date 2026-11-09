@@ -47,7 +47,7 @@ async fn test_replica_rejects_batch_start_beyond_node_state_and_recovers() {
 
     // Freeze ONLY the replica's node state by pausing its `update_state` loop. Postgres stays
     // healthy, so the replica keeps pulling the leader's batch-starts from the shared DB.
-    replica.pause_preferred_batches_for_node().await;
+    replica.pause_preferred_batches().await;
 
     // Keep the leader producing real batches while the DA advances, so it persists batch-starts
     // whose `visible_slot_number_after_increase` climbs past the replica's now-frozen node slot,
@@ -75,7 +75,7 @@ async fn test_replica_rejects_batch_start_beyond_node_state_and_recovers() {
 
     // Resume the replica: its node catches up past the batch's visible slot and it becomes ready.
     leader.wait_for_node_synced().await.unwrap();
-    replica.resume_preferred_batches_for_node().await;
+    replica.resume_preferred_batches().await;
     setup.da_service.produce_block_now().await.unwrap();
     replica.wait_for_sequencer_ready().await.unwrap();
 

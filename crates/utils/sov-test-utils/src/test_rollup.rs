@@ -1120,11 +1120,6 @@ where
         self.set_update_state_paused(true).await;
     }
 
-    /// Same as [`TestRollup::pause_preferred_batches`].
-    pub async fn pause_preferred_batches_for_node(&self) {
-        self.pause_preferred_batches().await;
-    }
-
     async fn set_update_state_paused(&self, paused: bool) -> bool {
         let path = if paused {
             "/sequencer/test-utils/pause-update-state"
@@ -1184,11 +1179,6 @@ where
             self.set_update_state_paused(false).await,
             "Resuming but it was never paused in the first place",
         );
-    }
-
-    /// Same as [`TestRollup::resume_preferred_batches`].
-    pub async fn resume_preferred_batches_for_node(&self) {
-        self.resume_preferred_batches().await;
     }
 
     pub async fn height(&self) -> RollupHeight {
