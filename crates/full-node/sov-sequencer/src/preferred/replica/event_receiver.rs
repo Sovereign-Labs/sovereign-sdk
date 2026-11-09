@@ -27,9 +27,6 @@ pub(crate) enum EventReceiverError {
 
     #[error("Invalid event sequence in the db: {0:?} {1:?}. Replica shutting down.")]
     InvalidEventSequence(Option<EventType>, EventType),
-
-    #[error("DB row does not exist: {0}")]
-    DbRowDoesNotExist(u64),
 }
 
 pub(crate) struct EventReceiverStartNotifier {
@@ -175,9 +172,9 @@ impl EventReceiver {
                 };
 
                 match res {
-                    Ok((event_id, event_type)) => {
+                    Ok((next_event_id, event_type)) => {
                         nb_of_consecutive_db_errors = 0;
-                        start_event_id = Some(event_id + 1);
+                        start_event_id = Some(next_event_id);
                         prev_event_type = event_type;
                     }
                     Err(err) => {
@@ -208,12 +205,10 @@ impl EventReceiver {
                                 prev_event_type,
                                 event_type,
                             ) => {
-                                panic!("Invalid event sequence in the db: {prev_event_type:?} {event_type:?}. Replica shutting down.");
-                            }
-                            EventReceiverError::DbRowDoesNotExist(event_id) => {
-                                panic!(
-                                    "Db row does not exist for event id: {event_id:?} {start_event_id:?} {prev_event_type:?}. Replica shutting down."
-                                );
+                                // Apart from the leader writing an inconsistent sequence, this happens
+                                // when the rows from `start_event_id` up to the first existing row have
+                                // already been pruned by the leader, i.e. the replica fell too far behind.
+                                panic!("Invalid event sequence in the db: {prev_event_type:?} {event_type:?} (next expected event id: {start_event_id:?}). Replica shutting down.");
                             }
                         }
                     }
@@ -222,102 +217,73 @@ impl EventReceiver {
         })
     }
 
-    async fn recv_notifications(
+    /// Returns the event id to fetch from once new rows may be available.
+    ///
+    /// Notifications are used purely as wake-up signals: `sqlx` hands them over one at a time
+    /// in arrival order, so the notification we wake up on is often not the most recent one.
+    /// The actual fetch therefore never targets a notification's event id; it reads everything
+    /// from `start_event_id` onwards.
+    async fn wait_for_new_rows(
         &mut self,
+        start_event_id: Option<u64>,
         listener: &mut PgListener,
-    ) -> Result<EventsNotificationPayload, EventReceiverError> {
-        let mut last_notification = None;
+    ) -> Result<u64, EventReceiverError> {
+        loop {
+            let notify = listener.recv().await?;
+            let notify = EventsNotificationPayload::parse_csv(notify.payload())?;
 
-        // We only care about the latest notification from the DB,
-        // since the backfill logic allows us to skip earlier ones.
-        while let Some(p) = listener.next_buffered() {
-            last_notification = Some(p);
+            match start_event_id {
+                // Notifications for rows we have already fetched carry no new information,
+                // so skip them without querying the database.
+                Some(start_id) if notify.event_id < start_id => {
+                    trace!(?notify, start_id, "Skipping stale notification.");
+                }
+                Some(start_id) => return Ok(start_id),
+                // `None` indicates the replica has just started. Keep listening until a
+                // `BatchStart` notification is received, so that the replica never starts
+                // in the middle of a batch, and fetch from that event onwards.
+                None if matches!(notify.event_type, EventType::BatchStart) => {
+                    debug!(?notify, "Replica received first BatchStart notification.");
+                    return Ok(notify.event_id);
+                }
+                None => {}
+            }
         }
-
-        let pg_notification = match last_notification {
-            Some(notification) => notification,
-            None => listener.recv().await?,
-        };
-
-        let payload = pg_notification.payload();
-        let parsed_notification = EventsNotificationPayload::parse_csv(payload)?;
-        Ok(parsed_notification)
     }
 
     async fn fetch_data(
         &mut self,
         start_event_id: Option<u64>,
-        mut prev_event_type: Option<EventType>,
+        prev_event_type: Option<EventType>,
         listener: &mut PgListener,
     ) -> Result<(u64, Option<EventType>), EventReceiverError> {
-        let (start_event_id, target_event_id) = match start_event_id {
-            // If we already have a start id, just wait for the next notification
-            // and use its event_id as the target.
-            Some(start_id) => {
-                let notify = self.recv_notifications(listener).await?;
-                assert!(notify.event_id >= start_id);
-                (start_id, notify.event_id)
-            }
-            // Otherwise, `None` indicates the replica has just started.
-            // Keep listening for events until a `BatchStart` notification is received,
-            // then use that event's ID as both the starting and target event ID.
-            None => loop {
-                let notify = listener.recv().await?;
-                let notify = EventsNotificationPayload::parse_csv(notify.payload())?;
-
-                if matches!(notify.event_type, EventType::BatchStart) {
-                    debug!(?notify, "Relica received first BatchStart notification.");
-                    break (notify.event_id, notify.event_id);
-                }
-            },
-        };
-
-        prev_event_type = self
-            .backfill_to_event_id(start_event_id, target_event_id, prev_event_type)
-            .await?;
-
-        Ok((target_event_id, prev_event_type))
+        let start_event_id = self.wait_for_new_rows(start_event_id, listener).await?;
+        self.fetch_from_event_id(start_event_id, prev_event_type)
+            .await
     }
 
-    async fn backfill_to_event_id(
+    /// Fetches every existing event with `event_id >= start_event_id`, page by page, and
+    /// returns the next event id to fetch together with the type of the last event sent.
+    async fn fetch_from_event_id(
         &mut self,
-        mut current_event_id: u64,
-        target_event_id: u64,
+        start_event_id: u64,
         mut prev_event_type: Option<EventType>,
-    ) -> Result<Option<EventType>, EventReceiverError> {
-        trace!(
-            "Backfilling events from {} to {}",
-            current_event_id,
-            target_event_id
-        );
+    ) -> Result<(u64, Option<EventType>), EventReceiverError> {
+        trace!(start_event_id, "Fetching events");
+        let mut next_event_id = start_event_id;
 
         // Currently, we fetch data in a loop. One possible (but not yet necessary) optimization would be to issue
         // multiple parallel queries to the DB for different `event_id`` ranges.
         // After analyzing real-world workloads, we can revisit this optimization. Implementing it would only affect
         // the contents of this method and would not require significant refactoring.
-        while current_event_id <= target_event_id {
-            trace!(
-                "Processing backfill page starting at event {} up to {}",
-                current_event_id,
-                target_event_id
-            );
+        loop {
+            trace!(next_event_id, "Processing page starting at event");
 
-            // Query and process events for this page
-            let db_rows = rows(
-                &self.query_pool,
-                current_event_id,
-                target_event_id,
-                self.page_size,
-            )
-            .await?;
+            let db_rows = rows(&self.query_pool, next_event_id, self.page_size).await?;
+            let is_last_page = db_rows.len() < self.page_size;
 
-            if db_rows.is_empty() {
-                return Err(EventReceiverError::DbRowDoesNotExist(target_event_id));
-            }
-
-            let mut last_event_id = current_event_id;
             for row in db_rows {
-                last_event_id = row.get::<i64, _>("event_id") as u64;
+                let event_id = row.get::<i64, _>("event_id") as u64;
                 let (event, event_type) = row_to_event(row)?;
 
                 if !(EventType::is_event_sequence_valid(prev_event_type, event_type)) {
@@ -329,11 +295,13 @@ impl EventReceiver {
 
                 let _ = self.db_data_sender.send(event).await;
                 prev_event_type = Some(event_type);
+                next_event_id = event_id + 1;
             }
 
-            current_event_id = last_event_id + 1;
+            // A short page means we have read every row that currently exists.
+            if is_last_page {
+                return Ok((next_event_id, prev_event_type));
+            }
         }
-
-        Ok(prev_event_type)
     }
 }
