@@ -399,11 +399,8 @@ async fn sync_rollup_with_path(
 
     tracing::info!("Node has synced, waiting for sequencer to be ready");
     test_rollup.wait_for_sequencer_ready().await?;
-    tracing::info!("Sequencer is ready, wait 1 second for stars to align");
-    // We need to sleep because the sync status is based on the DA service updated by the node,
-    // but the sequencer needs to run update_state() first.
-    // Could we get rollup height from sequencer to be 100% sure
-    tokio::time::sleep(Duration::from_millis(1000)).await;
+    // No extra wait for the sequencer's `update_state`: state root consistency checks are on,
+    // so a sequencer building on stale state would fail the transaction check below loudly.
     tracing::info!("Synced!");
 
     // Ensure the rollup can still accept transactions
