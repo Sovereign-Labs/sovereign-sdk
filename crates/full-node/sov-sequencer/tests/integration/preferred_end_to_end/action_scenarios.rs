@@ -119,7 +119,7 @@ async fn restart_after_big_batch_regression() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_batch_production_with_immediate_finalization() {
+async fn batch_production_with_immediate_finalization() {
     let actions = vec![
         TestingAction::AcceptTxs { count: 1 },
         TestingAction::AcceptTxs { count: 50 },

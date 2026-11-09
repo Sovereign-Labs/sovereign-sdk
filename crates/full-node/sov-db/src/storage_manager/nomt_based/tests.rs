@@ -432,7 +432,7 @@ fn test_finalize_only_last_block() {
 
 // TODO: Needs to be converted to benchmark
 #[test]
-fn flaky_test_parallel_forks_reading_while_finalization_is_happening() {
+fn test_parallel_forks_reading_while_finalization_is_happening() {
     parallel_forks_reading_while_finalization_is_happening::<Sm>();
 }
 

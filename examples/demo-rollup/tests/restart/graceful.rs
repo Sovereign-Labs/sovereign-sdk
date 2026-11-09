@@ -256,7 +256,7 @@ async fn start_stop_empty(
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_start_stop_zk_instant_finality() -> anyhow::Result<()> {
+async fn test_start_stop_zk_instant_finality() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
@@ -266,7 +266,7 @@ async fn flaky_test_start_stop_zk_instant_finality() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_start_stop_zk_non_instant_finality() -> anyhow::Result<()> {
+async fn test_start_stop_zk_non_instant_finality() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
@@ -441,7 +441,7 @@ async fn start_stop_under_load(
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_start_stop_under_load_zk_instant_finality() -> anyhow::Result<()> {
+async fn test_start_stop_under_load_zk_instant_finality() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
@@ -451,7 +451,7 @@ async fn flaky_test_start_stop_under_load_zk_instant_finality() -> anyhow::Resul
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_start_stop_under_load_zk_non_instant_finality() -> anyhow::Result<()> {
+async fn test_start_stop_under_load_zk_non_instant_finality() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {
@@ -461,7 +461,7 @@ async fn flaky_test_start_stop_under_load_zk_non_instant_finality() -> anyhow::R
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_start_stop_under_load_optimistic_instant_finality() -> anyhow::Result<()> {
+async fn test_start_stop_under_load_optimistic_instant_finality() -> anyhow::Result<()> {
     let collector = LogCollector::new(Level::WARN);
     initialize_logging_for_restart(collector.clone(), false);
     for seed in [42, 1337] {

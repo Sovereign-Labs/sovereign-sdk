@@ -315,7 +315,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 /// the sequencer will happily create new rollup blocks far in advance of the node,
 /// triggering the case we care about.
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
+async fn test_state_root_computation_when_blobs_are_delayed() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_STATE_ROOT_DELAY_BLOCKS", "1");
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
@@ -491,7 +491,7 @@ async fn test_no_crashes_on_resync_with_transactions() {
 /// Correctness of this test can be validated by disabling queue id check:
 ///  - https://github.com/Sovereign-Labs/sovereign-sdk/blob/e921a2bc5a395f807b73ccda2f41dac74c2a1b8e/crates/full-node/sov-sequencer/src/preferred/sync_sequencer_state/sync_state.rs#L739
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_txs_that_enter_before_downtime_are_dropped() {
+async fn txs_that_enter_before_downtime_are_dropped() {
     // Set a small batch time limit to ensure that the sequencer will be overloaded after the first tx.
     // Question from Nikolai: Why it is going to be overloaded?
     let block_execution_time_ms = 1000;
