@@ -371,12 +371,34 @@ where
             while !event_queue.is_empty() {
                 if let Err(e) = self.handle_executor_event(&mut event_queue).await {
                     tracing::error!(error = ?e, "Error handling executor event");
-                    // If we've already started shutting down, this might fail - but then we're happy.
                     self.primary_shutdown.shutdown();
-                    break;
+                    // Apply nothing from here on rather than moving on to the next event. Every
+                    // queued event was produced on top of the state left by the ones before it,
+                    // so once one side effect is lost, persisting or confirming a later one
+                    // could soft-confirm a transaction that is no longer valid.
+                    self.discard_events_until_closed(event_queue).await;
+                    return;
                 }
             }
         }
+    }
+
+    /// Drops every remaining event without applying it, until all the senders are gone.
+    ///
+    /// The channel is deliberately kept open: a sender that finds it closed calls
+    /// [`exit_rollup`], which would cut short the graceful shutdown already under way.
+    /// Submitters of the discarded transactions get an error in place of a confirmation.
+    async fn discard_events_until_closed(&mut self, event_queue: VecDeque<ExecutorEvent<S, Rt>>) {
+        let mut discarded = event_queue.len();
+        event_queue.into_iter().for_each(discard_event);
+        while let Some(event) = self.executor_events_receiver.recv().await {
+            discard_event(event);
+            discarded += 1;
+        }
+        warn!(
+            discarded,
+            "Discarded the executor events that followed a failed side effect"
+        );
     }
 
     pub(crate) fn spawn(mut self) -> BackgroundHandle<()> {
@@ -405,6 +427,15 @@ fn drain_consecutive_accepted_txs<S: Spec, Rt: Runtime<S>>(
         }
     }
     txs_to_insert
+}
+
+fn discard_event<S: Spec, Rt: Runtime<S>>(event: ExecutorEvent<S, Rt>) {
+    // A flush request is acknowledged even though nothing is flushed. The transaction cache
+    // lives in memory only, so skipping the flush has no consequence while shutting down,
+    // whereas a request left unanswered makes its sender call [`exit_rollup`].
+    if let ExecutorEvent::FlushTransactionsCache { oneshot_sender, .. } = event {
+        let _ = oneshot_sender.send(());
+    }
 }
 
 #[cfg(test)]
