@@ -612,6 +612,18 @@ impl PreferredSequencerDb {
         ))
     }
 
+    /// Builds a database on top of an arbitrary backend, so that tests can inject failures.
+    #[cfg(test)]
+    pub(crate) fn with_backend(
+        backend: Box<dyn DbBackend>,
+        primary_shutdown: PrimaryShutdownController,
+    ) -> Self {
+        Self {
+            backend: Some(backend),
+            primary_shutdown,
+        }
+    }
+
     pub(crate) async fn initial_data(&self) -> Result<(SequenceNumber, BlobsCache)> {
         if let Some(backend) = &self.backend {
             match backend.current_data().await {
