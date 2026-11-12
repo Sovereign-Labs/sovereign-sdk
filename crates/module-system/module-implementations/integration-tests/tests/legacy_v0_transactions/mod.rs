@@ -236,7 +236,7 @@ fn fixture_metadata_matches_this_runtime() {
     let fixtures = Fixtures::load();
     let chain_id: u64 = config_value!("CHAIN_ID");
 
-    assert_eq!(RT::CHAIN_HASH, fixtures.chain_hash.0);
+    assert_eq!(RT::chain_hash(), fixtures.chain_hash.0);
     assert_eq!(chain_id, fixtures.chain_id);
     assert_eq!(fixtures.recipient(), fixtures.recipient.address);
     for sender in &fixtures.senders {
@@ -476,7 +476,7 @@ fn legacy_deactivation_height_rejects_legacy_transactions_from_cutoff() {
 
     let unsigned = UnsignedTransaction::<RT, S>::new(
         fixtures.expected_call(next),
-        RT::CHAIN_HASH,
+        RT::chain_hash(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(1),
@@ -487,7 +487,7 @@ fn legacy_deactivation_height_rejects_legacy_transactions_from_cutoff() {
         input: TransactionType::pre_signed(
             unsigned,
             &key_from_seed(next.sender_seed),
-            &RT::CHAIN_HASH,
+            &RT::chain_hash(),
         ),
         assert: Box::new(|result, _state| assert!(result.tx_receipt.is_successful())),
     });
@@ -589,7 +589,7 @@ fn current_envelope_truncated_to_legacy_is_rejected() {
     let tx = fixtures.by_name("nonce_0_transfer");
     let unsigned = UnsignedTransaction::<RT, S>::new(
         fixtures.expected_call(tx),
-        RT::CHAIN_HASH,
+        RT::chain_hash(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(0),
@@ -598,7 +598,7 @@ fn current_envelope_truncated_to_legacy_is_rejected() {
     );
     let signed = Transaction::<RT, S>::new_signed_tx(
         &key_from_seed(tx.sender_seed),
-        &RT::CHAIN_HASH,
+        &RT::chain_hash(),
         unsigned,
     );
     let mut raw_tx = borsh::to_vec(&signed).unwrap();
@@ -636,14 +636,14 @@ fn current_format_envelopes_decode_unchanged() {
     for address_override in [None, Some(address_from_seed(0x60))] {
         let unsigned = UnsignedTransaction::<RT, S>::new(
             fixtures.expected_call(tx),
-            RT::CHAIN_HASH,
+            RT::chain_hash(),
             TEST_DEFAULT_MAX_PRIORITY_FEE,
             TEST_DEFAULT_MAX_FEE,
             UniquenessData::Nonce(0),
             None,
             address_override,
         );
-        let signed = Transaction::<RT, S>::new_signed_tx(&key, &RT::CHAIN_HASH, unsigned);
+        let signed = Transaction::<RT, S>::new_signed_tx(&key, &RT::chain_hash(), unsigned);
 
         let DecodedTransaction::Current(decoded) = decode(&borsh::to_vec(&signed).unwrap()) else {
             panic!("current-format envelope decoded as legacy");
@@ -688,7 +688,7 @@ fn current_format_transaction_follows_legacy_transactions() {
     let legacy_tx = fixtures.by_name("nonce_0_transfer");
     let unsigned = UnsignedTransaction::<RT, S>::new(
         fixtures.expected_call(legacy_tx),
-        RT::CHAIN_HASH,
+        RT::chain_hash(),
         TEST_DEFAULT_MAX_PRIORITY_FEE,
         TEST_DEFAULT_MAX_FEE,
         UniquenessData::Nonce(2),
@@ -699,7 +699,7 @@ fn current_format_transaction_follows_legacy_transactions() {
         input: TransactionType::pre_signed(
             unsigned,
             &key_from_seed(legacy_tx.sender_seed),
-            &RT::CHAIN_HASH,
+            &RT::chain_hash(),
         ),
         assert: Box::new(|result, _state| {
             assert!(

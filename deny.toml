@@ -76,6 +76,21 @@ expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []
 
 [[licenses.clarify]]
+name = "sov-chain-config"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-chain-config-patcher"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
+name = "sov-chain-config-patcher-cli"
+expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
+license-files = []
+
+[[licenses.clarify]]
 name = "sov-blob-sender"
 expression = "LicenseRef-Sovereign-Permissionless-Commercial-License"
 license-files = []

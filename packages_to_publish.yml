@@ -11,6 +11,7 @@
 - sov-rollup-full-node-interface
 - sov-blob-sender
 - sov-state
+- sov-chain-config
 - sov-modules-macros # Requires --no-verify because it writes outside of OUT_DIR.
 - sov-modules-api
 # Release modules here:
@@ -58,6 +59,7 @@
 # Adapters
 - sov-risc0-adapter
 - sov-sp1-adapter
+- sov-chain-config-patcher
 - sov-celestia-adapter
 - sov-mock-da
 - sov-mock-zkvm

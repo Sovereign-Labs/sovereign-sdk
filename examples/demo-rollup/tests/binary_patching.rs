@@ -580,8 +580,6 @@ async fn submit_transaction_with_patched_cli(
             "import".into(),
             "from-file".into(),
             "bank".into(),
-            "--chain-id".into(),
-            PATCHED_CHAIN_ID.to_string().into(),
             "--max-fee".into(),
             "100000000".into(),
             "--path".into(),

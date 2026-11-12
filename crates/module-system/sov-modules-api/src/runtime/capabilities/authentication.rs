@@ -539,7 +539,8 @@ pub fn authenticate<
             verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
         }
         DecodedTransaction::LegacyV0(tx_v0) => {
-            let cutoff: u64 = config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
+            let cutoff: u64 =
+                sov_modules_macros::config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
             if height.get() >= cutoff {
                 return Err(AuthenticationError::FatalError(
                     FatalError::Other(format!(
@@ -594,7 +595,7 @@ fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
 /// The rollup's `CHAIN_ID`. Pre-fork transactions commit to it in the details field that now holds
 /// the chain hash fragment, so it is still required to authenticate legacy V0 transactions.
 fn legacy_chain_id() -> u64 {
-    config_value_private!("CHAIN_ID")
+    *crate::CHAIN_ID
 }
 
 /// Verifies that a legacy V0 transaction carries the rollup's chain id.
