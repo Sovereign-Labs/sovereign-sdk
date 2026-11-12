@@ -224,7 +224,7 @@ async fn max_batch_size() {
 /// |  6  |       33% +bt |      2 |    > 300% |     > 346% |
 /// This way this test can validate that only **execution time** of tx counts
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_max_batch_execution_time() {
+async fn max_batch_execution_time() {
     // Timeout the batch after 2 seconds of **execution time**.
     let max_batch_exec_time_millis = 2000;
     let approx_batch_time_millis = 400;
@@ -407,8 +407,6 @@ async fn sequencer_back_pressure() {
     let end_padding_blocks = 30;
     for _ in 0..end_padding_blocks {
         test_rollup.da_service.produce_block_now().await.unwrap();
-        // Give the node time to ingest each padding block so debug output reflects progress.
-        tokio::time::sleep(std::time::Duration::from_millis(50)).await;
         print_blobs_at_head(&test_rollup.da_service).await;
     }
 

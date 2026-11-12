@@ -28,7 +28,6 @@ use sov_modules_api::{
     Amount, DispatchCall, Gas, GasArray, GasPrice, GasUnit, PrivateKey, PublicKey, RawTx, Runtime,
 };
 use sov_modules_stf_blueprint::GenesisParams;
-use sov_node_client::NodeClient;
 use sov_paymaster::{Paymaster, PaymasterConfig};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::execution_mode::Native;
@@ -237,6 +236,10 @@ pub(crate) enum TestingAction {
     QuerySetValueHistorical,
     /// A new DA slot will be produced and made available to the node and sequencer.
     NewDaSlot,
+    /// Like [`TestingAction::NewDaSlot`], then waits until the node has processed the slot and
+    /// the sequencer has run `update_state` for it.
+    #[weight(0)]
+    NewDaSlotAndWait,
     /// Sets the pause state of update state execution to provided value.
     /// Allows disabling update_state from running inside the sequencer.
     PauseUpdateStateExecution(bool),
@@ -509,6 +512,29 @@ pub(crate) async fn setup_test_rollup_with_initial_state(
     (test_rollup, test_state)
 }
 
+/// Waits until the node reports `Synced` at (or past) the current DA head.
+///
+/// `TestRollup::wait_for_node_synced` alone can pass before the node has noticed new DA blocks.
+pub(crate) async fn wait_for_node_at_da_head(
+    test_rollup: &TestRollup<TestBlueprint>,
+) -> anyhow::Result<()> {
+    let da_head = i64::try_from(sov_rollup_interface::da::BlockHeaderTrait::height(
+        &test_rollup.da_service.get_head_block_header().await?,
+    ))?;
+    test_rollup
+        .wait_for_condition(
+            || async {
+                let status = test_rollup.client.client.get_sync_status().await?;
+                Ok(matches!(
+                    status.into_inner(),
+                    api_types::SyncStatus::Synced { synced_da_height } if synced_da_height >= da_head
+                ))
+            },
+            "node to reach the DA head",
+        )
+        .await
+}
+
 pub(crate) async fn run_actions_against_test_rollup(
     actions: Vec<TestingAction>,
     test_rollup: TestRollup<TestBlueprint>,
@@ -635,6 +661,19 @@ pub(crate) async fn run_action_against_test_rollup(
         }
         TestingAction::NewDaSlot => {
             test_rollup.da_service.produce_block_now().await.unwrap();
+        }
+        TestingAction::NewDaSlotAndWait => {
+            let mut state_updates = test_rollup.subscribe_state_updates().await;
+            let state_updates = state_updates.as_mut().unwrap();
+            test_rollup.da_service.produce_block_now().await?;
+            wait_for_node_at_da_head(&test_rollup).await?;
+            let latest_slot = test_rollup.api_client().get_latest_slot(None).await?.number;
+            while next_within(state_updates, NOTIFICATION_TIMEOUT)
+                .await?
+                .slot_number
+                .get()
+                < latest_slot
+            {}
         }
         TestingAction::QuerySetValueHistorical => {
             for (slot_number, value) in test_state.value_by_slot_number.iter() {

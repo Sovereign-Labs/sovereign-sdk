@@ -315,7 +315,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 /// the sequencer will happily create new rollup blocks far in advance of the node,
 /// triggering the case we care about.
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
+async fn test_state_root_computation_when_blobs_are_delayed() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_STATE_ROOT_DELAY_BLOCKS", "1");
     let genesis_config =
         HighLevelOptimisticGenesisConfig::generate().add_accounts_with_default_balance(1);
@@ -379,23 +379,13 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
 
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
-    let acceptable_block_processing_time = std::time::Duration::from_millis(500);
-
-    let total_waiting_time = acceptable_block_processing_time * blocks_to_delay as u32;
-
     // Producing more blocks, so all delayed blobs are flushed.
     test_rollup
         .da_service
         .produce_n_blocks_now(blocks_to_delay as usize)
         .await
         .unwrap();
-    if let Some(sleep_time) =
-        TestRollup::<TestBlueprint>::POLLING_TIMEOUT.checked_sub(total_waiting_time)
-    {
-        // Wait for delayed blobs to age through the configured delay window before checking sync.
-        tokio::time::sleep(sleep_time).await;
-    }
-    test_rollup.wait_for_node_synced().await.unwrap();
+    wait_for_node_at_da_head(&test_rollup).await.unwrap();
 
     let response = test_rollup
         .client
@@ -421,8 +411,7 @@ async fn test_no_crashes_on_resync_with_transactions() {
     let actions = vec![
         TestingAction::AcceptTx,
         TestingAction::AcceptTx,
-        TestingAction::NewDaSlot,
-        TestingAction::Sleep { duration_ms: 100 },
+        TestingAction::NewDaSlotAndWait,
     ];
     let (test_rollup, state) =
         run_actions_against_test_rollup(actions, test_rollup, &admin.clone(), state).await;
@@ -430,12 +419,11 @@ async fn test_no_crashes_on_resync_with_transactions() {
     let actions = vec![
         TestingAction::AcceptTx,
         TestingAction::AcceptTx,
-        TestingAction::NewDaSlot,
-        TestingAction::Sleep { duration_ms: 100 },
+        TestingAction::NewDaSlotAndWait,
     ]
     .into_iter()
     .cycle()
-    .take(160)
+    .take(120)
     .collect(); // repeat for 40 blocks
     let (test_rollup, state) =
         run_actions_against_test_rollup(actions, test_rollup, &admin.clone(), state).await;
@@ -474,8 +462,7 @@ async fn test_no_crashes_on_resync_with_transactions() {
     let actions = vec![
         TestingAction::AcceptTx,
         TestingAction::AcceptTx,
-        TestingAction::NewDaSlot,
-        TestingAction::Sleep { duration_ms: 100 },
+        TestingAction::NewDaSlotAndWait,
         TestingAction::QuerySetValue,
     ];
 
@@ -504,7 +491,7 @@ async fn test_no_crashes_on_resync_with_transactions() {
 /// Correctness of this test can be validated by disabling queue id check:
 ///  - https://github.com/Sovereign-Labs/sovereign-sdk/blob/e921a2bc5a395f807b73ccda2f41dac74c2a1b8e/crates/full-node/sov-sequencer/src/preferred/sync_sequencer_state/sync_state.rs#L739
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_txs_that_enter_before_downtime_are_dropped() {
+async fn txs_that_enter_before_downtime_are_dropped() {
     // Set a small batch time limit to ensure that the sequencer will be overloaded after the first tx.
     // Question from Nikolai: Why it is going to be overloaded?
     let block_execution_time_ms = 1000;

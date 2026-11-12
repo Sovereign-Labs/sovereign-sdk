@@ -603,7 +603,7 @@ mod tests {
         // but it sure sounds like it.
         #[tokio::test(flavor = "multi_thread")]
         /// Pushing a blob and immediately reading it
-        async fn flaky_push_pull_single_thread() {
+        async fn push_pull_single_thread() {
             test_push_and_read(0, 10).await.unwrap();
         }
 
@@ -622,7 +622,7 @@ mod tests {
         // I haven't looked into this and checked whether it's actually a problem,
         // but it sure sounds like it.
         #[tokio::test(flavor = "multi_thread")]
-        async fn flaky_push_pull_single_thread() {
+        async fn push_pull_single_thread() {
             test_push_and_read(1, 10).await.unwrap();
             test_push_and_read(3, 10).await.unwrap();
             test_push_and_read(5, 10).await.unwrap();

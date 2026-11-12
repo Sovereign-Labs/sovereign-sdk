@@ -30,6 +30,7 @@ cargo nextest run -p <package_name> <test_name>
 - Always use `cargo nextest` over regular `cargo test`. Cargo nextest runs each test in a separate process which gives isolation of environment variables.
 - This project has strict testing practices. It means that tests on base branch(`dev`) are always passing. 
   Any consistent failure in the branch is certainly introduced in the branch.
+- A test whose name contains `flaky_` gets 5 silent retries (`.config/nextest.toml`), so its failures only show up in the CI flaky-test summary. Fix the test instead when you can. If you do rename a test to `flaky_`, open an issue first and link it in a `// Flaky: <issue URL>` comment directly above the test.
 
 ### Debugging
 
@@ -42,7 +43,7 @@ cargo nextest run -p <package_name> <test_name>
 - `PROPTEST_CASES=50` - Faster local proptest runs (CI uses more)
 - `SKIP_GUEST_BUILD=1` - Skip risc0 guest builds during development
 - `SP1_SKIP_PROGRAM_BUILD=1` - Skip SP1 program builds during development
-- `SOV_TEST_SKIP_DOCKER=1` - Skip docker-based tests, useful for local development without docker
+- `SOV_TEST_SKIP_DOCKER=1` - Skip docker-based tests, useful for local development without docker. Add `NEXTEST_PROFILE=no-docker` so the postgres-backed ones show up as skipped instead of passed
 
 Always use `SKIP_GUEST_BUILD=1` unless performing specific ZK related changes, because it massively speeds up compilation time.
 

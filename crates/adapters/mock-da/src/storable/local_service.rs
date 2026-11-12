@@ -710,16 +710,14 @@ mod tests {
         for handler in handlers {
             handler.await?;
         }
-        // Sleep extra block time so all blocks are produced.
-        sleep(block_time * 2).await;
+        // Stop the periodic producer, then seal the blobs it hasn't included yet.
+        secondary_shutdown_controller.shutdown();
+        producing_handle.unwrap().await?;
+        da_layer.write().await.produce_block().await?;
 
         let da_service =
             StorableMockDaService::new(MockAddress::new([1; 32]), da_layer, block_producing).await;
         check_consistency(&da_service, services_count * blobs_per_service).await?;
-
-        secondary_shutdown_controller.shutdown();
-        drop(da_service);
-        producing_handle.unwrap().await?;
 
         Ok(())
     }

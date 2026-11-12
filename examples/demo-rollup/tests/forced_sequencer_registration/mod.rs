@@ -58,7 +58,7 @@ const FORCED_TX_BATCH_POLL_INTERVAL: Duration = Duration::from_millis(200);
 
 /// Verifies that a rollup with a preferred sequencer can handle forced registration from a different DA address.
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_test_forced_sequencer_registration() -> anyhow::Result<()> {
+async fn test_forced_sequencer_registration() -> anyhow::Result<()> {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "50");
     let (rollup, da_service) = setup().await;
     run_forced_tx_test(rollup, da_service, forced_sequencer_registration_test_case).await

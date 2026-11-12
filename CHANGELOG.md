@@ -1,3 +1,5 @@
+# 2026-11-09
+- #3130 API: Archival state REST reads (`?rollup_height=`/`?slot_number=`) that race with the pruner now return 404 "invalid rollup height" instead of `{"value": null}`. Tests: CI uploads a nextest JUnit report and lists tests that passed only after a retry; `flaky_` tests require a linked issue; new `NEXTEST_PROFILE=no-docker` reports postgres-backed tests as skipped; sleeps used as synchronization replaced with bounded waits; previously ignored or `flaky_` tests that now pass reliably are re-enabled and renamed.
 # 2026-11-08
 - #3118 Tests: Replace the positional-argument `create_test_rollup` wrappers in sov-sequencer tests with `create_test_rollup()` and `create_test_rollup_with(...)` builder overrides.
 - #3119 Tests: Share `query_set_value` and `tx_set_value_nonce` across sov-sequencer integration tests.
