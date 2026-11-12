@@ -1,10 +1,11 @@
+# 2026-11-12
+- #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
+
 # 2026-11-02
 - #3106 Dependencies: Updated `quinn-proto` to 0.11.15 (GHSA-4w2j-m93h-cj5j), `rustls` to 0.23.45 (GHSA-2mjx-qc3c-rqvc), `serde_with` to 3.21.0 (GHSA-7gcf-g7xr-8hxj; the workspace now requires `serde_with = "3.21"`) and `pyo3` to 0.29 (`py_sovereign_web3` only). To apply the same updates to a rollup (e.g. rollup-starter), run these commands in the workspace root and again in each zkVM guest crate with `--manifest-path <guest>/Cargo.toml`, skipping any package that isn't in that lockfile:
     - `cargo update -p quinn-proto --precise 0.11.15`
     - `cargo update -p rustls --precise 0.23.45` (if cargo reports multiple `rustls` versions, use `-p rustls@<current 0.23.x version>`)
     - `cargo update -p serde_with --precise 3.21.0` (3.23+ pulls in `syn` 3, `darling` 0.24 and `base64` 0.23 as duplicate majors)
-# 2026-11-09
-- #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 # 2026-10-21
 - #3080 DB: Added optional `storage.live_db_path` and `storage.user_nomt_db_path` config values, which set exact directories for the live state DB and the user NOMT DB (alongside the existing `storage.ledger_db_path`). When unset, databases stay under `storage.path` as before. Relative paths are resolved from the process working directory.
     - **Breaking Change** Migrations: `migrate_to_v1` and `mockda-to-celestia-migrate` accept `--live-db-path`, `--ledger-db-path` and `--user-nomt-db-path` overrides. `--db-path` now refuses to run if the rollup config sets a per-DB path that isn't overridden too, because that DB would otherwise be migrated at its original location. `sov_migrations::MigrationArgs::db_path` is replaced by `db_paths: DbPathOverrides`, and `load_storage_config` takes `&DbPathOverrides`.
