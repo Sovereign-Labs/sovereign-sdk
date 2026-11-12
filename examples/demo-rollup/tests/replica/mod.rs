@@ -20,7 +20,6 @@ use sov_api_spec::types;
 use sov_bank::config_gas_token_id;
 use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_demo_rollup::ExternalMockDemoRollup;
-use sov_full_node_configs::sequencer::SequencerKindConfig;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_mock_da::BlockProducingConfig;
@@ -80,25 +79,18 @@ async fn start_rollup_with_connection_string(
         postgres,
     )
     .await
-    .set_config(move |c| {
+    .set_config(|c| {
         c.blob_processing_timeout_secs = 300;
-        match &mut c.sequencer_config {
-            SequencerKindConfig::Standard(_) => {
-                panic!("Expected preferred sequencer config");
-            }
-            SequencerKindConfig::Preferred(p) => {
-                p.num_cache_warmup_workers = 0;
-                p.recovery_strategy = RecoveryStrategy::TryToSave;
-                p.ideal_lag_behind_finalized_slot = 3;
-                if let Some(connection_string) = postgres_connection_override.as_ref() {
-                    p.postgres_config
-                        .as_mut()
-                        .expect(
-                            "Expected postgres config when overriding postgres connection string",
-                        )
-                        .postgres_connection_string = connection_string.clone();
-                }
-            }
+    })
+    .with_preferred_seq_config(move |seq| {
+        seq.num_cache_warmup_workers = 0;
+        seq.recovery_strategy = RecoveryStrategy::TryToSave;
+        seq.ideal_lag_behind_finalized_slot = 3;
+        if let Some(connection_string) = postgres_connection_override {
+            seq.postgres_config
+                .as_mut()
+                .expect("Expected postgres config when overriding postgres connection string")
+                .postgres_connection_string = connection_string;
         }
     })
     .start_test_rollup()
@@ -146,13 +138,13 @@ async fn start_rollup_with_prover(
         c.blob_processing_timeout_secs = 180;
         c.aggregated_proof_block_jump = 2;
         c.max_concurrent_proof_blobs = 1024;
-        if let SequencerKindConfig::Preferred(seq) = &mut c.sequencer_config {
-            seq.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
-            seq.recovery_strategy = RecoveryStrategy::TryToSave;
-            seq.disable_state_root_consistency_checks = true;
-            seq.num_cache_warmup_workers = 0;
-            seq.ideal_lag_behind_finalized_slot = 3;
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
+        seq.recovery_strategy = RecoveryStrategy::TryToSave;
+        seq.disable_state_root_consistency_checks = true;
+        seq.num_cache_warmup_workers = 0;
+        seq.ideal_lag_behind_finalized_slot = 3;
     })
     .start_test_rollup()
     .await
