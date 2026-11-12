@@ -9,7 +9,7 @@ use sov_node_client::NodeClient;
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
 use sov_test_utils::test_rollup::get_height;
-use sov_test_utils::test_rollup::TestRollup;
+use sov_test_utils::test_rollup::{next_within, TestRollup};
 use sov_test_utils::{
     generate_operator_runtime_with_kernel, RtAgnosticBlueprint, TestSpec, TestUser,
     TEST_DEFAULT_USER_BALANCE, TEST_FINALIZATION_BLOCKS, TEST_NORMAL_SHUTDOWN_TIMEOUT,
@@ -98,7 +98,12 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
         send_tx(&admin, nonce, &api_client).await.unwrap();
         nonce += 1;
         test_rollup.da_service.produce_block_now().await.unwrap();
-        slot_subscription.next().await;
+        next_within(
+            &mut slot_subscription,
+            TestRollup::<TestBlueprint>::POLLING_TIMEOUT,
+        )
+        .await
+        .unwrap();
     }
 
     let slot_height = test_rollup.height().await;
@@ -173,7 +178,12 @@ async fn sequencer_does_not_accept_tx_after_stop(finalization_blocks: u32) {
         }
 
         test_rollup.da_service.produce_block_now().await.unwrap();
-        slot_subscription.next().await;
+        next_within(
+            &mut slot_subscription,
+            TestRollup::<TestBlueprint>::POLLING_TIMEOUT,
+        )
+        .await
+        .unwrap();
         current_height = test_rollup.height().await;
     }
 
@@ -253,7 +263,12 @@ async fn rollup_operates_only_on_finalized_blocks_if_stop_at_height_set(finaliza
     while current_height < stop_at_height {
         // Each DA block triggers slot notification, even if it does not have any blobs.
         test_rollup.da_service.produce_block_now().await.unwrap();
-        let _slot = slot_subscription.next().await.unwrap().unwrap();
+        let _slot = next_within(
+            &mut slot_subscription,
+            TestRollup::<TestBlueprint>::POLLING_TIMEOUT,
+        )
+        .await
+        .unwrap();
         assert_rollup_processes_only_finalized_blocks(&client).await;
         current_height = test_rollup.height().await;
     }

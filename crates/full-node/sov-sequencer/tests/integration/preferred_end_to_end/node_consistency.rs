@@ -108,11 +108,19 @@ async fn visible_hashes_match_across_node_and_sequencer() {
     }
     // Produce some empty blocks to ensure that the sequencer has a batch in progress.
     da_layer.write().await.produce_block().await.unwrap();
-    slot_subscription.next().await.unwrap().unwrap();
-    state_update_subscription.next().await.unwrap().unwrap();
+    next_within(&mut slot_subscription, NOTIFICATION_TIMEOUT)
+        .await
+        .unwrap();
+    next_within(&mut state_update_subscription, NOTIFICATION_TIMEOUT)
+        .await
+        .unwrap();
     da_layer.write().await.produce_block().await.unwrap();
-    slot_subscription.next().await.unwrap().unwrap();
-    state_update_subscription.next().await.unwrap().unwrap();
+    next_within(&mut slot_subscription, NOTIFICATION_TIMEOUT)
+        .await
+        .unwrap();
+    next_within(&mut state_update_subscription, NOTIFICATION_TIMEOUT)
+        .await
+        .unwrap();
 
     // Run a few rounds of checking the state root to be extra sure nothing gets screwed up over time.
     let mut current_nonce = 0;
@@ -152,7 +160,9 @@ async fn visible_hashes_match_across_node_and_sequencer() {
         // Produce a block. This will trigger the sequencer to close out its current batch and start a new one.
         test_rollup.force_close_batch().await.unwrap();
         da_layer.write().await.produce_block().await.unwrap();
-        let slot = slot_subscription.next().await.unwrap().unwrap();
+        let slot = next_within(&mut slot_subscription, NOTIFICATION_TIMEOUT)
+            .await
+            .unwrap();
         if !slot.batches.is_empty() && !slot.batches[0].txs.is_empty() {
             // Assert that the second transaction in the batch (the one that asserts the state root) succeeded.
             assert_eq!(
@@ -160,7 +170,9 @@ async fn visible_hashes_match_across_node_and_sequencer() {
                 TxReceiptResult::Successful
             );
         }
-        state_update_subscription.next().await.unwrap().unwrap();
+        next_within(&mut state_update_subscription, NOTIFICATION_TIMEOUT)
+            .await
+            .unwrap();
     }
 }
 

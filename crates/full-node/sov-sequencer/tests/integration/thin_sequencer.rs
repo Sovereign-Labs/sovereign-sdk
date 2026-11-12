@@ -5,7 +5,6 @@ use std::sync::Arc;
 use anyhow::Context;
 use base64::prelude::BASE64_STANDARD;
 use base64::Engine;
-use futures::StreamExt;
 use sov_api_spec::types::AcceptTxBody;
 use sov_blob_storage::config_deferred_slots_count;
 use sov_mock_da::storable::StorableMockDaService;
@@ -19,7 +18,7 @@ use sov_rollup_interface::TxHash;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::StoragePath;
-use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder};
+use sov_test_utils::test_rollup::{next_within, GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction_with_nonce, generate_optimistic_runtime, RtAgnosticBlueprint,
     TestSpec, TestUser,
@@ -114,7 +113,9 @@ async fn test_thin_direct_same_transactions() {
         }
     }
     // Wait for the slot to be processed, so rollup is in a good state.
-    let _slot = slots.next().await.unwrap().unwrap();
+    let _slot = next_within(&mut slots, TestRollup::<TestBlueprint>::POLLING_TIMEOUT)
+        .await
+        .unwrap();
     compare_block_at_height(height_to_check, &test_rollup.da_service).await;
 }
 

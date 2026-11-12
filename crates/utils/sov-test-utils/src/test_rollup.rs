@@ -1377,3 +1377,42 @@ pub async fn get_height(client: &NodeClient) -> anyhow::Result<RollupHeight> {
     let heights: Data = serde_json::from_str(&response)?;
     Ok(RollupHeight::new(heights.value.0))
 }
+
+/// Awaits the next item of `stream`, panicking if none arrives within `d` or the stream ends.
+///
+/// Not an `async fn`, so that `#[track_caller]` can record the call site for the panic message.
+#[track_caller]
+pub fn next_within<'a, S: tokio_stream::Stream + Unpin>(
+    stream: &'a mut S,
+    d: Duration,
+) -> impl std::future::Future<Output = S::Item> + 'a {
+    let caller = std::panic::Location::caller();
+    async move {
+        match timeout(d, stream.next()).await {
+            Ok(Some(item)) => item,
+            Ok(None) => panic!("stream ended before yielding an item (awaited at {caller})"),
+            Err(_) => panic!("no stream item within {d:?} (awaited at {caller})"),
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[tokio::test]
+    #[should_panic(expected = "no stream item within 10ms")]
+    async fn next_within_panics_on_timeout() {
+        next_within(
+            &mut tokio_stream::pending::<()>(),
+            Duration::from_millis(10),
+        )
+        .await;
+    }
+
+    #[tokio::test]
+    #[should_panic(expected = "stream ended before yielding an item")]
+    async fn next_within_panics_when_stream_ends() {
+        next_within(&mut tokio_stream::empty::<()>(), Duration::from_secs(60)).await;
+    }
+}
