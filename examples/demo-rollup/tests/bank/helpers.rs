@@ -6,7 +6,7 @@ use sov_bank::event::Event as BankEvent;
 use sov_bank::TokenId;
 use sov_cli::NodeClient;
 use sov_demo_rollup::MockDemoRollup;
-use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
+use sov_full_node_configs::sequencer::RecoveryStrategy;
 use sov_mock_zkvm::{MockCodeCommitment, MockZkVerifier};
 use sov_modules_api::transaction::Transaction;
 use sov_modules_api::{
@@ -289,15 +289,14 @@ pub async fn start_test_rollup(
         c.blob_processing_timeout_secs = 180;
         c.aggregated_proof_block_jump = 5;
         c.max_concurrent_proof_blobs = 1024;
-        if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
-            sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS
-                * std::cmp::max(1, test_case.finalization_blocks as u64);
-            sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
-            sequencer_config.disable_state_root_consistency_checks =
-                disable_state_root_consistency_check;
-            sequencer_config.num_cache_warmup_workers = 0;
-            sequencer_config.ideal_lag_behind_finalized_slot = 3;
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS
+            * std::cmp::max(1, test_case.finalization_blocks as u64);
+        seq.recovery_strategy = RecoveryStrategy::TryToSave;
+        seq.disable_state_root_consistency_checks = disable_state_root_consistency_check;
+        seq.num_cache_warmup_workers = 0;
+        seq.ideal_lag_behind_finalized_slot = 3;
     })
     .start()
     .await?;
