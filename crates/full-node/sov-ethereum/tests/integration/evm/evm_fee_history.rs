@@ -17,13 +17,13 @@ use serde::Deserialize;
 use sov_cli::NodeClient;
 use sov_eth_client::SimpleStorageClient;
 use sov_evm::{ChainSpecUpdate, EvmRuntimeConfigUpdate};
-use sov_modules_api::{CryptoSpec, GasPrice, GasUnit, Spec};
+use sov_modules_api::{GasPrice, GasUnit};
 use sov_test_utils::test_rollup::TestRollup;
 
 use crate::common::{
     alloy_client, alloy_client_with_signer, create_simple_storage_client, deploy_contract_check,
     estimate_gas_and_check_affordability, set_value_check, setup_test_rollup,
-    setup_test_rollup_with_admin_key, setup_test_rollup_with_ideal_lag, EVM_EXTENSION,
+    setup_test_rollup_with_admin, setup_test_rollup_with_ideal_lag, EVM_EXTENSION,
     HIGH_PRIORITY_FEE_PER_GAS, MAX_FEE_PER_GAS, SENDER_PRIV_KEY,
 };
 use crate::runtime::{EvmBlueprint, EvmTestSpec};
@@ -1899,7 +1899,7 @@ async fn test_fee_history_gas_used_ratio_uses_per_block_limit() -> anyhow::Resul
     // Clearly different from the genesis EVM block gas limit and above MIN_BLOCK_GAS_LIMIT (5M).
     const NEW_BLOCK_GAS_LIMIT: u64 = 0x1_2345_6700; // 4_886_718_208
 
-    let (rollup, admin_key) = setup_test_rollup_with_admin_key(0, EVM_EXTENSION).await;
+    let (rollup, admin) = setup_test_rollup_with_admin(0, EVM_EXTENSION).await;
     let client = alloy_client_with_signer(rollup.http_addr, SENDER_PRIV_KEY);
     rollup.wait_for_sequencer_ready().await.unwrap();
 
@@ -1912,7 +1912,7 @@ async fn test_fee_history_gas_used_ratio_uses_per_block_limit() -> anyhow::Resul
     );
 
     // 2. Change the EVM block gas limit via an admin runtime-config update.
-    update_block_gas_limit(&rollup, &admin_key, NEW_BLOCK_GAS_LIMIT).await?;
+    update_block_gas_limit(&rollup, &admin, NEW_BLOCK_GAS_LIMIT).await?;
 
     // Wait until freshly produced blocks reflect the new limit.
     let mut applied = false;
@@ -1995,7 +1995,7 @@ async fn get_block_gas_limit(client: &DynProvider, block_number: u64) -> anyhow:
 /// Changes the EVM block gas limit via an admin `UpdateRuntimeConfig` call.
 async fn update_block_gas_limit(
     rollup: &TestRollup<EvmBlueprint>,
-    admin_key: &<<EvmTestSpec as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
+    admin: &sov_test_utils::TestUser<EvmTestSpec>,
     new_block_gas_limit: u64,
 ) -> anyhow::Result<()> {
     let update = EvmRuntimeConfigUpdate::<EvmTestSpec> {
@@ -2008,5 +2008,5 @@ async fn update_block_gas_limit(
         }),
         new_admin: None,
     };
-    super::send_evm_runtime_config_update(rollup, admin_key, update).await
+    super::send_evm_runtime_config_update(rollup, admin, update).await
 }

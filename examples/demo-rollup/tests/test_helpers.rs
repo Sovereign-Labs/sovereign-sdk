@@ -13,14 +13,16 @@ use sov_hyperlane_integration::HyperlaneAddress;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::transaction::Transaction;
+use sov_modules_api::Amount;
 use sov_modules_api::Base58Address;
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::OperatingMode;
 use sov_modules_api::Spec;
 use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_test_utils::default_test_tx_details;
-use sov_test_utils::test_rollup::GenesisSource;
+use sov_test_utils::test_rollup::{read_private_key, GenesisSource};
 use sov_test_utils::test_signed_transaction;
+use sov_test_utils::TestUser;
 pub type DemoRollupSpec = <MockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 
 pub fn test_genesis_source<S: Spec>(operating_mode: OperatingMode) -> GenesisSource<S, Runtime<S>>
@@ -43,6 +45,35 @@ pub fn test_genesis_paths(operating_mode: OperatingMode) -> GenesisPaths {
     paths
 }
 
+/// The account from `tx_signer_private_key.json`, which the integration-test genesis funds.
+/// Its balance is not tracked, so `available_gas_balance` is zero.
+pub fn tx_signer<S: Spec>() -> TestUser<S> {
+    TestUser::new(
+        read_private_key::<S>("tx_signer_private_key.json").private_key,
+        Amount::ZERO,
+    )
+}
+
+/// Creates a bank transfer call message.
+pub fn transfer_token_msg<S>(
+    token_id: TokenId,
+    recipient: <S as Spec>::Address,
+    amount: u128,
+) -> RuntimeCall<S>
+where
+    S: Spec,
+    <S as Spec>::Address:
+        FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
+{
+    RuntimeCall::<S>::Bank(sov_bank::CallMessage::<S>::Transfer {
+        to: recipient,
+        coins: Coins {
+            amount: amount.into(),
+            token_id,
+        },
+    })
+}
+
 /// Creates token transfer tx.
 pub fn build_transfer_token_tx_uniqueness_data<S>(
     key: &<<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey,
@@ -56,13 +87,7 @@ where
     <S as Spec>::Address:
         FromVmAddress<EthereumAddress> + FromVmAddress<Base58Address> + HyperlaneAddress,
 {
-    let msg = RuntimeCall::<S>::Bank(sov_bank::CallMessage::<S>::Transfer {
-        to: recipient,
-        coins: Coins {
-            amount: amount.into(),
-            token_id,
-        },
-    });
+    let msg = transfer_token_msg::<S>(token_id, recipient, amount);
     test_signed_transaction(
         key,
         &msg,
