@@ -341,6 +341,7 @@ async fn check_start_at(finalization_blocks: u32) {
     let current_height = get_height(&client).await.unwrap();
 
     pause_update_state::set(false);
+    test_rollup.resume_preferred_batches().await;
 
     // Verify that the last processed height was `stop_at_height`. Since we called `pause_update_state`,
     // we should see the final height before the shutdown.
