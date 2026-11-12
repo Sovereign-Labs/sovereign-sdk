@@ -1,10 +1,10 @@
 use sov_modules_api::macros::serialize;
-use sov_modules_api::{Amount, Spec};
+use sov_modules_api::{Amount, DaSpec, Spec};
 
 /// Sample Event
 #[derive(Debug, PartialEq, Clone, schemars::JsonSchema)]
 #[serialize(Borsh, Serde)]
-#[serde(rename_all = "snake_case")]
+#[serde(bound = "S: Spec", rename_all = "snake_case")]
 #[schemars(bound = "S: Spec", rename = "Event")]
 pub enum Event<S: Spec> {
     /// A sequencer was registered.
@@ -35,5 +35,18 @@ pub enum Event<S: Spec> {
         sequencer: S::Address,
         /// The amount of the deposit.
         amount: u128,
+    },
+
+    /// A sequencer rotated its DA address.
+    ///
+    /// Preferred self-rotations emit this when the rotation is scheduled; the
+    /// state move is applied later in the end-block hook.
+    DaAddressUpdated {
+        /// The rollup address of the sequencer (unchanged across the rotation).
+        sequencer: S::Address,
+        /// The DA address being rotated away from.
+        old_da_address: <S::Da as DaSpec>::Address,
+        /// The new DA address.
+        new_da_address: <S::Da as DaSpec>::Address,
     },
 }

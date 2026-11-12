@@ -1,0 +1,1319 @@
+{
+  "blocks": [
+    {
+      "balances": [
+        "1000000000000000",
+        "1000000000000000",
+        "1000000000000000",
+        "0"
+      ],
+      "name": "genesis",
+      "receipt": null,
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        },
+        null,
+        null
+      ],
+      "root": "340b0d63db4fe3d1dc6a9db45b5696bf5b01a9ed176d3f0480290df188c4babf7636089fec83cd2fb3905e38142b47a764cc04f1bbbed433d5206bb6a4c48a4c"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999899999688700",
+        "1000000000000000",
+        "0"
+      ],
+      "name": "register",
+      "receipt": {
+        "gas": [
+          15565,
+          15565
+        ],
+        "gas_value": "311300",
+        "tx": {
+          "events": [
+            {
+              "key": [
+                83,
+                101,
+                113,
+                117,
+                101,
+                110,
+                99,
+                101,
+                114,
+                82,
+                101,
+                103,
+                105,
+                115,
+                116,
+                114,
+                121,
+                47,
+                82,
+                101,
+                103,
+                105,
+                115,
+                116,
+                101,
+                114,
+                101,
+                100
+              ],
+              "tx_hash": [
+                166,
+                7,
+                81,
+                46,
+                191,
+                29,
+                209,
+                143,
+                135,
+                156,
+                146,
+                214,
+                206,
+                164,
+                49,
+                29,
+                87,
+                140,
+                239,
+                219,
+                214,
+                173,
+                118,
+                224,
+                5,
+                212,
+                116,
+                136,
+                176,
+                105,
+                239,
+                243
+              ],
+              "value": [
+                0,
+                0,
+                129,
+                57,
+                119,
+                14,
+                168,
+                125,
+                23,
+                95,
+                86,
+                163,
+                84,
+                102,
+                195,
+                76,
+                126,
+                204,
+                203,
+                141,
+                138,
+                145,
+                180,
+                238,
+                55,
+                162,
+                93,
+                246,
+                15,
+                91,
+                0,
+                232,
+                118,
+                72,
+                23,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ],
+          "receipt": {
+            "successful": {
+              "gas_used": [
+                15565,
+                15565
+              ]
+            }
+          },
+          "tx_hash": "0xa607512ebf1dd18f879c92d6cea4311d578cefdbd6ad76e005d47488b069eff3"
+        }
+      },
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999995920",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        },
+        null
+      ],
+      "root": "5d618ac4865ed6c968320cc5a69b5d1de26247a26f4b6a195628571abe5a06bd650e53fea92aae89aa5a1aca32f560a5bfff85ecc0b737886a0e7c007edfbd29"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799999403994",
+        "1000000000000000",
+        "0"
+      ],
+      "name": "register_second_da_same_owner",
+      "receipt": {
+        "gas": [
+          15817,
+          15817
+        ],
+        "gas_value": "284706",
+        "tx": {
+          "events": [
+            {
+              "key": [
+                83,
+                101,
+                113,
+                117,
+                101,
+                110,
+                99,
+                101,
+                114,
+                82,
+                101,
+                103,
+                105,
+                115,
+                116,
+                114,
+                121,
+                47,
+                82,
+                101,
+                103,
+                105,
+                115,
+                116,
+                101,
+                114,
+                101,
+                100
+              ],
+              "tx_hash": [
+                22,
+                81,
+                129,
+                105,
+                13,
+                101,
+                246,
+                248,
+                75,
+                120,
+                61,
+                137,
+                111,
+                165,
+                10,
+                73,
+                90,
+                152,
+                114,
+                65,
+                169,
+                172,
+                87,
+                35,
+                148,
+                52,
+                171,
+                27,
+                57,
+                152,
+                219,
+                188
+              ],
+              "value": [
+                0,
+                0,
+                129,
+                57,
+                119,
+                14,
+                168,
+                125,
+                23,
+                95,
+                86,
+                163,
+                84,
+                102,
+                195,
+                76,
+                126,
+                204,
+                203,
+                141,
+                138,
+                145,
+                180,
+                238,
+                55,
+                162,
+                93,
+                246,
+                15,
+                91,
+                0,
+                232,
+                118,
+                72,
+                23,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ],
+          "receipt": {
+            "successful": {
+              "gas_used": [
+                15817,
+                15817
+              ]
+            }
+          },
+          "tx_hash": "0x165181690d65f6f84b783d896fa50a495a987241a9ac57239434ab1b3998dbbc"
+        }
+      },
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999992248",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "5f9a60db23dfca3cf15bfd3c565b194f5cf77dae028a5687c689fcc74b50e54c69043c13864fb2f14ac6955058963a12e745f96ba7948355949c2a359edc1be1"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799999231770",
+        "1000000000000000",
+        "0"
+      ],
+      "name": "register_duplicate",
+      "receipt": {
+        "gas": [
+          10764,
+          10764
+        ],
+        "gas_value": "172224",
+        "tx": {
+          "events": [],
+          "receipt": {
+            "reverted": {
+              "gas_used": [
+                10764,
+                10764
+              ],
+              "reason": {
+                "message": "The user is already registered"
+              }
+            }
+          },
+          "tx_hash": "0x2da88728a52b5b75187475485ed1fd34190cdc708728e80cf5345e1feb608db4"
+        }
+      },
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999988984",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "32115dc633e04ca129d2262ffe9d7b734b30b8e55313887381760c67467d759d63fe1cb8961bbd7738272366587ab8c65fd25679854eebacea7501bab1b025c9"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799998957656",
+        "1000000000000000",
+        "0"
+      ],
+      "name": "deposit",
+      "receipt": {
+        "gas": [
+          17055,
+          17055
+        ],
+        "gas_value": "272880",
+        "tx": {
+          "events": [
+            {
+              "key": [
+                83,
+                101,
+                113,
+                117,
+                101,
+                110,
+                99,
+                101,
+                114,
+                82,
+                101,
+                103,
+                105,
+                115,
+                116,
+                114,
+                121,
+                47,
+                68,
+                101,
+                112,
+                111,
+                115,
+                105,
+                116,
+                101,
+                100
+              ],
+              "tx_hash": [
+                2,
+                224,
+                104,
+                99,
+                220,
+                3,
+                137,
+                131,
+                176,
+                78,
+                19,
+                242,
+                164,
+                103,
+                196,
+                177,
+                123,
+                34,
+                151,
+                19,
+                118,
+                95,
+                146,
+                44,
+                210,
+                116,
+                199,
+                217,
+                28,
+                44,
+                149,
+                71
+              ],
+              "value": [
+                0,
+                3,
+                129,
+                57,
+                119,
+                14,
+                168,
+                125,
+                23,
+                95,
+                86,
+                163,
+                84,
+                102,
+                195,
+                76,
+                126,
+                204,
+                203,
+                141,
+                138,
+                145,
+                180,
+                238,
+                55,
+                162,
+                93,
+                246,
+                15,
+                91,
+                210,
+                4,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ],
+          "receipt": {
+            "successful": {
+              "gas_used": [
+                17055,
+                17055
+              ]
+            }
+          },
+          "tx_hash": "0x02e06863dc038983b04e13f2a467c4b17b229713765f922cd274c7d91c2c9547"
+        }
+      },
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999985720",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000001234",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "1392faaba6ee9943eb854d210ee2dc6db14dd37ce762136a77001887c3d312d773db1d9940c41afe0cc214b106fe6f898b103c2b8b6956a4d0dee664b2d3547f"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799998957656",
+        "999999999831808",
+        "0"
+      ],
+      "name": "deposit_wrong_owner",
+      "receipt": {
+        "gas": [
+          10512,
+          10512
+        ],
+        "gas_value": "168192",
+        "tx": {
+          "events": [],
+          "receipt": {
+            "reverted": {
+              "gas_used": [
+                10512,
+                10512
+              ],
+              "reason": {
+                "message": "Custom error: The address provided as a parameter to the `exit` method does not match the transaction sender"
+              }
+            }
+          },
+          "tx_hash": "0x11c0f3f0b3e021f36c50401014ee20c3c50651c57956fd83bcc50c92cf3f32b9"
+        }
+      },
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999982456",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000001234",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "461831e0ebb81af356d2b8a04f68baa91f7953cdb255a4ad958c7e3567d963626f22cf59deb831f300df907aa8693f636398e67b5dc9fe24beb5d75770db441e"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799998773432",
+        "999999999831808",
+        "0"
+      ],
+      "name": "withdraw_not_initiated",
+      "receipt": {
+        "gas": [
+          11514,
+          11514
+        ],
+        "gas_value": "184224",
+        "tx": {
+          "events": [],
+          "receipt": {
+            "reverted": {
+              "gas_used": [
+                11514,
+                11514
+              ],
+              "reason": {
+                "message": "Custom error: Sequencers may not withdraw without first initiating a withdrawal and waiting for the withdrawal to be ready"
+              }
+            }
+          },
+          "tx_hash": "0xeb11932fcfaeaf093117a5e0d433451efcbbec69429fb5da6db81dfd7792c730"
+        }
+      },
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999979448",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000001234",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "1b24f317263b69e6d3606a4584d9e7f5ac2b28b816cb2a44186271625295525a1dffee5dfcbb8e99bc1a71b5d49864d44dce5ef8dfca323274ccfb934f9dcd9a"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799998573448",
+        "999999999831808",
+        "0"
+      ],
+      "name": "initiate_withdrawal",
+      "receipt": {
+        "gas": [
+          12499,
+          12499
+        ],
+        "gas_value": "199984",
+        "tx": {
+          "events": [
+            {
+              "key": [
+                83,
+                101,
+                113,
+                117,
+                101,
+                110,
+                99,
+                101,
+                114,
+                82,
+                101,
+                103,
+                105,
+                115,
+                116,
+                114,
+                121,
+                47,
+                73,
+                110,
+                105,
+                116,
+                105,
+                97,
+                116,
+                101,
+                100,
+                87,
+                105,
+                116,
+                104,
+                100,
+                114,
+                97,
+                119,
+                97,
+                108
+              ],
+              "tx_hash": [
+                82,
+                177,
+                198,
+                182,
+                184,
+                237,
+                236,
+                242,
+                136,
+                208,
+                221,
+                178,
+                202,
+                82,
+                13,
+                130,
+                98,
+                213,
+                21,
+                12,
+                89,
+                234,
+                87,
+                202,
+                238,
+                204,
+                203,
+                198,
+                107,
+                190,
+                103,
+                141
+              ],
+              "value": [
+                0,
+                1,
+                129,
+                57,
+                119,
+                14,
+                168,
+                125,
+                23,
+                95,
+                86,
+                163,
+                84,
+                102,
+                195,
+                76,
+                126,
+                204,
+                203,
+                141,
+                138,
+                145,
+                180,
+                238,
+                55,
+                162,
+                93,
+                246,
+                15,
+                91
+              ]
+            }
+          ],
+          "receipt": {
+            "successful": {
+              "gas_used": [
+                12499,
+                12499
+              ]
+            }
+          },
+          "tx_hash": "0x52b1c6b6b8edecf288d0ddb2ca520d8262d5150c59ea57caeecccbc66bbe678d"
+        }
+      },
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999976440",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000001234",
+          "balance_state": {
+            "PendingWithdrawal": {
+              "ready_at": 11
+            }
+          }
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "657967bb85d06fce6c891796e49b2d1a98ed11e38cf18686f75261ee477a4081236c69e21469dd1501ca459ee72bec8438e12a3c03862cb3dd05eb1e92b7bf2b"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799998386152",
+        "999999999831808",
+        "0"
+      ],
+      "name": "withdraw_too_early",
+      "receipt": {
+        "gas": [
+          11706,
+          11706
+        ],
+        "gas_value": "187296",
+        "tx": {
+          "events": [],
+          "receipt": {
+            "reverted": {
+              "gas_used": [
+                11706,
+                11706
+              ],
+              "reason": {
+                "message": "Custom error: Sequencer 0x0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a0a may not withdraw before the withdrawal is ready. Current visible height: 8, Ready at: 11"
+              }
+            }
+          },
+          "tx_hash": "0x378309c96d936ace5062c952e15e4de5c0a83b43359f37a0a8bb6a51b9c5bfb9"
+        }
+      },
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999973432",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000001234",
+          "balance_state": {
+            "PendingWithdrawal": {
+              "ready_at": 11
+            }
+          }
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "023271dc3a5516d730ae3010291e503e3a685ef4fc81eb50dbfbd9fec3c52fd235e91aef1674bd4cb1179536e2d3bc06cacf67c9776a2853ba0d8deb930a86ab"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799998198856",
+        "999999999831808",
+        "0"
+      ],
+      "name": "initiate_twice",
+      "receipt": {
+        "gas": [
+          11706,
+          11706
+        ],
+        "gas_value": "187296",
+        "tx": {
+          "events": [],
+          "receipt": {
+            "reverted": {
+              "gas_used": [
+                11706,
+                11706
+              ],
+              "reason": {
+                "message": "The user has already initiated a withdrawal"
+              }
+            }
+          },
+          "tx_hash": "0xbb4b1ffa4cae5d25492b57be4f0b0b6f395e9844b2e6c97410568af1bb2e623e"
+        }
+      },
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999970424",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000001234",
+          "balance_state": {
+            "PendingWithdrawal": {
+              "ready_at": 11
+            }
+          }
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "6f7a187950fcb355bdc9eefd9cebee4730d07c6699309e67103416ea7dd99b1e47947716294cc0a9d37f14d36cee5173d20d7f1e7e44e418fb9e825813a52a67"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799998198856",
+        "999999999831808",
+        "0"
+      ],
+      "name": "wait_for_withdrawal",
+      "receipt": null,
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999970424",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000001234",
+          "balance_state": {
+            "PendingWithdrawal": {
+              "ready_at": 11
+            }
+          }
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "1cb3f7c1b641dd6366ffed16185491c941dee3906ad2f5dc33e34bc56b1e1fff629d18e07561afda29e00162734a0b29b41891eb073c8c2f64ac9640712c050b"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799998198856",
+        "999999999831808",
+        "0"
+      ],
+      "name": "wait_for_withdrawal",
+      "receipt": null,
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999970424",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000001234",
+          "balance_state": {
+            "PendingWithdrawal": {
+              "ready_at": 11
+            }
+          }
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "013bfb42b280c3aa731ae9ee45b7f3adb8949028f54bf11b51dcde577cc5e3eb0c26a035e19f0ce9d1a9ab1659768a4c514ad27102fe1cf74880f521354baedc"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799998198856",
+        "999999999831808",
+        "0"
+      ],
+      "name": "wait_for_withdrawal",
+      "receipt": null,
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999970424",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000001234",
+          "balance_state": {
+            "PendingWithdrawal": {
+              "ready_at": 11
+            }
+          }
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "600260fc415f04d258c356d0a7361579ede50557cc374062c9f0a049359a67c74569ea1d2e17fd9620a6f7be216e827d0f9548494645aa1139598a671dbca100"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999799998198856",
+        "999999999831808",
+        "0"
+      ],
+      "name": "wait_for_withdrawal",
+      "receipt": null,
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999970424",
+          "balance_state": "Active"
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000001234",
+          "balance_state": {
+            "PendingWithdrawal": {
+              "ready_at": 11
+            }
+          }
+        },
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "0b24e49884c894981a20d6af1efc487007b8198ee0ed9b401afa9b2610e82c9662bb74ec9d8a56ea37c3885f4dbabf0e6048381d0f9ba3c3b24041b224d396fd"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999899997967690",
+        "999999999831808",
+        "0"
+      ],
+      "name": "withdraw",
+      "receipt": {
+        "gas": [
+          16600,
+          16600
+        ],
+        "gas_value": "232400",
+        "tx": {
+          "events": [
+            {
+              "key": [
+                83,
+                101,
+                113,
+                117,
+                101,
+                110,
+                99,
+                101,
+                114,
+                82,
+                101,
+                103,
+                105,
+                115,
+                116,
+                114,
+                121,
+                47,
+                87,
+                105,
+                116,
+                104,
+                100,
+                114,
+                101,
+                119
+              ],
+              "tx_hash": [
+                68,
+                32,
+                108,
+                228,
+                23,
+                106,
+                252,
+                203,
+                1,
+                225,
+                183,
+                207,
+                167,
+                58,
+                88,
+                93,
+                19,
+                219,
+                232,
+                150,
+                127,
+                81,
+                158,
+                218,
+                108,
+                228,
+                222,
+                222,
+                118,
+                51,
+                1,
+                102
+              ],
+              "value": [
+                0,
+                2,
+                129,
+                57,
+                119,
+                14,
+                168,
+                125,
+                23,
+                95,
+                86,
+                163,
+                84,
+                102,
+                195,
+                76,
+                126,
+                204,
+                203,
+                141,
+                138,
+                145,
+                180,
+                238,
+                55,
+                162,
+                93,
+                246,
+                15,
+                91,
+                210,
+                236,
+                118,
+                72,
+                23,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0,
+                0
+              ]
+            }
+          ],
+          "receipt": {
+            "successful": {
+              "gas_used": [
+                16600,
+                16600
+              ]
+            }
+          },
+          "tx_hash": "0x44206ce4176afccb01e1b7cfa73a585d13dbe8967f519eda6ce4dede76330166"
+        }
+      },
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999967792",
+          "balance_state": "Active"
+        },
+        null,
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "3ebbdc1a19034fba846278507155894c658f2cd21797a15ff7ca258b3dfd5493117abc924dfe011d57b66c0575a4b8fbd9cb673ec4067551cf27025ed9062f4f"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999899997967690",
+        "999999999831808",
+        "0"
+      ],
+      "name": "escrow",
+      "receipt": null,
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999967792",
+          "balance_state": "Active"
+        },
+        null,
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "99999999223",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "297be6ef77ae8ceae118036dfa6f730e765aa56383fcb7ebba3b50e735738c7347e05c920650ab9fc2cc0877a5df9379ff9f34ebd79d52f9cb6ddf46eceea28c"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999899997967690",
+        "999999999831808",
+        "0"
+      ],
+      "name": "refund",
+      "receipt": null,
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999967792",
+          "balance_state": "Active"
+        },
+        null,
+        {
+          "address": "sov1syuhwr4g05t4744r23nvxnr7en9cmz53knhr0gja7c84k4sw7hu",
+          "balance": "100000000000",
+          "balance_state": "Active"
+        }
+      ],
+      "root": "3ebbdc1a19034fba846278507155894c658f2cd21797a15ff7ca258b3dfd5493117abc924dfe011d57b66c0575a4b8fbd9cb673ec4067551cf27025ed9062f4f"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999899997967690",
+        "999999999831808",
+        "0"
+      ],
+      "name": "slash",
+      "receipt": null,
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999967792",
+          "balance_state": "Active"
+        },
+        null,
+        null
+      ],
+      "root": "3ebbdc1a19034fba846278507155894c658f2cd21797a15ff7ca258b3dfd54932c3d9af0974e02dd4c62cf692aa2f856c5caf6d837fc16690c0392d9ceabae8a"
+    },
+    {
+      "balances": [
+        "1000000000000000",
+        "999899997967690",
+        "999999999831808",
+        "0"
+      ],
+      "name": "refund_after_slashing",
+      "receipt": null,
+      "registrations": [
+        {
+          "address": "sov132yw8ht5p8cetl2jmvknewjawt9xwzdlrk2pyxlnwjyqzfgqj3t",
+          "balance": "99999967792",
+          "balance_state": "Active"
+        },
+        null,
+        null
+      ],
+      "root": "3ebbdc1a19034fba846278507155894c658f2cd21797a15ff7ca258b3dfd54932c3d9af0974e02dd4c62cf692aa2f856c5caf6d837fc16690c0392d9ceabae8a"
+    }
+  ],
+  "chain_hash": [
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11,
+    11
+  ],
+  "source_commit": "509a482949d553e3b178cac77290d9ecea15d9f2"
+}

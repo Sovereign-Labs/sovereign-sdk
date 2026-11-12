@@ -17,7 +17,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 177
+              "ByIndex": 178
             }
           }
         ],
@@ -84,7 +84,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 171
+              "ByIndex": 172
             },
             "doc": ""
           },
@@ -92,7 +92,7 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 175
+              "ByIndex": 176
             },
             "doc": ""
           },
@@ -132,7 +132,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 34
+              "ByIndex": 35
             }
           },
           {
@@ -140,7 +140,7 @@
             "discriminant": 3,
             "template": null,
             "value": {
-              "ByIndex": 37
+              "ByIndex": 38
             }
           },
           {
@@ -148,7 +148,7 @@
             "discriminant": 4,
             "template": null,
             "value": {
-              "ByIndex": 42
+              "ByIndex": 43
             }
           },
           {
@@ -156,7 +156,7 @@
             "discriminant": 5,
             "template": null,
             "value": {
-              "ByIndex": 46
+              "ByIndex": 47
             }
           },
           {
@@ -164,7 +164,7 @@
             "discriminant": 6,
             "template": null,
             "value": {
-              "ByIndex": 55
+              "ByIndex": 56
             }
           },
           {
@@ -172,7 +172,7 @@
             "discriminant": 7,
             "template": null,
             "value": {
-              "ByIndex": 57
+              "ByIndex": 58
             }
           },
           {
@@ -180,7 +180,7 @@
             "discriminant": 8,
             "template": null,
             "value": {
-              "ByIndex": 60
+              "ByIndex": 61
             }
           },
           {
@@ -188,7 +188,7 @@
             "discriminant": 9,
             "template": null,
             "value": {
-              "ByIndex": 61
+              "ByIndex": 62
             }
           },
           {
@@ -196,7 +196,7 @@
             "discriminant": 10,
             "template": null,
             "value": {
-              "ByIndex": 90
+              "ByIndex": 91
             }
           },
           {
@@ -204,7 +204,7 @@
             "discriminant": 11,
             "template": null,
             "value": {
-              "ByIndex": 95
+              "ByIndex": 96
             }
           },
           {
@@ -212,7 +212,7 @@
             "discriminant": 12,
             "template": null,
             "value": {
-              "ByIndex": 104
+              "ByIndex": 105
             }
           },
           {
@@ -220,7 +220,7 @@
             "discriminant": 13,
             "template": null,
             "value": {
-              "ByIndex": 114
+              "ByIndex": 115
             }
           },
           {
@@ -228,7 +228,7 @@
             "discriminant": 14,
             "template": null,
             "value": {
-              "ByIndex": 115
+              "ByIndex": 116
             }
           },
           {
@@ -236,7 +236,7 @@
             "discriminant": 15,
             "template": null,
             "value": {
-              "ByIndex": 135
+              "ByIndex": 136
             }
           },
           {
@@ -244,7 +244,7 @@
             "discriminant": 16,
             "template": null,
             "value": {
-              "ByIndex": 152
+              "ByIndex": 153
             }
           },
           {
@@ -252,7 +252,7 @@
             "discriminant": 17,
             "template": null,
             "value": {
-              "ByIndex": 166
+              "ByIndex": 167
             }
           }
         ],
@@ -887,6 +887,14 @@
             "value": {
               "ByIndex": 33
             }
+          },
+          {
+            "name": "UpdateDaAddress",
+            "discriminant": 4,
+            "template": null,
+            "value": {
+              "ByIndex": 34
+            }
           }
         ],
         "hide_tag": false
@@ -998,6 +1006,31 @@
       }
     },
     {
+      "Struct": {
+        "type_name": "__SovVirtualWallet_CallMessage_UpdateDaAddress",
+        "template": null,
+        "peekable": false,
+        "fields": [
+          {
+            "display_name": "old_da_address",
+            "silent": false,
+            "value": {
+              "ByIndex": 30
+            },
+            "doc": ""
+          },
+          {
+            "display_name": "new_da_address",
+            "silent": false,
+            "value": {
+              "ByIndex": 30
+            },
+            "doc": ""
+          }
+        ]
+      }
+    },
+    {
       "Tuple": {
         "type_name": null,
         "template": null,
@@ -1005,7 +1038,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 35
+              "ByIndex": 36
             },
             "silent": false,
             "doc": ""
@@ -1022,7 +1055,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 36
+              "ByIndex": 37
             }
           }
         ],
@@ -1054,7 +1087,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 38
+              "ByIndex": 39
             },
             "silent": false,
             "doc": ""
@@ -1071,7 +1104,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 39
+              "ByIndex": 40
             }
           },
           {
@@ -1091,7 +1124,7 @@
             "discriminant": 3,
             "template": null,
             "value": {
-              "ByIndex": 40
+              "ByIndex": 41
             }
           },
           {
@@ -1105,7 +1138,7 @@
             "discriminant": 5,
             "template": null,
             "value": {
-              "ByIndex": 41
+              "ByIndex": 42
             }
           }
         ],
@@ -1168,7 +1201,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 43
+              "ByIndex": 44
             },
             "silent": false,
             "doc": ""
@@ -1185,7 +1218,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 44
+              "ByIndex": 45
             }
           },
           {
@@ -1193,7 +1226,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 45
+              "ByIndex": 46
             }
           },
           {
@@ -1246,7 +1279,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 47
+              "ByIndex": 48
             },
             "silent": false,
             "doc": ""
@@ -1263,7 +1296,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 48
+              "ByIndex": 49
             }
           },
           {
@@ -1271,7 +1304,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 51
+              "ByIndex": 52
             }
           },
           {
@@ -1279,7 +1312,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 52
+              "ByIndex": 53
             }
           },
           {
@@ -1287,7 +1320,7 @@
             "discriminant": 3,
             "template": null,
             "value": {
-              "ByIndex": 53
+              "ByIndex": 54
             }
           },
           {
@@ -1295,7 +1328,7 @@
             "discriminant": 4,
             "template": null,
             "value": {
-              "ByIndex": 54
+              "ByIndex": 55
             }
           }
         ],
@@ -1310,7 +1343,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 49
+              "ByIndex": 50
             },
             "silent": false,
             "doc": ""
@@ -1326,7 +1359,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "silent": false,
             "doc": ""
@@ -1373,7 +1406,7 @@
             "display_name": "credential",
             "silent": false,
             "value": {
-              "ByIndex": 49
+              "ByIndex": 50
             },
             "doc": ""
           }
@@ -1398,7 +1431,7 @@
             "display_name": "credential",
             "silent": false,
             "value": {
-              "ByIndex": 49
+              "ByIndex": 50
             },
             "doc": ""
           }
@@ -1423,7 +1456,7 @@
             "display_name": "old_credential",
             "silent": false,
             "value": {
-              "ByIndex": 49
+              "ByIndex": 50
             },
             "doc": ""
           },
@@ -1431,7 +1464,7 @@
             "display_name": "new_credential",
             "silent": false,
             "value": {
-              "ByIndex": 49
+              "ByIndex": 50
             },
             "doc": ""
           }
@@ -1468,7 +1501,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 56
+              "ByIndex": 57
             },
             "silent": false,
             "doc": ""
@@ -1491,7 +1524,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 58
+              "ByIndex": 59
             },
             "silent": false,
             "doc": ""
@@ -1514,7 +1547,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 59
+              "ByIndex": 60
             }
           }
         ],
@@ -1551,7 +1584,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 56
+              "ByIndex": 57
             },
             "silent": false,
             "doc": ""
@@ -1567,7 +1600,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 62
+              "ByIndex": 63
             },
             "silent": false,
             "doc": ""
@@ -1584,7 +1617,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 63
+              "ByIndex": 64
             }
           },
           {
@@ -1592,7 +1625,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 79
+              "ByIndex": 80
             }
           },
           {
@@ -1600,7 +1633,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 80
+              "ByIndex": 81
             }
           }
         ],
@@ -1617,7 +1650,7 @@
             "display_name": "policy",
             "silent": false,
             "value": {
-              "ByIndex": 64
+              "ByIndex": 65
             },
             "doc": ""
           }
@@ -1634,7 +1667,7 @@
             "display_name": "default_payee_policy",
             "silent": false,
             "value": {
-              "ByIndex": 65
+              "ByIndex": 66
             },
             "doc": ""
           },
@@ -1642,7 +1675,7 @@
             "display_name": "payees",
             "silent": false,
             "value": {
-              "ByIndex": 74
+              "ByIndex": 75
             },
             "doc": ""
           },
@@ -1658,7 +1691,7 @@
             "display_name": "authorized_sequencers",
             "silent": false,
             "value": {
-              "ByIndex": 76
+              "ByIndex": 77
             },
             "doc": ""
           }
@@ -1674,7 +1707,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 66
+              "ByIndex": 67
             }
           },
           {
@@ -1705,7 +1738,7 @@
             "display_name": "gas_limit",
             "silent": false,
             "value": {
-              "ByIndex": 67
+              "ByIndex": 68
             },
             "doc": ""
           },
@@ -1713,7 +1746,7 @@
             "display_name": "max_gas_price",
             "silent": false,
             "value": {
-              "ByIndex": 70
+              "ByIndex": 71
             },
             "doc": ""
           },
@@ -1721,7 +1754,7 @@
             "display_name": "transaction_limit",
             "silent": false,
             "value": {
-              "ByIndex": 73
+              "ByIndex": 74
             },
             "doc": ""
           }
@@ -1731,7 +1764,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 68
+          "ByIndex": 69
         }
       }
     },
@@ -1743,7 +1776,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 69
+              "ByIndex": 70
             },
             "silent": false,
             "doc": ""
@@ -1767,7 +1800,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 71
+          "ByIndex": 72
         }
       }
     },
@@ -1781,7 +1814,7 @@
             "display_name": "value",
             "silent": false,
             "value": {
-              "ByIndex": 72
+              "ByIndex": 73
             },
             "doc": ""
           }
@@ -1811,7 +1844,7 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 75
+          "ByIndex": 76
         }
       }
     },
@@ -1830,7 +1863,7 @@
           },
           {
             "value": {
-              "ByIndex": 65
+              "ByIndex": 66
             },
             "silent": false,
             "doc": ""
@@ -1853,7 +1886,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 77
+              "ByIndex": 78
             }
           }
         ],
@@ -1868,7 +1901,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 78
+              "ByIndex": 79
             },
             "silent": false,
             "doc": ""
@@ -1918,7 +1951,7 @@
             "display_name": "update",
             "silent": false,
             "value": {
-              "ByIndex": 81
+              "ByIndex": 82
             },
             "doc": ""
           }
@@ -1935,7 +1968,7 @@
             "display_name": "sequencer_update",
             "silent": false,
             "value": {
-              "ByIndex": 82
+              "ByIndex": 83
             },
             "doc": ""
           },
@@ -1943,7 +1976,7 @@
             "display_name": "updaters_to_add",
             "silent": false,
             "value": {
-              "ByIndex": 87
+              "ByIndex": 88
             },
             "doc": ""
           },
@@ -1951,7 +1984,7 @@
             "display_name": "updaters_to_remove",
             "silent": false,
             "value": {
-              "ByIndex": 87
+              "ByIndex": 88
             },
             "doc": ""
           },
@@ -1959,7 +1992,7 @@
             "display_name": "payee_policies_to_set",
             "silent": false,
             "value": {
-              "ByIndex": 88
+              "ByIndex": 89
             },
             "doc": ""
           },
@@ -1967,7 +2000,7 @@
             "display_name": "payee_policies_to_delete",
             "silent": false,
             "value": {
-              "ByIndex": 87
+              "ByIndex": 88
             },
             "doc": ""
           },
@@ -1975,7 +2008,7 @@
             "display_name": "default_policy",
             "silent": false,
             "value": {
-              "ByIndex": 89
+              "ByIndex": 90
             },
             "doc": ""
           }
@@ -1985,7 +2018,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 83
+          "ByIndex": 84
         }
       }
     },
@@ -2004,7 +2037,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 84
+              "ByIndex": 85
             }
           }
         ],
@@ -2019,7 +2052,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 85
+              "ByIndex": 86
             },
             "silent": false,
             "doc": ""
@@ -2037,7 +2070,7 @@
             "display_name": "to_add",
             "silent": false,
             "value": {
-              "ByIndex": 86
+              "ByIndex": 87
             },
             "doc": ""
           },
@@ -2045,7 +2078,7 @@
             "display_name": "to_remove",
             "silent": false,
             "value": {
-              "ByIndex": 86
+              "ByIndex": 87
             },
             "doc": ""
           }
@@ -2055,7 +2088,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 78
+          "ByIndex": 79
         }
       }
     },
@@ -2069,14 +2102,14 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 74
+          "ByIndex": 75
         }
       }
     },
     {
       "Option": {
         "value": {
-          "ByIndex": 65
+          "ByIndex": 66
         }
       }
     },
@@ -2088,7 +2121,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 91
+              "ByIndex": 92
             },
             "silent": false,
             "doc": ""
@@ -2117,7 +2150,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 92
+              "ByIndex": 93
             }
           },
           {
@@ -2125,7 +2158,7 @@
             "discriminant": 3,
             "template": null,
             "value": {
-              "ByIndex": 93
+              "ByIndex": 94
             }
           },
           {
@@ -2133,7 +2166,7 @@
             "discriminant": 4,
             "template": null,
             "value": {
-              "ByIndex": 94
+              "ByIndex": 95
             }
           }
         ],
@@ -2204,7 +2237,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 96
+              "ByIndex": 97
             },
             "silent": false,
             "doc": ""
@@ -2221,7 +2254,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 97
+              "ByIndex": 98
             }
           },
           {
@@ -2229,7 +2262,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 100
+              "ByIndex": 101
             }
           },
           {
@@ -2237,7 +2270,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 101
+              "ByIndex": 102
             }
           }
         ],
@@ -2267,7 +2300,7 @@
             "display_name": "recipient",
             "silent": false,
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "doc": ""
           },
@@ -2275,7 +2308,7 @@
             "display_name": "body",
             "silent": false,
             "value": {
-              "ByIndex": 98
+              "ByIndex": 99
             },
             "doc": ""
           },
@@ -2283,7 +2316,7 @@
             "display_name": "metadata",
             "silent": false,
             "value": {
-              "ByIndex": 99
+              "ByIndex": 100
             },
             "doc": ""
           },
@@ -2329,7 +2362,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 98
+          "ByIndex": 99
         }
       }
     },
@@ -2343,7 +2376,7 @@
             "display_name": "metadata",
             "silent": false,
             "value": {
-              "ByIndex": 98
+              "ByIndex": 99
             },
             "doc": ""
           },
@@ -2351,7 +2384,7 @@
             "display_name": "message",
             "silent": false,
             "value": {
-              "ByIndex": 98
+              "ByIndex": 99
             },
             "doc": ""
           }
@@ -2368,7 +2401,7 @@
             "display_name": "validator_address",
             "silent": false,
             "value": {
-              "ByIndex": 102
+              "ByIndex": 103
             },
             "doc": ""
           },
@@ -2384,7 +2417,7 @@
             "display_name": "signature",
             "silent": false,
             "value": {
-              "ByIndex": 103
+              "ByIndex": 104
             },
             "doc": ""
           }
@@ -2441,7 +2474,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 105
+              "ByIndex": 106
             },
             "silent": false,
             "doc": ""
@@ -2458,7 +2491,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 106
+              "ByIndex": 107
             }
           },
           {
@@ -2466,7 +2499,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 112
+              "ByIndex": 113
             }
           },
           {
@@ -2474,7 +2507,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 113
+              "ByIndex": 114
             }
           }
         ],
@@ -2491,7 +2524,7 @@
             "display_name": "domain_oracle_data",
             "silent": false,
             "value": {
-              "ByIndex": 107
+              "ByIndex": 108
             },
             "doc": ""
           },
@@ -2499,7 +2532,7 @@
             "display_name": "domain_default_gas",
             "silent": false,
             "value": {
-              "ByIndex": 110
+              "ByIndex": 111
             },
             "doc": ""
           },
@@ -2525,7 +2558,7 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 108
+          "ByIndex": 109
         }
       }
     },
@@ -2552,7 +2585,7 @@
             "display_name": "data_value",
             "silent": false,
             "value": {
-              "ByIndex": 109
+              "ByIndex": 110
             },
             "doc": ""
           }
@@ -2592,7 +2625,7 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 111
+          "ByIndex": 112
         }
       }
     },
@@ -2649,7 +2682,7 @@
             "display_name": "oracle_data",
             "silent": false,
             "value": {
-              "ByIndex": 109
+              "ByIndex": 110
             },
             "doc": ""
           }
@@ -2701,7 +2734,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 116
+              "ByIndex": 117
             },
             "silent": false,
             "doc": ""
@@ -2718,7 +2751,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 117
+              "ByIndex": 118
             }
           },
           {
@@ -2726,7 +2759,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 129
+              "ByIndex": 130
             }
           },
           {
@@ -2734,7 +2767,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 132
+              "ByIndex": 133
             }
           },
           {
@@ -2742,7 +2775,7 @@
             "discriminant": 3,
             "template": null,
             "value": {
-              "ByIndex": 133
+              "ByIndex": 134
             }
           },
           {
@@ -2750,7 +2783,7 @@
             "discriminant": 4,
             "template": null,
             "value": {
-              "ByIndex": 134
+              "ByIndex": 135
             }
           }
         ],
@@ -2767,7 +2800,7 @@
             "display_name": "admin",
             "silent": false,
             "value": {
-              "ByIndex": 118
+              "ByIndex": 119
             },
             "doc": ""
           },
@@ -2775,7 +2808,7 @@
             "display_name": "token_source",
             "silent": false,
             "value": {
-              "ByIndex": 120
+              "ByIndex": 121
             },
             "doc": ""
           },
@@ -2783,7 +2816,7 @@
             "display_name": "ism",
             "silent": false,
             "value": {
-              "ByIndex": 123
+              "ByIndex": 124
             },
             "doc": ""
           },
@@ -2791,7 +2824,7 @@
             "display_name": "remote_routers",
             "silent": false,
             "value": {
-              "ByIndex": 127
+              "ByIndex": 128
             },
             "doc": ""
           },
@@ -2845,7 +2878,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 119
+              "ByIndex": 120
             }
           }
         ],
@@ -2877,7 +2910,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 121
+              "ByIndex": 122
             }
           },
           {
@@ -2885,7 +2918,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 122
+              "ByIndex": 123
             }
           },
           {
@@ -2908,7 +2941,7 @@
             "display_name": "remote_token_id",
             "silent": false,
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "doc": ""
           },
@@ -2968,7 +3001,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 124
+              "ByIndex": 125
             }
           },
           {
@@ -2976,7 +3009,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 125
+              "ByIndex": 126
             }
           }
         ],
@@ -2993,7 +3026,7 @@
             "display_name": "relayer",
             "silent": false,
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "doc": ""
           }
@@ -3010,7 +3043,7 @@
             "display_name": "validators",
             "silent": false,
             "value": {
-              "ByIndex": 126
+              "ByIndex": 127
             },
             "doc": ""
           },
@@ -3033,14 +3066,14 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 102
+          "ByIndex": 103
         }
       }
     },
     {
       "Vec": {
         "value": {
-          "ByIndex": 128
+          "ByIndex": 129
         }
       }
     },
@@ -3064,7 +3097,7 @@
           },
           {
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "silent": false,
             "doc": ""
@@ -3082,7 +3115,7 @@
             "display_name": "warp_route",
             "silent": false,
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "doc": ""
           },
@@ -3090,7 +3123,7 @@
             "display_name": "admin",
             "silent": false,
             "value": {
-              "ByIndex": 130
+              "ByIndex": 131
             },
             "doc": ""
           },
@@ -3098,7 +3131,7 @@
             "display_name": "ism",
             "silent": false,
             "value": {
-              "ByIndex": 131
+              "ByIndex": 132
             },
             "doc": ""
           },
@@ -3140,14 +3173,14 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 118
+          "ByIndex": 119
         }
       }
     },
     {
       "Option": {
         "value": {
-          "ByIndex": 123
+          "ByIndex": 124
         }
       }
     },
@@ -3161,7 +3194,7 @@
             "display_name": "warp_route",
             "silent": false,
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "doc": ""
           },
@@ -3182,7 +3215,7 @@
             "display_name": "remote_router_address",
             "silent": false,
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "doc": ""
           }
@@ -3199,7 +3232,7 @@
             "display_name": "warp_route",
             "silent": false,
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "doc": ""
           },
@@ -3229,7 +3262,7 @@
             "display_name": "warp_route",
             "silent": false,
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "doc": ""
           },
@@ -3250,7 +3283,7 @@
             "display_name": "recipient",
             "silent": false,
             "value": {
-              "ByIndex": 50
+              "ByIndex": 51
             },
             "doc": ""
           },
@@ -3289,7 +3322,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 136
+              "ByIndex": 137
             },
             "silent": false,
             "doc": ""
@@ -3306,7 +3339,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 137
+              "ByIndex": 138
             }
           },
           {
@@ -3314,7 +3347,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 139
+              "ByIndex": 140
             }
           },
           {
@@ -3322,7 +3355,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 149
+              "ByIndex": 150
             }
           }
         ],
@@ -3337,7 +3370,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 138
+              "ByIndex": 139
             },
             "silent": false,
             "doc": ""
@@ -3374,7 +3407,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 140
+              "ByIndex": 141
             },
             "silent": false,
             "doc": ""
@@ -3392,7 +3425,7 @@
             "display_name": "new_hardfork",
             "silent": false,
             "value": {
-              "ByIndex": 141
+              "ByIndex": 142
             },
             "doc": ""
           },
@@ -3400,7 +3433,7 @@
             "display_name": "new_contract_creation_policy",
             "silent": false,
             "value": {
-              "ByIndex": 143
+              "ByIndex": 144
             },
             "doc": ""
           },
@@ -3408,7 +3441,7 @@
             "display_name": "chain_spec_update",
             "silent": false,
             "value": {
-              "ByIndex": 146
+              "ByIndex": 147
             },
             "doc": ""
           },
@@ -3426,7 +3459,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 142
+          "ByIndex": 143
         }
       }
     },
@@ -3466,7 +3499,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 144
+          "ByIndex": 145
         }
       }
     },
@@ -3485,7 +3518,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 145
+              "ByIndex": 146
             }
           }
         ],
@@ -3502,7 +3535,7 @@
             "display_name": "add",
             "silent": false,
             "value": {
-              "ByIndex": 126
+              "ByIndex": 127
             },
             "doc": ""
           },
@@ -3510,7 +3543,7 @@
             "display_name": "remove",
             "silent": false,
             "value": {
-              "ByIndex": 126
+              "ByIndex": 127
             },
             "doc": ""
           }
@@ -3520,7 +3553,7 @@
     {
       "Option": {
         "value": {
-          "ByIndex": 147
+          "ByIndex": 148
         }
       }
     },
@@ -3534,7 +3567,7 @@
             "display_name": "new_limit_contract_code_size",
             "silent": false,
             "value": {
-              "ByIndex": 148
+              "ByIndex": 149
             },
             "doc": ""
           },
@@ -3542,7 +3575,7 @@
             "display_name": "new_block_gas_limit",
             "silent": false,
             "value": {
-              "ByIndex": 73
+              "ByIndex": 74
             },
             "doc": ""
           },
@@ -3550,7 +3583,7 @@
             "display_name": "new_tx_gas_limit",
             "silent": false,
             "value": {
-              "ByIndex": 73
+              "ByIndex": 74
             },
             "doc": ""
           }
@@ -3577,7 +3610,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 150
+              "ByIndex": 151
             },
             "silent": false,
             "doc": ""
@@ -3595,7 +3628,7 @@
             "display_name": "add",
             "silent": false,
             "value": {
-              "ByIndex": 151
+              "ByIndex": 152
             },
             "doc": ""
           },
@@ -3603,7 +3636,7 @@
             "display_name": "remove",
             "silent": false,
             "value": {
-              "ByIndex": 151
+              "ByIndex": 152
             },
             "doc": ""
           }
@@ -3625,7 +3658,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 153
+              "ByIndex": 154
             },
             "silent": false,
             "doc": ""
@@ -3642,7 +3675,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 154
+              "ByIndex": 155
             }
           },
           {
@@ -3650,7 +3683,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 155
+              "ByIndex": 156
             }
           },
           {
@@ -3658,7 +3691,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 157
+              "ByIndex": 158
             }
           },
           {
@@ -3666,7 +3699,7 @@
             "discriminant": 3,
             "template": null,
             "value": {
-              "ByIndex": 158
+              "ByIndex": 159
             }
           },
           {
@@ -3674,7 +3707,7 @@
             "discriminant": 4,
             "template": null,
             "value": {
-              "ByIndex": 159
+              "ByIndex": 160
             }
           },
           {
@@ -3682,7 +3715,7 @@
             "discriminant": 5,
             "template": null,
             "value": {
-              "ByIndex": 160
+              "ByIndex": 161
             }
           },
           {
@@ -3696,7 +3729,7 @@
             "discriminant": 7,
             "template": null,
             "value": {
-              "ByIndex": 161
+              "ByIndex": 162
             }
           },
           {
@@ -3704,7 +3737,7 @@
             "discriminant": 8,
             "template": null,
             "value": {
-              "ByIndex": 162
+              "ByIndex": 163
             }
           },
           {
@@ -3718,7 +3751,7 @@
             "discriminant": 10,
             "template": null,
             "value": {
-              "ByIndex": 163
+              "ByIndex": 164
             }
           },
           {
@@ -3726,7 +3759,7 @@
             "discriminant": 11,
             "template": null,
             "value": {
-              "ByIndex": 164
+              "ByIndex": 165
             }
           },
           {
@@ -3734,7 +3767,7 @@
             "discriminant": 12,
             "template": null,
             "value": {
-              "ByIndex": 165
+              "ByIndex": 166
             }
           }
         ],
@@ -3812,7 +3845,7 @@
             "display_name": "content",
             "silent": false,
             "value": {
-              "ByIndex": 156
+              "ByIndex": 157
             },
             "doc": ""
           }
@@ -4105,7 +4138,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 167
+              "ByIndex": 168
             },
             "silent": false,
             "doc": ""
@@ -4122,7 +4155,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 168
+              "ByIndex": 169
             }
           },
           {
@@ -4130,7 +4163,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 169
+              "ByIndex": 170
             }
           },
           {
@@ -4138,7 +4171,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 170
+              "ByIndex": 171
             }
           }
         ],
@@ -4259,7 +4292,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 172
+              "ByIndex": 173
             }
           },
           {
@@ -4267,7 +4300,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 173
+              "ByIndex": 174
             }
           },
           {
@@ -4275,7 +4308,7 @@
             "discriminant": 2,
             "template": null,
             "value": {
-              "ByIndex": 174
+              "ByIndex": 175
             }
           }
         ],
@@ -4355,7 +4388,7 @@
             "display_name": "max_priority_fee_bips",
             "silent": false,
             "value": {
-              "ByIndex": 176
+              "ByIndex": 177
             },
             "doc": ""
           },
@@ -4371,7 +4404,7 @@
             "display_name": "gas_limit",
             "silent": false,
             "value": {
-              "ByIndex": 67
+              "ByIndex": 68
             },
             "doc": ""
           },
@@ -4420,7 +4453,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 178
+              "ByIndex": 179
             },
             "silent": false,
             "doc": ""
@@ -4438,7 +4471,7 @@
             "display_name": "signatures",
             "silent": false,
             "value": {
-              "ByIndex": 179
+              "ByIndex": 180
             },
             "doc": ""
           },
@@ -4446,7 +4479,7 @@
             "display_name": "unused_pub_keys",
             "silent": false,
             "value": {
-              "ByIndex": 181
+              "ByIndex": 182
             },
             "doc": ""
           },
@@ -4475,7 +4508,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 171
+              "ByIndex": 172
             },
             "doc": ""
           },
@@ -4483,7 +4516,7 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 175
+              "ByIndex": 176
             },
             "doc": ""
           },
@@ -4501,7 +4534,7 @@
     {
       "Vec": {
         "value": {
-          "ByIndex": 180
+          "ByIndex": 181
         }
       }
     },
@@ -4561,7 +4594,7 @@
             "discriminant": 0,
             "template": null,
             "value": {
-              "ByIndex": 183
+              "ByIndex": 184
             }
           },
           {
@@ -4569,7 +4602,7 @@
             "discriminant": 1,
             "template": null,
             "value": {
-              "ByIndex": 185
+              "ByIndex": 186
             }
           }
         ],
@@ -4584,7 +4617,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 184
+              "ByIndex": 185
             },
             "silent": false,
             "doc": ""
@@ -4610,7 +4643,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 171
+              "ByIndex": 172
             },
             "doc": ""
           },
@@ -4618,7 +4651,7 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 175
+              "ByIndex": 176
             },
             "doc": ""
           },
@@ -4654,7 +4687,7 @@
         "fields": [
           {
             "value": {
-              "ByIndex": 186
+              "ByIndex": 187
             },
             "silent": false,
             "doc": ""
@@ -4680,7 +4713,7 @@
             "display_name": "uniqueness",
             "silent": false,
             "value": {
-              "ByIndex": 171
+              "ByIndex": 172
             },
             "doc": ""
           },
@@ -4688,7 +4721,7 @@
             "display_name": "details",
             "silent": false,
             "value": {
-              "ByIndex": 175
+              "ByIndex": 176
             },
             "doc": ""
           },
@@ -4727,7 +4760,7 @@
   ],
   "root_type_indices": [
     0,
-    182,
+    183,
     3,
     9
   ],
@@ -5129,6 +5162,9 @@
         },
         {
           "name": "withdraw"
+        },
+        {
+          "name": "update_da_address"
         }
       ]
     },
@@ -5171,6 +5207,17 @@
       "fields_or_variants": [
         {
           "name": "da_address"
+        }
+      ]
+    },
+    {
+      "name": "__SovVirtualWallet_CallMessage_UpdateDaAddress",
+      "fields_or_variants": [
+        {
+          "name": "old_da_address"
+        },
+        {
+          "name": "new_da_address"
         }
       ]
     },
