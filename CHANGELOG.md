@@ -1,3 +1,5 @@
+# 2026-11-08
+- #3118 Tests: Replace the positional-argument `create_test_rollup` wrappers in sov-sequencer tests with `create_test_rollup()` and `create_test_rollup_with(...)` builder overrides.
 # 2026-11-02
 - #3106 Dependencies: Updated `quinn-proto` to 0.11.15 (GHSA-4w2j-m93h-cj5j), `rustls` to 0.23.45 (GHSA-2mjx-qc3c-rqvc), `serde_with` to 3.21.0 (GHSA-7gcf-g7xr-8hxj; the workspace now requires `serde_with = "3.21"`) and `pyo3` to 0.29 (`py_sovereign_web3` only). To apply the same updates to a rollup (e.g. rollup-starter), run these commands in the workspace root and again in each zkVM guest crate with `--manifest-path <guest>/Cargo.toml`, skipping any package that isn't in that lockfile:
     - `cargo update -p quinn-proto --precise 0.11.15`
