@@ -340,6 +340,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             node_id,
             client,
             da_service,
+            _shutdown_on_drop: ShutdownOnDrop(primary_shutdown.clone()),
             primary_shutdown,
             secondary_test_sequencer_client: None,
             _secondary_sequencer_state_sender: None,
@@ -731,6 +732,22 @@ pub struct TestRollup<R: FullNodeBlueprint<Native>> {
     #[allow(dead_code)]
     _secondary_sequencer_state_sender:
         Option<watch::Sender<StateUpdateInfo<<R::Spec as Spec>::Storage>>>,
+    _shutdown_on_drop: ShutdownOnDrop,
+}
+
+/// Triggers the rollup's primary shutdown when the owning [`TestRollup`] is dropped.
+///
+/// Lives in a field rather than as `impl Drop for TestRollup`, so callers can still move
+/// fields like `rollup_task` out of a `TestRollup`. Dropping only sends the signal; use
+/// [`TestRollup::shutdown`] to wait for the node to stop.
+struct ShutdownOnDrop(PrimaryShutdownController);
+
+impl Drop for ShutdownOnDrop {
+    fn drop(&mut self) {
+        if !self.0.is_triggered() {
+            self.0.shutdown();
+        }
+    }
 }
 
 impl<R> TestRollup<R>

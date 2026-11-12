@@ -1,6 +1,7 @@
 # 2026-11-08
 - #3118 Tests: Replace the positional-argument `create_test_rollup` wrappers in sov-sequencer tests with `create_test_rollup()` and `create_test_rollup_with(...)` builder overrides.
 - #3119 Tests: Share `query_set_value` and `tx_set_value_nonce` across sov-sequencer integration tests.
+- #3123 Tests: Dropping a `TestRollup` now triggers the rollup shutdown signal, so a panicking test no longer leaks the node.
 # 2026-11-05
 - #3122 Tests: Split the sov-sequencer `preferred_end_to_end.rs` integration tests into a `preferred_end_to_end/` module with one file per concern.
 # 2026-11-02
