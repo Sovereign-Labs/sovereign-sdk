@@ -43,6 +43,13 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
     }
 
     async fn shutdown_on_error(&self) {
+        // The side effects task stops consuming events once it has triggered a shutdown after a
+        // failure, so a closed channel is expected from then on. Exiting here would cut the
+        // graceful shutdown short.
+        if self.primary_shutdown.is_triggered() {
+            tracing::debug!("Dropped an executor event because the rollup is shutting down");
+            return;
+        }
         tracing::error!("Failed to send executor event because the receiver was dropped. This indicates that the database is no longer available. Shutting down.");
         exit_rollup(&self.primary_shutdown).await;
     }
@@ -428,4 +435,36 @@ pub(crate) struct AcceptedTxEventContents<S: Spec, Rt: Runtime<S>> {
     pub oneshot_sender: oneshot::Sender<AcceptedTx<Confirmation<S, Rt>>>,
     pub sequence_number: SequenceNumber,
     pub tx_idx_within_batch: u64,
+}
+
+#[cfg(test)]
+mod tests {
+    use sov_test_utils::{generate_optimistic_runtime, TestSpec as S};
+
+    use super::*;
+
+    generate_optimistic_runtime!(TestRuntime <= );
+
+    /// The side effects task closes the channel once it has triggered a shutdown after a
+    /// failure. Senders must put up with that instead of forcing the process to exit.
+    #[tokio::test]
+    async fn test_sending_to_a_closed_channel_is_tolerated_while_shutting_down() {
+        let primary_shutdown = PrimaryShutdownController::new();
+        let (mut sender, receiver) = ExecutorEventsSender::<S, TestRuntime<S>>::new(
+            primary_shutdown.clone(),
+            BlobsCache::new(Default::default(), None, primary_shutdown.clone()),
+        );
+        primary_shutdown.shutdown();
+        drop(receiver);
+
+        // A sender that does not tolerate the closed channel never returns: it waits a few
+        // seconds for logs to be flushed and then exits the process.
+        let send_result =
+            tokio::time::timeout(std::time::Duration::from_secs(1), sender.prune(0x1234)).await;
+
+        assert!(
+            send_result.is_ok(),
+            "Sending to a closed channel should return straight away while shutting down"
+        );
+    }
 }
