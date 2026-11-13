@@ -8,6 +8,7 @@
     - `cargo update -p serde_with --precise 3.21.0` (3.23+ pulls in `syn` 3, `darling` 0.24 and `base64` 0.23 as duplicate majors)
 - #3100 Tests: Surface hidden sequencer test failures, bound `TestRollup::wait_for_height` by `POLLING_TIMEOUT`, and replace blob-publication sleeps with `TestRollup::force_close_batch_and_wait_for_publication`.
 - #3101 Tests: Re-enable passing ignored sequencer tests and run `heavy_` tests in the nightly workflow.
+- #3103 Tests: Add `RollupBuilder::with_preferred_seq_config` for adjusting the preferred sequencer config in tests; it panics instead of silently skipping when no preferred sequencer is configured.
 # 2026-10-21
 - #3080 DB: Added optional `storage.live_db_path` and `storage.user_nomt_db_path` config values, which set exact directories for the live state DB and the user NOMT DB (alongside the existing `storage.ledger_db_path`). When unset, databases stay under `storage.path` as before. Relative paths are resolved from the process working directory.
     - **Breaking Change** Migrations: `migrate_to_v1` and `mockda-to-celestia-migrate` accept `--live-db-path`, `--ledger-db-path` and `--user-nomt-db-path` overrides. `--db-path` now refuses to run if the rollup config sets a per-DB path that isn't overridden too, because that DB would otherwise be migrated at its original location. `sov_migrations::MigrationArgs::db_path` is replaced by `db_paths: DbPathOverrides`, and `load_storage_config` takes `&DbPathOverrides`.
