@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 
+use sov_bank::derived_holder::DerivedHolder;
 use sov_bank::error::TransferTokenError;
 use sov_bank::{config_gas_token_id, Coins, IntoPayable, Payable};
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -66,6 +67,62 @@ impl<S: Spec> SequencerRegistry<S> {
                     &KnownSequencer {
                         address,
                         balance: new_balance,
+                        balance_state,
+                    },
+                    state,
+                )
+                .unwrap_infallible();
+
+            Ok(())
+        } else {
+            anyhow::bail!("Sequencer {} is not registered", sequencer)
+        }
+    }
+
+    /// Decrements the sequencer's balance by the requested amount without modifying user space
+    pub fn reserve_part_of_the_stake<
+        Accessor: StateWriter<Kernel, Error = Infallible> + StateReader<Kernel, Error = Infallible>,
+    >(
+        &mut self,
+        sequencer: &<S::Da as DaSpec>::Address,
+        holder: &DerivedHolder,
+        amount: Amount,
+        state: &mut Accessor,
+    ) -> Result<(), anyhow::Error> {
+        if let Some(KnownSequencer {
+            address,
+            balance,
+            balance_state,
+        }) = self
+            .known_sequencers
+            .get(sequencer, state)
+            .unwrap_infallible()
+        {
+            // The sequencer has to be active in order to use their stake for blob submission.
+            if balance_state != BalanceState::Active {
+                anyhow::bail!("Sequencer {} is not active", sequencer);
+            }
+            let new_sequencer_balance = balance.checked_sub(amount).ok_or_else(|| {
+                anyhow::anyhow!(
+                    "Sequencer's: {} stake is too low. Current stake: {}, amount to deduct: {}",
+                    sequencer,
+                    balance,
+                    amount
+                )
+            })?;
+
+            assert!(self
+                .escrow
+                .get(holder, state)
+                .unwrap_infallible().is_none(), "Duplicate writes to a single derived holder {holder}. This is a bug, please report it.");
+            self.escrow.set(holder, &amount, state).unwrap_infallible();
+
+            self.known_sequencers
+                .set(
+                    sequencer,
+                    &KnownSequencer {
+                        address,
+                        balance: new_sequencer_balance,
                         balance_state,
                     },
                     state,

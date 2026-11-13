@@ -69,12 +69,12 @@ impl<S: Spec> BlobStorage<S> {
             return None;
         }
 
-        // If the blobs are being deferred, we store the balance per sequencer in separate derived accounts.
+        // If the blobs are being deferred, we store the balance per blob in separate derived escrow slots in the sequencer registry.
         if account_for_deferral {
-            let new_holder: DerivedHolder = self.compute_derived_holder(&blob, idx, state);
-            if let Err(e) = self.sequencer_registry.remove_part_of_the_stake(
+            let new_holder = self.compute_derived_holder(&blob, idx, state);
+            if let Err(e) = self.sequencer_registry.reserve_part_of_the_stake(
                 &sender,
-                new_holder.to_payable(),
+                &new_holder,
                 funds_needed,
                 state,
             ) {
