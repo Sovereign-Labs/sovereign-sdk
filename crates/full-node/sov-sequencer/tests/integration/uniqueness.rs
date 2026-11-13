@@ -102,7 +102,7 @@ async fn test_mixed_nonce_and_generation_transactions() {
             UnsignedTransaction::new_with_details(msg.clone(), uniqueness, details.clone(), None);
         Transaction::<RT, TestSpec>::new_signed_tx(
             &test_user.private_key,
-            &RT::CHAIN_HASH,
+            &RT::chain_hash(),
             unsigned_tx,
         )
     };

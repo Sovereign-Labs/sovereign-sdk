@@ -2,7 +2,7 @@ use std::collections::BTreeMap;
 
 use borsh::{BorshDeserialize, BorshSerialize};
 use sov_universal_wallet::schema::safe_string::SafeString;
-use sov_universal_wallet::schema::Schema;
+use sov_universal_wallet::schema::{ChainData, Schema};
 use sov_universal_wallet::UniversalWallet;
 
 #[derive(BorshSerialize, BorshDeserialize, UniversalWallet)]
@@ -40,6 +40,50 @@ macro_rules! eip712_tests {
 enum TestCallMessage {
     Transfer { amount: u128, to: Address },
     Mint { token: TokenId, amount: u128 },
+}
+
+#[test]
+fn eip712_domain_rebinds_chain_data() {
+    let message = TestCallMessage::Transfer {
+        amount: 56,
+        to: Address([2u8; 32]),
+    };
+    let input = borsh::to_vec(&message).unwrap();
+    let schema = Schema::of_single_type::<TestCallMessage>()
+        .unwrap()
+        .with_chain_data(ChainData {
+            chain_id: 4321,
+            chain_name: "Original".to_owned(),
+        });
+
+    let original_hash = schema.chain_hash().unwrap();
+    let original_digest = schema.eip712_signing_digest(0, &input).unwrap();
+    let original_json: serde_json::Value =
+        serde_json::from_str(&schema.eip712_json(0, &input).unwrap()).unwrap();
+    assert_eq!(original_json["domain"]["name"], "Original");
+    assert_eq!(original_json["domain"]["chainId"], "0x10e1");
+    assert_eq!(
+        original_json["domain"]["salt"],
+        format!("0x{}", hex::encode(original_hash))
+    );
+
+    let schema = schema.with_chain_data(ChainData {
+        chain_id: 8765,
+        chain_name: "Rebound".to_owned(),
+    });
+    let rebound_hash = schema.chain_hash().unwrap();
+    let rebound_digest = schema.eip712_signing_digest(0, &input).unwrap();
+    let rebound_json: serde_json::Value =
+        serde_json::from_str(&schema.eip712_json(0, &input).unwrap()).unwrap();
+
+    assert_ne!(rebound_hash, original_hash);
+    assert_ne!(rebound_digest, original_digest);
+    assert_eq!(rebound_json["domain"]["name"], "Rebound");
+    assert_eq!(rebound_json["domain"]["chainId"], "0x223d");
+    assert_eq!(
+        rebound_json["domain"]["salt"],
+        format!("0x{}", hex::encode(rebound_hash))
+    );
 }
 
 #[test]

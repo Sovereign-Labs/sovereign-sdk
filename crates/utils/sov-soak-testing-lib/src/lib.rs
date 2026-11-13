@@ -381,7 +381,7 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
                     let invalid_tx = TransactionType::<R, S>::sign(
                         message.clone(),
                         key.clone(),
-                        &R::CHAIN_HASH,
+                        &R::chain_hash(),
                         details.clone(),
                         &mut future_nonce,
                     );
@@ -396,14 +396,14 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
                     let outdated_tx = TransactionType::<R, S>::sign(
                         message.clone(),
                         key.clone(),
-                        &R::CHAIN_HASH,
+                        &R::chain_hash(),
                         details.clone(),
                         &mut outdated_nonce,
                     );
                     txns.push((outdated_tx, true));
                 }
 
-                TransactionType::<R, S>::sign(message, key, &R::CHAIN_HASH, details, &mut nonces)
+                TransactionType::<R, S>::sign(message, key, &R::chain_hash(), details, &mut nonces)
             };
             txns.push((signed_tx, false));
         }

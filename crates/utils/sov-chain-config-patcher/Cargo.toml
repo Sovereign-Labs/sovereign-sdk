@@ -1,0 +1,33 @@
+[package]
+name = "sov-chain-config-patcher"
+description = "Library for patching chain identity in Sovereign rollup binaries and refreshing SP1 commitments"
+authors = { workspace = true }
+edition = { workspace = true }
+homepage = { workspace = true }
+license = { workspace = true }
+repository = { workspace = true }
+version = { workspace = true }
+
+[lints]
+workspace = true
+
+[dependencies]
+anyhow = { workspace = true }
+object = { version = "0.36.7", default-features = false, features = ["elf", "read_core", "std"] }
+serde = { workspace = true, features = ["std"] }
+serde_json = { workspace = true, features = ["std"] }
+sha2 = { workspace = true }
+sov-chain-config = { workspace = true, features = ["toml"] }
+sov-rollup-interface = { workspace = true }
+sov-sp1-adapter = { workspace = true, features = ["native"], optional = true }
+sov-universal-wallet = { workspace = true }
+
+[dev-dependencies]
+object = { version = "0.36.7", default-features = false, features = ["elf", "write_std"] }
+tempfile = { workspace = true }
+
+[features]
+default = ["sp1"]
+# Patching and recommitting SP1 guest ELFs. Native-only (MockZkvm) patching does not need this
+# and can disable it to avoid building the SP1 prover dependency stack.
+sp1 = ["dep:sov-sp1-adapter"]

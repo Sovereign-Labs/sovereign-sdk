@@ -121,7 +121,9 @@ macro_rules! generate_runtime_without_capabilities {
             <Self as ::sov_modules_api::DispatchCall>::Decodable: $crate::sov_universal_wallet::schema::UniversalWallet,
             $($runtime_trait_impl_bounds)*
         {
-            const CHAIN_HASH: [u8; 32] = [11; 32];
+            fn chain_hash() -> [u8; 32] {
+                [11; 32]
+            }
 
             type GenesisConfig = <Self as ::sov_modules_api::Genesis>::Config;
             type GenesisInput = ();
@@ -132,7 +134,6 @@ macro_rules! generate_runtime_without_capabilities {
                 use $crate::sov_rollup_apis::endpoints::dedup::{DeDupEndpoint, SovereignDeDupEndpoint};
                 use $crate::sov_rollup_apis::endpoints::schema::{SchemaEndpoint, StandardSchemaEndpoint};
                 use $crate::sov_universal_wallet::schema::{ChainData, Schema};
-                use ::sov_modules_api::macros::config_value;
                 use ::sov_modules_api::transaction::{Transaction, TransactionSigningPayload};
                 use ::sov_modules_api::rest::HasRestApi;
 
@@ -148,8 +149,8 @@ macro_rules! generate_runtime_without_capabilities {
                 <Self as ::sov_modules_api::DispatchCall>::Decodable,
                 S::Address,
                 >(ChainData {
-                    chain_id: config_value!("CHAIN_ID"),
-                    chain_name: config_value!("CHAIN_NAME").to_string(),
+                    chain_id: *::sov_modules_api::CHAIN_ID,
+                    chain_name: ::sov_modules_api::CHAIN_NAME.to_string(),
                 })
                 .unwrap();
 
@@ -157,7 +158,7 @@ macro_rules! generate_runtime_without_capabilities {
                 // This ensures wallets get the correct chain hash during chain hash transitions.
                 let schema_endpoint = StandardSchemaEndpoint::<S>::new(
                     &schema,
-                    Self::CHAIN_HASH.into(),
+                    Self::chain_hash().into(),
                     api_state.checkpoint_receiver(),
                 )
                 .expect("Failed to initialize StandardSchemaEndpoint");

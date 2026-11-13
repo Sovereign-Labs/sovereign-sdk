@@ -49,7 +49,7 @@ fn create_insert_credentials(from_addr: Address) -> Transaction<TestRuntime<Test
     let max_fee = TEST_DEFAULT_MAX_FEE;
     let gas_limit = None;
     let chain_hash =
-        <TestRuntime<TestSpec> as sov_modules_stf_blueprint::Runtime<TestSpec>>::CHAIN_HASH;
+        <TestRuntime<TestSpec> as sov_modules_stf_blueprint::Runtime<TestSpec>>::chain_hash();
     Transaction::<TestRuntime<TestSpec>, TestSpec>::new_signed_tx(
         &key,
         &chain_hash,

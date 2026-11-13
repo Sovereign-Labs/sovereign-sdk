@@ -39,7 +39,7 @@ fn make_unregistered_blobs<
             let tx = TransactionType::<RT, S>::sign_and_serialize(
                 <RT as EncodeCall<SequencerRegistry<S>>>::to_decodable(msg),
                 key,
-                &RT::CHAIN_HASH,
+                &RT::chain_hash(),
                 details,
                 nonces,
             );
@@ -67,7 +67,7 @@ fn make_unregistered_blob_with_approx_size<
     let tx = TransactionType::<RT, S>::sign_and_serialize(
         <RT as EncodeCall<ValueSetter<S>>>::to_decodable(msg),
         key,
-        &RT::CHAIN_HASH,
+        &RT::chain_hash(),
         details,
         nonces,
     );

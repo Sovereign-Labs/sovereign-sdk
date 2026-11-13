@@ -6,7 +6,6 @@ use std::marker::PhantomData;
 use borsh::{BorshDeserialize, BorshSerialize};
 use digest::Digest;
 use serde::{Deserialize, Serialize};
-use sov_modules_macros::config_value_private;
 use sov_rollup_interface::TxHash;
 use sov_state::User;
 use thiserror::Error;
@@ -38,10 +37,11 @@ pub fn resolve_chain_hashes_for_height(
     height: u64,
     default_hash: [u8; 32],
 ) -> crate::runtime::ResolvedChainHashes {
-    #[allow(clippy::needless_borrow)]
-    // We have slightly different types when static vs. dynamic constant resolution is enabled. We need an extra borrow in one case but not the other, so clippy complains.
-    let overrides: &[crate::ChainHashOverride] = &config_value_private!("CHAIN_HASH_OVERRIDES");
-    crate::runtime::resolve_chain_hashes(height, overrides, default_hash)
+    crate::runtime::resolve_chain_hashes(
+        height,
+        crate::runtime::chain_hash_overrides(),
+        default_hash,
+    )
 }
 
 /// A batch sent by an unregistered sequencer contains only one transaction.
@@ -209,7 +209,7 @@ where
             capabilities::fatal_deserialization_error::<_, S, _>(&tx.data, e, pre_exec_ws)
         })?;
 
-        crate::capabilities::authenticate::<_, S, Rt>(&input.data, &Rt::CHAIN_HASH, pre_exec_ws)
+        crate::capabilities::authenticate::<_, S, Rt>(&input.data, &Rt::chain_hash(), pre_exec_ws)
     }
 
     #[cfg(feature = "native")]
@@ -539,7 +539,8 @@ pub fn authenticate<
             verify_and_decode_tx_multi_hash::<S, D>(raw_tx_hash, tx, resolved_hashes, state)
         }
         DecodedTransaction::LegacyV0(tx_v0) => {
-            let cutoff: u64 = config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
+            let cutoff: u64 =
+                sov_modules_macros::config_value_private!("ACCEPT_LEGACY_V0_TXS_UNTIL_HEIGHT");
             if height.get() >= cutoff {
                 return Err(AuthenticationError::FatalError(
                     FatalError::Other(format!(
@@ -594,7 +595,7 @@ fn verify_and_decode_tx_multi_hash<S: Spec, D: DispatchCall<Spec = S>>(
 /// The rollup's `CHAIN_ID`. Pre-fork transactions commit to it in the details field that now holds
 /// the chain hash fragment, so it is still required to authenticate legacy V0 transactions.
 fn legacy_chain_id() -> u64 {
-    config_value_private!("CHAIN_ID")
+    *crate::CHAIN_ID
 }
 
 /// Verifies that a legacy V0 transaction carries the rollup's chain id.
@@ -682,7 +683,7 @@ pub fn authenticate_unregistered<
     pre_exec_ws: &mut Accessor,
 ) -> Result<AuthenticationOutput<S, Rt::Decodable>, UnregisteredAuthenticationError> {
     let (tx_and_raw_hash, auth_data, runtime_call) =
-        authenticate::<_, S, Rt>(raw_tx, &Rt::CHAIN_HASH, pre_exec_ws).map_err(|e| match e {
+        authenticate::<_, S, Rt>(raw_tx, &Rt::chain_hash(), pre_exec_ws).map_err(|e| match e {
             AuthenticationError::FatalError(err, hash) => {
                 UnregisteredAuthenticationError::FatalError(err, hash)
             }

@@ -1,4 +1,4 @@
-use sov_modules_api::macros::config_value;
+use sov_modules_api::CHAIN_ID;
 
 /// Create minimal EVM RPC module that allows wallets such as Metamask to connect to the rollup and
 /// validate the `CHAIN_ID`, as they may refuse to sign an EIP712 request otherwise.
@@ -27,13 +27,13 @@ pub fn stub_evm_rpc() -> jsonrpsee::RpcModule<()> {
     // to sign the EIP712 message
     minimal_evm_rpc
         .register_method("eth_chainId", |_, _, _| {
-            let chain_id = config_value!("CHAIN_ID");
+            let chain_id = *CHAIN_ID;
             Ok::<_, jsonrpsee::types::ErrorObjectOwned>(format!("0x{chain_id:x}"))
         })
         .expect("Failed to register eth_chainId");
     minimal_evm_rpc
         .register_method("net_version", |_, _, _| {
-            let chain_id = config_value!("CHAIN_ID");
+            let chain_id = *CHAIN_ID;
             Ok::<_, jsonrpsee::types::ErrorObjectOwned>(chain_id.to_string())
         })
         .expect("Failed to register net_version");

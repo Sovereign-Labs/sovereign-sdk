@@ -2,6 +2,7 @@ use axum::routing::get;
 use axum::Router;
 use serde::Serialize;
 use sov_modules_api::macros::config_value;
+use sov_modules_api::{CHAIN_ID, CHAIN_NAME};
 use sov_rest_utils::preconfigured_router_layers;
 
 /// The response returned by the `/rollup/constants` endpoint.
@@ -11,7 +12,7 @@ use sov_rest_utils::preconfigured_router_layers;
 #[derive(Serialize)]
 pub struct ConstantsResponse {
     chain_id: u64,
-    chain_name: &'static str,
+    chain_name: String,
     hyperlane_domain: u32,
     address_prefix: &'static str,
 }
@@ -19,15 +20,15 @@ pub struct ConstantsResponse {
 impl Default for ConstantsResponse {
     fn default() -> Self {
         Self {
-            chain_id: config_value!("CHAIN_ID"),
-            chain_name: config_value!("CHAIN_NAME"),
+            chain_id: *CHAIN_ID,
+            chain_name: CHAIN_NAME.clone(),
             hyperlane_domain: config_value!("HYPERLANE_BRIDGE_DOMAIN"),
             address_prefix: config_value!("ADDRESS_PREFIX"),
         }
     }
 }
 
-/// Returns an axum router configured to serve `/rollup/constants` requests
+/// Returns an axum router configured to serve `/rollup/constants` requests.
 pub fn axum_router() -> Router<()> {
     preconfigured_router_layers(Router::new().route(
         "/rollup/constants",

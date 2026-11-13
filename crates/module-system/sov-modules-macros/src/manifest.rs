@@ -15,6 +15,11 @@ pub struct Manifest<'a> {
 }
 
 impl<'a> Manifest<'a> {
+    /// Returns the parsed manifest document.
+    pub fn toml_value(&self) -> &Value {
+        &self.value
+    }
+
     /// Parse a manifest file from a string.
     ///
     /// The provided path will be used to feedback error to the user, if any.

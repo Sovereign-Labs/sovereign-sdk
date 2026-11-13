@@ -6,9 +6,9 @@ use serde::Serialize;
 use sov_modules_api::capabilities::{
     BatchFromUnregisteredSequencer, TransactionAuthenticator, UnregisteredAuthenticationError,
 };
-use sov_modules_api::macros::config_value;
 use sov_modules_api::{
     DispatchCall, FullyBakedTx, ProvableStateReader, RawTx, Runtime, Spec, VersionReader,
+    CHAIN_NAME,
 };
 
 /// Indicates that a runtime supports the `SolanaOffchain` transaction authenticator
@@ -88,8 +88,8 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     crate::authentication::authenticate::<Accessor, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
-                        config_value!("CHAIN_NAME"),
+                        &Rt::chain_hash(),
+                        &CHAIN_NAME,
                         state,
                     )?;
 
@@ -99,7 +99,7 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     sov_modules_api::capabilities::authenticate::<_, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
+                        &Rt::chain_hash(),
                         state,
                     )?;
 
@@ -140,8 +140,8 @@ where
                 let (tx_and_raw_hash, auth_data, runtime_call) =
                     crate::authentication::authenticate::<Accessor, S, Rt>(
                         &tx.data,
-                        &Rt::CHAIN_HASH,
-                        config_value!("CHAIN_NAME"),
+                        &Rt::chain_hash(),
+                        &CHAIN_NAME,
                         state,
                     )?;
                 Ok((tx_and_raw_hash, auth_data, runtime_call))

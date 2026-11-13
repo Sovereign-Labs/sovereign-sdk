@@ -234,7 +234,7 @@ fn slot_out_of_gas_tests() {
         10,
         priority_fee_bips,
         &actors.admin_account,
-        &<IntegTestRuntime<S> as sov_modules_api::Runtime<S>>::CHAIN_HASH,
+        &<IntegTestRuntime<S> as sov_modules_api::Runtime<S>>::chain_hash(),
         encode_message::<IntegTestRuntime<S>>(Some(gas)),
     );
 

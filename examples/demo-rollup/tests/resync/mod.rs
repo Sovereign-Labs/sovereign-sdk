@@ -78,7 +78,7 @@ fn tx_set_value_for_check(
         &key,
         &msg,
         generation,
-        &<DemoRuntime<DemoRollupSpec> as Runtime<DemoRollupSpec>>::CHAIN_HASH,
+        &<DemoRuntime<DemoRollupSpec> as Runtime<DemoRollupSpec>>::chain_hash(),
     );
     RawTx::new(borsh::to_vec(&tx).unwrap())
 }
