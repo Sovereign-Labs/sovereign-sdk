@@ -1,10 +1,11 @@
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
+use sov_test_utils::test_rollup::next_within;
 use std::sync::Arc;
 
 use crate::bank::helpers::*;
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
 use crate::test_helpers::DemoRollupSpec;
 use anyhow::Context;
-use futures::StreamExt;
 use serde::Deserialize;
 use sov_cli::NodeClient;
 use sov_mock_da::storable::StorableMockDaService;
@@ -60,7 +61,7 @@ async fn send_test_bank_txs(
         "Going to wait deferred slots count double for some reason"
     );
     for _ in 0..slots_to_wait {
-        let _slot = slots_subscription.next().await.unwrap()?;
+        let _slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     }
 
     assert_slot_finality(
@@ -84,7 +85,7 @@ async fn send_test_bank_txs(
     let attestation_publish_threshold = 1000;
 
     while verified_attested_height <= batch_1_rollup_height {
-        let slot = slots_subscription.next().await.unwrap()?;
+        let slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
         assert!(slot.number >= rollup_height);
 
         let max_attested_height = get_max_attested_height(client, Some(rollup_height)).await?;

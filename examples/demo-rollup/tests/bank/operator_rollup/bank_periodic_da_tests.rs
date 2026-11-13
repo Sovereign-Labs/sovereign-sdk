@@ -1,9 +1,11 @@
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
 use futures::StreamExt;
 use sov_bank::config_gas_token_id;
 use sov_bank::derived_holder::DerivedHolder;
 use sov_cli::NodeClient;
 use sov_mock_da::storable::StorableMockDaService;
 use sov_modules_api::{Amount, OperatingMode, Spec};
+use sov_test_utils::test_rollup::next_within;
 use sov_test_utils::TestSpec;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -100,9 +102,9 @@ async fn send_test_bank_txs(
     let tx = build_create_token_tx(&key, 0, initial_balance);
 
     let slot_number = send_tx_and_wait_for_status(&[tx], client).await?;
-    let mut processed_slot = slots_subscription.next().await.unwrap()?;
+    let mut processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     while processed_slot.number <= slot_number {
-        processed_slot = slots_subscription.next().await.unwrap()?;
+        processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     }
 
     // Will cause a batch to be produced.
@@ -118,7 +120,7 @@ async fn send_test_bank_txs(
         let slot_number = send_tx_and_wait_for_status(&[tx], client).await?;
         // Wait a litle more to make sure finality is correct
         while processed_slot.number <= slot_number {
-            processed_slot = slots_subscription.next().await.unwrap()?;
+            processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
         }
 
         assert_slot_finality(client, slot_number, test_case.expected_head_finality()).await;
