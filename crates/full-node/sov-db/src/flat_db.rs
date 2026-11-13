@@ -310,12 +310,24 @@ impl FlatStateDb {
 
     /// Commit the `state_changes`.
     pub fn commit(&self, state_changes: StateChanges) -> anyhow::Result<FlatStateCommitMetric> {
+        self.commit_with_before_live(state_changes, || Ok(()))
+    }
+
+    /// Like [`Self::commit`], but runs `before_live` after the archival DB is written and
+    /// before the live DB is written. The live DB is the commit marker for crash recovery, so
+    /// callers use `before_live` to wait for every other store of the same slot to be
+    /// committed. If `before_live` fails, the live DB is not written.
+    pub(crate) fn commit_with_before_live(
+        &self,
+        state_changes: StateChanges,
+        before_live: impl FnOnce() -> anyhow::Result<()>,
+    ) -> anyhow::Result<FlatStateCommitMetric> {
         let version = self
             .latest_version_and_root_hash_live_db()?
             .and_then(|(v, _)| v.checked_add(1))
             .unwrap_or(0);
 
-        self.commit_internal(state_changes, version, true)
+        self.commit_internal(state_changes, version, true, before_live)
     }
 
     #[cfg(feature = "migration-script")]
@@ -345,7 +357,7 @@ impl FlatStateDb {
             );
         }
 
-        self.commit_internal(state_changes, current_latest, true)
+        self.commit_internal(state_changes, current_latest, true, || Ok(()))
     }
 
     fn commit_internal(
@@ -353,6 +365,7 @@ impl FlatStateDb {
         state_changes: StateChanges,
         version: u64,
         is_commit: bool,
+        before_live: impl FnOnce() -> anyhow::Result<()>,
     ) -> anyhow::Result<FlatStateCommitMetric> {
         let start_prepare = std::time::Instant::now();
         let prepare = start_prepare.elapsed();
@@ -361,19 +374,12 @@ impl FlatStateDb {
         let mut live_db_batch = rocksdb::WriteBatch::default();
         let mut archival_db_batch = rocksdb::WriteBatch::default();
 
-        // 1. Lock caches.
-        let inner = self.db_cache.inner.write();
-
-        let kernel_cache = &inner.kernel_cache;
-        let user_cache = &inner.user_cache;
-
-        // 2. Update batches with kernel values.
+        // 1. Update batches with kernel values.
         let metrics_kernel = VersionedDB::<_, DbCache>::update_versioned_db_batch(
             &mut live_db_batch,
             &mut archival_db_batch,
             &state_changes.kernel,
             version,
-            kernel_cache,
             &self.live_db,
             &self.archival_db,
             is_commit,
@@ -382,13 +388,12 @@ impl FlatStateDb {
         let serialized_size_kernel = live_db_batch.size_in_bytes();
         let archival_serialized_size_kernel = archival_db_batch.size_in_bytes();
 
-        // 3. Update batches with user values.
+        // 2. Update batches with user values.
         let metrics_user = VersionedDB::<_, DbCache>::update_versioned_db_batch(
             &mut live_db_batch,
             &mut archival_db_batch,
             &state_changes.user,
             version,
-            user_cache,
             &self.live_db,
             &self.archival_db,
             is_commit,
@@ -398,7 +403,7 @@ impl FlatStateDb {
         let archival_serialized_size_user =
             archival_db_batch.size_in_bytes() - archival_serialized_size_kernel;
 
-        // 4.Update root hash.
+        // 3. Update root hash.
         DB::update_db_batch_with_schema_data(
             &mut archival_db_batch,
             &state_changes.root_hash_batch,
@@ -416,6 +421,21 @@ impl FlatStateDb {
         crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingArchival
             .inject_fault_if_configured();
         self.archival_db.write_db_batch(archival_db_batch)?;
+
+        before_live()?;
+
+        // 4. Lock caches. Readers must not see the new cache values until the live batch is written.
+        let inner = self.db_cache.inner.write();
+        VersionedDB::<_, DbCache>::apply_cache_updates(
+            &inner.kernel_cache,
+            &state_changes.kernel,
+            is_commit,
+        );
+        VersionedDB::<_, DbCache>::apply_cache_updates(
+            &inner.user_cache,
+            &state_changes.user,
+            is_commit,
+        );
 
         // rockbound requirement:  `store_committed_archival_version` has to be called before before writing `live_db_batch`.
         self.kernel.store_committed_archival_version(version);
@@ -510,7 +530,7 @@ impl FlatStateDb {
         };
 
         // We rollback only archival db.
-        self.commit_internal(state_changes, current_version_archival, false)?;
+        self.commit_internal(state_changes, current_version_archival, false, || Ok(()))?;
 
         Ok(())
     }
@@ -615,6 +635,47 @@ mod tests {
     #[test]
     fn test_rollback_crash_before_committing_live() -> anyhow::Result<()> {
         test_rollback(CommitFaultInjectionLocation::BeforeCommittingLive, 1)
+    }
+
+    #[test]
+    fn test_cache_is_not_locked_during_before_live() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let flat_db = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000).unwrap();
+        let data = data_to_insert_per_version();
+
+        flat_db
+            .commit_with_before_live(data.change_set(0), || {
+                assert!(
+                    flat_db.db_cache.inner.try_write().is_some(),
+                    "Cache lock must not be held while waiting for other stores"
+                );
+                Ok(())
+            })
+            .unwrap();
+    }
+
+    #[test]
+    fn test_failed_before_live_leaves_cache_at_previous_version() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let flat_db = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000).unwrap();
+        let data = data_to_insert_per_version();
+        let key = make_key("kernel_key1");
+
+        flat_db.commit(data.change_set(0)).unwrap();
+        let value_v0 = flat_db.kernel.get_live_value(&key).unwrap();
+        assert!(value_v0.is_some());
+
+        // Version 1 deletes `kernel_key1`.
+        let result = flat_db.commit_with_before_live(data.change_set(1), || {
+            anyhow::bail!("injected failure of another store")
+        });
+        assert!(result.is_err());
+
+        assert_eq!(
+            flat_db.kernel.get_live_value(&key).unwrap(),
+            value_v0,
+            "Cache must not expose version 1 values when the live DB was not written"
+        );
     }
 
     fn assert_key_value(
