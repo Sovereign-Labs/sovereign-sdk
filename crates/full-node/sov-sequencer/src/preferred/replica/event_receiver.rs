@@ -25,11 +25,10 @@ pub(crate) enum EventReceiverError {
     #[error("Error while parsing the db notification: {0}")]
     ParsingError(#[from] ParsingError),
 
-    #[error("Invalid event sequence in the db: {0:?} {1:?}. Replica shutting down.")]
-    InvalidEventSequence(Option<EventType>, EventType),
-
-    #[error("DB row does not exist: {0}")]
-    DbRowDoesNotExist(u64),
+    #[error(
+        "Invalid event sequence in the db: {0:?} {1:?} at event id {2}. Replica shutting down."
+    )]
+    InvalidEventSequence(Option<EventType>, EventType, u64),
 }
 
 pub(crate) struct EventReceiverStartNotifier {
@@ -101,6 +100,12 @@ pub(crate) struct EventReceiver {
     query_pool: PgPool,
     page_size: usize,
     ready_to_process_db_events_recv: watch::Receiver<()>,
+    /// Id of the next event to fetch. `None` until the first event has been sent to the handler.
+    next_event_id: Option<u64>,
+    /// Type of the last event sent to the handler.
+    prev_event_type: Option<EventType>,
+    /// Number of database errors since the last successful events query.
+    nb_of_consecutive_db_errors: u32,
 }
 
 impl EventReceiver {
@@ -132,20 +137,19 @@ impl EventReceiver {
                 query_pool,
                 page_size,
                 ready_to_process_db_events_recv,
+                next_event_id: None,
+                prev_event_type: None,
+                nb_of_consecutive_db_errors: 0,
             },
             db_data_receiver,
         )
     }
 
     pub(crate) async fn spawn_db_data_fetcher(mut self) -> BackgroundHandle<()> {
-        let mut nb_of_consecutive_db_errors = 0;
         let shutdown_receiver = self.primary_shutdown.clone();
         let mut start_replica_task_receiver = self.ready_to_process_db_events_recv.clone();
 
         BackgroundHandle::spawn("replica-db-fetcher", async move {
-            let mut start_event_id = None;
-            let mut prev_event_type = None;
-
             if start_replica_task_receiver.changed().await.is_err() {
                 return;
             }
@@ -163,23 +167,17 @@ impl EventReceiver {
             }
 
             debug!("Replica event receiver started.");
+            let mut fetch_immediately = false;
             loop {
-                let fut = shutdown_receiver.future_or_shutdown(self.fetch_data(
-                    start_event_id,
-                    prev_event_type,
-                    &mut listener,
-                ));
+                let fut = shutdown_receiver
+                    .future_or_shutdown(self.fetch_data(&mut listener, fetch_immediately));
 
                 let FutureOrShutdownOutput::Output(res) = fut.await else {
                     break;
                 };
 
                 match res {
-                    Ok((event_id, event_type)) => {
-                        nb_of_consecutive_db_errors = 0;
-                        start_event_id = Some(event_id + 1);
-                        prev_event_type = event_type;
-                    }
+                    Ok(()) => fetch_immediately = false,
                     Err(err) => {
                         match err {
                             EventReceiverError::ParsingError(err) => {
@@ -189,31 +187,35 @@ impl EventReceiver {
                                 );
                             }
                             EventReceiverError::DbError(err) => {
-                                error!(?err, ?start_event_id, "Failed to receive notifications from database. Shutting down replica.");
+                                error!(?err, next_event_id = ?self.next_event_id, "Database error in the replica event receiver. Retrying; the replica shuts down after {MAX_DB_ERRORS_ALLOWED} consecutive errors.");
 
                                 if shutdown_receiver.is_triggered() {
                                     break;
                                 }
 
                                 // Since network errors can occur, we will retry receiving a few times before initiating replica shutdown.
-                                if nb_of_consecutive_db_errors >= MAX_DB_ERRORS_ALLOWED {
-                                    panic!("Failed to connect to the database after {nb_of_consecutive_db_errors} attempts. Shutting down replica.");
+                                if self.nb_of_consecutive_db_errors >= MAX_DB_ERRORS_ALLOWED {
+                                    panic!("Failed to connect to the database after {} attempts. Shutting down replica.", self.nb_of_consecutive_db_errors);
                                 }
 
-                                nb_of_consecutive_db_errors += 1;
+                                self.nb_of_consecutive_db_errors += 1;
                                 tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+                                // The failed fetch may have left committed rows unread, and the
+                                // notifications for them may already be consumed (or lost with the
+                                // connection), so don't wait for a new one before fetching again.
+                                fetch_immediately = true;
                                 continue;
                             }
                             EventReceiverError::InvalidEventSequence(
                                 prev_event_type,
                                 event_type,
+                                event_id,
                             ) => {
-                                panic!("Invalid event sequence in the db: {prev_event_type:?} {event_type:?}. Replica shutting down.");
-                            }
-                            EventReceiverError::DbRowDoesNotExist(event_id) => {
-                                panic!(
-                                    "Db row does not exist for event id: {event_id:?} {start_event_id:?} {prev_event_type:?}. Replica shutting down."
-                                );
+                                // Apart from the leader writing an inconsistent sequence, this happens
+                                // when the leader pruned the rest of the batch the replica was in the
+                                // middle of. Pruning of whole batches leaves a valid sequence and is
+                                // not detected here: the handler deals with gaps in sequence numbers.
+                                panic!("Invalid event sequence in the db: {prev_event_type:?} {event_type:?} at event id {event_id}. Replica shutting down.");
                             }
                         }
                     }
@@ -222,118 +224,328 @@ impl EventReceiver {
         })
     }
 
-    async fn recv_notifications(
-        &mut self,
-        listener: &mut PgListener,
-    ) -> Result<EventsNotificationPayload, EventReceiverError> {
-        let mut last_notification = None;
-
-        // We only care about the latest notification from the DB,
-        // since the backfill logic allows us to skip earlier ones.
-        while let Some(p) = listener.next_buffered() {
-            last_notification = Some(p);
-        }
-
-        let pg_notification = match last_notification {
-            Some(notification) => notification,
-            None => listener.recv().await?,
-        };
-
-        let payload = pg_notification.payload();
-        let parsed_notification = EventsNotificationPayload::parse_csv(payload)?;
-        Ok(parsed_notification)
-    }
-
-    async fn fetch_data(
+    /// Returns the event id to fetch from once new rows may be available.
+    ///
+    /// Notifications are used purely as wake-up signals: `sqlx` hands them over one at a time
+    /// in arrival order, so the notification we wake up on is often not the most recent one.
+    /// The actual fetch therefore never targets a notification's event id; it reads everything
+    /// from `start_event_id` onwards.
+    async fn wait_for_new_rows(
         &mut self,
         start_event_id: Option<u64>,
-        mut prev_event_type: Option<EventType>,
         listener: &mut PgListener,
-    ) -> Result<(u64, Option<EventType>), EventReceiverError> {
-        let (start_event_id, target_event_id) = match start_event_id {
-            // If we already have a start id, just wait for the next notification
-            // and use its event_id as the target.
-            Some(start_id) => {
-                let notify = self.recv_notifications(listener).await?;
-                assert!(notify.event_id >= start_id);
-                (start_id, notify.event_id)
-            }
-            // Otherwise, `None` indicates the replica has just started.
-            // Keep listening for events until a `BatchStart` notification is received,
-            // then use that event's ID as both the starting and target event ID.
-            None => loop {
-                let notify = listener.recv().await?;
-                let notify = EventsNotificationPayload::parse_csv(notify.payload())?;
+    ) -> Result<u64, EventReceiverError> {
+        loop {
+            let notify = listener.recv().await?;
+            let notify = EventsNotificationPayload::parse_csv(notify.payload())?;
 
-                if matches!(notify.event_type, EventType::BatchStart) {
-                    debug!(?notify, "Relica received first BatchStart notification.");
-                    break (notify.event_id, notify.event_id);
+            match start_event_id {
+                // Notifications for rows we have already fetched carry no new information,
+                // so skip them without querying the database.
+                Some(start_id) if notify.event_id < start_id => {
+                    trace!(?notify, start_id, "Skipping stale notification.");
                 }
-            },
-        };
-
-        prev_event_type = self
-            .backfill_to_event_id(start_event_id, target_event_id, prev_event_type)
-            .await?;
-
-        Ok((target_event_id, prev_event_type))
+                Some(start_id) => return Ok(start_id),
+                // `None` indicates the replica has just started. Keep listening until a
+                // `BatchStart` notification is received, so that the replica never starts
+                // in the middle of a batch, and fetch from that event onwards.
+                None if matches!(notify.event_type, EventType::BatchStart) => {
+                    debug!(?notify, "Replica received first BatchStart notification.");
+                    return Ok(notify.event_id);
+                }
+                None => {}
+            }
+        }
     }
 
-    async fn backfill_to_event_id(
+    /// Waits for a notification and fetches all new events. With `fetch_immediately` set, the
+    /// wait is skipped if the position to fetch from is already known.
+    async fn fetch_data(
         &mut self,
-        mut current_event_id: u64,
-        target_event_id: u64,
-        mut prev_event_type: Option<EventType>,
-    ) -> Result<Option<EventType>, EventReceiverError> {
-        trace!(
-            "Backfilling events from {} to {}",
-            current_event_id,
-            target_event_id
-        );
+        listener: &mut PgListener,
+        fetch_immediately: bool,
+    ) -> Result<(), EventReceiverError> {
+        let start_event_id = match self.next_event_id {
+            Some(next_event_id) if fetch_immediately => next_event_id,
+            next_event_id => self.wait_for_new_rows(next_event_id, listener).await?,
+        };
+        self.fetch_from_event_id(start_event_id).await
+    }
+
+    /// Fetches every existing event with `event_id >= start_event_id`, page by page.
+    ///
+    /// Progress is recorded in `self` as each event is sent, so that after an error on a later
+    /// page the next fetch resumes right after the last event sent.
+    async fn fetch_from_event_id(&mut self, start_event_id: u64) -> Result<(), EventReceiverError> {
+        trace!(start_event_id, "Fetching events");
+        let mut next_event_id = start_event_id;
 
         // Currently, we fetch data in a loop. One possible (but not yet necessary) optimization would be to issue
         // multiple parallel queries to the DB for different `event_id`` ranges.
         // After analyzing real-world workloads, we can revisit this optimization. Implementing it would only affect
         // the contents of this method and would not require significant refactoring.
-        while current_event_id <= target_event_id {
-            trace!(
-                "Processing backfill page starting at event {} up to {}",
-                current_event_id,
-                target_event_id
-            );
+        loop {
+            trace!(next_event_id, "Processing page starting at event");
 
-            // Query and process events for this page
-            let db_rows = rows(
-                &self.query_pool,
-                current_event_id,
-                target_event_id,
-                self.page_size,
-            )
-            .await?;
+            let db_rows = rows(&self.query_pool, next_event_id, self.page_size).await?;
+            self.nb_of_consecutive_db_errors = 0;
+            let is_last_page = db_rows.len() < self.page_size;
 
-            if db_rows.is_empty() {
-                return Err(EventReceiverError::DbRowDoesNotExist(target_event_id));
-            }
-
-            let mut last_event_id = current_event_id;
             for row in db_rows {
-                last_event_id = row.get::<i64, _>("event_id") as u64;
+                let event_id = row.get::<i64, _>("event_id") as u64;
                 let (event, event_type) = row_to_event(row)?;
 
-                if !(EventType::is_event_sequence_valid(prev_event_type, event_type)) {
+                if !(EventType::is_event_sequence_valid(self.prev_event_type, event_type)) {
                     return Err(EventReceiverError::InvalidEventSequence(
-                        prev_event_type,
+                        self.prev_event_type,
                         event_type,
+                        event_id,
                     ));
                 }
 
                 let _ = self.db_data_sender.send(event).await;
-                prev_event_type = Some(event_type);
+                self.prev_event_type = Some(event_type);
+                next_event_id = event_id + 1;
+                self.next_event_id = Some(next_event_id);
             }
 
-            current_event_id = last_event_id + 1;
+            // A short page means we have read every row that currently exists.
+            if is_last_page {
+                return Ok(());
+            }
+        }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::preferred::db::postgres::PostgresBackend;
+    use crate::preferred::db::BatchToStore;
+    use crate::preferred::db::DbBackend;
+    use sov_full_node_configs::sequencer::ConfiguredNodeRole;
+    use sov_modules_api::FullyBakedTx;
+    use sov_modules_api::TxHash;
+    use sov_modules_api::VisibleSlotNumber;
+    use sov_test_utils::postgres::config_from_postgres_container;
+    use sov_test_utils::postgres::{create_postgres_container, CreatePostgresError};
+    use sov_test_utils::postgres::{ContainerAsync, Postgres};
+    use std::future::Future;
+    use std::net::Ipv4Addr;
+    use std::net::SocketAddr;
+    use std::num::NonZero;
+    use std::time::Duration;
+    use tokio::sync::mpsc;
+
+    const PAGE_SIZE: usize = 2;
+
+    struct TestSetup {
+        // Stops the container when dropped.
+        _postgres: ContainerAsync<Postgres>,
+        connection_string: String,
+        leader_db: PostgresBackend,
+        receiver: EventReceiver,
+        /// Subscribed to the events notifications before any event is written.
+        listener: PgListener,
+        db_data_receiver: mpsc::Receiver<DbData>,
+    }
+
+    /// Returns `None` if docker is not available.
+    async fn setup() -> Option<TestSetup> {
+        let postgres = match create_postgres_container().await {
+            Ok(postgres) => postgres,
+            Err(CreatePostgresError::DockerNotSupported) => return None,
+            Err(CreatePostgresError::DockerError(e)) => {
+                panic!("Failed to create Postgres container: {e}");
+            }
+        };
+
+        let postgres_config = config_from_postgres_container(
+            &postgres,
+            "Replica".into(),
+            ConfiguredNodeRole::Replica,
+        )
+        .await
+        .unwrap();
+        let connection_string = postgres_config.postgres_connection_string.clone();
+
+        let addr = SocketAddr::from((Ipv4Addr::LOCALHOST, 0));
+        let leader_db = PostgresBackend::connect(&postgres_config, addr)
+            .await
+            .unwrap();
+        let _ = leader_db
+            .heartbeat(Some(postgres_config.leader_election))
+            .await
+            .unwrap();
+
+        let (receiver, db_data_receiver) = EventReceiver::new(
+            connection_string.clone(),
+            PrimaryShutdownController::new(),
+            PAGE_SIZE,
+            watch::channel(()).1,
+        )
+        .await;
+
+        let mut listener = PgListener::connect(&connection_string).await.unwrap();
+        listener.listen("events_changes").await.unwrap();
+
+        Some(TestSetup {
+            _postgres: postgres,
+            connection_string,
+            leader_db,
+            receiver,
+            listener,
+            db_data_receiver,
+        })
+    }
+
+    /// Writes a complete batch as the leader and returns the events a replica should receive.
+    async fn write_batch(
+        db: &mut PostgresBackend,
+        sequence_number: u64,
+        nb_of_txs: u64,
+    ) -> Vec<DbData> {
+        let batch = BatchToStore {
+            sequence_number,
+            blob_id: 0x1234,
+            visible_slot_number_after_increase: VisibleSlotNumber::new_dangerous(1),
+            visible_slots_to_advance: NonZero::new(1).unwrap(),
+        };
+
+        db.begin_rollup_block(batch).await.unwrap();
+        let mut events = vec![DbData::BatchStart(batch)];
+
+        for i in 0..nb_of_txs {
+            let tx = FullyBakedTx::new(vec![i as u8]);
+            db.add_tx(sequence_number, i, tx.clone(), TxHash::new([1; 32]))
+                .await
+                .unwrap();
+            events.push(DbData::Transaction(
+                sequence_number,
+                tx,
+                TxHash::new([1; 32]),
+            ));
         }
 
-        Ok(prev_event_type)
+        db.end_rollup_block(batch).await.unwrap();
+        events.push(DbData::BatchEnd(batch));
+        events
+    }
+
+    /// Drives `fut` to completion while collecting the events sent in the meantime. A fetch
+    /// cannot simply be awaited: the events channel only holds one page, so it blocks until
+    /// the events are received.
+    async fn drain_until<T>(
+        fut: impl Future<Output = T>,
+        db_data_receiver: &mut mpsc::Receiver<DbData>,
+        received: &mut Vec<DbData>,
+    ) -> T {
+        tokio::pin!(fut);
+        loop {
+            tokio::select! {
+                Some(event) = db_data_receiver.recv() => received.push(event),
+                output = &mut fut => {
+                    // The sender is still alive, so the only possible error is an empty
+                    // channel, which means we have collected everything.
+                    while let Ok(event) = db_data_receiver.try_recv() {
+                        received.push(event);
+                    }
+                    return output;
+                }
+            }
+        }
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_single_notification_fetches_all_committed_events() {
+        let Some(TestSetup {
+            _postgres,
+            mut leader_db,
+            mut receiver,
+            mut listener,
+            mut db_data_receiver,
+            ..
+        }) = setup().await
+        else {
+            return;
+        };
+
+        // All the events are committed before the replica receives its first notification.
+        let expected = write_batch(&mut leader_db, 1, 6).await;
+
+        let mut received = Vec::new();
+        drain_until(
+            receiver.fetch_data(&mut listener, false),
+            &mut db_data_receiver,
+            &mut received,
+        )
+        .await
+        .unwrap();
+
+        assert_eq!(
+            received, expected,
+            "A single wake-up should fetch every committed event, not just the one it was notified about"
+        );
+    }
+
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_fetch_resumes_after_db_error_without_resending_events() {
+        let Some(TestSetup {
+            _postgres,
+            connection_string,
+            mut leader_db,
+            mut receiver,
+            mut listener,
+            mut db_data_receiver,
+        }) = setup().await
+        else {
+            return;
+        };
+
+        // 8 events: 4 full pages.
+        let expected = write_batch(&mut leader_db, 1, 6).await;
+
+        let query_pool = receiver.query_pool.clone();
+        let fetch = tokio::spawn(async move {
+            let res = receiver.fetch_data(&mut listener, false).await;
+            (receiver, listener, res)
+        });
+
+        // Once the first event arrives, the fetch has sent the first page. It cannot have queried
+        // the third page yet: the channel only holds one page, so sending the second page blocks
+        // until more events are received.
+        let mut received = vec![db_data_receiver.recv().await.unwrap()];
+
+        // Make all further queries fail, as if the database became unreachable mid-fetch.
+        query_pool.close().await;
+        let (mut receiver, mut listener, res) =
+            drain_until(fetch, &mut db_data_receiver, &mut received)
+                .await
+                .unwrap();
+        assert!(
+            matches!(res, Err(EventReceiverError::DbError(_))),
+            "The fetch should fail once the pool is closed, got: {res:?}"
+        );
+
+        // The database is reachable again. All notifications for the batch were sent before
+        // the failure, so a retry that waited for a new one would never complete.
+        receiver.query_pool = PgPoolOptions::default()
+            .connect(&connection_string)
+            .await
+            .unwrap();
+        let retry = drain_until(
+            receiver.fetch_data(&mut listener, true),
+            &mut db_data_receiver,
+            &mut received,
+        );
+        tokio::time::timeout(Duration::from_secs(60), retry)
+            .await
+            .expect("The retry should not wait for a new notification")
+            .unwrap();
+
+        assert_eq!(
+            received, expected,
+            "Every event should be delivered exactly once and in order"
+        );
     }
 }
