@@ -1006,14 +1006,9 @@ where
                 NoOpControlFlow,
             )
             .into_iter()
-            .map(|mut b| {
-                // Batches from unregistered sequencers don't reserve any gas
-                // tokens.
-                if b.reserved_gas_tokens.is_some() {
-                    b.reserved_gas_tokens = Some(standard_gas_escrow);
-                }
-                b.map_batch(MaybeAsyncBatch::<S>::new_sync)
-            })
+            // Keep the reserved gas computed by the kernel, which matches what the node reserves for
+            // these blobs (batches from unregistered sequencers don't reserve any gas tokens).
+            .map(|b| b.map_batch(MaybeAsyncBatch::<S>::new_sync))
             .collect::<Vec<_>>();
 
         tracing::debug!(count = %non_preferred_blobs.len(), "Extracted non-preferred blobs");
