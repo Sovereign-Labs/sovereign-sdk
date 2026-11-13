@@ -1,6 +1,8 @@
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 
+# 2026-11-13
+- #3134 Tests: Bound subscription stream reads in demo-rollup tests with `next_within` and a shared 30s `NOTIFICATION_TIMEOUT`; remove the redundant `TestRollup::{pause,resume}_preferred_batches_for_node` helpers.
 # 2026-11-09
 - #3130 API: Archival state REST reads (`?rollup_height=`/`?slot_number=`) that race with the pruner now return 404 "invalid rollup height" instead of `{"value": null}`. Tests: CI uploads a nextest JUnit report and lists tests that passed only after a retry; `flaky_` tests require a linked issue; new `NEXTEST_PROFILE=no-docker` reports postgres-backed tests as skipped; sleeps used as synchronization replaced with bounded waits; previously ignored or `flaky_` tests that now pass reliably are re-enabled and renamed.
 # 2026-11-08
