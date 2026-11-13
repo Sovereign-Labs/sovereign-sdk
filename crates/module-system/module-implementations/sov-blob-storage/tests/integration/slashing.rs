@@ -288,3 +288,57 @@ fn same_slot_valid_then_garbage_from_sequencer_executes_without_panic() {
         "The preferred batch and the slashed sequencer's selected batch must both execute"
     );
 }
+
+/// In setup mode the gas price is zero, so a slashed preferred sequencer still passes the funds check
+/// for its stored batches.
+/// - Slot A: the preferred sequencer posts batches 1 and 2. Batch 1 executes and batch 2 is stored.
+/// - Slot B: the preferred sequencer posts garbage and is slashed before its stored batch 2 is
+///   selected in the same slot. Escrowing for batch 2 must not panic.
+#[test]
+fn stored_preferred_batch_after_slashing_in_setup_mode_does_not_panic() {
+    // nextest runs each test in its own process, so the override doesn't leak into other tests.
+    std::env::set_var(
+        "SOV_TEST_CONST_OVERRIDE_SETUP_MODE_TERMINATION_HEIGHT",
+        "100",
+    );
+    let (
+        TestData {
+            preferred_sequencer,
+            ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+    let da = preferred_sequencer.da_address;
+
+    // Slot A
+    let mut nonces = runner.nonces().clone();
+    let blobs = build_soft_confirmation_blobs(
+        &vec![
+            (
+                preferred_sequencer.clone(),
+                SequencerInfo::Preferred {
+                    slots_to_advance: 1,
+                    sequence_number: 1,
+                },
+            ),
+            (
+                preferred_sequencer.clone(),
+                SequencerInfo::Preferred {
+                    slots_to_advance: 1,
+                    sequence_number: 2,
+                },
+            ),
+        ],
+        &mut nonces,
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+
+    // Slot B
+    runner.execute::<RelevantBlobs<MockBlob>>(garbage_blob(da));
+
+    assert!(
+        !is_registered(&runner, &da),
+        "Garbage blob must slash the preferred sequencer"
+    );
+}

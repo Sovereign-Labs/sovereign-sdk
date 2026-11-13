@@ -11,6 +11,7 @@ mod helpers_basic_kernel;
 mod helpers_soft_confirmations;
 
 mod base_sequencing;
+mod escrow_interleavings;
 mod recovery_mode;
 mod slashing;
 mod soft_confirmation;

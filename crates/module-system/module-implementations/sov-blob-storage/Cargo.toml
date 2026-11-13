@@ -41,6 +41,7 @@ sov-kernels = { workspace = true, features = ["native", "test-utils"] }
 sov-value-setter = { workspace = true }
 sov-rollup-interface = { workspace = true }
 sov-modules-stf-blueprint = { workspace = true }
+proptest = { workspace = true }
 
 [features]
 default = []
