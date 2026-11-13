@@ -142,10 +142,13 @@ impl DbData {
     }
 }
 
+/// Fetches up to `page_size` events with `event_id >= current_event_id`, in `event_id` order.
+///
+/// There is deliberately no upper bound: the caller pages until it gets a short page, so that
+/// every committed row is fetched regardless of how many notifications it has consumed.
 pub(crate) async fn rows(
     query_pool: &PgPool,
     current_event_id: u64,
-    target_event_id: u64,
     page_size: usize,
 ) -> Result<Vec<PgRow>, sqlx::Error> {
     // Fetch the next existing rows in event_id order rather than assuming ids are dense.
@@ -155,12 +158,11 @@ pub(crate) async fn rows(
         LEFT JOIN proof_blobs p
           ON p.sequence_number = e.sequence_number
           AND e.event_type = 'new_proof'
-        WHERE e.event_id >= $1 AND e.event_id <= $2
+        WHERE e.event_id >= $1
         ORDER BY e.event_id ASC
-        LIMIT $3",
+        LIMIT $2",
     )
     .bind(current_event_id as i64)
-    .bind(target_event_id as i64)
     .bind(page_size as i64)
     .fetch_all(query_pool)
     .await
