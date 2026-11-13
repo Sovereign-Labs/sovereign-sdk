@@ -1244,7 +1244,6 @@ async fn sequencer_filled_up_block() {
 const SEQUENCER_RECOVERY_ERROR: &str = "The preferred sequencer is recovering from downtime and cannot provide soft-confirmations at this time";
 
 #[tokio::test(flavor = "multi_thread")]
-#[ignore]
 async fn seq_behind_deferred_slots_count_simple_lagging() {
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "40");
     let (test_rollup, admin) = create_test_rollup(
@@ -3298,9 +3297,8 @@ async fn visible_hashes_match_across_node_and_sequencer() {
 ///
 /// If this test is flaky, it can be made more reliable by simply increasing the `worker_timeout_secs` variable.
 /// This makes the test take longer to run, but also reduces the chance of it flaking.
-// Note that this test is `#[ignore]`d and does not run in CI; run it with `cargo nextest run --run-ignored only`.
 #[tokio::test(flavor = "multi_thread")]
-#[ignore]
+#[ignore = "Takes ~90s; runs in the nightly workflow"]
 async fn heavy_blob_submission_long_delay() {
     let worker_timeout_secs = 90;
     std::env::set_var("SOV_TEST_CONST_OVERRIDE_DEFERRED_SLOTS_COUNT", "150000");
