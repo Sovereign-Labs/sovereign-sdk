@@ -13,8 +13,6 @@ use sov_modules_api::prelude::*;
 use sov_modules_api::{DispatchCall, RawTx, Runtime};
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::PaymasterConfig;
-use sov_sequencer::preferred::PreferredSequencerConfig;
-use sov_sequencer::SequencerKindConfig;
 use sov_test_modules::hooks_count::HooksCount;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, StoragePath, TestRollup};
@@ -80,17 +78,12 @@ async fn create_test_rollup(
         c.max_batch_size_bytes = TEST_MAX_BATCH_SIZE;
         c.blob_processing_timeout_secs = TEST_BLOB_PROCESSING_TIMEOUT;
         c.max_concurrent_batch_blobs = TEST_MAX_CONCURRENT_BATCH_BLOBS;
-
-        let mut preferred_config = match &c.sequencer_config {
-            SequencerKindConfig::Preferred(p) => p.clone(),
-            SequencerKindConfig::Standard(_) => PreferredSequencerConfig::default(),
-        };
-        preferred_config.batch_execution_time_limit_millis = MAX_BATCH_EXECUTION_TIME_MILLIS;
-        preferred_config.maximum_future_nonce_delta = maximum_future_nonce_delta;
-        preferred_config.future_nonce_transaction_timeout_millis =
-            future_nonce_transaction_timeout_millis;
-        preferred_config.ideal_lag_behind_finalized_slot = 3;
-        c.sequencer_config = SequencerKindConfig::Preferred(preferred_config);
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.batch_execution_time_limit_millis = MAX_BATCH_EXECUTION_TIME_MILLIS;
+        seq.maximum_future_nonce_delta = maximum_future_nonce_delta;
+        seq.future_nonce_transaction_timeout_millis = future_nonce_transaction_timeout_millis;
+        seq.ideal_lag_behind_finalized_slot = 3;
     })
     .set_da_config(|c| {
         c.sender_address = genesis_params
