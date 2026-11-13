@@ -1,0 +1,30 @@
+[workspace]
+
+[package]
+name = "sov-loadr"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+loadr-plugin-api = { git = "https://github.com/celestiaorg/loadr", rev = "8982d8c709c98f94dd1df9c919e651b670cdafb1" }
+abi_stable = "0.11"
+anyhow = "1"
+base64 = "0.22"
+ed25519-dalek = "=2.1.1"
+hex = "0.4"
+k256 = { version = "0.13.4", features = ["ecdsa"] }
+reqwest = { version = "0.13", features = ["blocking", "json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+sha3 = "0.10.8"
+sov-universal-wallet = { path = "../crates/universal-wallet/schema", features = ["serde"] }
+
+[dev-dependencies]
+tempfile = "3"
+
+[profile.dev]
+debug = 0
