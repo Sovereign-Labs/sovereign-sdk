@@ -39,4 +39,16 @@ describe("js", () => {
       },
     );
   });
+
+  describe("integer parsing", () => {
+    it("rejects malformed decimal integer strings", () => {
+      expect(() => js.serialize({ Number: { U32: "12abc" } }, 0)).toThrow(
+        "Expected u32",
+      );
+    });
+
+    it("serializes canonical decimal integer strings", () => {
+      expect(() => js.serialize({ Number: { U32: "12" } }, 0)).not.toThrow();
+    });
+  });
 });
