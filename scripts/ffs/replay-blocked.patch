@@ -1,0 +1,13 @@
+diff --git a/src/session.rs b/src/session.rs
+--- a/src/session.rs
++++ b/src/session.rs
+@@ -2091,6 +2091,9 @@ impl Session {
+     /// blocked here).
+     pub fn resume_as_blocked(&mut self, ltid: Ltid) -> Result<Event> {
+         let tid = self.tid_of(ltid)?;
++        if matches!(self.task(tid)?.state, State::Blocked { .. }) {
++            return self.run_task(ltid, 0);
++        }
+         if let Some(stop @ Stop::SyscallExit { ret, .. }) = self.task(tid)?.stop() {
+             if ret == -(libc::EINTR as i64) {
+                 if let Some(event) = self.handle_stop(tid, stop)? {
