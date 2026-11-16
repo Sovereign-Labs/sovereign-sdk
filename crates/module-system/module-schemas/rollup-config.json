@@ -1325,7 +1325,7 @@
           }
         },
         "max_nb_of_concurrent_users_in_rate_limiter": {
-          "description": "The cache size for the rate limiter.",
+          "description": "The cache size for the rate limiter. This limit is approximate: once it is reached, new\nusers are rejected, but users with custom limits are always admitted.",
           "type": "integer",
           "format": "uint64",
           "minimum": 0

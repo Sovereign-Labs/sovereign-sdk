@@ -230,6 +230,9 @@ impl<G: Gas> Throttler<G> {
 ///   total_resource_used = 3 micros
 pub(crate) struct RateLimiter<K, S: Spec> {
     limiter_type: &'static str,
+    /// Approximate cap on the number of keys in `data`. New keys are rejected once it is
+    /// reached, but keys in `special_configs` are always admitted, so `data` can exceed it
+    /// by up to `special_configs.len()` entries.
     max_nb_of_concurrent_users: u64,
     data: Cache<K, Throttler<S::Gas>>,
     default_config: RateLimiterConfig<S>,
@@ -279,7 +282,15 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
 
         self.metric_counter += 1;
 
-        if entry_count >= self.max_nb_of_concurrent_users {
+        let existing = self.data.get(key);
+
+        // The cap only limits how many new users can enter the cache. Users already in the
+        // cache and keys with a special config are never rejected by it; otherwise anyone
+        // could lock out every user by filling the cache with throwaway keys.
+        if existing.is_none()
+            && entry_count >= self.max_nb_of_concurrent_users
+            && !self.special_configs.contains_key(key)
+        {
             // data.entry_count() returns only approximate number of entries in this cache.
             // Once we hit the limit we sync to get the exact number of entries.
             self.data.sync();
@@ -292,7 +303,7 @@ impl<K: Hash + Eq + Debug + Send + Sync + 'static, S: Spec> RateLimiter<K, S> {
             }
         }
 
-        let throttler = match self.data.get(key) {
+        let throttler = match existing {
             Some(throttler) => throttler,
             None => Throttler {
                 total_resource_used: TotalResources::zero(),
@@ -643,6 +654,73 @@ mod tests {
         panic!(
             "Test failed: The rate limiter did not apply the max_nb_of_concurrent_users parameter."
         );
+    }
+
+    /// Builds a simulator whose user cache is full of `max_nb_of_concurrent_users` addresses
+    /// (`[0; 28]`, `[1; 28]`, ...), and checks that a new address is rejected.
+    fn full_simulator(
+        max_nb_of_concurrent_users: u8,
+        special_configs: HashMap<<TestSpec as Spec>::Address, RateLimiterConfig<TestSpec>>,
+        now: Instant,
+    ) -> Simulator {
+        let config = RateLimiterConfig::<TestSpec> {
+            max_allowed_resources: max_allowed_resources(),
+            refill_rate: refill_rate(),
+        };
+        let mut simulator = Simulator::new(
+            max_nb_of_concurrent_users.into(),
+            TTL,
+            config,
+            small_resource_used_per_run(),
+            special_configs,
+        );
+        for i in 0..max_nb_of_concurrent_users {
+            let addr = <TestSpec as Spec>::Address::from([i; 28]);
+            simulator
+                .run_and_assert_limits(now, &addr, simulator.resource_used_per_run)
+                .unwrap();
+        }
+        simulator.rate_limiter.data.sync();
+
+        let new_addr = <TestSpec as Spec>::Address::from([u8::MAX; 28]);
+        assert_eq!(
+            simulator.rate_limiter.allow(now, &new_addr).unwrap_err(),
+            LimitExceeded::TooManyConcurrentUsers {
+                nb_of_users: max_nb_of_concurrent_users.into(),
+                max_allowed: max_nb_of_concurrent_users.into(),
+            },
+            "A new user should be rejected once the cache is full"
+        );
+        simulator
+    }
+
+    #[test]
+    fn test_rate_limiter_full_cache_allows_existing_user() {
+        let now = Instant::now();
+        let mut simulator = full_simulator(5, Default::default(), now);
+
+        let existing_addr = <TestSpec as Spec>::Address::from([0; 28]);
+        simulator
+            .run_and_assert_limits(now, &existing_addr, simulator.resource_used_per_run.mul(2))
+            .unwrap();
+    }
+
+    #[test]
+    fn test_rate_limiter_full_cache_allows_special_config_user() {
+        let now = Instant::now();
+        let special_addr = <TestSpec as Spec>::Address::from([100; 28]);
+        let special_configs = HashMap::from([(
+            special_addr,
+            RateLimiterConfig::<TestSpec> {
+                max_allowed_resources: max_allowed_resources(),
+                refill_rate: refill_rate(),
+            },
+        )]);
+        let mut simulator = full_simulator(5, special_configs, now);
+
+        simulator
+            .run_and_assert_limits(now, &special_addr, simulator.resource_used_per_run)
+            .unwrap();
     }
 
     struct Simulator {
