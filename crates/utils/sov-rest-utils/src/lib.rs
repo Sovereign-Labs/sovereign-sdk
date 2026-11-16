@@ -70,9 +70,10 @@ use sov_shutdown::PrimaryShutdownController;
 use std::cell::Cell;
 use std::fmt::Debug;
 use tower_http::cors::CorsLayer;
-use tower_http::propagate_header::PropagateHeaderLayer;
+use tower_http::request_id::{
+    MakeRequestUuid, PropagateRequestIdLayer, RequestId, SetRequestIdLayer,
+};
 use tower_http::trace::TraceLayer;
-use tower_request_id::{RequestId, RequestIdLayer};
 use tracing::{error, error_span, trace, warn};
 
 use crate::errors::ReportableWsError;
@@ -242,15 +243,14 @@ pub fn preconfigured_router_layers<S>(router: Router<S>) -> Router<S>
 where
     S: Clone + Send + Sync + 'static,
 {
-    // Tracing span with unique ID per request:
-    // <https://github.com/imbolc/tower-request-id/blob/main/examples/logging.rs>
+    // Tracing span with unique ID per request.
     let trace_layer = TraceLayer::new_for_http().make_span_with(|request: &Request<Body>| {
-        // We get the request id from the extensions
+        // `SetRequestIdLayer` below puts the id into the request extensions.
         let request_id = request
             .extensions()
             .get::<RequestId>()
-            .map(ToString::to_string)
-            .unwrap_or_else(|| "unknown".into());
+            .and_then(|id| id.header_value().to_str().ok())
+            .unwrap_or("unknown");
         // And then we put it along with other information into the `request` span
         error_span!(
             "request",
@@ -261,18 +261,15 @@ where
     });
     router
         .layer(trace_layer)
-        // This layer creates a new id for each request and puts it into the request extensions.
-        // Note that it should be added after the Trace layer. (Filippo: why? I
-        // don't know, I copy-pasted this.)
-        .layer(RequestIdLayer)
         .layer(
             tower::ServiceBuilder::new()
+                // Keeps the client's `X-Request-Id` or generates a UUID; must wrap `trace_layer`
+                // so the id is in the request extensions when the span is created.
+                .layer(SetRequestIdLayer::x_request_id(MakeRequestUuid))
                 // Tracing.
                 .layer(TraceLayer::new_for_http())
-                // Propagate `X-Request-Id`s from requests to responses.
-                .layer(PropagateHeaderLayer::new(HeaderName::from_static(
-                    "x-request-id",
-                ))),
+                // Echo `X-Request-Id` on every response.
+                .layer(PropagateRequestIdLayer::x_request_id()),
         )
         // Outermost, so it sees the final response of every route in this router.
         .layer(axum::middleware::from_fn(attach_last_event_number))
@@ -716,6 +713,33 @@ mod tests {
                 .get(&EVENT_EPOCH)
                 .map(|value| value.to_str().unwrap()),
         )
+    }
+
+    #[test]
+    fn response_gets_generated_request_id() {
+        let headers = headers_after_recording(&[], get_root());
+
+        let request_id = headers.get("x-request-id").map(|v| v.to_str().unwrap());
+        assert_eq!(
+            request_id.map(str::len),
+            Some(36),
+            "Expected a UUID request id, got {request_id:?}"
+        );
+    }
+
+    #[test]
+    fn response_echoes_client_request_id() {
+        let request = Request::get("/")
+            .header("x-request-id", "client-id-1234")
+            .body(Body::empty())
+            .unwrap();
+
+        let headers = headers_after_recording(&[], request);
+
+        assert_eq!(
+            headers.get("x-request-id").map(|v| v.to_str().unwrap()),
+            Some("client-id-1234")
+        );
     }
 
     #[test]

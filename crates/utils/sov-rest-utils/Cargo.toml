@@ -28,8 +28,7 @@ sov-shutdown = { workspace = true }
 thiserror = { workspace = true }
 tokio = { workspace = true, features = ["rt"] }
 tower = { workspace = true, features = ["util"] }
-tower-http = { workspace = true, features = ["cors", "trace", "propagate-header", "set-header"] }
-tower-request-id = { workspace = true }
+tower-http = { workspace = true, features = ["cors", "trace", "request-id", "set-header"] }
 tracing = { workspace = true }
 
 [dev-dependencies]
