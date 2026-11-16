@@ -195,7 +195,7 @@ pub(crate) fn spawn_metrics_udp_receiver(
                 Ok((size, _src)) => {
                     let received = &buf[..size];
                     let measurements = std::str::from_utf8(received).unwrap().split('\n');
-                    for m in measurements {
+                    for m in measurements.filter(|m| !m.is_empty()) {
                         metrics_write.send(m.to_owned()).await.unwrap();
                     }
                 }
@@ -211,16 +211,22 @@ async fn process_measurement(
     publisher: &mut MetricsPublisher,
     max_buffer_size: usize,
 ) {
-    if !buffer.is_empty() {
-        buffer.push(b'\n');
+    // Every line is newline-terminated, including the last one in the buffer:
+    // over TCP consecutive flushes form a single stream, so an unterminated line
+    // would be glued to the first line of the next flush.
+    let len_before = buffer.len();
+    match measurement.serialize_for_telegraf(buffer) {
+        Ok(()) => buffer.push(b'\n'),
+        Err(error) => {
+            // Drop partially written bytes so they don't corrupt the next line.
+            buffer.truncate(len_before);
+            tracing::warn!(
+                ?error,
+                ?measurement,
+                "Failed to format measurement, skipping"
+            );
+        }
     }
-    if let Err(error) = measurement.serialize_for_telegraf(buffer) {
-        tracing::warn!(
-            ?error,
-            ?measurement,
-            "Failed to format measurement, skipping"
-        );
-    };
 
     // Exceed max size, need to submit the packet first.
     if buffer.len() > max_buffer_size {
@@ -380,6 +386,67 @@ mod tests {
         });
 
         test_publisher_submits_metric(telegraf_address, metrics_back_receiver).await?;
+
+        Ok(())
+    }
+
+    /// TCP is a single stream, so every line must be newline-terminated; otherwise the last
+    /// metric of one flush is glued to the first metric of the next flush and Telegraf
+    /// rejects both with a parse error.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_tcp_metrics_from_consecutive_flushes_are_newline_separated() -> anyhow::Result<()>
+    {
+        let tcp_listener = tokio::net::TcpListener::bind("127.0.0.1:0").await?;
+        let monitoring_config = MonitoringConfig {
+            telegraf_address: TelegrafSocketConfig::tcp(tcp_listener.local_addr()?),
+            // Every metric exceeds the limit, so each one is flushed separately.
+            max_datagram_size: Some(1),
+            max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: RpcAggregationConfig::standard(),
+        };
+        let timestamp = 1_700_000_000_123_456_789u128;
+        let expected_lines: Vec<String> = (0..3)
+            .map(|i| format!("sov-test-metric value={} {timestamp}", 0x1234 + i))
+            .collect();
+
+        let secondary_shutdown_controller = SecondaryShutdownController::new();
+        let (sender, receiver) = tokio::sync::mpsc::channel(10);
+        let _task_handle = tokio::spawn(async move {
+            metrics_publisher_task(receiver, &monitoring_config, secondary_shutdown_controller)
+                .await;
+        });
+
+        let (mut socket, _) = tcp_listener.accept().await?;
+        for i in 0..expected_lines.len() {
+            let metric = SampleMetric(format!("sov-test-metric value={}", 0x1234 + i).into_bytes());
+            sender
+                .send(SubmittableMetric::new(
+                    SubmittableMetricKind::Boxed(Box::new(metric)),
+                    timestamp,
+                ))
+                .await?;
+        }
+
+        // Read the stream until it goes idle.
+        let mut received = Vec::new();
+        let mut buf = [0u8; 1024];
+        while let Ok(read) =
+            tokio::time::timeout(std::time::Duration::from_millis(500), socket.read(&mut buf)).await
+        {
+            let n = read?;
+            if n == 0 {
+                break;
+            }
+            received.extend_from_slice(&buf[..n]);
+        }
+
+        let received = String::from_utf8(received)?;
+        let received_lines: Vec<&str> = received.lines().collect();
+        assert_eq!(
+            received_lines, expected_lines,
+            "Each metric must arrive on its own line in the TCP stream"
+        );
 
         Ok(())
     }
