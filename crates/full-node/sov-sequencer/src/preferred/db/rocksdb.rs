@@ -86,6 +86,21 @@ impl DbBackend for RocksDbBackend {
         Ok(())
     }
 
+    /// One write for the whole slice instead of one per tx.
+    async fn batch_add_txs(
+        &mut self,
+        sequence_number: SequenceNumber,
+        tx_idx_within_batch: u64,
+        txs: &[(FullyBakedTx, TxHash)],
+    ) -> anyhow::Result<(), DbError> {
+        let mut s = SchemaBatch::new();
+        for (idx, (tx, hash)) in (tx_idx_within_batch..).zip(txs) {
+            s.put::<tables::BatchContents>(&(sequence_number, idx), &(*hash, tx.clone()))?;
+        }
+        self.db.write_schemas_async(&s).await?;
+        Ok(())
+    }
+
     #[tracing::instrument(skip_all, level = "trace")]
     async fn end_rollup_block(&mut self, stored_batch: BatchToStore) -> Result<(), DbError> {
         let sequence_number = stored_batch.sequence_number;
