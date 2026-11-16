@@ -889,6 +889,24 @@ async fn test_fee_history_percentiles_not_monotonic() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn test_fee_history_too_many_percentiles() -> anyhow::Result<()> {
+    let (_rollup, client) = setup_fee_history_test(2).await;
+
+    // 101 valid, monotonic percentiles: only the length cap can reject this
+    let result = client
+        .get_fee_history(2, BlockNumberOrTag::Latest, &[50.0; 101])
+        .await;
+
+    let err = result.expect_err("More than 100 percentiles should return error");
+    assert!(
+        err.to_string().contains("too many reward percentiles"),
+        "Unexpected error: {err}"
+    );
+
+    Ok(())
+}
+
 // ==================== Schema Invariant Tests ====================
 
 #[tokio::test(flavor = "multi_thread")]

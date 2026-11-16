@@ -3,7 +3,7 @@ use std::ops::RangeInclusive;
 use alloy_consensus::BlockHeader;
 use alloy_eips::{BlockId, BlockNumberOrTag};
 use alloy_rpc_types::FeeHistory;
-use jsonrpsee::types::error::INTERNAL_ERROR_CODE;
+use jsonrpsee::types::error::{INTERNAL_ERROR_CODE, INVALID_PARAMS_CODE};
 use jsonrpsee::types::ErrorObjectOwned;
 use sov_address::{EthereumAddress, FromVmAddress};
 use sov_bank::Amount;
@@ -15,6 +15,8 @@ use sov_rpc_eth_types::EthApiError;
 /// When estimating the base fee for the next block, we assume that at least two thirds of the gas limit will be used.
 const ESTIMATION_GAS_LIMIT_MULTIPLIER: u64 = 2;
 const ESTIMATED_GAS_LIMIT_DIVISOR: u64 = 3;
+/// Maximum number of reward percentiles accepted by `eth_feeHistory`. Matches geth's `maxQueryLimit`.
+const MAX_REWARD_PERCENTILES: usize = 100;
 
 use crate::{Evm, SyntheticBlockWithoutRootsAndBloom};
 
@@ -54,6 +56,16 @@ where
 
         // Validate reward percentiles
         if let Some(percentiles) = reward_percentiles {
+            if percentiles.len() > MAX_REWARD_PERCENTILES {
+                return Err(EthApiError::other(ErrorObjectOwned::owned(
+                    INVALID_PARAMS_CODE,
+                    format!(
+                        "too many reward percentiles: {} exceeds maximum of {MAX_REWARD_PERCENTILES}",
+                        percentiles.len()
+                    ),
+                    None::<()>,
+                )));
+            }
             for &p in percentiles {
                 if !(0.0..=100.0).contains(&p) {
                     return Err(EthApiError::InvalidRewardPercentile(p));
