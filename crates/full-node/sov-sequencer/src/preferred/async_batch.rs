@@ -293,8 +293,16 @@ impl<S: Spec> AsyncBatchResponder<S> {
             // SAFETY: We always enforce that the gas used is less than the remaining slot gas limit
             .expect("Impossible happened: SlotGasMeter underflow when charging gas.");
 
+        // The executor's own batch receipts are skipped in `end_rollup_block`, so the batch keeps
+        // the receipt without its events and body instead of a full copy.
+        let batch_receipt = TransactionReceipt {
+            tx_hash: receipt.tx_hash,
+            body_to_save: None,
+            events: Vec::new(),
+            receipt: receipt.receipt.clone(),
+        };
         let response = ExecutedTxResponse {
-            receipt: receipt.clone(),
+            receipt,
             tx_changes: dirty_scratchpad.tx_changes(execution_context),
             remaining_slot_gas,
             sequencing_scratchpad,
@@ -303,7 +311,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
         self.send(gas_used, execution_time_micros, Ok(response));
         (
             dirty_scratchpad.commit(),
-            TxControlFlow::ContinueProcessing(receipt),
+            TxControlFlow::ContinueProcessing(batch_receipt),
         )
     }
 }
