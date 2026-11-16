@@ -295,6 +295,14 @@ fn apply_block_overrides<DB: Database>(
         block_env.timestamp = U256::from(time);
     }
     if let Some(gas_limit) = gas_limit {
+        // The block gas limit is the only cap on simulation gas. Allowing callers to raise it
+        // lets a single request run unbounded computation, so only lowering it is permitted.
+        if gas_limit > block_env.gas_limit {
+            return Err(invalid_override_params(format!(
+                "block gas limit override {gas_limit} exceeds block gas limit {}",
+                block_env.gas_limit
+            )));
+        }
         block_env.gas_limit = gas_limit;
     }
     if let Some(coinbase) = coinbase {
