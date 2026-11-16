@@ -344,6 +344,28 @@ impl<S: Spec> IncrementalBatch<S> for MaybeAsyncBatch<S> {
     }
 }
 
+/// How long the executor thread polls for the next tx before parking. Under load the next tx
+/// arrives within tens of microseconds, and a park/unpark round trip costs a large share of that.
+const SPIN_BEFORE_PARK: std::time::Duration = std::time::Duration::from_micros(50);
+
+fn recv_spinning_first(
+    txs_receiver: &mut Receiver<FullyBakedTxWithMaybeChangeSet>,
+) -> Option<FullyBakedTxWithMaybeChangeSet> {
+    let spin_until = std::time::Instant::now() + SPIN_BEFORE_PARK;
+    loop {
+        match txs_receiver.try_recv() {
+            Ok(item) => return Some(item),
+            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => return None,
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
+                if std::time::Instant::now() >= spin_until {
+                    return Handle::current().block_on(txs_receiver.recv());
+                }
+                std::hint::spin_loop();
+            }
+        }
+    }
+}
+
 impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
     type Item = (FullyBakedTx, MaybeAsyncBatchControlFlow<S>);
 
@@ -356,8 +378,7 @@ impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
                 txs_receiver,
                 responder,
                 ..
-            } => Handle::current()
-                .block_on(txs_receiver.recv())
+            } => recv_spinning_first(txs_receiver)
                 .map(|mut item| {
                     (
                         item.tx,
