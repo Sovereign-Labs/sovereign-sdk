@@ -136,7 +136,10 @@ where
         serialized_attestation: SerializedAttestation,
         state: &mut State,
     ) -> anyhow::Result<SovAttestation<S>, ProcessAttestationErrors> {
-        if !self.should_reward_fees(state) {
+        if !self
+            .should_reward_fees(state)
+            .map_err(Into::<anyhow::Error>::into)?
+        {
             return Err(ProcessAttestationErrors::InvalidOperatingMode);
         }
 
@@ -300,7 +303,10 @@ where
         slot_number: SlotNumber,
         state: &mut State,
     ) -> anyhow::Result<SovStateTransitionPublicData<S>, ProcessChallengeErrors> {
-        if !self.should_reward_fees(state) {
+        if !self
+            .should_reward_fees(state)
+            .map_err(Into::<anyhow::Error>::into)?
+        {
             return Err(ProcessChallengeErrors::InvalidOperatingMode);
         }
 
