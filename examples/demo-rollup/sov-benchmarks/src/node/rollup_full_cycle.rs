@@ -312,8 +312,10 @@ async fn main() -> anyhow::Result<()> {
     )
     .set_config(|c| {
         c.sequencer_address = sequencer_info.as_user().address().to_string();
-        // Production values from `configs/mock_rollup_config.toml`.
-        c.max_batch_size_bytes = 1024 * 1024;
+        // Production values from `configs/mock_rollup_config.toml`, except the batch size: the
+        // sequencer opens at most one batch per DA slot, so 1 MiB batches cap throughput at
+        // ~4.5k transfers/s regardless of execution speed.
+        c.max_batch_size_bytes = 7 * 1024 * 1024;
         c.max_concurrent_batch_blobs = 128;
         if let SequencerKindConfig::Preferred(p) = &mut c.sequencer_config {
             p.ideal_lag_behind_finalized_slot = 3;
