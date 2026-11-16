@@ -348,14 +348,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
 
-        let call = Rt::Auth::decode_serialized_tx(&baked_tx.tx).map_err(|e| {
-            RollupBlockExecutorErrorWithBudget {
-                execution_time_micros: 0,
-                gas_used: <S as Spec>::Gas::zero(),
-                inner_err: RollupBlockExecutorError::DecodeCall(e),
-            }
-        })?;
-        let call = Rt::wrap_call(call);
+        // Decoding is only needed to name the call in a rejection, so it happens off the hot path.
+        // `try_send` hands the tx to the executor, so keep its bytes for that case.
+        let raw_tx = baked_tx.tx.clone();
 
         if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {
             return Err(RollupBlockExecutorErrorWithBudget {
@@ -386,13 +381,19 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             tx_changes,
             remaining_slot_gas,
             sequencing_scratchpad,
-        } = inner_result.map_err(|reason| RollupBlockExecutorErrorWithBudget {
-            execution_time_micros,
-            gas_used,
-            inner_err: RollupBlockExecutorError::Rejected {
-                reason,
-                call: call_message_repr::<Rt>(&call),
-            },
+        } = inner_result.map_err(|reason| {
+            let inner_err = match Rt::Auth::decode_serialized_tx(&raw_tx) {
+                Ok(call) => RollupBlockExecutorError::Rejected {
+                    reason,
+                    call: call_message_repr::<Rt>(&Rt::wrap_call(call)),
+                },
+                Err(e) => RollupBlockExecutorError::DecodeCall(e),
+            };
+            RollupBlockExecutorErrorWithBudget {
+                execution_time_micros,
+                gas_used,
+                inner_err,
+            }
         })?;
 
         if !receipt.receipt.is_successful() {
