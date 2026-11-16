@@ -1,8 +1,9 @@
 use schemars::JsonSchema;
+use sov_bank::error::{CommonError, TransferTokenError};
 use sov_bank::{Amount, IntoPayable};
 use sov_modules_api::macros::{config_value, serialize, UniversalWallet};
 use sov_modules_api::registration_lib::RegistrationError;
-use sov_modules_api::{Context, DaSpec, EventEmitter, ModuleInfo, Spec, TxState};
+use sov_modules_api::{Context, CoreModuleError, DaSpec, EventEmitter, ModuleInfo, Spec, TxState};
 
 use crate::{
     gas_coins, BalanceState, CustomError, Event, KnownSequencer, SequencerRegistry,
@@ -257,7 +258,19 @@ impl<S: Spec> SequencerRegistry<S> {
                 gas_coins(existing_sequencer.balance),
                 state,
             )
-            .expect("Failed to withdraw a sequencer balance. This indicates a bug in accounting!");
+            .map_err(|err| match err {
+                // The transfer uses the metered state of the transaction, so its state accesses
+                // fail when the transaction runs out of gas. The transaction must revert.
+                TransferTokenError::Common(CommonError::CoreModuleError(
+                    CoreModuleError::StateRead(_) | CoreModuleError::StateWrite(_),
+                )) => RegistrationError::Custom(CustomError::OutOfGasDuringWithdrawal {
+                    sequencer: *da_address,
+                    reason: err.to_string(),
+                }),
+                err => panic!(
+                    "Failed to withdraw a sequencer balance. This indicates a bug in accounting! {err}"
+                ),
+            })?;
 
         self.emit_event(
             state,

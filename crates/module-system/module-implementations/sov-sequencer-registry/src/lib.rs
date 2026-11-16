@@ -161,6 +161,18 @@ pub enum CustomError<RollupAddress: BasicAddress, DaAddress: BasicAddress> {
         ready_at: VisibleSlotNumber,
     },
 
+    /// A state access failed during the transfer of the withdrawn balance. This occurs when the
+    /// transaction runs out of gas.
+    #[error(
+        "Sequencer {sequencer} could not withdraw because the transaction ran out of gas: {reason}"
+    )]
+    OutOfGasDuringWithdrawal {
+        /// The address of the sequencer that tried to withdraw.
+        sequencer: DaAddress,
+        /// The state access error that stopped the transfer.
+        reason: String,
+    },
+
     #[error("The address provided as a parameter to the `exit` method does not match the transaction sender")]
     /// The address provided as a parameter to the `exit` method does not match the transaction sender.
     SuppliedAddressDoesNotMatchTxSender {
