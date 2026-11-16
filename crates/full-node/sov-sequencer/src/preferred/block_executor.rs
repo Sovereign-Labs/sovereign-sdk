@@ -181,6 +181,26 @@ pub(crate) struct RollupBlockExecutorErrorWithBudget<S: Spec> {
     pub(crate) inner_err: RollupBlockExecutorError<S>,
 }
 
+/// How long to spin for the executor's result before waiting for a wake-up. The executor usually
+/// answers within tens of microseconds, and a wake-up round trip costs a large share of that.
+const SPIN_BEFORE_WAIT: std::time::Duration = std::time::Duration::from_micros(50);
+
+async fn recv_spinning_first<T>(receiver: &mut mpsc::Receiver<T>) -> Option<T> {
+    let spin_until = std::time::Instant::now() + SPIN_BEFORE_WAIT;
+    loop {
+        match receiver.try_recv() {
+            Ok(item) => return Some(item),
+            Err(mpsc::error::TryRecvError::Disconnected) => return None,
+            Err(mpsc::error::TryRecvError::Empty) => {
+                if std::time::Instant::now() >= spin_until {
+                    return receiver.recv().await;
+                }
+                std::hint::spin_loop();
+            }
+        }
+    }
+}
+
 impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     /// The maximum number of transactions that can be buffered before incoming txs start getting
     /// rejected.
@@ -360,7 +380,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             });
         }
 
-        let Some(result) = task_state.result_receiver.recv().await else {
+        let Some(result) = recv_spinning_first(&mut task_state.result_receiver).await else {
             tracing::error!("The rollup block executor task failed unexpectedly. Gracefully shutting down the sequencer.");
             self.primary_shutdown.shutdown(); // We don't care if this was already triggered, because that would mean the sequencer is already shutting down - which is exactly what we want.
             return Err(RollupBlockExecutorErrorWithBudget {
