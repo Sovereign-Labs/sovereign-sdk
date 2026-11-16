@@ -4,5 +4,6 @@ mod challenger;
 mod deposit;
 mod helpers;
 mod invariant;
+mod out_of_gas;
 mod unbonding;
 mod wallet;
