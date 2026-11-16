@@ -3,7 +3,6 @@
 use std::sync::{Arc, Mutex};
 
 use crate::guest::SP1Guest;
-use crate::metrics::submit_proving_metric;
 use crate::SP1MethodId;
 use serde::Serialize;
 use sov_metrics::ZkCircuit;
@@ -17,12 +16,10 @@ use sov_rollup_interface::zk::aggregated_proof::{
 };
 use sov_rollup_interface::zk::{SerializedZkProof, ZkvmHost};
 use sp1_sdk::blocking::{
-    CpuProver, EnvProver, EnvProvingKey, LightProver, MockProver, NetworkProver,
-    NetworkProverBuilder, ProveRequest, Prover, ProverClient,
+    CpuProver, EnvProver, EnvProvingKey, LightProver, MockProver, ProveRequest, Prover,
 };
-use sp1_sdk::network::{FulfillmentStrategy, NetworkMode};
 use sp1_sdk::SP1VerifyingKey;
-use sp1_sdk::{HashableKey, SP1Proof, SP1ProvingKey, SP1Stdin};
+use sp1_sdk::{HashableKey, SP1Proof, SP1Stdin};
 use sp1_sdk::{ProvingKey, RiscvAir};
 
 /// SP1 host that produces aggregated (outer) proofs by recursively verifying
@@ -159,7 +156,9 @@ impl SP1AggregationHost {
 pub struct SP1Prover {
     prover: EnvProver,
     pk: Arc<EnvProvingKey>,
+    #[cfg_attr(not(feature = "network"), allow(dead_code))]
     circuit: ZkCircuit,
+    #[cfg_attr(not(feature = "network"), allow(dead_code))]
     is_reserved_network: bool,
 }
 
@@ -233,6 +232,7 @@ impl SP1Prover {
         // For network proving we go through the explicit two-step API
         // (`request()` + `wait_proof()`) so we can capture the request_id and
         // afterwards fetch the canonical cycles + PGUs the network recorded.
+        #[cfg(feature = "network")]
         if let EnvProver::Network(network) = &self.prover {
             let EnvProvingKey::Network { pk, .. } = &*self.pk else {
                 anyhow::bail!("EnvProver is Network but proving key variant is not Network");
@@ -258,16 +258,18 @@ impl SP1Prover {
         Ok(output)
     }
 
+    #[cfg(feature = "network")]
     fn run_network(
         &self,
-        network: &NetworkProver,
-        pk: &SP1ProvingKey,
+        network: &sp1_sdk::blocking::NetworkProver,
+        pk: &sp1_sdk::SP1ProvingKey,
         stdin: SP1Stdin,
     ) -> anyhow::Result<sp1_sdk::SP1ProofWithPublicValues> {
         let mut request_builder = network.prove(pk, stdin).compressed();
 
         if self.is_reserved_network {
-            request_builder = request_builder.strategy(FulfillmentStrategy::Reserved);
+            request_builder =
+                request_builder.strategy(sp1_sdk::network::FulfillmentStrategy::Reserved);
         }
 
         let request_id = request_builder
@@ -278,7 +280,7 @@ impl SP1Prover {
             .wait_proof(request_id, None, None)
             .map_err(|e| anyhow::anyhow!("SP1 network proof wait failed. Error: {:?}", e))?;
 
-        submit_proving_metric(network, request_id, self.circuit);
+        crate::metrics::submit_proving_metric(network, request_id, self.circuit);
 
         Ok(proof)
     }
@@ -384,19 +386,25 @@ fn prover_client_from_env() -> anyhow::Result<(EnvProver, bool)> {
             false,
         ),
 
+        #[cfg(feature = "network")]
         "network" => (
             EnvProver::Network(Box::new(
-                NetworkProverBuilder::new_with_machine(machine).build(),
+                sp1_sdk::blocking::NetworkProverBuilder::new_with_machine(machine).build(),
             )),
             false,
         ),
+        #[cfg(feature = "network")]
         "network-reserved" => {
-            let client = ProverClient::builder()
-                .network_for(NetworkMode::Reserved)
+            let client = sp1_sdk::blocking::ProverClient::builder()
+                .network_for(sp1_sdk::network::NetworkMode::Reserved)
                 .build();
 
             (EnvProver::Network(Box::new(client)), true)
         }
+        #[cfg(not(feature = "network"))]
+        "network" | "network-reserved" => anyhow::bail!(
+            "SP1_PROVER={prover} requires sov-sp1-adapter to be built with the `network` feature"
+        ),
         var => anyhow::bail!("Invalid SP1_PROVER env variable: {var}"),
     };
 
