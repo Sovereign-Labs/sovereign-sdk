@@ -1,5 +1,11 @@
 use super::*;
 
+/// Bound for the `seq_behind_deferred_slots_count*` resync loops. These tests are in the
+/// `heavy-sequencer-tests` nextest group, which allows up to 10 minutes under load
+/// (`.config/nextest.toml`), so `POLLING_TIMEOUT` (60s) is too tight. Kept below the nextest
+/// kill so that a stalled resync fails with this test's message instead of a bare timeout.
+const RESYNC_TIMEOUT: Duration = Duration::from_secs(9 * 60);
+
 #[derive(Debug, serde::Deserialize)]
 struct ManyValuesItemResponse {
     #[allow(unused)]
@@ -129,7 +135,7 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    tokio::time::timeout(TestRollup::<TestBlueprint>::POLLING_TIMEOUT, async {
+    tokio::time::timeout(RESYNC_TIMEOUT, async {
         while !test_rollup.is_sequencer_ready().await {
             let _ = da_layer.produce_block().await;
             sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
@@ -259,7 +265,7 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    tokio::time::timeout(TestRollup::<TestBlueprint>::POLLING_TIMEOUT, async {
+    tokio::time::timeout(RESYNC_TIMEOUT, async {
         while !test_rollup.is_sequencer_ready().await {
             test_rollup.da_service.produce_block_now().await.unwrap();
             sleep(Duration::from_millis(50)).await;
