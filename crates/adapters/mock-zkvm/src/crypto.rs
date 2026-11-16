@@ -191,9 +191,39 @@ impl BorshDeserialize for Ed25519PublicKey {
         let mut buffer = [0; PUBLIC_KEY_LENGTH];
         reader.read_exact(&mut buffer)?;
 
-        let pub_key = DalekPublicKey::from_bytes(&buffer).map_err(map_error)?;
+        let pub_key = decompress_public_key(&buffer).map_err(map_error)?;
 
         Ok(Self { pub_key })
+    }
+}
+
+/// `DalekPublicKey::from_bytes`, memoized per thread in native builds: every transaction carries
+/// its sender's key, and point decompression is a large share of decoding a transaction. Only
+/// successful decompressions are cached, so invalid keys are rejected exactly as before.
+fn decompress_public_key(bytes: &[u8; PUBLIC_KEY_LENGTH]) -> Result<DalekPublicKey, SignatureError> {
+    #[cfg(feature = "native")]
+    {
+        /// Bounds the memory per thread; the cache is cleared when it fills up.
+        const MAX_CACHED_KEYS: usize = 4096;
+        thread_local! {
+            static KEYS: std::cell::RefCell<std::collections::HashMap<[u8; PUBLIC_KEY_LENGTH], DalekPublicKey>> =
+                std::cell::RefCell::new(std::collections::HashMap::new());
+        }
+        KEYS.with_borrow_mut(|keys| {
+            if let Some(key) = keys.get(bytes) {
+                return Ok(*key);
+            }
+            let key = DalekPublicKey::from_bytes(bytes)?;
+            if keys.len() >= MAX_CACHED_KEYS {
+                keys.clear();
+            }
+            keys.insert(*bytes, key);
+            Ok(key)
+        })
+    }
+    #[cfg(not(feature = "native"))]
+    {
+        DalekPublicKey::from_bytes(bytes)
     }
 }
 
