@@ -6,6 +6,20 @@ use super::*;
 /// kill so that a stalled resync fails with this test's message instead of a bare timeout.
 const RESYNC_TIMEOUT: Duration = Duration::from_secs(9 * 60);
 
+/// Lets the node process every produced DA block, then gives the sequencer up to a second to
+/// report ready. Producing blocks without waiting for the node keeps moving the tip that the
+/// recovering sequencer resyncs to, so under load it can chase the tip and never become ready.
+async fn sequencer_ready_after_node_sync(test_rollup: &TestRollup<TestBlueprint>) -> bool {
+    test_rollup.wait_for_node_synced().await.unwrap();
+    for _ in 0..20 {
+        if test_rollup.is_sequencer_ready().await {
+            return true;
+        }
+        sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
+    }
+    false
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct ManyValuesItemResponse {
     #[allow(unused)]
@@ -136,9 +150,8 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
     tokio::time::timeout(RESYNC_TIMEOUT, async {
-        while !test_rollup.is_sequencer_ready().await {
+        while !sequencer_ready_after_node_sync(&test_rollup).await {
             let _ = da_layer.produce_block().await;
-            sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
         }
     })
     .await
@@ -266,9 +279,8 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
     tokio::time::timeout(RESYNC_TIMEOUT, async {
-        while !test_rollup.is_sequencer_ready().await {
+        while !sequencer_ready_after_node_sync(&test_rollup).await {
             test_rollup.da_service.produce_block_now().await.unwrap();
-            sleep(Duration::from_millis(50)).await;
         }
     })
     .await
