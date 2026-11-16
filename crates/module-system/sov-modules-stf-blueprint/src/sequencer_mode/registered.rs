@@ -136,7 +136,7 @@ fn track_transaction_metrics<S: Spec>(
             tx_effect,
             execution_context: execution_context.str(),
             visible_slot_number: visible_slot_number.get(),
-            sequencer_address: sequencer_address.to_string(),
+            sequencer_address: da_address_label(sequencer_address),
             call_message: message_discriminant,
             gas_used: gas_used.as_ref().to_vec(),
         };
@@ -144,6 +144,23 @@ fn track_transaction_metrics<S: Spec>(
         metrics_tracker.submit_known_metric(transaction_metrics);
         metrics_tracker.submit(processing_metrics);
     });
+}
+
+/// `address.to_string()`, memoized per thread: a batch has one sequencer, so consecutive txs
+/// format the same address, and formatting it costs more than the rest of the metric.
+#[cfg(feature = "native")]
+fn da_address_label(address: &impl sov_rollup_interface::BasicAddress) -> String {
+    thread_local! {
+        static LAST: std::cell::RefCell<Option<(Vec<u8>, String)>> = const { std::cell::RefCell::new(None) };
+    }
+    LAST.with_borrow_mut(|last| match last {
+        Some((bytes, label)) if bytes.as_slice() == address.as_ref() => label.clone(),
+        _ => {
+            let label = address.to_string();
+            *last = Some((address.as_ref().to_vec(), label.clone()));
+            label
+        }
+    })
 }
 
 /// Actual processing of transaction.
