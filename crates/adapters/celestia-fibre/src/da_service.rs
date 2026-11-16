@@ -1,3 +1,4 @@
+use std::future::Future;
 use std::sync::Arc;
 use std::time::Duration;
 
@@ -17,7 +18,10 @@ use sov_rollup_interface::common::HexHash;
 use sov_rollup_interface::da::{
     BlobReaderTrait, BlockHeaderTrait, DaProof, RelevantBlobs, RelevantProofs,
 };
-use sov_rollup_interface::node::da::{DaService, SlotData, SubmitBlobReceipt};
+use sov_rollup_interface::node::da::{
+    run_maybe_retryable_async_fn_with_retries, DaService, MaybeRetryable, SlotData,
+    SubmitBlobReceipt,
+};
 use tokio::sync::oneshot;
 
 use crate::commitment::prove_rows_prefix;
@@ -75,6 +79,8 @@ pub struct CelestiaFibreDaService {
     signer_address: Option<CelestiaAddress>,
     rollup_batch_namespace: Namespace,
     rollup_proof_namespace: Namespace,
+    request_timeout: Duration,
+    backoff_policy: backon::ExponentialBuilder,
 }
 
 impl CelestiaFibreDaService {
@@ -85,7 +91,9 @@ impl CelestiaFibreDaService {
     ) -> anyhow::Result<Self> {
         tracing::info!(?config, "Initializing Celestia Fibre Adapter");
 
-        let mut rpc = celestia_client::Client::builder().rpc_url(&config.rpc_url);
+        let mut rpc = celestia_client::Client::builder()
+            .rpc_url(&config.rpc_url)
+            .timeout(config.api_request_timeout());
         if let Some(token) = &config.rpc_auth_token {
             rpc = rpc.rpc_auth_token(token);
         }
@@ -98,7 +106,9 @@ impl CelestiaFibreDaService {
         if let Some(token) = &config.grpc_auth_token {
             endpoint = endpoint.metadata("x-token", token);
         }
-        let mut grpc = celestia_grpc::GrpcClient::builder().endpoint(endpoint);
+        let mut grpc = celestia_grpc::GrpcClient::builder()
+            .endpoint(endpoint)
+            .timeout(config.api_request_timeout());
         let mut signing_key = None;
         if let Some(key_hex) = &config.signer_private_key {
             let key_bytes = hex::decode(key_hex).context("`signer_private_key` is not hex")?;
@@ -129,7 +139,49 @@ impl CelestiaFibreDaService {
             signer_address,
             rollup_batch_namespace: chain_params.rollup_batch_namespace,
             rollup_proof_namespace: chain_params.rollup_proof_namespace,
+            request_timeout: config.request_timeout(),
+            backoff_policy: config.backoff_policy(),
         })
+    }
+
+    /// Runs a Celestia node call with the same timeout and retries as `sov-celestia-adapter`:
+    /// every attempt is bounded by `request_timeout_secs`, and every failure is retried as
+    /// transient according to the `backoff_*` config parameters.
+    async fn call_with_retries<T, E, Fut>(
+        &self,
+        method_name: &str,
+        call: impl Fn() -> Fut,
+    ) -> anyhow::Result<T>
+    where
+        Fut: Future<Output = Result<T, E>>,
+        E: Into<anyhow::Error>,
+    {
+        run_maybe_retryable_async_fn_with_retries(
+            self.backoff_policy,
+            || async {
+                match tokio::time::timeout(self.request_timeout, call()).await {
+                    Ok(Ok(response)) => Ok(response),
+                    Ok(Err(error)) => Err(MaybeRetryable::Transient(error.into())),
+                    Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("await timeout"))),
+                }
+            },
+            method_name,
+        )
+        .await
+    }
+
+    async fn get_namespace_data(
+        &self,
+        height: u64,
+        namespace: Namespace,
+    ) -> anyhow::Result<NamespaceData> {
+        self.call_with_retries("get_namespace_data", || async {
+            self.client
+                .share()
+                .get_namespace_data(height, namespace)
+                .await
+        })
+        .await
     }
 
     /// Proves the sequences of `namespace`, selects the Fibre references among them by verifying
@@ -150,8 +202,14 @@ impl CelestiaFibreDaService {
         // TODO: downloads run sequentially, parallelize if blocks carry many Fibre blobs.
         for fibre_ref in refs {
             let blob_id = BlobID::new(FIBRE_BLOB_VERSION, fibre_ref.commitment);
+            // The blob is stored by the validators of the block that references it, which can
+            // differ from the head validator set when the node is catching up.
+            let options = || DownloadOptions {
+                height: Some(height),
+                ..DownloadOptions::default()
+            };
             // Validators signed that they store this blob, so a failure is transient.
-            let downloaded = (|| self.fibre.download(&blob_id, DownloadOptions::default()))
+            let downloaded = (|| self.fibre.download(&blob_id, options()))
                 .retry(download_backoff())
                 .notify(|error, delay| {
                     tracing::warn!(
@@ -197,7 +255,13 @@ impl CelestiaFibreDaService {
             .try_into()
             .context("Fibre commitment is not 32 bytes")?;
 
-        let tx = self.grpc.submit_message(msg, TxConfig::default()).await?;
+        let tx = self
+            .call_with_retries("submit_pay_for_fibre", || async {
+                self.grpc
+                    .submit_message(msg.clone(), TxConfig::default())
+                    .await
+            })
+            .await?;
         tracing::info!(
             da_height = tx.height,
             bytes = data.len(),
@@ -261,19 +325,10 @@ impl DaService for CelestiaFibreDaService {
     type Error = anyhow::Error;
 
     async fn get_block_at(&self, height: u64) -> Result<Self::FilteredBlock, Self::Error> {
-        let shares = self.client.share();
         let (header, batch_namespace_data, proof_namespace_data) = tokio::try_join!(
             self.get_block_header_at(height),
-            async {
-                Ok(shares
-                    .get_namespace_data(height, self.rollup_batch_namespace)
-                    .await?)
-            },
-            async {
-                Ok(shares
-                    .get_namespace_data(height, self.rollup_proof_namespace)
-                    .await?)
-            },
+            self.get_namespace_data(height, self.rollup_batch_namespace),
+            self.get_namespace_data(height, self.rollup_proof_namespace),
         )?;
         let ((batch_namespace_proof, batch_blobs), (proof_namespace_proof, proof_blobs)) = tokio::try_join!(
             self.download_fibre_blobs(&header, self.rollup_batch_namespace, batch_namespace_data),
@@ -289,7 +344,12 @@ impl DaService for CelestiaFibreDaService {
     }
 
     async fn get_block_header_at(&self, height: u64) -> Result<CelestiaHeader, Self::Error> {
-        Ok(self.client.header().get_by_height(height).await?.into())
+        let header = self
+            .call_with_retries("get_block_header_at", || async {
+                self.client.header().get_by_height(height).await
+            })
+            .await?;
+        Ok(header.into())
     }
 
     async fn get_last_finalized_block_header(&self) -> Result<CelestiaHeader, Self::Error> {
@@ -298,7 +358,12 @@ impl DaService for CelestiaFibreDaService {
     }
 
     async fn get_head_block_header(&self) -> Result<CelestiaHeader, Self::Error> {
-        Ok(self.client.header().network_head().await?.into())
+        let header = self
+            .call_with_retries("get_head_block_header", || async {
+                self.client.header().network_head().await
+            })
+            .await?;
+        Ok(header.into())
     }
 
     fn extract_relevant_blobs(&self, block: &Self::FilteredBlock) -> RelevantBlobs<FibreBlob> {
@@ -380,13 +445,10 @@ impl DaService for CelestiaFibreDaService {
     }
 
     async fn get_proofs_at(&self, height: u64) -> Result<Vec<Vec<u8>>, Self::Error> {
-        let (header, namespace_data) = tokio::try_join!(self.get_block_header_at(height), async {
-            Ok(self
-                .client
-                .share()
-                .get_namespace_data(height, self.rollup_proof_namespace)
-                .await?)
-        },)?;
+        let (header, namespace_data) = tokio::try_join!(
+            self.get_block_header_at(height),
+            self.get_namespace_data(height, self.rollup_proof_namespace),
+        )?;
         let (_, blobs) = self
             .download_fibre_blobs(&header, self.rollup_proof_namespace, namespace_data)
             .await?;
