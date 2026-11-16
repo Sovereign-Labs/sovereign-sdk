@@ -29,7 +29,7 @@ convert_case = { workspace = true }
 darling = { workspace = true }
 derive_more = { workspace = true, features = ["deref"] }
 hex = { workspace = true }
-prettier-please = { version = "0.3", default-features = false }
+prettyplease = "0.2.22"
 proc-macro2 = { workspace = true }
 quote = { workspace = true }
 serde = { workspace = true }

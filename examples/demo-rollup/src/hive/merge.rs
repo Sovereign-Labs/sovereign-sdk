@@ -1,6 +1,6 @@
 use std::collections::{BTreeMap, HashMap};
 
-use alloy::genesis::GenesisAccount;
+use alloy_genesis::GenesisAccount;
 use alloy_primitives::{hex, keccak256, Address, B256, U256};
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::{json, Value};

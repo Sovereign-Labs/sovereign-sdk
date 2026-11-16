@@ -1,7 +1,7 @@
 use std::fs;
 use std::path::Path;
 
-use alloy::consensus::Header as ConsensusHeader;
+use alloy_consensus::Header as ConsensusHeader;
 use alloy_rlp::{Decodable, Header, PayloadView};
 use anyhow::{bail, Context, Result};
 
@@ -51,7 +51,7 @@ pub(crate) fn activation_block_for_timestamp(
 mod tests {
     use std::fs;
 
-    use alloy::consensus::Header as ConsensusHeader;
+    use alloy_consensus::Header as ConsensusHeader;
     use alloy_rlp::{Encodable, Header as RlpHeader};
 
     use super::*;

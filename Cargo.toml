@@ -240,12 +240,10 @@ borsh = { version = "=1.6.1", features = ["derive"] }
 #     https://github.com/Sovereign-Labs/sovereign-sdk/issues/283
 bincode = "1.3.3"
 bcs = "0.2.0"
-byteorder = { version = "1.5.0", default-features = false }
 bytes = { version = "1.10", default-features = false }
 convert_case = { version = "0.6", default-features = false }
 chrono = { version = "0.4", default-features = false, features = ["now"] }
-darling = "0.21"
-derive-new = "0.7.0"
+darling = "0.23"
 derivative = { version = "2.2", features = ["use_core"] }
 digest = { version = "0.10.7", default-features = false, features = ["alloc"] }
 # Don't forget to upgrade zkVM patches if changing this one.
@@ -284,7 +282,6 @@ lz4_flex = { version = "0.11", default-features = false }
 thiserror = "2"
 tower = { version = "0.5", default-features = false }
 tower-http = "0.6"
-tower-request-id = "0.3"
 tracing = { version = "0.1.40", default-features = false, features = ["attributes"] }
 tracing-subscriber = { version = "0.3.18" } # There's hardly any reason to disable its default features.
 tracing-appender = { version = "0.2", default-features = false }
@@ -308,8 +305,8 @@ testcontainers-modules = "0.15.0"
 test-strategy = "0.4.0"
 tokio = { version = "1.42.2", default-features = false }
 tokio-stream = { version = "0.1", features = ["sync"] }
-tokio-tungstenite = { version = "0.29.0", default-features = false }
-tungstenite = "0.29.0"
+tokio-tungstenite = { version = "0.28.0", default-features = false }
+tungstenite = "0.28.0"
 uuid = { version = "1.10", default-features = false } # v1.9 is important because it guarantees monotic UUIDv7 generation: https://github.com/uuid-rs/uuid/releases/tag/1.9.0.
 num_cpus = "1.16"
 ruint = { version = "1", default-features = false }
@@ -346,6 +343,7 @@ alloy-sol-types = { version = "1.4.1", default-features = false }
 alloy-dyn-abi = { version = "1.4.1", default-features = false }
 alloy-eips = { version = "1.8.3", default-features = false }
 alloy-consensus = { version = "1.8.3", default-features = false }
+alloy-genesis = { version = "1.8.3", default-features = false }
 alloy-contract = { version = "1.8.3", default-features = false }
 alloy-transport = { version = "1.8.3", default-features = false }
 alloy-rpc-types = { version = "1.8.3", features = [
@@ -368,6 +366,11 @@ secp256k1 = { version = "=0.30.0", default-features = false, features = [
 k256 = { version = "0.13.4", default-features = false, features = ["ecdsa", "std"] }
 quick_cache = "0.6.16"
 # End of EVM dependencies
+
+# Build scripts and proc-macros default to opt-level 0 in release, so every crate shared between
+# them and the binary (e.g. the runtime that demo-stf's build.rs compiles) is built twice.
+[profile.release.build-override]
+opt-level = 3
 
 [profile.rust-analyzer-optimized]
 inherits = "dev"

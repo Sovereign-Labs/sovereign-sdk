@@ -2,7 +2,6 @@ use crate::{to_rollup_address, AccountStorageKey};
 use alloy_primitives::{Address, BlockHash, BlockNumber, B256, U256};
 use derive_more::Debug;
 use derive_more::{Deref, Into};
-use derive_new::new;
 use revm::state::{AccountInfo, Bytecode};
 use revm::{database_interface::DBErrorMarker, Database};
 use serde::{Deserialize, Serialize};
@@ -33,7 +32,6 @@ impl<Ws: StateAccessor> DBErrorMarker for Error<Ws> {}
 pub struct DbAccount(pub(crate) AccountInfo);
 
 /// A queryable EVM database.
-#[derive(new)]
 pub struct EvmDb<'a, Ws, S: Spec> {
     pub(crate) accounts: StateMap<Address, DbAccount, BcsCodec>,
     pub(crate) account_storage: StateMap<AccountStorageKey, U256, BcsCodec>,
@@ -41,6 +39,26 @@ pub struct EvmDb<'a, Ws, S: Spec> {
     pub(crate) block_hashes: StateMap<BlockNumber, BlockHash, BcsCodec>,
     pub(crate) state: &'a mut Ws,
     pub(crate) bank_module: sov_bank::Bank<S>,
+}
+
+impl<'a, Ws, S: Spec> EvmDb<'a, Ws, S> {
+    pub(crate) fn new(
+        accounts: StateMap<Address, DbAccount, BcsCodec>,
+        account_storage: StateMap<AccountStorageKey, U256, BcsCodec>,
+        code: StateMap<B256, Bytecode, BcsCodec>,
+        block_hashes: StateMap<BlockNumber, BlockHash, BcsCodec>,
+        state: &'a mut Ws,
+        bank_module: sov_bank::Bank<S>,
+    ) -> Self {
+        Self {
+            accounts,
+            account_storage,
+            code,
+            block_hashes,
+            state,
+            bank_module,
+        }
+    }
 }
 
 impl<'a, Ws: TxState<S>, S: Spec> Database for EvmDb<'a, Ws, S>

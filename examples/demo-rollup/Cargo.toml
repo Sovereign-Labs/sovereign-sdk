@@ -83,7 +83,8 @@ tracing = { workspace = true }
 rockbound = { workspace = true, optional = true }
 clap = { workspace = true, features = ["derive"] }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
-alloy = { workspace = true, features = ["genesis"] }
+alloy-consensus = { workspace = true, features = ["std"] }
+alloy-genesis = { workspace = true, features = ["std"] }
 alloy-primitives = { workspace = true }
 alloy-rlp = { workspace = true }
 
@@ -129,6 +130,7 @@ tokio-tungstenite = { workspace = true, features = ["connect"] }
 tracing-subscriber = { workspace = true }
 rand = { workspace = true }
 
+alloy = { workspace = true }
 alloy-primitives = { workspace = true }
 alloy-rpc-types-eth = { workspace = true }
 alloy-rpc-types-trace = { workspace = true }

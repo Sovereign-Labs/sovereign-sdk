@@ -17,7 +17,7 @@ pub fn expand_to_file(input: TokenStream, filename: &str) -> Result<TokenStream,
     // Sometimes proc-macros don't result in valid Rust code, so we
     // can't pretty print them. That's okay.
     let input_str = syn::parse_file(&input_str)
-        .map(|f| prettier_please::unparse(&f))
+        .map(|f| prettyplease::unparse(&f))
         .unwrap_or(input_str);
 
     let dest = {

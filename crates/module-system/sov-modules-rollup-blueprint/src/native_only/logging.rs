@@ -75,7 +75,8 @@ pub fn initialize_logging() -> LoggingGuard {
         .with_filter(IgnoreSpan(ExecutionContext::SEQUENCER_WARM_UP))
         .boxed();
 
-    if cfg!(tokio_unstable) && should_init_tokio_console_subscriber() {
+    #[cfg(tokio_unstable)]
+    if should_init_tokio_console_subscriber() {
         layers = layers
             .and_then(
                 // See <https://github.com/tokio-rs/console?tab=readme-ov-file#using-it>.

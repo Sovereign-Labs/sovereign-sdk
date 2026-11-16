@@ -20,7 +20,6 @@ alloy-eips = { workspace = true }
 alloy-sol-types = { workspace = true }
 alloy-transport = { workspace = true }
 serde = { workspace = true }
-derive-new = { workspace = true }
 alloy-serde = { workspace = true }
 
 [lints]

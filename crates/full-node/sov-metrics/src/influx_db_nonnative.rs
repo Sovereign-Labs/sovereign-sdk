@@ -1,4 +1,3 @@
-use derive_new::new;
 use std::fmt;
 use std::sync::Arc;
 use std::time::Duration;
@@ -31,7 +30,7 @@ pub enum StateAccessType {
 }
 
 /// A key for a metric.
-#[derive(Default, new)]
+#[derive(Default)]
 pub struct MetricSlotKey {
     key: Option<Arc<Vec<u8>>>,
     display_fn: Option<ArcFormatFn>,

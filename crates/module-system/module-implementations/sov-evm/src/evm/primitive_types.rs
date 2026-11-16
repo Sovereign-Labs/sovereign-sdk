@@ -15,7 +15,6 @@ use alloy_primitives::{Address, Sealable, Sealed, B256};
 use alloy_primitives::{Bloom, TxHash};
 use bytes::BufMut;
 use derive_more::{Deref, DerefMut};
-use derive_new::new;
 use serde_with::serde_as;
 use sov_modules_api::macros::UniversalWallet;
 use sov_rollup_interface::da::Time;
@@ -71,7 +70,7 @@ pub struct RlpEvmTransaction {
 }
 
 #[serde_as]
-#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, Deref, DerefMut, new)]
+#[derive(Debug, PartialEq, Clone, serde::Serialize, serde::Deserialize, Deref, DerefMut)]
 pub struct TxSignedAndRecovered {
     /// Signer of the transaction
     pub(crate) signer: Address,
@@ -83,6 +82,20 @@ pub struct TxSignedAndRecovered {
     pub(crate) signed_transaction: TransactionSigned,
     /// Block the transaction was added to
     pub block_number: u64,
+}
+
+impl TxSignedAndRecovered {
+    pub(crate) fn new(
+        signer: Address,
+        signed_transaction: TransactionSigned,
+        block_number: u64,
+    ) -> Self {
+        Self {
+            signer,
+            signed_transaction,
+            block_number,
+        }
+    }
 }
 
 impl Encodable2718 for TxSignedAndRecovered {

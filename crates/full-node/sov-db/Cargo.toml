@@ -24,7 +24,6 @@ parking_lot = "0.12.4"
 anyhow = { workspace = true, default-features = true }
 arbitrary = { workspace = true, features = ["derive"], optional = true }
 async-trait = { workspace = true }
-byteorder = { workspace = true, default-features = true }
 borsh = { workspace = true, default-features = true, features = ["bytes", "rc"] }
 futures = { workspace = true, default-features = true }
 proptest = { workspace = true, optional = true, features = ["std"] }
