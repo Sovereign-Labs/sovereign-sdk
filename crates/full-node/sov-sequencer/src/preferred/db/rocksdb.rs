@@ -314,13 +314,15 @@ mod tests {
         run_rocksdb_test(2000).await;
     }
 
+    // Flaky: asserts a wall-clock budget (2 minutes), which depends on disk and CPU contention.
     #[tokio::test(flavor = "multi_thread")]
-    async fn test_sequencer_rocksdb_db_performance_can_run_10k_batches_in_2_minutes() {
+    async fn flaky_test_sequencer_rocksdb_db_performance_can_run_10k_batches_in_2_minutes() {
         let handle = tokio::task::spawn(run_rocksdb_test(10_000));
 
-        let _ = tokio::time::timeout(std::time::Duration::from_secs(120), handle)
+        tokio::time::timeout(std::time::Duration::from_secs(120), handle)
             .await
-            .expect("Creating 10_000 batches should take less than 2 minutes; you may need to check your filesystem performance!");
+            .expect("Creating 10_000 batches should take less than 2 minutes; you may need to check your filesystem performance!")
+            .expect("RocksDB test task panicked");
     }
 
     async fn run_rocksdb_test(iters: u64) {
