@@ -266,10 +266,23 @@ impl AsRef<[u8]> for Ed25519Signature {
     }
 }
 
+#[cfg(feature = "native")]
+static ED25519_VERIFICATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Number of ed25519 signature verifications this process has performed so far.
+///
+/// Lets tests assert that the node does no signature work a sequencer has not paid for.
+#[cfg(feature = "native")]
+pub fn ed25519_verifications_performed() -> u64 {
+    ED25519_VERIFICATIONS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 impl sov_rollup_interface::crypto::Signature for Ed25519Signature {
     type PublicKey = Ed25519PublicKey;
 
     fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError> {
+        #[cfg(feature = "native")]
+        ED25519_VERIFICATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         pub_key
             .pub_key
             .verify_strict(msg, &self.msg_sig)
