@@ -19,8 +19,9 @@
 //!
 //! Knobs: `SOV_BENCH_TXS` (default 50_000), `SOV_BENCH_SENDERS` (1_000),
 //! `SOV_BENCH_SUBMITTERS` (64), `SOV_BENCH_METRICS_FILE` (optional path to dump the raw
-//! metric lines). The metrics tracker is process-global, so run one rollup per
-//! process.
+//! metric lines), `SOV_BENCH_POSTGRES_URL` (optional; the sequencer uses this Postgres database,
+//! which must be empty, instead of RocksDB). The metrics tracker is process-global, so run one
+//! rollup per process.
 
 #![allow(clippy::float_arithmetic)]
 
@@ -320,6 +321,14 @@ async fn main() -> anyhow::Result<()> {
         if let SequencerKindConfig::Preferred(p) = &mut c.sequencer_config {
             p.ideal_lag_behind_finalized_slot = 3;
             p.batch_execution_time_limit_millis = 2000;
+            p.postgres_config = std::env::var("SOV_BENCH_POSTGRES_URL").ok().map(|url| {
+                sov_sequencer::preferred::PostgresConfig {
+                    postgres_connection_string: url,
+                    node_id: "bench".to_string(),
+                    node_role: sov_sequencer::preferred::ConfiguredNodeRole::Leader,
+                    leader_election: Default::default(),
+                }
+            });
         }
     })
     .set_da_config(|da| da.sender_address = sequencer_info.da_address)
