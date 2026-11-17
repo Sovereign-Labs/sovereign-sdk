@@ -2,7 +2,10 @@ use std::collections::HashMap;
 use std::env;
 
 use sov_blob_storage::config_deferred_slots_count;
+use sov_chain_state::ChainState;
 use sov_mock_da::MockBlob;
+use sov_modules_api::capabilities::BlockGasInfo;
+use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::{Amount, BlobReaderTrait, Gas, GasArray, GasSpec, GetGasPrice};
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_sequencer_registry::SequencerRegistry;
@@ -10,7 +13,7 @@ use sov_test_utils::SequencerInfo;
 
 use crate::helpers_soft_confirmations::{
     assert_blobs_are_correctly_received_soft_confirmation, build_soft_confirmation_blobs,
-    setup_soft_confirmation_kernel, setup_with_registration_soft_confirmation_kernel,
+    setup_soft_confirmation_kernel, setup_with_registration_soft_confirmation_kernel, SoftConfRT,
 };
 use crate::{deferred_escrows, pending_escrow, sequencer_stake, SequenceInfo, TestData, S};
 
@@ -788,5 +791,92 @@ fn executing_deferred_blob_removes_its_escrow_entry() {
         }),
         None,
         "The escrow entry must be removed once the deferred blob is selected"
+    );
+}
+
+/// If the gas price rises so much while a blob is deferred that its escrow can no longer cover the
+/// pre-execution checks, the blob is dropped and its whole escrow is refunded to its sender.
+#[test]
+fn deferred_blob_with_insufficient_escrow_is_dropped_and_refunded() {
+    let (
+        TestData {
+            preferred_sequencer,
+            regular_sequencer,
+            ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+    let mut nonces = runner.nonces().clone();
+    let sender_address = regular_sequencer.user_info.address();
+    // `__apply_to_state` commits a state version that has no slot receipt, after which the runner
+    // can no longer query by true slot number. So this test only queries the visible state.
+    let sender_balance = |runner: &crate::TestRunner<_>| {
+        runner.query_visible_state(|state| {
+            crate::TestRunner::<SoftConfRT>::bank_gas_balance(&sender_address, state)
+                .unwrap_or(Amount::ZERO)
+        })
+    };
+
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(regular_sequencer.clone(), SequencerInfo::Regular)],
+        &mut nonces,
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+    let escrows = deferred_escrows(&runner);
+    assert_eq!(
+        escrows.len(),
+        1,
+        "The non-preferred blob should be deferred with an escrow entry"
+    );
+    let (holder, escrowed_amount) = &escrows[0];
+    let sender_balance_before = sender_balance(&runner);
+
+    // The escrow covers the pre-execution checks at up to twice the gas price at deferral, so
+    // raise the base fee of the latest rollup block well beyond that.
+    let gas_price = runner.query_visible_state(|state| state.gas_price());
+    runner.__apply_to_state(|state| {
+        let mut chain_state = ChainState::<S>::default();
+        let rollup_height = chain_state.rollup_height(state).unwrap_infallible();
+        chain_state.record_gas_usage(
+            state,
+            BlockGasInfo::new(
+                <S as GasSpec>::block_gas_limit(),
+                gas_price.checked_scalar_product(Amount::new(8)).unwrap(),
+            ),
+            rollup_height,
+        );
+    });
+
+    // The preferred sequencer advances the visible slot over the deferred blob.
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(
+            preferred_sequencer.clone(),
+            SequencerInfo::Preferred {
+                slots_to_advance: 2,
+                sequence_number: 1,
+            },
+        )],
+        &mut nonces,
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+
+    assert_eq!(
+        runner.receipts().last().unwrap().batch_receipts.len(),
+        1,
+        "Only the preferred batch must execute, the deferred blob must be dropped"
+    );
+    assert_eq!(
+        sender_balance(&runner),
+        sender_balance_before.checked_add(*escrowed_amount).unwrap(),
+        "The whole escrow must be refunded to the sender of the dropped blob"
+    );
+    assert_eq!(
+        runner.query_visible_state(|state| {
+            SequencerRegistry::<S>::default().get_escrowed_amount_via_api(holder, state)
+        }),
+        None,
+        "The escrow entry must be removed once the escrow is refunded"
     );
 }
