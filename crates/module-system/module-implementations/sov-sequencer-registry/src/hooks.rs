@@ -10,20 +10,34 @@ impl<S: Spec> BlockHooks for SequencerRegistry<S> {
         if !Self::rotation_enabled(state) {
             return;
         }
-        let Some(pending) = self
-            .pending_da_address_update
-            .remove(state)
+        let Some(pending_updates) = self
+            .pending_da_address_updates
+            .get(state)
             .unwrap_infallible()
         else {
             return;
         };
+        self.pending_da_address_updates
+            .delete(state)
+            .unwrap_infallible();
+        for pending in pending_updates {
+            self.apply_pending_da_rotation(pending, state);
+        }
+    }
+}
 
+impl<S: Spec> SequencerRegistry<S> {
+    fn apply_pending_da_rotation(
+        &mut self,
+        pending: crate::PendingDaAddressUpdate<S>,
+        state: &mut StateCheckpoint<S>,
+    ) {
         // `update_da_address` validated both addresses earlier in this block. The entry at the
         // old address can only disappear through `withdraw` (refused while this update is
         // pending), `slash_sequencer` (which drops the pending update) or another rotation
-        // (refused while one is pending), and the new address is reserved against
-        // registration. Anything else is a bug, and applying the move anyway would lose or
-        // misattribute the sequencer's stake.
+        // (refused while this one is pending), and the new address is reserved against
+        // registration and other rotations. Anything else is a bug, and applying the move
+        // anyway would lose or misattribute the sequencer's stake.
         let existing_sequencer = self
             .known_sequencers
             .get(&pending.old_da_address, state)

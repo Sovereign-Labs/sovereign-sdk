@@ -171,9 +171,10 @@ pub struct SequencerRegistry<S: Spec> {
     #[state]
     pub(crate) minimum_bond: StateValue<Amount>,
 
-    /// A preferred sequencer DA address rotation scheduled for the end of the current rollup block.
+    /// DA address rotations that sequencers scheduled during their own batches. They are applied
+    /// at the end of the current rollup block. At most one per old DA address.
     #[state]
-    pending_da_address_update: StateValue<PendingDaAddressUpdate<S>>,
+    pending_da_address_updates: StateValue<Vec<PendingDaAddressUpdate<S>>>,
 
     /// DA addresses retired by rotation. Active retired addresses cannot sequence or be reused, but
     /// escrow refunds already addressed to them are redirected to the sequencer's current DA.
@@ -187,6 +188,11 @@ pub struct SequencerRegistry<S: Spec> {
     /// Last allocated registration ID; absent until the first registration or rotation after activation.
     #[state]
     registration_id_counter: KernelStateValue<u64>,
+
+    /// Set when a rotation moves the preferred sequencer to a new DA address, and cleared by
+    /// [`SequencerRegistry::take_preferred_da_address_rotated`].
+    #[state]
+    preferred_da_address_rotated: StateValue<bool>,
 }
 
 /// A special error type that can be raised when calling a method from the sequencer registry
@@ -496,14 +502,14 @@ impl<S: Spec> SequencerRegistry<S> {
             self.clear_current_da_address(&slashed.address, da_address, state)
                 .unwrap_infallible();
             // A rotation this sequencer scheduled earlier in the block has nothing left to move.
-            if self
-                .pending_da_address_update
+            if let Some(mut pending) = self
+                .pending_da_address_updates
                 .get(state)
                 .unwrap_infallible()
-                .is_some_and(|pending| &pending.old_da_address == da_address)
             {
-                self.pending_da_address_update
-                    .delete(state)
+                pending.retain(|pending| &pending.old_da_address != da_address);
+                self.pending_da_address_updates
+                    .set::<Vec<_>, _>(&pending, state)
                     .unwrap_infallible();
             }
         }

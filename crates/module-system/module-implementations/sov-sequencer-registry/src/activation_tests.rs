@@ -111,13 +111,16 @@ fn rotation_is_rejected_before_activation_and_accepted_at_activation() {
         old_da_address: preferred.da_address,
         new_da_address: new_da,
     };
-    assert!(matches!(
-        execute(&mut runner, &preferred, message.clone()),
-        TxEffect::Reverted(_)
-    ));
+    let TxEffect::Reverted(reverted) = execute(&mut runner, &preferred, message.clone()) else {
+        panic!("Rotation must revert before activation");
+    };
+    assert_eq!(
+        reverted.reason.to_string(),
+        "Custom error: Sequencer DA rotation has not been activated"
+    );
     runner.query_visible_state(|state| {
         assert_eq!(state.rollup_height_to_access().get(), 1);
-        assert!(reg.pending_da_address_update.get(state).unwrap().is_none());
+        assert_eq!(reg.pending_da_address_updates.get(state).unwrap(), None);
         assert!(reg
             .known_sequencers
             .get(&preferred.da_address, state)
@@ -136,7 +139,7 @@ fn rotation_is_rejected_before_activation_and_accepted_at_activation() {
             .get(&preferred.da_address, state)
             .unwrap()
             .is_none());
-        assert!(reg.pending_da_address_update.get(state).unwrap().is_none());
+        assert_eq!(reg.pending_da_address_updates.get(state).unwrap(), None);
     });
 }
 
@@ -250,13 +253,13 @@ fn withdraw_is_refused_while_rotation_away_from_address_is_pending() {
     let owner = user.address();
     runner.__apply_to_state(move |state| {
         SequencerRegistry::<S>::default()
-            .pending_da_address_update
-            .set(
-                &PendingDaAddressUpdate {
+            .pending_da_address_updates
+            .set::<Vec<_>, _>(
+                &vec![PendingDaAddressUpdate {
                     sequencer: owner,
                     old_da_address: da,
                     new_da_address: new_da,
-                },
+                }],
                 state,
             )
             .unwrap();
@@ -286,18 +289,21 @@ fn slashing_drops_pending_rotation_away_from_slashed_address() {
     let owner = user.address();
     runner.__apply_to_state(move |state| {
         let mut reg = SequencerRegistry::<S>::default();
-        reg.pending_da_address_update
-            .set(
-                &PendingDaAddressUpdate {
+        reg.pending_da_address_updates
+            .set::<Vec<_>, _>(
+                &vec![PendingDaAddressUpdate {
                     sequencer: owner,
                     old_da_address: da,
                     new_da_address: new_da,
-                },
+                }],
                 state,
             )
             .unwrap();
         reg.slash_sequencer(&da, state);
-        assert!(reg.pending_da_address_update.get(state).unwrap().is_none());
+        assert_eq!(
+            reg.pending_da_address_updates.get(state).unwrap(),
+            Some(vec![])
+        );
     });
 }
 

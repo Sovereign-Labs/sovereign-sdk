@@ -479,6 +479,27 @@ impl<S: Spec> BlobStorage<S> {
             .unwrap_infallible()
             .unwrap_or_default();
 
+        // Blobs stored ahead of sequence before the preferred sequencer rotated its DA address
+        // were posted by the retired address, whose key may be compromised.
+        if self
+            .sequencer_registry
+            .take_preferred_da_address_rotated(state)
+        {
+            let stale = std::mem::take(&mut sequence_tracker.saved_sequencer_numbers);
+            debug!(
+                dropped = stale.len(),
+                "Preferred sequencer rotated its DA address; dropping its stored blobs"
+            );
+            for sequence_number in stale.into_keys() {
+                self.deferred_preferred_sequencer_blobs
+                    .delete(&sequence_number, state)
+                    .unwrap_infallible();
+            }
+            self.upcoming_sequence_numbers
+                .set(&sequence_tracker, state)
+                .unwrap_infallible();
+        }
+
         // 1. Extract all the new preferred blobs from the input
 
         let separated_proofs =

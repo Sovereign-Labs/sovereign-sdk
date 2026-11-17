@@ -17,6 +17,28 @@ impl<S: Spec> SequencerRegistry<S> {
         self.preferred_sequencer.get(scratchpad).unwrap_infallible()
     }
 
+    /// Returns whether the preferred sequencer rotated its DA address since the last call.
+    /// Preferred blobs stored before the rotation were posted by the retired address and must
+    /// be dropped by the caller.
+    pub fn take_preferred_da_address_rotated<
+        Accessor: StateReader<User, Error = Infallible> + StateWriter<User, Error = Infallible>,
+    >(
+        &mut self,
+        state: &mut Accessor,
+    ) -> bool {
+        let rotated = self
+            .preferred_da_address_rotated
+            .get(state)
+            .unwrap_infallible()
+            .is_some();
+        if rotated {
+            self.preferred_da_address_rotated
+                .delete(state)
+                .unwrap_infallible();
+        }
+        rotated
+    }
+
     /// Transfers a portion of the sequencer's stake to the beneficiary and decreases the staked balance.
     pub fn remove_part_of_the_stake<
         Accessor: StateWriter<Kernel, Error = Infallible>
@@ -91,19 +113,25 @@ impl<S: Spec> SequencerRegistry<S> {
         amount: Amount,
         state: &mut Accessor,
     ) -> Result<(), AddToStakeError<S>> {
-        let Some(sequencer) = self.refund_da_address(sequencer, state) else {
-            return Err(AddToStakeError::SequencerNotRegistered {
-                sequencer: *sequencer,
-            });
-        };
-        if let Some(KnownSequencer {
-            address,
-            balance,
-            balance_state,
-        }) = self
+        // Funds addressed to a DA address retired by a rotation go to the sequencer's current
+        // DA address. A retired address is never registered (registering it deletes the retired
+        // entry), so the retired lookup is only needed when the address is unknown.
+        let registered = match self
             .known_sequencers
-            .get(&sequencer, state)
+            .get(sequencer, state)
             .unwrap_infallible()
+        {
+            Some(known) => Some((*sequencer, known)),
+            None => self.retired_successor(sequencer, state),
+        };
+        if let Some((
+            sequencer,
+            KnownSequencer {
+                address,
+                balance,
+                balance_state,
+            },
+        )) = registered
         {
             // Note that we don't check if the sequencer is active here, because the sequencer can get
             // refunded from escrow while their withdrawal is pending. In fact, that's the whole point of the
@@ -138,28 +166,31 @@ impl<S: Spec> SequencerRegistry<S> {
 
             Ok(())
         } else {
-            Err(AddToStakeError::SequencerNotRegistered { sequencer })
+            Err(AddToStakeError::SequencerNotRegistered {
+                sequencer: *sequencer,
+            })
         }
     }
 
-    /// Returns the DA address whose stake receives funds addressed to `da_address`: the address
-    /// itself, or, if it was retired by a rotation, the sequencer's current DA address.
-    fn refund_da_address<
+    /// Returns the registration that `da_address` was rotated into, if `da_address` is retired
+    /// and that registration is still active.
+    fn retired_successor<
         Accessor: StateReader<Kernel, Error = Infallible> + StateReader<User, Error = Infallible>,
     >(
         &self,
         da_address: &<S::Da as DaSpec>::Address,
         state: &mut Accessor,
-    ) -> Option<<S::Da as DaSpec>::Address> {
-        // A retired DA address is never registered: registering it deletes the retired entry.
-        match self
+    ) -> Option<(<S::Da as DaSpec>::Address, KnownSequencer<S>)> {
+        let retired = self
             .retired_da_addresses
             .get(da_address, state)
-            .unwrap_infallible()
-        {
-            Some(retired) => self.active_successor(&retired, state).unwrap_infallible(),
-            None => Some(*da_address),
-        }
+            .unwrap_infallible()?;
+        let successor = self.active_successor(&retired, state).unwrap_infallible()?;
+        let known = self
+            .known_sequencers
+            .get(&successor, state)
+            .unwrap_infallible()?;
+        Some((successor, known))
     }
 
     /// Returns the registered DA address that `retired` was rotated into, or [`None`] if that

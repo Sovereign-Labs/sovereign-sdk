@@ -1323,10 +1323,10 @@ fn test_pending_preferred_self_rotation_reserves_new_da_address() {
     });
 }
 
-/// A non-preferred active batch producer still cannot rotate its own DA
-/// mid-batch.
+/// A non-preferred sequencer can rotate its own DA address inside its own batch too. The move
+/// is applied in the end-block hook.
 #[test]
-fn test_non_preferred_update_da_address_during_own_batch_fails() {
+fn test_non_preferred_update_da_address_during_own_batch_succeeds() {
     let (
         TestRoles {
             additional_sequencer,
@@ -1335,6 +1335,7 @@ fn test_non_preferred_update_da_address_during_own_batch_fails() {
         mut runner,
     ) = setup();
 
+    let rollup_address = additional_sequencer.address();
     let old_da: MockAddress = NON_DEFAULT_SEQUENCER_DA_ADDRESS.into();
     let new_da: MockAddress = ROTATED_DA_ADDRESS.into();
 
@@ -1344,15 +1345,10 @@ fn test_non_preferred_update_da_address_during_own_batch_fails() {
     runner.execute_transaction(TransactionTestCase {
         input: rotate_da_address(&additional_sequencer, old_da, new_da),
         assert: Box::new(move |result, state| {
-            assert_reverted_with(
-                &result,
-                TestSequencerRegistryError::Custom(CustomError::CannotUnregisterDuringOwnBatch(
-                    old_da,
-                )),
-            );
+            assert!(result.tx_receipt.is_successful());
 
-            known_sequencer(&old_da, state);
-            assert_unknown_sequencer(&new_da, state);
+            assert_unknown_sequencer(&old_da, state);
+            assert_eq!(known_sequencer(&new_da, state).address, rollup_address);
         }),
     });
 }
@@ -1726,11 +1722,11 @@ fn test_reregister_original_da_after_slashing_does_not_receive_retired_refund() 
                 state,
             )
             .expect_err("Refund to retired B must not credit the new registration at A");
-        assert!(matches!(
-            error,
-            sov_sequencer_registry::AddToStakeError::SequencerNotRegistered { sequencer }
-                if sequencer == da_b
-        ));
+        let sov_sequencer_registry::AddToStakeError::SequencerNotRegistered { sequencer } = error
+        else {
+            panic!("Expected SequencerNotRegistered, got {error}");
+        };
+        assert_eq!(sequencer, da_b);
         assert_eq!(reg.is_sender_known(&da_a, state).unwrap(), before);
     });
 }

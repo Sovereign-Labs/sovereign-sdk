@@ -314,9 +314,8 @@ impl<S: Spec> SequencerRegistry<S> {
     /// impersonation of another sequencer's DA.
     ///
     /// # Errors
-    /// - If a DA address update is already pending in this rollup block (by any sequencer).
-    /// - If `old_da_address` is producing the current batch and the caller is not the preferred
-    ///   sequencer.
+    /// - If a DA address update away from `old_da_address` or onto `new_da_address` is already
+    ///   pending in this rollup block.
     /// - If rotation has not been activated, or `old_da_address` is not tracked for the caller.
     /// - If `new_da_address` is registered, or retired by a sequencer that is still registered.
     pub(crate) fn update_da_address<ST: TxState<S>>(
@@ -356,12 +355,14 @@ impl<S: Spec> SequencerRegistry<S> {
         }
         self.ensure_retired_da_address_available(new_da_address, state)?;
 
-        // Only one rotation may be pending per rollup block.
-        if let Some(pending) = self.pending_da_address_update.get(state)? {
-            return Err(RegistrationError::Custom(Self::pending_update_error(
-                pending,
-            )));
-        }
+        let mut pending_updates = self
+            .pending_da_address_updates
+            .get(state)?
+            .unwrap_or_default();
+        Self::ensure_not_in_pending_updates(&pending_updates, old_da_address)
+            .map_err(RegistrationError::Custom)?;
+        Self::ensure_not_in_pending_updates(&pending_updates, new_da_address)
+            .map_err(RegistrationError::Custom)?;
 
         // Registrations that predate activation are not tracked yet. Start tracking at the
         // address being rotated so `apply_da_rotation` has a registration ID to carry over.
@@ -377,23 +378,16 @@ impl<S: Spec> SequencerRegistry<S> {
             )?;
         }
 
-        // The producing DA's bond is reserved for the whole batch, so only the preferred
-        // sequencer may rotate it, and the move is deferred to `end_rollup_block_hook`.
+        // The producing DA's bond is reserved for the whole batch, so the move is deferred to
+        // `end_rollup_block_hook`.
         if old_da_address == context.sequencer_da_address() {
-            if !context.sequencer_is_preferred() {
-                return Err(RegistrationError::Custom(
-                    CustomError::CannotUnregisterDuringOwnBatch(*old_da_address),
-                ));
-            }
-
-            self.pending_da_address_update.set(
-                &PendingDaAddressUpdate {
-                    sequencer: existing_sequencer.address,
-                    old_da_address: *old_da_address,
-                    new_da_address: *new_da_address,
-                },
-                state,
-            )?;
+            pending_updates.push(PendingDaAddressUpdate {
+                sequencer: existing_sequencer.address,
+                old_da_address: *old_da_address,
+                new_da_address: *new_da_address,
+            });
+            self.pending_da_address_updates
+                .set::<Vec<_>, _>(&pending_updates, state)?;
         } else {
             self.apply_da_rotation(old_da_address, new_da_address, &existing_sequencer, state)?;
         }
@@ -453,6 +447,7 @@ impl<S: Spec> SequencerRegistry<S> {
 
         if self.preferred_sequencer.get(state)?.as_ref() == Some(old_da_address) {
             self.preferred_sequencer.set(new_da_address, state)?;
+            self.preferred_da_address_rotated.set(&true, state)?;
         }
 
         Ok(())
@@ -518,23 +513,26 @@ impl<S: Spec> SequencerRegistry<S> {
         da_address: &<S::Da as DaSpec>::Address,
         state: &mut ST,
     ) -> Result<(), SequencerRegistryError<S, ST>> {
-        if let Some(pending) = self.pending_da_address_update.get(state)? {
-            if &pending.old_da_address == da_address || &pending.new_da_address == da_address {
-                return Err(RegistrationError::Custom(Self::pending_update_error(
-                    pending,
-                )));
-            }
-        }
-
-        Ok(())
+        let pending_updates = self
+            .pending_da_address_updates
+            .get(state)?
+            .unwrap_or_default();
+        Self::ensure_not_in_pending_updates(&pending_updates, da_address)
+            .map_err(RegistrationError::Custom)
     }
 
-    fn pending_update_error(
-        pending: PendingDaAddressUpdate<S>,
-    ) -> CustomError<S::Address, <S::Da as DaSpec>::Address> {
-        CustomError::PendingDaAddressUpdate {
-            sequencer: pending.sequencer,
-            new_da_address: pending.new_da_address,
+    fn ensure_not_in_pending_updates(
+        pending_updates: &[PendingDaAddressUpdate<S>],
+        da_address: &<S::Da as DaSpec>::Address,
+    ) -> Result<(), CustomError<S::Address, <S::Da as DaSpec>::Address>> {
+        match pending_updates.iter().find(|pending| {
+            &pending.old_da_address == da_address || &pending.new_da_address == da_address
+        }) {
+            Some(pending) => Err(CustomError::PendingDaAddressUpdate {
+                sequencer: pending.sequencer,
+                new_da_address: pending.new_da_address,
+            }),
+            None => Ok(()),
         }
     }
 

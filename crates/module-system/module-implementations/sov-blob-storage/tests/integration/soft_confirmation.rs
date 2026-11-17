@@ -2,15 +2,16 @@ use std::collections::HashMap;
 use std::env;
 
 use sov_blob_storage::config_deferred_slots_count;
-use sov_mock_da::MockBlob;
+use sov_mock_da::{MockAddress, MockBlob};
 use sov_rollup_interface::da::RelevantBlobs;
-use sov_test_utils::SequencerInfo;
+use sov_sequencer_registry::SequencerRegistry;
+use sov_test_utils::{AsUser, BatchType, SequencerInfo, SoftConfirmationBlobInfo};
 
 use crate::helpers_soft_confirmations::{
     assert_blobs_are_correctly_received_soft_confirmation, build_soft_confirmation_blobs,
-    setup_soft_confirmation_kernel, setup_with_registration_soft_confirmation_kernel,
+    setup_soft_confirmation_kernel, setup_with_registration_soft_confirmation_kernel, SoftConfRT,
 };
-use crate::{SequenceInfo, TestData};
+use crate::{SequenceInfo, TestData, TestRunner, S};
 
 /// Tests the soft confirmation kernel functionality by executing one batch per slot for the preferred sequencer.
 /// Expected result:
@@ -653,4 +654,76 @@ fn check_blob_selection() {
 
     let result = runner.execute::<RelevantBlobs<MockBlob>>(slot_to_send);
     assert_eq!(result.0.batch_receipts.len(), 0);
+}
+
+/// A preferred blob that the old DA address posted ahead of sequence must not run once the
+/// preferred sequencer has rotated away from that address (e.g. because its key leaked).
+/// - Slot 1: Send [(Batch 0, old DA, Sequence number 1)]. Receive []
+/// - Slot 2: Send [(Batch 1, old DA, Sequence number 0, rotates old DA -> new DA)]. Receive [Batch 1]
+/// - Slot 3: Send []. Receive []
+#[test]
+fn preferred_blob_stored_before_da_rotation_is_not_executed_after_it() {
+    let (
+        TestData {
+            preferred_sequencer,
+            ..
+        },
+        mut runner,
+    ) = setup_soft_confirmation_kernel();
+    let old_da = preferred_sequencer.da_address;
+    let new_da = MockAddress::new([0x77; 32]);
+    let mut nonces = HashMap::new();
+
+    let stored_ahead_of_sequence = build_soft_confirmation_blobs(
+        &vec![(
+            preferred_sequencer.clone(),
+            SequencerInfo::Preferred {
+                slots_to_advance: 1,
+                sequence_number: 1,
+            },
+        )],
+        &mut nonces,
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(stored_ahead_of_sequence);
+
+    let rotation = TestRunner::<SoftConfRT>::soft_confirmation_batches_to_blobs(
+        vec![SoftConfirmationBlobInfo {
+            batch_type: BatchType(vec![preferred_sequencer
+                .create_plain_message::<SoftConfRT, SequencerRegistry<S>>(
+                    sov_sequencer_registry::CallMessage::UpdateDaAddress {
+                        old_da_address: old_da,
+                        new_da_address: new_da,
+                    },
+                )]),
+            sequencer_address: old_da,
+            sequencer_info: SequencerInfo::Preferred {
+                slots_to_advance: 1,
+                sequence_number: 0,
+            },
+        }],
+        &mut nonces,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(rotation);
+    assert_eq!(
+        runner.query_state(|state| SequencerRegistry::<S>::default().preferred_sequencer(state)),
+        Some(new_da),
+        "The rotation must have moved the preferred sequencer to the new DA address"
+    );
+
+    runner.advance_slots(1);
+
+    let executed_senders: Vec<MockAddress> = runner
+        .receipts()
+        .last()
+        .unwrap()
+        .batch_receipts
+        .iter()
+        .map(|batch| batch.inner.da_address)
+        .collect();
+    assert_eq!(
+        executed_senders,
+        Vec::<MockAddress>::new(),
+        "A blob stored from the retired DA address must not execute after the rotation"
+    );
 }
