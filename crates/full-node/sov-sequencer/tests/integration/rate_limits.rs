@@ -93,7 +93,6 @@ async fn create_test_rollup(
         c.storage = StoragePath::Tmp(dir);
         c.max_concurrent_batch_blobs = 64;
         if let SequencerKindConfig::Preferred(ref mut config) = &mut c.sequencer_config {
-            config.num_cache_warmup_workers = 0;
             config.batch_execution_time_limit_millis = 3000;
             config.rate_limiter = Some(rate_limiter_config);
         }

@@ -8,7 +8,6 @@ use crate::preferred::block_executor::{
     AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
 };
 use crate::preferred::block_executor::{RollupBlockExecutorErrorWithBudget, StartBlockData};
-use crate::preferred::cache_warm_up_executor::{CacheWarmUpExecutor, StartBlockNotification};
 use crate::preferred::db::{latest_finalized_sequence_number, SequencerRole};
 use crate::preferred::executor_events::ExecutorEventsSender;
 use crate::preferred::rate_limiter::ResourceUsed;
@@ -119,7 +118,6 @@ where
     pub(crate) stop_at_rollup_height: Option<RollupHeight>,
     pub(crate) rollup_exec_config: RollupBlockExecutorConfig<S>,
     pub(crate) tx_cache_writer: TxResultWriter<S, Rt>,
-    pub(crate) cache_warm_up_executor: CacheWarmUpExecutor<S>,
     pub(crate) start_replica_task_notifier: EventReceiverStartNotifier,
     pub(crate) rate_limiter: SovRateLimiter<S>,
     pub(crate) pi_controller: PIController,
@@ -715,32 +713,11 @@ where
             proofs_to_replay,
         };
 
-        let old_checkpoint = self
-            .executor
-            .checkpoint
-            .clone_with_empty_witness_dropping_temp_cache();
-
         self.executor
-            .start_rollup_block(start_block_data.clone())
+            .start_rollup_block(start_block_data)
             .await;
 
-        let state_roots = self.executor.state_roots.clone();
-
-        if state_roots.len() > 50 {
-            tracing::warn!(state_roots = %state_roots.len(), "Executor: The computed state roots map is large, and cloning it can be costly in terms of time.");
-        }
-
-        let notification = StartBlockNotification {
-            state_roots,
-            data: start_block_data,
-            checkpoint: old_checkpoint,
-            sequence_number,
-        };
-
         self.pi_controller.batch_start_time = std::time::Instant::now();
-
-        self.cache_warm_up_executor
-            .send_batch_start_notification(notification);
 
         self.executor_events_sender
             .start_batch(
@@ -794,7 +771,6 @@ where
             executor,
             batch_size_tracker,
             executor_events_sender,
-            cache_warm_up_executor,
             ..
         } = &mut *self;
 
@@ -826,7 +802,6 @@ where
             );
         }
 
-        let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone(), sequence_number);
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
         let (

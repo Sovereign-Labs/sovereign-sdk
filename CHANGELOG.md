@@ -1,3 +1,5 @@
+# 2026-11-17
+- #PR_NUMBER **Breaking Change** Preferred sequencer: removed the cache warm-up workers and the `sequencer.preferred.num_cache_warmup_workers` config value. The workers re-executed every transaction but delivered results to the main executor in time for ~0.04% of transactions; ingest throughput rises ~4% without them. Delete `num_cache_warmup_workers` from your rollup config, otherwise the config fails to parse. The `sov_sequencer_cache_warmup_metrics` metric is gone. Not state- or chain-hash-breaking.
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 

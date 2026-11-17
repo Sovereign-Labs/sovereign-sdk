@@ -591,13 +591,6 @@
           "default": 0,
           "minimum": 0
         },
-        "num_cache_warmup_workers": {
-          "description": "The number of workers that warm up the main executor cache.",
-          "type": "integer",
-          "format": "uint",
-          "default": 3,
-          "minimum": 0
-        },
         "postgres_config": {
           "description": "Optional. When present, Postgres will be used as a database instead of\nRocksDB.",
           "anyOf": [

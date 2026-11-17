@@ -212,6 +212,5 @@ batch_execution_time_limit_millis = 6000 # Do no more than 6 seconds worth of wo
 # This warms up caches so the main transaction executor can run with ready-to-use data.
 # This variable determines the number of worker threads.
 
-num_cache_warmup_workers = 0
 [sequencer.extension]
 max_log_limit = 20000

@@ -87,7 +87,6 @@ async fn start_rollup_with_connection_string(
                 panic!("Expected preferred sequencer config");
             }
             SequencerKindConfig::Preferred(p) => {
-                p.num_cache_warmup_workers = 0;
                 p.recovery_strategy = RecoveryStrategy::TryToSave;
                 p.ideal_lag_behind_finalized_slot = 3;
                 if let Some(connection_string) = postgres_connection_override.as_ref() {
@@ -150,7 +149,6 @@ async fn start_rollup_with_prover(
             seq.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
             seq.recovery_strategy = RecoveryStrategy::TryToSave;
             seq.disable_state_root_consistency_checks = true;
-            seq.num_cache_warmup_workers = 0;
             seq.ideal_lag_behind_finalized_slot = 3;
         }
     })
