@@ -2,15 +2,20 @@ use std::collections::HashMap;
 use std::env;
 
 use sov_blob_storage::config_deferred_slots_count;
+use sov_chain_state::ChainState;
 use sov_mock_da::MockBlob;
+use sov_modules_api::capabilities::BlockGasInfo;
+use sov_modules_api::prelude::UnwrapInfallible;
+use sov_modules_api::{Amount, BlobReaderTrait, Gas, GasArray, GasSpec, GetGasPrice};
 use sov_rollup_interface::da::RelevantBlobs;
+use sov_sequencer_registry::SequencerRegistry;
 use sov_test_utils::SequencerInfo;
 
 use crate::helpers_soft_confirmations::{
     assert_blobs_are_correctly_received_soft_confirmation, build_soft_confirmation_blobs,
-    setup_soft_confirmation_kernel, setup_with_registration_soft_confirmation_kernel,
+    setup_soft_confirmation_kernel, setup_with_registration_soft_confirmation_kernel, SoftConfRT,
 };
-use crate::{SequenceInfo, TestData};
+use crate::{deferred_escrows, pending_escrow, sequencer_stake, SequenceInfo, TestData, S};
 
 /// Tests the soft confirmation kernel functionality by executing one batch per slot for the preferred sequencer.
 /// Expected result:
@@ -653,4 +658,225 @@ fn check_blob_selection() {
 
     let result = runner.execute::<RelevantBlobs<MockBlob>>(slot_to_send);
     assert_eq!(result.0.batch_receipts.len(), 0);
+}
+
+/// The user state root must change only when a rollup block is created. Deferring a blob from a
+/// registered non-preferred sequencer escrows part of its stake, and that escrow must be tracked in
+/// kernel state only. Otherwise the node's user root changes in a slot with no rollup block, and
+/// the preferred sequencer's user root consistency check against the node fails.
+#[test]
+fn deferring_registered_non_preferred_blob_does_not_change_user_state() {
+    use sov_state::{ProvableNamespace, StateRoot};
+
+    let (
+        TestData {
+            regular_sequencer, ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+    let user_root_before = runner.state_root().namespace_root(ProvableNamespace::User);
+
+    // No preferred batch is in this slot, so the blob is deferred and no rollup block is created.
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(regular_sequencer.clone(), SequencerInfo::Regular)],
+        &mut HashMap::new(),
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+
+    assert!(
+        runner.receipts().last().unwrap().batch_receipts.is_empty(),
+        "The non-preferred blob should be deferred, not executed"
+    );
+    assert!(
+        pending_escrow(&runner) > Amount::ZERO,
+        "The deferred blob should hold a non-zero escrow"
+    );
+    assert_eq!(
+        runner.state_root().namespace_root(ProvableNamespace::User),
+        user_root_before,
+        "The user state root must not change in a slot that creates no rollup block"
+    );
+}
+
+/// The escrow of a deferred blob is taken out of its sender's stake. Otherwise the same tokens
+/// would back both the stake and the escrow, and the registry could not pay out both.
+#[test]
+fn deferring_registered_non_preferred_blob_deducts_escrow_from_stake() {
+    let (
+        TestData {
+            regular_sequencer, ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+    let da = regular_sequencer.da_address;
+    let stake_before = sequencer_stake(&runner, &da);
+
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(regular_sequencer.clone(), SequencerInfo::Regular)],
+        &mut HashMap::new(),
+        0,
+    );
+    let blob_len = blobs.batch_blobs[0].total_len();
+    let gas_price = runner.query_visible_state(|state| state.gas_price());
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+
+    // Registered senders are also charged for deserializing their blob, out of their stake.
+    let deserialization_charge = <S as GasSpec>::gas_to_charge_per_byte_borsh_read()
+        .checked_scalar_product(blob_len as u64)
+        .unwrap()
+        .checked_value(gas_price)
+        .unwrap();
+    assert_eq!(
+        stake_before
+            .checked_sub(sequencer_stake(&runner, &da))
+            .unwrap(),
+        pending_escrow(&runner)
+            .checked_add(deserialization_charge)
+            .unwrap(),
+        "The stake must decrease by exactly the escrowed amount plus the deserialization charge"
+    );
+}
+
+/// The escrow entry of a deferred blob is removed from kernel state once the blob is selected
+/// for execution.
+#[test]
+fn executing_deferred_blob_removes_its_escrow_entry() {
+    let (
+        TestData {
+            preferred_sequencer,
+            regular_sequencer,
+            ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+    let mut nonces = runner.nonces().clone();
+
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(regular_sequencer.clone(), SequencerInfo::Regular)],
+        &mut nonces,
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+    let escrows = deferred_escrows(&runner);
+    assert_eq!(
+        escrows.len(),
+        1,
+        "The non-preferred blob should be deferred with an escrow entry"
+    );
+    let (holder, _) = &escrows[0];
+
+    // The preferred sequencer advances the visible slot over the deferred blob.
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(
+            preferred_sequencer.clone(),
+            SequencerInfo::Preferred {
+                slots_to_advance: 2,
+                sequence_number: 1,
+            },
+        )],
+        &mut nonces,
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+
+    assert_eq!(
+        runner.receipts().last().unwrap().batch_receipts.len(),
+        2,
+        "The preferred batch and the deferred batch must both execute"
+    );
+    assert_eq!(
+        runner.query_state(|state| {
+            SequencerRegistry::<S>::default().get_escrowed_amount_via_api(holder, state)
+        }),
+        None,
+        "The escrow entry must be removed once the deferred blob is selected"
+    );
+}
+
+/// If the gas price rises so much while a blob is deferred that its escrow can no longer cover the
+/// pre-execution checks, the blob is dropped and its whole escrow is refunded to its sender.
+#[test]
+fn deferred_blob_with_insufficient_escrow_is_dropped_and_refunded() {
+    let (
+        TestData {
+            preferred_sequencer,
+            regular_sequencer,
+            ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+    let mut nonces = runner.nonces().clone();
+    let sender_address = regular_sequencer.user_info.address();
+    // `__apply_to_state` commits a state version that has no slot receipt, after which the runner
+    // can no longer query by true slot number. So this test only queries the visible state.
+    let sender_balance = |runner: &crate::TestRunner<_>| {
+        runner.query_visible_state(|state| {
+            crate::TestRunner::<SoftConfRT>::bank_gas_balance(&sender_address, state)
+                .unwrap_or(Amount::ZERO)
+        })
+    };
+
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(regular_sequencer.clone(), SequencerInfo::Regular)],
+        &mut nonces,
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+    let escrows = deferred_escrows(&runner);
+    assert_eq!(
+        escrows.len(),
+        1,
+        "The non-preferred blob should be deferred with an escrow entry"
+    );
+    let (holder, escrowed_amount) = &escrows[0];
+    let sender_balance_before = sender_balance(&runner);
+
+    // The escrow covers the pre-execution checks at up to twice the gas price at deferral, so
+    // raise the base fee of the latest rollup block well beyond that.
+    let gas_price = runner.query_visible_state(|state| state.gas_price());
+    runner.__apply_to_state(|state| {
+        let mut chain_state = ChainState::<S>::default();
+        let rollup_height = chain_state.rollup_height(state).unwrap_infallible();
+        chain_state.record_gas_usage(
+            state,
+            BlockGasInfo::new(
+                <S as GasSpec>::block_gas_limit(),
+                gas_price.checked_scalar_product(Amount::new(8)).unwrap(),
+            ),
+            rollup_height,
+        );
+    });
+
+    // The preferred sequencer advances the visible slot over the deferred blob.
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(
+            preferred_sequencer.clone(),
+            SequencerInfo::Preferred {
+                slots_to_advance: 2,
+                sequence_number: 1,
+            },
+        )],
+        &mut nonces,
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+
+    assert_eq!(
+        runner.receipts().last().unwrap().batch_receipts.len(),
+        1,
+        "Only the preferred batch must execute, the deferred blob must be dropped"
+    );
+    assert_eq!(
+        sender_balance(&runner),
+        sender_balance_before.checked_add(*escrowed_amount).unwrap(),
+        "The whole escrow must be refunded to the sender of the dropped blob"
+    );
+    assert_eq!(
+        runner.query_visible_state(|state| {
+            SequencerRegistry::<S>::default().get_escrowed_amount_via_api(holder, state)
+        }),
+        None,
+        "The escrow entry must be removed once the escrow is refunded"
+    );
 }

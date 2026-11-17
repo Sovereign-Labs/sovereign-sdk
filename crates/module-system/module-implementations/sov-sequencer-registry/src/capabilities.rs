@@ -1,5 +1,6 @@
 use std::convert::Infallible;
 
+use sov_bank::derived_holder::DerivedHolder;
 use sov_bank::error::TransferTokenError;
 use sov_bank::{config_gas_token_id, Coins, IntoPayable, Payable};
 use sov_modules_api::prelude::UnwrapInfallible;
@@ -30,52 +31,75 @@ impl<S: Spec> SequencerRegistry<S> {
         amount: Amount,
         state: &mut Accessor,
     ) -> Result<(), anyhow::Error> {
-        if let Some(KnownSequencer {
-            address,
-            balance,
-            balance_state,
-        }) = self
+        let updated_sequencer = self.checked_sub_stake(sequencer, amount, state)?;
+
+        let coins = Coins {
+            amount,
+            token_id: config_gas_token_id(),
+        };
+        self.bank
+            .transfer_from(self.id.clone().to_payable(), beneficiary, coins, state)?;
+
+        self.known_sequencers
+            .set(sequencer, &updated_sequencer, state)
+            .unwrap_infallible();
+        Ok(())
+    }
+
+    /// Moves a portion of the sequencer's stake into the escrow entry for `holder`.
+    /// The tokens stay in the registry's bank account, so user space is not modified.
+    pub fn reserve_part_of_the_stake<
+        Accessor: StateWriter<Kernel, Error = Infallible> + StateReader<Kernel, Error = Infallible>,
+    >(
+        &mut self,
+        sequencer: &<S::Da as DaSpec>::Address,
+        holder: &DerivedHolder,
+        amount: Amount,
+        state: &mut Accessor,
+    ) -> Result<(), anyhow::Error> {
+        let updated_sequencer = self.checked_sub_stake(sequencer, amount, state)?;
+
+        assert!(
+            self.escrow.get(holder, state).unwrap_infallible().is_none(),
+            "Duplicate writes to a single derived holder {holder}. This is a bug, please report it."
+        );
+        self.escrow.set(holder, &amount, state).unwrap_infallible();
+
+        self.known_sequencers
+            .set(sequencer, &updated_sequencer, state)
+            .unwrap_infallible();
+        Ok(())
+    }
+
+    /// Returns the entry of the given sequencer with `amount` subtracted from its stake, or an
+    /// error if the sequencer is not registered, not active, or its stake is too low.
+    /// Nothing is written: the caller stores the entry once the subtracted amount is accounted for.
+    fn checked_sub_stake<Accessor: StateReader<Kernel, Error = Infallible>>(
+        &self,
+        sequencer: &<S::Da as DaSpec>::Address,
+        amount: Amount,
+        state: &mut Accessor,
+    ) -> Result<KnownSequencer<S>, anyhow::Error> {
+        let Some(mut known_sequencer) = self
             .known_sequencers
             .get(sequencer, state)
             .unwrap_infallible()
-        {
-            // The sequencer has to be active in order to use their stake for blob submission.
-            if balance_state != BalanceState::Active {
-                anyhow::bail!("Sequencer {} is not active", sequencer);
-            }
-            let new_balance = balance.checked_sub(amount).ok_or_else(|| {
-                anyhow::anyhow!(
-                    "Sequencer's: {} stake is too low. Current stake: {}, amount to deduct: {}",
-                    sequencer,
-                    balance,
-                    amount
-                )
-            })?;
-
-            let coins = Coins {
-                amount,
-                token_id: config_gas_token_id(),
-            };
-
-            self.bank
-                .transfer_from(self.id.clone().to_payable(), beneficiary, coins, state)?;
-
-            self.known_sequencers
-                .set(
-                    sequencer,
-                    &KnownSequencer {
-                        address,
-                        balance: new_balance,
-                        balance_state,
-                    },
-                    state,
-                )
-                .unwrap_infallible();
-
-            Ok(())
-        } else {
+        else {
             anyhow::bail!("Sequencer {} is not registered", sequencer)
+        };
+        // The sequencer has to be active in order to use their stake for blob submission.
+        if known_sequencer.balance_state != BalanceState::Active {
+            anyhow::bail!("Sequencer {} is not active", sequencer);
         }
+        known_sequencer.balance = known_sequencer.balance.checked_sub(amount).ok_or_else(|| {
+            anyhow::anyhow!(
+                "Sequencer's: {} stake is too low. Current stake: {}, amount to deduct: {}",
+                sequencer,
+                known_sequencer.balance,
+                amount
+            )
+        })?;
+        Ok(known_sequencer)
     }
 
     /// Increases the staked balance of the sequencer by transferring the given amount from the sender to the SequencerRegistry module.
