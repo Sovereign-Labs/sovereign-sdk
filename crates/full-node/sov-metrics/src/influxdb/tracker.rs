@@ -283,8 +283,6 @@ pub struct TransactionProcessingMetrics {
     pub execution_context: &'static str,
     /// Height at which transaction is being executed
     pub visible_slot_number: u64,
-    /// Human-readable address of sequencer.
-    pub sequencer_address: String,
     /// Call message
     pub call_message: String,
     /// Gas used by given transaction expressed in gas units
@@ -438,13 +436,12 @@ impl Metric for TransactionProcessingMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{},status={:?},context={},call_message={},sequencer={} value={},rollup_height={}",
+            "{},status={:?},context={},call_message={} value={},rollup_height={}",
             self.measurement_name(),
             // tags
             self.tx_effect,
             self.execution_context,
             self.call_message,
-            self.sequencer_address,
             //fields
             self.execution_time.as_micros(),
             self.visible_slot_number,

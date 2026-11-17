@@ -85,7 +85,6 @@ where
         start.elapsed(),
         execution_context,
         visible_slot_number,
-        sequencer_da_address,
         discriminant,
         &result.2,
         metrics,
@@ -100,7 +99,6 @@ fn track_transaction_metrics<S: Spec>(
     execution_time: std::time::Duration,
     execution_context: ExecutionContext,
     visible_slot_number: sov_rollup_interface::common::VisibleSlotNumber,
-    sequencer_address: &<S::Da as DaSpec>::Address,
     message_discriminant: String,
     basic_gas_meter: &BasicGasMeter<S>,
     mut processing_metrics: AuthAndProcessMetrics,
@@ -135,7 +133,6 @@ fn track_transaction_metrics<S: Spec>(
             tx_effect,
             execution_context: execution_context.str(),
             visible_slot_number: visible_slot_number.get(),
-            sequencer_address: sequencer_address.to_string(),
             call_message: message_discriminant,
             gas_used: gas_used.as_ref().to_vec(),
         };
