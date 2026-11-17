@@ -14,6 +14,8 @@ workspace = true
 
 [dev-dependencies]
 criterion = "0.5.1"
+ed25519-dalek = { workspace = true, features = ["std", "fast", "batch"] }
+rayon = { workspace = true }
 sov-gas-tools = { workspace = true }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-mock-da = { workspace = true, features = ["native"] }
@@ -25,4 +27,8 @@ harness = false
 
 [[bench]]
 name = "ed25519"
+harness = false
+
+[[bench]]
+name = "ed25519_throughput"
 harness = false
