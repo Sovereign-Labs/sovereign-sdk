@@ -52,7 +52,6 @@ tokio = { workspace = true, features = ["sync", "rt"] }
 tokio-stream = { workspace = true }
 uuid = { workspace = true, features = ["std", "v7", "serde"] }
 backon = { workspace = true }
-flume = { workspace = true }
 time = "0.3"
 ipnet = { workspace = true }
 

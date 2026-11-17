@@ -915,9 +915,6 @@ where
 
     let _span = match executor_context {
         ExecutionContext::Sequencer => tracing::trace_span!(ExecutionContext::SEQUENCER),
-        ExecutionContext::SequencerWarmUp => {
-            tracing::trace_span!(ExecutionContext::SEQUENCER_WARM_UP)
-        }
         ExecutionContext::Node => tracing::trace_span!(ExecutionContext::NODE),
     }
     .entered();

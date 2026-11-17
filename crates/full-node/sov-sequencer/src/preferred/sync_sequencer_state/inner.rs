@@ -713,9 +713,7 @@ where
             proofs_to_replay,
         };
 
-        self.executor
-            .start_rollup_block(start_block_data)
-            .await;
+        self.executor.start_rollup_block(start_block_data).await;
 
         self.pi_controller.batch_start_time = std::time::Instant::now();
 
