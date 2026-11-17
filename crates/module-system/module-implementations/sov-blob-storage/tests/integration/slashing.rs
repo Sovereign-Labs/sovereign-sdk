@@ -10,18 +10,16 @@ use sov_bank::{config_gas_token_id, Bank, IntoPayable};
 use sov_mock_da::{MockAddress, MockBlob};
 use sov_modules_api::{Amount, Gas, GasSpec, ModuleInfo};
 use sov_modules_stf_blueprint::Runtime;
-use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_sequencer_registry::SequencerRegistry;
 use sov_test_utils::runtime::traits::MinimalGenesis;
-use sov_test_utils::runtime::BlobStorage;
 use sov_test_utils::SequencerInfo;
 
 use crate::helpers_basic_kernel::setup_basic_kernel;
 use crate::helpers_soft_confirmations::{
     build_soft_confirmation_blobs, setup_with_registration_soft_confirmation_kernel,
 };
-use crate::{visible_slot, TestData, TestRunner, S};
+use crate::{pending_escrow, sequencer_stake, visible_slot, TestData, TestRunner, S};
 
 fn is_registered<RT: Runtime<S> + MinimalGenesis<S>>(
     runner: &TestRunner<RT>,
@@ -106,41 +104,6 @@ fn registry_gas_balance<RT: Runtime<S> + MinimalGenesis<S>>(runner: &TestRunner<
             .get_balance_of(registry_id.to_payable(), config_gas_token_id(), state)
             .unwrap()
             .unwrap_or(Amount::ZERO)
-    })
-}
-
-fn sequencer_stake<RT: Runtime<S> + MinimalGenesis<S>>(
-    runner: &TestRunner<RT>,
-    da: &MockAddress,
-) -> Amount {
-    runner.query_state(|state| {
-        SequencerRegistry::<S>::default()
-            .get_sender_balance_via_api(da, state)
-            .expect("sequencer must be registered")
-    })
-}
-
-/// Total escrow of all blobs still in deferred storage. Escrowed tokens stay in the registry's
-/// bank account and are only tracked in kernel state until the blob leaves storage.
-fn pending_escrow<RT: Runtime<S> + MinimalGenesis<S>>(runner: &TestRunner<RT>) -> Amount {
-    let true_slot = runner.true_slot_number().get();
-    runner.query_state(|state| {
-        let registry = SequencerRegistry::<S>::default();
-        let mut total = Amount::ZERO;
-        for slot in 0..=true_slot {
-            for holder in BlobStorage::<S>::default()
-                .get_deferred_escrow_holders(SlotNumber::new(slot), state)
-                .unwrap()
-            {
-                let amount = registry
-                    .get_escrowed_amount_via_api(&holder, state)
-                    .unwrap_or_else(|| {
-                        panic!("Deferred blob with holder {holder} has no escrow entry")
-                    });
-                total = total.checked_add(amount).unwrap();
-            }
-        }
-        total
     })
 }
 
