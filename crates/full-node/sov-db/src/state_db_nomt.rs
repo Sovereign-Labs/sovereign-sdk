@@ -25,8 +25,19 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
     pub fn new(config: RollupDbConfig) -> anyhow::Result<Self> {
         tracing::debug!(options = ?config, "Opening NOMT");
 
-        let kernel = Nomt::<BinaryHasher<H>>::open(config.get_kernel_options())?;
-        let user = Nomt::<BinaryHasher<H>>::open(config.get_user_options())?;
+        // The kernel and user databases are independent, so open them concurrently.
+        let (kernel, user) = std::thread::scope(|s| {
+            let kernel = s.spawn(|| {
+                crate::timed_open(KERNEL, || {
+                    Nomt::<BinaryHasher<H>>::open(config.get_kernel_options())
+                })
+            });
+            let user = crate::timed_open(USER, || {
+                Nomt::<BinaryHasher<H>>::open(config.get_user_options())
+            });
+            (crate::join_scoped(kernel), user)
+        });
+        let (kernel, user) = (kernel?, user?);
 
         let kernel_buckets =
             check_nomt_hashtable_buckets(KERNEL, &kernel, config.kernel_hashtable_buckets())?;
