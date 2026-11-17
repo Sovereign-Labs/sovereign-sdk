@@ -15,7 +15,6 @@ use parking_lot::{MappedRwLockReadGuard, MappedRwLockWriteGuard, RwLock};
 use parking_lot::{RwLockReadGuard, RwLockWriteGuard};
 use rockbound::cache::delta_reader::DeltaReader;
 use rockbound::versioned_db::CacheForVersionedDB;
-use rockbound::versioned_db::SchemaWithVersion;
 use rockbound::{
     default_cf_descriptor_with, rocksdb::ColumnFamilyDescriptor, versioned_db::VersionedDB,
 };
@@ -327,7 +326,7 @@ impl FlatStateDb {
             .and_then(|(v, _)| v.checked_add(1))
             .unwrap_or(0);
 
-        self.commit_internal(state_changes, version, true, before_live)
+        self.commit_internal(state_changes, version, before_live)
     }
 
     #[cfg(feature = "migration-script")]
@@ -357,14 +356,13 @@ impl FlatStateDb {
             );
         }
 
-        self.commit_internal(state_changes, current_latest, true, || Ok(()))
+        self.commit_internal(state_changes, current_latest, || Ok(()))
     }
 
     fn commit_internal(
         &self,
         state_changes: StateChanges,
         version: u64,
-        is_commit: bool,
         before_live: impl FnOnce() -> anyhow::Result<()>,
     ) -> anyhow::Result<FlatStateCommitMetric> {
         let start_prepare = std::time::Instant::now();
@@ -382,7 +380,6 @@ impl FlatStateDb {
             version,
             &self.live_db,
             &self.archival_db,
-            is_commit,
         )?;
 
         let serialized_size_kernel = live_db_batch.size_in_bytes();
@@ -396,7 +393,6 @@ impl FlatStateDb {
             version,
             &self.live_db,
             &self.archival_db,
-            is_commit,
         )?;
 
         let serialized_size_user = live_db_batch.size_in_bytes() - serialized_size_kernel;
@@ -425,32 +421,25 @@ impl FlatStateDb {
         before_live()?;
 
         // 4. Lock caches. Readers bypass the cache while the live DB changes underneath it.
-        let inner = self.db_cache.inner.write();
+        let mut inner = self.db_cache.inner.write();
 
         // rockbound requirement:  `store_committed_archival_version` has to be called before before writing `live_db_batch`.
         self.kernel.store_committed_archival_version(version);
         self.user.store_committed_archival_version(version);
 
         // Write live db batch.
-        if is_commit {
-            #[cfg(feature = "test-utils")]
-            crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLive
-                .inject_fault_if_configured();
-            self.live_db.write_db_batch(live_db_batch)?;
-        }
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLive
+            .inject_fault_if_configured();
+        self.live_db.write_db_batch(live_db_batch)?;
 
         // 5. Update caches only once the live batch is written, so a failed live write
         // does not leave values in the cache that are not in the live DB.
         VersionedDB::<_, DbCache>::apply_cache_updates(
-            &inner.kernel_cache,
+            &mut inner.kernel_cache,
             &state_changes.kernel,
-            is_commit,
         );
-        VersionedDB::<_, DbCache>::apply_cache_updates(
-            &inner.user_cache,
-            &state_changes.user,
-            is_commit,
-        );
+        VersionedDB::<_, DbCache>::apply_cache_updates(&mut inner.user_cache, &state_changes.user);
 
         // 6. Release caches.
         drop(inner);
@@ -511,13 +500,18 @@ impl FlatStateDb {
         self.rollback_archival(current_version_archival)
     }
 
+    /// Removes the archival rows of `current_version_archival`, a version whose live write never
+    /// happened. Only the archival DB is touched: readers never saw this version, so neither the
+    /// cache nor the committed archival version are changed.
     fn rollback_archival(&self, current_version_archival: u64) -> anyhow::Result<()> {
-        let user_changes = keys_for_rollback(&self.user, current_version_archival)?;
-        let kernel_changes = keys_for_rollback(&self.kernel, current_version_archival)?;
-
-        let (user_batch, kernel_batch) = HistoricalStateReader::materialize_user_and_kernel_values(
-            user_changes,
-            kernel_changes,
+        let mut archival_db_batch = rocksdb::WriteBatch::default();
+        self.user.update_archival_db_batch_for_rollback(
+            &mut archival_db_batch,
+            current_version_archival,
+        )?;
+        self.kernel.update_archival_db_batch_for_rollback(
+            &mut archival_db_batch,
+            current_version_archival,
         )?;
 
         let mut root_hash_batch = SchemaBatch::default();
@@ -525,41 +519,14 @@ impl FlatStateDb {
             current_version_archival.to_slot_number(),
             STATE_ROOT_HASH_SINGLETON,
         ))?;
+        DB::update_db_batch_with_schema_data(
+            &mut archival_db_batch,
+            &root_hash_batch,
+            &self.archival_db,
+        )?;
 
-        let state_changes = StateChanges {
-            user: Arc::new(user_batch),
-            kernel: Arc::new(kernel_batch),
-            root_hash_batch: Arc::new(root_hash_batch),
-        };
-
-        // We rollback only archival db.
-        self.commit_internal(state_changes, current_version_archival, false, || Ok(()))?;
-
-        Ok(())
+        self.archival_db.write_db_batch(archival_db_batch)
     }
-}
-
-#[allow(clippy::type_complexity)]
-fn keys_for_rollback<V, C>(
-    db: &VersionedDB<V, C>,
-    version_to_rollback: u64,
-) -> anyhow::Result<Vec<(V::Key, Option<V::Value>)>>
-where
-    C: CacheForVersionedDB<V>,
-    V::Key: Ord + Clone + std::hash::Hash + AsRef<[u8]>,
-    V::Value: Clone + AsRef<[u8]>,
-    V: SchemaWithVersion + Ord,
-{
-    // Get all keys committed at `version_to_rollback` and delete them.
-    let prunable_keys = db.iter_pruning_keys_at_version(version_to_rollback)?;
-    let mut data_to_materialize = Vec::new();
-
-    for key in prunable_keys {
-        let (version, key) = key.version_and_key();
-        assert_eq!(version, version_to_rollback);
-        data_to_materialize.push((key, None));
-    }
-    Ok(data_to_materialize)
 }
 
 struct Inner {
@@ -641,6 +608,46 @@ mod tests {
     #[test]
     fn test_rollback_crash_before_committing_live() -> anyhow::Result<()> {
         test_rollback(CommitFaultInjectionLocation::BeforeCommittingLive, 1)
+    }
+
+    /// Rolling back an archival version whose live write never happened must not advance the
+    /// committed archival version. Otherwise readers at the live version are served from the
+    /// archival DB until a newer version is committed.
+    #[test]
+    fn test_rollback_keeps_committed_archival_version_at_live_version() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let db_path = tempdir.path();
+        let data = data_to_insert_per_version();
+
+        {
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
+            flat_db.commit(data.change_set(0)).unwrap();
+        }
+        unlock_dbs(&tempdir);
+
+        CommitFaultInjectionLocation::BeforeCommittingLive.set_crash_env();
+        {
+            let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
+            let result =
+                std::panic::catch_unwind(AssertUnwindSafe(|| flat_db.commit(data.change_set(1))));
+            assert!(result.is_err(), "Commit should crash before the live write");
+        }
+        std::env::remove_var(crate::test_utils::CRASH_ON_COMMIT_ENV_NAME);
+        unlock_dbs(&tempdir);
+
+        let flat_db = FlatStateDb::new(db_path.to_path_buf(), 1_000_000).unwrap();
+        flat_db.validate_and_rollback_archival().unwrap();
+
+        assert_eq!(
+            flat_db.user.fetch_latest_committed_archival_version(),
+            Some(0),
+            "User committed archival version must stay at the live version after rollback"
+        );
+        assert_eq!(
+            flat_db.kernel.fetch_latest_committed_archival_version(),
+            Some(0),
+            "Kernel committed archival version must stay at the live version after rollback"
+        );
     }
 
     #[test]
