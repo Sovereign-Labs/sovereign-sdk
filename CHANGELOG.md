@@ -1,3 +1,5 @@
+# 2026-11-17
+- #3146 Tests: Add `SeqTestRollup::max_allowed_node_distance_behind`; `event_epoch` no longer flakes when the node falls behind under load, `max_concurrent_proof` uses a limit of 3 and is marked `flaky_` (#3145), and the rocksdb perf test fails at its 2-minute budget instead of hanging until the nextest kill.
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 
