@@ -202,31 +202,58 @@ pub trait EventEmitter: ModuleInfo {
 }
 
 fn event_key<T: Debug>(module_prefix: &str, event: &T) -> String {
-    let event_debug = format!("{event:?}");
-    // Hacky logic to get the first identifier in the Debug representation.
-    let event_identifier = event_debug
-        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-        .next()
-        .unwrap_or_default();
-
-    format!("{module_prefix}/{event_identifier}")
+    // The first identifier in the Debug representation.
+    let mut event_identifier = LeadingIdent(String::new());
+    debug_prefix(event, &mut event_identifier);
+    format!("{module_prefix}/{}", event_identifier.0)
 }
 
 /// A helper function to make string representation of the inner call message from the runtime's `Decodable` representation.
 pub fn call_message_repr<D: DispatchCall>(decodable: &D::Decodable) -> String {
-    // Extract the variant name from the part right after the first parenthesis
-    let dbg = format!("{decodable:?}");
-    let variant_part = dbg
-        .split_once('(')
-        .map(|(_idx, after_parent)| {
-            let end_idx = after_parent
-                .find([' ', '{', '('])
-                .unwrap_or(after_parent.len());
-            &after_parent[..end_idx]
-        })
-        .unwrap_or("Unknown");
-
+    // The variant name right after the first parenthesis of the Debug representation.
+    let mut variant = FirstVariant(None);
+    debug_prefix(decodable, &mut variant);
+    let variant_part = variant.0.as_deref().unwrap_or("Unknown");
     format!("{}_{}", decodable.discriminant().as_ref(), variant_part)
+}
+
+/// Writes `value`'s Debug representation into `sink` until `sink` returns an error, so that only
+/// the prefix the caller needs is formatted, not every (often bech32-encoded) field.
+fn debug_prefix(value: &impl Debug, sink: &mut impl core::fmt::Write) {
+    // An error only means that `sink` has seen enough.
+    let _ = core::fmt::write(sink, format_args!("{value:?}"));
+}
+
+/// Collects the leading run of alphanumeric and `_` characters.
+struct LeadingIdent(String);
+
+impl core::fmt::Write for LeadingIdent {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for c in s.chars() {
+            if !(c.is_alphanumeric() || c == '_') {
+                return Err(core::fmt::Error);
+            }
+            self.0.push(c);
+        }
+        Ok(())
+    }
+}
+
+/// Collects the text after the first `(` up to the next ` `, `{` or `(`. `None` if there is no `(`.
+struct FirstVariant(Option<String>);
+
+impl core::fmt::Write for FirstVariant {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for c in s.chars() {
+            match &mut self.0 {
+                None if c == '(' => self.0 = Some(String::new()),
+                None => {}
+                Some(_) if matches!(c, ' ' | '{' | '(') => return Err(core::fmt::Error),
+                Some(variant) => variant.push(c),
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<T> EventEmitter for T
