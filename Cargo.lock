@@ -4154,6 +4154,7 @@ checksum = "4a3daa8e81a3963a60642bcc1f90a670680bd4a77535faa384e9d1c79d620871"
 dependencies = [
  "curve25519-dalek",
  "ed25519",
+ "merlin",
  "rand_core 0.6.4",
  "serde",
  "sha2 0.10.9",
@@ -6823,6 +6824,8 @@ name = "native-gas-microbenches"
 version = "0.3.0"
 dependencies = [
  "criterion",
+ "ed25519-dalek",
+ "rayon",
  "sov-gas-tools",
  "sov-mock-da",
  "sov-mock-zkvm",
@@ -11283,6 +11286,7 @@ dependencies = [
  "reqwest 0.13.3",
  "risc0",
  "serde",
+ "serde_json",
  "sov-address",
  "sov-db",
  "sov-hyperlane-integration",
@@ -11294,6 +11298,7 @@ dependencies = [
  "sov-node-client",
  "sov-risc0-adapter",
  "sov-rollup-interface",
+ "sov-sequencer",
  "sov-shutdown",
  "sov-sp1-adapter",
  "sov-state",

@@ -264,11 +264,25 @@ impl<T: borsh::BorshDeserialize> MeteredBorshDeserialize for T {}
 pub fn metered_decode_from_slice<T, M: GasMeter>(
     buf: &mut &[u8],
     meter: &mut M,
-    decode: impl FnOnce(&mut crate::MeteredReader<'_, &mut io::Cursor<&[u8]>, M>) -> io::Result<T>,
+    decode: impl Fn(&mut crate::MeteredReader<'_, &mut io::Cursor<&[u8]>, M>) -> io::Result<T>,
 ) -> Result<T, MeteredBorshDeserializeError<<M::Spec as Spec>::Gas>> {
     meter
         .charge_gas(<M::Spec as GasSpec>::bias_borsh_deserialization())
         .map_err(MeteredBorshDeserializeError::GasError)?;
+
+    // Fast path: decode while counting, then charge the totals at once. Gas-constant estimation
+    // counts individual charges, so it always takes the per-read path.
+    #[cfg(not(feature = "gas-constant-estimation"))]
+    {
+        let mut cursor = io::Cursor::new(*buf);
+        let mut reader = crate::MeteredReader::new_deferred(&mut cursor, &mut *meter);
+        if let Ok(value) = decode(&mut reader) {
+            if reader.charge_deferred() {
+                *buf = &buf[cursor.position() as usize..];
+                return Ok(value);
+            }
+        }
+    }
 
     let mut cursor = io::Cursor::new(*buf);
     let mut reader = crate::MeteredReader::new(&mut cursor, meter);

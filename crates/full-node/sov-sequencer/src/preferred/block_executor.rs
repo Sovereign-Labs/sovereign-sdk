@@ -181,6 +181,26 @@ pub(crate) struct RollupBlockExecutorErrorWithBudget<S: Spec> {
     pub(crate) inner_err: RollupBlockExecutorError<S>,
 }
 
+/// How long to spin for the executor's result before waiting for a wake-up. The executor usually
+/// answers within tens of microseconds, and a wake-up round trip costs a large share of that.
+const SPIN_BEFORE_WAIT: std::time::Duration = std::time::Duration::from_micros(50);
+
+async fn recv_spinning_first<T>(receiver: &mut mpsc::Receiver<T>) -> Option<T> {
+    let spin_until = std::time::Instant::now() + SPIN_BEFORE_WAIT;
+    loop {
+        match receiver.try_recv() {
+            Ok(item) => return Some(item),
+            Err(mpsc::error::TryRecvError::Disconnected) => return None,
+            Err(mpsc::error::TryRecvError::Empty) => {
+                if std::time::Instant::now() >= spin_until {
+                    return receiver.recv().await;
+                }
+                std::hint::spin_loop();
+            }
+        }
+    }
+}
+
 impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     /// The maximum number of transactions that can be buffered before incoming txs start getting
     /// rejected.
@@ -348,14 +368,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
 
-        let call = Rt::Auth::decode_serialized_tx(&baked_tx.tx).map_err(|e| {
-            RollupBlockExecutorErrorWithBudget {
-                execution_time_micros: 0,
-                gas_used: <S as Spec>::Gas::zero(),
-                inner_err: RollupBlockExecutorError::DecodeCall(e),
-            }
-        })?;
-        let call = Rt::wrap_call(call);
+        // Decoding is only needed to name the call in a rejection, so it happens off the hot path.
+        // `try_send` hands the tx to the executor, so keep its bytes for that case.
+        let raw_tx = baked_tx.tx.clone();
 
         if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {
             return Err(RollupBlockExecutorErrorWithBudget {
@@ -365,7 +380,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             });
         }
 
-        let Some(result) = task_state.result_receiver.recv().await else {
+        let Some(result) = recv_spinning_first(&mut task_state.result_receiver).await else {
             tracing::error!("The rollup block executor task failed unexpectedly. Gracefully shutting down the sequencer.");
             self.primary_shutdown.shutdown(); // We don't care if this was already triggered, because that would mean the sequencer is already shutting down - which is exactly what we want.
             return Err(RollupBlockExecutorErrorWithBudget {
@@ -386,13 +401,19 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             tx_changes,
             remaining_slot_gas,
             sequencing_scratchpad,
-        } = inner_result.map_err(|reason| RollupBlockExecutorErrorWithBudget {
-            execution_time_micros,
-            gas_used,
-            inner_err: RollupBlockExecutorError::Rejected {
-                reason,
-                call: call_message_repr::<Rt>(&call),
-            },
+        } = inner_result.map_err(|reason| {
+            let inner_err = match Rt::Auth::decode_serialized_tx(&raw_tx) {
+                Ok(call) => RollupBlockExecutorError::Rejected {
+                    reason,
+                    call: call_message_repr::<Rt>(&Rt::wrap_call(call)),
+                },
+                Err(e) => RollupBlockExecutorError::DecodeCall(e),
+            };
+            RollupBlockExecutorErrorWithBudget {
+                execution_time_micros,
+                gas_used,
+                inner_err,
+            }
         })?;
 
         if !receipt.receipt.is_successful() {
