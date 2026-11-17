@@ -776,6 +776,10 @@ impl<S: Spec> BlobStorage<S> {
             );
 
             for mut batch in batches_from_next_slot {
+                // TODO(@preston-evans98): The escrow is released *before* the blob is checked against the size limit. If the
+                // blob is then dropped as `OutOfCapacity`, its sender has already paid for pre-execution checks.
+                // Checking capacity first (and refunding the whole escrow on `OutOfCapacity`) would fix this, but we should analyze
+                // the game theory before fixing. This would be a breaking change for any chains that have already dropped deferred blobs.
                 if !self.release_deferred_escrow(
                     &mut batch,
                     *gas_price_for_new_block,
