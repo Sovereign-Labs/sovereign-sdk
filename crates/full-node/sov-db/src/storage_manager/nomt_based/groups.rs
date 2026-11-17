@@ -31,12 +31,18 @@ use crate::storage_manager::{
 const GIGABYTE: usize = 1024 * 1024 * 1024;
 
 /// Joins a store commit thread, re-raising its panic on the caller's thread.
+/// Errors are logged here because the caller propagates at most one of several store failures.
 fn join_commit_thread<T>(
+    store: &str,
     handle: std::thread::ScopedJoinHandle<'_, anyhow::Result<T>>,
 ) -> anyhow::Result<T> {
-    handle
+    let result = handle
         .join()
-        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+        .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+    if let Err(error) = &result {
+        tracing::error!(store, ?error, "Failed to commit store");
+    }
+    result
 }
 
 // 300 thousand keys * 32 bytes is about 10 MB. This should be a large enough batch size to keep up with state growth,
@@ -167,43 +173,57 @@ where
         // to each other and to NOMT. `NomtProverStorage::get_with_proof` stays consistent
         // because it cross-checks the live root against the NOMT root and retries on mismatch.
         let root_hash_batch = historical_state.root_hash_batch.clone();
+        // Spans are thread-local, so commit threads enter the caller's span explicitly.
+        let span = tracing::Span::current();
 
         let (flat_metrics, others) = std::thread::scope(|s| {
             let merklized = s.spawn(|| {
-                tracing::trace!("Commiting NOMT DBs...");
-                self.merklized_state.commit(state)
+                span.in_scope(|| {
+                    tracing::trace!("Commiting NOMT DBs...");
+                    self.merklized_state.commit(state)
+                })
             });
             let ledger_commit = s.spawn(|| {
-                tracing::trace!("Committing Ledger DB...");
-                #[cfg(feature = "test-utils")]
-                crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLedger
-                    .inject_fault_if_configured();
-                let ledger_start = std::time::Instant::now();
-                self.ledger.write_schemas(&ledger)?;
-                anyhow::Ok(ledger_start.elapsed())
+                span.in_scope(|| {
+                    tracing::trace!("Committing Ledger DB...");
+                    #[cfg(feature = "test-utils")]
+                    crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLedger
+                        .inject_fault_if_configured();
+                    let ledger_start = std::time::Instant::now();
+                    self.ledger.write_schemas(&ledger)?;
+                    anyhow::Ok(ledger_start.elapsed())
+                })
             });
             let accessory_commit = s.spawn(|| {
-                tracing::trace!("Commiting Accessory DB...");
-                #[cfg(feature = "test-utils")]
-                crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingAccessory
-                    .inject_fault_if_configured();
-                let accessory_start = std::time::Instant::now();
-                AccessoryDb::commit(&self.accessory, &accessory, &root_hash_batch)?;
-                anyhow::Ok(accessory_start.elapsed())
+                span.in_scope(|| {
+                    tracing::trace!("Commiting Accessory DB...");
+                    #[cfg(feature = "test-utils")]
+                    crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingAccessory
+                        .inject_fault_if_configured();
+                    let accessory_start = std::time::Instant::now();
+                    AccessoryDb::commit(&self.accessory, &accessory, &root_hash_batch)?;
+                    anyhow::Ok(accessory_start.elapsed())
+                })
             });
 
+            let mut handles = Some((merklized, ledger_commit, accessory_commit));
             let mut others = None;
             let wait_for_others = || -> anyhow::Result<()> {
-                let merklized_commit = join_commit_thread(merklized)?;
-                let ledger_commit = join_commit_thread(ledger_commit)?;
-                let accessory_commit = join_commit_thread(accessory_commit)?;
-                others = Some((merklized_commit, ledger_commit, accessory_commit));
+                let (merklized, ledger_commit, accessory_commit) = handles
+                    .take()
+                    .expect("other stores are awaited at most once");
+                // Join every thread before propagating, so each failure gets logged.
+                let merklized_commit = join_commit_thread("nomt", merklized);
+                let ledger_commit = join_commit_thread("ledger", ledger_commit);
+                let accessory_commit = join_commit_thread("accessory", accessory_commit);
+                others = Some((merklized_commit?, ledger_commit?, accessory_commit?));
                 Ok(())
             };
 
             tracing::trace!("Committing Flat DB..");
             #[cfg(feature = "migration-script")]
             let flat_metrics = if let Some(expected_latest) = expected_latest {
+                let mut wait_for_others = wait_for_others;
                 wait_for_others().and_then(|_| {
                     self.flat_state
                         .commit_at_latest_checked(historical_state, expected_latest)
@@ -222,6 +242,15 @@ where
                 self.flat_state
                     .commit_with_before_live(historical_state, wait_for_others)
             };
+
+            // The flat commit failed before waiting for the other stores. Join them anyway so
+            // their failures are logged instead of being dropped with the scope. Their results
+            // are ignored because the flat commit error is the one being propagated.
+            if let Some((merklized, ledger_commit, accessory_commit)) = handles.take() {
+                let _ = join_commit_thread("nomt", merklized);
+                let _ = join_commit_thread("ledger", ledger_commit);
+                let _ = join_commit_thread("accessory", accessory_commit);
+            }
             (flat_metrics, others)
         });
         let flat_metrics = flat_metrics?;

@@ -424,18 +424,8 @@ impl FlatStateDb {
 
         before_live()?;
 
-        // 4. Lock caches. Readers must not see the new cache values until the live batch is written.
+        // 4. Lock caches. Readers bypass the cache while the live DB changes underneath it.
         let inner = self.db_cache.inner.write();
-        VersionedDB::<_, DbCache>::apply_cache_updates(
-            &inner.kernel_cache,
-            &state_changes.kernel,
-            is_commit,
-        );
-        VersionedDB::<_, DbCache>::apply_cache_updates(
-            &inner.user_cache,
-            &state_changes.user,
-            is_commit,
-        );
 
         // rockbound requirement:  `store_committed_archival_version` has to be called before before writing `live_db_batch`.
         self.kernel.store_committed_archival_version(version);
@@ -449,7 +439,20 @@ impl FlatStateDb {
             self.live_db.write_db_batch(live_db_batch)?;
         }
 
-        // 5. Release caches.
+        // 5. Update caches only once the live batch is written, so a failed live write
+        // does not leave values in the cache that are not in the live DB.
+        VersionedDB::<_, DbCache>::apply_cache_updates(
+            &inner.kernel_cache,
+            &state_changes.kernel,
+            is_commit,
+        );
+        VersionedDB::<_, DbCache>::apply_cache_updates(
+            &inner.user_cache,
+            &state_changes.user,
+            is_commit,
+        );
+
+        // 6. Release caches.
         drop(inner);
 
         // Update metrics once the cache lock is released.
@@ -618,6 +621,9 @@ impl CacheForVersionedDB<NomtStateValues<KernelNamespace>> for DbCache {
 }
 
 #[cfg(test)]
+mod concurrency_tests;
+
+#[cfg(test)]
 mod tests {
     use super::*;
     use crate::test_utils::CommitFaultInjectionLocation;
@@ -675,6 +681,31 @@ mod tests {
             flat_db.kernel.get_live_value(&key).unwrap(),
             value_v0,
             "Cache must not expose version 1 values when the live DB was not written"
+        );
+    }
+
+    #[test]
+    fn test_failed_live_write_leaves_cache_at_previous_version() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let flat_db = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000).unwrap();
+        let data = data_to_insert_per_version();
+        let key = make_key("kernel_key2");
+
+        flat_db.commit(data.change_set(0)).unwrap();
+        let value_v0 = flat_db.kernel.get_live_value(&key).unwrap();
+        assert!(value_v0.is_some());
+
+        // Version 1 overrides `kernel_key2`; the commit crashes right before the live write.
+        CommitFaultInjectionLocation::BeforeCommittingLive.set_crash_env();
+        let result =
+            std::panic::catch_unwind(AssertUnwindSafe(|| flat_db.commit(data.change_set(1))));
+        std::env::remove_var(crate::test_utils::CRASH_ON_COMMIT_ENV_NAME);
+        assert!(result.is_err(), "Commit should crash before the live write");
+
+        assert_eq!(
+            flat_db.kernel.get_live_value(&key).unwrap(),
+            value_v0,
+            "Cache must not expose version 1 values when the live write did not happen"
         );
     }
 
