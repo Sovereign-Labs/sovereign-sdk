@@ -38,7 +38,8 @@ pub fn config_unregistered_blobs_per_slot() -> u64 {
 /// An escrow account for storing the reserved gas for a blob.
 #[derive(Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Debug, PartialEq)]
 pub enum Escrow {
-    /// The gas is held in a derived holder account in the bank module.
+    /// The gas is recorded in the sequencer registry's escrow map under this holder.
+    /// The tokens themselves stay in the registry's bank account.
     DerivedHolder(DerivedHolder),
     /// The given number of tokens is held directly in the sequencer module.
     Direct(Amount),
