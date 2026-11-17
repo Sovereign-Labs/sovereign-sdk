@@ -1,5 +1,5 @@
 # 2026-11-16
-- #PR_NUMBER Metrics: Fixed metrics being lost when sent to Telegraf over TCP (`telegraf_address = "tcp://..."`). Each batch ended without a newline, so the last metric of one batch was joined to the first metric of the next, and Telegraf rejected both with a parse error. Every metric line is now newline-terminated. UDP was not affected.
+- #3144 Metrics: Fixed metrics being lost when sent to Telegraf over TCP (`telegraf_address = "tcp://..."`). Each batch ended without a newline, so the last metric of one batch was joined to the first metric of the next, and Telegraf rejected both with a parse error. Every metric line is now newline-terminated. UDP was not affected.
 
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
