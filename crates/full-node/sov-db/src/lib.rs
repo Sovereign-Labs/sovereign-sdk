@@ -142,12 +142,19 @@ pub(crate) fn timed_open<T>(
 ) -> anyhow::Result<T> {
     let start = std::time::Instant::now();
     let result = open();
-    tracing::info!(
-        db,
-        elapsed = ?start.elapsed(),
-        success = result.is_ok(),
-        "Finished opening database"
-    );
+    let elapsed = start.elapsed();
+    match &result {
+        Ok(_) => tracing::info!(db, ?elapsed, "Finished opening database"),
+        // `{:#}` prints the whole `anyhow` context chain, not just the outermost message.
+        Err(error) => {
+            tracing::error!(
+                db,
+                ?elapsed,
+                error = format!("{error:#}"),
+                "Failed to open database"
+            );
+        }
+    }
     result
 }
 
