@@ -309,6 +309,7 @@ pub struct SeqTestRollup<RT: Runtime<TestSpec>> {
     stop_at_rollup_height: Option<RollupHeight>,
     finalization_blocks: u32,
     pruner: PrunerConfig,
+    max_allowed_node_distance_behind: Option<u64>,
 }
 
 impl<RT: Runtime<TestSpec> + HasRestApi<TestSpec>> SeqTestRollup<RT> {
@@ -331,6 +332,7 @@ impl<RT: Runtime<TestSpec> + HasRestApi<TestSpec>> SeqTestRollup<RT> {
             finalization_blocks: TEST_FINALIZATION_BLOCKS,
             // Pruning disabled by default, matching production defaults for fresh nodes.
             pruner: PrunerConfig::Off,
+            max_allowed_node_distance_behind: None,
         }
     }
 
@@ -393,6 +395,13 @@ impl<RT: Runtime<TestSpec> + HasRestApi<TestSpec>> SeqTestRollup<RT> {
         self
     }
 
+    /// How far the node may fall behind the DA tip before the sequencer pauses and resyncs.
+    /// `None` keeps the `RollupBuilder` default.
+    pub fn max_allowed_node_distance_behind(mut self, distance: u64) -> Self {
+        self.max_allowed_node_distance_behind = Some(distance);
+        self
+    }
+
     pub async fn start(self) -> TestRollup<RtAgnosticBlueprint<TestSpec, RT>> {
         let prover_enabled = self.rollup_prover_config.is_enabled();
         RollupBuilder::<RtAgnosticBlueprint<TestSpec, RT>>::new(
@@ -409,6 +418,9 @@ impl<RT: Runtime<TestSpec> + HasRestApi<TestSpec>> SeqTestRollup<RT> {
             c.stop_at_rollup_height = self.stop_at_rollup_height;
             c.pruner = self.pruner;
             c.max_concurrent_batch_blobs = TEST_MAX_CONCURRENT_BATCH_BLOBS;
+            if let Some(distance) = self.max_allowed_node_distance_behind {
+                c.max_allowed_node_distance_behind = distance;
+            }
         })
         .with_preferred_seq_config(|seq| {
             seq.batch_execution_time_limit_millis = self.max_batch_execution_time_millis;

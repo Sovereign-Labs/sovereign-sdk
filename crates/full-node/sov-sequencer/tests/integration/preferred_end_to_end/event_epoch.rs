@@ -148,7 +148,12 @@ async fn historical_state_reads_report_no_last_event_number() {
 /// still. A client that resynchronised on every batch would be useless.
 #[tokio::test(flavor = "multi_thread")]
 async fn the_event_epoch_is_stable_while_the_sequencer_makes_progress() {
-    let (test_rollup, admin) = create_test_rollup().await;
+    // A resync legitimately starts a new epoch. Each `produce_enough_finalized_slots` produces a
+    // burst of DA blocks, and under CPU load the node can fall more than the default 10 blocks
+    // behind, which makes the sequencer pause and resync. Raise the bound so this test only sees
+    // normal operation. It must stay below `DEFERRED_SLOTS_COUNT`.
+    let (test_rollup, admin) =
+        create_test_rollup_with(|b| b.max_allowed_node_distance_behind(30)).await;
 
     test_rollup.produce_enough_finalized_slots().await;
     test_rollup.wait_for_sequencer_ready().await.unwrap();
