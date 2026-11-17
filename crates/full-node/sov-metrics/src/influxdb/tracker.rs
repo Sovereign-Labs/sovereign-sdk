@@ -74,7 +74,7 @@ impl MetricsTracker {
         self.submit_with_time(timestamp(), measurement);
     }
 
-    /// Submits a metric with a timestamp.
+    /// Submits a metric of a known kind, timestamped now.
     pub fn submit_known_metric(&self, measurement: impl KnownMetric + 'static) {
         let metric = measurement.to_known_submittable();
 
@@ -83,7 +83,7 @@ impl MetricsTracker {
         };
     }
 
-    /// Submits a metric with a timestamp.
+    /// Submits a metric with an explicit timestamp, in nanoseconds since the UNIX epoch.
     pub fn submit_with_time(&self, timestamp: u128, measurement: impl Metric + 'static) {
         let metric = SubmittableMetric::new(
             super::SubmittableMetricKind::Boxed(Box::new(measurement)),
