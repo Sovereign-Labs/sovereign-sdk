@@ -455,6 +455,52 @@ async fn discarded_blobs_are_resubmitted() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[tokio::test(flavor = "multi_thread")]
+async fn blob_sender_exits_if_blob_keeps_being_discarded() -> anyhow::Result<()> {
+    let deps = create_deps().await;
+    let primary_shutdown = deps.primary_shutdown.clone();
+    let (status_sender, mut status_receiver) = broadcast::channel(100);
+
+    let (mut blob_sender, blob_sender_handle) = create_blob_sender(
+        Duration::from_secs(20),
+        &deps,
+        Some(status_sender),
+        BlobSelectorStatus::Discarded(BlobDiscardReason::SenderInsufficientStake),
+    )
+    .await;
+
+    let blob_id = 11u8;
+    let data = Arc::new([blob_id, 2, 3, 4, 5]);
+    blob_sender
+        .publish_batch_blob(data, blob_id as BlobInternalId)
+        .await?;
+    wait_for_submission_statuses(
+        &mut status_receiver,
+        |status| {
+            matches!(
+                status.blob_submission_status,
+                BlobSubmissionStatus::Published { .. }
+            )
+        },
+        1,
+    )
+    .await;
+    deps.da.produce_block_now().await?;
+
+    // Once the blob is on DA, every lookup reports it as discarded. After
+    // MAX_NB_OF_BLOB_SUBMISSION_RETRIES attempts, BlobSender should request shutdown.
+    tokio::time::timeout(
+        Duration::from_secs(30),
+        primary_shutdown.wait_for_shutdown(),
+    )
+    .await
+    .expect("The BlobSender should stop resubmitting a blob that keeps being discarded.")
+    .expect("The BlobSender should request shutdown after exhausting resubmissions.");
+
+    blob_sender_handle.await.unwrap();
+    Ok(())
+}
+
 // A saturated proof buffer must not block the
 // sequencer's batch-production gate.
 #[tokio::test(flavor = "multi_thread")]
