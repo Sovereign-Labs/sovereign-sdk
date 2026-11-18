@@ -23,6 +23,12 @@ basic-nomt:
 	@echo "Output: Standard"
 	@cd ../.. && SOV_BENCH=nomt cargo bench --bench=rollup_coarse_measure
 
+full-cycle:
+	@echo "Running full-cycle benchmark: preferred sequencer and node in one process"
+	@echo "Method: Metrics from an in-process collector"
+	@echo "Output: Standard"
+	@cd ../.. && cargo bench --bench=rollup_full_cycle
+
 flamegraph:
 	@echo "Running basic benchmark with $(SOV_BENCH_BLOCKS) blocks and $(SOV_BENCH_TXNS_PER_BLOCKS) transactions per block"
 	@echo "Method: Coarse Timers"
