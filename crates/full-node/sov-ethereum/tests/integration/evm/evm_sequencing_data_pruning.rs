@@ -26,7 +26,6 @@ use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::Paymaster;
 use sov_rollup_interface::node::da::DaService;
 use sov_rollup_interface::TxHash as SovTxHash;
-use sov_sequencer::SequencerKindConfig;
 use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::StandardProvenRollupCapabilities;
@@ -302,9 +301,9 @@ async fn setup_pruning_rollup() -> TestRollup<PruningBlueprint> {
             c.max_infos_in_db = 30;
             c.max_channel_size = 20;
             c.extension = Some(EVM_EXTENSION);
-            if let SequencerKindConfig::Preferred(ref mut seq) = c.sequencer_config {
-                seq.ideal_lag_behind_finalized_slot = 3;
-            }
+        })
+        .with_preferred_seq_config(|seq| {
+            seq.ideal_lag_behind_finalized_slot = 3;
         })
         .set_da_config(|c| {
             c.sender_address = seq_da_address;

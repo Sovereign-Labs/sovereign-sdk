@@ -7,7 +7,7 @@ use demo_stf::genesis_config::create_genesis_config;
 use futures::StreamExt;
 use serde::Deserialize;
 use sov_demo_rollup::ExternalMockDemoRollup;
-use sov_full_node_configs::sequencer::{RecoveryStrategy, SequencerKindConfig};
+use sov_full_node_configs::sequencer::RecoveryStrategy;
 use sov_mock_da::storable::rpc::MockDaClientConfig;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::AggregatedProofPublicData;
@@ -75,13 +75,13 @@ pub async fn start_test_rollup(
         c.max_concurrent_proof_blobs = max_concurrent_proof_blobs;
         c.start_fresh_outer_proof_on_resync = start_fresh_outer_proof_on_resync;
         c.stop_at_rollup_height = stop_at_rollup_height;
-        if let SequencerKindConfig::Preferred(sequencer_config) = &mut c.sequencer_config {
-            sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
-            sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
-            sequencer_config.disable_state_root_consistency_checks = true;
-            sequencer_config.num_cache_warmup_workers = 0;
-            sequencer_config.ideal_lag_behind_finalized_slot = 3;
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
+        seq.recovery_strategy = RecoveryStrategy::TryToSave;
+        seq.disable_state_root_consistency_checks = true;
+        seq.num_cache_warmup_workers = 0;
+        seq.ideal_lag_behind_finalized_slot = 3;
     })
     .start_test_rollup()
     .await?;

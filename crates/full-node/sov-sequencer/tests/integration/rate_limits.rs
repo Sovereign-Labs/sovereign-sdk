@@ -14,7 +14,6 @@ use sov_modules_api::RawTx;
 use sov_modules_api::Spec;
 use sov_modules_stf_blueprint::Runtime;
 use sov_sequencer::rest_api::AcceptTx;
-use sov_sequencer::SequencerKindConfig;
 use sov_test_utils::generate_operator_runtime_with_kernel;
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
@@ -92,11 +91,11 @@ async fn create_test_rollup(
     .set_config(|c| {
         c.storage = StoragePath::Tmp(dir);
         c.max_concurrent_batch_blobs = 64;
-        if let SequencerKindConfig::Preferred(ref mut config) = &mut c.sequencer_config {
-            config.num_cache_warmup_workers = 0;
-            config.batch_execution_time_limit_millis = 3000;
-            config.rate_limiter = Some(rate_limiter_config);
-        }
+    })
+    .with_preferred_seq_config(|seq| {
+        seq.num_cache_warmup_workers = 0;
+        seq.batch_execution_time_limit_millis = 3000;
+        seq.rate_limiter = Some(rate_limiter_config);
     })
     .set_da_config(|c| c.sender_address = seq_da_address)
     .set_persistent_da()
