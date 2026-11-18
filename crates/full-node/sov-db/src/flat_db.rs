@@ -24,6 +24,7 @@ use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
 use std::sync::Arc;
 
 /// A database to store the flat state of the rollup (i.e. the raw key-value pairs)
+#[derive(Clone)]
 pub struct FlatStateDb {
     pub(crate) user: Arc<VersionedDB<NomtStateValues<UserNamespace>, DbCache>>,
     pub(crate) kernel: Arc<VersionedDB<NomtStateValues<KernelNamespace>, DbCache>>,
