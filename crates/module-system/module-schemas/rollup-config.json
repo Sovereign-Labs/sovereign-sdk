@@ -952,6 +952,11 @@
       "description": "Configuration for Sovereign Rollup node database.",
       "type": "object",
       "properties": {
+        "flat_state_rocksdb_statistics": {
+          "description": "Enables RocksDB statistics on the live flat state database and reports them in the\n`sov_flat_state_reads` metric. Statistics add a few percent to every RocksDB read, i.e. to\nreads that miss the state cache. Default is `false`.",
+          "type": "boolean",
+          "default": false
+        },
         "kernel_commit_concurrency": {
           "description": "Number of concurrent commit workers for the kernel state.\nMore details at [`Options::commit_concurrency`]",
           "type": [
