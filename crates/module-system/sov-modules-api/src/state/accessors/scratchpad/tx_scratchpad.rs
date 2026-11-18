@@ -169,7 +169,7 @@ impl<S: Spec> TxScratchpad<S, StateCheckpoint<S>> {
         reads: &mut Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
         namespace: Namespace,
     ) {
-        reads.retain(|(k, _)| !self.inner.writes.contains_key(&(k.clone(), namespace)));
+        reads.retain(|(k, _)| self.inner.writes.get(namespace, k).is_none());
     }
 }
 

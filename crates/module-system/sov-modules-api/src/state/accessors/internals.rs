@@ -470,8 +470,76 @@ impl<S: Storage> UniversalStateAccessor for AccessoryDelta<S> {
 
 pub(super) struct RevertableWriter<T> {
     pub(super) inner: T,
-    pub(crate) writes: HashMap<(SlotKey, Namespace), Option<SlotValue>>,
+    pub(crate) writes: PendingWrites,
     pub(crate) cache_writes: TempCache,
+}
+
+/// Pending writes of a [`RevertableWriter`]: one map per namespace, so a lookup hashes the
+/// borrowed key instead of building a `(key, namespace)` tuple.
+pub(crate) struct PendingWrites {
+    user: HashMap<SlotKey, Option<SlotValue>>,
+    kernel: HashMap<SlotKey, Option<SlotValue>>,
+    accessory: HashMap<SlotKey, Option<SlotValue>>,
+}
+
+impl PendingWrites {
+    fn new() -> Self {
+        Self {
+            user: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
+            kernel: HashMap::new(),
+            accessory: HashMap::new(),
+        }
+    }
+
+    fn map(&self, namespace: Namespace) -> &HashMap<SlotKey, Option<SlotValue>> {
+        match namespace {
+            Namespace::User => &self.user,
+            Namespace::Kernel => &self.kernel,
+            Namespace::Accessory => &self.accessory,
+        }
+    }
+
+    fn map_mut(&mut self, namespace: Namespace) -> &mut HashMap<SlotKey, Option<SlotValue>> {
+        match namespace {
+            Namespace::User => &mut self.user,
+            Namespace::Kernel => &mut self.kernel,
+            Namespace::Accessory => &mut self.accessory,
+        }
+    }
+
+    pub(crate) fn get(&self, namespace: Namespace, key: &SlotKey) -> Option<&Option<SlotValue>> {
+        self.map(namespace).get(key)
+    }
+
+    fn insert(&mut self, namespace: Namespace, key: &SlotKey, value: Option<SlotValue>) {
+        let map = self.map_mut(namespace);
+        match map.get_mut(key) {
+            Some(existing) => *existing = value,
+            None => {
+                map.insert(key.clone(), value);
+            }
+        }
+    }
+
+    fn iter(&self) -> impl Iterator<Item = ((&SlotKey, Namespace), &Option<SlotValue>)> {
+        [
+            (Namespace::User, &self.user),
+            (Namespace::Kernel, &self.kernel),
+            (Namespace::Accessory, &self.accessory),
+        ]
+        .into_iter()
+        .flat_map(|(namespace, map)| map.iter().map(move |(k, v)| ((k, namespace), v)))
+    }
+
+    fn into_iter(self) -> impl Iterator<Item = ((SlotKey, Namespace), Option<SlotValue>)> {
+        [
+            (Namespace::User, self.user),
+            (Namespace::Kernel, self.kernel),
+            (Namespace::Accessory, self.accessory),
+        ]
+        .into_iter()
+        .flat_map(|(namespace, map)| map.into_iter().map(move |(k, v)| ((k, namespace), v)))
+    }
 }
 
 impl<T: fmt::Debug> fmt::Debug for RevertableWriter<T> {
@@ -483,19 +551,10 @@ impl<T: fmt::Debug> fmt::Debug for RevertableWriter<T> {
 }
 
 impl<T> RevertableWriter<T> {
-    /// The pending write for `key`, if any. Skips building the lookup key (a clone of `key`) when
-    /// nothing was written yet, which is the common case for reads.
-    fn lookup_write(&self, namespace: Namespace, key: &SlotKey) -> Option<&Option<SlotValue>> {
-        if self.writes.is_empty() {
-            return None;
-        }
-        self.writes.get(&(key.clone(), namespace))
-    }
-
     pub(super) fn new(inner: T) -> Self {
         Self {
             inner,
-            writes: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
+            writes: PendingWrites::new(),
             cache_writes: TempCache::new(),
         }
     }
@@ -505,7 +564,7 @@ impl<T> RevertableWriter<T> {
     where
         T: UniversalStateAccessor + PerBlockCache,
     {
-        for ((key, namespace), value) in self.writes {
+        for ((key, namespace), value) in self.writes.into_iter() {
             Self::commit_entry(&mut self.inner, namespace, &key, value);
         }
 
@@ -543,7 +602,7 @@ impl<S: Spec> RevertableWriter<StateCheckpoint<S>> {
             writes: self
                 .writes
                 .iter()
-                .map(|(k, v)| (k.clone(), v.clone()))
+                .map(|((k, namespace), v)| ((k.clone(), namespace), v.clone()))
                 .collect(),
             reads,
         }
@@ -560,7 +619,7 @@ where
         key: &SlotKey,
         metric: &mut StateAccessMetric,
     ) -> Option<u32> {
-        if let Some(value) = self.lookup_write(namespace, key) {
+        if let Some(value) = self.writes.get(namespace, key) {
             value.as_ref().map(|v| v.size())
         } else {
             <T as UniversalStateAccessor>::get_size(&mut self.inner, namespace, key, metric)
@@ -568,7 +627,7 @@ where
     }
 
     fn get_cached_value(&self, namespace: Namespace, key: &SlotKey) -> Option<Option<SlotValue>> {
-        match self.lookup_write(namespace, key) {
+        match self.writes.get(namespace, key) {
             Some(value) => Some(value.clone()),
             None => self.inner.get_cached_value(namespace, key),
         }
@@ -580,7 +639,7 @@ where
         key: &SlotKey,
         metric: &mut StateAccessMetric,
     ) -> Option<SlotValue> {
-        if let Some(value) = self.lookup_write(namespace, key) {
+        if let Some(value) = self.writes.get(namespace, key) {
             value.clone()
         } else {
             <T as UniversalStateAccessor>::get_value(&mut self.inner, namespace, key, metric)
@@ -588,11 +647,11 @@ where
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
-        self.writes.insert((key.clone(), namespace), Some(value));
+        self.writes.insert(namespace, key, Some(value));
     }
 
     fn delete_value(&mut self, namespace: Namespace, key: &SlotKey) {
-        self.writes.insert((key.clone(), namespace), None);
+        self.writes.insert(namespace, key, None);
     }
 }
 
