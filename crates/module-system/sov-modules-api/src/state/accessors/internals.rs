@@ -513,13 +513,8 @@ impl PendingWrites {
     }
 
     fn insert(&mut self, namespace: Namespace, key: &SlotKey, value: Option<SlotValue>) {
-        let map = self.map_mut(namespace);
-        match map.get_mut(key) {
-            Some(existing) => *existing = value,
-            None => {
-                map.insert(key.clone(), value);
-            }
-        }
+        // Cloning the key is cheaper than hashing it twice to check for an existing entry first.
+        self.map_mut(namespace).insert(key.clone(), value);
     }
 
     fn iter(&self) -> impl Iterator<Item = ((&SlotKey, Namespace), &Option<SlotValue>)> {
