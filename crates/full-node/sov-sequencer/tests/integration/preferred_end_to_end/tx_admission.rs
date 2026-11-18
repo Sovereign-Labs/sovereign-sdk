@@ -50,12 +50,16 @@ async fn test_transaction_priority() {
     }
 
     // Check that our initial tx arrived first and was processed - otherwise the priority numbers won't have had any effect.
-    let initial_event = event_subscription.next().await.unwrap().unwrap();
+    let initial_event = next_within(&mut event_subscription, NOTIFICATION_TIMEOUT)
+        .await
+        .unwrap();
     assert_event_value(&initial_event, 1000);
 
     // No matter what order txs arrived in, events should always be received in reverse order because higher numbers get higher priority.
     for i in (1..10).rev() {
-        let event = event_subscription.next().await.unwrap().unwrap();
+        let event = next_within(&mut event_subscription, NOTIFICATION_TIMEOUT)
+            .await
+            .unwrap();
         assert_event_value(&event, i);
     }
 }
@@ -123,7 +127,9 @@ async fn test_tx_ws_submission() {
     }
     let mut received_ids = [false, false, false];
     for _ in 0..3 {
-        let msg = reader.next().await.unwrap().unwrap();
+        let msg = next_within(&mut reader, NOTIFICATION_TIMEOUT)
+            .await
+            .unwrap();
         let id: usize = msg.id.parse().unwrap();
         assert!(!received_ids[id]);
         received_ids[id] = true;

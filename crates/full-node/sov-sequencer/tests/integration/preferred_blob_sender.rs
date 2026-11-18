@@ -7,7 +7,7 @@ use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::prelude::*;
 use sov_modules_api::{DispatchCall, RawTx, Runtime};
 use sov_rollup_interface::stf::BlobDiscardReason;
-use sov_test_utils::test_rollup::TestRollup;
+use sov_test_utils::test_rollup::{next_within, TestRollup};
 use sov_test_utils::{default_test_signed_transaction_with_nonce, TestSpec, TestUser};
 
 #[allow(unused_imports)]
@@ -136,7 +136,12 @@ async fn test_blobs_are_send_after_rollup_resync() {
 
     for _ in 0..10 {
         da.produce_block_now().await.unwrap();
-        header_subscription.next().await.unwrap().unwrap();
+        next_within(
+            &mut header_subscription,
+            TestRollup::<TestBlueprint>::POLLING_TIMEOUT,
+        )
+        .await
+        .unwrap();
     }
     test_rollup.wait_for_node_synced().await.unwrap();
 
@@ -145,7 +150,12 @@ async fn test_blobs_are_send_after_rollup_resync() {
     // Generate a block while Rollup is offline to trigger resync logic.
     for _ in 0..20 {
         da.produce_block_now().await.unwrap();
-        header_subscription.next().await.unwrap().unwrap();
+        next_within(
+            &mut header_subscription,
+            TestRollup::<TestBlueprint>::POLLING_TIMEOUT,
+        )
+        .await
+        .unwrap();
     }
 
     // The new rollup has pending blobs in the BlobSender DB and completed blobs in the Preferred Sequencer state.

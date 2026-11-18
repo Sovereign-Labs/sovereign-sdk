@@ -381,7 +381,9 @@ async fn flaky_test_state_root_computation_when_blobs_are_delayed() {
         let tx = tx_set_value(&admin.private_key, i, i);
         client.send_raw_tx_to_sequencer(&tx).await.unwrap();
         test_rollup.da_service.produce_block_now().await.unwrap();
-        let _slot = slot_subscription.next().await.unwrap().unwrap();
+        let _slot = next_within(&mut slot_subscription, NOTIFICATION_TIMEOUT)
+            .await
+            .unwrap();
     }
     // Now almost all blobs are still delayed, only first has landed
 
