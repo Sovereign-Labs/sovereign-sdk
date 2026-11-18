@@ -45,12 +45,12 @@ fn print_times(
     table.printstd();
 
     assert!(
-        tps > MIN_TPS,
+        tps >= MIN_TPS,
         "TPS {tps} dropped below {MIN_TPS}, investigation is needed"
     );
     assert!(
-        tps < MAX_TPS,
-        "TPS {tps} reached unrealistic number {MAX_TPS}, investigation is needed"
+        tps <= MAX_TPS,
+        "TPS {tps} exceeded unrealistic number {MAX_TPS}, investigation is needed"
     );
 }
 
