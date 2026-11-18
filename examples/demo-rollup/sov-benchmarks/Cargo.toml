@@ -77,6 +77,11 @@ name = "rollup_full_cycle"
 path = "src/node/rollup_full_cycle.rs"
 harness = false
 
+[[bench]]
+name = "rollup_stf_loop"
+path = "src/node/rollup_stf_loop.rs"
+harness = false
+
 [features]
 gas-constant-estimation = [
     "sov-modules-api/gas-constant-estimation",
