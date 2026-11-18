@@ -53,7 +53,7 @@ serde = { workspace = true, default-features = false, features = [
     "derive",
 ] }
 backon = { workspace = true }
-tokio = { workspace = true, default-features = false, features = ["process"] }
+tokio = { workspace = true, default-features = false, features = ["process", "net", "io-util"] }
 async-trait = { workspace = true }
 humantime = "2.1"
 clap = { workspace = true }
@@ -68,6 +68,11 @@ harness = false
 [[bench]]
 name = "rollup_coarse_measure"
 path = "src/node/rollup_coarse_measure.rs"
+harness = false
+
+[[bench]]
+name = "rollup_stf_loop"
+path = "src/node/rollup_stf_loop.rs"
 harness = false
 
 [features]
