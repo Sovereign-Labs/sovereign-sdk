@@ -103,7 +103,8 @@ where
 
         tracing::debug!(%slot_number, %attestation_height, "Submitting attestation to DA");
 
-        self.stf_info_receiver.inc_next_height_to_receive();
+        self.stf_info_receiver
+            .record_successful_optimistic_attestation();
         Ok(())
     }
 }
