@@ -180,13 +180,7 @@ async fn test_start_stop_with_crash(
             );
         }
 
-        // Verify the crash was due to the expected CommitFaultInjectionLocation panic, not some other bug.
-        test_rollup
-            .wait_for_rollup_to_crash_with_expected_panic(
-                Duration::from_secs(30),
-                &crash_moment.to_string(),
-            )
-            .await?;
+        wait_for_rollup_to_crash(test_rollup, &crash_moment).await?;
     }
 
     // Give the OS time to clean up file handles after the crash.
@@ -225,6 +219,46 @@ async fn test_start_stop_with_crash(
 
     secondary_shutdown_controller.shutdown();
 
+    Ok(())
+}
+
+/// Verifies that the rollup crashed because of the injected commit fault.
+///
+/// The fault panics on the background storage commit thread while it holds the NOMT snapshots
+/// lock, poisoning it. The rollup then stops on whichever task touches that lock first: the
+/// next finalization re-raises the injected panic, the runner panics on the poisoned lock, or
+/// another background task (e.g. the sequencer) panics on it and the task monitor reports an error.
+async fn wait_for_rollup_to_crash(
+    test_rollup: TestRollup<MockDemoRollup<Native>>,
+    crash_moment: &CommitFaultInjectionLocation,
+) -> anyhow::Result<()> {
+    let result = tokio::time::timeout(Duration::from_secs(30), test_rollup.rollup_task)
+        .await
+        .expect("Failed to join rollup task before timeout.");
+    match result {
+        Err(join_error) if join_error.is_panic() => {
+            let payload = join_error.into_panic();
+            let message = payload
+                .downcast_ref::<&str>()
+                .map(|message| message.to_string())
+                .or_else(|| payload.downcast_ref::<String>().cloned())
+                .unwrap_or_default();
+            anyhow::ensure!(
+                message.contains(&crash_moment.to_string())
+                    || message.contains("Snapshots lock poisoned"),
+                "Rollup panicked with an unexpected message: {message}"
+            );
+        }
+        Ok(Err(error)) => {
+            anyhow::ensure!(
+                error
+                    .to_string()
+                    .contains("One or more background tasks joined with errors"),
+                "Rollup failed with an unexpected error: {error}"
+            );
+        }
+        other => anyhow::bail!("Rollup did not crash as expected: {other:?}"),
+    }
     Ok(())
 }
 

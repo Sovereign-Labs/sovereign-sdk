@@ -174,10 +174,6 @@ where
         }
     }
 
-    pub(crate) fn commit(&mut self, group: CommitGroup) -> anyhow::Result<()> {
-        self.committer().commit(group)
-    }
-
     #[cfg(feature = "migration-script")]
     pub(crate) fn commit_at_latest_checked(
         &mut self,
@@ -456,7 +452,7 @@ enum FlatCommitMode {
     RewriteHead(SlotNumber),
 }
 
-/// Write handles of [`DbGroup`] used to commit a [`CommitGroup`].
+/// Write handles of [`DbGroup`] used to commit finalized blocks.
 pub(crate) struct DbCommitter<H> {
     merklized_state: Arc<NomtStateDb<H>>,
     flat_state: FlatStateDb,
@@ -468,10 +464,39 @@ impl<H> DbCommitter<H>
 where
     H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
 {
-    pub(crate) fn commit(&self, group: CommitGroup) -> anyhow::Result<()> {
-        self.commit_helper(group, FlatCommitMode::Append)
+    /// Commits `blocks` (oldest first) on a background thread.
+    /// Each block is committed to all DBs while holding the `nomt_snapshots` write lock, so NOMT
+    /// sessions cannot be opened while NOMT and RocksDB disagree on the latest block. Proof
+    /// generation (`get_with_proof`) relies on this.
+    pub(crate) fn spawn_commit<K>(
+        self,
+        blocks: Vec<(K, SnapshotGroup)>,
+        nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
+    ) -> JoinHandle<anyhow::Result<()>>
+    where
+        H: 'static,
+        K: Eq + std::hash::Hash + std::fmt::Debug + Send + Sync + 'static,
+    {
+        std::thread::Builder::new()
+            .name("storage-commit".to_string())
+            .spawn(move || {
+                for (block_hash, rockbound) in blocks {
+                    tracing::trace!(?block_hash, "Committing finalized block in background");
+                    let mut nomt_snapshots = nomt_snapshots
+                        .write()
+                        .expect("Failed to lock nomt_snapshots for commit");
+                    let overlay = nomt_snapshots
+                        .remove(&block_hash)
+                        .expect("Block being committed must have a NOMT snapshot");
+                    let merklized_commit = self.commit_merklized(overlay)?;
+                    self.commit_rockbound(rockbound, merklized_commit, FlatCommitMode::Append)?;
+                }
+                Ok(())
+            })
+            .expect("Failed to spawn storage commit thread")
     }
 
+    #[cfg(feature = "migration-script")]
     fn commit_helper(
         &self,
         group: CommitGroup,
@@ -574,6 +599,21 @@ pub(crate) struct SnapshotGroup {
     pub(crate) ledger: Arc<SchemaBatch>,
 }
 
+impl SnapshotGroup {
+    /// Another handle to the same snapshot data. Only bumps `Arc`s.
+    pub(crate) fn share(&self) -> Self {
+        Self {
+            historical_state: StateChanges {
+                user: self.historical_state.user.clone(),
+                kernel: self.historical_state.kernel.clone(),
+                root_hash_batch: self.historical_state.root_hash_batch.clone(),
+            },
+            accessory: self.accessory.clone(),
+            ledger: self.ledger.clone(),
+        }
+    }
+}
+
 pub(crate) struct PruneGroup {
     historical_state: PrunerJobOutput,
     accessory: PrunerJobOutput,
@@ -585,6 +625,7 @@ impl PruneGroup {
     }
 }
 
+#[cfg(feature = "migration-script")]
 pub(crate) struct CommitGroup {
     // State
     pub(crate) nomt: StateOverlay,

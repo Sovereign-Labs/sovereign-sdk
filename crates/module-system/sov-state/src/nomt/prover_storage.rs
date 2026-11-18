@@ -1106,6 +1106,8 @@ mod tests {
 
         if finalize {
             storage_manager.finalize(da_header).unwrap();
+            // These tests rely on finalized blocks being on disk.
+            storage_manager.flush().unwrap();
         }
 
         expected_root
