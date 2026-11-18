@@ -6,10 +6,15 @@ use sov_chain_state::ChainState;
 use sov_mock_da::MockBlob;
 use sov_modules_api::capabilities::BlockGasInfo;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::{Amount, BlobReaderTrait, Gas, GasArray, GasSpec, GetGasPrice};
+use sov_modules_api::{
+    Amount, BlobReaderTrait, Gas, GasArray, GasSpec, GetGasPrice, KernelStateAccessor,
+    NoOpControlFlow, RawTx, Spec,
+};
 use sov_rollup_interface::da::RelevantBlobs;
 use sov_sequencer_registry::SequencerRegistry;
-use sov_test_utils::SequencerInfo;
+use sov_test_utils::{
+    BatchType, SequencerInfo, SoftConfirmationBlobInfo, TestSequencer, TransactionType,
+};
 
 use crate::helpers_soft_confirmations::{
     assert_blobs_are_correctly_received_soft_confirmation, build_soft_confirmation_blobs,
@@ -878,5 +883,166 @@ fn deferred_blob_with_insufficient_escrow_is_dropped_and_refunded() {
         }),
         None,
         "The escrow entry must be removed once the escrow is refunded"
+    );
+}
+
+/// Defers a two-transaction batch from `sequencer`, a registered non-preferred sequencer, and
+/// returns the amount escrowed for it. No preferred batch is in the slot, so no rollup block is
+/// created. Two transactions, because the escrow pays for one pre-execution check per transaction.
+fn defer_two_tx_batch(
+    sequencer: &TestSequencer<S>,
+    runner: &mut crate::TestRunner<SoftConfRT>,
+) -> Amount {
+    let blobs = crate::TestRunner::<SoftConfRT>::soft_confirmation_batches_to_blobs(
+        vec![SoftConfirmationBlobInfo {
+            batch_type: BatchType(vec![TransactionType::PreSigned(RawTx::new(vec![])); 2]),
+            sequencer_address: sequencer.da_address,
+            sequencer_info: SequencerInfo::Regular,
+        }],
+        &mut HashMap::new(),
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+
+    let escrows = deferred_escrows(runner);
+    assert_eq!(
+        escrows.len(),
+        1,
+        "The non-preferred blob should be deferred with an escrow entry"
+    );
+    escrows[0].1
+}
+
+/// Does what the preferred sequencer's block builder does when it starts a rollup block that
+/// advances the visible slot by one: increments the rollup height, reads the new base fee and
+/// pulls the deferred blobs of the newly visible slot. Returns that base fee and the gas reserved
+/// for each pulled blob.
+fn replay_deferred_blobs_as_preferred_sequencer(
+    runner: &mut crate::TestRunner<SoftConfRT>,
+) -> (<<S as Spec>::Gas as Gas>::Price, Vec<Option<Amount>>) {
+    use sov_modules_api::capabilities::{BlobSelector as _, ChainState as _, HasKernel as _};
+
+    let mut output = None;
+    runner.__apply_to_state(|checkpoint| {
+        let mut rt = SoftConfRT::default();
+        let mut kernel = rt.kernel();
+        let mut accessor = KernelStateAccessor::from_checkpoint(&kernel, checkpoint);
+        // `__apply_to_state` has already advanced the visible slot of the checkpoint by one.
+        let next_visible_slot_number = accessor.visible_slot_number();
+        kernel.increment_rollup_height(&mut accessor, next_visible_slot_number);
+        let gas_price = kernel
+            .base_fee_per_gas(&mut accessor)
+            .expect("The base fee of the rollup block being built must be known");
+        let blobs = kernel.get_non_preferred_blobs(
+            std::iter::once(next_visible_slot_number.as_true()),
+            &gas_price,
+            &mut accessor,
+            NoOpControlFlow,
+        );
+        output = Some((
+            gas_price,
+            blobs
+                .into_iter()
+                .map(|blob| blob.reserved_gas_tokens)
+                .collect(),
+        ));
+    });
+    output.expect("`__apply_to_state` must run the closure")
+}
+
+/// Regression test: a deferred blob from a registered non-preferred sequencer is stored with its
+/// gas in a deferred escrow. When the preferred sequencer's block builder pulls it via
+/// `get_non_preferred_blobs`, the escrow must be released (instead of panicking in
+/// `into_selected_blob`), leaving the gas for one pre-execution check per transaction reserved.
+#[test]
+fn sequencer_get_non_preferred_blobs_releases_deferred_escrow() {
+    let (
+        TestData {
+            regular_sequencer, ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+    defer_two_tx_batch(&regular_sequencer, &mut runner);
+
+    let (gas_price, reserved_gas) = replay_deferred_blobs_as_preferred_sequencer(&mut runner);
+
+    let two_checks = <S as GasSpec>::max_tx_check_costs()
+        .checked_scalar_product(2)
+        .unwrap()
+        .checked_value(gas_price)
+        .unwrap();
+    assert_eq!(
+        reserved_gas,
+        vec![Some(two_checks)],
+        "The deferred blob should be selected with the gas for its two pre-execution checks, moved out of the deferred escrow"
+    );
+}
+
+/// The preferred sequencer must reserve exactly as much gas for a deferred blob as the node takes
+/// out of the blob's escrow when it executes the same rollup block. The sequencer's state is later
+/// overwritten with the node's, so a mismatch that still lets the blob's transactions execute
+/// would otherwise go unnoticed.
+#[test]
+fn sequencer_reserves_the_same_gas_for_a_deferred_blob_as_the_node() {
+    // What the node does: the preferred batch advances the visible slot by one, over the deferred
+    // blob.
+    let (
+        TestData {
+            preferred_sequencer,
+            regular_sequencer,
+            ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+    let sender_address = regular_sequencer.user_info.address();
+    let sender_balance = |runner: &crate::TestRunner<_>| {
+        runner.query_visible_state(|state| {
+            crate::TestRunner::<SoftConfRT>::bank_gas_balance(&sender_address, state)
+                .unwrap_or(Amount::ZERO)
+        })
+    };
+    let escrowed_on_node = defer_two_tx_batch(&regular_sequencer, &mut runner);
+    let sender_balance_before = sender_balance(&runner);
+    let blobs = build_soft_confirmation_blobs(
+        &vec![(
+            preferred_sequencer.clone(),
+            SequencerInfo::Preferred {
+                slots_to_advance: 1,
+                sequence_number: 1,
+            },
+        )],
+        &mut HashMap::new(),
+        0,
+    );
+    runner.execute::<RelevantBlobs<MockBlob>>(blobs);
+    assert_eq!(
+        runner.receipts().last().unwrap().batch_receipts.len(),
+        2,
+        "The preferred batch and the deferred batch must both execute on the node"
+    );
+    // The node keeps the gas for the pre-execution checks and refunds the rest of the escrow to
+    // the sender's bank balance, which nothing else touches in this block.
+    let refunded_by_node = sender_balance(&runner)
+        .checked_sub(sender_balance_before)
+        .unwrap();
+    let reserved_by_node = escrowed_on_node.checked_sub(refunded_by_node).unwrap();
+
+    // What the preferred sequencer does, starting from an identical state.
+    let (
+        TestData {
+            regular_sequencer, ..
+        },
+        mut runner,
+    ) = setup_with_registration_soft_confirmation_kernel();
+    let escrowed_on_sequencer = defer_two_tx_batch(&regular_sequencer, &mut runner);
+    assert_eq!(
+        escrowed_on_sequencer, escrowed_on_node,
+        "Both runs must start from the same escrow to be comparable"
+    );
+    let (_, reserved_by_sequencer) = replay_deferred_blobs_as_preferred_sequencer(&mut runner);
+
+    assert_eq!(
+        reserved_by_sequencer,
+        vec![Some(reserved_by_node)],
+        "The preferred sequencer must reserve the same gas for the deferred blob as the node"
     );
 }
