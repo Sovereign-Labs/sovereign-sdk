@@ -3,6 +3,7 @@ resolver = "2"
 exclude = ["crates/module-system/module-implementations/extern/hyperlane-solana-register/solana"]
 members = [
     "crates/rollup-interface",
+    "crates/rollup-interface/specs",
     "crates/adapters/mock-da",
     "crates/adapters/mock-zkvm",
     "scripts/switcheroo",
