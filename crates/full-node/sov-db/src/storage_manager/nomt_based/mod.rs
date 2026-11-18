@@ -549,7 +549,9 @@ where
     /// Must not be called by a thread that holds a live NOMT session:
     /// the commit waits for all sessions to end.
     fn finalize(&mut self, block_header: &Da::BlockHeader) -> anyhow::Result<()> {
+        let wait_start = std::time::Instant::now();
         self.flush();
+        let wait_for_previous_commit_time = wait_start.elapsed();
         tracing::trace!(block_hash = %block_header.hash(), "Finalizing changes");
 
         if !self.rockbound_snapshots.contains_key(&block_header.hash()) {
@@ -717,6 +719,7 @@ where
 
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(StorageManagerFinalizationMetric {
+                wait_for_previous_commit_time,
                 preparation_time,
                 commit_time: apply_time,
                 pruning_commit_time,
