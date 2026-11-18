@@ -427,8 +427,11 @@ where
                     pre_exec_err_to_accept_tx_err(PreExecError::AuthError(e))
                 })?;
             let call: <Rt as DispatchCall>::Decodable = Rt::wrap_call(call);
-            let call_repr = call_message_repr::<Rt>(&call);
-            tracing::debug!(%tx_hash, discriminant = call_repr, "Executing accept_tx");
+            // Naming the call costs a `Debug` walk and allocations, so only do it when logged.
+            if tracing::enabled!(tracing::Level::DEBUG) {
+                let call_repr = call_message_repr::<Rt>(&call);
+                tracing::debug!(%tx_hash, discriminant = call_repr, "Executing accept_tx");
+            }
             let delay_ms = self.runtime.get_transaction_delay_ms(&call);
             let uniqueness = auth_data.uniqueness;
             (
