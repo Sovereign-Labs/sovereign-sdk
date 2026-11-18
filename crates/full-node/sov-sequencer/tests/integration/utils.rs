@@ -282,6 +282,8 @@ impl<S: Spec> BlockHooks for ModuleWithVersionedStateAccessInSlotHook<S> {
     }
 }
 
+/// Only affects sequencers started after the call; use `TestRollup::pause_preferred_batches`
+/// for a running node.
 pub mod pause_update_state {
     const ENV_VAR: &str = "SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE";
 

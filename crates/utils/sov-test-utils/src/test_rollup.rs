@@ -1094,19 +1094,31 @@ where
     /// Transactions accepted by the preferred sequencer after this call (and
     /// before [`TestRollup::resume_preferred_batches`]) will all be part of the
     /// same batch.
+    ///
+    /// Only this rollup's sequencer is paused; other nodes in the same process keep producing
+    /// batches.
     pub async fn pause_preferred_batches(&self) {
-        std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", "1");
+        self.set_update_state_paused(true).await;
     }
 
-    /// Like [`TestRollup::pause_preferred_batches`], but only pauses this
-    /// rollup's configured postgres node. Other nodes sharing the same process
-    /// (e.g. a replica) will continue producing batches.
+    /// Same as [`TestRollup::pause_preferred_batches`].
     pub async fn pause_preferred_batches_for_node(&self) {
-        let node_id = self
-            .node_id
-            .as_deref()
-            .expect("pause_preferred_batches_for_node requires TestRollup.node_id to be set");
-        std::env::set_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE", node_id);
+        self.pause_preferred_batches().await;
+    }
+
+    async fn set_update_state_paused(&self, paused: bool) -> bool {
+        let path = if paused {
+            "/sequencer/test-utils/pause-update-state"
+        } else {
+            "/sequencer/test-utils/resume-update-state"
+        };
+        let response = self
+            .client
+            .http_post(path)
+            .await
+            .unwrap_or_else(|e| panic!("POST {path} failed: {e}"));
+        serde_json::from_str(&response)
+            .unwrap_or_else(|e| panic!("POST {path} returned {response:?}, expected a bool: {e}"))
     }
 
     /// Pauses preferred batch production and waits until the sequencer confirms
@@ -1149,31 +1161,15 @@ where
     ///
     /// Note: calling this method MAY NOT immediately produce a batch.
     pub async fn resume_preferred_batches(&self) {
-        assert_eq!(
-            std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
-            "1",
+        assert!(
+            self.set_update_state_paused(false).await,
             "Resuming but it was never paused in the first place",
         );
-
-        std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
     }
 
-    /// Resumes batch production after [`TestRollup::pause_preferred_batches_for_node`].
-    ///
-    /// Note: calling this method MAY NOT immediately produce a batch.
+    /// Same as [`TestRollup::resume_preferred_batches`].
     pub async fn resume_preferred_batches_for_node(&self) {
-        let node_id = self
-            .node_id
-            .as_deref()
-            .expect("resume_preferred_batches_for_node requires TestRollup.node_id to be set");
-
-        assert_eq!(
-            std::env::var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE").unwrap(),
-            node_id,
-            "Resuming but it was never paused for this node in the first place",
-        );
-
-        std::env::remove_var("SOV_TEST_PAUSE_SEQUENCER_UPDATE_STATE");
+        self.resume_preferred_batches().await;
     }
 
     pub async fn height(&self) -> RollupHeight {

@@ -202,6 +202,14 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                 axum::routing::post(Self::axum_force_close_batch),
             )
             .route(
+                "/sequencer/test-utils/pause-update-state",
+                axum::routing::post(Self::axum_pause_update_state),
+            )
+            .route(
+                "/sequencer/test-utils/resume-update-state",
+                axum::routing::post(Self::axum_resume_update_state),
+            )
+            .route(
                 "/sequencer/test-utils/state-updates/ws",
                 axum::routing::get(Self::subscribe_to_state_updates_unstable),
             )
@@ -646,6 +654,18 @@ impl<Seq: Sequencer> SequencerApis<Seq> {
                     .into_response()
             })?;
         Ok(result.into())
+    }
+
+    /// Returns whether state updates were already paused.
+    #[cfg(feature = "test-utils")]
+    async fn axum_pause_update_state(state: State<Self>) -> ApiResult<bool> {
+        Ok(state.sequencer.set_update_state_paused(true).into())
+    }
+
+    /// Returns whether state updates were paused before this call.
+    #[cfg(feature = "test-utils")]
+    async fn axum_resume_update_state(state: State<Self>) -> ApiResult<bool> {
+        Ok(state.sequencer.set_update_state_paused(false).into())
     }
 
     #[cfg(feature = "test-utils")]

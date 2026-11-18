@@ -3,9 +3,9 @@
 
 use crate::utils::{encode_call, EventEmitterModule};
 use crate::utils::{
-    generate_paymaster_tx, generate_txs, pause_update_state, query_set_value,
-    query_set_value_helper, tempdir_inside_codebase_dir, tx_set_value_with_gas,
-    ModuleWithVersionedStateAccessInSlotHook, SeqTestRollup, MAX_BATCH_EXECUTION_TIME_MILLIS,
+    generate_paymaster_tx, generate_txs, query_set_value, query_set_value_helper,
+    tempdir_inside_codebase_dir, tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook,
+    SeqTestRollup, MAX_BATCH_EXECUTION_TIME_MILLIS,
 };
 use anyhow::Context;
 use backon::Retryable;
@@ -560,7 +560,12 @@ pub(crate) async fn run_action_against_test_rollup(
     );
 
     match action {
-        TestingAction::PauseUpdateStateExecution(v) => pause_update_state::set(v),
+        TestingAction::PauseUpdateStateExecution(true) => {
+            test_rollup.pause_preferred_batches().await;
+        }
+        TestingAction::PauseUpdateStateExecution(false) => {
+            test_rollup.resume_preferred_batches().await;
+        }
         TestingAction::Sleep { duration_ms } => {
             // This action intentionally models time passing in scenario-driven tests.
             sleep(Duration::from_millis(duration_ms)).await;

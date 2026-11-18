@@ -38,8 +38,9 @@ async fn test_db_elected_leader_recovery_with_replica() {
     )
     .await;
 
-    // Pause the sequencer update_state loop to prevent batch production.
+    // Pause both sequencers' update_state loops to prevent batch production.
     leader.pause_preferred_batches().await;
+    replica.pause_preferred_batches().await;
 
     for _ in 0..30 {
         setup.da_service.produce_block_now().await.unwrap();
@@ -50,6 +51,7 @@ async fn test_db_elected_leader_recovery_with_replica() {
 
     // Resume batch production; on the next state update the leader should enter recovery
     leader.resume_preferred_batches().await;
+    replica.resume_preferred_batches().await;
 
     // Wait until the leader enters recovery.
     leader.wait_for_sequencer_recovering().await.unwrap();
