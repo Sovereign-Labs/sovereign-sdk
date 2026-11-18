@@ -485,7 +485,8 @@ pub(crate) struct PendingWrites {
 impl PendingWrites {
     fn new() -> Self {
         Self {
-            user: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
+            // Transactions write a few keys per layer; allocate on the first write.
+            user: HashMap::new(),
             kernel: HashMap::new(),
             accessory: HashMap::new(),
         }
