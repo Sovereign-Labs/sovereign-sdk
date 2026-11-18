@@ -11456,6 +11456,7 @@ dependencies = [
  "borsh",
  "bytes",
  "celestia-client",
+ "celestia-fibre",
  "celestia-grpc",
  "celestia-types",
  "hex",
@@ -11466,8 +11467,10 @@ dependencies = [
  "sha2 0.10.9",
  "sov-celestia-adapter",
  "sov-celestia-fibre-adapter",
+ "sov-metrics",
  "sov-rollup-interface",
  "tokio",
+ "toml 0.8.23",
  "tracing",
 ]
 

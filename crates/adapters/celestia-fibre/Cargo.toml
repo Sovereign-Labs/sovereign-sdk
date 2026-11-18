@@ -7,7 +7,7 @@ license.workspace = true
 authors.workspace = true
 homepage.workspace = true
 repository.workspace = true
-publish = false
+publish = true
 
 [lints]
 workspace = true
@@ -35,8 +35,12 @@ backon = { workspace = true, optional = true }
 celestia-client = { version = "1.2.0", default-features = false, features = [
     "tls-native-roots",
 ], optional = true }
+# Same version as the one `celestia-client` re-exports. Used directly for the validator connector
+# types that `celestia-client` does not re-export.
+celestia-fibre = { version = "1.2.0", default-features = false, optional = true }
 celestia-grpc = { version = "1.2.0", default-features = false, optional = true }
 hex = { workspace = true, optional = true }
+sov-metrics = { workspace = true, optional = true }
 tokio = { workspace = true, optional = true, features = ["rt", "sync", "time"] }
 tracing = { workspace = true, optional = true }
 
@@ -45,6 +49,7 @@ tracing = { workspace = true, optional = true }
 # `sov-rollup-interface/native` (which adds `BlobReaderTrait::advance`) without ours.
 sov-celestia-fibre-adapter = { path = ".", features = ["native"] }
 serde_json = { workspace = true, features = ["std"] }
+toml = { workspace = true }
 
 [features]
 default = []
@@ -52,11 +57,14 @@ native = [
     "dep:async-trait",
     "dep:backon",
     "dep:celestia-client",
+    "dep:celestia-fibre",
     "dep:celestia-grpc",
     "dep:hex",
+    "dep:sov-metrics",
     "dep:tokio",
     "dep:tracing",
     "sov-celestia-adapter/native",
     "sov-celestia-fibre-adapter/native",
+    "sov-metrics/native",
     "sov-rollup-interface/native",
 ]

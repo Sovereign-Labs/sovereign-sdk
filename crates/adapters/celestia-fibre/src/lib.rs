@@ -7,6 +7,8 @@ mod commitment;
 mod config;
 #[cfg(feature = "native")]
 mod da_service;
+#[cfg(feature = "native")]
+mod metrics;
 mod namespace;
 mod spec;
 

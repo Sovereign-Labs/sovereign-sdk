@@ -12,6 +12,7 @@ use celestia_types::namespace_data::{NamespaceData, NamespaceDataId};
 use celestia_types::nmt::{Namespace, NamespaceProof, NamespacedHash};
 use celestia_types::state::AddressTrait;
 use celestia_types::{Blob, DataAvailabilityHeader, Share};
+use sov_celestia_adapter::shares::shares_needed_for_bytes_with_signer;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::CelestiaHeader;
 use sov_rollup_interface::da::BlockHeaderTrait;
@@ -213,19 +214,11 @@ fn sequence_shares(share: &Share) -> anyhow::Result<u64> {
         version <= appconsts::SHARE_VERSION_TWO,
         "Unsupported share version {version}"
     );
-    let mut first_share_capacity = appconsts::FIRST_SPARSE_SHARE_CONTENT_SIZE as u64;
-    if share.signer().is_some() {
-        first_share_capacity -= appconsts::SIGNER_SIZE as u64;
-    }
-    // Same as `shares_needed_for_blob` in `celestia-types`, which isn't public.
-    Ok(
-        match u64::from(sequence_len).checked_sub(first_share_capacity) {
-            None => 1,
-            Some(rest) => {
-                1 + rest.div_ceil(appconsts::CONTINUATION_SPARSE_SHARE_CONTENT_SIZE as u64)
-            }
-        },
-    )
+    let shares = shares_needed_for_bytes_with_signer(
+        usize::try_from(sequence_len).context("Sequence length doesn't fit in usize")?,
+        share.signer().is_some(),
+    );
+    u64::try_from(shares).context("Share count doesn't fit in u64")
 }
 
 /// Fibre reference in the first share of a sequence.

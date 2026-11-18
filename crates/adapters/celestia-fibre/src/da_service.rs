@@ -1,6 +1,6 @@
 use std::future::Future;
 use std::sync::Arc;
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use anyhow::Context;
 use async_trait::async_trait;
@@ -10,6 +10,9 @@ use celestia_client::tx::{SigningKey, TxConfig};
 use celestia_client::types::namespace_data::NamespaceData;
 use celestia_client::types::nmt::Namespace;
 use celestia_client::types::state::AddressTrait;
+use celestia_client::types::state::ErrorCode;
+use celestia_grpc::grpc::{BroadcastMode, TxStatus};
+use celestia_grpc::BroadcastedTx;
 use sov_celestia_adapter::types::TmHash;
 use sov_celestia_adapter::verifier::address::CelestiaAddress;
 use sov_celestia_adapter::verifier::RollupParams;
@@ -25,6 +28,7 @@ use sov_rollup_interface::node::da::{
 use tokio::sync::oneshot;
 
 use crate::commitment::prove_rows_prefix;
+use crate::metrics::{self, Operation};
 use crate::namespace::{prove_namespace, verify_namespace_proof, FIBRE_BLOB_VERSION};
 use crate::{
     CelestiaFibreConfig, CelestiaFibreSpec, CelestiaFibreVerifier, FibreBlob, FibreNamespaceProof,
@@ -90,6 +94,7 @@ impl CelestiaFibreDaService {
         chain_params: RollupParams,
     ) -> anyhow::Result<Self> {
         tracing::info!(?config, "Initializing Celestia Fibre Adapter");
+        config.validate()?;
 
         let mut rpc = celestia_client::Client::builder()
             .rpc_url(&config.rpc_url)
@@ -97,18 +102,33 @@ impl CelestiaFibreDaService {
         if let Some(token) = &config.rpc_auth_token {
             rpc = rpc.rpc_auth_token(token);
         }
+        // `rpc_url` stays the preferred endpoint; the fallbacks are appended after it.
+        if !config.rpc_fallback_endpoints.is_empty() {
+            rpc = rpc.rpc_endpoints(config.rpc_fallback_endpoints.iter().map(|endpoint| {
+                let mut rpc_endpoint = celestia_client::RpcEndpoint::new(endpoint.url.clone());
+                if let Some(token) = &endpoint.token {
+                    rpc_endpoint = rpc_endpoint.auth_token(token);
+                }
+                rpc_endpoint
+            }));
+            if let Some(interval) = config.rpc_health_check_interval_secs {
+                rpc = rpc.rpc_health_check_interval(Duration::from_secs(interval.get()));
+            }
+            if let Some(max_head_age) = config.rpc_max_head_age_secs {
+                rpc = rpc.rpc_max_head_age(Duration::from_secs(max_head_age.get()));
+            }
+        }
         let client = rpc
             .build()
             .await
             .context("Failed to build celestia-client")?;
 
-        let mut endpoint = celestia_grpc::Endpoint::new(config.grpc_url.clone());
-        if let Some(token) = &config.grpc_auth_token {
-            endpoint = endpoint.metadata("x-token", token);
-        }
         let mut grpc = celestia_grpc::GrpcClient::builder()
-            .endpoint(endpoint)
+            .endpoint(grpc_endpoint(&config.grpc_url, &config.grpc_auth_token))
             .timeout(config.api_request_timeout());
+        for endpoint in &config.grpc_fallback_endpoints {
+            grpc = grpc.endpoint(grpc_endpoint(&endpoint.url, &endpoint.token));
+        }
         let mut signing_key = None;
         if let Some(key_hex) = &config.signer_private_key {
             let key_bytes = hex::decode(key_hex).context("`signer_private_key` is not hex")?;
@@ -118,9 +138,18 @@ impl CelestiaFibreDaService {
         let grpc = grpc.build().context("Failed to build gRPC client")?;
 
         let chain_id = grpc.chain_id().await.context("Failed to fetch chain id")?;
-        let fibre = FibreClient::from_grpc_client(
-            grpc.clone(),
+        let fibre_grpc = match &config.fibre_grpc_url {
+            Some(url) => celestia_grpc::GrpcClient::builder()
+                .endpoint(grpc_endpoint(url, &config.fibre_grpc_auth_token))
+                .timeout(config.api_request_timeout())
+                .build()
+                .context("Failed to build Fibre gRPC client")?,
+            None => grpc.clone(),
+        };
+        let fibre = fibre_client(
+            fibre_grpc,
             FibreClientConfig::new(chain_id.as_str())?,
+            config.fibre_request_timeout(),
         )?;
 
         let signer_address = grpc
@@ -146,10 +175,12 @@ impl CelestiaFibreDaService {
 
     /// Runs a Celestia node call with the same timeout and retries as `sov-celestia-adapter`:
     /// every attempt is bounded by `request_timeout_secs`, and every failure is retried as
-    /// transient according to the `backoff_*` config parameters.
+    /// transient according to the `backoff_*` config parameters. Each attempt is reported as a
+    /// metric of `operation`.
     async fn call_with_retries<T, E, Fut>(
         &self,
         method_name: &str,
+        operation: Operation,
         call: impl Fn() -> Fut,
     ) -> anyhow::Result<T>
     where
@@ -159,7 +190,15 @@ impl CelestiaFibreDaService {
         run_maybe_retryable_async_fn_with_retries(
             self.backoff_policy,
             || async {
-                match tokio::time::timeout(self.request_timeout, call()).await {
+                let start = Instant::now();
+                let result = tokio::time::timeout(self.request_timeout, call()).await;
+                metrics::track(
+                    operation,
+                    start.elapsed(),
+                    matches!(result, Ok(Ok(_))),
+                    None,
+                );
+                match result {
                     Ok(Ok(response)) => Ok(response),
                     Ok(Err(error)) => Err(MaybeRetryable::Transient(error.into())),
                     Err(_) => Err(MaybeRetryable::Transient(anyhow::anyhow!("await timeout"))),
@@ -175,12 +214,16 @@ impl CelestiaFibreDaService {
         height: u64,
         namespace: Namespace,
     ) -> anyhow::Result<NamespaceData> {
-        self.call_with_retries("get_namespace_data", || async {
-            self.client
-                .share()
-                .get_namespace_data(height, namespace)
-                .await
-        })
+        self.call_with_retries(
+            "get_namespace_data",
+            Operation::GetNamespaceData,
+            || async {
+                self.client
+                    .share()
+                    .get_namespace_data(height, namespace)
+                    .await
+            },
+        )
         .await
     }
 
@@ -208,9 +251,23 @@ impl CelestiaFibreDaService {
                 height: Some(height),
                 ..DownloadOptions::default()
             };
-            // Validators signed that they store this blob, so a failure is transient.
-            let downloaded = (|| self.fibre.download(&blob_id, options()))
-                .retry(download_backoff())
+            // Validators signed that they store this blob, so a failure is transient. A single
+            // unresponsive validator delays an attempt by at most `fibre_request_timeout_secs`:
+            // its request then fails, and the client asks another validator.
+            let download = || async {
+                let start = Instant::now();
+                let result = self.fibre.download(&blob_id, options()).await;
+                let bytes = result.as_ref().ok().map(|blob| blob.data().len());
+                metrics::track(
+                    Operation::FibreDownload,
+                    start.elapsed(),
+                    result.is_ok(),
+                    bytes,
+                );
+                result
+            };
+            let downloaded = download
+                .retry(fibre_backoff())
                 .notify(|error, delay| {
                     tracing::warn!(
                         height,
@@ -242,10 +299,30 @@ impl CelestiaFibreDaService {
             anyhow::bail!("Signer must be set for submitting blobs");
         };
 
-        let msg = self
-            .fibre
-            .upload_and_prepare(signing_key, namespace, data, &account)
-            .await?;
+        // A failed upload returns no payment promise, so retrying it can't make us pay twice.
+        // Each attempt signs a new promise. Validators that stored the shards of a failed attempt
+        // keep its promise and could charge it after it times out.
+        let upload = || async {
+            let start = Instant::now();
+            let result = self
+                .fibre
+                .upload_and_prepare(signing_key, namespace, data, &account)
+                .await;
+            metrics::track(
+                Operation::FibreUpload,
+                start.elapsed(),
+                result.is_ok(),
+                Some(data.len()),
+            );
+            result
+        };
+        let msg = upload
+            .retry(fibre_backoff())
+            .notify(|error, delay| {
+                tracing::warn!(%error, ?delay, "Failed to upload Fibre blob, retrying");
+            })
+            .await
+            .context("Failed to upload Fibre blob")?;
         let commitment: [u8; 32] = msg
             .payment_promise
             .as_ref()
@@ -255,17 +332,27 @@ impl CelestiaFibreDaService {
             .try_into()
             .context("Fibre commitment is not 32 bytes")?;
 
-        let tx = self
-            .call_with_retries("submit_pay_for_fibre", || async {
-                self.grpc
-                    .submit_message(msg.clone(), TxConfig::default())
-                    .await
-            })
+        // A broadcast attempt that times out may still reach the mempool, and the retry then
+        // carries the same payment promise. The chain settles a promise only once, and
+        // `confirm_pay_for_fibre` accepts the "already processed" rejection of the duplicate.
+        let submitted = self
+            .call_with_retries(
+                "broadcast_pay_for_fibre",
+                Operation::SubmitPayForFibre,
+                || async {
+                    self.grpc
+                        .broadcast_message(msg.clone(), TxConfig::default())
+                        .await
+                },
+            )
             .await?;
+        let tx = submitted.tx_ref();
+        let da_height = self.confirm_pay_for_fibre(tx).await?;
         tracing::info!(
-            da_height = tx.height,
+            ?da_height,
             bytes = data.len(),
             commitment = %HexHash::new(commitment),
+            tx_hash = %tx.hash,
             "Blob has been submitted to Celestia Fibre"
         );
 
@@ -274,10 +361,99 @@ impl CelestiaFibreDaService {
             da_transaction_id: TmHash(tx.hash),
         })
     }
+
+    /// Waits until a broadcast `MsgPayForFibre` is committed and returns its height, or `None`
+    /// if a duplicate of it settled the payment promise first.
+    ///
+    /// Unlike [`celestia_grpc::SubmittedTx::confirm`], a failed status query is retried instead
+    /// of failing the submission: the blob sender would then upload the blob again and pay for it
+    /// a second time. The tx is never re-signed, because a new tx would carry the same payment
+    /// promise. Like `confirm`, an evicted tx is broadcast again with the same signed bytes.
+    async fn confirm_pay_for_fibre(&self, tx: &BroadcastedTx) -> anyhow::Result<Option<u64>> {
+        let hash = tx.hash;
+        loop {
+            let status = self
+                .call_with_retries("tx_status", Operation::TxStatus, || async {
+                    self.grpc.tx_status(hash).await
+                })
+                .await?;
+            match status.status {
+                TxStatus::Pending => tokio::time::sleep(TX_CONFIRMATION_INTERVAL).await,
+                TxStatus::Committed if status.execution_code == ErrorCode::Success => {
+                    return Ok(Some(status.height.value()));
+                }
+                TxStatus::Committed | TxStatus::Rejected
+                    if status.error.contains(PROMISE_ALREADY_PROCESSED) =>
+                {
+                    tracing::warn!(
+                        %hash,
+                        error = status.error,
+                        "Payment promise was settled by a duplicate MsgPayForFibre"
+                    );
+                    return Ok(None);
+                }
+                TxStatus::Committed | TxStatus::Rejected => anyhow::bail!(
+                    "MsgPayForFibre {hash} failed with {:?} ({:?}): {}",
+                    status.status,
+                    status.execution_code,
+                    status.error
+                ),
+                TxStatus::Evicted | TxStatus::Unknown => {
+                    tracing::warn!(%hash, status = ?status.status, "Broadcasting MsgPayForFibre again");
+                    let response = self
+                        .grpc
+                        .broadcast_tx(tx.tx.clone(), BroadcastMode::Sync)
+                        .await
+                        .with_context(|| {
+                            format!("Failed to broadcast MsgPayForFibre {hash} again")
+                        })?;
+                    anyhow::ensure!(
+                        response.code == ErrorCode::Success,
+                        "Failed to broadcast MsgPayForFibre {hash} again: {:?}: {}",
+                        response.code,
+                        response.raw_log
+                    );
+                }
+            }
+        }
+    }
 }
 
-/// Retries for a Fibre download: about a minute in total before the block fails.
-fn download_backoff() -> backon::ExponentialBuilder {
+/// How often `confirm_pay_for_fibre` polls the status of a pending tx. Same as `celestia-grpc`.
+const TX_CONFIRMATION_INTERVAL: Duration = Duration::from_millis(500);
+
+/// Error of a `MsgPayForFibre` whose payment promise was already settled
+/// (celestia-app `x/fibre/keeper/keeper.go`).
+const PROMISE_ALREADY_PROCESSED: &str = "payment promise has already been processed";
+
+fn grpc_endpoint(url: &str, auth_token: &Option<String>) -> celestia_grpc::Endpoint {
+    let endpoint = celestia_grpc::Endpoint::new(url.to_owned());
+    match auth_token {
+        Some(token) => endpoint.metadata("x-token", token),
+        None => endpoint,
+    }
+}
+
+/// Builds the [`FibreClient`] like [`FibreClient::from_grpc_client`], but with a configurable
+/// timeout on every request to a validator, connection setup included. `from_grpc_client` leaves
+/// it at `celestia-grpc`'s default of 30 seconds.
+fn fibre_client(
+    grpc: celestia_grpc::GrpcClient,
+    config: FibreClientConfig,
+    validator_request_timeout: Duration,
+) -> anyhow::Result<FibreClient> {
+    let host_registry = Arc::new(celestia_fibre::GrpcHostRegistry::new(grpc.clone()));
+    let connector = celestia_fibre::GrpcValidatorConnector::new(host_registry, config.chain_id())
+        .with_request_timeout(validator_request_timeout);
+    Ok(celestia_fibre::FibreClient::builder()
+        .config(config)
+        .set_getter(celestia_fibre::GrpcSetGetter::new(grpc))
+        .connector(connector)
+        .build()?)
+}
+
+/// Retries for a Fibre download or upload: about a minute in total before it fails.
+fn fibre_backoff() -> backon::ExponentialBuilder {
     backon::ExponentialBuilder::default()
         .with_min_delay(Duration::from_millis(500))
         .with_max_delay(Duration::from_secs(16))
@@ -345,8 +521,15 @@ impl DaService for CelestiaFibreDaService {
 
     async fn get_block_header_at(&self, height: u64) -> Result<CelestiaHeader, Self::Error> {
         let header = self
-            .call_with_retries("get_block_header_at", || async {
-                self.client.header().get_by_height(height).await
+            .call_with_retries("get_block_header_at", Operation::GetBlockHeader, || async {
+                let header = self.client.header().get_by_height(height).await?;
+                // Same check as `sov-celestia-adapter`: a header of another height is retried.
+                let received = header.header.height.value();
+                anyhow::ensure!(
+                    received == height,
+                    "Received wrong height {received}, when requested {height}"
+                );
+                Ok::<_, anyhow::Error>(header)
             })
             .await?;
         Ok(header.into())
@@ -359,9 +542,11 @@ impl DaService for CelestiaFibreDaService {
 
     async fn get_head_block_header(&self) -> Result<CelestiaHeader, Self::Error> {
         let header = self
-            .call_with_retries("get_head_block_header", || async {
-                self.client.header().network_head().await
-            })
+            .call_with_retries(
+                "get_head_block_header",
+                Operation::GetHeadBlockHeader,
+                || async { self.client.header().network_head().await },
+            )
             .await?;
         Ok(header.into())
     }
