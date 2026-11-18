@@ -130,7 +130,7 @@ impl<S: Spec> sov_modules_api::Module for ProverIncentives<S> {
         context: &Context<Self::Spec>,
         state: &mut impl TxState<S>,
     ) -> Result<(), Self::Error> {
-        if !self.should_reward_fees(state) {
+        if !self.should_reward_fees(state)? {
             return Err(anyhow::anyhow!(
                 "Prover incentives call message received when operating in optimistic mode"
             ));
@@ -149,11 +149,16 @@ impl<S: Spec> sov_modules_api::Module for ProverIncentives<S> {
 
 impl<S: Spec> ProverIncentives<S> {
     /// Returns a bool indicating if the [`ProverIncentives`] module should be paid fees.
-    pub fn should_reward_fees<Accessor: StateReader<User>>(&self, state: &mut Accessor) -> bool {
-        self.chain_state
-            .operating_mode(state)
-            .expect("Operating mode retrieval should be infallible")
-            == OperatingMode::Zk
+    ///
+    /// # Errors
+    /// Returns an error if the operating mode cannot be read from `state`. With a gas-metered
+    /// accessor (such as the one a transaction executes with), the read fails when the meter
+    /// cannot pay for it, so callers must propagate this error rather than unwrap it.
+    pub fn should_reward_fees<Accessor: StateReader<User>>(
+        &self,
+        state: &mut Accessor,
+    ) -> Result<bool, Accessor::Error> {
+        Ok(self.chain_state.operating_mode(state)? == OperatingMode::Zk)
     }
 
     /// Returns the proving penalty as a [`u64`] value using the gas price contained in the state accessor.
@@ -164,5 +169,61 @@ impl<S: Spec> ProverIncentives<S> {
         self.proving_penalty
             .get(state)
             .map(|maybe_penalty| maybe_penalty.map(|penalty| penalty.value(state.gas_price())))
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use sov_modules_api::capabilities::mocks::MockKernel;
+    use sov_modules_api::transaction::{PriorityFeeBips, TxDetails};
+    use sov_modules_api::{
+        Amount, AuthenticatedTransactionData, BasicGasMeter, Context, DaSpec, Gas, GasArray,
+        Module, SequencerType, Spec, StateCheckpoint, StateProvider, WorkingSet,
+    };
+    use sov_rollup_interface::stf::ExecutionContext;
+    use sov_state::nomt::zk_storage::NomtVerifierStorage;
+    use sov_test_utils::ZkTestSpec;
+
+    use super::*;
+
+    type S = ZkTestSpec;
+
+    /// The operating-mode check at the top of `call` is a gas-metered state read. If the
+    /// transaction's meter cannot pay for it, the call must be rejected with an error.
+    #[test]
+    fn call_returns_error_when_meter_cannot_pay_for_operating_mode_read() {
+        let checkpoint =
+            StateCheckpoint::<S>::new(NomtVerifierStorage::new(), &MockKernel::<S>::default());
+        let tx = AuthenticatedTransactionData::<S>(TxDetails {
+            max_priority_fee_bips: PriorityFeeBips::ZERO,
+            max_fee: Amount::ZERO,
+            gas_limit: None,
+            chain_hash_fragment: 0,
+        });
+        let exhausted_meter = BasicGasMeter::<S>::new_with_gas(
+            <<S as Spec>::Gas as Gas>::zero(),
+            <<S as Spec>::Gas as Gas>::Price::ZEROED,
+        );
+        let mut state =
+            WorkingSet::create_working_set(checkpoint.to_tx_scratchpad(), &tx, exhausted_meter);
+
+        let sender = <S as Spec>::Address::from([1; 28]);
+        let context = Context::<S>::new(
+            sender,
+            Default::default(),
+            sender,
+            <<S as Spec>::Da as DaSpec>::Address::new([0; 32]),
+            None,
+            ExecutionContext::Node,
+            SequencerType::NonPreferred,
+        );
+
+        let result =
+            ProverIncentives::<S>::default().call(call::CallMessage::Exit, &context, &mut state);
+
+        assert!(
+            result.is_err(),
+            "A call that cannot pay for the operating mode read should return an error"
+        );
     }
 }

@@ -323,6 +323,28 @@ fn test_eth_call_rejects_block_override_number_overflow() {
 }
 
 #[test]
+fn test_eth_call_rejects_block_override_gas_limit_increase() {
+    let (runner, account, _, _) = setup();
+    let target = Address::with_last_byte(0x5C);
+
+    runner.query_visible_state(|state| {
+        let evm = Evm::<S>::default();
+        let request = call_request(account.address(), target);
+
+        let err = evm
+            .eth_call(
+                request,
+                None,
+                None,
+                Some(Box::new(BlockOverrides::default().with_gas_limit(u64::MAX))),
+                state,
+            )
+            .unwrap_err();
+        assert_eq!(err.code(), INVALID_PARAMS_CODE);
+    });
+}
+
+#[test]
 fn test_eth_call_rejects_move_precompile_override() {
     let (runner, account, _, _) = setup();
     let target = Address::with_last_byte(0x5B);

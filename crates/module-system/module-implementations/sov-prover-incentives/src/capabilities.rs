@@ -173,7 +173,10 @@ impl<S: Spec> ProverIncentives<S> {
         AggregatedProofPublicData<S::Address, S::Da, <S::Storage as Storage>::Root>,
         ProcessProofError,
     > {
-        if !self.should_reward_fees(state) {
+        if !self
+            .should_reward_fees(state)
+            .map_err(Into::<anyhow::Error>::into)?
+        {
             return Err(ProcessProofError::InvalidOperatingMode);
         }
 
