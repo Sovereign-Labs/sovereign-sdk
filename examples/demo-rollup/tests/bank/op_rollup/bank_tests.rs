@@ -1,6 +1,7 @@
 #![allow(dead_code, unused_imports, unused_variables)]
 use crate::bank::helpers::*;
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
 use crate::test_helpers::*;
 use anyhow::Context;
 use base64::prelude::BASE64_STANDARD;
@@ -17,6 +18,7 @@ use sov_modules_api::default_spec::DefaultSpec;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::{OperatingMode, Runtime as RuntimeTrait};
 use sov_rollup_interface::node::ledger_api::IncludeChildren;
+use sov_test_utils::test_rollup::next_within;
 use sov_test_utils::test_rollup::{RollupBuilder, RollupProverConfig, TestRollup};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING;
 use std::sync::Arc;
@@ -83,7 +85,7 @@ async fn test_chain_hash_override() -> anyhow::Result<()> {
         .await?;
     let mut done_waiting = false;
     for i in 0..50 {
-        let slot = slots_subscription.next().await.unwrap()?;
+        let slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
         if slot.batch_range.start >= 10 {
             done_waiting = true;
             break;
@@ -198,7 +200,7 @@ async fn test_chain_hash_override_grace_period() -> anyhow::Result<()> {
         .await?;
     let mut current_height = 0;
     for _ in 0..50 {
-        let slot = slots_subscription.next().await.unwrap()?;
+        let slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
         current_height = slot.batch_range.start;
         if current_height >= 10 {
             break;
@@ -246,7 +248,7 @@ async fn test_chain_hash_override_grace_period() -> anyhow::Result<()> {
 
     // Wait for rollup height >= 15 (grace period ends)
     for _ in 0..50 {
-        let slot = slots_subscription.next().await.unwrap()?;
+        let slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
         current_height = slot.batch_range.start;
         if current_height >= 15 {
             break;
@@ -339,9 +341,9 @@ async fn send_test_bank_txs(
     let mut slots_subscription = client.client.subscribe_slots().await?;
     let slot_number = send_tx_and_wait_for_status(&[tx], client).await?;
 
-    let mut processed_slot = slots_subscription.next().await.unwrap()?;
+    let mut processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     while processed_slot.number < slot_number {
-        processed_slot = slots_subscription.next().await.unwrap()?;
+        processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     }
 
     assert_slot_finality(client, slot_number, test_case.expected_head_finality()).await;
@@ -365,7 +367,7 @@ async fn send_test_bank_txs(
 
         tracing::info!(slot_number, "Tx has been published in slot");
         while processed_slot.number < slot_number {
-            processed_slot = slots_subscription.next().await.unwrap()?;
+            processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
         }
         tracing::info!("C {nonce} =========");
         tracing::info!("------------------------");
@@ -380,7 +382,7 @@ async fn send_test_bank_txs(
             tracing::info!(
                 "KEEP WAITING: {nonce} =========: {max_attested_height} < {slot_number}"
             );
-            slots_subscription.next().await.unwrap()?;
+            next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
         }
     }
 

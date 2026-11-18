@@ -3,8 +3,8 @@ mod max_concurrent_proof_blobs;
 mod mock_light_client_validation;
 mod skip_proving_on_resync;
 
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
 use demo_stf::genesis_config::create_genesis_config;
-use futures::StreamExt;
 use serde::Deserialize;
 use sov_demo_rollup::ExternalMockDemoRollup;
 use sov_full_node_configs::sequencer::RecoveryStrategy;
@@ -17,6 +17,7 @@ use sov_modules_rollup_blueprint::RollupBlueprint;
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_state::Storage;
 use sov_stf_runner::processes::RollupProverConfig;
+use sov_test_utils::test_rollup::next_within;
 use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
 
@@ -92,7 +93,7 @@ pub async fn start_test_rollup(
 
     let mut slots = test_rollup.client.client.subscribe_slots().await?;
     for _ in 0..warm_up_blocks {
-        let _slot = slots.next().await;
+        let _slot = next_within(&mut slots, NOTIFICATION_TIMEOUT).await;
     }
 
     test_rollup.wait_for_sequencer_ready().await?;

@@ -1,5 +1,5 @@
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
 use anyhow::Context;
-use futures::StreamExt;
 use sov_api_spec::types::AggregatedProof as ApiAggregatedProof;
 use sov_bank::event::Event as BankEvent;
 use sov_bank::utils::TokenHolder;
@@ -12,6 +12,7 @@ use sov_rollup_interface::zk::aggregated_proof::{
     AggregateProofVerifier, AggregatedProofPublicData,
 };
 use sov_state::Storage;
+use sov_test_utils::test_rollup::next_within;
 
 use crate::bank::helpers::*;
 use crate::bank::{TOKEN_DECIMALS, TOKEN_NAME};
@@ -81,9 +82,9 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
     let tx = build_create_token_tx(&key, 0, 1000);
 
     let slot_batch_1 = send_tx_and_wait_for_status(&[tx], client).await?;
-    let mut processed_slot = slots_subscription.next().await.unwrap()?;
+    let mut processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     while processed_slot.number < slot_batch_1 {
-        processed_slot = slots_subscription.next().await.unwrap()?;
+        processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     }
 
     assert_balance(client, 1000, token_id, user_address, None)
@@ -94,7 +95,7 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
     let tx = build_transfer_token_tx(&key, token_id, recipient_address, 100, 1);
     let slot_batch_2 = send_tx_and_wait_for_status(&[tx], client).await?;
     while processed_slot.number < slot_batch_2 {
-        processed_slot = slots_subscription.next().await.unwrap()?;
+        processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     }
 
     assert_balance(client, 900, token_id, user_address, None)
@@ -112,7 +113,7 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
 
     let slot_batch_3 = send_tx_and_wait_for_status(&[tx], client).await?;
     while processed_slot.number < slot_batch_3 {
-        processed_slot = slots_subscription.next().await.unwrap()?;
+        processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     }
 
     assert_balance(client, 700, token_id, user_address, None)
@@ -124,7 +125,7 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
     let txs = build_multiple_transfers(&transfer_amounts, &key, token_id, recipient_address, 3);
     let slot_batch_n = send_tx_and_wait_for_status(&txs, client).await?;
     while processed_slot.number < slot_batch_n {
-        processed_slot = slots_subscription.next().await.unwrap()?;
+        processed_slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     }
     assert_slot_finality(client, slot_batch_n, test_case.expected_head_finality()).await;
 
@@ -185,7 +186,9 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
 
     if test_case.wait_for_aggregated_proof {
         let aggregated_proof_resp: ApiAggregatedProof =
-            aggregated_proof_subscription.next().await.unwrap().unwrap();
+            next_within(&mut aggregated_proof_subscription, NOTIFICATION_TIMEOUT)
+                .await
+                .unwrap();
 
         let proof: SerializedAggregatedProof = aggregated_proof_resp.try_into()?;
         let verifier = AggregateProofVerifier::<MockZkVerifier>::new(MockCodeCommitment::default());
@@ -210,7 +213,7 @@ async fn send_test_bank_txs(test_case: TestCase, client: &NodeClient) -> anyhow:
     // Due to polling nature of finalized header, we cannot know for sure that this slot is finalized now.
     // So we wait 2 more slots
     for _ in 0..2 {
-        let _slot = slots_subscription.next().await.unwrap()?;
+        let _slot = next_within(&mut slots_subscription, NOTIFICATION_TIMEOUT).await?;
     }
     if let Some(finalized_rollup_height) = test_case.get_latest_finalized_slot_after(slot_batch_n) {
         assert_slot_finality(client, finalized_rollup_height, FinalityStatus::Finalized).await;

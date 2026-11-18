@@ -23,6 +23,9 @@ use sov_test_utils::default_test_tx_details;
 use sov_test_utils::test_rollup::{read_private_key, GenesisSource};
 use sov_test_utils::test_signed_transaction;
 use sov_test_utils::TestUser;
+
+/// Upper bound for waiting on the next item of a subscription stream (slots, events, proofs).
+pub const NOTIFICATION_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(30);
 pub type DemoRollupSpec = <MockDemoRollup<Native> as RollupBlueprint<Native>>::Spec;
 
 pub fn test_genesis_source<S: Spec>(operating_mode: OperatingMode) -> GenesisSource<S, Runtime<S>>

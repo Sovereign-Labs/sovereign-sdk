@@ -1,5 +1,6 @@
 use crate::test_helpers::build_transfer_token_tx_with_generation;
 use crate::test_helpers::test_genesis_source;
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
 use futures::stream::BoxStream;
 use futures::StreamExt;
 use sov_api_spec::types;
@@ -20,6 +21,7 @@ use sov_modules_api::PublicKey;
 use sov_modules_api::Spec;
 use sov_sequencer::SeqConfigExtension;
 use sov_shutdown::SecondaryShutdownController;
+use sov_test_utils::test_rollup::next_within;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
 use std::sync::Arc;
@@ -218,7 +220,9 @@ async fn test_start_stop_with_crash(
 
         // Check if transactions are coming through.
         for _ in 0..40 {
-            let _ = event_subscription.next().await.unwrap().unwrap();
+            let _ = next_within(&mut event_subscription, NOTIFICATION_TIMEOUT)
+                .await
+                .unwrap();
         }
         test_rollup.shutdown().await?;
     }

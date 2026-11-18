@@ -1,3 +1,5 @@
+use crate::test_helpers::NOTIFICATION_TIMEOUT;
+use sov_test_utils::test_rollup::next_within;
 use std::future::Future;
 use std::str::FromStr;
 use std::sync::Arc;
@@ -624,7 +626,7 @@ async fn max_blobs_per_slot_test_case(
     // Wait for all of the blobs to processed. We need to keep producing blocks so the hte visible slot number is incremented.
     for _ in 0..20 {
         produce_block_and_wait_slot(rollup, &mut slot_subscription).await?;
-        let _ = state_update_subscription.next().await.unwrap()?;
+        let _ = next_within(&mut state_update_subscription, NOTIFICATION_TIMEOUT).await?;
         while let Ok(Some(Ok(next))) =
             tokio::time::timeout(Duration::from_secs(10), blobs_subscription.next()).await
         {
@@ -733,7 +735,7 @@ async fn forced_txs_resync_test_case(
     let mut state_update_subscription = rollup.subscribe_state_updates().await?;
     let mut slot_num_of_last_forced_tx = 0;
     for _ in 0..RESYNC_FORCED_BLOCKS {
-        let slot = slot_subscription.next().await.unwrap()?;
+        let slot = next_within(&mut slot_subscription, NOTIFICATION_TIMEOUT).await?;
         slot_num_of_last_forced_tx = slot.number;
     }
 
