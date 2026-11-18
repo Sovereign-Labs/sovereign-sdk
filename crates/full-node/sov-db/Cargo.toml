@@ -19,6 +19,8 @@ sov-rollup-interface = { workspace = true, features = ["native"] }
 nomt = { workspace = true }
 sov-metrics = { workspace = true, features = ["native"] }
 parking_lot = "0.12.4"
+# Only to enable hit/miss counters on rockbound's cache.
+quick_cache = { workspace = true, features = ["stats"] }
 
 # External
 anyhow = { workspace = true, default-features = true }

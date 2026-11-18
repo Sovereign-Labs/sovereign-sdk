@@ -11504,6 +11504,7 @@ dependencies = [
  "parking_lot",
  "proptest",
  "proptest-derive 0.5.1",
+ "quick_cache",
  "rand 0.8.5",
  "rockbound",
  "schemars 1.2.1",
