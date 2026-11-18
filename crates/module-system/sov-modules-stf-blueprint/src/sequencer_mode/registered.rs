@@ -58,11 +58,10 @@ where
         sov_modules_api::VersionReader::current_visible_slot_number(&pre_exec_working_set);
 
     #[cfg(feature = "native")]
-    let (start, discriminant) = {
-        (
-            std::time::Instant::now(),
-            call_message_repr::<R>(&validated_output.2),
-        )
+    let (discriminant, start) = {
+        // Name the call before starting the clock, so `execution_time` covers execution only.
+        let discriminant = call_message_repr::<R>(&validated_output.2);
+        (discriminant, std::time::Instant::now())
     };
 
     let result = process_tx_and_reward_prover_inner(
@@ -86,7 +85,6 @@ where
         start.elapsed(),
         execution_context,
         visible_slot_number,
-        sequencer_da_address,
         discriminant,
         &result.2,
         metrics,
@@ -101,7 +99,6 @@ fn track_transaction_metrics<S: Spec>(
     execution_time: std::time::Duration,
     execution_context: ExecutionContext,
     visible_slot_number: sov_rollup_interface::common::VisibleSlotNumber,
-    sequencer_address: &<S::Da as DaSpec>::Address,
     message_discriminant: String,
     basic_gas_meter: &BasicGasMeter<S>,
     mut processing_metrics: AuthAndProcessMetrics,
@@ -136,7 +133,6 @@ fn track_transaction_metrics<S: Spec>(
             tx_effect,
             execution_context: execution_context.str(),
             visible_slot_number: visible_slot_number.get(),
-            sequencer_address: sequencer_address.to_string(),
             call_message: message_discriminant,
             gas_used: gas_used.as_ref().to_vec(),
         };
