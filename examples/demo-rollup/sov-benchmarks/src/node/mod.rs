@@ -14,6 +14,9 @@ type BatchReceipt<S> =
 
 type BenchmarkMessages = Vec<RelevantBlobs<MockBlob>>;
 
+/// In-process collection of the rollup's own metrics.
+pub mod metrics;
+
 /// Builds a simple transfer transaction to a fresh address derived from `recipient_seed`
 pub fn build_send_tx<S>(
     sender: &TestUser<S>,
