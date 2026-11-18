@@ -10,7 +10,9 @@ use tokio::sync::mpsc::error::TrySendError;
 use tokio::sync::{mpsc, oneshot};
 
 use crate::common::AcceptedTx;
-use crate::metrics::{track_in_progress_batch_size, PreferredSequencerExecutorEventSendingMetrics};
+use crate::metrics::{
+    track_in_progress_batch_size, MetricBatcher, PreferredSequencerExecutorEventSendingMetrics,
+};
 use crate::preferred::db::{BlobsCache, ReadBatch};
 use crate::preferred::{
     exit_rollup, Confirmation, DbEvent, PreferredBatchToReplay, ReadBlob, RecoveryStrategy,
@@ -20,10 +22,23 @@ use crate::{PreferredProofDataBytes, SlotNumber};
 
 const MAX_EXECUTOR_EVENT_QUEUE_DEPTH: usize = 1000;
 
+/// Sending metrics of accepted-tx events are submitted in batches of this many.
+const METRICS_BATCH_SIZE: usize = 32;
+
+/// The in-progress batch size gauge is reported at most once per this interval while txs
+/// arrive, which keeps its submission off the per-tx path without hiding small batches.
+const IN_PROGRESS_BATCH_SIZE_REPORT_INTERVAL: std::time::Duration =
+    std::time::Duration::from_millis(100);
+
 pub(crate) struct ExecutorEventsSender<S: Spec, Rt: Runtime<S>> {
     events_sender: mpsc::Sender<ExecutorEvent<S, Rt>>,
     cache: BlobsCache,
     primary_shutdown: PrimaryShutdownController,
+    /// Sending metrics of accepted-tx events, the only per-tx event; batched to keep submission
+    /// off the per-tx path. Other events are rare and submit their metrics directly.
+    accepted_tx_sending_metrics: MetricBatcher<PreferredSequencerExecutorEventSendingMetrics>,
+    /// When the in-progress batch size gauge was last reported from `send_accept_tx`.
+    last_batch_size_report: Option<std::time::Instant>,
 }
 
 impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
@@ -37,6 +52,8 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
                 events_sender: sender,
                 primary_shutdown,
                 cache,
+                accepted_tx_sending_metrics: MetricBatcher::new(METRICS_BATCH_SIZE),
+                last_batch_size_report: None,
             },
             receiver,
         )
@@ -54,8 +71,20 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
         exit_rollup(&self.primary_shutdown).await;
     }
 
-    /// Send an event tracking metrics on the queue depth and blocking time and shutting down on error.
+    /// [`Self::send_and_measure`], submitting the metrics right away.
     async fn send(&self, event: ExecutorEvent<S, Rt>) {
+        let metrics = self.send_and_measure(event).await;
+        sov_metrics::track_metrics(|t| {
+            t.submit(metrics);
+        });
+    }
+
+    /// Send an event and return metrics on the queue depth and blocking time, shutting down on
+    /// error.
+    async fn send_and_measure(
+        &self,
+        event: ExecutorEvent<S, Rt>,
+    ) -> PreferredSequencerExecutorEventSendingMetrics {
         let mut metrics = PreferredSequencerExecutorEventSendingMetrics::default();
         match self.events_sender.try_send(event) {
             Ok(()) => (),
@@ -74,9 +103,7 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
 
         let queue_depth = self.events_sender.max_capacity() - self.events_sender.capacity();
         metrics.queue_depth = queue_depth;
-        sov_metrics::track_metrics(|t| {
-            t.submit(metrics);
-        });
+        metrics
     }
 
     /// Send a notification of an accepted tx. Return a receiver that will receive the confirmation.
@@ -97,20 +124,30 @@ impl<S: Spec, Rt: Runtime<S>> ExecutorEventsSender<S, Rt> {
             .await;
 
         let (sender, receiver) = oneshot::channel();
-        track_in_progress_batch_size(
-            self.cache
-                .in_progress_batch_opt()
-                .map(|b| b.txs.len() as u64)
-                .unwrap_or(0),
-        );
-        self.send(ExecutorEvent::AcceptedTx(AcceptedTxEventContents {
-            accepted_tx,
-            tx_changes,
-            oneshot_sender: sender,
-            sequence_number,
-            tx_idx_within_batch,
-        }))
-        .await;
+        // A gauge, so sampling it is enough. Closing the batch reports the reset to 0 directly.
+        let now = std::time::Instant::now();
+        if self
+            .last_batch_size_report
+            .is_none_or(|last| now.duration_since(last) >= IN_PROGRESS_BATCH_SIZE_REPORT_INTERVAL)
+        {
+            self.last_batch_size_report = Some(now);
+            track_in_progress_batch_size(
+                self.cache
+                    .in_progress_batch_opt()
+                    .map(|b| b.txs.len() as u64)
+                    .unwrap_or(0),
+            );
+        }
+        let metrics = self
+            .send_and_measure(ExecutorEvent::AcceptedTx(AcceptedTxEventContents {
+                accepted_tx,
+                tx_changes,
+                oneshot_sender: sender,
+                sequence_number,
+                tx_idx_within_batch,
+            }))
+            .await;
+        self.accepted_tx_sending_metrics.push(metrics);
         receiver
     }
 

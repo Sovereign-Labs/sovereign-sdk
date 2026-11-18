@@ -1,4 +1,5 @@
 # 2026-11-18
+- #3152 Preferred sequencer metrics: `sov_rollup_in_progress_batch_size` is reported at most once per 100 ms while txs are accepted, instead of after every tx; closing a batch still reports 0 immediately. `sov_rollup_preferred_sequencer_executor_event_sending` points for accepted txs are submitted in batches of 32, so they reach InfluxDB with a delay at low traffic and are timestamped when the batch is submitted.
 - #3151 Metrics: every line of a multi-line metric (such as the sequencer's metric batches) now ends with its own timestamp, `timestamp + i` nanoseconds for line `i`. Previously only the last line carried one. Telegraf stamped the rest on arrival, and InfluxDB kept only one of the same-series lines that shared a timestamp, so batched metrics lost points.
 
 # 2026-11-12
