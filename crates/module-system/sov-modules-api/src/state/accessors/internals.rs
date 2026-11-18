@@ -483,6 +483,15 @@ impl<T: fmt::Debug> fmt::Debug for RevertableWriter<T> {
 }
 
 impl<T> RevertableWriter<T> {
+    /// The pending write for `key`, if any. Skips building the lookup key (a clone of `key`) when
+    /// nothing was written yet, which is the common case for reads.
+    fn lookup_write(&self, namespace: Namespace, key: &SlotKey) -> Option<&Option<SlotValue>> {
+        if self.writes.is_empty() {
+            return None;
+        }
+        self.writes.get(&(key.clone(), namespace))
+    }
+
     pub(super) fn new(inner: T) -> Self {
         Self {
             inner,
@@ -551,7 +560,7 @@ where
         key: &SlotKey,
         metric: &mut StateAccessMetric,
     ) -> Option<u32> {
-        if let Some(value) = self.writes.get(&(key.clone(), namespace)) {
+        if let Some(value) = self.lookup_write(namespace, key) {
             value.as_ref().map(|v| v.size())
         } else {
             <T as UniversalStateAccessor>::get_size(&mut self.inner, namespace, key, metric)
@@ -559,7 +568,7 @@ where
     }
 
     fn get_cached_value(&self, namespace: Namespace, key: &SlotKey) -> Option<Option<SlotValue>> {
-        match self.writes.get(&(key.clone(), namespace)) {
+        match self.lookup_write(namespace, key) {
             Some(value) => Some(value.clone()),
             None => self.inner.get_cached_value(namespace, key),
         }
@@ -571,7 +580,7 @@ where
         key: &SlotKey,
         metric: &mut StateAccessMetric,
     ) -> Option<SlotValue> {
-        if let Some(value) = self.writes.get(&(key.clone(), namespace)) {
+        if let Some(value) = self.lookup_write(namespace, key) {
             value.clone()
         } else {
             <T as UniversalStateAccessor>::get_value(&mut self.inner, namespace, key, metric)
