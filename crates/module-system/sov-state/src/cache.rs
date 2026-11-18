@@ -77,17 +77,6 @@ impl Access {
             Access::Write { modified, .. } => Some(modified),
         }
     }
-
-    fn add_write(&mut self, write: Option<SlotValue>) {
-        match self {
-            Access::Read { original: _ } => *self = Access::Write { modified: write },
-            Access::Write { modified } => {
-                // Simply override the modified value with the new modified
-                // value.
-                *modified = write;
-            }
-        }
-    }
 }
 
 pub(crate) mod internal {
@@ -100,37 +89,44 @@ pub(crate) mod internal {
     /// [`CacheLog`] keeps track of the original and current values of each key accessed.
     /// By tracking original values, we can detect and eliminate write patterns where a key is
     /// changed temporarily and then reset to its original value
+    ///
+    /// Changes since the last commit or discard are applied to `log` directly and recorded in
+    /// `undo` with the entry they replaced, so a lookup hashes the key once and a commit only
+    /// clears `undo`. Reads that mutate an entry in place (fetching the value of a size-only read)
+    /// are not recorded, so they survive a discard, as they did when revertable changes were kept
+    /// in a separate map.
     #[derive(Debug, Clone)]
     pub(crate) struct CacheLog {
-        revertable_log: HashMap<SlotKey, Access>,
         log: HashMap<SlotKey, Access>,
+        /// Revertable changes, oldest first: the key and the entry it replaced (`None` if absent).
+        undo: Vec<(SlotKey, Option<Access>)>,
     }
 
     impl Default for CacheLog {
         fn default() -> Self {
             Self {
-                revertable_log: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
                 log: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
+                undo: Vec::new(),
             }
         }
     }
 
     impl CacheLog {
-        // This method is used to get all the changeset from the cache. The `revertable_log`
-        // shoule be either merged or discarded before calling this method.
+        // This method is used to get all the changeset from the cache. The revertable changes
+        // should be either committed or discarded before calling this method.
         pub(crate) fn iter(&self) -> impl Iterator<Item = (&SlotKey, &Access)> {
             assert!(
-                self.revertable_log.is_empty(),
+                self.undo.is_empty(),
                 "Revertable cache should be merged or discarded before calling `iter`"
             );
             self.log.iter()
         }
 
-        // This method is used to take all the changeset from the cache. The `revertable_log`
-        // shoule be either merged or discarded before calling this method.
+        // This method is used to take all the changeset from the cache. The revertable changes
+        // should be either committed or discarded before calling this method.
         pub(crate) fn take_writes(self) -> Vec<(SlotKey, Option<SlotValue>)> {
             assert!(
-                self.revertable_log.is_empty(),
+                self.undo.is_empty(),
                 "Revertable cache should be merged or discarded before calling `take_writes`"
             );
             self.log
@@ -140,19 +136,16 @@ pub(crate) mod internal {
         }
 
         pub(crate) fn get(&self, key: &SlotKey) -> Option<&Access> {
-            self.revertable_log.get(key).or_else(|| self.log.get(key))
+            self.log.get(key)
         }
 
         pub(crate) fn get_mut(&mut self, key: &SlotKey) -> Option<&mut Access> {
-            self.revertable_log
-                .get_mut(key)
-                .or_else(|| self.log.get_mut(key))
+            self.log.get_mut(key)
         }
 
         // Adds a read entry to the cache. Caller must guarantee that the key is not already present in the cache.
         pub(crate) fn add_read(&mut self, key: SlotKey, value: Option<NodeLeafAndMaybeValue>) {
-            // We do the sanity check for `revertable_log` because it is free.
-            match self.revertable_log.entry(key) {
+            match self.log.entry(key) {
                 Entry::Occupied(existing) => {
                     // Sanity check.
                     panic!(
@@ -160,7 +153,10 @@ pub(crate) mod internal {
                         existing.key()
                     );
                 }
-                Entry::Vacant(vacancy) => vacancy.insert(Access::Read { original: value }),
+                Entry::Vacant(vacancy) => {
+                    self.undo.push((vacancy.key().clone(), None));
+                    vacancy.insert(Access::Read { original: value });
+                }
             };
         }
 
@@ -174,53 +170,37 @@ pub(crate) mod internal {
                 value.as_ref().map(|v| v.size()).unwrap_or(0),
             ));
 
-            match self.revertable_log.entry(key.clone()) {
+            match self.log.entry(key) {
                 Entry::Occupied(mut existing) => {
-                    existing.get_mut().add_write(value);
+                    // A write replaces any earlier read or write of the key.
+                    let previous =
+                        std::mem::replace(existing.get_mut(), Access::Write { modified: value });
+                    self.undo.push((existing.key().clone(), Some(previous)));
                     out
                 }
                 Entry::Vacant(vacancy) => {
-                    let out = match self.log.entry(key) {
-                        Entry::Occupied(_) => out,
-                        Entry::Vacant(_) => IsValueCached::No,
-                    };
-                    // The write is added only to `revertable_log`.
-                    // It will later be either committed or discarded.
+                    self.undo.push((vacancy.key().clone(), None));
                     vacancy.insert(Access::Write { modified: value });
-                    out
+                    IsValueCached::No
                 }
             }
         }
 
         pub(crate) fn commit_revertable_log(&mut self) {
-            // Fast path: We rarely (if ever) commit more than once per block. If it's the first commit, we can just swap the revertable log into the commited log's spot.
-            if self.log.is_empty() {
-                std::mem::swap(&mut self.log, &mut self.revertable_log);
-                return;
-            }
-
-            for (k, v) in self.revertable_log.drain() {
-                match v {
-                    // 1. merge reads
-                    Access::Read { original: _ } => {
-                        let is_new = self.log.insert(k, v).is_none();
-                        assert!(is_new, "The same value was read twice from the DB in a single block; the value is already present in the log. This is a bug, please report it.");
-                    }
-                    // 2. merge writes
-                    Access::Write { modified } => match self.log.entry(k) {
-                        Entry::Occupied(mut existing) => {
-                            existing.get_mut().add_write(modified);
-                        }
-                        Entry::Vacant(vacancy) => {
-                            vacancy.insert(Access::Write { modified });
-                        }
-                    },
-                }
-            }
+            self.undo.clear();
         }
 
         pub(crate) fn discard_revertable_log(&mut self) {
-            self.revertable_log.clear();
+            for (key, previous) in self.undo.drain(..).rev() {
+                match previous {
+                    Some(access) => {
+                        self.log.insert(key, access);
+                    }
+                    None => {
+                        self.log.remove(&key);
+                    }
+                }
+            }
         }
     }
 }
