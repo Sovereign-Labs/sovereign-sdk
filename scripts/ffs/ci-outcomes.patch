@@ -1,0 +1,14 @@
+diff --git a/src/trace.rs b/src/trace.rs
+--- a/src/trace.rs
++++ b/src/trace.rs
+@@ -78,6 +78,9 @@ impl Outcome {
+     pub fn is_failure(&self) -> bool {
+         matches!(
+             self,
+-            Outcome::AssertFailed { .. } | Outcome::Deadlock { .. } | Outcome::Hang { .. } | Outcome::Killed { .. }
++            Outcome::Bound
++                | Outcome::Error { .. }
++                | Outcome::Divergence { .. }
++                | Outcome::AssertFailed { .. } | Outcome::Deadlock { .. } | Outcome::Hang { .. } | Outcome::Killed { .. }
+         ) || matches!(self, Outcome::Exited { code } if *code != 0)
+     }

@@ -1,0 +1,115 @@
+name: FFS sequencer
+
+on:
+  workflow_dispatch:
+    inputs:
+      ticks:
+        description: Scheduling mode (hw requires hardware performance counters)
+        type: choice
+        options: [none, hw]
+        default: none
+      iterations:
+        description: Schedules to explore
+        type: choice
+        options: ['3', '10', '30']
+        default: '10'
+  push:
+    branches: [dev, 'ci/ffs-*']
+    paths:
+      - '.github/workflows/ffs.yml'
+      - 'scripts/ffs/**'
+      - 'scripts/ffs-sequencer-runner.sh'
+      - 'crates/full-node/sov-sequencer/**'
+  pull_request:
+    paths:
+      - '.github/workflows/ffs.yml'
+      - 'scripts/ffs/**'
+      - 'scripts/ffs-sequencer-runner.sh'
+      - 'crates/full-node/sov-sequencer/**'
+
+permissions:
+  contents: read
+concurrency:
+  group: ffs-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  sequencer:
+    runs-on: namespace-profile-sov-ubuntu-24-04-amd64-16x64-rust-1-93-v20260602;container.privileged=true;container.host-pid-namespace=true;overrides.cache-tag=ffs-1-93
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: bash
+    env:
+      SKIP_GUEST_BUILD: '1'
+      SP1_SKIP_PROGRAM_BUILD: '1'
+      TOKIO_WORKER_THREADS: '2'
+      FFS_OUTPUT_DIR: ${{ github.workspace }}/target/ffs-ci
+      FFS_TICKS: ${{ inputs.ticks || 'none' }}
+      FFS_ITERATIONS: ${{ inputs.iterations || '10' }}
+      FFS_SEED: ${{ github.run_number }}
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: namespacelabs/nscloud-cache-action@v1
+        with:
+          cache: rust
+      - uses: actions/checkout@v6
+        with:
+          repository: aoli-al/ffs
+          ref: 986acb0de2589430b49621c4d4fb6bc94bfa869a
+          path: .ffs-tool
+          persist-credentials: false
+      - name: Build pinned FFS and local fixes
+        run: |
+          mv "$GITHUB_WORKSPACE/.ffs-tool" "$RUNNER_TEMP/ffs-tool"
+          FFS_BIN="$RUNNER_TEMP/ffs-tool/target/release/ffs"
+          echo "FFS_BIN=$FFS_BIN" >> "$GITHUB_ENV"
+          rustup toolchain install 1.94.1 --profile minimal
+          cargo +1.94.1 build --release --locked --manifest-path "$RUNNER_TEMP/ffs-tool/Cargo.toml"
+          cp "$FFS_BIN" "$RUNNER_TEMP/ffs-original"
+          git -C "$RUNNER_TEMP/ffs-tool" apply "$GITHUB_WORKSPACE/scripts/ffs/replay-blocked.patch" "$GITHUB_WORKSPACE/scripts/ffs/ci-outcomes.patch"
+          cargo +1.94.1 build --release --locked --manifest-path "$RUNNER_TEMP/ffs-tool/Cargo.toml"
+      - name: Check tracing and incomplete-run detection
+        timeout-minutes: 3
+        run: |
+          mkdir -p "$FFS_OUTPUT_DIR"
+          git -C "$GITHUB_WORKSPACE" rev-parse HEAD > "$FFS_OUTPUT_DIR/settings.log"
+          printf 'FFS=986acb0de2589430b49621c4d4fb6bc94bfa869a ticks=%s schedules=%s seed=%s\n' "$FFS_TICKS" "$FFS_ITERATIONS" "$FFS_SEED" >> "$FFS_OUTPUT_DIR/settings.log"
+          rustc --version >> "$FFS_OUTPUT_DIR/settings.log"
+          rustc +1.94.1 --version >> "$FFS_OUTPUT_DIR/settings.log"
+          if [[ "$FFS_TICKS" == hw ]]; then "$FFS_BIN" check; fi
+          "$FFS_BIN" record --ticks "$FFS_TICKS" -o "$FFS_OUTPUT_DIR/smoke.json" -- /usr/bin/true > "$FFS_OUTPUT_DIR/smoke-record.log" 2>&1
+          "$FFS_BIN" replay "$FFS_OUTPUT_DIR/smoke.json" > "$FFS_OUTPUT_DIR/smoke-replay.log" 2>&1
+          status=0
+          "$FFS_BIN" explore --ticks none --root start --iterations 1 --max-depth 1 --watch-count 0 --no-verify --output-dir "$FFS_OUTPUT_DIR/bound" -- /usr/bin/true > "$FFS_OUTPUT_DIR/bound.log" 2>&1 || status=$?
+          test "$status" -eq 2
+          python3 -c 'import json, sys; assert json.load(open(sys.argv[1]))["outcome"] == "Bound"' "$FFS_OUTPUT_DIR/bound/fail-1.json"
+      - name: Native sequencer baseline
+        run: |
+          cargo nextest run --manifest-path "$GITHUB_WORKSPACE/Cargo.toml" -p sov-sequencer --test integration -E 'test(=preferred_tx_nonce_queue::test_out_of_order_nonces)' --no-capture 2>&1 | tee "$FFS_OUTPUT_DIR/native.log"
+      - name: Diagnose known FFS replay failures
+        id: replay
+        continue-on-error: true
+        timeout-minutes: 5
+        run: |
+          FFS_PATCHED_BIN="$FFS_BIN" FFS_BIN="$RUNNER_TEMP/ffs-original" FFS_OUTPUT_DIR="$FFS_OUTPUT_DIR/replay" bash "$GITHUB_WORKSPACE/scripts/ffs/reproduce-replay.sh" 2>&1 | tee "$FFS_OUTPUT_DIR/replay.log"
+      - name: Explore sequencer schedules
+        timeout-minutes: 20
+        env:
+          FFS_MODE: explore
+          CARGO_TARGET_X86_64_UNKNOWN_LINUX_GNU_RUNNER: bash ${{ github.workspace }}/scripts/ffs-sequencer-runner.sh
+        run: |
+          cargo nextest run --manifest-path "$GITHUB_WORKSPACE/Cargo.toml" -p sov-sequencer --test integration -E 'test(=preferred_tx_nonce_queue::test_out_of_order_nonces)' --no-capture 2>&1 | tee "$FFS_OUTPUT_DIR/explore.log"
+      - name: Summarize run
+        if: always()
+        run: |
+          echo "FFS ticks=$FFS_TICKS, schedules=$FFS_ITERATIONS, seed=$FFS_SEED" >> "$GITHUB_STEP_SUMMARY"
+          echo "Replay diagnostic outcome: ${{ steps.replay.outcome }} (separate from sequencer assertions)." >> "$GITHUB_STEP_SUMMARY"
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: ffs-logs-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ github.workspace }}/target/ffs-ci/**/*.log
+          retention-days: 7
