@@ -1,4 +1,4 @@
-.PHONY: up down wait-compose-ready restart logs postgres build-hyperlane-cli build-celestia-devnet-images push-celestia-devnet-images
+.PHONY: up down wait-compose-ready restart logs postgres enable-chaos-std enable-chaos-brutal restart-toxiproxy build-hyperlane-cli build-celestia-devnet-images push-celestia-devnet-images
 
 PROJECT_ROOT := $(shell git rev-parse --show-toplevel)
 DOCKER_COMPOSE_DIR := $(PROJECT_ROOT)/docker
@@ -47,20 +47,25 @@ postgres:
 	@echo "Starting fresh PostgreSQL environment..."
 	docker compose -f $(DOCKER_COMPOSE_DIR)/docker-compose.postgres.yml up
 
-enable-chaos-std:
-	./toxiproxy/remove_toxics.sh
-	./toxiproxy/enable_toxics.sh
-	./toxiproxy/status_chaos.sh
+CHAOS_DIR := $(PROJECT_ROOT)/scripts/chaos
+DOCKER_CHAOS_ENV := LISTEN_ADDR=0.0.0.0 POSTGRES_UPSTREAM=host.docker.internal:5432
 
+# Steady DA latency on the primary rollup (toxi_scenario P5).
+enable-chaos-std:
+	$(CHAOS_DIR)/toxi_scenario.sh clear primary
+	$(CHAOS_DIR)/toxi_scenario.sh scenario P5 primary
+	$(CHAOS_DIR)/toxi_scenario.sh list
+
+# Compound failure: DA latency + postgres resets (toxi_scenario P6).
 enable-chaos-brutal:
-	./toxiproxy/remove_toxics.sh
-	TIMEOUT_RATIO=0.9 LATENCY_RATIO=0.1 LIMIT_DATA_RATIO=0.4 ./toxiproxy/enable_toxics.sh
-	./toxiproxy/status_chaos.sh
+	$(CHAOS_DIR)/toxi_scenario.sh clear primary
+	$(CHAOS_DIR)/toxi_scenario.sh scenario P6 primary
+	$(CHAOS_DIR)/toxi_scenario.sh list
 
 restart-toxiproxy:
 	docker compose restart toxiproxy
 	sleep 5
-	TOXIPROXY_HOST="localhost" ./toxiproxy/configure.sh
+	$(DOCKER_CHAOS_ENV) $(CHAOS_DIR)/toxi_apply_config.sh
 
 # Needs docker logged in
 # echo $GITHUB_TOKEN | docker login ghcr.io -u USERNAME --password-stdin
