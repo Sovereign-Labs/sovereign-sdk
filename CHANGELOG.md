@@ -1,6 +1,8 @@
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 
+# 2026-11-16
+- #PR_NUMBER **Breaking Change** SP1: Succinct prover network support moved behind a new `network` feature of `sov-sp1-adapter` (`native` no longer enables `sp1-sdk/network`), removing about 40 crates (AWS SDK, twirp, `aws-lc-sys`) from builds that don't use it. Rollups that run with `SP1_PROVER=network` or `SP1_PROVER=network-reserved` must enable it: `sov-sp1-adapter = { ..., features = ["native", "network"] }`. Without it, the node fails at startup with an error asking for the `network` feature. `cpu`, `mock` and `light` are unaffected.
 # 2026-11-02
 - #3106 Dependencies: Updated `quinn-proto` to 0.11.15 (GHSA-4w2j-m93h-cj5j), `rustls` to 0.23.45 (GHSA-2mjx-qc3c-rqvc), `serde_with` to 3.21.0 (GHSA-7gcf-g7xr-8hxj; the workspace now requires `serde_with = "3.21"`) and `pyo3` to 0.29 (`py_sovereign_web3` only). To apply the same updates to a rollup (e.g. rollup-starter), run these commands in the workspace root and again in each zkVM guest crate with `--manifest-path <guest>/Cargo.toml`, skipping any package that isn't in that lockfile:
     - `cargo update -p quinn-proto --precise 0.11.15`

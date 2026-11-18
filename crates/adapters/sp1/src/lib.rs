@@ -25,7 +25,7 @@ pub mod guest;
 pub mod host;
 #[cfg(feature = "native")]
 pub mod light_client;
-#[cfg(feature = "native")]
+#[cfg(feature = "network")]
 mod metrics;
 
 /// Uniquely identifies a SP1 binary. Stored as a serialized version of `SP1VerifyingKey`.

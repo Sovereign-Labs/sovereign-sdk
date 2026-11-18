@@ -60,11 +60,12 @@ default = []
 native = [
     "rand",
     "dep:tokio",
-    "sp1-sdk/network",
     "sov-rollup-interface/native",
     "sov-metrics/native",
     "sov-sp1-adapter/native",
 ]
+# Enables `SP1_PROVER=network` and `SP1_PROVER=network-reserved` (Succinct prover network).
+network = ["native", "sp1-sdk/network"]
 bench = [
     "sov-metrics",
     "sov-sp1-adapter/bench",
