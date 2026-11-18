@@ -12292,6 +12292,7 @@ dependencies = [
  "sov-modules-api",
  "sov-rollup-interface",
  "sov-sequencer-registry",
+ "tokio",
  "tracing",
 ]
 
