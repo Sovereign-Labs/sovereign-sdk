@@ -22,7 +22,7 @@ use sov_state::DefaultStorageSpec;
 use sov_test_utils::generators::BlobBuildingCtx;
 use tempfile::TempDir;
 
-use crate::prover::datagen::{get_blocks_from_da, DEFAULT_BLOCKS};
+use crate::prover::datagen::{get_blocks_from_da, get_evm_blocks_from_da, DEFAULT_BLOCKS};
 use crate::test_helpers::test_genesis_paths;
 
 type Hasher = <SP1CryptoSpec as CryptoSpec>::Hasher;
@@ -52,12 +52,35 @@ pub(super) type StfWitness = StateTransitionWitness<ProofStateRoot, ProofWitness
 ///
 /// Returns `(genesis_state_root, witnesses)`.
 pub(super) async fn generate_witnesses() -> (ProofStateRoot, Vec<StfWitness>) {
-    let temp_dir = TempDir::new().expect("Unable to create temporary directory");
-    tracing::info!("Creating temp dir at {}", temp_dir.path().display());
-    let da_service = MockDaService::new(MockAddress::default());
     let sequencer_mode = BlobBuildingCtx::Preferred {
         curr_sequence_number: Arc::new(AtomicU64::new(0)),
     };
+    let blocks = get_blocks_from_da(sequencer_mode)
+        .await
+        .expect("Failed to get DA blocks");
+
+    generate_witnesses_for_blocks(blocks, DEFAULT_BLOCKS as usize).await
+}
+
+/// Executes EVM contract deployment/call blocks and produces per-block witnesses.
+pub(super) async fn generate_evm_witnesses() -> (ProofStateRoot, Vec<StfWitness>) {
+    let sequencer_mode = BlobBuildingCtx::Preferred {
+        curr_sequence_number: Arc::new(AtomicU64::new(0)),
+    };
+    let blocks = get_evm_blocks_from_da(sequencer_mode)
+        .await
+        .expect("Failed to get EVM DA blocks");
+
+    generate_witnesses_for_blocks(blocks, 1).await
+}
+
+async fn generate_witnesses_for_blocks(
+    mut blocks: Vec<MockBlock>,
+    blocks_to_process: usize,
+) -> (ProofStateRoot, Vec<StfWitness>) {
+    let temp_dir = TempDir::new().expect("Unable to create temporary directory");
+    tracing::info!("Creating temp dir at {}", temp_dir.path().display());
+    let da_service = MockDaService::new(MockAddress::default());
 
     let mut storage_manager = NomtStorageManager::<MockDaSpec, Hasher, NativeStorage>::new(
         RollupDbConfig::default_in_path(temp_dir.path().to_path_buf()),
@@ -87,14 +110,9 @@ pub(super) async fn generate_witnesses() -> (ProofStateRoot, Vec<StfWitness>) {
 
     let genesis_state_root = prev_state_root;
 
-    // TODO: Fix this with genesis logic.
-    let mut blocks = get_blocks_from_da(sequencer_mode)
-        .await
-        .expect("Failed to get DA blocks");
-
     let mut witnesses = Vec::new();
 
-    for filtered_block in &mut blocks[..(DEFAULT_BLOCKS as usize)] {
+    for filtered_block in blocks.iter_mut().take(blocks_to_process) {
         let height = filtered_block.header().height();
         tracing::info!(
             "Requesting data for height {} and prev_state_root 0x{}",
