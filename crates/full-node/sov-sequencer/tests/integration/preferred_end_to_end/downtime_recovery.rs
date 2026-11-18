@@ -1,5 +1,25 @@
 use super::*;
 
+/// Bound for the `seq_behind_deferred_slots_count*` resync loops. These tests are in the
+/// `heavy-sequencer-tests` nextest group, which allows up to 10 minutes under load
+/// (`.config/nextest.toml`), so `POLLING_TIMEOUT` (60s) is too tight. Kept below the nextest
+/// kill so that a stalled resync fails with this test's message instead of a bare timeout.
+const RESYNC_TIMEOUT: Duration = Duration::from_secs(9 * 60);
+
+/// Lets the node process every produced DA block, then gives the sequencer up to a second to
+/// report ready. Producing blocks without waiting for the node keeps moving the tip that the
+/// recovering sequencer resyncs to, so under load it can chase the tip and never become ready.
+async fn sequencer_ready_after_node_sync(test_rollup: &TestRollup<TestBlueprint>) -> bool {
+    test_rollup.wait_for_node_synced().await.unwrap();
+    for _ in 0..20 {
+        if test_rollup.is_sequencer_ready().await {
+            return true;
+        }
+        sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
+    }
+    false
+}
+
 #[derive(Debug, serde::Deserialize)]
 struct ManyValuesItemResponse {
     #[allow(unused)]
@@ -129,10 +149,13 @@ async fn seq_behind_deferred_slots_count_simple_lagging() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    while !test_rollup.is_sequencer_ready().await {
-        let _ = da_layer.produce_block().await;
-        sleep(Duration::from_millis(50)).await; // Notifications don't work during recovery.
-    }
+    tokio::time::timeout(RESYNC_TIMEOUT, async {
+        while !sequencer_ready_after_node_sync(&test_rollup).await {
+            let _ = da_layer.produce_block().await;
+        }
+    })
+    .await
+    .expect("Sequencer did not become ready while producing DA blocks");
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
@@ -255,10 +278,13 @@ async fn seq_behind_deferred_slots_count_with_shutdown() {
 
     // Give time for the sequencer to catch up its visible state number
     tracing::info!("Producing DA blocks to let the sequencer resync.");
-    while !test_rollup.is_sequencer_ready().await {
-        test_rollup.da_service.produce_block_now().await.unwrap();
-        sleep(Duration::from_millis(50)).await;
-    }
+    tokio::time::timeout(RESYNC_TIMEOUT, async {
+        while !sequencer_ready_after_node_sync(&test_rollup).await {
+            test_rollup.da_service.produce_block_now().await.unwrap();
+        }
+    })
+    .await
+    .expect("Sequencer did not become ready while producing DA blocks");
     test_rollup.wait_for_sequencer_ready().await.unwrap();
 
     // Submit the same transaction to the now-working sequencer
