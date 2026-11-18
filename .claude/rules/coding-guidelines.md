@@ -10,6 +10,7 @@
 - **Test scope**: One concern per test; don't add unrelated assertions
 - **Tempdir**: Declare at top of test so it outlives async/threaded operations
 - **Docs**: Use `#[allow(missing_docs)]` only when documentation would be redundant
+- **Naming**: Normalized acronyms in types (`HttpServer`, not `HTTPServer`) and generics (`Rt`, `Da`, not `RT`, `DA`); exceptions: `SP1`, `IGP`, `IP`, `HD`
 
 ---
 
@@ -33,7 +34,9 @@
 # BAD:
 [dependencies]
 serde = "1.0"
+```
 
+```toml
 # GOOD:
 [dependencies]
 serde = { version = "1.0", default-features = false, features = ["alloc"] }
@@ -95,6 +98,51 @@ some-sdk-crate = { git = "https://github.com/org/repo", branch = "fix" }
 # GOOD: Git reference travels with the dependency
 [dependencies]
 some-sdk-crate = { git = "https://github.com/org/repo", branch = "fix" }
+```
+
+---
+
+### Naming: Normalized Acronyms in Types and Generics
+
+**When**: Naming structs, traits, enums, type aliases, or generic type parameters that contain acronyms or abbreviations.
+
+**Rule — type names**:
+- DON'T: Use all-caps acronyms in type names (`HTTPServer`, `RPCClient`, `DAService`)
+- DO: Capitalize only the first letter of acronyms (`HttpServer`, `RpcClient`, `DaService`)
+
+**Rule — generic type parameters**:
+- DON'T: Use all-caps multi-letter generics (`RT`, `VM`, `DA`)
+- DO: Use normalized multi-letter generics: `Rt`, `Da`, `Vm`, `Tx`, `Db`, `Api`
+- DO: Use one-letter generics only for local/standard patterns (`T`, `S`, `E`, `K`, `V`)
+
+**Consistency**: In any touched file, do not mix forms (e.g., `RT` and `Rt`). Normalize to the canonical form per this policy.
+
+**Exceptions**: The following tokens are allowlisted and may remain uppercase — no immediate rename is required:
+`SP1`, `IGP`, `IP`, `HD`
+
+**Why**: Rust convention normalizes acronyms in PascalCase to improve readability and avoid ambiguity at word boundaries (e.g., `HTTPSHandler` — is it `HTTPS` + `Handler` or `HTTP` + `SHandler`?). The same logic applies to generic parameters for consistency.
+
+**Example**:
+
+```rust
+// BAD: All-caps acronyms in type names
+struct HTTPSConnection;
+trait RPCHandler {}
+struct DAService;
+
+// GOOD: Normalized acronyms in type names
+struct HttpsConnection;
+trait RpcHandler {}
+struct DaService;
+
+// BAD: All-caps generic parameters
+struct Rollup<RT: Runtime, DA: DaLayer> { .. }
+
+// GOOD: Normalized generic parameters
+struct Rollup<Rt: Runtime, Da: DaLayer> { .. }
+
+// GOOD: Allowlisted tokens keep their casing
+struct SP1Prover;
 ```
 
 ---
