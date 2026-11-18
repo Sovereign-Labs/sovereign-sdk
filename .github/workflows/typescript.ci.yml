@@ -27,6 +27,7 @@ jobs:
           cache: pnpm
           path: |
             ./typescript/.turbo
+            /home/runner/.cache/.wasm-pack
       # Node 24, pnpm, and Bun are all baked into the base image.
       - name: Install dependencies
         run: pnpm install
