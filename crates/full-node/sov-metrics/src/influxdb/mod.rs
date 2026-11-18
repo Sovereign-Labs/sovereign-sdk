@@ -83,9 +83,25 @@ impl Metric for SubmittableMetric {
         self.contents.measurement_name()
     }
 
+    /// Ends every line the contents write with a timestamp: `timestamp + i` nanoseconds for line
+    /// `i`. A batch metric writes several lines of the same series. Without a timestamp, Telegraf
+    /// stamps them on arrival, and InfluxDB keeps only one of the lines that share a timestamp.
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let start = buffer.len();
         self.contents.serialize_for_telegraf(buffer)?;
-        write!(buffer, " {}", self.timestamp)
+        if !buffer[start..].contains(&b'\n') {
+            return write!(buffer, " {}", self.timestamp);
+        }
+
+        let lines = buffer.split_off(start);
+        for (i, line) in lines.split(|byte| *byte == b'\n').enumerate() {
+            if i > 0 {
+                buffer.push(b'\n');
+            }
+            buffer.extend_from_slice(line);
+            write!(buffer, " {}", self.timestamp.saturating_add(i as u128))?;
+        }
+        Ok(())
     }
 }
 
@@ -387,5 +403,72 @@ mod tests {
         );
 
         Ok(())
+    }
+
+    /// Writes two lines of the same series, like a batch of metrics does.
+    #[derive(Debug)]
+    struct TwoLineMetric;
+
+    impl Metric for TwoLineMetric {
+        fn measurement_name(&self) -> &'static str {
+            "two_line_metric"
+        }
+
+        fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+            write!(
+                buffer,
+                "two_line_metric value=4660i\ntwo_line_metric value=22136i"
+            )
+        }
+    }
+
+    #[test]
+    fn every_line_of_a_multi_line_metric_gets_its_own_timestamp() {
+        let timestamp = 0x1234_5678_9abc_u128;
+        let metric = SubmittableMetric::new(
+            SubmittableMetricKind::Boxed(Box::new(TwoLineMetric)),
+            timestamp,
+        );
+
+        let mut buffer = Vec::new();
+        metric.serialize_for_telegraf(&mut buffer).unwrap();
+
+        assert_eq!(
+            String::from_utf8(buffer).unwrap(),
+            format!(
+                "two_line_metric value=4660i {timestamp}\ntwo_line_metric value=22136i {}",
+                timestamp + 1
+            ),
+            "Lines of the same series must not share a timestamp, or InfluxDB keeps only one"
+        );
+    }
+
+    #[test]
+    fn single_line_metric_gets_the_timestamp_appended() {
+        let timestamp = 0x1234_5678_9abc_u128;
+        let metric = SubmittableMetric::new(
+            SubmittableMetricKind::Boxed(Box::new(MyCustomMetric {
+                value: 0x1234,
+                tag: 0x56,
+            })),
+            timestamp,
+        );
+
+        let mut buffer = b"previous_metric value=1i\n".to_vec();
+        metric.serialize_for_telegraf(&mut buffer).unwrap();
+
+        let mut expected = b"previous_metric value=1i\n".to_vec();
+        MyCustomMetric {
+            value: 0x1234,
+            tag: 0x56,
+        }
+        .serialize_for_telegraf(&mut expected)
+        .unwrap();
+        write!(expected, " {timestamp}").unwrap();
+        assert_eq!(
+            String::from_utf8(buffer).unwrap(),
+            String::from_utf8(expected).unwrap(),
+            "Earlier contents of the buffer must be left untouched"
+        );
     }
 }

@@ -1,3 +1,6 @@
+# 2026-11-18
+- #3151 Metrics: every line of a multi-line metric (such as the sequencer's metric batches) now ends with its own timestamp, `timestamp + i` nanoseconds for line `i`. Previously only the last line carried one. Telegraf stamped the rest on arrival, and InfluxDB kept only one of the same-series lines that shared a timestamp, so batched metrics lost points.
+
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 
