@@ -82,7 +82,7 @@ impl FlatStateDb {
 
     /// Create a new [`FlatStateDb`] from a path using RocksDB customizations from
     /// [`RollupDbConfigWithCustomizations`].
-    pub(crate) fn new_with_customizations(
+    pub fn new_with_customizations(
         path: std::path::PathBuf,
         cache_size: usize,
         custom_config: Option<&RollupDbConfigWithCustomizations>,

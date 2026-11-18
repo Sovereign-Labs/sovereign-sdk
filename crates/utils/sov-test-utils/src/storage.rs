@@ -76,11 +76,18 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
     /// Initialize a new instance of [`SimpleStorageManager`] in a temporary directory.
     pub fn new() -> Self {
         let dir = tempfile::tempdir().unwrap();
-        let config = RollupDbConfig::default_in_path(dir.path().to_path_buf());
+        let mut config = RollupDbConfig::default_in_path(dir.path().to_path_buf());
+        // Benches run on this manager; statistics only add counters.
+        config.flat_state_rocksdb_statistics = true;
 
+        let historical_state = FlatStateDb::new_with_customizations(
+            dir.path().to_path_buf(),
+            1_000_000, // Use a 1MB state cache for tests
+            Some(&config.clone().into()),
+        )
+        .unwrap();
         let state_db = sov_db::state_db_nomt::NomtStateDb::new(config)
             .expect("Failed to initialize NOMT state DB");
-        let historical_state = FlatStateDb::new(dir.path().to_path_buf(), 1_000_000).unwrap(); // Use a 1MB state cache for tests
         let accessory_rocksdb = AccessoryDb::get_rockbound_options()
             .default_setup_db_as_subdir(dir.path())
             .unwrap();

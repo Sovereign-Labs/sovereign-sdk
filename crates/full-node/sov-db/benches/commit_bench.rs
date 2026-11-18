@@ -320,7 +320,7 @@ fn main() {
         ledger_db_path: None,
         user_nomt_db_path: None,
         state_cache_size: None,
-        flat_state_rocksdb_statistics: false,
+        flat_state_rocksdb_statistics: true,
         user_commit_concurrency: Some(4),
         user_hashtable_buckets: Some(4_000_000),
         user_preallocate_ht: Some(false),

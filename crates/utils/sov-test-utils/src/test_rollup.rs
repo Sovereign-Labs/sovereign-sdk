@@ -114,6 +114,8 @@ pub struct RollupBuilderConfig<S: Spec> {
     /// State-version pruning policy applied to the node's DB config. Defaults to
     /// `PrunerConfig::Off`, matching production defaults for fresh test nodes.
     pub pruner: PrunerConfig,
+    /// Sets [`RollupDbConfig::flat_state_rocksdb_statistics`] on the node's DB config.
+    pub flat_state_rocksdb_statistics: bool,
 }
 
 /// A one-stop shop for building entire rollups and starting them in the
@@ -337,6 +339,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             RollupDbConfig::default_in_path(self.config.storage.path().to_path_buf());
         // Apply the configured pruning policy (default test config leaves pruning disabled).
         rollup_db_config.pruner = self.config.pruner;
+        rollup_db_config.flat_state_rocksdb_statistics = self.config.flat_state_rocksdb_statistics;
 
         RollupConfig {
             storage: rollup_db_config,
@@ -423,6 +426,7 @@ impl<R: FullNodeBlueprint<Native> + Default + 'static> RollupBuilder<R> {
             }),
             start_fresh_outer_proof_on_resync: false,
             pruner: PrunerConfig::Off,
+            flat_state_rocksdb_statistics: false,
         }
     }
 }
