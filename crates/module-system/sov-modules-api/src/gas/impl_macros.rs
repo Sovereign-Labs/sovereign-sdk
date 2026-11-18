@@ -8,6 +8,7 @@ macro_rules! impl_gas_array {
 
             const MAX: Self = Self::from_primitive([<$u>::MAX; $n]);
 
+            #[inline]
             fn checked_sub(self, rhs: Self) -> Option<Self> {
                 let mut output = [<$u>::from(0u64); $n];
 
@@ -22,6 +23,7 @@ macro_rules! impl_gas_array {
                 Some(Self::from(output))
             }
 
+            #[inline]
             fn checked_scalar_product(self, scalar: $u) -> Option<Self> {
                 let mut output = [<$u>::from(0u64); $n];
 
@@ -36,6 +38,7 @@ macro_rules! impl_gas_array {
                 Some(Self::from(output))
             }
 
+            #[inline]
             fn dim_is_less_than(self, rhs: Self) -> bool {
                 for (l, r) in self.value.iter().zip(rhs.value.as_slice()) {
                     if l >= r {
@@ -45,6 +48,7 @@ macro_rules! impl_gas_array {
                 true
             }
 
+            #[inline]
             fn dim_is_less_or_eq(self, rhs: Self) -> bool {
                 for (l, r) in self.value.iter().zip(rhs.value.as_slice()) {
                     if l > r {
@@ -86,6 +90,7 @@ macro_rules! impl_gas_array {
                 self
             }
 
+            #[inline]
             fn checked_combine(self, rhs: Self) -> Option<Self> {
                 let mut output = [<$u>::from(0u64); $n];
 
@@ -125,6 +130,7 @@ macro_rules! impl_gas_dimensions {
         }
 
         impl From<[$u; $n]> for $t {
+            #[inline]
             fn from(array: [$u; $n]) -> Self {
                 Self::from_primitive(array)
             }
@@ -189,6 +195,7 @@ macro_rules! impl_gas_unit {
                 }
             }
 
+            #[inline]
             fn checked_value(self, price: Self::Price) -> Option<Amount> {
                 let mut value: Amount = Amount::ZERO;
                 for (g, p) in self.value.iter().zip(price.as_ref().iter().copied()) {
@@ -199,6 +206,7 @@ macro_rules! impl_gas_unit {
                 Some(value)
             }
 
+            #[inline]
             fn value(self, price: Self::Price) -> Amount {
                 self.value
                     .iter()
@@ -210,6 +218,7 @@ macro_rules! impl_gas_unit {
 
         impl GasUnit<$n> {
             /// Creates a new [`GasUnit`] from an array of [`u64`].
+            #[inline]
             const fn from_primitive(array: [u64; $n]) -> Self {
                 Self {
                     value: array,
@@ -222,6 +231,7 @@ macro_rules! impl_gas_unit {
         impl GasPrice<$n> {
             /// Creates a new [`GasPrice`] from an array of Amount.
             #[must_use]
+            #[inline]
             pub const fn from_primitive(array: [Amount; $n]) -> Self {
                 let mut value: [Amount; $n] = [Amount::ZERO; $n];
 
