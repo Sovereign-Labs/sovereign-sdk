@@ -34,8 +34,8 @@ use crate::{eth_dev_signer, ROLLUP_BATCH_NAMESPACE, ROLLUP_PROOF_NAMESPACE};
 
 /// Rollup on Celestia Fibre DA, with [`MockZkvm`] as both inner and outer VM.
 ///
-/// Mock VMs avoid building zkVM guests for a DA spec that has no verifier yet
-/// (`CelestiaFibreVerifier` fails closed), so proving is not supported.
+/// Mock VMs avoid building zkVM guests while there is no guest for this DA spec yet, so real
+/// proving is not supported.
 #[derive(Default, Clone, Copy)]
 pub struct CelestiaFibreDemoRollup<M> {
     phantom: std::marker::PhantomData<M>,

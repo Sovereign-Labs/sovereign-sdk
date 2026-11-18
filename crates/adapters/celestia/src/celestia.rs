@@ -218,6 +218,13 @@ impl CelestiaHeader {
         }
         Ok(())
     }
+
+    /// Returns the [`DataAvailabilityHeader`] after checking it against the header, as
+    /// described in [`Self::validate_dah`].
+    pub fn verified_dah(&self) -> Result<&DataAvailabilityHeader, ValidationError> {
+        self.validate_dah()?;
+        Ok(&self.dah)
+    }
 }
 
 impl From<ExtendedHeader> for CelestiaHeader {
