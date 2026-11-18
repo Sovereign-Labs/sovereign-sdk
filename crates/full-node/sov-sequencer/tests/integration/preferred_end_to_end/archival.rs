@@ -92,6 +92,8 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
     let stop = Arc::new(AtomicBool::new(false));
     let reader_client = test_rollup.client.clone();
     let reader_stop = stop.clone();
+    let saw_pruned = Arc::new(tokio::sync::Notify::new());
+    let reader_saw_pruned = saw_pruned.clone();
     let target_url = format!("/modules/value-setter/state/value?rollup_height={target_height}");
     let hammer_url = target_url.clone();
     let hammer = tokio::spawn(async move {
@@ -126,6 +128,7 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
                         // HeightNotAccessible — the expected terminal state once pruned.
                         query_count += 1;
                         saw_not_accessible = true;
+                        reader_saw_pruned.notify_one();
                     }
                     // Otherwise a transient transport error: ignore and retry.
                 }
@@ -175,9 +178,13 @@ async fn test_archival_reads_at_pruned_height_stay_consistent_under_pruning() {
         "target height {target_height} should be HeightNotAccessible after advancing past versions_to_keep",
     );
 
-    // Let the hammer observe the pruned state for a moment, then stop and join it (this also
+    // Wait for the hammer to observe the pruned state, then stop and join it (this also
     // surfaces any assertion failure that fired inside the task).
-    tokio::time::sleep(Duration::from_millis(500)).await;
+    tokio::time::timeout(NOTIFICATION_TIMEOUT, saw_pruned.notified())
+        .await
+        .expect(
+            "the concurrent reader should have observed HeightNotAccessible for the pruned height",
+        );
     stop.store(true, Ordering::Relaxed);
     let (saw_not_accessible, query_count) = hammer.await.unwrap();
     assert!(
@@ -356,54 +363,6 @@ async fn test_archival_read_from_uncommitted_changes() {
     );
 
     test_rollup.resume_preferred_batches().await;
-}
-
-#[tokio::test(flavor = "multi_thread")]
-#[ignore = "This test covers pruning behavior, which is currently disabled."]
-async fn test_archival_state_with_pruning() {
-    let (test_rollup, admin) = create_test_rollup().await;
-
-    test_rollup.produce_enough_finalized_slots().await;
-    test_rollup.wait_for_sequencer_ready().await.unwrap();
-
-    let mut da_layer = DaLayerWithSubscription::new(&test_rollup).await;
-
-    for i in 0..150 {
-        test_rollup.submit(&admin, set_value(i)).await.unwrap();
-        da_layer.produce_and_wait_for_slot().await;
-    }
-
-    // Assert that the earlier transactions sent just before the sequencer went into recovery was
-    // flushed and processed by the node
-
-    let mut success_count = 0;
-    let mut pruned_count = 0;
-    for i in 0..150 {
-        let state = test_rollup
-            .client
-            .query_rest_endpoint::<serde_json::Value>(
-                format!("/modules/value-setter/state/value?slot_number={i}").as_str(),
-            )
-            .await;
-        assert!(state.is_ok(), "Error from archival state query: {state:?}",);
-        let state = state.unwrap();
-        if state
-            .to_string()
-            .contains("The requested height may have been pruned")
-        {
-            pruned_count += 1;
-        } else {
-            let value: ValueResponse =
-                serde_json::from_value(state).expect("Failed to deserialize into ValueResponse");
-            assert!(value.value < 150);
-            success_count += 1;
-        }
-    }
-
-    // Check that we ran into some pruned slots to sanity check that the test is working. If this fails, we just need to update the test logic
-    assert!(pruned_count > 0, "No pruned slots found");
-    assert!(success_count > 0, "No successful queries found");
-    test_rollup.shutdown().await.unwrap();
 }
 
 /// Checks that historical `ValueSetter` reads return the value as of the requested rollup height

@@ -295,22 +295,22 @@ async fn test_nonce_queue_timeout() {
     let second_range = (5..8).rev().collect(); // 7, 6, 5
 
     // Submit the first range, missing nonce 0 so they all get queued
-    let mut handles = submit_parallel_txs(&client, &key, first_range, true).await;
+    let first_handles = submit_parallel_txs(&client, &key, first_range, true).await;
     // Submit the second range, with another gap at nonce 4. These will fail later.
-    handles.extend(submit_parallel_txs(&client, &key, second_range, false).await);
+    let second_handles = submit_parallel_txs(&client, &key, second_range, false).await;
 
     // Now submit tx 0, so the first range gets executed
     submit_tx_set_value(&client, &key, 0, true).await;
 
-    // Wait past the queue timeout configured at the start of the test. The second range should
-    // have all timed out and been rejected by the time this is over.
-    tokio::time::sleep(Duration::from_millis(SHORT_QUEUE_TIMEOUT * 2)).await;
+    // The second range times out of the queue and is rejected; each task asserts the rejection.
+    for handle in second_handles {
+        handle.await.unwrap();
+    }
 
     // Now submit tx 4
     submit_tx_set_value(&client, &key, 4, true).await;
 
-    // Wait for all tasks
-    for handle in handles {
+    for handle in first_handles {
         handle.await.unwrap();
     }
 
@@ -328,17 +328,18 @@ async fn test_zero_length_queue() {
 
     // Spam some transactions with nonces above 0. Expect them to fail because queue size is 0.
     let handles = submit_parallel_txs(&client, &key, (1..5).collect(), false).await;
-    // Absolutely ensure all of the transactions have time to hit the queue (500 ms is very
-    // generous) - while also absolutely making sure we don't hit the timeout case before sending
-    // transaction 0 (so if they got queued, they would then execute, failing the test).
-    tokio::time::sleep(Duration::from_millis(LONGISH_TIMEOUT / 4)).await;
+    // With a zero-length queue they are rejected right away. Had any of them been queued, it
+    // would only fail after LONGISH_TIMEOUT, so this bounded wait would time out.
+    tokio::time::timeout(Duration::from_millis(LONGISH_TIMEOUT / 2), async {
+        for handle in handles {
+            handle.await.unwrap();
+        }
+    })
+    .await
+    .expect("Transactions should be rejected immediately, not queued");
     // Send the 0 nonce transaction - if the above had gotten queued (which they shouldn't have),
     // this would let them succeed
     submit_tx_set_value(&client, &key, 0, true).await;
-
-    for handle in handles {
-        handle.await.unwrap();
-    }
     // Sanity check
     query_set_value(&test_rollup, None, Some(0)).await.unwrap();
 }

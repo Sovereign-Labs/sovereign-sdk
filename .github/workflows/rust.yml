@@ -273,6 +273,29 @@ jobs:
       - run: make test-all
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+      - name: Upload JUnit report
+        if: ${{ !cancelled() }}
+        uses: actions/upload-artifact@v7
+        with:
+          name: nextest-junit
+          path: target/nextest/ci/junit.xml
+          retention-days: 14
+      # Tests that failed and then passed on retry (see `.config/nextest.toml`).
+      - name: Report flaky tests
+        if: ${{ !cancelled() }}
+        run: |
+          python3 - <<'EOF'
+          import os
+          import xml.etree.ElementTree as ET
+
+          cases = ET.parse("target/nextest/ci/junit.xml").iter("testcase")
+          flaky = [f"{c.get('classname')} {c.get('name')}" for c in cases if c.find("flakyFailure") is not None]
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a") as summary:
+              summary.write(f"### Flaky tests: {len(flaky)}\n")
+              summary.writelines(f"- `{name}`\n" for name in flaky)
+          for name in flaky:
+              print(f"::warning title=Flaky test::{name} passed only after a retry")
+          EOF
 
   doctests:
     name: doctests

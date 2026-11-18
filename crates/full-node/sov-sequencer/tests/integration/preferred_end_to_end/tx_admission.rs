@@ -369,9 +369,6 @@ async fn delayed_tx_is_processed_after_delay() {
     };
     let delayed_tx_future = client.accept_tx(&binding);
 
-    // Sleep to ensure that the tx would surely be processed if it were not delayed.
-    tokio::time::sleep(Duration::from_millis(200)).await;
-
     let binding = api_types::AcceptTxBody {
         body: BASE64_STANDARD.encode(&regular_tx),
     };

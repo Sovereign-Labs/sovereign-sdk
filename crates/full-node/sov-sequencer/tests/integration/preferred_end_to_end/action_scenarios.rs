@@ -119,20 +119,16 @@ async fn restart_after_big_batch_regression() {
 }
 
 #[tokio::test(flavor = "multi_thread")]
-async fn flaky_batch_production_with_immediate_finalization() {
+async fn batch_production_with_immediate_finalization() {
     let actions = vec![
         TestingAction::AcceptTxs { count: 1 },
         TestingAction::AcceptTxs { count: 50 },
         TestingAction::Restart,
-        // Restarting is consistently slow in this test because of the big batches, so sleep extra
-        TestingAction::Sleep { duration_ms: 2000 },
         TestingAction::AcceptTx,
         TestingAction::Sleep { duration_ms: 50 },
         TestingAction::Restart,
-        TestingAction::Sleep { duration_ms: 2000 },
         TestingAction::AcceptTxs { count: 50 },
         TestingAction::Restart,
-        TestingAction::Sleep { duration_ms: 2000 },
         TestingAction::AcceptTx,
         TestingAction::AcceptTx,
         TestingAction::AcceptTx,
@@ -159,14 +155,10 @@ async fn test_sequencer_state_and_node_state_matches() {
         // Produce a block to trigger an update_state operation
         // which will replace the state with that from the node.
         // It should produce the same result as our previous query
-        TestingAction::NewDaSlot,
-        // Give time for `update_state` to run
         // This should produce a batch containing previous transactions
-        TestingAction::Sleep { duration_ms: 500 },
+        TestingAction::NewDaSlotAndWait,
         // Trigger another block so we get updated state
-        TestingAction::NewDaSlot,
-        // give time for update state to run
-        TestingAction::Sleep { duration_ms: 500 },
+        TestingAction::NewDaSlotAndWait,
         // Should be unchanged
         TestingAction::QuerySetValue,
     ];

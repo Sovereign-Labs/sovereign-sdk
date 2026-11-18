@@ -185,8 +185,10 @@ async fn test_instant_finality() -> anyhow::Result<()> {
             .await
             .await??;
         let filtered_block = da_service.get_block_at(height).await?;
-        // Sleep here more, to ensure that latest finalized header has been pulled.
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        state_manager
+            .finalized_headers_provider
+            .wait_until_caught_up()
+            .await?;
         process_continuous_transition(&mut state_manager, filtered_block.clone(), &da_service, 0)
             .await?;
         // TODO: Check how state manager internal state looks like on instant finality.
@@ -326,7 +328,10 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
         // Not used anywhere, `process_normal_transition` relies on da header to produce changes.
         let blob_data = [da_height as u8; 10];
         da_service.send_transaction(&blob_data).await.await??;
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        state_manager
+            .finalized_headers_provider
+            .wait_until_caught_up()
+            .await?;
         let filtered_block = da_service.get_block_at(da_height).await?;
         if da_height < fork_happens_at {
             let block_hash = filtered_block.header().hash();
@@ -480,7 +485,10 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
     .await;
 
     let slot_commit: MockSlotCommit = SlotCommit::new(filtered_block, Default::default());
-    tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+    state_manager
+        .finalized_headers_provider
+        .wait_until_caught_up()
+        .await?;
     state_manager
         .process_stf_changes(
             change_set,
@@ -591,7 +599,10 @@ async fn test_progressing_with_shuffle(
             SlotCommit::new(returned_block.clone(), Default::default());
 
         let state_root_hash = transition_witness.final_state_root;
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        state_manager
+            .finalized_headers_provider
+            .wait_until_caught_up()
+            .await?;
         state_manager
             .process_stf_changes(
                 change_set,
@@ -905,7 +916,10 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
             SlotCommit::new(returned_block.clone(), Default::default());
 
         let state_root_hash = transition_witness.final_state_root;
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        state_manager
+            .finalized_headers_provider
+            .wait_until_caught_up()
+            .await?;
         state_manager
             .process_stf_changes(
                 change_set,
@@ -1093,7 +1107,11 @@ async fn test_change_in_finalized_header() {
             .unwrap()
             .unwrap();
         let filtered_block = da_service.get_block_at(height).await.unwrap();
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        state_manager
+            .finalized_headers_provider
+            .wait_until_caught_up()
+            .await
+            .unwrap();
         process_continuous_transition(
             &mut state_manager,
             filtered_block.clone(),
@@ -1684,7 +1702,10 @@ async fn test_binary_search_handles_da_error() -> anyhow::Result<()> {
     // Process first few blocks to populate state_on_block
     for height in 1..=5u64 {
         let filtered_block = da_service.get_block_at(height).await?;
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        state_manager
+            .finalized_headers_provider
+            .wait_until_caught_up()
+            .await?;
 
         let (prover_storage, pre_state_root, ledger_pre_state, block) =
             resolve_to_continuation(&mut state_manager, &da_service, filtered_block).await?;
@@ -1783,7 +1804,10 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
     // Process several blocks to populate state
     for height in 1..=10u64 {
         let filtered_block = da_service.get_block_at(height).await?;
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        state_manager
+            .finalized_headers_provider
+            .wait_until_caught_up()
+            .await?;
 
         let (prover_storage, pre_state_root, ledger_pre_state, block) =
             resolve_to_continuation(&mut state_manager, &da_service, filtered_block).await?;
@@ -1886,7 +1910,10 @@ async fn test_ledger_consistency_after_processing() -> anyhow::Result<()> {
             .await
             .await??;
         let filtered_block = da_service.get_block_at(height).await?;
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        state_manager
+            .finalized_headers_provider
+            .wait_until_caught_up()
+            .await?;
 
         let state_root = process_continuous_transition(
             &mut state_manager,
@@ -1966,7 +1993,10 @@ async fn test_finalized_height_monotonic() -> anyhow::Result<()> {
         .await;
 
         let slot_commit: MockSlotCommit = SlotCommit::new(returned_block, Default::default());
-        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        state_manager
+            .finalized_headers_provider
+            .wait_until_caught_up()
+            .await?;
         state_manager
             .process_stf_changes(
                 change_set,
