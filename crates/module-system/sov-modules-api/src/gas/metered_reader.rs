@@ -1,6 +1,6 @@
 use std::io;
 
-use crate::gas::traits::GasMeter;
+use crate::gas::traits::{GasArray, GasMeter};
 use crate::{as_u32_or_panic, GasSpec, Spec};
 
 /// `io::Read` adapter that charges gas to a `GasMeter` for every byte read.
@@ -14,6 +14,9 @@ pub struct MeteredReader<'a, R: io::Read, M: GasMeter> {
     meter: &'a mut M,
     per_byte: <M::Spec as Spec>::Gas,
     per_read_bias: <M::Spec as Spec>::Gas,
+    /// When set, reads are counted as `(reads, bytes)` instead of charged; see
+    /// [`MeteredReader::charge_deferred`].
+    deferred: Option<(u64, u64)>,
 }
 
 impl<'a, R: io::Read, M: GasMeter> MeteredReader<'a, R, M> {
@@ -40,11 +43,56 @@ impl<'a, R: io::Read, M: GasMeter> MeteredReader<'a, R, M> {
             meter,
             per_byte,
             per_read_bias,
+            deferred: None,
         }
+    }
+
+    /// A reader that only counts what it would charge. [`MeteredReader::charge_deferred`] then
+    /// charges it in two calls instead of two per read.
+    pub(crate) fn new_deferred(inner: R, meter: &'a mut M) -> Self {
+        Self {
+            deferred: Some((0, 0)),
+            ..Self::new(inner, meter)
+        }
+    }
+
+    /// Charges what a reader from [`MeteredReader::new_deferred`] counted. Returns `false`, with
+    /// the meter unchanged, if the meter doesn't expose its [`BasicGasMeter`](crate::BasicGasMeter)
+    /// or the charge fails; the caller then decodes again with a charging reader, which reproduces
+    /// the exact sequence of charges, including where it runs out of gas.
+    ///
+    /// Gas and its value are linear and the meter only changes on a successful charge, so when
+    /// these charges succeed the meter ends in the same state as after the per-read charges.
+    pub(crate) fn charge_deferred(&mut self) -> bool {
+        let Some((reads, bytes)) = self.deferred else {
+            return true;
+        };
+        let Some(snapshot) = self.meter.try_as_basic_gas_meter().cloned() else {
+            return false;
+        };
+        let (Some(bias), Ok(bytes)) = (
+            self.per_read_bias.checked_scalar_product(reads),
+            u32::try_from(bytes),
+        ) else {
+            return false;
+        };
+        let charged = self.meter.charge_gas(bias).is_ok()
+            && self.meter.charge_linear_gas(self.per_byte, bytes).is_ok();
+        if !charged {
+            if let Some(meter) = self.meter.try_as_basic_gas_meter() {
+                *meter = snapshot;
+            }
+        }
+        charged
     }
 
     fn charge(&mut self, n: usize) -> io::Result<()> {
         if n == 0 {
+            return Ok(());
+        }
+        if let Some((reads, bytes)) = &mut self.deferred {
+            *reads += 1;
+            *bytes += n as u64;
             return Ok(());
         }
         self.meter

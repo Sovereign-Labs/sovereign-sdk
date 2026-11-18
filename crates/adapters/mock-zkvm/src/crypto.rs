@@ -191,9 +191,39 @@ impl BorshDeserialize for Ed25519PublicKey {
         let mut buffer = [0; PUBLIC_KEY_LENGTH];
         reader.read_exact(&mut buffer)?;
 
-        let pub_key = DalekPublicKey::from_bytes(&buffer).map_err(map_error)?;
+        let pub_key = decompress_public_key(&buffer).map_err(map_error)?;
 
         Ok(Self { pub_key })
+    }
+}
+
+/// `DalekPublicKey::from_bytes`, memoized per thread in native builds: every transaction carries
+/// its sender's key, and point decompression is a large share of decoding a transaction. Only
+/// successful decompressions are cached, so invalid keys are rejected exactly as before.
+fn decompress_public_key(bytes: &[u8; PUBLIC_KEY_LENGTH]) -> Result<DalekPublicKey, SignatureError> {
+    #[cfg(feature = "native")]
+    {
+        /// Bounds the memory per thread; the cache is cleared when it fills up.
+        const MAX_CACHED_KEYS: usize = 4096;
+        thread_local! {
+            static KEYS: std::cell::RefCell<std::collections::HashMap<[u8; PUBLIC_KEY_LENGTH], DalekPublicKey>> =
+                std::cell::RefCell::new(std::collections::HashMap::new());
+        }
+        KEYS.with_borrow_mut(|keys| {
+            if let Some(key) = keys.get(bytes) {
+                return Ok(*key);
+            }
+            let key = DalekPublicKey::from_bytes(bytes)?;
+            if keys.len() >= MAX_CACHED_KEYS {
+                keys.clear();
+            }
+            keys.insert(*bytes, key);
+            Ok(key)
+        })
+    }
+    #[cfg(not(feature = "native"))]
+    {
+        DalekPublicKey::from_bytes(bytes)
     }
 }
 
@@ -266,10 +296,23 @@ impl AsRef<[u8]> for Ed25519Signature {
     }
 }
 
+#[cfg(feature = "native")]
+static ED25519_VERIFICATIONS: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
+
+/// Number of ed25519 signature verifications this process has performed so far.
+///
+/// Lets tests assert that the node does no signature work a sequencer has not paid for.
+#[cfg(feature = "native")]
+pub fn ed25519_verifications_performed() -> u64 {
+    ED25519_VERIFICATIONS.load(std::sync::atomic::Ordering::Relaxed)
+}
+
 impl sov_rollup_interface::crypto::Signature for Ed25519Signature {
     type PublicKey = Ed25519PublicKey;
 
     fn verify(&self, pub_key: &Self::PublicKey, msg: &[u8]) -> Result<(), SigVerificationError> {
+        #[cfg(feature = "native")]
+        ED25519_VERIFICATIONS.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
         pub_key
             .pub_key
             .verify_strict(msg, &self.msg_sig)
