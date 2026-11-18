@@ -52,12 +52,12 @@ impl TestableStorage for TestNomtStorage {
             accessory_db: _,
         } = self;
 
-        let user_session = state_session_builder
-            .begin_user_session_without_witness()
-            .unwrap();
-        let kernel_session = state_session_builder
-            .begin_kernel_session_without_witness()
-            .unwrap();
+        // Both sessions are opened under one snapshots lock: holding one while opening the other
+        // can deadlock with a background commit.
+        let crate::state_db_nomt::SessionsContainer {
+            user: user_session,
+            kernel: kernel_session,
+        } = state_session_builder.begin_both_sessions(false).unwrap();
 
         let mut state_writes = Vec::with_capacity(items.len());
         let mut accessory_writes = Vec::with_capacity(items.len());
@@ -288,10 +288,10 @@ async fn wait_for_background_pruner(storage_manager: &Sm) {
 
 /// Oldest historical version still queryable after the "drain the pruner, then finalize one more
 /// block" bookkeeping shared by the periodic-pruning tests. The committing pruner was spawned at
-/// height `blocks - 1` and saw `last_committed = blocks - 2`, so the pruned floor sits at
-/// `(blocks - 2) - versions_to_keep`.
+/// height `blocks - 1` before that block's commit, so it saw `last_committed = blocks - 3`, and
+/// the pruned floor sits at `(blocks - 3) - versions_to_keep`.
 fn oldest_available_after_drain(blocks: u64, versions_to_keep: u64) -> u64 {
-    blocks - versions_to_keep - 2
+    blocks - versions_to_keep - 3
 }
 
 #[test]
@@ -556,7 +556,7 @@ async fn test_historical_state_with_pruning() {
         assert_eq!(value, Some(key.to_be_bytes().to_vec()));
 
         // The committed pruning batch was collected by the pruner spawned at height 13,
-        // which saw `last_committed = blocks - 2`.
+        // which saw `last_committed = blocks - 3`.
         let oldest_available_version =
             oldest_available_after_drain(blocks, versions_to_keep as u64);
 
@@ -908,7 +908,7 @@ async fn test_hot_key_pruning_keeps_only_recent_versions() {
     );
 
     // Same bookkeeping as `test_historical_state_with_pruning`: the committing pruner saw
-    // `last_committed = blocks - 2`, so the oldest retained version is `last_committed - keep`.
+    // `last_committed = blocks - 3`, so the oldest retained version is `last_committed - keep`.
     let oldest_available_version = oldest_available_after_drain(blocks, versions_to_keep as u64);
 
     let mut retained = 0u64;
@@ -1037,4 +1037,221 @@ async fn test_pruner_backpressure_respawns_until_drained() {
         oldest.is_err(),
         "version 0 of the sampled key should be pruned once backpressure has drained, found {oldest:?}",
     );
+}
+
+mod background_commit {
+    use std::time::Duration;
+
+    use super::*;
+    use crate::test_utils::CommitFaultInjectionLocation;
+
+    const GATE_TIMEOUT: Duration = Duration::from_secs(10);
+
+    fn key(height: u64) -> Vec<u8> {
+        // Keys must be at least 2 bytes long.
+        vec![height as u8, 0, 0]
+    }
+
+    fn value(height: u64) -> Vec<u8> {
+        (0x1234_5678u64 + height).to_be_bytes().to_vec()
+    }
+
+    fn new_storage_manager(temp_dir: &tempfile::TempDir) -> Sm {
+        Sm::new(
+            RollupDbConfig::default_in_path(temp_dir.path().to_path_buf()),
+            false,
+        )
+        .unwrap()
+    }
+
+    /// Saves block `height` that writes `key(height) = value(height)` at version `height - 1`.
+    fn save_block(storage_manager: &mut Sm, height: u64) {
+        let header = MockBlockHeader::from_height(height);
+        let (storage, _) = storage_manager.create_state_for(&header).unwrap();
+        let (changes, _) =
+            storage.materialize_from_key_values(&[(key(height), Some(value(height)))], height - 1);
+        storage_manager
+            .save_change_set(&header, changes, SchemaBatch::default())
+            .unwrap();
+    }
+
+    #[test]
+    fn storage_created_after_commit_landed_but_before_join_has_correct_version() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut storage_manager = new_storage_manager(&temp_dir);
+        save_block(&mut storage_manager, 1);
+        storage_manager
+            .finalize(&MockBlockHeader::from_height(1))
+            .unwrap();
+        storage_manager.wait_for_commit_to_finish();
+
+        let (storage, _) = storage_manager
+            .create_state_for(&MockBlockHeader::from_height(2))
+            .unwrap();
+
+        assert_eq!(
+            storage.historical_state.get_next_version(),
+            SlotNumber::new(1),
+            "Block 1 is written at version 0, so the next block must be at version 1"
+        );
+        assert_eq!(storage.get_value(&key(1)), Some(value(1)));
+    }
+
+    #[test]
+    fn storage_created_during_multi_block_commit_includes_all_blocks() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut storage_manager = new_storage_manager(&temp_dir);
+        save_block(&mut storage_manager, 1);
+        save_block(&mut storage_manager, 2);
+        let location = CommitFaultInjectionLocation::BeforeCommittingLive;
+        location.arm_wait_gate();
+        // Commits blocks 1 and 2 at once. Pauses before the live DB write of block 1.
+        storage_manager
+            .finalize(&MockBlockHeader::from_height(2))
+            .unwrap();
+        assert!(location.wait_until_wait_gate_reached(GATE_TIMEOUT));
+
+        let (storage, _) = storage_manager
+            .create_state_for(&MockBlockHeader::from_height(3))
+            .unwrap();
+        assert_eq!(
+            storage.historical_state.get_next_version(),
+            SlotNumber::new(2)
+        );
+        assert_eq!(
+            storage.get_value_without_consistency_checks(&key(1)),
+            Some(value(1))
+        );
+        assert_eq!(
+            storage.get_value_without_consistency_checks(&key(2)),
+            Some(value(2))
+        );
+
+        location.release_wait_gate();
+        storage_manager.flush().unwrap();
+    }
+
+    #[test]
+    fn storage_after_unknown_block_during_commit_includes_committing_block() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut storage_manager = new_storage_manager(&temp_dir);
+        save_block(&mut storage_manager, 1);
+        let location = CommitFaultInjectionLocation::BeforeCommittingLedger;
+        location.arm_wait_gate();
+        storage_manager
+            .finalize(&MockBlockHeader::from_height(1))
+            .unwrap();
+        assert!(location.wait_until_wait_gate_reached(GATE_TIMEOUT));
+
+        let (storage, _) = storage_manager
+            .create_state_after(&MockBlockHeader::from_height(100))
+            .unwrap();
+        assert_eq!(
+            storage.historical_state.get_next_version(),
+            SlotNumber::new(1)
+        );
+        assert_eq!(
+            storage.get_value_without_consistency_checks(&key(1)),
+            Some(value(1))
+        );
+
+        location.release_wait_gate();
+        storage_manager.flush().unwrap();
+    }
+
+    /// Executes and finalizes block 2 while the commit of block 1 is paused at `location`.
+    fn next_block_runs_while_commit_is_paused_at(location: CommitFaultInjectionLocation) {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut storage_manager = new_storage_manager(&temp_dir);
+        save_block(&mut storage_manager, 1);
+        location.arm_wait_gate();
+        storage_manager
+            .finalize(&MockBlockHeader::from_height(1))
+            .unwrap();
+        assert!(location.wait_until_wait_gate_reached(GATE_TIMEOUT));
+
+        let header = MockBlockHeader::from_height(2);
+        let (storage, _) = storage_manager.create_state_for(&header).unwrap();
+        assert_eq!(
+            storage.get_value_without_consistency_checks(&key(1)),
+            Some(value(1))
+        );
+        // Opening NOMT sessions waits for a paused NOMT commit, so it runs on another thread.
+        let changes = std::thread::scope(|scope| {
+            let execution = scope.spawn(move || {
+                storage
+                    .materialize_from_key_values(&[(key(2), Some(value(2)))], 1)
+                    .0
+            });
+            location.release_wait_gate();
+            execution.join().unwrap()
+        });
+        storage_manager
+            .save_change_set(&header, changes, SchemaBatch::default())
+            .unwrap();
+        storage_manager.finalize(&header).unwrap();
+        storage_manager.flush().unwrap();
+
+        let (storage, _) = storage_manager
+            .create_state_for(&MockBlockHeader::from_height(3))
+            .unwrap();
+        assert_eq!(storage.get_value(&key(1)), Some(value(1)));
+        assert_eq!(storage.get_value(&key(2)), Some(value(2)));
+    }
+
+    #[test]
+    fn next_block_runs_while_commit_is_paused_before_kernel_nomt() {
+        next_block_runs_while_commit_is_paused_at(
+            CommitFaultInjectionLocation::BeforeCommittingKernelNomt,
+        );
+    }
+
+    #[test]
+    fn next_block_runs_while_commit_is_paused_before_user_nomt() {
+        next_block_runs_while_commit_is_paused_at(
+            CommitFaultInjectionLocation::BeforeCommittingUserNomt,
+        );
+    }
+
+    #[test]
+    fn next_block_runs_while_commit_is_paused_before_ledger() {
+        next_block_runs_while_commit_is_paused_at(
+            CommitFaultInjectionLocation::BeforeCommittingLedger,
+        );
+    }
+
+    #[test]
+    fn next_block_runs_while_commit_is_paused_before_accessory() {
+        next_block_runs_while_commit_is_paused_at(
+            CommitFaultInjectionLocation::BeforeCommittingAccessory,
+        );
+    }
+
+    #[test]
+    fn next_block_runs_while_commit_is_paused_before_archival() {
+        next_block_runs_while_commit_is_paused_at(
+            CommitFaultInjectionLocation::BeforeCommittingArchival,
+        );
+    }
+
+    #[test]
+    fn next_block_runs_while_commit_is_paused_before_live() {
+        next_block_runs_while_commit_is_paused_at(
+            CommitFaultInjectionLocation::BeforeCommittingLive,
+        );
+    }
+
+    #[test]
+    #[should_panic(expected = "crashing the node")]
+    fn background_commit_panic_is_raised_by_flush() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut storage_manager = new_storage_manager(&temp_dir);
+        save_block(&mut storage_manager, 1);
+        CommitFaultInjectionLocation::BeforeCommittingLedger.set_crash_env();
+        storage_manager
+            .finalize(&MockBlockHeader::from_height(1))
+            .unwrap();
+
+        let _ = storage_manager.flush();
+    }
 }
