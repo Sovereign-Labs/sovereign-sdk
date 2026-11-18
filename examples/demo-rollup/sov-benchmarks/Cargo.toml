@@ -32,6 +32,7 @@ sov-metrics = { workspace = true, default-features = false }
 sov-mock-da = { workspace = true, features = ["arbitrary", "native"] }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-stf-runner = { workspace = true }
+sov-sequencer = { workspace = true }
 
 demo-stf = { workspace = true, features = ["test-utils", "arbitrary"] }
 reqwest = { workspace = true, features = ["stream"] }
@@ -48,12 +49,13 @@ prettytable-rs = "^0.10"
 criterion = "0.5.1"
 bincode = { workspace = true }
 anyhow = { workspace = true }
+serde_json = { workspace = true }
 serde = { workspace = true, default-features = false, features = [
     "alloc",
     "derive",
 ] }
 backon = { workspace = true }
-tokio = { workspace = true, default-features = false, features = ["process"] }
+tokio = { workspace = true, default-features = false, features = ["process", "net", "io-util", "time"] }
 async-trait = { workspace = true }
 humantime = "2.1"
 clap = { workspace = true }
@@ -68,6 +70,11 @@ harness = false
 [[bench]]
 name = "rollup_coarse_measure"
 path = "src/node/rollup_coarse_measure.rs"
+harness = false
+
+[[bench]]
+name = "rollup_full_cycle"
+path = "src/node/rollup_full_cycle.rs"
 harness = false
 
 [features]

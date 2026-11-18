@@ -59,6 +59,16 @@ struct BenchParams {
     blocks: u64,
     transactions_per_block: u64,
     timer_output: bool,
+    warm_signature_cache: bool,
+}
+
+fn parse_bool_env(name: &str) -> Option<bool> {
+    let val = env::var(name).ok()?;
+    match val.as_str() {
+        "true" | "1" | "yes" => Some(true),
+        "false" | "0" | "no" => Some(false),
+        val => panic!("Unknown value '{val}' for {name}. expected true/false/0/1/yes/no"),
+    }
 }
 
 impl BenchParams {
@@ -66,6 +76,7 @@ impl BenchParams {
         let mut blocks: u64 = 100;
         let mut transactions_per_block = 1000;
         let mut timer_output = true;
+        let warm_signature_cache = parse_bool_env("SOV_BENCH_WARM_SIG_CACHE").unwrap_or(false);
 
         if let Ok(val) = env::var("SOV_BENCH_TXNS_PER_BLOCK") {
             transactions_per_block = val
@@ -95,6 +106,7 @@ impl BenchParams {
             blocks,
             transactions_per_block,
             timer_output,
+            warm_signature_cache,
         }
     }
 }
@@ -112,6 +124,10 @@ where
 {
     let params = BenchParams::new();
     let mut num_success_txns: u64 = 0;
+
+    if params.warm_signature_cache {
+        warm_signature_cache::<S, Sm>(&params);
+    }
 
     let (mut runner, roles) = setup_with_runner_and_spec::<MockZkvm, Sm, S>(
         params.transactions_per_block,
@@ -178,6 +194,44 @@ where
         );
     }
     Ok(())
+}
+
+/// Fills the process-global signature verification cache, as the preferred sequencer's warm-up
+/// workers do for a real node: the same transactions are executed once on a throwaway runner.
+/// Keys are seeded and block time is frozen, so the throwaway runner produces byte-identical
+/// transactions, and the timed run then hits the cache.
+fn warm_signature_cache<S, Sm>(params: &BenchParams)
+where
+    Sm: ForklessStorageManager,
+    S: Spec<
+        InnerZkvm = MockZkvm,
+        OuterZkvm = MockZkvm,
+        Da = MockDaSpec,
+        Address = MultiAddressEvmSolana,
+        Storage = Sm::Storage,
+    >,
+{
+    let total_txs = params.blocks * params.transactions_per_block;
+    if total_txs > sov_modules_api::capabilities::DEFAULT_SIGNATURE_CACHE_SIZE as u64 {
+        println!(
+            "WARNING: {total_txs} txs exceed the signature cache size ({}), so the cache is only partly warm",
+            sov_modules_api::capabilities::DEFAULT_SIGNATURE_CACHE_SIZE
+        );
+    }
+    let (mut runner, roles) = setup_with_runner_and_spec::<MockZkvm, Sm, S>(
+        params.transactions_per_block,
+        Default::default(),
+    );
+    let token_id = prefill_state(&roles, &mut runner);
+    let blocks = generate_transfers::<S, Sm>(params.blocks, token_id, &roles, &mut runner);
+    let now = Instant::now();
+    for filtered_block in blocks {
+        runner.execute(filtered_block);
+    }
+    println!(
+        "Signature cache warmed in {}",
+        format_duration(now.elapsed())
+    );
 }
 
 #[tokio::main]
