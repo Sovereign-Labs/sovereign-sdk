@@ -161,10 +161,25 @@ where
         Vq: ?Sized,
         Writer: StateWriter<N>,
     {
-        let key = self.slot_key(key);
+        self.set_by_slot_key(&self.slot_key(key), value, state)
+    }
+
+    /// Like [`Self::set`], for a key built with [`Self::slot_key`]. Lets a caller that reads and
+    /// writes the same entry encode its key once.
+    pub fn set_by_slot_key<Vq, Writer>(
+        &mut self,
+        key: &SlotKey,
+        value: &Vq,
+        state: &mut Writer,
+    ) -> Result<(), Writer::Error>
+    where
+        Codec::ValueCodec: EncodeLike<Vq, V>,
+        Vq: ?Sized,
+        Writer: StateWriter<N>,
+    {
         #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Setting map value");
-        state.set(&key, self.slot_value(value))
+        state.set(key, self.slot_value(value))
     }
 
     /// Calls [`StateMap::set`] iff the key is not already present in the map.
@@ -230,10 +245,22 @@ where
         Kq: ?Sized,
         Reader: StateReader<N>,
     {
-        let key = self.slot_key(key);
+        self.get_by_slot_key(&self.slot_key(key), state)
+    }
+
+    /// Like [`Self::get`], for a key built with [`Self::slot_key`]. Lets a caller that reads and
+    /// writes the same entry encode its key once.
+    pub fn get_by_slot_key<Reader>(
+        &self,
+        key: &SlotKey,
+        state: &mut Reader,
+    ) -> Result<Option<V>, Reader::Error>
+    where
+        Reader: StateReader<N>,
+    {
         #[cfg(feature = "expensive-observability")]
         tracing::trace!(%key, "Getting map value");
-        state.get_decoded(&key, self.codec())
+        state.get_decoded(key, self.codec())
     }
 
     /// Returns a borrowed value from the map, preventing mutable access to the map until this reference is dropped.
