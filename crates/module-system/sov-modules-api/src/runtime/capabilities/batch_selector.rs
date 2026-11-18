@@ -90,11 +90,16 @@ pub trait BlobSelector {
         Vec<DiscardedBlob>,
     )>;
 
-    /// Extracts all delayed non-preferred blobs that belong to the given slots.
+    /// Extracts all delayed non-preferred blobs that belong to the given slots, paying their
+    /// pre-execution checks out of their deferred escrow at `gas_price_for_new_block`.
+    ///
+    /// `gas_price_for_new_block` must be the base fee of the rollup block being built, i.e. read
+    /// after `increment_rollup_height`, so that it matches the price the node uses.
     #[allow(clippy::type_complexity)]
     fn get_non_preferred_blobs<CF: InjectedControlFlow<Self::Spec> + Clone>(
         &mut self,
         slot_range: impl Iterator<Item = SlotNumber>,
+        gas_price_for_new_block: &<<Self::Spec as Spec>::Gas as crate::Gas>::Price,
         state: &mut KernelStateAccessor<'_, Self::Spec>,
         cf: CF,
     ) -> Vec<SelectedBlob<Self::Spec, IterableBatchWithId<Self::Spec, CF>>>;

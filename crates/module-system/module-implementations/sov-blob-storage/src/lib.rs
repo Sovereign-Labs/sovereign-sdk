@@ -236,6 +236,26 @@ impl<S: Spec> BlobStorage<S> {
             .get(&sequence_number, state)
     }
 
+    /// Returns the escrow holders of the deferred blobs stored for the given slot. Blobs whose
+    /// funds are not held in a deferred escrow (e.g. emergency registrations) are skipped.
+    #[cfg(feature = "test-utils")]
+    pub fn get_deferred_escrow_holders<R: sov_modules_api::StateReader<sov_state::Kernel>>(
+        &self,
+        slot_number: SlotNumber,
+        state: &mut R,
+    ) -> Result<Vec<DerivedHolder>, R::Error> {
+        Ok(self
+            .deferred_blobs
+            .get(&slot_number, state)?
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|blob| match blob.balance_store {
+                Escrow::DerivedHolder(holder) => Some(holder),
+                Escrow::Direct(_) | Escrow::None => None,
+            })
+            .collect())
+    }
+
     /// What the [`SequenceNumber`] of the next [`PreferredBlobData`]s MUST
     /// be.
     pub fn next_sequence_number(&self, state: &mut impl InfallibleKernelStateAccessor) -> u64 {
