@@ -64,6 +64,10 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for TxScratchpad<S, I>
         )
     }
 
+    fn commit_writes(&mut self, writes: super::super::internals::PendingWrites) {
+        self.inner.writes.merge_newer(writes);
+    }
+
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
         <RevertableWriter<I> as UniversalStateAccessor>::set_value(
             &mut self.inner,

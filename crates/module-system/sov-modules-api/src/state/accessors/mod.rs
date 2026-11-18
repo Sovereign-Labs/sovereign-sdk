@@ -85,6 +85,16 @@ pub(super) mod seal {
         fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue);
 
         fn delete_value(&mut self, namespace: Namespace, key: &SlotKey);
+
+        /// Applies a committed layer's pending writes, as `set_value` / `delete_value` would.
+        fn commit_writes(&mut self, writes: super::internals::PendingWrites) {
+            for ((key, namespace), value) in writes.into_iter() {
+                match value {
+                    Some(value) => self.set_value(namespace, &key, value),
+                    None => self.delete_value(namespace, &key),
+                }
+            }
+        }
     }
 }
 

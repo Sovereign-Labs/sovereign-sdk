@@ -476,10 +476,25 @@ pub(super) struct RevertableWriter<T> {
 
 /// Pending writes of a [`RevertableWriter`]: one map per namespace, so a lookup hashes the
 /// borrowed key instead of building a `(key, namespace)` tuple.
-pub(crate) struct PendingWrites {
+pub struct PendingWrites {
     user: HashMap<SlotKey, Option<SlotValue>>,
     kernel: HashMap<SlotKey, Option<SlotValue>>,
     accessory: HashMap<SlotKey, Option<SlotValue>>,
+}
+
+fn merge_newer_map(
+    older: &mut HashMap<SlotKey, Option<SlotValue>>,
+    mut newer: HashMap<SlotKey, Option<SlotValue>>,
+) {
+    if newer.len() > older.len() {
+        // Keep the bigger map and add the older entries it doesn't override.
+        std::mem::swap(older, &mut newer);
+        for (key, value) in newer {
+            older.entry(key).or_insert(value);
+        }
+    } else {
+        older.extend(newer);
+    }
 }
 
 impl PendingWrites {
@@ -527,7 +542,20 @@ impl PendingWrites {
         .flat_map(|(namespace, map)| map.iter().map(move |(k, v)| ((k, namespace), v)))
     }
 
-    fn into_iter(self) -> impl Iterator<Item = ((SlotKey, Namespace), Option<SlotValue>)> {
+    /// Adds `newer` writes on top of these ones, as inserting each of them would, but hashes only
+    /// the entries of whichever map is smaller.
+    pub(crate) fn merge_newer(&mut self, newer: PendingWrites) {
+        let PendingWrites {
+            user,
+            kernel,
+            accessory,
+        } = newer;
+        merge_newer_map(&mut self.user, user);
+        merge_newer_map(&mut self.kernel, kernel);
+        merge_newer_map(&mut self.accessory, accessory);
+    }
+
+    pub(crate) fn into_iter(self) -> impl Iterator<Item = ((SlotKey, Namespace), Option<SlotValue>)> {
         [
             (Namespace::User, self.user),
             (Namespace::Kernel, self.kernel),
@@ -560,9 +588,7 @@ impl<T> RevertableWriter<T> {
     where
         T: UniversalStateAccessor + PerBlockCache,
     {
-        for ((key, namespace), value) in self.writes.into_iter() {
-            Self::commit_entry(&mut self.inner, namespace, &key, value);
-        }
+        self.inner.commit_writes(self.writes);
 
         self.inner.update_cache_with(self.cache_writes);
 
@@ -573,15 +599,6 @@ impl<T> RevertableWriter<T> {
         self.inner
     }
 
-    fn commit_entry(inner: &mut T, namespace: Namespace, key: &SlotKey, value: Option<SlotValue>)
-    where
-        T: UniversalStateAccessor,
-    {
-        match value {
-            Some(value) => inner.set_value(namespace, key, value),
-            None => inner.delete_value(namespace, key),
-        };
-    }
 }
 
 impl<S: Spec> RevertableWriter<StateCheckpoint<S>> {
