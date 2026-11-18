@@ -2,19 +2,13 @@ use std::collections::BTreeMap;
 
 use crate::preferred_end_to_end::DaLayerWithSubscription;
 use crate::utils::tempdir_inside_codebase_dir;
-use base64::prelude::BASE64_STANDARD;
-use base64::Engine;
-use sov_api_spec::types as api_types;
 use sov_mock_da::BlockProducingConfig;
-use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
-use sov_modules_api::RawTx;
 use sov_modules_api::{DispatchCall, HexHash, HexString};
 use sov_modules_stf_blueprint::Runtime;
 use sov_rest_utils::PaginatedResponse;
 use sov_test_modules::state_map_tester::CallMessage;
 use sov_test_modules::state_map_tester::StateKey;
 use sov_test_modules::state_map_tester::StateMapTester;
-use sov_test_utils::default_test_signed_transaction;
 use sov_test_utils::generate_optimistic_runtime_with_kernel;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
@@ -31,29 +25,18 @@ type TestNomtBlueprint = RtAgnosticBlueprint<TestSpec, TestRuntime<TestSpec>, Te
 
 const STATE_MAP_ADDRESS: HexHash = HexString([1u8; 32]);
 
-fn tx_modify_state_map(
-    key: &Ed25519PrivateKey,
-    generation: u64,
+fn modify_state_map(
     address: HexHash,
     index: u32,
     new_value: Option<u32>,
-) -> RawTx {
-    let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::StateMapTester(
+) -> <TestRuntime<TestSpec> as DispatchCall>::Decodable {
+    <TestRuntime<TestSpec> as DispatchCall>::Decodable::StateMapTester(
         CallMessage::ModifyStateMap {
             address,
             index,
             new_value,
         },
-    );
-
-    let tx = default_test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
-        key,
-        &msg,
-        generation,
-        &<TestRuntime<TestSpec> as Runtime<TestSpec>>::CHAIN_HASH,
-    );
-
-    RawTx::new(borsh::to_vec(&tx).unwrap())
+    )
 }
 
 generate_optimistic_runtime_with_kernel!(
@@ -116,14 +99,9 @@ async fn send_value_and_update_values(
     key: (HexHash, u32),
     new_value: Option<u32>,
     values: &mut BTreeMap<StateKey, u32>,
-    iter: u32,
 ) {
-    let tx = tx_modify_state_map(&user.private_key, iter as u64, key.0, key.1, new_value);
     test_rollup
-        .api_client()
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
+        .submit(user, modify_state_map(key.0, key.1, new_value))
         .await
         .unwrap();
     if let Some(new_value) = new_value {
@@ -158,7 +136,7 @@ async fn do_step(
     iter: u32,
 ) {
     // Step 1: Send a tx to update the state map.
-    send_value_and_update_values(test_rollup, user, key, new_value, values, iter).await;
+    send_value_and_update_values(test_rollup, user, key, new_value, values).await;
 
     // Step 2: Produce a new block, maybe notifying the sequencer
     //
@@ -258,12 +236,8 @@ async fn test_state_map_single_item_lookup() {
     let index = 0x1234u32;
     let value = 0x5678u32;
 
-    let tx = tx_modify_state_map(&user.private_key, 0, address, index, Some(value));
     test_rollup
-        .api_client()
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
+        .submit(&user, modify_state_map(address, index, Some(value)))
         .await
         .unwrap();
     da_layer.produce_and_wait_for_slot().await;

@@ -126,13 +126,9 @@ async fn test_rate_limiting() {
     let client = test_rollup.api_client().clone();
 
     // Send tx that takes 200ms but the limit for each sender is 3000*0.5% = 15ms
-    let tx = tx_set_value_and_sleep(&admin.private_key, 0, 99, 200);
-
     // The transaction is accepted but the sender has been rate-limited after it is executed.
-    client
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
+    test_rollup
+        .submit(&admin, set_value_and_sleep(99, 200))
         .await
         .unwrap();
 
@@ -409,17 +405,27 @@ async fn test_subnet_bucket_is_shared_ipv6() {
     assert_subnet_bucket_is_shared("2001:db8::/64", "2001:db8::1", "2001:db8::2").await;
 }
 
+fn set_value_and_sleep(
+    value_to_set: u64,
+    sleep_millis: u64,
+) -> <TestRuntime<TestSpec> as DispatchCall>::Decodable {
+    <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
+        sov_value_setter::CallMessage::SetValueAndSleep {
+            value: value_to_set as u32,
+            sleep_millis,
+        },
+    )
+}
+
 fn tx_set_value_and_sleep(
     key: &Ed25519PrivateKey,
     generation: u64,
     value_to_set: u64,
     sleep_millis: u64,
 ) -> RawTx {
-    let msg = <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
-        sov_value_setter::CallMessage::SetValueAndSleep {
-            value: value_to_set as u32,
-            sleep_millis,
-        },
-    );
-    encode_call::<RT>(key, generation, &msg)
+    encode_call::<RT>(
+        key,
+        generation,
+        &set_value_and_sleep(value_to_set, sleep_millis),
+    )
 }

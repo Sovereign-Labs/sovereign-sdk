@@ -4,7 +4,7 @@ use sov_api_spec::{types, ResponseValue};
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::capabilities::RollupHeight;
-use sov_modules_api::{RawTx, Runtime};
+use sov_modules_api::{DispatchCall, RawTx, Runtime};
 use sov_node_client::NodeClient;
 use sov_test_utils::runtime::genesis::operator::HighLevelOperatorGenesisConfig;
 use sov_test_utils::runtime::GenesisParams;
@@ -77,7 +77,6 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     let (test_rollup, admin) = create_test_rollup(None, finalization_blocks).await;
 
     let mut slot_subscription = test_rollup.client.client.subscribe_slots().await.unwrap();
-    let api_client = test_rollup.api_client().clone();
 
     // Produce the minimum paced DA blocks needed for readiness.
     // We intentionally avoid `produce_enough_finalized_slots()` here because it also performs
@@ -93,10 +92,8 @@ async fn sequencer_stops_if_stop_at_height_too_small(finalization_blocks: u32) {
     // Produce enough blocks with transactions to advance rollup height past stop_at_height.
     // Transactions are required to trigger batch production and increment rollup height.
     let target_height = stop_at_height.get() + finalization_blocks as u64 + 2;
-    let mut nonce = 0;
     while test_rollup.height().await.get() < target_height {
-        send_tx(&admin, nonce, &api_client).await.unwrap();
-        nonce += 1;
+        test_rollup.submit(&admin, set_value(8)).await.unwrap();
         test_rollup.da_service.produce_block_now().await.unwrap();
         next_within(
             &mut slot_subscription,
@@ -437,6 +434,15 @@ async fn create_test_rollup(
         .start()
         .await,
         admin,
+    )
+}
+
+fn set_value(value_to_set: u64) -> <TestRuntime<TestSpec> as DispatchCall>::Decodable {
+    <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
+        sov_value_setter::CallMessage::SetValue {
+            value: value_to_set as u32,
+            gas: None,
+        },
     )
 }
 

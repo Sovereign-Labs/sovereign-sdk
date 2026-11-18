@@ -203,14 +203,7 @@ async fn test_sequencer_event_stream_filtering() {
         .subscribe_to_events_with_filter("Bank/*,ValueSetter/*")
         .await
         .unwrap();
-    let tx = tx_set_value(&admin.private_key, 0, 1000);
-    let _ = test_rollup
-        .api_client()
-        .accept_tx(&api_types::AcceptTxBody {
-            body: BASE64_STANDARD.encode(&tx),
-        })
-        .await
-        .unwrap();
+    test_rollup.submit(&admin, set_value(1000)).await.unwrap();
 
     assert!(
         tokio::time::timeout(Duration::from_secs(1), bank_events.next())
@@ -287,12 +280,8 @@ async fn test_sequencer_event_stream_lag_message() {
 
     for i in 0..num_txs {
         // Send a tx that emits many events to generate lots of data
-        let tx = tx_event_emitter(&admin.private_key, emit_pattern.clone(), i as u64);
-        let _ = test_rollup
-            .api_client()
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
+        test_rollup
+            .submit(&admin, emit_events(emit_pattern.clone()))
             .await
             .unwrap();
         if i < 2 {

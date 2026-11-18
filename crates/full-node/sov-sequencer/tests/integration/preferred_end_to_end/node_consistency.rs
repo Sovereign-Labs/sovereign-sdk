@@ -123,19 +123,13 @@ async fn visible_hashes_match_across_node_and_sequencer() {
         .unwrap();
 
     // Run a few rounds of checking the state root to be extra sure nothing gets screwed up over time.
-    let mut current_nonce = 0;
     for i in 0..10 {
         // Send a transaction to ensure that the sequencer has a batch in progress. This is necessary
         // because we start a new rollup block (with a new visible hash) each time we start a batch.
-        let tx = tx_set_value(&admin.private_key, current_nonce, i + 100).clone();
         test_rollup
-            .api_client()
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
+            .submit(&admin, set_value(i + 100))
             .await
             .unwrap();
-        current_nonce += 1;
 
         // Query the current state root from the node.
         let root = get_state_root(&test_rollup).await;
@@ -145,17 +139,10 @@ async fn visible_hashes_match_across_node_and_sequencer() {
         );
 
         // Send a transaction that asserts the correct state root.
-        let tx = tx_assert_state_root(&admin.private_key, current_nonce, root.root_hashes.clone())
-            .clone();
         test_rollup
-            .api_client()
-            .accept_tx(&api_types::AcceptTxBody {
-                body: BASE64_STANDARD.encode(&tx),
-            })
+            .submit(&admin, assert_state_root(root.root_hashes.clone()))
             .await
             .unwrap();
-
-        current_nonce += 1;
 
         // Produce a block. This will trigger the sequencer to close out its current batch and start a new one.
         test_rollup.force_close_batch().await.unwrap();

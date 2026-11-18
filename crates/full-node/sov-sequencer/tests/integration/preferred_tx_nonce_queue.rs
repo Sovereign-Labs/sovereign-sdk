@@ -102,6 +102,15 @@ async fn create_test_rollup(
     (test_rollup, admin)
 }
 
+fn set_value(value_to_set: u64) -> <TestRuntime<TestSpec> as DispatchCall>::Decodable {
+    <TestRuntime<TestSpec> as DispatchCall>::Decodable::ValueSetter(
+        sov_value_setter::CallMessage::SetValue {
+            value: value_to_set as u32,
+            gas: None,
+        },
+    )
+}
+
 /// Helper to create a ValueSetter transaction with a specific nonce.
 fn tx_set_value(key: &Ed25519PrivateKey, nonce: u64, value_to_set: u64) -> RawTx {
     tx_set_value_nonce::<TestRuntime<TestSpec>>(key, nonce, value_to_set, None)
@@ -182,11 +191,10 @@ async fn submit_parallel_txs(
 #[tokio::test(flavor = "multi_thread")]
 async fn test_consecutive_nonces() {
     let (test_rollup, admin) = create_test_rollup(DEFAULT_SIZE, DEFAULT_TIMEOUT).await;
-    let client = test_rollup.api_client().clone();
 
     // Submit 5 transactions with consecutive nonces (0, 1, 2, 3, 4)
-    for nonce in 0..5 {
-        submit_tx_set_value(&client, &admin.private_key, nonce, true).await;
+    for value in 0..5 {
+        test_rollup.submit(&admin, set_value(value)).await.unwrap();
     }
 
     // Sanity check
