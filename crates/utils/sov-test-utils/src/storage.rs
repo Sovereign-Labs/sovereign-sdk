@@ -82,7 +82,7 @@ impl<S: MerkleProofSpec> SimpleStorageManager<S> {
 
         let historical_state = FlatStateDb::new_with_customizations(
             dir.path().to_path_buf(),
-            1_000_000, // Use a 1MB state cache for tests
+            1024 * 1024 * 1024, // Production default, so benches see realistic cache hit rates
             Some(&config.clone().into()),
         )
         .unwrap();

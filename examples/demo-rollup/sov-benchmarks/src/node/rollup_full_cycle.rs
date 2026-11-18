@@ -319,6 +319,7 @@ async fn main() -> anyhow::Result<()> {
         c.max_batch_size_bytes = 7 * 1024 * 1024;
         c.max_concurrent_batch_blobs = 128;
         c.flat_state_rocksdb_statistics = true;
+        c.state_cache_size = None;
         if let SequencerKindConfig::Preferred(p) = &mut c.sequencer_config {
             p.ideal_lag_behind_finalized_slot = 3;
             p.batch_execution_time_limit_millis = 2000;
