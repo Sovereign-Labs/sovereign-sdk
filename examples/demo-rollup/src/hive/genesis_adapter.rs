@@ -6,7 +6,7 @@ mod types;
 use std::fs;
 use std::path::Path;
 
-use alloy::genesis::Genesis;
+use alloy_genesis::Genesis;
 use alloy_primitives::{hex, Address};
 use anyhow::{anyhow, bail, Context, Result};
 use serde_json::Value;

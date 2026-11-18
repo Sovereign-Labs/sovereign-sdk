@@ -14,7 +14,6 @@ publish = true
 workspace = true
 
 [dependencies]
-console-subscriber = { workspace = true, optional = true }
 sov-rollup-interface = { workspace = true, features = ["native"] }
 sov-shutdown = { workspace = true, optional = true }
 sov-stf-runner = { workspace = true, optional = true }
@@ -48,6 +47,10 @@ opentelemetry-otlp = { version = "0.31", default-features = false, features = ["
 opentelemetry-appender-tracing = { version = "0.31", optional = true }
 opentelemetry-semantic-conventions = { version = "0.31", features = ["semconv_experimental"], optional = true }
 tracing-opentelemetry = { version = "0.32", default-features = false, features = ["tracing-log"], optional = true }
+
+# Only usable when compiled with `--cfg tokio_unstable`, so don't build it otherwise.
+[target.'cfg(tokio_unstable)'.dependencies]
+console-subscriber = { workspace = true, optional = true }
 
 [features]
 default = ["native"]

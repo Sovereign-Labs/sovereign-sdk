@@ -1,4 +1,4 @@
-use alloy::genesis::ChainConfig;
+use alloy_genesis::ChainConfig;
 use anyhow::Result;
 use serde_json::Value;
 

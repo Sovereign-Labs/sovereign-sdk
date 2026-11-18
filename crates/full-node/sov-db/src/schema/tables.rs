@@ -22,7 +22,6 @@
 
 use borsh::ser::BorshSerialize;
 use borsh::BorshDeserialize;
-use byteorder::{BigEndian, ReadBytesExt, WriteBytesExt};
 use rockbound::schema::{ColumnFamilyName, KeyDecoder, KeyEncoder, ValueCodec};
 use rockbound::{CodecError, SchemaValue, SeekKeyEncoder};
 use sov_rollup_interface::common::SlotNumber;
@@ -30,6 +29,7 @@ use sov_rollup_interface::stf::{EventKey, StoredEvent};
 use sov_rollup_interface::zk::aggregated_proof::{
     SerializedAggregatedProof, SerializedPartialProofReceipt,
 };
+use std::io::Read;
 
 use super::types::{
     AccessoryKey, AccessoryStateValue, BatchNumber, DbHash, EventKeyNumber, EventNumber,
@@ -329,8 +329,7 @@ impl<K: AsRef<[u8]> + core::fmt::Debug> KeyEncoder<ModuleAccessoryState> for (K,
         let mut out = Vec::with_capacity(key_bytes.len() + std::mem::size_of::<u64>() + 8);
         key_bytes.serialize(&mut out).map_err(CodecError::from)?;
         // Write the version in big-endian order so that sorting order is based on the most-significant bytes of the key
-        out.write_u64::<BigEndian>(self.1.get())
-            .expect("serialization to vec is infallible");
+        out.extend_from_slice(&self.1.get().to_be_bytes());
         Ok(out)
     }
 }
@@ -345,7 +344,9 @@ impl KeyDecoder<ModuleAccessoryState> for (AccessoryKey, SlotNumber) {
     fn decode_key(data: &[u8]) -> rockbound::schema::Result<Self> {
         let mut cursor = std::io::Cursor::new(data);
         let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
-        let version = cursor.read_u64::<BigEndian>()?;
+        let mut version = [0u8; 8];
+        cursor.read_exact(&mut version)?;
+        let version = u64::from_be_bytes(version);
         Ok((key, SlotNumber::new(version)))
     }
 }
@@ -377,8 +378,7 @@ impl<K: AsRef<[u8]> + core::fmt::Debug> KeyEncoder<AccessoryKeysByVersion> for (
         let key_bytes = self.1.as_ref();
         let mut out = Vec::with_capacity(std::mem::size_of::<u64>() + key_bytes.len() + 8);
 
-        out.write_u64::<BigEndian>(self.0.get())
-            .expect("serialization to vec is infallible");
+        out.extend_from_slice(&self.0.get().to_be_bytes());
         key_bytes.serialize(&mut out).map_err(CodecError::from)?;
         Ok(out)
     }
@@ -393,7 +393,9 @@ impl<K: AsRef<[u8]> + core::fmt::Debug> SeekKeyEncoder<AccessoryKeysByVersion> f
 impl KeyDecoder<AccessoryKeysByVersion> for (SlotNumber, AccessoryKey) {
     fn decode_key(data: &[u8]) -> rockbound::schema::Result<Self> {
         let mut cursor = std::io::Cursor::new(data);
-        let version = cursor.read_u64::<BigEndian>()?;
+        let mut version = [0u8; 8];
+        cursor.read_exact(&mut version)?;
+        let version = u64::from_be_bytes(version);
         let key = Vec::<u8>::deserialize_reader(&mut cursor)?;
         Ok((SlotNumber::new(version), key))
     }

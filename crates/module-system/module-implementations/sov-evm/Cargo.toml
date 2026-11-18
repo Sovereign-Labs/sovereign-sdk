@@ -35,7 +35,6 @@ serde = { workspace = true }
 serde_json = { workspace = true }
 serde_with = { workspace = true }
 borsh = { workspace = true, features = ["rc"] }
-derive-new = { workspace = true }
 itertools = { workspace = true }
 hex = { workspace = true }
 jsonrpsee = { workspace = true, features = [
