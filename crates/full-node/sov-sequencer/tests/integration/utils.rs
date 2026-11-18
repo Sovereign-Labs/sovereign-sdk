@@ -21,6 +21,7 @@ use sov_modules_api::{
 };
 use sov_modules_stf_blueprint::GenesisParams;
 use sov_paymaster::PaymasterPolicyInitializer;
+use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::TxHash;
 use sov_sequencer::standard::{StdSequencer, StdSequencerConfig};
 use sov_state::Storage;
@@ -33,7 +34,7 @@ use sov_test_utils::runtime::{
 };
 use sov_test_utils::sequencer::TestSequencerSetup;
 use sov_test_utils::test_rollup::StoragePath;
-use sov_test_utils::test_rollup::{GenesisSource, RollupBuilder, TestRollup};
+use sov_test_utils::test_rollup::{FullNodeBlueprint, GenesisSource, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction, default_test_tx_details, test_signed_transaction, EncodeCall,
     MessageGenerator, RtAgnosticBlueprint, TestPrivateKey, TestSpec, TransactionType,
@@ -493,6 +494,54 @@ pub fn tx_set_value_nonce<RT: Runtime<TestSpec> + EncodeCall<ValueSetter<TestSpe
         tx_details.max_fee,
         UniquenessData::Nonce(nonce),
     )
+}
+
+/// Checks the `ValueSetter` value over REST, optionally at a historical `rollup_height`.
+/// `expected: None` asserts that the value is unset.
+pub async fn query_set_value<B: FullNodeBlueprint<Native>>(
+    test_rollup: &TestRollup<B>,
+    rollup_height: Option<u64>,
+    expected: Option<u64>,
+) -> anyhow::Result<()> {
+    query_set_value_helper(
+        test_rollup,
+        rollup_height.map(|n| format!("rollup_height={n}")),
+        expected,
+    )
+    .await
+}
+
+pub async fn query_set_value_helper<B: FullNodeBlueprint<Native>>(
+    test_rollup: &TestRollup<B>,
+    query_param: Option<String>,
+    expected: Option<u64>,
+) -> anyhow::Result<()> {
+    let url = format!(
+        "/modules/value-setter/state/value{}",
+        if let Some(query_param) = query_param {
+            format!("?{query_param}")
+        } else {
+            "".to_string()
+        }
+    );
+    let response = test_rollup
+        .client
+        .query_rest_endpoint::<serde_json::Value>(&url)
+        .await?;
+    // quick/easy way to detect if the request returned a error, i.e 404
+    if response.get("message").is_some() {
+        return Err(anyhow::anyhow!("API request failed: {:?}", response));
+    }
+
+    tracing::debug!(?response, "Queried state value");
+    let found_value = response["value"].as_u64();
+
+    anyhow::ensure!(
+        found_value == expected,
+        "Expected value {expected:?}, found {found_value:?}"
+    );
+
+    Ok(())
 }
 
 // This allows for easily setting file sharing when using Docker Desktop.

@@ -3,9 +3,9 @@
 
 use crate::utils::{encode_call, EventEmitterModule};
 use crate::utils::{
-    generate_paymaster_tx, generate_txs, pause_update_state, tempdir_inside_codebase_dir,
-    tx_set_value_with_gas, ModuleWithVersionedStateAccessInSlotHook, SeqTestRollup,
-    MAX_BATCH_EXECUTION_TIME_MILLIS,
+    generate_paymaster_tx, generate_txs, pause_update_state, query_set_value,
+    query_set_value_helper, tempdir_inside_codebase_dir, tx_set_value_with_gas,
+    ModuleWithVersionedStateAccessInSlotHook, SeqTestRollup, MAX_BATCH_EXECUTION_TIME_MILLIS,
 };
 use anyhow::Context;
 use backon::Retryable;
@@ -58,7 +58,7 @@ use test_strategy::Arbitrary;
 use tokio::sync::RwLock;
 use tokio::time::sleep;
 use tokio_stream::StreamExt;
-use tracing::{debug, info};
+use tracing::info;
 
 const DELAYED_TX_DELAY_MS: u64 = 2500;
 const NOTIFICATION_TIMEOUT: Duration = Duration::from_secs(30);
@@ -3773,19 +3773,6 @@ pub(crate) async fn run_action_against_test_rollup(
     Ok(test_rollup)
 }
 
-async fn query_set_value(
-    test_rollup: &TestRollup<TestBlueprint>,
-    rollup_height: Option<u64>,
-    expected: Option<u64>,
-) -> anyhow::Result<()> {
-    query_set_value_helper(
-        test_rollup,
-        rollup_height.map(|n| format!("rollup_height={n}")),
-        expected,
-    )
-    .await
-}
-
 async fn query_hook_count(
     test_rollup: &TestRollup<TestBlueprint>,
     rollup_height: Option<u64>,
@@ -3818,36 +3805,6 @@ async fn query_set_value_by_slot_number(
         expected,
     )
     .await
-}
-
-async fn query_set_value_helper(
-    test_rollup: &TestRollup<TestBlueprint>,
-    query_param: Option<String>,
-    expected: Option<u64>,
-) -> anyhow::Result<()> {
-    let url = format!(
-        "/modules/value-setter/state/value{}",
-        if let Some(query_param) = query_param {
-            format!("?{query_param}")
-        } else {
-            "".to_string()
-        }
-    );
-    let response = test_rollup
-        .client
-        .query_rest_endpoint::<serde_json::Value>(&url)
-        .await?;
-    // quick/easy way to detect if the request returned a error, i.e 404
-    if response.get("message").is_some() {
-        return Err(anyhow::anyhow!("API request failed: {:?}", response));
-    }
-
-    debug!(?response, "Queried state value");
-    let found_value = response["value"].as_u64();
-
-    anyhow::ensure!(found_value == expected);
-
-    Ok(())
 }
 
 pub(super) fn tx_set_value(key: &Ed25519PrivateKey, generation: u64, value_to_set: u64) -> RawTx {
