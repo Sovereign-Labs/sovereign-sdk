@@ -2,7 +2,6 @@
 
 use std::collections::hash_map::Entry;
 use std::convert::Infallible;
-use std::mem;
 
 #[cfg(feature = "native")]
 use crate::digest::typenum;
@@ -282,12 +281,10 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
 
     /// Commit the revertable part of the `ProvableStorageCache`.
     pub fn commit_revertable_storage_cache(&mut self) {
-        let cap = self.revertable_ordered_reads.capacity();
-        let revertable_ordered_reads =
-            mem::replace(&mut self.revertable_ordered_reads, Vec::with_capacity(cap));
+        // Draining keeps the buffer's capacity for the next transaction.
         self.ordered_db_reads.extend(
-            revertable_ordered_reads
-                .into_iter()
+            self.revertable_ordered_reads
+                .drain(..)
                 .map(|(key, node)| (key, node.map(|n| n.leaf))),
         );
         self.cache.commit_revertable_log();
