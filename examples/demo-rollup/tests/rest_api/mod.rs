@@ -103,7 +103,11 @@ fn synthetic_load_tx() -> Transaction<Runtime<TestSpec>, TestSpec> {
     )
 }
 
-async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
+/// Returns the rollup too: dropping a `TestRollup` shuts the node down.
+async fn setup() -> anyhow::Result<(
+    TestRollup<MockDemoRollup<Native>>,
+    demo_stf_json_client::Client,
+)> {
     let test_rollup = start_warm_rollup().await?;
 
     let tx = synthetic_load_tx();
@@ -113,14 +117,13 @@ async fn setup() -> anyhow::Result<demo_stf_json_client::Client> {
 
     test_rollup.da_service.produce_n_blocks_now(3).await?;
 
-    Ok(demo_stf_json_client::Client::new(
-        &test_rollup.client.base_url,
-    ))
+    let client = demo_stf_json_client::Client::new(&test_rollup.client.base_url);
+    Ok((test_rollup, client))
 }
 
 #[tokio::test(flavor = "multi_thread")]
 async fn flaky_test_runtime_spec_with_gen_client() -> anyhow::Result<()> {
-    let runtime_client = setup().await?;
+    let (_test_rollup, runtime_client) = setup().await?;
 
     check_base_runtime_info(&runtime_client)
         .await

@@ -184,3 +184,35 @@ async fn start_and_stop_node_in_dir(dir: Arc<TempDir>) {
 
     test_rollup.shutdown().await.unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn dropping_test_rollup_triggers_shutdown() {
+    let dir = Arc::new(tempfile::tempdir().unwrap());
+    let genesis_params = GenesisParams {
+        runtime: <TestRuntime<TestSpec> as Runtime<TestSpec>>::GenesisConfig::from_minimal_config(
+            HighLevelOptimisticGenesisConfig::generate().into(),
+        ),
+    };
+
+    let test_rollup = RollupBuilder::<TestBlueprint>::new(
+        GenesisSource::CustomParams(genesis_params),
+        TEST_DEFAULT_MOCK_DA_PERIODIC_PRODUCING,
+        1,
+    )
+    .set_config(|c| {
+        c.storage = StoragePath::Tmp(dir);
+        c.rollup_prover_config = RollupProverConfig::Disabled;
+    })
+    .with_standard_sequencer()
+    .start()
+    .await
+    .unwrap();
+    let primary_shutdown = test_rollup.primary_shutdown.clone();
+
+    drop(test_rollup);
+
+    assert!(
+        primary_shutdown.is_triggered(),
+        "Dropping a TestRollup should send the primary shutdown signal"
+    );
+}
