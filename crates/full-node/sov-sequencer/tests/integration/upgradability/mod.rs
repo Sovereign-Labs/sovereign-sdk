@@ -1,10 +1,7 @@
-use crate::utils::{
-    new_test_rollup, pause_update_state, tx_set_value_with_gas, MAX_BATCH_EXECUTION_TIME_MILLIS,
-};
+use crate::utils::{pause_update_state, tx_set_value_with_gas, SeqTestRollup};
 use futures::StreamExt;
 use sov_api_spec::{types, ResponseValue};
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
-use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::{RawTx, Runtime};
@@ -442,24 +439,21 @@ async fn create_test_rollup(
     let dir = Arc::new(tempfile::tempdir().unwrap());
 
     (
-        new_test_rollup::<TestRuntime<TestSpec>>(
-            dir.clone(),
+        SeqTestRollup::<TestRuntime<TestSpec>>::new(
             genesis_params
                 .runtime
                 .sequencer_registry
                 .sequencer_config
                 .seq_da_address,
             genesis_params,
-            minimum_profit_per_tx,
-            true,
-            max_batch_size,
-            BlockProducingConfig::Manual,
-            None,
-            blob_processing_timeout_secs,
-            MAX_BATCH_EXECUTION_TIME_MILLIS,
-            stop_at_rollup_height,
-            finalization_blocks,
         )
+        .dir(dir.clone())
+        .minimum_profit_per_tx(minimum_profit_per_tx)
+        .max_batch_size_bytes(max_batch_size)
+        .blob_processing_timeout_secs(blob_processing_timeout_secs)
+        .stop_at_rollup_height(stop_at_rollup_height)
+        .finalization_blocks(finalization_blocks)
+        .start()
         .await,
         admin,
     )

@@ -12,12 +12,9 @@ use sov_test_modules::sequencing_data::{CallMessage, SequencingDataTester};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::RtAgnosticBlueprint;
-use sov_test_utils::{
-    default_test_signed_transaction, generate_runtime, TestSpec, TestUser,
-    TEST_BLOB_PROCESSING_TIMEOUT, TEST_FINALIZATION_BLOCKS, TEST_MAX_BATCH_SIZE,
-};
+use sov_test_utils::{default_test_signed_transaction, generate_runtime, TestSpec, TestUser};
 
-use crate::utils::{new_test_rollup, tempdir_inside_codebase_dir, MAX_BATCH_EXECUTION_TIME_MILLIS};
+use crate::utils::{tempdir_inside_codebase_dir, SeqTestRollup};
 
 generate_runtime!(
     name: TestRuntime,
@@ -54,26 +51,19 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<S>) {
     let (genesis_params, admin) = create_genesis_params();
     let dir = tempdir_inside_codebase_dir();
 
-    let rollup = new_test_rollup::<RT>(
-        dir,
+    let rollup = SeqTestRollup::<RT>::new(
         genesis_params
             .runtime
             .sequencer_registry
             .sequencer_config
             .seq_da_address,
         genesis_params,
-        0,
-        true,
-        TEST_MAX_BATCH_SIZE,
-        BlockProducingConfig::OnBatchSubmit {
-            block_wait_timeout_ms: None,
-        },
-        None,
-        TEST_BLOB_PROCESSING_TIMEOUT,
-        MAX_BATCH_EXECUTION_TIME_MILLIS,
-        None,
-        TEST_FINALIZATION_BLOCKS,
     )
+    .dir(dir)
+    .block_producing_config(BlockProducingConfig::OnBatchSubmit {
+        block_wait_timeout_ms: None,
+    })
+    .start()
     .await;
 
     (rollup, admin)

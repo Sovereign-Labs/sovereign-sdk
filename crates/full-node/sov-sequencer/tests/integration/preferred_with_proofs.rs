@@ -1,4 +1,3 @@
-use sov_mock_da::BlockProducingConfig;
 use sov_mock_zkvm::crypto::private_key::Ed25519PrivateKey;
 use sov_modules_api::{RawTx, Runtime};
 use sov_modules_stf_blueprint::GenesisParams;
@@ -6,12 +5,12 @@ use sov_stf_runner::processes::RollupProverConfig;
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::{
     generate_zk_runtime_with_kernel, test_rollup::TestRollup, RtAgnosticBlueprint, TestSpec,
-    TestUser, TEST_DEFAULT_MAX_FEE, TEST_MAX_BATCH_SIZE,
+    TestUser, TEST_DEFAULT_MAX_FEE,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use tokio_stream::StreamExt;
 
-use crate::utils::{new_test_rollup, tempdir_inside_codebase_dir, tx_set_value_with_gas};
+use crate::utils::{tempdir_inside_codebase_dir, tx_set_value_with_gas, SeqTestRollup};
 
 generate_zk_runtime_with_kernel!(
     kernel_type: sov_kernels::soft_confirmations::SoftConfirmationsKernel<'a, S>,
@@ -55,24 +54,19 @@ async fn create_test_rollup_with_prover() -> (TestRollup<TestBlueprint>, TestUse
     let dir = tempdir_inside_codebase_dir();
 
     (
-        new_test_rollup::<TestRuntime<TestSpec>>(
-            dir.clone(),
+        SeqTestRollup::<TestRuntime<TestSpec>>::new(
             genesis_params
                 .runtime
                 .sequencer_registry
                 .sequencer_config
                 .seq_da_address,
             genesis_params,
-            0,
-            true,
-            TEST_MAX_BATCH_SIZE,
-            BlockProducingConfig::Manual,
-            Some(RollupProverConfig::Prove),
-            60,
-            1000,
-            None,
-            0,
         )
+        .dir(dir.clone())
+        .rollup_prover_config(RollupProverConfig::Prove)
+        .max_batch_execution_time_millis(1000)
+        .finalization_blocks(0)
+        .start()
         .await,
         admin,
     )

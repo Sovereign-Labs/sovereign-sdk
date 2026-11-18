@@ -1,6 +1,5 @@
-use crate::utils::{new_test_rollup, MAX_BATCH_EXECUTION_TIME_MILLIS};
+use crate::utils::SeqTestRollup;
 use sov_kernels::soft_confirmations::SoftConfirmationsKernel;
-use sov_mock_da::BlockProducingConfig;
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::prelude::*;
 use sov_modules_api::transaction::{Transaction, UnsignedTransaction};
@@ -13,7 +12,7 @@ use sov_test_utils::sov_bank::{config_gas_token_id, CallMessage as BankCallMessa
 use sov_test_utils::test_rollup::TestRollup;
 use sov_test_utils::{
     default_test_tx_details, generate_operator_runtime_with_kernel, RtAgnosticBlueprint, TestSpec,
-    TestUser, TEST_BLOB_PROCESSING_TIMEOUT, TEST_DEFAULT_USER_BALANCE, TEST_MAX_BATCH_SIZE,
+    TestUser, TEST_DEFAULT_USER_BALANCE,
 };
 use sov_value_setter::{ValueSetter, ValueSetterConfig};
 use std::sync::Arc;
@@ -46,24 +45,17 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
     let dir = Arc::new(tempfile::tempdir().unwrap());
 
     (
-        new_test_rollup::<RT>(
-            dir.clone(),
+        SeqTestRollup::<RT>::new(
             genesis_params
                 .runtime
                 .sequencer_registry
                 .sequencer_config
                 .seq_da_address,
             genesis_params,
-            0,
-            true,
-            TEST_MAX_BATCH_SIZE,
-            BlockProducingConfig::Manual,
-            None,
-            TEST_BLOB_PROCESSING_TIMEOUT,
-            MAX_BATCH_EXECUTION_TIME_MILLIS,
-            None,
-            1,
         )
+        .dir(dir.clone())
+        .finalization_blocks(1)
+        .start()
         .await,
         admin,
     )

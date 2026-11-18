@@ -11,10 +11,7 @@ use sov_paymaster::PaymasterConfig;
 use sov_rollup_interface::stf::BlobDiscardReason;
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::test_rollup::TestRollup;
-use sov_test_utils::{
-    default_test_signed_transaction_with_nonce, TestSpec, TestUser, TEST_BLOB_PROCESSING_TIMEOUT,
-    TEST_MAX_BATCH_SIZE,
-};
+use sov_test_utils::{default_test_signed_transaction_with_nonce, TestSpec, TestUser};
 use sov_value_setter::ValueSetterConfig;
 
 #[allow(unused_imports)]
@@ -23,7 +20,7 @@ use crate::preferred_end_to_end::{
     setup_test_rollup_with_initial_state, InvalidGeneration, TestBlueprint, TestRuntime, TestState,
     TestingAction,
 };
-use crate::utils::{new_test_rollup, tempdir_inside_codebase_dir, MAX_BATCH_EXECUTION_TIME_MILLIS};
+use crate::utils::{tempdir_inside_codebase_dir, SeqTestRollup};
 
 const PREFERRED_SEQUENCER_DB_NAME: &str = "preferred_sequencer";
 
@@ -51,25 +48,19 @@ async fn create_test_rollup() -> (TestRollup<TestBlueprint>, TestUser<TestSpec>)
     let dir = tempdir_inside_codebase_dir();
 
     (
-        new_test_rollup::<TestRuntime<TestSpec>>(
-            dir,
+        SeqTestRollup::<TestRuntime<TestSpec>>::new(
             genesis_params
                 .runtime
                 .sequencer_registry
                 .sequencer_config
                 .seq_da_address,
             genesis_params,
-            0,
-            true,
-            TEST_MAX_BATCH_SIZE,
-            BlockProducingConfig::Periodic { block_time_ms: 300 },
-            //BlockProducingConfig::Manual,
-            None,
-            TEST_BLOB_PROCESSING_TIMEOUT,
-            MAX_BATCH_EXECUTION_TIME_MILLIS,
-            None,
-            0,
         )
+        .dir(dir)
+        .block_producing_config(BlockProducingConfig::Periodic { block_time_ms: 300 })
+        //BlockProducingConfig::Manual,
+        .finalization_blocks(0)
+        .start()
         .await,
         admin,
     )
