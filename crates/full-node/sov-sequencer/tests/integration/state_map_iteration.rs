@@ -96,7 +96,6 @@ async fn create_test_nomt_rollup_with_long_finalization(
         c.storage = StoragePath::Tmp(dir);
         c.max_concurrent_batch_blobs = 64;
         if let SequencerKindConfig::Preferred(ref mut config) = &mut c.sequencer_config {
-            config.num_cache_warmup_workers = 0;
             config.batch_execution_time_limit_millis = 6000;
             config.ideal_lag_behind_finalized_slot = 10;
         }

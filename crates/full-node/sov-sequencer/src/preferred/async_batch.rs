@@ -1,6 +1,5 @@
 use std::sync::Arc;
 
-use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use sov_modules_api::state::TxScratchpad;
 use sov_modules_api::{
     ChangeSet, Context, DispatchCall, ExecutionContext, FullyBakedTx, Gas, GasArray,
@@ -21,7 +20,7 @@ use crate::common::sender_is_allowed;
 pub enum MaybeAsyncBatch<S: Spec> {
     /// The batch is streamed from a channel.
     Async {
-        txs_receiver: Receiver<FullyBakedTxWithMaybeChangeSet>,
+        txs_receiver: Receiver<FullyBakedTx>,
         responder: AsyncBatchResponder<S>,
         setup_sender: Option<oneshot::Sender<ChangeSet>>,
         address: S::Address,
@@ -35,7 +34,7 @@ pub enum MaybeAsyncBatch<S: Spec> {
 impl<S: Spec> MaybeAsyncBatch<S> {
     /// Create a new batch with a receiver for transactions.
     pub fn new_async(
-        txs_receiver: Receiver<FullyBakedTxWithMaybeChangeSet>,
+        txs_receiver: Receiver<FullyBakedTx>,
         setup_sender: oneshot::Sender<ChangeSet>,
         result_channel: Sender<AsyncBatchResult<S>>,
         tx_profit_threshold: u128,
@@ -67,34 +66,11 @@ impl<S: Spec> MaybeAsyncBatch<S> {
 /// The control flow injector for an async batch.
 #[derive(Debug)]
 pub enum MaybeAsyncBatchControlFlow<S: Spec> {
-    Async {
-        responder: AsyncBatchResponder<S>,
-        // If this is the main sequencer executor, it may benefit from using a precomputed
-        // transaction change set from the worker warm-up executor.
-        maybe_tx_change_set: Option<oneshot::Receiver<TxChangeSet>>,
-    },
+    Async { responder: AsyncBatchResponder<S> },
     Sync,
 }
 
 impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
-    fn try_warm_up_cache(&mut self, scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {
-        match self {
-            MaybeAsyncBatchControlFlow::Async {
-                responder: _,
-                maybe_tx_change_set,
-            } => {
-                if let Some(mut rec) = maybe_tx_change_set.take() {
-                    // If the worker executor provides cache values in time, we apply them to the main executor.
-                    // Otherwise, we proceed without waiting and let the main executor continue.
-                    if let Ok(change_set) = rec.try_recv() {
-                        scratchpad.apply_change_set(change_set);
-                    }
-                }
-            }
-            MaybeAsyncBatchControlFlow::Sync => {}
-        }
-    }
-
     fn post_tx(
         &self,
         provisional_outcome: ProvisionalSequencerOutcome<S>,
@@ -104,10 +80,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         match self {
-            Self::Async {
-                responder,
-                maybe_tx_change_set: _,
-            } => responder.post_tx(
+            Self::Async { responder } => responder.post_tx(
                 provisional_outcome,
                 dirty_scratchpad,
                 slot_gas_meter_before_tx,
@@ -132,10 +105,7 @@ impl<S: Spec> InjectedControlFlow<S> for MaybeAsyncBatchControlFlow<S> {
         call: &<RT as DispatchCall>::Decodable,
     ) -> TxControlFlow<()> {
         match self {
-            Self::Async {
-                responder,
-                maybe_tx_change_set: _,
-            } => responder.pre_flight(runtime, context, call),
+            Self::Async { responder } => responder.pre_flight(runtime, context, call),
             Self::Sync => <NoOpControlFlow as InjectedControlFlow<S>>::pre_flight(
                 &NoOpControlFlow,
                 runtime,
@@ -244,7 +214,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         slot_gas_meter_before_tx: &SlotGasMeter<S>,
         gas_used: <S as Spec>::Gas,
-        execution_context: ExecutionContext,
+        _execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         let execution_time_micros =
             self.execution_start.borrow().elapsed().as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
@@ -266,7 +236,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
         if !receipt.receipt.is_successful() {
             let response = ExecutedTxResponse {
                 receipt: receipt.clone(),
-                tx_changes: dirty_scratchpad.tx_changes(execution_context),
+                tx_changes: dirty_scratchpad.tx_changes(),
                 remaining_slot_gas: *slot_gas_meter_before_tx.remaining_preferred_slot_gas(), // Since we ignore this tx, the remaining gas limit is unchanged
                 sequencing_scratchpad,
             };
@@ -295,7 +265,7 @@ impl<S: Spec> AsyncBatchResponder<S> {
 
         let response = ExecutedTxResponse {
             receipt: receipt.clone(),
-            tx_changes: dirty_scratchpad.tx_changes(execution_context),
+            tx_changes: dirty_scratchpad.tx_changes(),
             remaining_slot_gas,
             sequencing_scratchpad,
         };
@@ -356,17 +326,14 @@ impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
                 txs_receiver,
                 responder,
                 ..
-            } => Handle::current()
-                .block_on(txs_receiver.recv())
-                .map(|mut item| {
-                    (
-                        item.tx,
-                        MaybeAsyncBatchControlFlow::Async {
-                            responder: responder.clone_for_tx(),
-                            maybe_tx_change_set: item.receiver.take(),
-                        },
-                    )
-                }),
+            } => Handle::current().block_on(txs_receiver.recv()).map(|tx| {
+                (
+                    tx,
+                    MaybeAsyncBatchControlFlow::Async {
+                        responder: responder.clone_for_tx(),
+                    },
+                )
+            }),
             MaybeAsyncBatch::Sync { batch } => batch
                 .next()
                 .map(|(item, _)| (item, MaybeAsyncBatchControlFlow::Sync)),
