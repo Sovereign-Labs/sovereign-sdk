@@ -32,7 +32,8 @@ pub struct StateCheckpoint<S: Spec> {
     pub(super) visible_slot_num: VisibleSlotNumber,
     pub(super) rollup_height: RollupHeight,
     pub(super) cache: TempCache,
-    pub(super) metrics: StateMetrics,
+    // Boxed for the same reason as `delta`.
+    pub(super) metrics: Box<StateMetrics>,
 }
 
 #[cfg(feature = "native")]
@@ -100,7 +101,7 @@ impl<S: Spec> StateCheckpoint<S> {
             visible_slot_num: self.visible_slot_num,
             rollup_height: self.rollup_height,
             cache: TempCache::new(),
-            metrics: StateMetrics::default(),
+            metrics: Box::default(),
         }
     }
 
@@ -196,7 +197,7 @@ impl<S: Spec> StateCheckpoint<S> {
             visible_slot_num,
             rollup_height,
             cache: TempCache::new(),
-            metrics: StateMetrics::default(),
+            metrics: Box::default(),
         }
     }
 
