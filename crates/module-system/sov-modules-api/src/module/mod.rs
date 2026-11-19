@@ -202,22 +202,39 @@ pub trait EventEmitter: ModuleInfo {
 }
 
 fn event_key<T: Debug>(module_prefix: &str, event: &T) -> String {
-    format!("{module_prefix}/{}", leading_ident(event))
+    // `{module_prefix}/{leading_ident(event)}`, with the identifier written straight into the key.
+    let mut key = String::with_capacity(module_prefix.len() + 32);
+    key.push_str(module_prefix);
+    key.push('/');
+    leading_ident_after(key, event)
 }
 
 /// A helper function to make string representation of the inner call message from the runtime's `Decodable` representation.
 pub fn call_message_repr<D: DispatchCall>(decodable: &D::Decodable) -> String {
     let variant_part = first_variant(decodable);
-    format!(
-        "{}_{}",
-        decodable.discriminant().as_ref(),
-        variant_part.as_deref().unwrap_or("Unknown")
-    )
+    let variant = variant_part.as_deref().unwrap_or("Unknown");
+    let discriminant = decodable.discriminant();
+    let discriminant = discriminant.as_ref();
+    // `{discriminant}_{variant}`, without the formatting machinery.
+    let mut repr = String::with_capacity(discriminant.len() + 1 + variant.len());
+    repr.push_str(discriminant);
+    repr.push('_');
+    repr.push_str(variant);
+    repr
 }
 
 /// The first identifier in `value`'s Debug representation.
+#[cfg(test)]
 fn leading_ident(value: &impl Debug) -> String {
-    let mut sink = LeadingIdent::default();
+    leading_ident_after(String::new(), value)
+}
+
+/// `prefix` followed by the first identifier in `value`'s Debug representation.
+fn leading_ident_after(prefix: String, value: &impl Debug) -> String {
+    let mut sink = LeadingIdent {
+        ident: prefix,
+        done: false,
+    };
     debug_prefix(value, &mut sink);
     sink.ident
 }
