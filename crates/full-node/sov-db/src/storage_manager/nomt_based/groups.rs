@@ -184,7 +184,8 @@ where
         group: CommitGroup,
         expected_latest: SlotNumber,
     ) -> anyhow::Result<()> {
-        self.committer().commit_helper(group, Some(expected_latest))
+        self.committer()
+            .commit_helper(group, FlatCommitMode::RewriteHead(expected_latest))
     }
 
     /// The latest slot committed to the on-disk flat state DB.
@@ -445,6 +446,16 @@ where
     }
 }
 
+/// How [`DbCommitter`] writes the flat state.
+#[derive(Debug, Clone, Copy)]
+enum FlatCommitMode {
+    /// Commit as a new version on top of the latest one (normal finalization).
+    Append,
+    /// Overwrite the latest version, which must equal the given slot (offline migration).
+    #[cfg(feature = "migration-script")]
+    RewriteHead(SlotNumber),
+}
+
 /// Write handles of [`DbGroup`] used to commit a [`CommitGroup`].
 pub(crate) struct DbCommitter<H> {
     merklized_state: Arc<NomtStateDb<H>>,
@@ -458,19 +469,19 @@ where
     H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
 {
     pub(crate) fn commit(&self, group: CommitGroup) -> anyhow::Result<()> {
-        self.commit_helper(group, None)
+        self.commit_helper(group, FlatCommitMode::Append)
     }
 
     fn commit_helper(
         &self,
         group: CommitGroup,
-        expected_latest: Option<SlotNumber>,
+        flat_commit_mode: FlatCommitMode,
     ) -> anyhow::Result<()> {
-        tracing::trace!(?expected_latest, "Committing a group...");
+        tracing::trace!(?flat_commit_mode, "Committing a group...");
         // The last commit had to be successful.
         let CommitGroup { nomt, rockbound } = group;
         let merklized_commit = self.commit_merklized(nomt)?;
-        self.commit_rockbound(rockbound, merklized_commit, expected_latest)
+        self.commit_rockbound(rockbound, merklized_commit, flat_commit_mode)
     }
 
     // ======================= DANGER ZONE ======================
@@ -488,7 +499,7 @@ where
         &self,
         group: SnapshotGroup,
         merklized_commit: MerklizedCommitMetric,
-        expected_latest: Option<SlotNumber>,
+        flat_commit_mode: FlatCommitMode,
     ) -> anyhow::Result<()> {
         let SnapshotGroup {
             historical_state,
@@ -513,21 +524,12 @@ where
 
         // Flat State
         tracing::trace!("Committing Flat DB..");
-        #[cfg(feature = "migration-script")]
-        let flat_metrics = if let Some(expected_latest) = expected_latest {
-            self.flat_state
-                .commit_at_latest_checked(historical_state, expected_latest)?
-        } else {
-            self.flat_state.commit(historical_state)?
-        };
-
-        #[cfg(not(feature = "migration-script"))]
-        let flat_metrics = {
-            assert!(
-                expected_latest.is_none(),
-                "expected_latest must be none when not in migration script"
-            );
-            self.flat_state.commit(historical_state)?
+        let flat_metrics = match flat_commit_mode {
+            FlatCommitMode::Append => self.flat_state.commit(historical_state)?,
+            #[cfg(feature = "migration-script")]
+            FlatCommitMode::RewriteHead(expected_latest) => self
+                .flat_state
+                .commit_at_latest_checked(historical_state, expected_latest)?,
         };
 
         // ======================= END DANGER ZONE ======================
