@@ -336,7 +336,7 @@ fn encode_zero_gas_tx(
         max_fee: Amount::ZERO,
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         gas_limit: None,
-        chain_id: config_value!("CHAIN_ID"),
+        chain_hash_fragment: 0,
     };
     let tx = test_signed_transaction::<TestRuntime<TestSpec>, TestSpec>(
         key,

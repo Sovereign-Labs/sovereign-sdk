@@ -65,7 +65,7 @@ const TEST_MESSAGE = Buffer.from(
       max_priority_fee_bips: 0,
       max_fee: "100000000000",
       gas_limit: [1000000000, 1000000000],
-      chain_id: 4321,
+      chain_hash_fragment: "795741901218843403",
     },
     chain_name: "TestChain",
   }),

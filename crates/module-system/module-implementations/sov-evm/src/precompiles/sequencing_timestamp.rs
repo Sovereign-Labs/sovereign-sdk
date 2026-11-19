@@ -1,6 +1,5 @@
 use alloy_primitives::{Bytes, U256};
-use borsh::BorshDeserialize;
-use sov_modules_api::{HDTimestamp, Spec, TxState};
+use sov_modules_api::{Spec, TxState};
 
 use super::{
     Address, EvmPrecompile, EvmPrecompileEnv, EvmPrecompileSet, PrecompileError, PrecompileOutput,
@@ -14,7 +13,14 @@ pub const SEQUENCING_TIMESTAMP_PRECOMPILE_ADDRESS: Address = Address::new([
 
 const SEQUENCING_TIMESTAMP_GAS: u64 = 50;
 
-/// A built-in precompile that returns the current sequencing/oracle timestamp in nanoseconds.
+/// A built-in precompile that returns the current oracle timestamp in nanoseconds.
+///
+/// The SDK updates the oracle from the preferred sequencer's transaction timestamp before each
+/// transaction is dispatched, so within a preferred-sequencer transaction this normally
+/// reflects that transaction's own sequencing timestamp. Exceptions: the oracle never moves
+/// backwards, so a regressing transaction timestamp is ignored and the previous (larger) oracle
+/// value is returned; and before the oracle activation height the update is a no-op. When no
+/// oracle time is set, it falls back to the DA layer time.
 #[derive(Clone)]
 pub struct SequencingTimestampPrecompile<S: Spec> {
     chain_state: sov_chain_state::ChainState<S>,
@@ -71,17 +77,9 @@ fn sequencing_timestamp_precompile<S: Spec, ST: TxState<S>>(
         )));
     }
 
-    let nanos = env
-        .sov_context
-        .and_then(|ctx| ctx.sequencing_data().as_ref())
-        .and_then(|bytes| HDTimestamp::try_from_slice(bytes).ok())
-        .map(|timestamp| timestamp.as_nanos())
-        .map(Ok)
-        .unwrap_or_else(|| {
-            chain_state
-                .get_oracle_time_nanos(env.state)
-                .map_err(|e| PrecompileError::State(e.to_string()))
-        })?;
+    let nanos = chain_state
+        .get_oracle_time_nanos(env.state)
+        .map_err(|e| PrecompileError::State(e.to_string()))?;
 
     Ok(PrecompileOutput {
         gas_used: SEQUENCING_TIMESTAMP_GAS,

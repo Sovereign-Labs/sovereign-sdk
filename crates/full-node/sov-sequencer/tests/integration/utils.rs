@@ -142,7 +142,7 @@ pub fn generate_paymaster_tx<RT: Runtime<TestSpec> + EncodeCall<Paymaster<TestSp
         max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
         max_fee: TEST_DEFAULT_MAX_FEE,
         gas_limit: Some(TEST_DEFAULT_GAS_LIMIT.into()),
-        chain_id: config_value!("CHAIN_ID"),
+        chain_hash_fragment: 0,
     };
     TransactionType::<RT, TestSpec>::sign_and_serialize(
         <RT as EncodeCall<Paymaster<TestSpec>>>::to_decodable(message),

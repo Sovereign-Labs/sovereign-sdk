@@ -128,7 +128,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
 
             inner
                 .executor_events_sender
-                .flush_transactions_cache(info.next_tx_number)
+                .flush_transactions_cache(info)
                 .await;
             inner.executor_events_sender.clean_all_batches_from_cache();
 
@@ -143,7 +143,7 @@ pub(crate) async fn operation_for_replica<S: Spec, Rt: Runtime<S>>(
                 inner.executor_events_sender.clean_all_batches_from_cache();
                 inner
                     .executor_events_sender
-                    .flush_transactions_cache(info.next_tx_number)
+                    .flush_transactions_cache(info)
                     .await;
 
                 let executor = Some(Box::new(
@@ -218,7 +218,7 @@ async fn reply_soft_confirmations<S: Spec, Rt: Runtime<S>>(
         );
         inner
             .executor_events_sender
-            .flush_transactions_cache(info.next_tx_number)
+            .flush_transactions_cache(info)
             .await;
 
         Some(Box::new(

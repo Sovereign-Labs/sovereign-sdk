@@ -2,6 +2,7 @@ import SovereignClient from "@sovereign-sdk/client";
 import type { APIError } from "@sovereign-sdk/client";
 import type { RollupSchema, Serializer } from "@sovereign-sdk/serializers";
 import type { Signer } from "@sovereign-sdk/signers";
+import type { HexString } from "@sovereign-sdk/utils";
 import { bytesToHex, hexToBytes } from "@sovereign-sdk/utils";
 import { Base64 } from "js-base64";
 import { VersionMismatchError } from "../errors";
@@ -33,10 +34,23 @@ export type TransactionContext<
   rollup: Rollup<S, C>;
 };
 
+export type TransactionSigningPayloadContext<
+  S extends BaseTypeSpec,
+  C extends RollupContext,
+> = {
+  unsignedTx: S["UnsignedTransaction"];
+  chainHash: Uint8Array;
+  rollup: Rollup<S, C>;
+};
+
 export type TypeBuilder<S extends BaseTypeSpec, C extends RollupContext> = {
   unsignedTransaction: (
     context: UnsignedTransactionContext<S, C>,
   ) => Promise<S["UnsignedTransaction"]>;
+
+  transactionSigningPayload: (
+    context: TransactionSigningPayloadContext<S, C>,
+  ) => Promise<S["TransactionSigningPayload"]>;
 
   transaction: (context: TransactionContext<S, C>) => Promise<S["Transaction"]>;
 };
@@ -45,6 +59,11 @@ export type TypeBuilder<S extends BaseTypeSpec, C extends RollupContext> = {
  * Arbitrary context that is associated with the rollup.
  */
 export type RollupContext = Record<string, unknown>;
+
+export type CredentialIdToAddress = (
+  credentialId: Uint8Array,
+  schema: RollupSchema,
+) => string;
 
 /**
  * The configuration for a rollup client.
@@ -66,6 +85,10 @@ export type RollupConfig<C extends RollupContext> = {
    * is detected then it will be called again with the new rollup schema.
    */
   getSerializer: (schema: RollupSchema) => Serializer;
+  /**
+   * Optional hook for converting multisig credential IDs into the rollup's native address format.
+   */
+  credentialIdToAddress?: CredentialIdToAddress;
   /**
    * Arbitrary context that is associated with the rollup.
    */
@@ -143,10 +166,32 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
    * TODO: How to request a specific uniqueness strategy explicitly
    */
   async dedup(publicKey: Uint8Array): Promise<S["Dedup"]> {
-    // for public key credential id is just its bytes representation
-    const credentialId = bytesToHex(publicKey);
+    return this.dedupByCredentialId(bytesToHex(publicKey));
+  }
+
+  /**
+   * Retrieve dedup information about the provided credential ID.
+   */
+  async dedupByCredentialId(credentialId: HexString): Promise<S["Dedup"]> {
     const response = await this.rollup.addresses.dedup(credentialId);
     return response as S["Dedup"];
+  }
+
+  /**
+   * Builds an unsigned transaction for the provided runtime call.
+   */
+  async buildUnsignedTransaction(
+    runtimeCall: S["RuntimeCall"],
+    params?: { overrides?: DeepPartial<S["UnsignedTransaction"]> },
+  ): Promise<S["UnsignedTransaction"]> {
+    const context = {
+      runtimeCall,
+      rollup: this,
+      overrides:
+        params?.overrides ?? ({} as DeepPartial<S["UnsignedTransaction"]>),
+    };
+
+    return this._typeBuilder.unsignedTransaction(context);
   }
 
   /**
@@ -228,12 +273,9 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
     { signer, overrides }: CallParams<S>,
     options?: SovereignClient.RequestOptions,
   ): Promise<TransactionResult<S["Transaction"]>> {
-    const context = {
-      runtimeCall,
-      rollup: this,
-      overrides: overrides ?? ({} as DeepPartial<S["UnsignedTransaction"]>),
-    };
-    const unsignedTx = await this._typeBuilder.unsignedTransaction(context);
+    const unsignedTx = await this.buildUnsignedTransaction(runtimeCall, {
+      overrides,
+    });
 
     return this.signAndSubmitTransaction(
       unsignedTx,
@@ -259,19 +301,16 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
     runtimeCall: S["RuntimeCall"],
     { signer, overrides }: CallParams<S>,
   ): Promise<S["Transaction"]> {
-    const context = {
-      runtimeCall,
-      rollup: this,
-      overrides: overrides ?? ({} as DeepPartial<S["UnsignedTransaction"]>),
-    };
-    const unsignedTx = await this._typeBuilder.unsignedTransaction(context);
+    const unsignedTx = await this.buildUnsignedTransaction(runtimeCall, {
+      overrides,
+    });
     return this.signTransaction(unsignedTx, signer);
   }
 
   /**
    * Signs an unsigned transaction using the provided signer.
-   * Creates a signature by combining the serialized unsigned transaction with the chain hash,
-   * then constructs a fully signed transaction.
+   * Creates a signature over the serialized transaction signing payload, then constructs a fully
+   * signed transaction.
    *
    * @param unsignedTx - The unsigned transaction to sign.
    * @param signer - The signer to use for signing the transaction.
@@ -282,11 +321,16 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
     signer: Signer,
   ): Promise<S["Transaction"]> {
     const serializer = await this.serializer();
-    const serializedUnsignedTx = serializer.serializeUnsignedTx(unsignedTx);
-    const chainHash = await this.chainHash();
-    const signature = await signer.sign(
-      new Uint8Array([...serializedUnsignedTx, ...chainHash]),
+    const transactionSigningPayload =
+      await this._typeBuilder.transactionSigningPayload({
+        unsignedTx,
+        chainHash: await this.chainHash(),
+        rollup: this,
+      });
+    const signingBytes = serializer.serializeSigningPayload(
+      transactionSigningPayload,
     );
+    const signature = await signer.sign(signingBytes);
     const publicKey = await signer.publicKey();
     const context = {
       unsignedTx,
@@ -391,9 +435,16 @@ export class Rollup<S extends BaseTypeSpec, C extends RollupContext> {
 }
 
 function isVersionMismatchError(e: APIError): boolean {
+  // biome-ignore lint/suspicious/noExplicitAny: Stainless error details are untyped
+  const details = (e.error as any)?.details;
+  if (details?.code === "invalid_chain_hash_fragment") {
+    return true;
+  }
+
+  const error = details?.error;
   if (
-    // biome-ignore lint/suspicious/noExplicitAny: yolo
-    (e.error as any)?.details?.error?.includes("Signature verification failed")
+    typeof error === "string" &&
+    error.includes("Signature verification failed")
   ) {
     return true;
   }

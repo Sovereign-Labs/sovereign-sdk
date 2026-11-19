@@ -1,4 +1,3 @@
-use sov_accounts::{Accounts, CallMessage as AccountsCallMessage};
 use sov_address::{EthereumAddress, EvmCryptoSpec};
 use sov_eip712_auth::{
     Eip712Authenticator, Eip712AuthenticatorInput, Eip712AuthenticatorTrait, SchemaProvider,
@@ -8,9 +7,9 @@ use sov_mock_zkvm::MockZkvm;
 use sov_modules_api::capabilities::{TransactionAuthenticator, UniquenessData};
 use sov_modules_api::configurable_spec::ConfigurableSpec;
 use sov_modules_api::execution_mode::Native;
-use sov_modules_api::macros::config_value;
-use sov_modules_api::transaction::PubKeyAndSignature;
+use sov_modules_api::prelude::UnwrapInfallible;
 use sov_modules_api::transaction::TxDetails;
+use sov_modules_api::transaction::{chain_hash_fragment, PubKeyAndSignature};
 use sov_modules_api::transaction::{PriorityFeeBips, Transaction, UnsignedTransaction};
 use sov_modules_api::CryptoSpec;
 use sov_modules_api::Multisig;
@@ -20,7 +19,6 @@ use sov_rollup_interface::da::RelevantBlobs;
 use sov_rollup_interface::stf::{TxEffect, TxReceiptContents};
 use sov_test_utils::runtime::genesis::optimistic::HighLevelOptimisticGenesisConfig;
 use sov_test_utils::runtime::{TestRunner, ValueSetter};
-use sov_test_utils::TransactionTestCase;
 use sov_test_utils::{generate_runtime, EncodeCall, TestStorage, TestUser, TEST_DEFAULT_MAX_FEE};
 use sov_value_setter::CallMessage;
 
@@ -133,13 +131,27 @@ fn setup() -> (TestRunner<RT, S>, TestUser<S>) {
 }
 
 pub fn create_utx<S: Spec, RT: Runtime<S>>(message: RT::Decodable) -> UnsignedTransaction<RT, S> {
+    create_utx_with_generation::<S, RT>(message, 0, None)
+}
+
+pub fn create_utx_with_generation<S: Spec, RT: Runtime<S>>(
+    message: RT::Decodable,
+    generation: u64,
+    address_override: Option<S::Address>,
+) -> UnsignedTransaction<RT, S> {
+    let chain_hash = TestSchemaProvider::get_schema().chain_hash().unwrap();
     let details = TxDetails {
         max_priority_fee_bips: PriorityFeeBips::ZERO,
         max_fee: TEST_DEFAULT_MAX_FEE,
         gas_limit: None,
-        chain_id: config_value!("CHAIN_ID"),
+        chain_hash_fragment: chain_hash_fragment(&chain_hash),
     };
-    UnsignedTransaction::new_with_details(message, UniquenessData::Generation(0), details)
+    UnsignedTransaction::new_with_details(
+        message,
+        UniquenessData::Generation(generation),
+        details,
+        address_override,
+    )
 }
 
 pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
@@ -150,13 +162,38 @@ pub fn sign_utx_in_place<S: Spec, RT: Runtime<S>>(
 
     let transaction_type_index = schema
         .rollup_expected_index(
-            sov_modules_api::sov_universal_wallet::schema::RollupRoots::UnsignedTransaction,
+            sov_modules_api::sov_universal_wallet::schema::RollupRoots::TransactionSigningPayload,
         )
         .unwrap();
 
-    let utx_bytes = borsh::to_vec(&utx).expect("Failed to serialize unsigned transaction");
+    let signing_payload_bytes = utx.to_signing_bytes_v0(schema.chain_hash().unwrap());
     let eip712_signing_data = schema
-        .eip712_signing_digest(transaction_type_index, &utx_bytes)
+        .eip712_signing_digest(transaction_type_index, &signing_payload_bytes)
+        .expect("Failed to calculate EIP712 hash");
+
+    private_key.sign(&eip712_signing_data)
+}
+
+/// Signs a V1 (multisig) unsigned transaction with the given private key using EIP712.
+/// The credential_address is computed from the provided multisig.
+pub fn sign_utx_v1_in_place<S: Spec, RT: Runtime<S>>(
+    utx: &UnsignedTransaction<RT, S>,
+    multisig: &Multisig<<S::CryptoSpec as CryptoSpec>::PublicKey>,
+    private_key: &<S::CryptoSpec as CryptoSpec>::PrivateKey,
+) -> <S::CryptoSpec as CryptoSpec>::Signature {
+    let schema = TestSchemaProvider::get_schema();
+
+    let transaction_type_index = schema
+        .rollup_expected_index(
+            sov_modules_api::sov_universal_wallet::schema::RollupRoots::TransactionSigningPayload,
+        )
+        .unwrap();
+
+    let signing_payload_bytes = utx
+        .to_signing_bytes_v1(multisig, schema.chain_hash().unwrap())
+        .expect("Chain hash fragment should match the schema chain hash");
+    let eip712_signing_data = schema
+        .eip712_signing_digest(transaction_type_index, &signing_payload_bytes)
         .expect("Failed to calculate EIP712 hash");
 
     private_key.sign(&eip712_signing_data)
@@ -178,11 +215,10 @@ pub fn create_tx<S: Spec, RT: Runtime<S>>(
     sign_utx::<S, RT>(utx, signer)
 }
 
-pub fn encode_message<S: Spec, RT: Runtime<S> + EncodeCall<ValueSetter<S>>>() -> RT::Decodable {
-    let msg = CallMessage::SetValue {
-        value: 0,
-        gas: None,
-    };
+pub fn encode_message<S: Spec, RT: Runtime<S> + EncodeCall<ValueSetter<S>>>(
+    value: u32,
+) -> RT::Decodable {
+    let msg = CallMessage::SetValue { value, gas: None };
     RT::to_decodable(msg)
 }
 
@@ -239,7 +275,7 @@ fn execute_tx_maybe_malformed(
 #[test]
 fn correct_signature_is_accepted() {
     let (mut runner, admin) = setup();
-    let call = encode_message::<_, RT>();
+    let call = encode_message::<_, RT>(1);
     let tx = create_tx::<_, RT>(call, &admin);
 
     let receipt = execute_tx(&mut runner, tx);
@@ -251,7 +287,7 @@ fn correct_signature_is_accepted() {
 #[test]
 fn duplicate_tx_is_rejected() {
     let (mut runner, admin) = setup();
-    let call = encode_message::<_, RT>();
+    let call = encode_message::<_, RT>(0);
     let tx = create_tx::<_, RT>(call, &admin);
     let tx_clone = tx.clone();
 
@@ -266,46 +302,65 @@ fn duplicate_tx_is_rejected() {
     assert!(
         error
             .to_string()
-            .contains("148 trailing bytes after transaction deserialization"),
-        "Expected error to contain '148 trailing bytes after transaction deserialization', got: {error}"
+            .contains("149 trailing bytes after transaction deserialization"),
+        "Expected error to contain '149 trailing bytes after transaction deserialization', got: {error}"
     );
 }
 
 #[test]
 fn test_multisig_signature_verification() {
-    use sov_test_utils::AsUser;
-    let (mut runner, admin) = setup();
-
-    // First, create and register a multisig
+    // `address_override` authorization correctness (positive + negative paths) is
+    // covered in sov-accounts/tests/integration/main.rs::test_v1_address_override_*.
+    // This test focuses on signature verification mechanics only.
     let multisig_keys = [
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),
         TestPrivateKey::generate(),
     ];
-
-    // Create the multisig and register it
     let multisig = Multisig::new(2, multisig_keys.iter().map(|k| k.pub_key()).collect());
     let multisig_credential_id =
         multisig.credential_id::<<<S as Spec>::CryptoSpec as CryptoSpec>::Hasher>();
-    runner.execute_transaction(TransactionTestCase {
-        input: admin.create_plain_message::<RT, Accounts<S>>(
-            AccountsCallMessage::InsertCredentialId(multisig_credential_id),
-        ),
-        assert: Box::new(move |result, _state| {
-            assert!(result.tx_receipt.is_successful());
-        }),
-    });
 
-    // Create a multisig transaction
-    let utx = create_utx::<S, RT>(encode_message::<_, RT>());
-    let mut signatures = Vec::new();
-    for key in multisig_keys.iter() {
-        signatures.push(sign_utx_in_place(&utx, key));
-    }
+    // Alice is a regular funded user; she pays gas for the multisig's transactions.
+    // The multisig acts on her behalf via an `address_override` authorized in genesis.
+    let alice = TestUser::<S>::generate_with_default_balance();
+    let alice_address = alice.address();
+
+    let genesis_config = HighLevelOptimisticGenesisConfig::generate()
+        .add_accounts_with_default_balance(1)
+        .add_accounts(vec![alice]);
+    let module_config = sov_value_setter::ValueSetterConfig {
+        admin: alice_address,
+    };
+    let mut genesis =
+        GenesisConfig::from_minimal_config(genesis_config.clone().into(), module_config);
+    genesis.accounts.accounts.push(sov_accounts::AccountData {
+        credential_id: multisig_credential_id,
+        address: alice_address,
+    });
+    let mut runner = TestRunner::new_with_genesis(genesis.into_genesis_params(), RT::default());
+
     // Generate a signature from a random private key that's not part of the multisig. We'll use this in some of the test cases.
     let random_private_key = TestPrivateKey::generate();
-    let random_signature = sign_utx_in_place(&utx, &random_private_key);
-    let tx = utx.to_multisig_tx(multisig);
+    let address_override = Some(alice_address);
+    let make_multisig_tx = |generation, value| {
+        let utx = create_utx_with_generation::<S, RT>(
+            encode_message::<_, RT>(value),
+            generation,
+            address_override,
+        );
+        let signatures = multisig_keys
+            .iter()
+            .map(|key| sign_utx_v1_in_place(&utx, &multisig, key))
+            .collect::<Vec<_>>();
+        let random_signature = sign_utx_v1_in_place(&utx, &multisig, &random_private_key);
+
+        (
+            utx.to_multisig_tx(multisig.clone()),
+            signatures,
+            random_signature,
+        )
+    };
 
     // Helper functions to assert the expected behavior of the transaction
     let assert_tx_success = |tx: Transaction<RT, S>, runner: &mut TestRunner<RT, S>| {
@@ -326,30 +381,45 @@ fn test_multisig_signature_verification() {
                 "Expected error to contain {reason}, got: {error}"
             );
         };
+    let assert_stored_value = |runner: &mut TestRunner<RT, S>, expected: u32| {
+        runner.query_state(|state| {
+            let runtime = RT::default();
+            assert_eq!(
+                runtime.value_setter.value.get(state).unwrap_infallible(),
+                Some(expected),
+            );
+        });
+    };
 
-    // A transaction with three valid signatures should succeed
+    // A transaction with three valid signatures should succeed and write `value = 3`.
     let tx_with_three_sigs = {
-        let mut tx = tx.clone();
+        let (mut tx, signatures, _) = make_multisig_tx(0, 3);
         for (key, signature) in multisig_keys.iter().zip(signatures.iter()) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
         Transaction::<RT, S>::from(tx)
     };
     assert_tx_success(tx_with_three_sigs, &mut runner);
+    assert_stored_value(&mut runner, 3);
 
-    // A transaction with only two valid signatures should succeed
+    // A transaction with only two valid signatures should succeed and write `value = 2`.
     let tx_with_two_sigs = {
-        let mut tx = tx.clone();
+        let (mut tx, signatures, _) = make_multisig_tx(1, 2);
         for (key, signature) in multisig_keys.iter().zip(signatures.iter().take(2)) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
         Transaction::<RT, S>::from(tx)
     };
     assert_tx_success(tx_with_two_sigs, &mut runner);
+    assert_stored_value(&mut runner, 2);
+
+    // From here on, every case is expected to be skipped — `value` should remain at 2.
+    // Each case uses a distinct sentinel for `SetValue { value }` so that a regression
+    // letting any case slip through points to which one leaked.
 
     // A transaction with only one valid signature should be skipped, since this is a 2/3 multisig.
     let tx_with_one_sig = {
-        let mut tx = tx.clone();
+        let (mut tx, signatures, _) = make_multisig_tx(2, 99);
         for (key, signature) in multisig_keys.iter().zip(signatures.iter().take(1)) {
             tx.add_signature(signature.clone(), key.pub_key()).unwrap();
         }
@@ -360,31 +430,30 @@ fn test_multisig_signature_verification() {
         &mut runner,
         "Not enough valid signatures. Required: 2, Got: 1",
     );
+    assert_stored_value(&mut runner, 2);
 
     // A transaction where one of the signatures isn't from this account should be skipped, since this changes the computed credential ID.
     let tx_with_random_sig = {
-        let mut tx = tx.clone();
+        let (mut tx, signatures, random_signature) = make_multisig_tx(3, 98);
         tx.add_signature(signatures[0].clone(), multisig_keys[0].pub_key())
             .unwrap();
         tx.signatures
             .try_push(PubKeyAndSignature {
-                signature: random_signature.clone(),
+                signature: random_signature,
                 pub_key: random_private_key.pub_key(),
             })
             .unwrap();
         Transaction::<RT, S>::from(tx)
     };
-    // Since the random signature is not part of the multisig, this changes the computed credential ID yielding a gas error. If we were to add a paymaster,
-    // The tx would succeed on a different account. In that case, this test case would need refinement to distinguish between the two cases.
-    assert_tx_skipped(
-        tx_with_random_sig,
-        &mut runner,
-        "Insufficient balance to pay for the transaction gas",
-    );
+    // The random key changes the credential_address so it no longer matches the signed bytes,
+    // so signature verification fails.
+    assert_tx_skipped(tx_with_random_sig, &mut runner, "signature error");
+    assert_stored_value(&mut runner, 2);
 
-    // A transaction with a duplicate signature should be skipped
+    // A transaction with a duplicate signature should be skipped — the duplicate changes
+    // the credential_address, causing signature verification failure.
     let tx_with_duplicate_sig = {
-        let mut tx = tx.clone();
+        let (mut tx, signatures, _) = make_multisig_tx(4, 97);
         tx.add_signature(signatures[0].clone(), multisig_keys[0].pub_key())
             .unwrap();
         tx.signatures
@@ -395,15 +464,12 @@ fn test_multisig_signature_verification() {
             .unwrap();
         Transaction::<RT, S>::from(tx)
     };
-    assert_tx_skipped(
-        tx_with_duplicate_sig,
-        &mut runner,
-        "is not part of the multisig or has already signed",
-    );
+    assert_tx_skipped(tx_with_duplicate_sig, &mut runner, "signature error");
+    assert_stored_value(&mut runner, 2);
 
-    // A transaction with a bad signature should be skipped
+    // A transaction with a bad signature should be skipped.
     let tx_with_bad_sig = {
-        let mut tx = tx.clone();
+        let (mut tx, signatures, _) = make_multisig_tx(5, 96);
         tx.add_signature(signatures[0].clone(), multisig_keys[0].pub_key())
             .unwrap();
         tx.add_signature(
@@ -414,4 +480,5 @@ fn test_multisig_signature_verification() {
         Transaction::<RT, S>::from(tx)
     };
     assert_tx_skipped(tx_with_bad_sig, &mut runner, "signature error");
+    assert_stored_value(&mut runner, 2);
 }

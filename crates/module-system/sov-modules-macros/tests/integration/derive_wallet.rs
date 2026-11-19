@@ -155,8 +155,6 @@ fn build_runtime_call() {
             "chain-state",
             "--json",
             r#"{"first_field": 1, "str_field": "hello"}"#,
-            "--chain-id",
-            "0",
             "--max-fee",
             "0",
         ])
@@ -171,8 +169,6 @@ fn build_runtime_call() {
             "second",
             "--json",
             r#"{"Bar": 2}"#,
-            "--chain-id",
-            "0",
             "--max-fee",
             "0",
         ])

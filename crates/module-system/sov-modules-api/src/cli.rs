@@ -1,6 +1,5 @@
 use std::fs;
 
-use crate::capabilities::config_chain_id;
 use crate::{clap, Amount, CliWallet};
 
 /// A trait that defines the interface for a CLI wallet.
@@ -14,9 +13,6 @@ where
 
 /// A trait that defines the arguments for a CLI transaction import method.
 pub trait CliTxImportArg {
-    /// The chain ID of the transaction.
-    fn chain_id(&self) -> u64;
-
     /// The priority fee to pay the sequencer, expressed as a fraction of the tokens spent on gas in basis points.
     /// for example, setting this value to 1 pays a tip of 1 token to the sequencer for every 10_000 tokens spent on gas.
     /// similarly, setting this value to 50_000 pays 5 tokens to the sequencer for every token spent on gas
@@ -41,10 +37,6 @@ pub struct JsonStringArg {
     /// The json formatted transaction data
     #[arg(long, help = "The JSON formatted transaction")]
     pub json: String,
-
-    /// The chain ID of the transaction.
-    #[arg(long, help = "The chain ID of the transaction.", default_value_t = config_chain_id())]
-    pub chain_id: u64,
 
     /// the gas tip for the sequencer.
     #[arg(
@@ -84,10 +76,6 @@ pub struct FileNameArg {
     #[arg(long, help = "The JSON formatted transaction")]
     pub path: String,
 
-    /// The chain ID of the transaction.
-    #[arg(long, help = "The chain ID of the transaction.", default_value_t = config_chain_id())]
-    pub chain_id: u64,
-
     /// the gas tip for the sequencer.
     #[arg(
         long,
@@ -120,10 +108,6 @@ pub struct FileNameArg {
 }
 
 impl CliTxImportArg for JsonStringArg {
-    fn chain_id(&self) -> u64 {
-        self.chain_id
-    }
-
     fn max_priority_fee_bips(&self) -> u64 {
         self.max_priority_fee_bips
     }
@@ -138,10 +122,6 @@ impl CliTxImportArg for JsonStringArg {
 }
 
 impl CliTxImportArg for FileNameArg {
-    fn chain_id(&self) -> u64 {
-        self.chain_id
-    }
-
     fn max_priority_fee_bips(&self) -> u64 {
         self.max_priority_fee_bips
     }
@@ -160,7 +140,6 @@ impl TryFrom<FileNameArg> for JsonStringArg {
     fn try_from(arg: FileNameArg) -> Result<Self, Self::Error> {
         let FileNameArg {
             path,
-            chain_id,
             max_priority_fee_bips,
             max_fee,
             gas_limit,
@@ -168,7 +147,6 @@ impl TryFrom<FileNameArg> for JsonStringArg {
 
         Ok(JsonStringArg {
             json: fs::read_to_string(path)?,
-            chain_id,
             max_priority_fee_bips,
             max_fee,
             gas_limit,

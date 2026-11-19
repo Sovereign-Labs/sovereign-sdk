@@ -6,6 +6,7 @@ use sov_address::{EthereumAddress, FromVmAddress};
 #[cfg(feature = "local")]
 pub use sov_eth_dev_signer::Signers;
 pub use sov_evm::EthereumAuthenticator;
+use sov_evm::HasEvm;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::{ApiStateAccessor, DaSpec, SequencerType, Spec};
 use sov_rpc_eth_types::{internal_rpc_err, invalid_params_rpc_err, rpc_error_with_code};
@@ -39,7 +40,7 @@ where
     S: Spec,
     Seq: Sequencer<Spec = S>,
     S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
+    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + HasEvm<S> + Default + Send + Sync + 'static,
 {
     // Unpack config
     let EthRpcConfig {
@@ -75,7 +76,7 @@ where
     S: Spec,
     Seq: Sequencer<Spec = S>,
     S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
+    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + HasEvm<S> + Default + Send + Sync + 'static,
 {
     for method in [
         "eth_protocolVersion",

@@ -2,7 +2,7 @@ use borsh::BorshSerialize;
 use sha2::Digest;
 use sov_modules_api::{CryptoSpec, PrivateKey, Spec};
 use sov_test_modules::access_pattern::{
-    AccessPattern, AccessPatternGenesisConfig, AccessPatternMessages, MeteredBorshDeserializeString,
+    AccessPattern, AccessPatternGenesisConfig, AccessPatternMessages,
 };
 use sov_test_utils::runtime::genesis::zk::config::HighLevelZkGenesisConfig;
 use sov_test_utils::runtime::TestRunner;
@@ -145,7 +145,7 @@ fn test_hashing() {
 fn test_deserialize() {
     let (mut runner, admin, _) = setup();
 
-    let input = MeteredBorshDeserializeString("abcd".to_string());
+    let input = "abcd".to_string();
     let mut buf = vec![];
     input.serialize(&mut buf).unwrap();
 
@@ -173,7 +173,7 @@ fn test_deserialize() {
 fn test_deserialize_with_storage_access() {
     let (mut runner, admin, _) = setup();
 
-    let input = MeteredBorshDeserializeString("abcd".to_string());
+    let input = "abcd".to_string();
     let mut buf = vec![];
     input.serialize(&mut buf).unwrap();
 

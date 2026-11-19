@@ -1,7 +1,7 @@
 use sov_bank::{config_gas_token_id, Bank, Coins};
-use sov_modules_api::macros::config_value;
+use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::prelude::UnwrapInfallible;
-use sov_modules_api::transaction::{PriorityFeeBips, TxDetails};
+use sov_modules_api::transaction::{PriorityFeeBips, TxDetails, UnsignedTransaction};
 use sov_modules_api::{Amount, GasUnit};
 use sov_test_utils::runtime::TestOptimisticRuntimeCall;
 use sov_test_utils::{
@@ -13,21 +13,34 @@ use sov_value_setter::ValueSetter;
 
 use crate::helpers::{setup, RT, S};
 
-/// Checks that the chain id of a transaction can be overridden.
+/// Checks that the chain hash fragment of a transaction is authenticated.
 #[test]
-fn test_custom_transaction_details_chain_id() {
+fn test_custom_transaction_details_chain_hash_fragment() {
     let (admin, mut runner) = setup();
 
-    let real_chain_id = config_value!("CHAIN_ID");
-    let fake_chain_id = real_chain_id + 1;
-
-    runner.execute_batch(BatchTestCase {
-        input: vec![admin
-            .create_plain_message::<RT, ValueSetter<S>>(sov_value_setter::CallMessage::SetValue {
+    let mut bad_chain_hash = <RT as sov_modules_stf_blueprint::Runtime<S>>::CHAIN_HASH;
+    bad_chain_hash[0] ^= 1;
+    let unsigned_tx = UnsignedTransaction::<RT, S>::new(
+        <RT as sov_test_utils::EncodeCall<ValueSetter<S>>>::to_decodable(
+            sov_value_setter::CallMessage::SetValue {
                 value: 1,
                 gas: None,
-            })
-            .with_chain_id(fake_chain_id)]
+            },
+        ),
+        bad_chain_hash,
+        TEST_DEFAULT_MAX_PRIORITY_FEE,
+        TEST_DEFAULT_MAX_FEE,
+        UniquenessData::Generation(0),
+        None,
+        None,
+    );
+
+    runner.execute_batch(BatchTestCase {
+        input: vec![TransactionType::pre_signed(
+            unsigned_tx,
+            admin.private_key(),
+            &bad_chain_hash,
+        )]
         .into(),
         assert: Box::new(move |result, _state| {
             let batch_receipt = result.batch_receipt.as_ref().unwrap();
@@ -194,7 +207,7 @@ fn test_default_transaction_details() {
             assert_eq!(details.max_fee, TEST_DEFAULT_MAX_FEE);
             assert_eq!(details.gas_limit, None);
 
-            assert_eq!(details.chain_id, 4321);
+            assert_eq!(details.chain_hash_fragment, 0);
         }
         _ => panic!("The message is not a plain message"),
     }
@@ -214,8 +227,7 @@ fn test_custom_transaction_format() {
         })
         .with_max_fee(Amount::new(100))
         .with_max_priority_fee_bips(PriorityFeeBips::from_percentage(10))
-        .with_gas_limit(Some(GasUnit::from([5; 2])))
-        .with_chain_id(5555);
+        .with_gas_limit(Some(GasUnit::from([5; 2])));
 
     match message {
         TransactionType::Plain {
@@ -243,7 +255,7 @@ fn test_custom_transaction_format() {
             assert_eq!(details.max_fee, 100);
             assert_eq!(details.gas_limit, Some(GasUnit::from([5; 2])));
 
-            assert_eq!(details.chain_id, 5555);
+            assert_eq!(details.chain_hash_fragment, 0);
         }
         _ => panic!("The message is not a plain message"),
     }
@@ -264,7 +276,7 @@ fn test_custom_transaction_format_2() {
             max_fee: Amount::new(100),
             max_priority_fee_bips: PriorityFeeBips::from_percentage(10),
             gas_limit: Some(GasUnit::from([5; 2])),
-            chain_id: 5555,
+            chain_hash_fragment: 5555,
         });
 
     match message {
@@ -293,7 +305,7 @@ fn test_custom_transaction_format_2() {
             assert_eq!(details.max_fee, 100);
             assert_eq!(details.gas_limit, Some(GasUnit::from([5; 2])));
 
-            assert_eq!(details.chain_id, 5555);
+            assert_eq!(details.chain_hash_fragment, 5555);
         }
         _ => panic!("The message is not a plain message"),
     }

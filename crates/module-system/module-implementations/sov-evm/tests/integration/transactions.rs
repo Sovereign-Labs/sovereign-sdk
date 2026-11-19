@@ -68,7 +68,6 @@ fn test_simple_transfer() {
 
 #[test]
 fn test_receipt_fee_matches_balance_delta() {
-    set_receipt_actual_fee_height(0);
     let (mut runner, from, to, _) = setup();
     let value = 1u128;
     let transfer = create_transfer_tx_with_fee_params(
@@ -86,7 +85,7 @@ fn test_receipt_fee_matches_balance_delta() {
         assert: Box::new(move |_ctx, state| {
             let sender_balance_after = evm.get_balance(from.address(), None, state).unwrap();
             let receipt = evm
-                .get_transaction_receipt(transfer.hash, state)
+                .get_transaction_receipt(&Default::default(), transfer.hash, state)
                 .unwrap()
                 .expect("receipt should exist");
 
@@ -110,7 +109,6 @@ fn test_receipt_fee_matches_balance_delta() {
 
 #[test]
 fn test_block_receipt_fee_matches_balance_delta() {
-    set_receipt_actual_fee_height(0);
     let (mut runner, from, to, _) = setup();
     let value = 1u128;
     let transfer = create_transfer_tx_with_fee_params(
@@ -128,7 +126,7 @@ fn test_block_receipt_fee_matches_balance_delta() {
         assert: Box::new(move |_ctx, state| {
             let sender_balance_after = evm.get_balance(from.address(), None, state).unwrap();
             let receipts = evm
-                .get_block_receipts(Some(BlockId::latest()), state)
+                .get_block_receipts(&Default::default(), Some(BlockId::latest()), state)
                 .unwrap()
                 .expect("latest block receipts should exist");
             let receipt = receipts
@@ -150,47 +148,6 @@ fn test_block_receipt_fee_matches_balance_delta() {
                 actual_fee,
                 implied_fee,
                 receipt.effective_gas_price,
-            );
-        }),
-    });
-}
-
-#[test]
-fn test_receipt_uses_eip1559_formula_before_activation_height() {
-    set_receipt_actual_fee_height(1_000_000);
-    let (mut runner, from, to, _) = setup();
-    let value = 1u128;
-    let transfer = create_transfer_tx_with_fee_params(
-        0,
-        &from,
-        &to,
-        value,
-        MIN_PROTOCOL_BASE_FEE as u128 * 2,
-        0,
-    );
-
-    let evm = Evm::<S>::default();
-    runner.execute_transaction(TransactionTestCase {
-        input: transfer.tx,
-        assert: Box::new(move |_ctx, state| {
-            let sender_balance_after = evm.get_balance(from.address(), None, state).unwrap();
-            let receipt = evm
-                .get_transaction_receipt(transfer.hash, state)
-                .unwrap()
-                .expect("receipt should exist");
-
-            let implied_fee =
-                U256::from(receipt.gas_used) * U256::from(receipt.effective_gas_price);
-            let actual_fee = U256::from(TEST_DEFAULT_USER_BALANCE.0)
-                .checked_sub(U256::from(value))
-                .and_then(|balance_after_value| {
-                    balance_after_value.checked_sub(sender_balance_after)
-                })
-                .expect("sender balance should decrease by transfer value and a fee");
-
-            assert_ne!(
-                actual_fee, implied_fee,
-                "before activation height receipts should follow legacy EIP-1559 projection",
             );
         }),
     });
@@ -339,9 +296,19 @@ fn test_executing_eth_transactions_several_blocks() {
         runner.execute_batch(BatchTestCase {
             input: block.batch_txs().into(),
             assert: Box::new(move |_result, state| {
-                assert_eq!(block.nr, evm.block_number(state).unwrap().to::<u64>());
+                assert_eq!(
+                    block.nr,
+                    evm.block_number(&Default::default(), state)
+                        .unwrap()
+                        .to::<u64>()
+                );
                 let block_from_evm = evm
-                    .get_block_by_number(Some(BlockId::number(block.nr)), None, state)
+                    .get_block_by_number(
+                        &Default::default(),
+                        Some(BlockId::number(block.nr)),
+                        None,
+                        state,
+                    )
                     .unwrap()
                     .unwrap();
 
@@ -356,7 +323,7 @@ fn test_executing_eth_transactions_several_blocks() {
                     let tx_index = tx_index as u64;
 
                     let tx_from_evm = evm
-                        .get_transaction_by_hash(tx.hash, state)
+                        .get_transaction_by_hash(&Default::default(), tx.hash, state)
                         .unwrap()
                         .unwrap();
 
@@ -365,7 +332,7 @@ fn test_executing_eth_transactions_several_blocks() {
                     assert_eq!(block.nr, tx_from_evm.block_number.unwrap());
 
                     let receipt_from_evm = evm
-                        .get_transaction_receipt(tx.hash, state)
+                        .get_transaction_receipt(&Default::default(), tx.hash, state)
                         .unwrap()
                         .unwrap();
 

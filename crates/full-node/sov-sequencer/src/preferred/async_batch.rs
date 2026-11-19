@@ -159,7 +159,7 @@ pub(crate) struct ExecutedTxResponse<S: Spec> {
     pub(crate) receipt: TransactionReceipt<S>,
     pub(crate) tx_changes: TxChangeSet,
     pub(crate) remaining_slot_gas: <S as Spec>::Gas,
-    pub(crate) sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
+    pub(crate) sequencing_scratchpad: sov_modules_api::SequencingScratchpadContents,
 }
 
 /// The channel responsible for notifying an async tx submitter of the txs result
@@ -227,6 +227,8 @@ impl<S: Spec> AsyncBatchResponder<S> {
         } else {
             let execution_time_micros =
                 self.execution_start.borrow().elapsed().as_micros().try_into().expect("Unix time in micros overflowed u64. This should be unreachable for the next 300,000 years");
+            // This is the only response for this tx: the STF does not call `post_tx` for txs
+            // ignored by the pre-flight hook.
             self.send(
                 S::Gas::zero(),
                 execution_time_micros,

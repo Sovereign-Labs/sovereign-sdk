@@ -10,7 +10,7 @@ on:
 
 jobs:
   check-changelog:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     timeout-minutes: 10
     if: ${{ !contains(github.event.pull_request.labels.*.name, 'skip-changelog') }}
     env:

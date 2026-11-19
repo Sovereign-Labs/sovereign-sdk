@@ -9,7 +9,7 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
 use sov_address::{EthereumAddress, FromVmAddress};
-use sov_evm::{build_request_preflight_auth, EthereumAuthenticator, Evm};
+use sov_evm::{build_request_preflight_auth, EthereumAuthenticator, Evm, HasEvm};
 use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::GasEnforcer;
 use sov_modules_api::capabilities::{
@@ -24,6 +24,10 @@ use sov_rpc_eth_types::{EthApiError, RpcInvalidTransactionError};
 use sov_sequencer::Sequencer;
 use std::sync::Arc;
 
+/// The runtime's EVM module type. Simulations must use it (rather than `Evm<S>`) so that
+/// the runtime's custom precompiles are available.
+type RuntimeEvm<S, Seq> = Evm<S, <<Seq as Sequencer>::Rt as HasEvm<S>>::EvmPrecompiles>;
+
 pub(crate) enum AffordabilityPreflight {
     Affordable,
     Rejected(ErrorObjectOwned),
@@ -35,7 +39,7 @@ where
     S: Spec,
     Seq: Sequencer<Spec = S>,
     S::Address: FromVmAddress<EthereumAddress>,
-    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + Default + Send + Sync + 'static,
+    Seq::Rt: HasKernel<S> + EthereumAuthenticator<S> + HasEvm<S> + Default + Send + Sync + 'static,
 {
     pub fn eth_estimate_gas(
         parameters: JRpcParams<'_>,
@@ -69,7 +73,7 @@ where
         snapshot_state: &ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<U64> {
-        let evm = Evm::<S>::default();
+        let evm = RuntimeEvm::<S, Seq>::default();
         // When state or block overrides are present, account balances and gas pricing can be
         // arbitrarily changed by the caller, so a preflight against real state would be
         // meaningless.
@@ -161,7 +165,7 @@ where
         snapshot_state: &ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> Result<U64, ErrorObjectOwned> {
-        let evm = Evm::<S>::default();
+        let evm = RuntimeEvm::<S, Seq>::default();
         let prepared = evm
             .prepare_runtime_parity_estimate::<Seq::Rt>(
                 request,
@@ -265,7 +269,7 @@ where
             return Ok(());
         }
 
-        let evm = Evm::<S>::default();
+        let evm = RuntimeEvm::<S, Seq>::default();
         let mut api_state = snapshot_state.clone_without_local_writes();
         let preflight_state = evm
             .preflight_state_for_block_id(block_id, &mut api_state)
@@ -309,7 +313,7 @@ where
         state: &mut ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<AffordabilityPreflight> {
-        let evm = Evm::<S>::default();
+        let evm = RuntimeEvm::<S, Seq>::default();
         let fee_check_active = evm
             .is_max_fee_check_active(state)
             .map_err(|e| rpc_internal_error(format!("state read error: {e}")))?;

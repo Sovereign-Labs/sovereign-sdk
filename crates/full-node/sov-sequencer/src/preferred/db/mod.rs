@@ -28,6 +28,7 @@ use sov_modules_api::{
     FullyBakedTx, KernelStateAccessor, Runtime, Spec, StateCheckpoint, TxHash, VisibleSlotNumber,
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
+use sov_rollup_interface::node::da::DaWriteRole;
 use sov_shutdown::PrimaryShutdownController;
 use std::collections::BTreeMap;
 use std::net::SocketAddr;
@@ -535,6 +536,14 @@ impl SequencerRole {
             SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica
         )
     }
+
+    /// The write permission this role grants on the DA service.
+    pub fn da_write_role(self) -> DaWriteRole {
+        match self {
+            SequencerRole::BatchProducer => DaWriteRole::Writer,
+            SequencerRole::PgSyncReplica | SequencerRole::DaOnlyReplica => DaWriteRole::ReadOnly,
+        }
+    }
 }
 
 pub(crate) struct PreferredSequencerDb {
@@ -601,6 +610,18 @@ impl PreferredSequencerDb {
             },
             role,
         ))
+    }
+
+    /// Builds a database on top of an arbitrary backend, so that tests can inject failures.
+    #[cfg(test)]
+    pub(crate) fn with_backend(
+        backend: Box<dyn DbBackend>,
+        primary_shutdown: PrimaryShutdownController,
+    ) -> Self {
+        Self {
+            backend: Some(backend),
+            primary_shutdown,
+        }
     }
 
     pub(crate) async fn initial_data(&self) -> Result<(SequenceNumber, BlobsCache)> {

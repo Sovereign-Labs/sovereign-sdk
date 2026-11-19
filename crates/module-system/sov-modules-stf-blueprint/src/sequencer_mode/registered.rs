@@ -498,6 +498,20 @@ where
         );
 
         let provisional_outcome = match outcome {
+            AuthAndProcessOutcome::RejectedByPreFlight => {
+                // Pre-flight rejections depend on the sequencer's local configuration, so they
+                // must never happen outside the sequencer, or execution becomes non-deterministic.
+                assert!(
+                    execution_context.is_sequencer(),
+                    "Transactions can only be rejected by pre-flight checks in the sequencer. This is a bug, please report it."
+                );
+                // The pre-flight hook has already responded for this transaction, so we skip
+                // `post_tx` and drop the transaction without affecting the batch.
+                let mut new_checkpoint = dirty_scratchpad.revert();
+                new_checkpoint.discard_revertable_storage_cache();
+                clean_scratchpad = new_checkpoint.to_tx_scratchpad();
+                continue;
+            }
             AuthAndProcessOutcome::IllegalSequencer { reason } => {
                 tracing::warn!(%reason, "Transaction could not be attempted due to sequencer error. If this error persists, check that your sequencer has sufficient funds");
                 ProvisionalSequencerOutcome::out_of_funds(
@@ -652,6 +666,9 @@ where
 enum AuthAndProcessOutcome<S: Spec> {
     /// The sequencer was not allowed to process this transaction
     IllegalSequencer { reason: OutOfFundsReason<S> },
+    /// The injected control flow rejected the transaction in its pre-flight hook. The
+    /// transaction is dropped as if it had never been submitted, and `post_tx` is not called.
+    RejectedByPreFlight,
     /// The transaction failed before execution started
     Skipped {
         error: TxProcessingError,
@@ -663,7 +680,7 @@ enum AuthAndProcessOutcome<S: Spec> {
         transaction_consumption: TransactionConsumption<S::Gas>,
         receipt: TransactionReceipt<S>,
         #[cfg(feature = "native")]
-        sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
+        sequencing_scratchpad: sov_modules_api::SequencingScratchpadContents,
     },
 }
 
@@ -675,24 +692,12 @@ struct AuthAndProcessOutput<S: Spec, I: StateProvider<S>> {
 }
 
 fn penalize_sequencer<S: Spec, RT: Runtime<S>, I: StateProvider<S>>(
-    sequencer_bond: &SequencerBondForTx,
     runtime: &mut RT,
     auth_cost: Amount,
     sequencer_address: &S::Address,
     operating_mode: OperatingMode,
     tx_scratchpad: &mut TxScratchpad<S, I>,
 ) {
-    // After the gas limit change height, the preferred sequencer doesn't bond for pre execution checks.
-    // In this case, we no longer attempt to penalize the sequencer. This feature should only be active for rollups.
-    // that don't use zk proving, since this would be a griefing vector against the prover.
-    if let SequencerBondForTx::Preferred(bond_amount) = sequencer_bond {
-        if bond_amount == &Amount::ZERO
-            && tx_scratchpad.rollup_height_to_access()
-                > <S as GasSpec>::change_gas_limit_after_height()
-        {
-            return;
-        }
-    }
     runtime
         .gas_enforcer()
         .reward_prover_from_sequencer_balance(
@@ -747,14 +752,8 @@ where
         }
     };
 
-    // If the sequencer isn't bonded enough, reject the input unless unless we've passed the gas limit update height (meaning we've done an update) *AND*
-    // the tx is from the preferred sequencer with zero escrow.
-    // (note: The preferred sequencer sending txs with no escrow is a new pattern that becomes legal
-    // after we update the gas limit.)
-    if sequencer_bond.amount() < max_tx_check_value
-        && !(scratchpad.rollup_height_to_access() > <S as GasSpec>::change_gas_limit_after_height()
-            && matches!(sequencer_bond, SequencerBondForTx::Preferred(Amount::ZERO)))
-    {
+    // If the sequencer isn't bonded enough, reject the input.
+    if sequencer_bond.amount() < max_tx_check_value {
         return AuthAndProcessOutput {
             outcome: AuthAndProcessOutcome::IllegalSequencer {
                 reason: OutOfFundsReason::SequencerBondTooLow {
@@ -768,10 +767,7 @@ where
     }
 
     // 3. The slot gas is higher than the gas needed to validate the transaction.
-    // If we've updated the gas limit, disable this check.
-    if slot_gas.dim_is_less_or_eq(max_tx_check_costs)
-        && scratchpad.rollup_height_to_access() <= <S as GasSpec>::change_gas_limit_after_height()
-    {
+    if slot_gas.dim_is_less_or_eq(max_tx_check_costs) {
         return AuthAndProcessOutput {
             outcome: AuthAndProcessOutcome::IllegalSequencer {
                 reason: OutOfFundsReason::SlotGasLimitExhausted {
@@ -829,7 +825,6 @@ where
             return match pre_exec_error {
                 AuthenticationError::FatalError(err, tx_hash) => {
                     penalize_sequencer(
-                        &sequencer_bond,
                         runtime,
                         funds_used_for_authentication,
                         &sequencer_rollup_address,
@@ -849,7 +844,6 @@ where
                 }
                 AuthenticationError::OutOfGas(e) => {
                     penalize_sequencer(
-                        &sequencer_bond,
                         runtime,
                         funds_used_for_authentication,
                         &sequencer_rollup_address,
@@ -904,9 +898,15 @@ where
     let (tx_result, mut scratchpad, pre_exec_gas_meter) = process_tx_result;
 
     match tx_result {
+        // The pre-flight rejection is sequencer policy, not a property of the transaction, so
+        // the sequencer is not penalized and no receipt is created.
+        Err((TxProcessingError::RejectedByPreFlight, _)) => AuthAndProcessOutput {
+            outcome: AuthAndProcessOutcome::RejectedByPreFlight,
+            scratchpad,
+            gas_used: pre_exec_gas_meter.gas_info().gas_used,
+        },
         Err((error, raw_tx)) => {
             penalize_sequencer(
-                &sequencer_bond,
                 runtime,
                 pre_exec_gas_meter.gas_info().gas_value,
                 &sequencer_rollup_address,

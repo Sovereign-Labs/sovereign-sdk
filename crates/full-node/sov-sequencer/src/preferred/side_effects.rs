@@ -1,7 +1,7 @@
 use std::collections::VecDeque;
 
 use anyhow::Result;
-use sov_modules_api::{ConcurrentStateCheckpoint, Runtime, Spec, StateCheckpoint};
+use sov_modules_api::{ConcurrentStateCheckpoint, EventFrontier, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use std::sync::Arc;
@@ -59,12 +59,20 @@ where
     }
 
     /// Syncs [`ApiState`]s with the latest [`StateCheckpoint`].
+    ///
+    /// `next_event_number` must be the number one past the last event whose effects are
+    /// reflected in `checkpoint`, so that API readers can pair a state snapshot with the
+    /// event stream. It is paired with the transaction cache's current epoch, which is the
+    /// run of numbering the cache's events are labelled with.
     #[tracing::instrument(skip_all, level = "trace")]
-    fn update_api_state(&self, checkpoint: StateCheckpoint<S>) {
+    async fn update_api_state(&self, checkpoint: StateCheckpoint<S>, next_event_number: u64) {
+        let event_frontier =
+            EventFrontier::new(self.transaction_cache.epoch().await, next_event_number);
         // Preferred sequencer intentionally treats the latest available slot as finalized
         // for API state (soft-confirmation semantics). This differs from the standard
         // sequencer which passes the node's true finalized slot explicitly.
-        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint);
+        let concurrent_checkpoint = ConcurrentStateCheckpoint::from_state_checkpoint(checkpoint)
+            .with_event_frontier(event_frontier);
         if self
             .checkpoint_sender
             .send(Arc::new(concurrent_checkpoint))
@@ -111,9 +119,10 @@ where
         checkpoint: StateCheckpoint<S>,
         batch: ReadBatch,
         info_to_store: BatchToStore,
+        next_event_number: u64,
     ) -> Result<()> {
         self.db.terminate_batch(info_to_store).await?;
-        self.update_api_state(checkpoint);
+        self.update_api_state(checkpoint, next_event_number).await;
 
         // Publish the batch.
         self.blob_sender
@@ -185,11 +194,27 @@ where
                     .await?;
 
                 let checkpoint_ref = self.checkpoint_sender.borrow().clone();
+                // `insert` labels events with the cache's epoch too, but the submitter's response
+                // below is sent before that, so it needs the label up front. Only this task
+                // rotates the epoch, so it cannot change before the insertion.
+                let epoch = self.transaction_cache.epoch().await;
 
                 let mut oneshot_and_txs = Vec::with_capacity(txs_to_insert.len());
-                for contents in txs_to_insert {
+                for mut contents in txs_to_insert {
+                    // The event numbers were assigned by the block executor when the receipt was
+                    // produced, so we read them off the transaction itself rather than off the
+                    // executor's counter, which has already run ahead of this queue.
+                    let next_event_number = contents
+                        .accepted_tx
+                        .confirmation
+                        .events
+                        .last()
+                        .map(|event| event.number + 1);
+                    for event in contents.accepted_tx.confirmation.events.iter_mut() {
+                        event.epoch = Some(epoch);
+                    }
                     // Apply all updates in a single batch
-                    checkpoint_ref.apply_tx_changes(contents.tx_changes);
+                    checkpoint_ref.apply_tx_changes(contents.tx_changes, next_event_number);
                     oneshot_and_txs.push((contents.oneshot_sender, contents.accepted_tx));
                 }
                 // Send a notification that the checkpoint has been updated. The inner value is already concurrency safe, this just ensures that anyone
@@ -208,6 +233,7 @@ where
                 batch,
                 checkpoint,
                 forced_txs,
+                next_event_number,
             } => {
                 let info_to_store = BatchToStore {
                     blob_id: batch.blob_id,
@@ -215,8 +241,13 @@ where
                     visible_slot_number_after_increase: batch.visible_slot_number_after_increase,
                     visible_slots_to_advance: batch.visible_slots_to_advance,
                 };
-                self.close_and_publish_current_batch(checkpoint, batch, info_to_store)
-                    .await?;
+                self.close_and_publish_current_batch(
+                    checkpoint,
+                    batch,
+                    info_to_store,
+                    next_event_number,
+                )
+                .await?;
                 for tx in forced_txs {
                     self.transaction_cache.insert(tx).await;
                 }
@@ -227,6 +258,7 @@ where
                 sequence_number,
                 new_checkpoint,
                 blob_id,
+                next_event_number,
             } => {
                 self.db
                     .start_batch(
@@ -236,7 +268,8 @@ where
                         blob_id,
                     )
                     .await?;
-                self.update_api_state(new_checkpoint);
+                self.update_api_state(new_checkpoint, next_event_number)
+                    .await;
             }
             ExecutorEvent::TriggerRecovery {
                 blobs_to_flush,
@@ -264,9 +297,10 @@ where
                     .publish_proof(data, sequence_number, blob_id)
                     .await?;
             }
-            ExecutorEvent::ForceUpdateApiState(new_checkpoint) => {
+            ExecutorEvent::ForceUpdateApiState(new_checkpoint, next_event_number) => {
                 Self::maybe_delay_api_state_update_for_tests().await;
-                self.update_api_state(new_checkpoint);
+                self.update_api_state(new_checkpoint, next_event_number)
+                    .await;
             }
             ExecutorEvent::UpdateApiLedger {
                 ledger_reader,
@@ -285,17 +319,24 @@ where
             ExecutorEvent::PruneDb(sequence_number) => {
                 self.db.prune_db(sequence_number).await?;
             }
-            ExecutorEvent::UpdateStateForRecovery(checkpoint) => {
+            ExecutorEvent::UpdateStateForRecovery(checkpoint, next_event_number) => {
                 Self::maybe_delay_api_state_update_for_tests().await;
-                self.update_api_state(checkpoint);
+                self.update_api_state(checkpoint, next_event_number).await;
             }
             ExecutorEvent::FlushTransactionsCache {
                 next_tx_number,
+                checkpoint,
+                next_event_number,
                 oneshot_sender,
             } => {
+                // Discarding the cache may rotate the epoch, so the published state must be
+                // re-stamped in the same step: the replayed events inserted next carry the new
+                // epoch, and a snapshot still labelled with the old one would send every client
+                // into a resynchronisation loop until the replay completes.
                 self.transaction_cache
                     .clean_and_overwrite_next_tx_number(next_tx_number)
                     .await;
+                self.update_api_state(checkpoint, next_event_number).await;
                 let _ = oneshot_sender.send(());
             }
         }
@@ -330,9 +371,17 @@ where
             while !event_queue.is_empty() {
                 if let Err(e) = self.handle_executor_event(&mut event_queue).await {
                     tracing::error!(error = ?e, "Error handling executor event");
-                    // If we've already started shutting down, this might fail - but then we're happy.
+                    // Stop for good rather than moving on to the next event. Every queued event
+                    // was produced on top of the state left by the ones before it, so once one
+                    // side effect is lost, persisting or confirming a later one could
+                    // soft-confirm a transaction that is no longer valid. The events still
+                    // queued are dropped, so their submitters get an error, not a confirmation.
+                    //
+                    // The shutdown has to be triggered before the channel is closed by
+                    // returning: senders treat a closed channel as fatal unless the rollup is
+                    // already shutting down.
                     self.primary_shutdown.shutdown();
-                    break;
+                    return;
                 }
             }
         }
@@ -368,13 +417,21 @@ fn drain_consecutive_accepted_txs<S: Spec, Rt: Runtime<S>>(
 
 #[cfg(test)]
 mod tests {
+    use sov_blob_sender::BlobInternalId;
+    use sov_blob_storage::SequenceNumber;
+    use sov_mock_da::{MockAddress, MockDaService};
+    use sov_modules_api::capabilities::HasKernel;
     use sov_modules_api::{
         ApiTxEffect, FullyBakedTx, Gas, SuccessfulTxContents, TxChangeSet, TxHash,
     };
-    use sov_test_utils::{generate_optimistic_runtime, TestSpec as S};
-    use tokio::sync::oneshot;
+    use sov_test_utils::storage::{SimpleLedgerStorageManager, SimpleStorageManager};
+    use sov_test_utils::{generate_optimistic_runtime, TestSpec as S, TestStorageSpec};
+    use tokio::sync::{broadcast, oneshot};
 
+    use crate::preferred::db::{DbBackend, DbError, InProgressBatch, SequencerRole, SnapshotData};
+    use crate::preferred::transaction_subscriptions::TransactionCache;
     use crate::preferred::{AcceptedTx, Confirmation};
+    use crate::{PreferredProofDataBytes, TxStatusManager};
 
     generate_optimistic_runtime!(TestRuntime <= );
 
@@ -402,6 +459,7 @@ mod tests {
             accepted_tx: AcceptedTx {
                 tx,
                 tx_hash,
+                credential_id: None,
                 confirmation,
             },
             tx_changes,
@@ -420,6 +478,189 @@ mod tests {
                 _ => panic!("Expected AcceptedTx event"),
             }
         }
+    }
+
+    /// A [`DbBackend`] whose transaction inserts always fail, reporting the index of every
+    /// insert that was attempted.
+    struct FailingDbBackend {
+        attempted_tx_indices: mpsc::UnboundedSender<u64>,
+        /// Inserts stay pending until this is set, like a query waiting on a dead connection.
+        timed_out: watch::Receiver<bool>,
+    }
+
+    #[async_trait::async_trait]
+    impl DbBackend for FailingDbBackend {
+        async fn begin_rollup_block(&mut self, _stored_batch: BatchToStore) -> Result<(), DbError> {
+            unimplemented!()
+        }
+
+        async fn add_tx(
+            &mut self,
+            _sequence_number_of_in_progress_batch: SequenceNumber,
+            tx_idx_within_batch: u64,
+            _tx: FullyBakedTx,
+            _hash: TxHash,
+        ) -> Result<(), DbError> {
+            self.attempted_tx_indices.send(tx_idx_within_batch).unwrap();
+            self.timed_out
+                .wait_for(|timed_out| *timed_out)
+                .await
+                .unwrap();
+            Err(DbError::Database(anyhow::anyhow!(
+                "simulated database outage"
+            )))
+        }
+
+        async fn end_rollup_block(&mut self, _stored_batch: BatchToStore) -> Result<(), DbError> {
+            unimplemented!()
+        }
+
+        async fn read_in_progress_batch(&self) -> Result<Option<InProgressBatch>, DbError> {
+            unimplemented!()
+        }
+
+        async fn current_data(&self) -> Result<SnapshotData, DbError> {
+            unimplemented!()
+        }
+
+        async fn add_proof_blob(
+            &mut self,
+            _sequence_number: SequenceNumber,
+            _blob_id: BlobInternalId,
+            _data: PreferredProofDataBytes,
+        ) -> Result<(), DbError> {
+            unimplemented!()
+        }
+
+        async fn prune(&mut self, _up_to_including: SequenceNumber) -> Result<(), DbError> {
+            unimplemented!()
+        }
+    }
+
+    /// A [`SideEffectsTask`] persisting to a caller-supplied backend, bundled with the resources
+    /// that have to outlive it. Everything other than the backend is an inert stand-in.
+    struct TestSideEffects {
+        task: SideEffectsTask<S, TestRuntime<S>, MockDaService>,
+        _storage_manager: SimpleStorageManager<TestStorageSpec>,
+        _checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
+        _transaction_cache: TransactionCache<S, TestRuntime<S>>,
+    }
+
+    impl TestSideEffects {
+        /// The number of events that can be queued before the task is run.
+        const EVENT_QUEUE_CAPACITY: usize = 16;
+
+        /// Returns the task along with the sender that feeds its event queue.
+        async fn new(
+            storage_path: &std::path::Path,
+            backend: impl DbBackend,
+        ) -> (Self, mpsc::Sender<ExecutorEvent<S, TestRuntime<S>>>) {
+            let primary_shutdown = PrimaryShutdownController::new();
+            let ledger_db = LedgerDb::with_reader(
+                SimpleLedgerStorageManager::new(storage_path).create_ledger_storage(),
+            )
+            .unwrap();
+            let storage_manager = SimpleStorageManager::<TestStorageSpec>::new();
+            let (checkpoint_sender, checkpoint_receiver) = watch::channel(Arc::new(
+                ConcurrentStateCheckpoint::from_state_checkpoint(StateCheckpoint::<S>::new(
+                    storage_manager.create_storage(),
+                    &TestRuntime::<S>::default().kernel(),
+                )),
+            ));
+            // A replica's blob sender is inert: it never publishes anything.
+            let (blob_sender, _) = PreferredBlobSender::new(
+                MockDaService::new(MockAddress::new([0; 32])),
+                ledger_db.clone(),
+                vec![],
+                storage_path.into(),
+                TxStatusManager::default(),
+                primary_shutdown.clone(),
+                std::time::Duration::from_secs(1),
+                broadcast::channel(1).0,
+                SequencerRole::DaOnlyReplica,
+            )
+            .await
+            .unwrap();
+            let transaction_cache = TransactionCache::new(ledger_db.clone(), 0, 1);
+            let (events_sender, executor_events_receiver) =
+                mpsc::channel(Self::EVENT_QUEUE_CAPACITY);
+
+            let task = SideEffectsTask {
+                checkpoint_sender,
+                blob_sender,
+                db: PreferredSequencerDb::with_backend(Box::new(backend), primary_shutdown.clone()),
+                api_ledger_db: ledger_db,
+                executor_events_receiver,
+                primary_shutdown,
+                transaction_cache: transaction_cache.write_handle(),
+            };
+
+            (
+                Self {
+                    task,
+                    _storage_manager: storage_manager,
+                    _checkpoint_receiver: checkpoint_receiver,
+                    _transaction_cache: transaction_cache,
+                },
+                events_sender,
+            )
+        }
+    }
+
+    /// Once a database write has failed, nothing that follows it may be persisted: a later
+    /// insert that succeeded would leave a gap in the stored batch, which replicas apply as-is.
+    #[tokio::test]
+    async fn test_no_inserts_are_attempted_after_a_failed_insert() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let (attempts_sender, mut attempted_tx_indices) = mpsc::unbounded_channel();
+        let (time_out_inserts, timed_out) = watch::channel(false);
+        let (side_effects, events_sender) = TestSideEffects::new(
+            temp_dir.path(),
+            FailingDbBackend {
+                attempted_tx_indices: attempts_sender,
+                timed_out,
+            },
+        )
+        .await;
+        let primary_shutdown = side_effects.task.primary_shutdown.clone();
+        let side_effects_task = side_effects.task.spawn();
+
+        assert!(
+            events_sender
+                .send(create_accepted_tx_event(0))
+                .await
+                .is_ok(),
+            "The side effects task should be accepting events"
+        );
+        assert_eq!(
+            attempted_tx_indices.recv().await,
+            Some(0),
+            "The first insert should be attempted"
+        );
+
+        // The second transaction arrives while the first insert is still pending, as happens
+        // when transactions keep arriving during a database outage. The task cannot have
+        // stopped yet, so the event is sure to be queued behind the insert that is about to fail.
+        assert!(
+            events_sender
+                .send(create_accepted_tx_event(1))
+                .await
+                .is_ok(),
+            "The side effects task should be accepting events while an insert is pending"
+        );
+        time_out_inserts.send_replace(true);
+        drop(events_sender);
+        side_effects_task.await.unwrap();
+
+        assert_eq!(
+            attempted_tx_indices.recv().await,
+            None,
+            "No insert should be attempted for a transaction that follows a failed write"
+        );
+        assert!(
+            primary_shutdown.is_triggered(),
+            "A failed write should shut the rollup down"
+        );
     }
 
     #[tokio::test]

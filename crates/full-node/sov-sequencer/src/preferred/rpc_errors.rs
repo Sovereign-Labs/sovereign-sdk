@@ -24,6 +24,22 @@ pub(crate) fn cant_fit_tx(
     }
 }
 
+pub(crate) fn tx_with_sequencing_data_too_big(
+    total_payload_len: usize,
+    max_payload_len: usize,
+) -> ErrorObject {
+    ErrorObject {
+        status: StatusCode::PAYLOAD_TOO_LARGE,
+        message:
+            "Transaction combined with its sequencing data exceeds the maximum transaction size"
+                .to_string(),
+        details: json_obj!({
+            "total_payload_size": total_payload_len,
+            "max_allowed_size": max_payload_len,
+        }),
+    }
+}
+
 pub(crate) fn rate_limit<S: Spec>(err: ResourceLimitExceededError<S>) -> ErrorObject {
     ErrorObject {
         status: StatusCode::SERVICE_UNAVAILABLE,

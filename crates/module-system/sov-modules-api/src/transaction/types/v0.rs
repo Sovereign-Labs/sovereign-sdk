@@ -3,7 +3,9 @@ use derivative::Derivative;
 use sov_universal_wallet::UniversalWallet;
 
 use crate::capabilities::{AuthenticationError, AuthorizationData, UniquenessData};
-use crate::transaction::{hex_field_format, Credentials, Transaction, TransactionCallable};
+use crate::transaction::{
+    hex_field_format, Credentials, Transaction, TransactionCallable, UnsignedTransaction,
+};
 use crate::{metered_credential, CryptoSpecExt, GasMeter, Spec, TxHash};
 
 #[derive(
@@ -17,12 +19,12 @@ use crate::{metered_credential, CryptoSpecExt, GasMeter, Spec, TxHash};
     UniversalWallet,
 )]
 #[derivative(
-    PartialEq(bound = "Call: PartialEq + Eq"),
-    Eq(bound = "Call: PartialEq + Eq")
+    PartialEq(bound = "R::Call: PartialEq + Eq"),
+    Eq(bound = "R::Call: PartialEq + Eq")
 )]
-#[serde(bound = "Call: serde::Serialize + serde::de::DeserializeOwned")]
+#[serde(bound = "R::Call: serde::Serialize + serde::de::DeserializeOwned")]
 /// V0 transaction.
-pub struct Version0<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
+pub struct Version0<R: TransactionCallable, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     /// The signature of the transaction.
     #[serde(with = "hex_field_format")]
     #[sov_wallet(display = "hex")]
@@ -32,19 +34,40 @@ pub struct Version0<Call, S: Spec, C: CryptoSpecExt = <S as Spec>::CryptoSpec> {
     #[sov_wallet(display = "hex")]
     pub pub_key: C::PublicKey,
     /// The runtime call of the transaction.
-    #[sov_wallet(bound = "Call: sov_universal_wallet::schema::UniversalWallet")]
-    pub runtime_call: Call,
+    #[sov_wallet(bound = "R::Call: sov_universal_wallet::schema::UniversalWallet")]
+    pub runtime_call: R::Call,
     /// Uniqueness identifier of this transaction. see [`UniquenessData`] for more details.
     pub uniqueness: UniquenessData,
-    /// The transaction metadata. Contains gas parameters and the chain ID.
+    /// The transaction metadata. Contains gas parameters and the chain hash fragment.
     pub details: TxDetails<S>,
+    /// Signer-declared address override.
+    /// See [`crate::capabilities::AuthorizationData::address_override`] for routing semantics.
+    #[serde(default)]
+    pub address_override: Option<S::Address>,
 }
 
-impl<Call, S: Spec, C: CryptoSpecExt> Version0<Call, S, C> {
+impl<R: TransactionCallable, S: Spec, C: CryptoSpecExt> Version0<R, S, C> {
+    /// Extracts the unsigned transaction payload from this signed envelope.
+    pub fn to_unsigned_transaction(&self) -> UnsignedTransaction<R, S> {
+        UnsignedTransaction::new_with_details(
+            self.runtime_call.clone(),
+            self.uniqueness,
+            self.details.clone(),
+            self.address_override,
+        )
+    }
+
+    /// Serializes the V0 transaction signing payload for this signed envelope.
+    pub fn to_signing_bytes(&self, chain_hash: &[u8; 32]) -> Vec<u8> {
+        self.to_unsigned_transaction()
+            .to_signing_bytes_v0(*chain_hash)
+    }
+
     /// Extracts authorization data from this transaction.
     pub fn auth_data<M: GasMeter<Spec = S>>(
         &self,
         raw_tx_hash: TxHash,
+        non_malleable_hash: TxHash,
         meter: &mut M,
     ) -> Result<AuthorizationData<S>, AuthenticationError> {
         let pub_key = self.pub_key.clone();
@@ -54,15 +77,17 @@ impl<Call, S: Spec, C: CryptoSpecExt> Version0<Call, S, C> {
         Ok(AuthorizationData {
             uniqueness: self.uniqueness,
             tx_hash: raw_tx_hash,
+            non_malleable_hash,
             credential_id,
             credentials: Credentials::new(pub_key),
             default_address: credential_id.into(),
+            address_override: self.address_override,
         })
     }
 }
 
-impl<R: TransactionCallable, S: Spec> From<Version0<R::Call, S>> for Transaction<R, S> {
-    fn from(value: Version0<R::Call, S>) -> Self {
+impl<R: TransactionCallable, S: Spec> From<Version0<R, S>> for Transaction<R, S> {
+    fn from(value: Version0<R, S>) -> Self {
         Transaction::V0(value)
     }
 }

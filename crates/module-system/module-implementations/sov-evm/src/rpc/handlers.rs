@@ -23,6 +23,7 @@ use sov_state::{NativeStorage, Storage, StorageProof, User};
 use std::ops::DerefMut;
 use tracing::trace;
 
+use super::HeadView;
 use crate::Evm;
 
 #[derive(serde::Serialize, serde::Deserialize, Clone)]
@@ -66,6 +67,7 @@ where
     #[rpc_method(name = "eth_getBlockByHash", blocking)]
     pub fn get_block_by_hash(
         &self,
+        ext: &jsonrpsee::Extensions,
         block_hash: B256,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
@@ -78,6 +80,7 @@ where
         Ok(self.get_maybe_synthetic_block_for_rpc(
             Some(BlockId::Hash(block_hash.into())),
             details.unwrap_or_default().into(),
+            HeadView::from_extensions(ext),
             state,
         )?)
     }
@@ -86,6 +89,7 @@ where
     #[rpc_method(name = "eth_getBlockByNumber", blocking)]
     pub fn get_block_by_number(
         &self,
+        ext: &jsonrpsee::Extensions,
         block_id: Option<BlockId>,
         details: Option<bool>,
         state: &mut ApiStateAccessor<S>,
@@ -96,7 +100,12 @@ where
             "EVM module JSON-RPC request"
         );
         let kind = details.unwrap_or_default().into();
-        Ok(self.get_maybe_synthetic_block_for_rpc(block_id, kind, state)?)
+        Ok(self.get_maybe_synthetic_block_for_rpc(
+            block_id,
+            kind,
+            HeadView::from_extensions(ext),
+            state,
+        )?)
     }
 
     /// Handler for: `eth_getBalance`
@@ -238,6 +247,7 @@ where
     #[rpc_method(name = "eth_feeHistory", blocking)]
     pub fn fee_history(
         &self,
+        ext: &jsonrpsee::Extensions,
         block_count: U64,
         newest_block: BlockNumberOrTag,
         reward_percentiles: Option<Vec<f64>>,
@@ -256,6 +266,7 @@ where
             block_count,
             newest_block,
             reward_percentiles.as_deref(),
+            HeadView::from_extensions(ext),
             state,
         )?)
     }
@@ -264,10 +275,11 @@ where
     #[rpc_method(name = "eth_getTransactionByHash")]
     pub fn get_transaction_by_hash(
         &self,
+        ext: &jsonrpsee::Extensions,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Transaction>> {
-        let transaction = self.get_transaction(hash, state);
+        let transaction = self.get_transaction(hash, HeadView::from_extensions(ext), state);
         trace!(
             %hash,
             ?transaction,
@@ -281,6 +293,7 @@ where
     #[rpc_method(name = "eth_getTransactionByBlockHashAndIndex")]
     pub fn get_transaction_by_block_hash_and_index(
         &self,
+        ext: &jsonrpsee::Extensions,
         block_hash: B256,
         index: U64,
         state: &mut ApiStateAccessor<S>,
@@ -291,12 +304,15 @@ where
             method = "eth_getTransactionByBlockHashAndIndex",
             "EVM module JSON-RPC request"
         );
-        let maybe_block =
-            match self.get_maybe_sealed_block_by_id(BlockId::Hash(block_hash.into()), state) {
-                Ok(block) => block,
-                Err(EthApiError::HeaderNotFound(_)) => return Ok(None),
-                Err(err) => return Err(err.into()),
-            };
+        let maybe_block = match self.get_maybe_sealed_block_by_id(
+            BlockId::Hash(block_hash.into()),
+            HeadView::from_extensions(ext),
+            state,
+        ) {
+            Ok(block) => block,
+            Err(EthApiError::HeaderNotFound(_)) => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
         let Some(block) = maybe_block else {
             return Ok(None);
         };
@@ -307,6 +323,7 @@ where
     #[rpc_method(name = "eth_getTransactionByBlockNumberAndIndex")]
     pub fn get_transaction_by_block_number_and_index(
         &self,
+        ext: &jsonrpsee::Extensions,
         block: BlockNumberOrTag,
         index: U64,
         state: &mut ApiStateAccessor<S>,
@@ -317,7 +334,11 @@ where
             method = "eth_getTransactionByBlockNumberAndIndex",
             "EVM module JSON-RPC request"
         );
-        let maybe_block = self.get_maybe_sealed_block_by_id(BlockId::Number(block), state)?;
+        let maybe_block = self.get_maybe_sealed_block_by_id(
+            BlockId::Number(block),
+            HeadView::from_extensions(ext),
+            state,
+        )?;
         let Some(block) = maybe_block else {
             return Ok(None);
         };
@@ -328,6 +349,7 @@ where
     #[rpc_method(name = "eth_getBlockReceipts", blocking)]
     pub fn get_block_receipts(
         &self,
+        ext: &jsonrpsee::Extensions,
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<Vec<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>>>
@@ -337,13 +359,14 @@ where
             method = "eth_getBlockReceipts",
             "EVM module JSON-RPC request"
         );
-        Ok(self.get_receipts(block_id, state)?)
+        Ok(self.get_receipts(block_id, HeadView::from_extensions(ext), state)?)
     }
 
     /// Handler for: `eth_getTransactionReceipt`
     #[rpc_method(name = "eth_getTransactionReceipt")]
     pub fn get_transaction_receipt(
         &self,
+        ext: &jsonrpsee::Extensions,
         hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<TransactionReceipt<ReceiptEnvelope<LogWithExecutionTimestamp>>>> {
@@ -352,7 +375,7 @@ where
             method = "eth_getTransactionReceipt",
             "EVM module JSON-RPC request"
         );
-        Ok(self.get_receipt_by_hash(hash, state))
+        Ok(self.get_receipt_by_hash(hash, HeadView::from_extensions(ext), state))
     }
 
     /// Handler for: `eth_call`
@@ -472,18 +495,26 @@ where
     /// Handler for: `eth_blockNumber`.
     /// Returns pending block if it has any transactions.
     /// This is in line with sovereign rollup `pending` == `latest` semantics.
+    /// With [`HeadView::SealedOnly`], returns the newest sealed block instead.
     #[rpc_method(name = "eth_blockNumber")]
-    pub fn block_number(&self, state: &mut ApiStateAccessor<S>) -> RpcResult<U256> {
+    pub fn block_number(
+        &self,
+        ext: &jsonrpsee::Extensions,
+        state: &mut ApiStateAccessor<S>,
+    ) -> RpcResult<U256> {
         trace!(method = "eth_blockNumber", "EVM module JSON-RPC request");
-        Ok(U256::from(
-            self.resolve_block_number(BlockNumberOrTag::Latest, state),
-        ))
+        Ok(U256::from(self.resolve_block_number(
+            BlockNumberOrTag::Latest,
+            HeadView::from_extensions(ext),
+            state,
+        )))
     }
 
     /// Handler for `debug_traceBlockByNumber`
     #[rpc_method(name = "debug_traceBlockByNumber", blocking)]
     pub fn debug_trace_block_by_number(
         &self,
+        ext: &jsonrpsee::Extensions,
         block: BlockNumberOrTag,
         opts: Option<GethDebugTracingOptions>,
         state: &mut ApiStateAccessor<S>,
@@ -492,19 +523,30 @@ where
             method = "debug_traceBlockByNumber",
             "EVM module JSON-RPC request"
         );
-        Ok(self.trace_block_by_number(block, opts.unwrap_or_default(), state)?)
+        Ok(self.trace_block_by_number(
+            block,
+            opts.unwrap_or_default(),
+            HeadView::from_extensions(ext),
+            state,
+        )?)
     }
 
     /// Handler for: `debug_traceTransaction`
     #[rpc_method(name = "debug_traceTransaction", blocking)]
     pub fn debug_trace_transaction(
         &self,
+        ext: &jsonrpsee::Extensions,
         tx_hash: B256,
         opts: Option<GethDebugTracingOptions>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<GethTrace> {
         trace!(method = "debug_traceTransaction", %tx_hash, "EVM module JSON-RPC request");
-        Ok(self.trace_transaction(tx_hash, opts.unwrap_or_default(), state)?)
+        Ok(self.trace_transaction(
+            tx_hash,
+            opts.unwrap_or_default(),
+            HeadView::from_extensions(ext),
+            state,
+        )?)
     }
 
     // ========== web3 namespace ==========
@@ -559,6 +601,7 @@ where
     #[rpc_method(name = "eth_getBlockTransactionCountByNumber")]
     pub fn get_block_transaction_count_by_number(
         &self,
+        ext: &jsonrpsee::Extensions,
         block_id: Option<BlockId>,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<U64>> {
@@ -568,7 +611,11 @@ where
             "EVM module JSON-RPC request"
         );
         let result = self
-            .get_maybe_sealed_block_by_id(block_id.unwrap_or_else(BlockId::latest), state)
+            .get_maybe_sealed_block_by_id(
+                block_id.unwrap_or_else(BlockId::latest),
+                HeadView::from_extensions(ext),
+                state,
+            )
             .map(|block| {
                 block
                     .map(|b| U64::from(b.transactions_end().saturating_sub(b.transactions_start())))
@@ -581,6 +628,7 @@ where
     #[rpc_method(name = "eth_getBlockTransactionCountByHash")]
     pub fn get_block_transaction_count_by_hash(
         &self,
+        ext: &jsonrpsee::Extensions,
         block_hash: B256,
         state: &mut ApiStateAccessor<S>,
     ) -> RpcResult<Option<U64>> {
@@ -589,14 +637,17 @@ where
             method = "eth_getBlockTransactionCountByHash",
             "EVM module JSON-RPC request"
         );
-        let maybe_block =
-            match self.get_maybe_sealed_block_by_id(BlockId::Hash(block_hash.into()), state) {
-                Ok(block) => block,
-                // For synthetic hashes that are not in cache, this endpoint should behave
-                // like unknown block hash and return `null` instead of an RPC error.
-                Err(EthApiError::HeaderNotFound(_)) => return Ok(None),
-                Err(err) => return Err(err.into()),
-            };
+        let maybe_block = match self.get_maybe_sealed_block_by_id(
+            BlockId::Hash(block_hash.into()),
+            HeadView::from_extensions(ext),
+            state,
+        ) {
+            Ok(block) => block,
+            // For synthetic hashes that are not in cache, this endpoint should behave
+            // like unknown block hash and return `null` instead of an RPC error.
+            Err(EthApiError::HeaderNotFound(_)) => return Ok(None),
+            Err(err) => return Err(err.into()),
+        };
 
         Ok(maybe_block.map(|block| {
             U64::from(

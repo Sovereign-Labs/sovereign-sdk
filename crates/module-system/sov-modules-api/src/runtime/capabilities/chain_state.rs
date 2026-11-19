@@ -56,6 +56,19 @@ pub trait ChainState {
         state: &mut KernelStateAccessor<'_, Self::Spec>,
     );
 
+    /// Updates the rollup's time oracle from the timestamp attached to a transaction by the
+    /// preferred sequencer.
+    ///
+    /// Invoked by the STF before dispatching every preferred-sequencer transaction that carries
+    /// a timestamp in its sequencing data. Implementations must be best-effort and deterministic:
+    /// invalid, overflowing, or regressing timestamps must be ignored rather than rejected, since
+    /// an error reverts the transaction.
+    fn update_oracle_time(
+        &mut self,
+        timestamp: crate::HDTimestamp,
+        state: &mut impl crate::TxState<Self::Spec>,
+    ) -> anyhow::Result<()>;
+
     /// Returns the base fee per gas accessible at the current *visible* slot.
     ///
     /// ## Note
@@ -79,16 +92,6 @@ pub trait ChainState {
         &self,
         state: &mut Reader,
     ) -> bool;
-
-    /// Returns the slot gas limit accessible at the current *virtual* slot.
-    ///
-    /// Note that the gas limit is defined to change as of the slot immediately after the CHANGE_GAS_LIMIT_AFTER_HEIGHT rollup height.
-    /// so we need to know whether this is a stale height (i.e. another slot being executed at the same height so that we can determine whether to show the updated gas limit at the boundary height).
-    fn block_gas_limit(
-        &self,
-        current_rollup_height: RollupHeight,
-        is_stale_height: bool,
-    ) -> <Self::Spec as Spec>::Gas;
 
     /// Returns the visible root hash accessible at the requested rollup height
     ///
@@ -120,6 +123,13 @@ pub trait ChainState {
         &self,
         state: &mut Reader,
     ) -> Option<u64>;
+
+    /// Returns the global on-chain state schema version.
+    #[cfg(feature = "native")]
+    fn state_version<Reader: StateReader<sov_state::Accessory, Error = Infallible>>(
+        &self,
+        state: &mut Reader,
+    ) -> u64;
 
     /// Returns the visible root hash accessible at the requested rollup height using the accessory state.
     ///

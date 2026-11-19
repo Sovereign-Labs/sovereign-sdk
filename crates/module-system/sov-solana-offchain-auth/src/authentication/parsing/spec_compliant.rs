@@ -53,8 +53,8 @@ const SIGNERS_START: usize = SIGNER_COUNT_OFFSET + SIGNER_COUNT_LEN;
 /// The envelope for a signed spec-compliant solana offchain message, where the signed message
 /// includes the preamble.
 #[derive(BorshSerialize, BorshDeserialize)]
-pub struct SolanaOffchainSpecCompliantMessage<S: Spec> {
-    /// The message is a JSON-serialized SolanaOffchainUnsignedTransaction with the standard
+pub struct SolanaOffchainSpecCompliantEnvelope<S: Spec> {
+    /// The message is a JSON-serialized SolanaOffchainSigningPayloadV0 with the standard
     /// preamble prepended.
     pub signed_message_with_preamble: Vec<u8>,
     pub signature: <S::CryptoSpec as CryptoSpec>::Signature,
@@ -64,9 +64,9 @@ pub struct SolanaOffchainSpecCompliantMessage<S: Spec> {
 /// All pubkeys are embedded in the preamble (part of the signed bytes). The envelope carries only
 /// signatures, a bitfield mapping each signature to its pubkey in the preamble, and the threshold.
 #[derive(BorshSerialize, BorshDeserialize)]
-pub struct SolanaOffchainSpecCompliantMultisigMessage<S: Spec> {
+pub struct SolanaOffchainSpecCompliantMultisigEnvelope<S: Spec> {
     /// Preamble (with all N pubkeys) followed by JSON-serialized
-    /// `SolanaOffchainUnsignedTransactionV1`.
+    /// `SolanaOffchainSigningPayloadV1`.
     pub signed_message_with_preamble: Vec<u8>,
     /// One signature per signer, ordered to match set bits in `signer_bitfield` from LSB to MSB.
     #[borsh(bound(
@@ -288,7 +288,7 @@ pub(super) fn unpack_spec_compliant_message<S: Spec>(
 ) -> Result<UnpackedSolanaMessage<S>, FatalError> {
     let single_key_preamble_len = preamble_len(1);
 
-    let envelope: SolanaOffchainSpecCompliantMessage<S> =
+    let envelope: SolanaOffchainSpecCompliantEnvelope<S> =
         borsh::from_slice(raw_tx).map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     if envelope.signed_message_with_preamble.len() < single_key_preamble_len {
@@ -324,7 +324,7 @@ pub(super) fn unpack_spec_compliant_message<S: Spec>(
 pub(super) fn unpack_spec_compliant_multisig_message<S: Spec>(
     raw_tx: &[u8],
 ) -> Result<UnpackedSolanaMessage<S>, FatalError> {
-    let envelope: SolanaOffchainSpecCompliantMultisigMessage<S> =
+    let envelope: SolanaOffchainSpecCompliantMultisigEnvelope<S> =
         borsh::from_slice(raw_tx).map_err(|e| FatalError::DeserializationFailed(e.to_string()))?;
 
     let data = &envelope.signed_message_with_preamble;

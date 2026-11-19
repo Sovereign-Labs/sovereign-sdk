@@ -174,21 +174,18 @@ where
         E2: Into<anyhow::Error> + Send + Sync,
         E3: Into<anyhow::Error> + Send + Sync,
     {
-        let chain_id;
         let max_priority_fee_bips;
         let max_fee;
         let gas_limit;
 
         let intermediate_repr: RT::CliStringRepr<U> = match self {
             TransactionLoadWorkflow::FromFile(file) => {
-                chain_id = file.chain_id();
                 max_priority_fee_bips = file.max_priority_fee_bips();
                 max_fee = file.max_fee();
                 gas_limit = file.gas_limit().map(|m| m.to_vec());
                 file.try_into().map_err(Into::<anyhow::Error>::into)?
             }
             TransactionLoadWorkflow::FromString(json) => {
-                chain_id = json.chain_id();
                 max_priority_fee_bips = json.max_priority_fee_bips();
                 max_fee = json.max_fee();
                 gas_limit = json.gas_limit().map(|m| m.to_vec());
@@ -207,7 +204,6 @@ where
 
         Ok(UnsignedTransactionWithoutUniqueness::new(
             tx,
-            chain_id,
             RT::CHAIN_HASH,
             max_priority_fee_bips.into(),
             max_fee,

@@ -117,6 +117,47 @@ pub struct SkippedField {
     not_skipped: u8,
 }
 
+/// A multi-field tuple struct: its schema records `type_name: Some("NamedTupleStruct")`.
+#[derive(
+    Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize, UniversalWallet, Arbitrary,
+)]
+pub struct NamedTupleStruct(i8, U64, ArbitrarySafeString);
+
+/// A newtype: its schema records `type_name: Some("NewtypeStruct")`, but it stays transparent
+/// for display and JSON exactly like an anonymous single-field tuple.
+#[derive(
+    Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize, UniversalWallet, Arbitrary,
+)]
+pub struct NewtypeStruct(u32);
+
+/// A tuple struct that opts out of name recording: its schema has `type_name: None`, identical
+/// to that of an anonymous `(i16, Option<u8>)`.
+#[derive(
+    Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize, UniversalWallet, Arbitrary,
+)]
+#[sov_wallet(anonymize_tuple)]
+pub struct AnonymizedTupleStruct(i16, Option<u8>);
+
+/// Tuple structs nested inside each other and inside containers.
+#[derive(
+    Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize, UniversalWallet, Arbitrary,
+)]
+pub struct NestedTupleStruct(
+    NewtypeStruct,
+    Option<NamedTupleStruct>,
+    Vec<AnonymizedTupleStruct>,
+);
+
+#[derive(
+    Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize, UniversalWallet, Arbitrary,
+)]
+pub enum TupleStructInput {
+    Named(NamedTupleStruct),
+    Newtype(NewtypeStruct),
+    Anonymized(AnonymizedTupleStruct),
+    Nested(NestedTupleStruct),
+}
+
 #[derive(
     Debug, BorshSerialize, BorshDeserialize, Serialize, Deserialize, UniversalWallet, Arbitrary,
 )]
@@ -134,7 +175,49 @@ pub enum FuzzInput {
         name: ArbitrarySafeString,
     },
     MultiTuple(i8, Option<u8>),
+    TupleStruct(TupleStructInput),
     SkippedField(SkippedField),
     Complex(ComplexStruct),
     Null(()),
+}
+
+#[cfg(test)]
+mod tests {
+    use sov_universal_wallet::schema::Schema;
+    use sov_universal_wallet::ty::Ty;
+
+    use super::*;
+
+    /// The type names recorded on the tuple types of `FuzzInput`'s schema.
+    fn recorded_tuple_type_names() -> Vec<String> {
+        Schema::of_single_type::<FuzzInput>()
+            .unwrap()
+            .types()
+            .iter()
+            .filter_map(|ty| match ty {
+                Ty::Tuple(tuple) => tuple.type_name.clone(),
+                _ => None,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn fuzz_input_schema_records_tuple_struct_names() {
+        let names = recorded_tuple_type_names();
+        for expected in ["NamedTupleStruct", "NewtypeStruct", "NestedTupleStruct"] {
+            assert!(
+                names.iter().any(|name| name == expected),
+                "FuzzInput's schema should contain a tuple type named {expected}, found {names:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn fuzz_input_schema_omits_anonymized_tuple_struct_name() {
+        let names = recorded_tuple_type_names();
+        assert!(
+            !names.iter().any(|name| name == "AnonymizedTupleStruct"),
+            "A tuple struct annotated with anonymize_tuple should not record its name, found {names:?}"
+        );
+    }
 }

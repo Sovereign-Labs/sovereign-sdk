@@ -26,7 +26,7 @@ serde_json = { workspace = true }
 serde_urlencoded = "0.7"
 sov-shutdown = { workspace = true }
 thiserror = { workspace = true }
-tokio = { workspace = true }
+tokio = { workspace = true, features = ["rt"] }
 tower = { workspace = true, features = ["util"] }
 tower-http = { workspace = true, features = ["cors", "trace", "propagate-header", "set-header"] }
 tower-request-id = { workspace = true }

@@ -72,7 +72,7 @@ let signed_tx = builder.build_and_sign(&private_key_bytes)?;
 
 **Example Usage:**
 ```rust
-use sovereign_web3::schema::{Serializer, TransactionBuilder, json};
+use sovereign_web3::schema::{chain_hash_fragment, json, Serializer, TransactionBuilder};
 
 // Load schema from URL or JSON string
 let serializer = Serializer::from_url("https://rollup.example.com/schema")?;
@@ -90,7 +90,7 @@ let call = json!({
 });
 
 let unsigned_tx = TransactionBuilder::new(call)
-    .chain_id(1234)
+    .chain_hash_fragment(chain_hash_fragment(&serializer.chain_hash()?))
     .max_fee(100000u128)
     .build()?;
 
@@ -114,4 +114,3 @@ cargo test
 # Run schema integration tests (requires running rollup)
 cargo test -- --ignored
 ```
-

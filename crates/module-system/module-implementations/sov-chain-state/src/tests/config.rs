@@ -11,6 +11,7 @@ fn test_config_serialization() {
         current_time: time,
         operating_mode: OperatingMode::Zk,
         genesis_da_height: 0,
+        state_version: 0,
         inner_code_commitment: Default::default(),
         outer_code_commitment: Default::default(),
         admin: None,
@@ -22,7 +23,8 @@ fn test_config_serialization() {
         "operating_mode": "zk",
         "inner_code_commitment": [0, 0, 0, 0, 0, 0, 0, 0],
         "outer_code_commitment": [0, 0, 0, 0, 0, 0, 0, 0],
-        "genesis_da_height": 0
+        "genesis_da_height": 0,
+        "state_version": 0
     }"#;
 
     let parsed_config: ChainStateConfig<TestSpec> = serde_json::from_str(data).unwrap();

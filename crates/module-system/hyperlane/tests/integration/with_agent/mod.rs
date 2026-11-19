@@ -14,7 +14,6 @@
 use std::collections::HashMap;
 use std::io::Read;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 
 use anyhow::Result;
 use base64::prelude::BASE64_STANDARD;
@@ -873,8 +872,15 @@ fn tx_set_relayer_config(relayer: &TestUser<TestSpec>) -> RawTx {
 }
 
 fn generation() -> u64 {
-    static GENERATION: AtomicU64 = AtomicU64::new(0);
-    GENERATION.fetch_add(1, Ordering::Relaxed)
+    // The dockerized Hyperlane agent uses Unix milliseconds for generations.
+    // Keep test-created transactions in the same range for shared credentials.
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .expect("system time should be after the Unix epoch");
+
+    now.as_secs()
+        .saturating_mul(1_000)
+        .saturating_add(u64::from(now.subsec_millis()))
 }
 
 async fn anvil_rpc_value(port: u16, method: &str, params: Value) -> Value {

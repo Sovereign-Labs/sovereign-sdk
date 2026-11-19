@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { bytesToHex, ensureBytes, hexToBytes } from "./hex";
+import { bytesToHex, ensureBytes, hexToBytes, normalizeHexString } from "./hex";
 
 describe("hexToBytes", () => {
   it("should convert a valid hex string to Uint8Array", () => {
@@ -37,6 +37,22 @@ describe("bytesToHex", () => {
     const arr = new Uint8Array([0]);
     const result = bytesToHex(arr);
     expect(result).toBe("00");
+  });
+});
+
+describe("normalizeHexString", () => {
+  it("should strip a 0x prefix and lowercase the value", () => {
+    expect(normalizeHexString("0xAABBCC")).toBe("aabbcc");
+  });
+
+  it("should preserve already-normalized lowercase hex", () => {
+    expect(normalizeHexString("0a1b2c")).toBe("0a1b2c");
+  });
+
+  it("should throw for invalid hex input", () => {
+    expect(() => normalizeHexString("0xZZ")).toThrow(
+      "Invalid hex string: contains non-hex characters",
+    );
   });
 });
 

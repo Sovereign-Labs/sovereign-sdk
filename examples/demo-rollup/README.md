@@ -109,9 +109,9 @@ Once a batch is submitted, the output should also contain the transaction hashes
 
 ```text
 2025-10-24T12:40:48.335845Z  INFO sov_cli::workflows::node: Executing node workflow
-2025-10-24T12:40:48.348358Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0xe87b872b001576ba4a72b5e0c41402ae1ae161c97be5e7099c1c03c3fb3ddba8
+2025-10-24T12:40:48.348358Z  INFO sov_cli::workflows::node: Submitting tx index=0 tx_hash=0x20950b76b653622fb25ca0e38f0dece5619a858714d30c7af282726effdd47cd
 2025-10-24T12:40:48.348379Z  INFO sov_node_client: Calling `publish_batch` sequencer endpoint txs_included=1
-2025-10-24T12:40:48.358028Z  INFO sov_node_client: Submitted tx hash="0xe87b872b001576ba4a72b5e0c41402ae1ae161c97be5e7099c1c03c3fb3ddba8"
+2025-10-24T12:40:48.358028Z  INFO sov_node_client: Submitted tx hash="0x20950b76b653622fb25ca0e38f0dece5619a858714d30c7af282726effdd47cd"
 2025-10-24T12:40:48.358060Z  INFO sov_node_client: Going to wait for batch to be processed max_waiting_time=300s
 2025-10-24T12:40:50.477229Z  INFO sov_node_client: Rollup has processed the submitted batch!
 ```
@@ -121,7 +121,7 @@ this case have the TokenCreated Event
 
 ```sh,test-ci,bashtestmd:compare-output
 $ sleep 5
-$ curl -sS http://127.0.0.1:12346/ledger/txs/0xe87b872b001576ba4a72b5e0c41402ae1ae161c97be5e7099c1c03c3fb3ddba8/events | jq
+$ curl -sS http://127.0.0.1:12346/ledger/txs/0x20950b76b653622fb25ca0e38f0dece5619a858714d30c7af282726effdd47cd/events | jq
 [
   {
     "type": "event",
@@ -155,7 +155,7 @@ $ curl -sS http://127.0.0.1:12346/ledger/txs/0xe87b872b001576ba4a72b5e0c41402ae1
       "type": "moduleRef",
       "name": "Bank"
     },
-    "tx_hash": "0xe87b872b001576ba4a72b5e0c41402ae1ae161c97be5e7099c1c03c3fb3ddba8"
+    "tx_hash": "0x20950b76b653622fb25ca0e38f0dece5619a858714d30c7af282726effdd47cd"
   }
 ]
 ```
@@ -334,12 +334,12 @@ Adding the following transaction to batch:
       }
     }
   },
-  "chain_hash": "0xb4be2c15ed35b8b7e0406b41e9dddd883948129501f3bcf952a47daf02b6c4a2",
+  "chain_hash": "0xf90c71c495f59c4fb44bd827d85d9f0273a3dda3def75222d738db6851fbad71",
   "details": {
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",
     "gas_limit": null,
-    "chain_id": 4321
+    "chain_hash_fragment": "5736730048957844729"
   }
 }
 ```

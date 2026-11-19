@@ -91,6 +91,22 @@ export type EventPayload = {
     type: "moduleRef";
     name: string;
   };
+  /**
+   * The run of numbering this copy of the event is served under.
+   *
+   * Present on every event served by the sequencer, from its cache or read back from the
+   * ledger: the sequencer's epoch at the time of serving. Before applying this event to a
+   * state snapshot, check it against the `x-sov-event-epoch` header that snapshot came with:
+   * if they differ, the sequencer has discarded soft confirmations since the snapshot was
+   * taken and the client must resynchronise. Comparing `number` alone is not enough, because
+   * a rollback that re-emits past where it rewound leaves the number higher than before.
+   *
+   * Absent on events from the node's ledger API, which has no epoch. An absent epoch counts
+   * as the all-zero epoch, which only a publisher that never reissues numbers, such as the
+   * standard sequencer, reports. On a DA layer without instant finality, a DA reorg can still
+   * renumber events in non-finalized slots; no epoch guards against that.
+   */
+  epoch?: string;
 };
 
 export interface SubscriptionToCallbackMap {

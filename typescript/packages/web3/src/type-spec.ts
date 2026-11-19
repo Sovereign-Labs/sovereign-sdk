@@ -18,6 +18,12 @@ export type BaseTypeSpec = {
   UnsignedTransaction: any;
 
   /**
+   * The type of transaction signing payload used in the rollup.
+   */
+  // biome-ignore lint/suspicious/noExplicitAny: base spec, allow any as default to be overriden
+  TransactionSigningPayload: any;
+
+  /**
    * The type of runtime call used in the rollup.
    */
   // biome-ignore lint/suspicious/noExplicitAny: base spec, allow any as default to be overriden

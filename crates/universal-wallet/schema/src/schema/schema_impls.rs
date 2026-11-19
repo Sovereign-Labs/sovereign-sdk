@@ -159,6 +159,7 @@ mod primitive_type_impls {
             impl<$($tts: UniversalWallet + 'static,)*> UniversalWallet for ($($tts,)*) {
                 fn scaffold() -> Item<IndexLinking> {
                     Item::Container(Container::Tuple(Tuple {
+                        type_name: None,
                         template: None,
                         peekable: false,
                         fields: vec![

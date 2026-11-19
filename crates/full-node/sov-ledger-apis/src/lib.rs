@@ -24,7 +24,7 @@ use sov_rest_utils::errors::{
 };
 use sov_rest_utils::{
     json_obj, preconfigured_router_layers, serve_generic_ws_subscription, ApiResult, ErrorObject,
-    PageSelection, Pagination, Path, Query,
+    PageSelection, PaginatedResponse, Pagination, Path, Query,
 };
 use sov_rollup_interface::common::{HexHash, HexString, SlotNumber};
 use sov_rollup_interface::node::ledger_api::{
@@ -32,7 +32,7 @@ use sov_rollup_interface::node::ledger_api::{
     FinalityStatus, IncludeChildren, ItemOrHash, LedgerStateProvider, QueryMode, SlotIdAndOffset,
     SlotIdentifier, SlotResponse, TxIdAndOffset, TxIdentifier, TxResponse,
 };
-use sov_rollup_interface::stf::TxReceiptContents;
+use sov_rollup_interface::stf::{EventKey, TxReceiptContents};
 use sov_shutdown::PrimaryShutdownController;
 
 type PathMap = Path<HashMap<String, NumberOrHash>>;
@@ -166,6 +166,7 @@ where
                 )),
             )
             .route("/events", get(Self::list_events))
+            .route("/events/by-key", get(Self::list_events_by_key))
             .route("/events/counts", get(Self::get_event_key_counts))
             .route("/events/latest", get(Self::get_latest_event))
             .nest(
@@ -348,6 +349,68 @@ where
             Ok(None) => Err(errors::not_found_404("Event", event_number)),
             Err(err) => Err(errors::database_error_response_500(err)),
         }
+    }
+
+    /// Events for one exact event key, oldest first.
+    ///
+    /// `EventByKey` is stored as `(EventKey, TxNumber, EventNumber)`, so an
+    /// exact key is a contiguous range: this seeks once and reads only the page
+    /// it returns. The `prefix` filter on `list_events` cannot do that — a
+    /// string prefix is not a contiguous range, because the encoded key starts
+    /// with its length — which is why that path needs a cursor bound and this
+    /// one does not.
+    ///
+    /// `page[cursor]` is opaque: pass back the `next_cursor` of the previous
+    /// page. It is the storage position of the first row not yet served, so
+    /// resuming re-reads nothing and splits no transaction.
+    async fn list_events_by_key(
+        State(state): State<LedgerState<T>>,
+        Query(query): Query<EventsByKeyQuery>,
+    ) -> ApiResult<PaginatedResponse<RuntimeEventResponse<E>, String>> {
+        let EventsByKeyQuery { key, pagination } = query;
+        if key.is_empty() {
+            return Err(errors::bad_request_400(
+                "key must not be empty",
+                "pass the exact event key, e.g. key=Bank/TokenTransferred",
+            ));
+        }
+        let limit = pagination.size as usize;
+
+        let cursor = match pagination.selection {
+            PageSelection::First => None,
+            PageSelection::Last => return Err(errors::not_implemented_501()),
+            PageSelection::Next { cursor } => {
+                // The store reports an undecodable cursor as an internal error
+                // and answers a cursor issued for another key with an empty
+                // page, so check both here and reject with 400 instead.
+                const BAD_CURSOR: &str =
+                    "page[cursor] must be the next_cursor of a previous page for this key";
+                let bytes =
+                    hex::decode(&cursor).map_err(|e| errors::bad_request_400(BAD_CURSOR, e))?;
+                let (cursor_key, _, _): (EventKey, TxNumber, EventNumber) =
+                    BorshDeserialize::try_from_slice(&bytes)
+                        .map_err(|e| errors::bad_request_400(BAD_CURSOR, e))?;
+                if cursor_key.inner().as_slice() != key.as_bytes() {
+                    return Err(errors::bad_request_400(
+                        BAD_CURSOR,
+                        "the cursor was issued for a different key",
+                    ));
+                }
+                Some(cursor)
+            }
+        };
+
+        let page = state
+            .ledger
+            .get_events_by_key::<RuntimeEventResponse<E>>(&key, None, limit, cursor.as_deref())
+            .await
+            .map_err(errors::database_error_response_500)?;
+
+        Ok(PaginatedResponse {
+            items: page.events_response,
+            next_cursor: page.next,
+        }
+        .into())
     }
 
     // TODO: we're going to want to start using range/iters
@@ -930,6 +993,38 @@ impl ReportableWsError for WsLedgerError {
 #[derive(Deserialize)]
 struct EventFilter {
     prefix: String,
+}
+
+/// Query string of `list_events_by_key`: the exact event key plus pagination.
+///
+/// Pagination is parsed only when a `page*` parameter is present, so a bare
+/// `?key=...` gets the default first page while a malformed `page[size]` or a
+/// `page=next` without a cursor is rejected. `Option<Query<Pagination>>` cannot
+/// make that distinction: it maps every parse failure to `None`.
+struct EventsByKeyQuery {
+    key: String,
+    pagination: Pagination<String>,
+}
+
+impl<'de> Deserialize<'de> for EventsByKeyQuery {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        use serde::de::{Error, IntoDeserializer};
+
+        let mut params = <HashMap<String, String> as Deserialize>::deserialize(deserializer)?;
+        let key = params
+            .remove("key")
+            .ok_or_else(|| D::Error::missing_field("key"))?;
+        let pagination = if params
+            .keys()
+            .any(|param| param == "page" || param.starts_with("page["))
+        {
+            <Pagination<String> as Deserialize>::deserialize(params.into_deserializer())
+                .map_err(|e: serde::de::value::Error| D::Error::custom(e))?
+        } else {
+            Pagination::default()
+        };
+        Ok(Self { key, pagination })
+    }
 }
 
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]

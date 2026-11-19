@@ -5,7 +5,9 @@ expression: config
 {
   "storage": {
     "path": "/tmp",
+    "live_db_path": null,
     "ledger_db_path": "/tmp/ledger-db",
+    "user_nomt_db_path": null,
     "state_cache_size": null,
     "user_commit_concurrency": null,
     "user_hashtable_buckets": null,
@@ -27,7 +29,8 @@ expression: config
       "bind_host": "127.0.0.1",
       "bind_port": 12346,
       "public_address": "https://rollup.sovereign.xyz",
-      "cors": "restrictive"
+      "cors": "restrictive",
+      "max_rpc_response_body_size": 10485760
     },
     "concurrent_sync_tasks": 18,
     "pre_fetched_blocks_capacity": 20,

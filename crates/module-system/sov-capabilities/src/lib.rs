@@ -9,23 +9,23 @@ use sov_chain_state::ChainState as ChainStateModule;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::capabilities::{
     AuthorizationData, GasEnforcer, ProofProcessor, SequencerAuthorization, SequencerRemuneration,
-    SequencingDataHandler, TransactionAuthorizer,
+    TransactionAuthorizer,
 };
+use sov_modules_api::prelude::tracing;
 use sov_modules_api::transaction::{
     AuthenticatedTransactionData, ProverReward, RemainingFunds, SequencerReward,
 };
-use sov_modules_api::HDTimestamp;
 use sov_modules_api::SequencerType;
 use sov_modules_api::{
     AggregatedProofPublicData, Amount, Context, DaSpec, Gas, GetGasPrice, InfallibleStateAccessor,
     InvalidProofError, ModuleInfo, OperatingMode, Rewards, SovAttestation,
     SovStateTransitionPublicData, Spec, StateAccessor, StateReader, StateWriter, Storage, TxState,
 };
-use sov_modules_api::{ExecutionContext, GasSpec, VersionReader};
+use sov_modules_api::{ExecutionContext, VersionReader};
 use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::zk::aggregated_proof::SerializedAggregatedProof;
 use sov_rollup_interface::Bytes;
-use sov_sequencer_registry::SequencerRegistry;
+use sov_sequencer_registry::{AddToStakeError, SequencerRegistry};
 use sov_state::{Kernel, User};
 
 /// Implements the basic capabilities required for a zk-rollup runtime.
@@ -44,10 +44,10 @@ pub struct StandardProvenRollupCapabilities<'a, S: Spec, GasPayer = ()> {
 impl<'a, S: Spec, T> StandardProvenRollupCapabilities<'a, S, T> {
     fn get_prover_token_holder(
         &'a self,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         state: &mut impl InfallibleStateAccessor,
     ) -> TokenHolder<S> {
-        let rewarded_token_holder = match oprating_mode {
+        let rewarded_token_holder = match operating_mode {
             OperatingMode::Zk => self.prover_incentives.id().to_payable().into(),
             OperatingMode::Optimistic => self.attester_incentives.id().to_payable().into(),
             OperatingMode::Operator => {
@@ -139,10 +139,10 @@ where
     fn reward_prover(
         &mut self,
         prover_rewards: &ProverReward,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         state: &mut impl InfallibleStateAccessor,
     ) {
-        let rewarded_module = self.get_prover_token_holder(oprating_mode, state);
+        let rewarded_module = self.get_prover_token_holder(operating_mode, state);
 
         self.bank
             .transfer_from(
@@ -181,10 +181,10 @@ where
         &mut self,
         amount: Amount,
         _sequencer: &S::Address,
-        oprating_mode: OperatingMode,
+        operating_mode: OperatingMode,
         state: &mut impl InfallibleStateAccessor,
     ) -> anyhow::Result<()> {
-        let rewarded_prover_module = self.get_prover_token_holder(oprating_mode, state);
+        let rewarded_prover_module = self.get_prover_token_holder(operating_mode, state);
         // Transfer the penalty from the sequencer bank to the sequencer
         Ok(self.bank.transfer_from(
             self.bank.id.clone().to_payable(),
@@ -207,22 +207,34 @@ where
         sequencer: &<S::Da as DaSpec>::Address,
         state: &mut Accessor,
     ) {
-        // Only the preferred sequencer is allowed to bond zero tokens. After the gas limit change height, we no longer penalize the preferred sequencer.
-        let mut net_amount = if bond_amount == Amount::ZERO
-            && state.rollup_height_to_access() > <S as GasSpec>::change_gas_limit_after_height()
-        {
-            Amount::ZERO
-        } else {
-            bond_amount.checked_sub(reward.accumulated_penalty).expect("A sequencer can never be penalized more than the amount they have escrowed, regardless of reward accumulation!")
-        };
+        let mut net_amount = bond_amount.checked_sub(reward.accumulated_penalty).expect("A sequencer can never be penalized more than the amount they have escrowed, regardless of reward accumulation!");
         net_amount = net_amount.checked_add(reward.accumulated_reward).expect("Total sequencer reward + escrow amount is greater than the max possible token supply. This is a bug in gas accounting.");
 
-        self.sequencer_registry.add_to_stake(
-            self.bank.id().to_payable(),
-            sequencer,
-            net_amount,
-            state,
-        ).expect("Attempted to send more funds to the sequencer than they have escrowed. This is a bug in gas accounting.");
+        match self
+            .sequencer_registry
+            .add_to_stake(self.bank.id().to_payable(), sequencer, net_amount, state)
+        {
+            Ok(_) => {}
+            // There's an edge case where a sequencer's valid blob was already selected or deferred when a garbage blob from the same sender slashes it.
+            // The queued blob isn't dropped, so it still executes and can result in sequencer rewards for a slashed sequencer.
+            Err(AddToStakeError::SequencerNotRegistered { sequencer }) => {
+                tracing::info!(amount = %net_amount, %sequencer, "A sequencer was rewarded after having been removed from the registry (probably due to slashing). Those funds are held by the sequencer registry but not claimable by anyone.");
+                let coins = gas_coins(net_amount);
+                let bank_id = *self.bank.id();
+                // In this edge case, we still transfer the funds from bank -> sequencer registry. This ensures that the user space state root matches whether or not the
+                // preferred sequencer observed the slashing before executing its batch; slashing a non-preferred sequencer only changes the kernel space `known_sequencers` map.
+                // Without this, the preferred sequencer might see the wrong state root leading to a defensive panic.
+                self.bank
+                    .transfer_from(
+                        bank_id.to_payable(),
+                        self.sequencer_registry.id().to_payable(),
+                        coins,
+                        state,
+                    )
+                    .expect("Bank had insufficient funds to transfer to sequencer registry after a slashing. This is a bug in gas accounting");
+            }
+            Err(e) => panic!("Failed to return escrowed funds to sequencer. This is a bug in gas accounting. Underlying error: {e}"),
+        }
     }
 }
 
@@ -236,40 +248,6 @@ impl<S: Spec, T> SequencerAuthorization<S> for StandardProvenRollupCapabilities<
     }
 }
 
-impl<S: Spec, T> SequencingDataHandler<S> for StandardProvenRollupCapabilities<'_, S, T> {
-    type SequencingData = HDTimestamp;
-
-    fn handle_sequencing_data(
-        &mut self,
-        data: Self::SequencingData,
-        context: &Context<S>,
-        state: &mut impl TxState<S>,
-    ) -> anyhow::Result<()> {
-        if !context.sequencer_is_preferred() {
-            return Ok(());
-        }
-
-        self.chain_state
-            .update_oracle_time_from_sequencing_data(data, state)
-    }
-
-    #[cfg(feature = "native")]
-    fn create_sequencing_data(&self) -> Self::SequencingData {
-        use std::str::FromStr;
-        if cfg!(debug_assertions) {
-            let Ok(timestamp) = std::env::var(OVERRIDE_HD_TIMESTAMPS_ENV_VAR) else {
-                return HDTimestamp::now();
-            };
-            HDTimestamp::from_str(&timestamp).unwrap_or_else(|_| HDTimestamp::now())
-        } else {
-            HDTimestamp::now()
-        }
-    }
-}
-
-#[cfg(feature = "native")]
-const OVERRIDE_HD_TIMESTAMPS_ENV_VAR: &str = "SOV_TEST_OVERRIDE_HD_TIMESTAMPS";
-
 impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'_, S, T> {
     /// Prevents duplicate transactions from running.
     fn check_uniqueness(
@@ -282,7 +260,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         self.uniqueness.check_uniqueness(
             &auth_data.credential_id,
             auth_data.uniqueness,
-            auth_data.tx_hash,
+            auth_data.non_malleable_hash,
             execution_context,
             state,
         )
@@ -298,7 +276,7 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         self.uniqueness.mark_tx_attempted(
             &auth_data.credential_id,
             auth_data.uniqueness,
-            auth_data.tx_hash,
+            auth_data.non_malleable_hash,
             state,
         )
     }
@@ -309,17 +287,13 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         auth_data: &AuthorizationData<S>,
         sequencer: &<S::Da as DaSpec>::Address,
         sequencer_rollup_address: S::Address,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
         sequencing_data: Option<Bytes>,
         execution_context: ExecutionContext,
         sequencer_type: SequencerType,
     ) -> anyhow::Result<Context<S>> {
-        // This should be resolved by the sequencer registry during blob selection
-        let sender = self.accounts.resolve_sender_address(
-            &auth_data.default_address,
-            &auth_data.credential_id,
-            state,
-        )?;
+        let sender = self.resolve_authorized_sender(auth_data, state)?;
+
         Ok(Context::new(
             sender,
             auth_data.credentials.clone(),
@@ -335,24 +309,76 @@ impl<S: Spec, T> TransactionAuthorizer<S> for StandardProvenRollupCapabilities<'
         &mut self,
         auth_data: &AuthorizationData<S>,
         sequencer: &<<S as Spec>::Da as DaSpec>::Address,
-        state: &mut impl StateAccessor,
+        state: &mut impl StateReader<User>,
         execution_context: ExecutionContext,
     ) -> anyhow::Result<Context<S>> {
-        let sender = self.accounts.resolve_sender_address(
-            &auth_data.default_address,
-            &auth_data.credential_id,
-            state,
-        )?;
-        // The tx sender & sequencer are the same entity
+        // On the unregistered path the sender pays its own sequencing, so the
+        // resolved address doubles as `sequencer_rollup_address`. When
+        // `address_override = Some(X)`, both fields resolve to `X` — fee debit
+        // and gas refund follow the override.
+        let address = self.resolve_authorized_sender(auth_data, state)?;
+
         Ok(Context::new(
-            sender,
+            address,
             auth_data.credentials.clone(),
-            sender,
+            address,
             *sequencer,
             None,
             execution_context,
             SequencerType::NonPreferred,
         ))
+    }
+}
+
+impl<S: Spec, T> StandardProvenRollupCapabilities<'_, S, T> {
+    /// Picks the sender address for a transaction.
+    ///
+    /// The two branches use deliberately different authorization predicates:
+    /// - `address_override = Some(_)` — requires an explicit `true` entry in
+    ///   `account_owners` for `(addr, cred)`. Overriding the default is
+    ///   opt-in and must be granted by a prior `InsertCredentialId` call.
+    ///   The REST endpoint exposes this predicate as the `admit_as_override`
+    ///   field of `sov_accounts::query::AuthorizationResponse`.
+    /// - `address_override = None` — trusts the authenticator's declared
+    ///   `default_address` unless that exact `(addr, cred)` pair is
+    ///   explicitly denied (e.g. by `revoke_credential`). The authenticator
+    ///   is responsible for having verified the credential→default_address
+    ///   binding before reaching this code. The REST endpoint exposes this
+    ///   predicate as the `admit_as_default` field.
+    ///
+    /// The off-chain `sov_accounts::Accounts::is_authorized_for` (which
+    /// includes a canonical-fallback semantic) is *not* used here and can
+    /// disagree with the admit-path for authenticators (notably EVM) whose
+    /// `default_address` is not the credential's canonical address.
+    fn resolve_authorized_sender(
+        &mut self,
+        auth_data: &AuthorizationData<S>,
+        state: &mut impl StateReader<User>,
+    ) -> anyhow::Result<S::Address> {
+        match auth_data.address_override {
+            Some(address_override) => {
+                anyhow::ensure!(
+                    self.accounts.is_explicitly_authorized(
+                        &address_override,
+                        &auth_data.credential_id,
+                        state,
+                    )?,
+                    "not authorized for address override"
+                );
+                Ok(address_override)
+            }
+            None => {
+                anyhow::ensure!(
+                    self.accounts.is_default_address_authorized(
+                        &auth_data.default_address,
+                        &auth_data.credential_id,
+                        state,
+                    )?,
+                    "not authorized for resolved address"
+                );
+                Ok(auth_data.default_address)
+            }
+        }
     }
 }
 

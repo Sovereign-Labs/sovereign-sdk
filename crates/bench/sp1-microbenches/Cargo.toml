@@ -15,6 +15,7 @@ path = "src/main.rs"
 [dependencies]
 anyhow = { workspace = true }
 bincode = { workspace = true }
+borsh = { workspace = true }
 clap = { workspace = true }
 sov-gas-tools = { workspace = true }
 serde = { workspace = true, features = ["derive"] }

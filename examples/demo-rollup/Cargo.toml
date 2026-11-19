@@ -24,15 +24,17 @@ sov-rollup-full-node-interface = { workspace = true }
 sov-stf-runner = { workspace = true }
 
 # Sovereign crates
+sov-accounts = { workspace = true, features = ["native"] }
 sov-bank = { workspace = true, features = ["native"] }
-sov-blob-storage = { workspace = true, features = ["native"], optional = true }
-sov-chain-state = { workspace = true, features = ["native"], optional = true }
-sov-paymaster = { workspace = true, features = ["native"], optional = true }
-sov-sequencer-registry = { workspace = true, features = ["native"], optional = true }
+sov-blob-storage = { workspace = true, features = ["native"] }
+sov-chain-state = { workspace = true, features = ["native"] }
+sov-paymaster = { workspace = true, features = ["native"] }
+sov-sequencer-registry = { workspace = true, features = ["native"] }
 sov-cli = { workspace = true }
 sov-db = { workspace = true }
 sov-ethereum = { workspace = true, features = ["local"] }
 sov-kernels = { workspace = true, features = ["native"] }
+sov-migrations = { workspace = true }
 sov-mock-zkvm = { workspace = true, features = ["native"] }
 sov-modules-api = { workspace = true, features = ["native"] }
 sov-node-client = { workspace = true }
@@ -114,6 +116,7 @@ sov-synthetic-load = { workspace = true, features = ["native"] }
 futures = { workspace = true }
 demo-stf = { workspace = true, features = ["native"] }
 demo-stf-json-client = { path = "./stf/demo-stf-json-client", default-features = false }
+
 tracing-panic = { version = "0.1.2" }
 
 base64 = { workspace = true }
@@ -162,17 +165,13 @@ default = ["mock_da"]
 mock_da = ["dep:sov-mock-da", "dep:sov-sp1-adapter", "dep:sp1"]
 celestia_da = ["dep:sov-celestia-adapter", "dep:sov-risc0-adapter", "dep:risc0"]
 
-migration-script = [
+da-migration-script = [
     # The migration binary bridges both DAs (references MockDemoRollup + CelestiaDemoRollup).
     "mock_da",
     "celestia_da",
-    "dep:sov-blob-storage",
     "dep:rockbound",
     "dep:bincode",
     "dep:hex",
-    "dep:sov-chain-state",
-    "dep:sov-paymaster",
-    "dep:sov-sequencer-registry",
     "sov-db/migration-script",
 ]
 
@@ -199,7 +198,12 @@ required-features = ["celestia_da"]
 [[bin]]
 name = "mockda-to-celestia-migrate"
 path = "src/migrations/mockda_to_celestia.rs"
-required-features = ["migration-script"]
+required-features = ["da-migration-script"]
+
+[[bin]]
+name = "migrate_to_v1"
+path = "src/migrations/legacy_accounts.rs"
+required-features = ["mock_da"]
 
 [[bin]]
 name = "sov-hive-genesis-adapter"

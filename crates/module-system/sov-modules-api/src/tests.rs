@@ -5,7 +5,6 @@ use sov_rollup_interface::execution_mode::Native;
 use sov_rollup_interface::zk::CryptoSpec;
 use sov_test_utils::MockDaSpec;
 
-use crate::capabilities::config_chain_id;
 use crate::{ModuleId, ModuleInfo, Spec};
 
 type TestSpec = crate::default_spec::DefaultSpec<MockDaSpec, MockZkvm, MockZkvm, Native>;
@@ -194,16 +193,23 @@ fn test_default_signature_roundtrip() {
 // Grep for `SOV_TEST_CONST_OVERRIDE_CHAIN_ID` to find the relevant code.
 #[test]
 fn assert_chain_id_was_not_overridden() {
-    assert_eq!(config_chain_id(), 4321);
+    assert_eq!(sov_modules_macros::config_value_private!("CHAIN_ID"), 4321);
 }
 
 mod chain_hash_override_tests {
-    use crate::runtime::{resolve_chain_hashes, ChainHashOverride};
+    use crate::runtime::{resolve_chain_hashes, validate_chain_hash_fragments, ChainHashOverride};
 
     const DEFAULT_HASH: [u8; 32] = [0xDDu8; 32];
     const OVERRIDE_HASH_1: [u8; 32] = [0x11u8; 32];
     const OVERRIDE_HASH_2: [u8; 32] = [0x22u8; 32];
     const OVERRIDE_HASH_3: [u8; 32] = [0x33u8; 32];
+
+    fn colliding_hashes() -> ([u8; 32], [u8; 32]) {
+        let first = [0xAA; 32];
+        let mut second = first;
+        second[31] ^= 1;
+        (first, second)
+    }
 
     #[test]
     fn test_empty_overrides_returns_default() {
@@ -436,6 +442,97 @@ mod chain_hash_override_tests {
         // At end_height: not in grace period when grace_period is 0
         assert!(!override_.in_grace_period(200));
         assert!(!override_.in_grace_period(250));
+    }
+
+    #[test]
+    fn allows_colliding_fragments_when_validity_does_not_overlap() {
+        let (first_hash, second_hash) = colliding_hashes();
+        let overrides = [
+            ChainHashOverride {
+                start_height: 0,
+                end_height: 100,
+                chain_hash: first_hash,
+                grace_period: 0,
+            },
+            ChainHashOverride {
+                start_height: 100,
+                end_height: 200,
+                chain_hash: second_hash,
+                grace_period: 0,
+            },
+        ];
+
+        validate_chain_hash_fragments(&overrides, DEFAULT_HASH).unwrap();
+    }
+
+    #[test]
+    fn rejects_colliding_fragments_across_long_grace_period() {
+        let (first_hash, third_hash) = colliding_hashes();
+        let overrides = [
+            ChainHashOverride {
+                start_height: 0,
+                end_height: 100,
+                chain_hash: first_hash,
+                grace_period: 250,
+            },
+            ChainHashOverride {
+                start_height: 100,
+                end_height: 200,
+                chain_hash: OVERRIDE_HASH_2,
+                grace_period: 0,
+            },
+            ChainHashOverride {
+                start_height: 200,
+                end_height: 300,
+                chain_hash: third_hash,
+                grace_period: 0,
+            },
+        ];
+
+        let error = validate_chain_hash_fragments(&overrides, DEFAULT_HASH).unwrap_err();
+        assert!(error.to_string().contains("valid simultaneously"));
+    }
+
+    #[test]
+    fn rejects_colliding_fragment_with_default_after_last_override() {
+        let (override_hash, default_hash) = colliding_hashes();
+        let overrides = [
+            ChainHashOverride {
+                start_height: 0,
+                end_height: 100,
+                chain_hash: override_hash,
+                grace_period: 250,
+            },
+            ChainHashOverride {
+                start_height: 100,
+                end_height: 200,
+                chain_hash: OVERRIDE_HASH_2,
+                grace_period: 0,
+            },
+        ];
+
+        let error = validate_chain_hash_fragments(&overrides, default_hash).unwrap_err();
+        assert!(error.to_string().contains("valid simultaneously"));
+    }
+
+    #[test]
+    fn allows_identical_hashes_during_overlapping_validity() {
+        let overrides = [
+            ChainHashOverride {
+                start_height: 0,
+                end_height: 100,
+                chain_hash: OVERRIDE_HASH_1,
+                grace_period: 50,
+            },
+            ChainHashOverride {
+                start_height: 100,
+                end_height: 200,
+                chain_hash: OVERRIDE_HASH_1,
+                grace_period: 0,
+            },
+        ];
+
+        validate_chain_hash_fragments(&overrides, DEFAULT_HASH).unwrap();
     }
 
     // Note: Validation that overrides start at 0 and are contiguous happens at

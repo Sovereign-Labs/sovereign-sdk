@@ -5,16 +5,14 @@ use alloy::signers::local::PrivateKeySigner;
 use alloy_primitives::{Address, U256};
 use alloy_provider::DynProvider;
 use alloy_rpc_types_eth::TransactionInput;
-use sov_evm::{CallMessage, EvmRuntimeConfigUpdate};
-use sov_modules_api::transaction::Transaction;
+use sov_evm::EvmRuntimeConfigUpdate;
 use sov_modules_api::{CryptoSpec, Spec};
-use sov_test_utils::default_test_signed_transaction_with_nonce;
 use sov_test_utils::test_rollup::TestRollup;
 
 use crate::common::{
     alloy_client_with_signer, setup_test_rollup_with_admin_key, EVM_EXTENSION, SENDER_PRIV_KEY,
 };
-use crate::runtime::{EvmBlueprint, EvmTestSpec, TestRuntime, TestRuntimeCall};
+use crate::runtime::{EvmBlueprint, EvmTestSpec};
 
 const GAS_LIMIT: u64 = 100_000;
 
@@ -174,19 +172,5 @@ async fn disable_max_fee_check(
     admin_key: &AdminPrivateKey,
 ) -> anyhow::Result<()> {
     let update = EvmRuntimeConfigUpdate::<EvmTestSpec>::empty();
-    let msg = TestRuntimeCall::<EvmTestSpec>::Evm(CallMessage::UpdateRuntimeConfig(update));
-
-    let chain_hash =
-        <TestRuntime<EvmTestSpec> as sov_modules_stf_blueprint::Runtime<EvmTestSpec>>::CHAIN_HASH;
-
-    let tx: Transaction<TestRuntime<EvmTestSpec>, EvmTestSpec> =
-        default_test_signed_transaction_with_nonce(admin_key, &msg, 0, &chain_hash);
-
-    rollup
-        .client
-        .client
-        .send_tx_to_sequencer_with_retry(&tx)
-        .await?;
-
-    Ok(())
+    super::send_evm_runtime_config_update(rollup, admin_key, update).await
 }

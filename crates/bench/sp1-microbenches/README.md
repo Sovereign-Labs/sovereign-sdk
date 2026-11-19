@@ -53,12 +53,30 @@ guest reads and deserializes the full block, runs
 `CelestiaVerifier::verify_relevant_tx_list`, and commits block/hash/blob stats.
 This is a fixed fixture bench rather than a byte-size sweep.
 
+**Borsh** — `borsh` runs three internal sweeps to calibrate the three borsh
+deserialization constants. A `reader-bytes` sweep (read length at one read per
+iteration) calibrates `BORSH_PER_BYTE_READ`; a `reader-count` sweep (read count
+at one byte per read) calibrates `BORSH_PER_READ_BIAS`; a `decode-vec` sweep
+(full `MeteredBorshDeserialize::deserialize_from_slice::<Vec<u8>>`) calibrates
+`BIAS_BORSH_DESERIALIZATION`, subtracting out the reader-level contributions.
+The latter two are derived by subtracting the earlier sweeps' slopes, so the
+constants are coupled and always calibrated together in one run. Borsh decode
+is cheap per cycle (no precompiles), so this bench uses two-iteration
+differencing — see "Methodology choice" below.
+
 ## Run
 
 ```sh
 cargo run --release -p sp1-microbenches -- sha256
 cargo run --release -p sp1-microbenches -- ed25519
 cargo run --release -p sp1-microbenches -- celestia
+```
+
+`borsh` runs its three sweeps in sequence and prints the final calibrated
+constants:
+
+```sh
+cargo run --release -p sp1-microbenches -- borsh
 ```
 
 Optional override:
@@ -106,6 +124,20 @@ binary) — they're pure clap-derive glue with no library role.
 Shared infrastructure lives in `lib.rs` (`BenchResult`, `load_guest_elf`) and
 `fit.rs` (OLS fit).
 
+## Methodology choice: single-pass vs two-iteration differencing
+
+Per-execution setup cost (zkVM bootstrap, stdin reads, guest allocations)
+contaminates the fit when per-operation work is small. Precompile-heavy
+benches (hashes, sig verify, big-int) use single-pass — setup is a
+fraction of a percent of signal. Cheap-per-cycle benches (memcpy,
+decoding) use two-iteration differencing: run the sweep at two iteration
+counts, compute `per_iter = (gas_high - gas_low) / (iter_high - iter_low)`
+per N, fit `fit_linear` on the result. Setup cancels exactly because it's
+identical between the two runs at the same N.
+
+Heuristic: precompile (sha256, keccak, secp256k1, curve ops) → single-pass.
+Generic Rust (allocs, memcpy, decoding) → differencing.
+
 ## Adding a new microbench
 
 1. Create `guest-{name}/` mirroring `guest-sha256/` — same SP1 patches, same
@@ -114,8 +146,10 @@ Shared infrastructure lives in `lib.rs` (`BenchResult`, `load_guest_elf`) and
    work (cheap insurance — see `guest-sha256/src/main.rs`).
 2. Add a `build_program_with_args` call in `build.rs`.
 3. Create `src/cmd/{name}.rs` with `{Name}Args` and
-   `pub fn run(args: {Name}Args) -> anyhow::Result<()>`. Inside, run the
-   sweep, call `fit_prover_gas_per_byte`, and `println!` the results.
+   `pub fn run(args: {Name}Args) -> anyhow::Result<()>`. Pick single-pass or
+   two-iter differencing per the methodology heuristic above. For single-pass
+   call `fit_prover_gas_per_byte`; for differencing call `fit_linear`
+   directly on the differential.
 4. Add `pub mod {name};` to `src/cmd/mod.rs`.
 5. Add the variant to `BenchCmd` in `src/main.rs` and route it in
    `BenchCmd::run`.

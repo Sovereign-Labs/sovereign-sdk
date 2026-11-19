@@ -1,5 +1,7 @@
 pub use crate::primitive_types::MaybeSealedBlock;
 
+pub use block_resolution::HeadView;
+
 mod block_resolution;
 pub(crate) mod error;
 pub(crate) mod handlers;

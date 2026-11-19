@@ -10,7 +10,7 @@ use futures::future;
 use sov_db::ledger_db::LedgerDb;
 use sov_db::schema::{DeltaReader, SchemaBatch};
 use sov_modules_api::capabilities::{
-    ChainState, HasCapabilities, HasKernel, ProofProcessor, RollupHeight,
+    ChainState as _, HasCapabilities, HasKernel, ProofProcessor, RollupHeight,
 };
 use sov_modules_api::execution_mode::ExecutionMode;
 use sov_modules_api::provable_height_tracker::MaximumProvableHeight;
@@ -584,8 +584,9 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 .await
         );
 
-        let checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
+        let mut checkpoint = StateCheckpoint::new(prover_storage, &rt.kernel());
         let current_height = checkpoint.rollup_height_to_access();
+        validate_state_version::<Self::Spec, Self::Runtime>(&mut rt, &mut checkpoint)?;
 
         startup_step!(validate_heights(
             current_height,
@@ -813,6 +814,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
         let endpoints = NodeEndpointsContainer {
             inner: endpoints,
             cors_configuration: rollup_config.runner.http_config.cors,
+            max_rpc_response_body_size: rollup_config.runner.http_config.max_rpc_response_body_size,
         };
 
         background_handles.extend(sequencer.background_handles);
@@ -902,6 +904,27 @@ async fn wait_for_failed_startup_tasks(
     }
 }
 
+fn validate_state_version<S, RT>(
+    runtime: &mut RT,
+    state: &mut StateCheckpoint<S>,
+) -> anyhow::Result<()>
+where
+    S: Spec,
+    RT: RuntimeTrait<S>,
+{
+    let compiled_state_version: u64 = sov_modules_api::macros::config_value!("STATE_VERSION");
+    let on_disk_state_version = runtime
+        .chain_state()
+        .state_version(&mut state.accessory_state());
+
+    anyhow::ensure!(
+        on_disk_state_version == compiled_state_version,
+        "State version mismatch: on-disk state has version {on_disk_state_version}, but this binary was compiled with STATE_VERSION {compiled_state_version}. Run the appropriate migration binary or use a matching rollup binary."
+    );
+
+    Ok(())
+}
+
 fn validate_heights(
     current_height: RollupHeight,
     start_at_rollup_height: Option<RollupHeight>,
@@ -932,10 +955,11 @@ fn validate_heights(
     Ok(())
 }
 
-/// [`NodeEndpoints`] with `CORS` configuration.
+/// [`NodeEndpoints`] with `CORS` and JSON-RPC server configuration.
 pub struct NodeEndpointsContainer {
     inner: NodeEndpoints,
     cors_configuration: CorsConfiguration,
+    max_rpc_response_body_size: u32,
 }
 
 /// Dependencies needed to run the rollup.
@@ -980,6 +1004,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
         let NodeEndpointsContainer {
             inner,
             cors_configuration,
+            max_rpc_response_body_size,
         } = endpoints;
         let NodeEndpoints {
             axum_router,
@@ -991,6 +1016,7 @@ impl<S: FullNodeBlueprint<M>, M: ExecutionMode> Rollup<S, M> {
                 axum_router,
                 jsonrpsee_module,
                 cors_configuration,
+                max_rpc_response_body_size,
                 rpc_aggregation_config,
             )
             .await

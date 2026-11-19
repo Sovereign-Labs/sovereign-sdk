@@ -21,7 +21,6 @@ pub use sov_mock_da::MockHash;
 pub use sov_mock_zkvm::{MockZkvm, MockZkvmCryptoSpec};
 use sov_modules_api::capabilities::UniquenessData;
 use sov_modules_api::default_spec::DefaultSpec;
-use sov_modules_api::macros::config_value;
 use sov_modules_api::transaction::{
     PriorityFeeBips, Transaction, TransactionCallable, TxDetails, UnsignedTransaction,
 };
@@ -229,7 +228,7 @@ pub fn default_test_tx_details<S: Spec>() -> TxDetails<S> {
         max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
         max_fee: TEST_DEFAULT_MAX_FEE,
         gas_limit: None,
-        chain_id: config_value!("CHAIN_ID"),
+        chain_hash_fragment: 0,
     }
 }
 
@@ -280,11 +279,12 @@ pub fn test_signed_transaction<T: TransactionCallable, S: Spec>(
         chain_hash,
         UnsignedTransaction::new(
             msg.clone(),
-            tx_details.chain_id,
+            *chain_hash,
             tx_details.max_priority_fee_bips,
             tx_details.max_fee,
             uniqueness,
             tx_details.gas_limit,
+            None,
         ),
     )
 }

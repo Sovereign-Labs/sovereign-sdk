@@ -12,6 +12,7 @@ use jsonrpsee::types::ErrorObjectOwned;
 use jsonrpsee::types::Params as JRpcParams;
 use jsonrpsee::Extensions;
 use service::LogsService;
+use sov_evm::HeadView;
 use sov_modules_api::Spec;
 use sov_rpc_eth_types::LogWithExecutionTimestamp;
 use sov_rpc_eth_types::{FilterWithCursor, LogsWithMaybeCursor};
@@ -34,7 +35,7 @@ where
     pub fn eth_get_logs(
         parameters: JRpcParams<'_>,
         ethereum: Arc<Ethereum<S, Seq>>,
-        _: Extensions,
+        ext: Extensions,
     ) -> Result<Vec<LogWithExecutionTimestamp>, ErrorObjectOwned> {
         // Force malformed filter payloads to return JSON-RPC -32602 (invalid params)
         // instead of bubbling up as internal deserialization errors.
@@ -49,6 +50,7 @@ where
             ethereum.extension.max_log_limit,
             state,
             ethereum.extension.response_size_limit,
+            HeadView::from_extensions(&ext),
         );
         let LogsWithMaybeCursor { logs, cursor } = service.logs_for_filter()?;
 
@@ -64,7 +66,7 @@ where
     pub fn eth_get_logs_with_cursor(
         parameters: JRpcParams<'_>,
         ethereum: Arc<Ethereum<S, Seq>>,
-        _: Extensions,
+        ext: Extensions,
     ) -> Result<LogsWithMaybeCursor, ErrorObjectOwned> {
         let state = ethereum.api_state_accessor();
         // Keep deserialization failures aligned with eth_getLogs: malformed payloads
@@ -79,6 +81,7 @@ where
             ethereum.extension.max_log_limit,
             state,
             ethereum.extension.response_size_limit,
+            HeadView::from_extensions(&ext),
         );
         Ok(service.logs_for_filter()?)
     }

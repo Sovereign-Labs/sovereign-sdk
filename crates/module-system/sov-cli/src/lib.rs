@@ -7,7 +7,9 @@ use borsh::{BorshDeserialize, BorshSerialize};
 use directories::BaseDirs;
 use serde::{Deserialize, Serialize};
 pub use sov_modules_api::clap;
-use sov_modules_api::transaction::{PriorityFeeBips, TxDetails, UnsignedTransaction};
+use sov_modules_api::transaction::{
+    chain_hash_fragment, PriorityFeeBips, TxDetails, UnsignedTransaction,
+};
 use sov_modules_api::{Amount, DispatchCall, HexHash, HexString, Spec};
 use sov_node_client as node_client;
 
@@ -58,7 +60,6 @@ where
     /// Creates a new [`UnsignedTransactionWithoutUniqueness`] with the given arguments.
     pub const fn new(
         tx: Tx::Decodable,
-        chain_id: u64,
         chain_hash: [u8; 32],
         max_priority_fee_bips: PriorityFeeBips,
         max_fee: Amount,
@@ -71,7 +72,7 @@ where
                 max_priority_fee_bips,
                 max_fee,
                 gas_limit,
-                chain_id,
+                chain_hash_fragment: chain_hash_fragment(&chain_hash),
             },
         }
     }
@@ -81,11 +82,12 @@ where
     pub fn with_generation(&self, generation: u64) -> UnsignedTransaction<Tx, S> {
         UnsignedTransaction::new(
             self.tx.clone(),
-            self.details.chain_id,
+            self.chain_hash.0,
             self.details.max_priority_fee_bips,
             self.details.max_fee,
             UniquenessData::Generation(generation),
             self.details.gas_limit,
+            None,
         )
     }
 }

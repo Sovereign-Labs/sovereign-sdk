@@ -1,0 +1,5 @@
+error: The `Extensions` argument to the `#[rpc_method]`-annotated function must be a shared reference: `&jsonrpsee::Extensions`.
+  --> tests/integration/trybuild/rpc/derive_rpc_extensions_mutable_reference.rs:16:23
+   |
+16 |     pub fn foo(&self, _ext: &mut jsonrpsee::Extensions) -> jsonrpsee::core::RpcResult<u32> {
+   |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^

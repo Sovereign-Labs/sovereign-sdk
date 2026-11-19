@@ -28,8 +28,9 @@ mod rpc_metrics;
 use rpc_metrics::RpcMetricsLayer;
 use sov_rest_utils::get_client_ip;
 use sov_rest_utils::GetIPResult;
+use sov_rest_utils::SealedBlocksOnly;
 
-// Middleware to inject SocketAddr from axum's ConnectInfo into the request extensions
+// Middleware to inject SocketAddr from axum's ConnectInfo (and the `SealedBlocksOnly` marker) into the request extensions
 // so that jsonrpsee RPC handlers can access it via the Extensions parameter
 #[derive(Clone)]
 struct InjectSocketAddrLayer;
@@ -69,9 +70,14 @@ where
         let connect_info = req.extensions().get::<ConnectInfo<SocketAddr>>();
 
         let maybe_ip = get_client_ip(headers.clone(), connect_info);
+        let sealed_blocks_only = SealedBlocksOnly::from_headers(headers);
         req.extensions_mut().insert(GetIPResult {
             maybe_ip: Arc::new(maybe_ip),
         });
+        // Lets the EVM RPC handlers hide synthetic blocks from clients that ask for it.
+        if let Some(marker) = sealed_blocks_only {
+            req.extensions_mut().insert(marker);
+        }
 
         self.inner.call(req)
     }
@@ -90,11 +96,16 @@ pub(crate) async fn start_http_server(
     methods: RpcModule<()>,
     shutdown: RunnerShutdownController,
     cors_configuration: CorsConfiguration,
+    max_rpc_response_body_size: u32,
     rpc_aggregation: RpcAggregationConfig,
 ) -> anyhow::Result<HttpServerStart> {
     let rest_address = axum_listener.local_addr()?;
-    let (rpc_router, server_handle, aggregator) =
-        rpc_module_to_router(methods, cors_configuration, rpc_aggregation);
+    let (rpc_router, server_handle, aggregator) = rpc_module_to_router(
+        methods,
+        cors_configuration,
+        max_rpc_response_body_size,
+        rpc_aggregation,
+    );
 
     // Drives the aggregator until the RPC server has fully stopped; the final
     // flush then captures calls that completed during graceful shutdown.
@@ -159,6 +170,7 @@ pub(crate) async fn start_http_server(
 pub fn rpc_module_to_router(
     methods: RpcModule<()>,
     cors_config: CorsConfiguration,
+    max_response_body_size: u32,
     rpc_aggregation: RpcAggregationConfig,
 ) -> (axum::Router, ServerHandle, Arc<RpcStatsAggregator>) {
     let (stop_handle, server_handle) = stop_channel();
@@ -181,11 +193,13 @@ pub fn rpc_module_to_router(
         methods.clone(),
         stop_handle.clone(),
         RpcMetricsLayer::new(aggregator.clone(), true),
+        max_response_body_size,
     );
     let http_service = http_service(
         methods,
         stop_handle,
         RpcMetricsLayer::new(aggregator.clone(), false),
+        max_response_body_size,
     );
     let error_layer = HandleErrorLayer::new(|error: BoxError| async move {
         let error = ErrorObject::owned(
@@ -218,11 +232,13 @@ fn http_service(
     methods: Methods,
     stop_handle: StopHandle,
     metrics: RpcMetricsLayer,
+    max_response_body_size: u32,
 ) -> TowerService<Stack<RpcMetricsLayer, Identity>, Identity> {
     // TODO: Into config.toml
     let config = ServerConfig::builder()
         .http_only()
         .max_connections(10_000)
+        .max_response_body_size(max_response_body_size)
         .build();
 
     ServerBuilder::with_config(config)
@@ -235,6 +251,7 @@ fn ws_service(
     methods: Methods,
     stop_handle: StopHandle,
     metrics: RpcMetricsLayer,
+    max_response_body_size: u32,
 ) -> TowerService<Stack<RpcMetricsLayer, Identity>, Identity> {
     // TODO: Into config.toml
     let config = ServerConfig::builder()
@@ -242,6 +259,7 @@ fn ws_service(
         .ws_only()
         .max_connections(10_000)
         .max_subscriptions_per_connection(100)
+        .max_response_body_size(max_response_body_size)
         .build();
     ServerBuilder::with_config(config)
         .set_rpc_middleware(RpcServiceBuilder::new().layer(metrics))
@@ -367,6 +385,7 @@ mod tests {
             methods,
             shutdown.clone(),
             CorsConfiguration::Restrictive,
+            10 * 1024 * 1024,
             RpcAggregationConfig::standard(),
         )
         .await

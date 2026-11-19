@@ -34,7 +34,7 @@ const rollup = new StandardRollup({
     max_priority_fee_bips: 0,
     max_fee: 1000000,
     gas_limit: null,
-    chain_id: 4321,
+    chain_hash_fragment: "6654161651848106779",
   },
 });
 
@@ -110,10 +110,41 @@ const simulation = await rollup.simulate(
     txDetails: {
       max_priority_fee_bips: 1000,
       max_fee: 1000000,
-      chain_id: 1,
     },
   }
 );
+```
+
+### Multisig
+
+```typescript
+import { Multisig } from "@sovereign-sdk/multisig";
+import type { UnsignedTransaction } from "@sovereign-sdk/types";
+import { bytesToHex } from "@sovereign-sdk/utils";
+
+const unsignedTx: UnsignedTransaction<YourRuntimeCall> =
+  await rollup.buildUnsignedTransaction(runtimeCall, {
+    overrides: { uniqueness: { nonce: 1 } },
+  });
+
+const multisig = Multisig.fromPubKeys(
+  ["pubkey1hex", "pubkey2hex", "pubkey3hex"],
+  2,
+);
+
+const signingBytes = await rollup.multisigSigningBytes(unsignedTx, multisig);
+multisig.addSignature(
+  bytesToHex(await signer1.sign(signingBytes)),
+  bytesToHex(await signer1.publicKey()),
+);
+
+multisig.addSignature(
+  bytesToHex(await signer2.sign(signingBytes)),
+  bytesToHex(await signer2.publicKey()),
+);
+
+const tx = multisig.toTransaction(unsignedTx);
+await rollup.submitTransaction(tx);
 ```
 
 ## API Reference
@@ -125,4 +156,3 @@ The package exports the following main components:
 - `createSerializer`: Function to create a Borsh serializer for your rollup schema
 
 For detailed API documentation, please refer to the inline TypeScript documentation in the source code.
-

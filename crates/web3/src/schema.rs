@@ -2,8 +2,9 @@
 //!
 //! This module provides utilities for serializing transactions using schema-based
 //! serialization, converting from JSON representations to efficient binary formats
-//! using Borsh serialization. It supports both unsigned and signed transactions
-//! with configurable schema validation.
+//! using Borsh serialization. Consumers build an [`UnsignedTransaction`], convert it
+//! into a versioned [`TransactionSigningPayload`] when producing signing bytes, and
+//! then submit a signed [`Transaction`].
 //!
 //! ## When to Use This Module
 //!
@@ -41,6 +42,7 @@ use serde_with::serde_as;
 use sov_universal_wallet::schema::{RollupRoots, Schema};
 
 pub use serde_json::json;
+pub use sov_universal_wallet::schema::chain_hash_fragment;
 
 /// Errors that can occur during schema-based serialization operations.
 #[derive(thiserror::Error, Debug)]
@@ -56,6 +58,16 @@ pub enum SerializerError {
     InvalidSchema(#[source] serde_json::Error),
     #[error("Failed to calculate chain hash: {0}")]
     ChainHash(#[source] sov_universal_wallet::schema::SchemaError),
+    /// The transaction targets a different chain hash than the serializer's schema.
+    #[error(
+        "Chain hash fragment mismatch: transaction details contain {actual}, but the serializer chain hash has fragment {expected}"
+    )]
+    ChainHashFragmentMismatch {
+        /// Fragment stored in the transaction details.
+        actual: u64,
+        /// Fragment derived from the serializer's chain hash.
+        expected: u64,
+    },
     /// Error occurred during HTTP request to fetch schema from URL.
     #[error("HTTP request error: {0}")]
     HttpRequest(#[from] reqwest::Error),
@@ -144,10 +156,9 @@ impl Serializer {
 
     /// Retrieves the 32-byte chain hash from the schema.
     ///
-    /// The chain hash is a unique identifier for the blockchain network that helps
-    /// prevent cross-chain replay attacks. This hash is embedded in the schema
-    /// definition and must be concatenated to the unsigned transaction bytes when
-    /// signing a transaction to ensure signatures are bound to a specific chain.
+    /// The chain hash commits to the rollup schema and metadata. It is embedded in
+    /// [`TransactionSigningPayload`] values before serialization so signatures are
+    /// bound to a specific schema version and chain.
     ///
     /// # Returns
     ///
@@ -161,19 +172,14 @@ impl Serializer {
         self.schema.chain_hash().map_err(SerializerError::ChainHash)
     }
 
-    /// Serializes an unsigned transaction to binary format.
+    /// Serializes a transaction signing payload to binary format.
     ///
-    /// Converts the provided unsigned transaction into a Borsh-serialized binary
+    /// Converts the provided signing payload into a Borsh-serialized binary
     /// representation using the configured schema.
-    ///
-    /// # Note
-    ///
-    /// When signing an unsigned transaction, the chain hash must be appended, preferably
-    /// use `UnsignedTransaction::bytes_for_signing` which handles this automatically.
     ///
     /// # Arguments
     ///
-    /// * `unsigned_tx` - The unsigned transaction to serialize
+    /// * `signing_payload` - The transaction signing payload to serialize
     ///
     /// # Returns
     ///
@@ -183,11 +189,11 @@ impl Serializer {
     ///
     /// * [`SerializerError::JsonSerialization`] - If the transaction cannot be converted to JSON
     /// * [`SerializerError::JsonToBorsh`] - If the JSON cannot be converted to Borsh format
-    pub fn serialize_unsigned_tx(
+    pub fn serialize_signing_payload(
         &self,
-        unsigned_tx: &UnsignedTransaction,
+        signing_payload: &TransactionSigningPayload,
     ) -> Result<Vec<u8>, SerializerError> {
-        self.serialize(unsigned_tx, RollupRoots::UnsignedTransaction)
+        self.serialize(signing_payload, RollupRoots::TransactionSigningPayload)
     }
 
     /// Serializes a signed transaction to binary format.
@@ -213,8 +219,9 @@ impl Serializer {
 
     /// Internal method to serialize any serializable type using the schema.
     ///
-    /// This method handles the common serialization logic for both unsigned and signed transactions.
-    /// It first converts the input to JSON, then uses the schema to convert the JSON to Borsh format.
+    /// This method handles the common serialization logic for signing payloads and
+    /// signed transactions. It first converts the input to JSON, then uses the schema
+    /// to convert the JSON to Borsh format.
     ///
     /// # Arguments
     ///
@@ -278,9 +285,9 @@ pub fn default_uniqueness() -> Result<UniquenessData, TransactionBuilderError> {
 /// Errors that can occur when building transactions using the schema-based approach.
 #[derive(thiserror::Error, Debug)]
 pub enum TransactionBuilderError {
-    /// The chain ID is required but was not provided in the transaction details.
-    #[error("chain_id is a required field but was not provided")]
-    MissingChainId,
+    /// The chain hash fragment is required but was not provided in the transaction details.
+    #[error("chain_hash_fragment is a required field but was not provided")]
+    MissingChainHashFragment,
     #[error("system time error: {0}")]
     TimeError(#[from] std::time::SystemTimeError),
 }
@@ -342,18 +349,20 @@ pub struct TxDetails {
     /// If `None`, the transaction has no gas limit. If `Some(vec)`, each element
     /// represents a gas limit for different execution phases or modules.
     pub gas_limit: Option<Vec<u64>>,
-    /// Chain identifier to prevent cross-chain replay attacks.
+    /// Chain hash fragment to prevent cross-chain replay attacks.
     ///
     /// This ensures transactions can only be executed on the intended blockchain.
-    pub chain_id: u64,
+    pub chain_hash_fragment: u64,
 }
 
-/// An unsigned transaction ready to be signed.
+/// Consumer-facing transaction payload before signing.
 ///
 /// This structure represents a complete transaction that has been constructed
 /// with all necessary parameters but has not yet been cryptographically signed.
 /// It contains the call to be executed, uniqueness data to prevent replays,
-/// and execution details such as fees and gas limits.
+/// and execution details such as fees and gas limits. To produce signing bytes,
+/// it is wrapped in a versioned [`TransactionSigningPayload`] that also commits
+/// to the chain hash.
 #[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
 #[serde(rename_all = "snake_case")]
 pub struct UnsignedTransaction {
@@ -363,16 +372,80 @@ pub struct UnsignedTransaction {
     pub uniqueness: UniquenessData,
     /// Transaction execution details including fees and gas limits.
     pub details: TxDetails,
+    /// Optional address override for execution; null uses default routing.
+    pub address_override: Option<String>,
+}
+
+/// Version 0 transaction signing payload.
+///
+/// This mirrors the V0 core signing payload so schema-based serialization includes
+/// the version discriminant and chain hash expected by the rollup schema.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub struct TransactionSigningPayloadV0 {
+    /// The runtime call to be executed when this transaction is processed.
+    pub runtime_call: RuntimeCall,
+    /// Uniqueness data to prevent transaction replay attacks.
+    pub uniqueness: UniquenessData,
+    /// Transaction execution details including fees and gas limits.
+    pub details: TxDetails,
+    /// Optional address override for execution; null uses default routing.
+    pub address_override: Option<String>,
+    /// Chain hash binding the signature to the rollup schema and metadata.
+    pub chain_hash: [u8; 32],
+}
+
+/// A versioned transaction signing payload envelope.
+///
+/// This mirrors the core transaction types so schema-based serialization includes
+/// the version discriminant expected by the rollup schema.
+#[derive(Clone, Debug, PartialEq, Eq, Serialize, Deserialize)]
+pub enum TransactionSigningPayload {
+    /// Version 0 transaction signing payload.
+    V0(TransactionSigningPayloadV0),
+}
+
+impl From<TransactionSigningPayloadV0> for TransactionSigningPayload {
+    fn from(value: TransactionSigningPayloadV0) -> Self {
+        Self::V0(value)
+    }
 }
 
 impl UnsignedTransaction {
-    pub fn bytes_for_signing(&self, serializer: &Serializer) -> Result<Vec<u8>, SerializerError> {
-        let mut bytes = serializer.serialize_unsigned_tx(self)?;
-        let chain_hash = serializer.chain_hash()?;
-        bytes.extend_from_slice(&chain_hash);
-        Ok(bytes)
+    /// Builds the V0 signing payload for this unsigned transaction.
+    fn signing_payload_v0(&self, chain_hash: [u8; 32]) -> TransactionSigningPayload {
+        TransactionSigningPayload::V0(TransactionSigningPayloadV0 {
+            runtime_call: self.runtime_call.clone(),
+            uniqueness: self.uniqueness,
+            details: self.details.clone(),
+            address_override: self.address_override.clone(),
+            chain_hash,
+        })
     }
 
+    /// Serializes the canonical V0 signing payload for this unsigned transaction.
+    ///
+    /// The chain hash is read from the serializer's schema and included as a field
+    /// in the serialized signing payload.
+    ///
+    /// # Errors
+    ///
+    /// Returns [`SerializerError::ChainHashFragmentMismatch`] if the transaction details
+    /// target a different chain hash than the serializer's schema. It also returns an error
+    /// if the chain hash cannot be calculated or the signing payload cannot be serialized.
+    pub fn bytes_for_signing(&self, serializer: &Serializer) -> Result<Vec<u8>, SerializerError> {
+        let chain_hash = serializer.chain_hash()?;
+        let expected = chain_hash_fragment(&chain_hash);
+        if self.details.chain_hash_fragment != expected {
+            return Err(SerializerError::ChainHashFragmentMismatch {
+                actual: self.details.chain_hash_fragment,
+                expected,
+            });
+        }
+        serializer.serialize_signing_payload(&self.signing_payload_v0(chain_hash))
+    }
+
+    /// Combines this unsigned transaction with an externally produced signature and public key.
     pub fn to_signed(&self, pub_key: Vec<u8>, signature: Vec<u8>) -> Transaction {
         Transaction::V0(TransactionV0 {
             pub_key,
@@ -380,6 +453,7 @@ impl UnsignedTransaction {
             runtime_call: self.runtime_call.clone(),
             uniqueness: self.uniqueness,
             details: self.details.clone(),
+            address_override: self.address_override.clone(),
         })
     }
 }
@@ -405,6 +479,8 @@ pub struct TransactionV0 {
     pub uniqueness: UniquenessData,
     /// Transaction execution details including fees and gas limits.
     pub details: TxDetails,
+    /// Optional address override for execution; null uses default routing.
+    pub address_override: Option<String>,
 }
 
 /// A versioned transaction envelope supporting different transaction formats.
@@ -432,7 +508,7 @@ pub enum Transaction {
 /// let builder = TransactionBuilder::new(my_call)
 ///     .max_fee(1000u128)
 ///     .priority_fee_bips(100u64)
-///     .chain_id(1)
+///     .chain_hash_fragment(chain_hash_fragment(&serializer.chain_hash()?))
 ///     .uniqueness(my_uniqueness_data);
 ///
 /// let unsigned_tx = builder.build()?;
@@ -443,15 +519,16 @@ pub struct TransactionBuilder {
     priority_fee_bips: Option<u64>,
     max_fee: Option<u128>,
     gas_limit: Option<Option<Vec<u64>>>,
-    chain_id: Option<u64>,
+    chain_hash_fragment: Option<u64>,
+    address_override: Option<String>,
 }
 
 impl TransactionBuilder {
     /// Creates a new transaction builder with the specified runtime call.
     ///
     /// All optional parameters are initially unset and will use default values
-    /// when the transaction is built. The chain_id is required and must be set
-    /// before calling `build()`.
+    /// when the transaction is built. The chain hash fragment is required and
+    /// must be set before calling `build()`.
     ///
     /// # Arguments
     ///
@@ -463,7 +540,8 @@ impl TransactionBuilder {
             priority_fee_bips: None,
             max_fee: None,
             gas_limit: None,
-            chain_id: None,
+            chain_hash_fragment: None,
+            address_override: None,
         }
     }
 
@@ -521,16 +599,22 @@ impl TransactionBuilder {
         self
     }
 
-    /// Sets the chain ID for the transaction.
+    /// Sets the chain hash fragment for the transaction.
     ///
-    /// The chain ID is required and must be set before calling `build()`.
+    /// The chain hash fragment is required and must be set before calling `build()`.
     /// It prevents transactions from being replayed on different chains.
     ///
     /// # Arguments
     ///
-    /// * `chain_id` - The chain identifier
-    pub fn chain_id(mut self, chain_id: u64) -> Self {
-        self.chain_id = Some(chain_id);
+    /// * `chain_hash_fragment` - The chain hash fragment
+    pub fn chain_hash_fragment(mut self, chain_hash_fragment: u64) -> Self {
+        self.chain_hash_fragment = Some(chain_hash_fragment);
+        self
+    }
+
+    /// Sets the explicit address override for the transaction.
+    pub fn address_override(mut self, address_override: impl Into<String>) -> Self {
+        self.address_override = Some(address_override.into());
         self
     }
 
@@ -542,7 +626,7 @@ impl TransactionBuilder {
     /// - Gas limit: `None` (unlimited)
     /// - Uniqueness: Generated via [`default_uniqueness`]
     ///
-    /// The chain_id must be set explicitly before calling this method.
+    /// The chain hash fragment must be set explicitly before calling this method.
     ///
     /// # Returns
     ///
@@ -551,7 +635,7 @@ impl TransactionBuilder {
     ///
     /// # Errors
     ///
-    /// * [`TransactionBuilderError::MissingChainId`] - If chain_id was not set
+    /// * [`TransactionBuilderError::MissingChainHashFragment`] - If chain hash fragment was not set
     pub fn build(self) -> Result<UnsignedTransaction, TransactionBuilderError> {
         let priority_fee = self
             .priority_fee_bips
@@ -562,9 +646,9 @@ impl TransactionBuilder {
             Some(u) => u,
             None => default_uniqueness()?,
         };
-        let chain_id = self
-            .chain_id
-            .ok_or(TransactionBuilderError::MissingChainId)?;
+        let chain_hash_fragment = self
+            .chain_hash_fragment
+            .ok_or(TransactionBuilderError::MissingChainHashFragment)?;
 
         Ok(UnsignedTransaction {
             runtime_call: self.call,
@@ -573,8 +657,9 @@ impl TransactionBuilder {
                 max_priority_fee_bips: priority_fee,
                 max_fee,
                 gas_limit,
-                chain_id,
+                chain_hash_fragment,
             },
+            address_override: self.address_override,
         })
     }
 }

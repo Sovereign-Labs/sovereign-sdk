@@ -321,6 +321,7 @@ where
         router: axum::Router<()>,
         methods: RpcModule<()>,
         cors_configuration: CorsConfiguration,
+        max_rpc_response_body_size: u32,
         rpc_aggregation: sov_metrics::RpcAggregationConfig,
     ) -> anyhow::Result<()> {
         let HttpServerStart {
@@ -334,6 +335,7 @@ where
             methods,
             self.runner_shutdown.clone(),
             cors_configuration,
+            max_rpc_response_body_size,
             rpc_aggregation,
         )
         .await?;

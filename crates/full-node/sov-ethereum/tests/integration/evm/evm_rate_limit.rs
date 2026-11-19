@@ -9,7 +9,6 @@ use alloy_provider::DynProvider;
 use alloy_rpc_types_eth::TransactionInput;
 use reqwest::header::{HeaderMap, HeaderValue};
 use sov_full_node_configs::sequencer::Limits;
-use sov_rollup_interface::common::RollupHeight;
 use sov_sequencer::SovRateLimiterConfig;
 
 use crate::common::{
@@ -38,7 +37,6 @@ async fn evm_test_rate_limit() -> anyhow::Result<()> {
         max_nb_of_concurrent_users_in_rate_limiter: 1000,
         max_requests_per_second: 1,
         address_custom_limits: Vec::default(),
-        height_for_gas_limit_computation: RollupHeight::GENESIS,
         ip_custom_limits: Vec::default(),
     };
 

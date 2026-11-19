@@ -187,6 +187,7 @@ fn create_test_rt_genesis_config<S: Spec>(
         chain_state: ChainStateConfig {
             current_time: Default::default(),
             genesis_da_height: 0,
+            state_version: sov_modules_api::macros::config_value!("STATE_VERSION"),
             operating_mode: sov_modules_api::OperatingMode::Optimistic,
             inner_code_commitment,
             outer_code_commitment,

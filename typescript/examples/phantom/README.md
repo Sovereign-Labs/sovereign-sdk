@@ -11,7 +11,6 @@ This package demonstrates how to connect a Phantom wallet and submit Solana offc
 Default values used when `.env` is absent:
 ```bash
 VITE_ROLLUP_URL=http://localhost:12346
-VITE_CHAIN_ID=4321
 VITE_SOLANA_ENDPOINT=/sequencer/accept-solana-offchain-tx
 ```
 

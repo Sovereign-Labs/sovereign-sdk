@@ -3,6 +3,34 @@ use sov_modules_api::{CredentialId, Spec, StateAccessor, StateReader, TxHash};
 use sov_state::User;
 
 use crate::Uniqueness;
+
+fn ensure_generation_is_not_too_far_ahead(
+    credential_id: &CredentialId,
+    latest_generation: u64,
+    past_transaction_generations: u64,
+    transaction_generation: u64,
+) -> anyhow::Result<()> {
+    // A jump to `latest_generation + PAST_TRANSACTION_GENERATIONS + 1` is the
+    // minimum increase that guarantees the current pruning rule can drop every
+    // existing bucket if the stored transaction hashes are at capacity.
+    let minimum_pruning_generation = latest_generation
+        .saturating_add(past_transaction_generations)
+        .saturating_add(1);
+    // Always allow at minimum a large enough increase to prune, in case the buckets are currently
+    // at capacity. This avoids an account deadlock at low generation numbers (where a doubling
+    // wouldn't be enough to prune).
+    let max_allowed_generation = latest_generation
+        .saturating_mul(2)
+        .max(minimum_pruning_generation);
+
+    anyhow::ensure!(
+        transaction_generation <= max_allowed_generation,
+        "Bad generation for credential id: {credential_id}, latest known value is: {latest_generation}, provided value {transaction_generation} exceeds the maximum allowed value {max_allowed_generation}",
+    );
+
+    Ok(())
+}
+
 impl<S: Spec> Uniqueness<S> {
     pub(crate) fn check_generation_uniqueness(
         &self,
@@ -18,13 +46,22 @@ impl<S: Spec> Uniqueness<S> {
 
         // The "currently active" generations is the range containing the latest seen generation
         // and the previous PAST_TRANSACTION_GENERATIONS
-        let latest_generation = senders_buckets
-            .last_key_value()
-            .map_or(transaction_generation, |(k, _)| *k);
+        let latest_generation = senders_buckets.last_key_value().map(|(k, _)| *k);
 
         let past_transaction_generations: u64 = config_value!("PAST_TRANSACTION_GENERATIONS");
         let transaction_generation_cutoff: u64 = past_transaction_generations.checked_sub(1)
             .ok_or( anyhow::anyhow!("PAST_TRANSACTION_GENERATIONS should be greater than 0. Please ensure you have set this value correctly"))?;
+
+        if let Some(latest_generation) = latest_generation {
+            ensure_generation_is_not_too_far_ahead(
+                credential_id,
+                latest_generation,
+                past_transaction_generations,
+                transaction_generation,
+            )?;
+        }
+
+        let latest_generation = latest_generation.unwrap_or(transaction_generation);
 
         // If we're below the current generation range, always fail
         // Note about the arithmetic: for a given PAST_TRANSACTION_GENERATIONS, the correct

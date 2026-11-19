@@ -79,3 +79,9 @@ name = "pruner"
 path = "benches/pruner_bench.rs"
 harness = false
 required-features = ["test-utils"]
+
+[[bench]]
+name = "commit_bench"
+path = "benches/commit_bench.rs"
+harness = false
+required-features = ["test-utils"]

@@ -8,6 +8,7 @@ use jsonrpsee::Extensions;
 use jsonrpsee::PendingSubscriptionSink;
 use sov_address::{EthereumAddress, FromVmAddress};
 pub use sov_evm::EthereumAuthenticator;
+use sov_evm::HeadView;
 use sov_modules_api::capabilities::HasKernel;
 use sov_modules_api::Spec;
 use sov_sequencer::Sequencer;
@@ -27,7 +28,7 @@ pub async fn eth_subscribe<S, Seq>(
     parameters: JRpcParams<'static>,
     pending: PendingSubscriptionSink,
     ethereum: Arc<Ethereum<S, Seq>>,
-    _: Extensions,
+    ext: Extensions,
 ) -> jsonrpsee::core::SubscriptionResult
 where
     S: Spec,
@@ -46,7 +47,7 @@ where
     };
 
     let accepted = pending.accept().await?;
-    let streamer = Streamer::new(accepted, ethereum.clone());
+    let streamer = Streamer::new(accepted, ethereum.clone(), HeadView::from_extensions(&ext));
 
     tokio::spawn(async move {
         match request {

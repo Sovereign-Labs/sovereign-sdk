@@ -15,7 +15,7 @@ use alloy_rpc_types::eth::Filter;
 use alloy_rpc_types::{FilterBlockOption, Log};
 use derive_more::{Deref, From};
 use jsonrpsee::types::ErrorObjectOwned;
-use sov_evm::{Evm, MaybeSealedBlock, Receipt};
+use sov_evm::{Evm, HeadView, MaybeSealedBlock, Receipt};
 use sov_modules_api::da::Time;
 use sov_modules_api::ApiStateAccessor;
 use sov_modules_api::Spec;
@@ -87,6 +87,7 @@ pub struct LogsService<S: Spec, Seq: Sequencer<Spec = S>> {
     logs_serialized_size: usize,
     state: ApiStateAccessor<S>,
     response_size_limit: Immutable<usize>,
+    head_view: Immutable<HeadView>,
     _phantom: PhantomData<(S, Seq)>,
 }
 
@@ -103,6 +104,7 @@ where
         max_logs: usize,
         state: ApiStateAccessor<S>,
         response_size_limit: usize,
+        head_view: HeadView,
     ) -> Self {
         Self {
             filter: filter.into(),
@@ -113,6 +115,7 @@ where
             logs: vec![],
             logs_serialized_size: 0,
             response_size_limit: response_size_limit.into(),
+            head_view: head_view.into(),
             _phantom: PhantomData,
         }
     }
@@ -130,7 +133,7 @@ where
     fn by_hash(mut self, block_hash: B256) -> Result<LogsWithMaybeCursor> {
         let block = self
             .evm
-            .get_maybe_sealed_block_by_id(block_hash.into(), &mut self.state)
+            .get_maybe_sealed_block_by_id(block_hash.into(), *self.head_view, &mut self.state)
             .map_err(|_| Error::BlockHashNotFound(block_hash))?
             .ok_or(Error::BlockHashNotFound(block_hash))?;
         let maybe_cursor = self.scan_block(block)?;
@@ -335,7 +338,10 @@ where
     }
 
     fn get_block(&mut self, number: BlockNumber) -> Result<MaybeSealedBlock> {
-        let Some(block) = self.evm.get_maybe_sealed_block(number, &mut self.state) else {
+        let Some(block) = self
+            .evm
+            .get_maybe_sealed_block(number, *self.head_view, &mut self.state)
+        else {
             tracing::error!(
                 number,
                 "Block for height not found. The state may have already been pruned."
@@ -347,7 +353,9 @@ where
 
     fn get_block_nr(&mut self, block_nr_or_tag: Option<BlockNumberOrTag>) -> Result<BlockNumber> {
         let block_number = block_nr_or_tag.unwrap_or_default();
-        Ok(self.evm.resolve_block_number(block_number, &mut self.state))
+        Ok(self
+            .evm
+            .resolve_block_number(block_number, *self.head_view, &mut self.state))
     }
 }
 

@@ -37,7 +37,7 @@ jobs:
 
       - name: Slack notification on failure
         if: failure() && steps.tests.outcome == 'failure'
-        uses: slackapi/slack-github-action@v2.1.1
+        uses: slackapi/slack-github-action@v3.0.5
         env:
           SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
         with:

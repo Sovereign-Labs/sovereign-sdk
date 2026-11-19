@@ -113,6 +113,7 @@ async fn start_rollup(
                 seq_config.batch_execution_time_limit_millis =
                     TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS * 3;
                 seq_config.ideal_lag_behind_finalized_slot = 3;
+                seq_config.num_cache_warmup_workers = 0;
             }
         })
         .start(),
@@ -259,7 +260,7 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
 
     {
         let _span = tracing::info_span!("sync-1").entered();
-        sync_rollup_with_path(rollup_storage_path.clone(), 10_000)
+        sync_rollup_with_path(rollup_storage_path.clone(), 200)
             .await
             .context("Sync 1")?;
     }
@@ -305,7 +306,7 @@ async fn test_rollup_resync() -> anyhow::Result<()> {
     );
 
     {
-        sync_rollup_with_path(rollup_storage_path, 20_000)
+        sync_rollup_with_path(rollup_storage_path, 300)
             .await
             .context("Sync 2")?;
     }

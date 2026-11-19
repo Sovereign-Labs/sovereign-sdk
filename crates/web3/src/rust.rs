@@ -35,7 +35,6 @@
 //! parameters, this module provides better performance and compile-time guarantees.
 //! For language bindings or when generics are not available, use the `schema` module.
 
-use sov_modules_api::capabilities::config_chain_id;
 use sov_modules_api::{CallMessage, CryptoSpec, RuntimeDiscriminant, UnmanagedRuntimeCall};
 
 pub use sov_modules_api::capabilities::UniquenessData;
@@ -50,12 +49,12 @@ pub enum TransactionBuilderError {
     PrivateKeyInvalid,
 }
 
-/// Trait for providing chain-specific hash values.
+/// Trait for providing chain-specific schema hash values.
 ///
-/// This trait must be implemented by types that need to provide
-/// a unique 32-byte hash identifying a specific blockchain.
+/// This trait must be implemented by types that provide the 32-byte chain hash
+/// committed to by transaction signing payloads.
 pub trait ChainHash {
-    /// Returns the 32-byte hash that uniquely identifies the chain.
+    /// Returns the 32-byte hash for the target rollup schema and metadata.
     fn chain_hash() -> [u8; 32];
 }
 
@@ -110,6 +109,7 @@ pub struct TransactionBuilder<S: Spec, C: ChainHash, M: CallMessage + RuntimeDis
     priority_fee_bips: Option<PriorityFeeBips>,
     max_fee: Option<Amount>,
     gas_limit: Option<Option<S::Gas>>,
+    address_override: Option<S::Address>,
     _phantom: std::marker::PhantomData<C>,
 }
 
@@ -129,6 +129,7 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
             priority_fee_bips: None,
             max_fee: None,
             gas_limit: None,
+            address_override: None,
             _phantom: Default::default(),
         }
     }
@@ -186,6 +187,12 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
         self
     }
 
+    /// Sets the explicit address override for the transaction.
+    pub fn address_override(mut self, address_override: S::Address) -> Self {
+        self.address_override = Some(address_override);
+        self
+    }
+
     /// Builds an unsigned transaction with the configured parameters.
     ///
     /// Uses default values for any parameters that were not explicitly set:
@@ -210,18 +217,20 @@ impl<S: Spec, C: ChainHash, M: CallMessage + RuntimeDiscriminant> TransactionBui
 
         Ok(UnsignedTransaction::new(
             self.call,
-            config_chain_id(),
+            C::chain_hash(),
             priority_fee,
             max_fee,
             uniqueness,
             gas_limit,
+            self.address_override,
         ))
     }
 
     /// Builds and signs a transaction in one step.
     ///
     /// This is a convenience method that builds the transaction with the configured
-    /// parameters and immediately signs it with the provided private key.
+    /// parameters and immediately signs its canonical signing payload with the
+    /// provided private key. The signing payload commits to `C::chain_hash()`.
     ///
     /// # Arguments
     ///

@@ -528,3 +528,154 @@ mod utils {
             .expect("Failed test; the API response can't be serialized as JSON... this is a bug")
     }
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_events_by_key_paginates_without_gaps_or_duplicates() {
+    use sov_test_utils::ledger_db::{
+        REPEATED_EVENTS_PER_TX, REPEATED_EVENT_COUNT, REPEATED_EVENT_KEY,
+    };
+
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::RepeatedEventKey)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    // Page boundaries must fall inside a transaction, so that a cursor has to
+    // resume mid-transaction rather than at the next transaction.
+    let page_size: u64 = 10;
+    assert_ne!(page_size % REPEATED_EVENTS_PER_TX, 0);
+
+    let mut seen = Vec::new();
+    let mut url = format!(
+        "http://{addr}/ledger/events/by-key?key={REPEATED_EVENT_KEY}\
+         &page=first&page[size]={page_size}"
+    );
+    // A cursor that fails to advance would otherwise loop forever.
+    let max_pages = REPEATED_EVENT_COUNT.div_ceil(page_size) + 1;
+    let mut reached_end = false;
+    for _ in 0..max_pages {
+        let response = reqwest::get(&url).await.unwrap();
+        assert_eq!(response.status(), 200);
+        let page: serde_json::Value = response.json().await.unwrap();
+        for event in page["items"].as_array().unwrap() {
+            assert_eq!(event["key"].as_str(), Some(REPEATED_EVENT_KEY));
+            seen.push(event["number"].as_u64().unwrap());
+        }
+        match page["next_cursor"].as_str() {
+            Some(cursor) => {
+                url = format!(
+                    "http://{addr}/ledger/events/by-key?key={REPEATED_EVENT_KEY}\
+                     &page=next&page[cursor]={cursor}&page[size]={page_size}"
+                );
+            }
+            None => {
+                reached_end = true;
+                break;
+            }
+        }
+    }
+
+    assert!(
+        reached_end,
+        "next_cursor never became null within {max_pages} pages"
+    );
+    // The fixture is the only data in the ledger, so its events are numbered
+    // from zero: every event exactly once, in order.
+    assert_eq!(seen, (0..REPEATED_EVENT_COUNT).collect::<Vec<_>>());
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_events_by_key_rejects_empty_key() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::RepeatedEventKey)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    let response = reqwest::get(format!("http://{addr}/ledger/events/by-key?key="))
+        .await
+        .unwrap();
+    assert_eq!(response.status(), 400);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_events_by_key_rejects_malformed_cursor() {
+    use sov_test_utils::ledger_db::REPEATED_EVENT_KEY;
+
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::RepeatedEventKey)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    let response = reqwest::get(format!(
+        "http://{addr}/ledger/events/by-key?key={REPEATED_EVENT_KEY}&page=next&page[cursor]=abc"
+    ))
+    .await
+    .unwrap();
+    assert_eq!(response.status(), 400);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_events_by_key_rejects_cursor_issued_for_another_key() {
+    use sov_test_utils::ledger_db::REPEATED_EVENT_KEY;
+
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::RepeatedEventKey)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    let first_page: serde_json::Value = reqwest::get(format!(
+        "http://{addr}/ledger/events/by-key?key={REPEATED_EVENT_KEY}&page=first&page[size]=1"
+    ))
+    .await
+    .unwrap()
+    .json()
+    .await
+    .unwrap();
+    let cursor = first_page["next_cursor"].as_str().unwrap();
+
+    // Reusing it under another key would otherwise yield a silently empty page.
+    let response = reqwest::get(format!(
+        "http://{addr}/ledger/events/by-key?key=Nope/Nope&page=next&page[cursor]={cursor}"
+    ))
+    .await
+    .unwrap();
+    assert_eq!(response.status(), 400);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_events_by_key_rejects_invalid_pagination() {
+    use sov_test_utils::ledger_db::REPEATED_EVENT_KEY;
+
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::RepeatedEventKey)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    // Malformed pagination is an error, not a silent fall-back to the default
+    // first page (which would make a client following `next_cursor` loop).
+    let response = reqwest::get(format!(
+        "http://{addr}/ledger/events/by-key?key={REPEATED_EVENT_KEY}\
+         &page=next&page[cursor]=0&page[size]=100000"
+    ))
+    .await
+    .unwrap();
+    assert_eq!(response.status(), 400);
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn list_events_by_key_unknown_key_is_empty() {
+    let ledger_service = LedgerTestService::new(LedgerTestServiceData::RepeatedEventKey)
+        .await
+        .unwrap();
+    let addr = ledger_service.axum_handle.listening().await.unwrap();
+
+    let page: serde_json::Value =
+        reqwest::get(format!("http://{addr}/ledger/events/by-key?key=Nope/Nope"))
+            .await
+            .unwrap()
+            .json()
+            .await
+            .unwrap();
+    assert!(page["items"].as_array().unwrap().is_empty());
+    assert!(page["next_cursor"].is_null());
+}

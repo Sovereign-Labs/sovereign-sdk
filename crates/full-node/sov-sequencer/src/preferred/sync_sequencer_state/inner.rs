@@ -17,7 +17,7 @@ use crate::preferred::sync_sequencer_state::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchSizeTracker;
 use crate::preferred::RollupBlockExecutorConfig;
-use crate::preferred::{comfortable_gas_limit_for_height, PreferredBlobToReplay};
+use crate::preferred::{comfortable_gas_limit, PreferredBlobToReplay};
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     is_lagging_less_than_ideal_amount, next_visible_slot_number_increase, BatchCreationError,
@@ -32,7 +32,7 @@ use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::Gas;
 use sov_modules_api::{
-    FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, VersionReader,
+    CredentialId, FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, VersionReader,
     VisibleSlotNumber,
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
@@ -67,6 +67,10 @@ pub(crate) enum DoNewTxError<S: Spec> {
         current_batch_size: usize,
         max_batch_size: usize,
         tx_len: usize,
+    },
+    TxWithSequencingDataTooBig {
+        total_payload_len: usize,
+        max_payload_len: usize,
     },
     ExecutorError(RollupBlockExecutorError<S>),
     Shutdown,
@@ -344,8 +348,12 @@ where
         // Replace API state
         let mut rt = Rt::default();
         let checkpoint = StateCheckpoint::new(info.storage.clone(), &rt.kernel());
+        // This checkpoint holds the node's state only, with none of the sequencer's soft
+        // confirmations, so the event frontier resets to the node's. It moves *backwards*
+        // whenever we discard soft-confirmed transactions, which is correct: their events are
+        // retracted along with their writes.
         self.executor_events_sender
-            .force_update_api_state(checkpoint)
+            .force_update_api_state(checkpoint, info.next_event_number)
             .await;
     }
 
@@ -410,19 +418,18 @@ where
         &mut self,
         remaining_slot_gas: <S as GasSpec>::Gas,
     ) {
-        let rollup_height = self.executor.checkpoint.rollup_height_to_access();
         // Check if we're close to the gas limit and close the batch if we are.
-        // We want to close when gas used is at least 95% of the initial gas limit.
-        let initial_gas_limit = <S as GasSpec>::gas_limit_for_height(rollup_height);
-        let comfortable_gas_limit = comfortable_gas_limit_for_height::<S>(rollup_height);
+        // We want to close when gas used is at least 95% of the block gas limit.
+        let block_gas_limit = <S as GasSpec>::block_gas_limit();
+        let comfortable_limit = comfortable_gas_limit::<S>();
 
-        let gas_used = initial_gas_limit
+        let gas_used = block_gas_limit
             .checked_sub(remaining_slot_gas)
-            .expect("remaining_lot_gas is always smaller than initial_gas_limit");
+            .expect("remaining_slot_gas is always smaller than block_gas_limit");
 
-        let close_to_gas_limit = comfortable_gas_limit.dim_is_less_or_eq(gas_used);
+        let close_to_gas_limit = comfortable_limit.dim_is_less_or_eq(gas_used);
         if close_to_gas_limit {
-            tracing::debug!(%comfortable_gas_limit, %gas_used, "Closing and publishing current batch because we're close to the gas limit");
+            tracing::debug!(%comfortable_limit, %gas_used, "Closing and publishing current batch because we're close to the gas limit");
             self.close_current_batch().await;
         }
 
@@ -743,6 +750,7 @@ where
                 self.executor
                     .checkpoint
                     .clone_with_empty_witness_dropping_temp_cache(),
+                self.executor.next_event_number(),
             )
             .await;
 
@@ -753,6 +761,7 @@ where
         &mut self,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
+        credential_id: Option<CredentialId>,
     ) -> (
         Result<
             (
@@ -801,12 +810,28 @@ where
             );
         }
 
+        // `MAX_FULLY_BAKED_TX_SIZE` is enforced by `FullyBakedTx`'s deserializers, so a tx that
+        // exceeds it once sequencing data is attached would execute and soft-confirm here, yet
+        // produce a blob that every node (including our own blob sender) rejects. Reject it up
+        // front instead. Note that pruning can only shrink the sequencing data, so this check
+        // is conservative.
+        let total_payload_len = baked_tx.payload_len();
+        if total_payload_len > sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE {
+            return (
+                Err(DoNewTxError::TxWithSequencingDataTooBig {
+                    total_payload_len,
+                    max_payload_len: sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE,
+                }),
+                request_used,
+            );
+        }
+
         let baked_tx = cache_warm_up_executor.send_tx(baked_tx.clone(), sequence_number);
         let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
 
         let (
             AcceptedTxWithBudgetInfo {
-                accepted_tx,
+                mut accepted_tx,
                 remaining_slot_gas,
                 execution_time_micros,
             },
@@ -834,6 +859,7 @@ where
         let gas_used = accepted_tx.confirmation.gas_used();
         let finalized_tx_len = accepted_tx.tx.len();
         let resource_used = ResourceUsed::new(1, tx_len, execution_time_micros, gas_used);
+        accepted_tx.credential_id = credential_id;
 
         batch_size_tracker.add_tx(finalized_tx_len, execution_time_micros);
         let rx = executor_events_sender
@@ -1026,8 +1052,11 @@ where
             .checkpoint
             .clone_with_empty_witness_dropping_temp_cache();
         self.sequence_number_of_open_batch = None;
+        // Read the counter after `end_rollup_block`, which assigns numbers to the forced
+        // transactions whose writes `checkpoint` already contains.
+        let next_event_number = self.executor.next_event_number();
         self.executor_events_sender
-            .close_batch(checkpoint, forced_txs)
+            .close_batch(checkpoint, forced_txs, next_event_number)
             .await;
     }
 

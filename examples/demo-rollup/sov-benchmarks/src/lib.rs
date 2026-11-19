@@ -24,7 +24,9 @@ use sov_test_utils::runtime::sov_paymaster::{
 };
 use sov_test_utils::runtime::TestRunner;
 use sov_test_utils::storage::ForklessStorageManager;
-use sov_test_utils::{MockDaSpec, MockZkvm, TestPreferredSequencer, TestProver, TestUser};
+use sov_test_utils::{
+    MockDaSpec, MockZkvm, TestPreferredSequencer, TestProver, TestSequencer, TestUser,
+};
 
 pub const DEFAULT_BLOCK_TIME_MS: u64 = 150;
 pub const DEFAULT_BLOCK_PRODUCING_CONFIG: BlockProducingConfig = BlockProducingConfig::Periodic {
@@ -102,6 +104,15 @@ pub struct Roles<S: Spec> {
     pub senders: Vec<TestUser<S>>,
 }
 
+/// Creates a user whose private key is derived from `seed`.
+fn seeded_user<S: Spec>(seed: u64, balance: Amount) -> TestUser<S> {
+    let mut key = [0x5e; 32];
+    key[..8].copy_from_slice(&seed.to_le_bytes());
+    let private_key = <S::CryptoSpec as CryptoSpec>::PrivateKey::try_from(key.to_vec())
+        .unwrap_or_else(|_| panic!("Any 32 bytes are a valid ed25519 private key"));
+    TestUser::new(private_key, balance)
+}
+
 /// Setups benchmarks and returns the genesis config along with benchmark roles
 pub fn setup<S, Vm>(
     num_senders: u64,
@@ -112,12 +123,36 @@ where
     Vm: Zkvm,
     <Vm::Verifier as ZkVerifier>::CryptoSpec: CryptoSpecExt,
 {
-    let mut genesis_config =
+    let generated =
         HighLevelZkGenesisConfig::generate_with_additional_accounts_and_code_commitments(
             (3 + num_senders) as usize,
-            inner_code_commitment,
+            inner_code_commitment.clone(),
             Default::default(),
         );
+    // Replace the randomly generated keys with seeded ones so that runs are reproducible.
+    let prover_sequencer = seeded_user::<S>(
+        0,
+        generated.initial_sequencer.user_info.available_gas_balance,
+    );
+    let accounts = generated
+        .additional_accounts()
+        .iter()
+        .enumerate()
+        .map(|(i, user)| seeded_user::<S>(i as u64 + 1, user.available_gas_balance))
+        .collect();
+    let mut genesis_config = HighLevelZkGenesisConfig::with_defaults(
+        TestProver {
+            user_info: prover_sequencer.clone(),
+            ..generated.initial_prover
+        },
+        TestSequencer {
+            user_info: prover_sequencer,
+            ..generated.initial_sequencer
+        },
+        accounts,
+        inner_code_commitment,
+        Default::default(),
+    );
 
     genesis_config.initial_sequencer.bond = genesis_config
         .initial_sequencer
@@ -225,13 +260,13 @@ where
 {
     let (genesis_config, roles) = setup::<S, Vm>(num_senders, inner_code_commitment);
 
-    (
-        TestRunner::<RT<S>, S, Sm>::new_with_genesis(
-            genesis_config.into_genesis_params(),
-            Default::default(),
-        ),
-        roles,
-    )
+    let mut runner = TestRunner::<RT<S>, S, Sm>::new_with_genesis(
+        genesis_config.into_genesis_params(),
+        Default::default(),
+    );
+    // Fixed block time so that runs are reproducible.
+    runner.config.freeze_time = Some(sov_rollup_interface::da::Time::from_secs(1_700_000_000));
+    (runner, roles)
 }
 
 /// Returns the risc0 host arguments for a rollup with mock da. This is the code that is zk-proven by the rollup

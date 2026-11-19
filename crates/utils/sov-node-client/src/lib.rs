@@ -335,6 +335,32 @@ impl NodeClient {
         Ok(self.http_client.get(url).send().await?.text().await?)
     }
 
+    /// HTTP GET to the given endpoint, returning the named response header alongside the
+    /// plain-text body.
+    ///
+    /// Useful for headers that describe the reply rather than its contents, such as
+    /// `x-sov-last-event-number`, which names the last rollup event the returned state
+    /// reflects.
+    pub async fn http_get_with_header(
+        &self,
+        url: &str,
+        header: &str,
+    ) -> anyhow::Result<(Option<String>, String)> {
+        let url = format!("{}{}", self.base_url, url);
+        let response = self.http_client.get(url).send().await?;
+        let header_value = response
+            .headers()
+            .get(header)
+            .map(|value| {
+                value
+                    .to_str()
+                    .map(ToOwned::to_owned)
+                    .with_context(|| format!("Header `{header}` is not valid text"))
+            })
+            .transpose()?;
+        Ok((header_value, response.text().await?))
+    }
+
     /// HTTP POST to the given endpoint, returning plain text.
     pub async fn http_post(&self, url: &str) -> anyhow::Result<String> {
         let url = format!("{}{}", self.base_url, url);

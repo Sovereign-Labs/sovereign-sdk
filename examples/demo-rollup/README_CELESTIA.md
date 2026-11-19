@@ -280,7 +280,7 @@ Options:
 Let's go ahead and import the transaction into the wallet
 
 ```bash,test-ci,bashtestmd:compare-output
-$ ./../../target/debug/sov-cli transactions import from-file bank --chain-id 4321 --max-fee 100000000 --path ../test-data/requests/transfer.json
+$ ./../../target/debug/sov-cli transactions import from-file bank --max-fee 100000000 --path ../test-data/requests/transfer.json
 Adding the following transaction to batch:
 {
   "tx": {
@@ -294,12 +294,12 @@ Adding the following transaction to batch:
       }
     }
   },
-  "chain_hash": "0xb4be2c15ed35b8b7e0406b41e9dddd883948129501f3bcf952a47daf02b6c4a2",
+  "chain_hash": "0xf90c71c495f59c4fb44bd827d85d9f0273a3dda3def75222d738db6851fbad71",
   "details": {
     "max_priority_fee_bips": 0,
     "max_fee": "100000000",
     "gas_limit": null,
-    "chain_id": 4321
+    "chain_hash_fragment": "5736730048957844729"
   }
 }
 ```

@@ -1,16 +1,11 @@
-import {
-  generateKeyPairSync,
-  sign,
-  verify,
-  type KeyObject,
-} from "node:crypto";
+import { generateKeyPairSync, sign, verify, type KeyObject } from "node:crypto";
 import { Buffer } from "node:buffer";
 import { expect, test } from "@playwright/test";
+import { chainHashFragment } from "@sovereign-sdk/web3";
 
 const ROLLUP_URL = process.env.VITE_ROLLUP_URL ?? "http://localhost:12346";
 const SOLANA_ENDPOINT =
   process.env.VITE_SOLANA_ENDPOINT || "/sequencer/accept-solana-offchain-tx";
-const CHAIN_ID = Number(process.env.VITE_CHAIN_ID ?? "4321");
 const BASE58_ALPHABET =
   "123456789ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnopqrstuvwxyz";
 
@@ -24,7 +19,7 @@ type SolanaSimpleEnvelope = {
 type SolanaUnsignedTx = {
   chain_name?: string;
   details?: {
-    chain_id?: number;
+    chain_hash_fragment?: string;
   };
   runtime_call?: {
     bank?: {
@@ -67,7 +62,9 @@ function publicKeyToRawBytes(publicKey: KeyObject): Buffer {
   return der.subarray(der.length - 32);
 }
 
-function parseSolanaSimpleEnvelope(payloadBase64: string): SolanaSimpleEnvelope {
+function parseSolanaSimpleEnvelope(
+  payloadBase64: string,
+): SolanaSimpleEnvelope {
   const serialized = Buffer.from(payloadBase64, "base64");
   const minEnvelopeSize = 4 + 32 + 32 + 64;
   if (serialized.length < minEnvelopeSize) {
@@ -94,7 +91,9 @@ function parseSolanaSimpleEnvelope(payloadBase64: string): SolanaSimpleEnvelope 
 
   return {
     signedMessage: serialized.subarray(signedMessageStart, signedMessageEnd),
-    chainHashHex: serialized.subarray(chainHashStart, chainHashEnd).toString("hex"),
+    chainHashHex: serialized
+      .subarray(chainHashStart, chainHashEnd)
+      .toString("hex"),
     pubkeyHex: serialized.subarray(pubkeyStart, pubkeyEnd).toString("hex"),
     signature: serialized.subarray(signatureStart, signatureEnd),
   };
@@ -144,10 +143,13 @@ test.describe("Phantom mocked-provider with real rollup", () => {
   const walletAddress = base58Encode(new Uint8Array(publicKeyRaw));
 
   test.beforeEach(async ({ page }) => {
-    await page.exposeFunction("__signEd25519Message", async (message: number[]) => {
-      const signature = sign(null, Buffer.from(message), privateKey);
-      return Array.from(signature);
-    });
+    await page.exposeFunction(
+      "__signEd25519Message",
+      async (message: number[]) => {
+        const signature = sign(null, Buffer.from(message), privateKey);
+        return Array.from(signature);
+      },
+    );
 
     await page.addInitScript(
       ({ address, publicKeyBytes }) => {
@@ -225,7 +227,9 @@ test.describe("Phantom mocked-provider with real rollup", () => {
     ).toBeVisible();
 
     await expect(
-      page.getByText("Phantom was not detected. Install the Phantom browser extension"),
+      page.getByText(
+        "Phantom was not detected. Install the Phantom browser extension",
+      ),
     ).toHaveCount(0);
 
     await page.getByRole("button", { name: "Connect Phantom" }).click();
@@ -233,12 +237,16 @@ test.describe("Phantom mocked-provider with real rollup", () => {
       timeout: 15_000,
     });
 
-    await page.getByRole("button", { name: "Sign with Phantom and Send" }).click();
+    await page
+      .getByRole("button", { name: "Sign with Phantom and Send" })
+      .click();
 
     const submissionRequest = await submissionRequestPromise;
     const postBody = submissionRequest.postData();
     if (!postBody) {
-      throw new Error("Expected request body for solana offchain tx submission");
+      throw new Error(
+        "Expected request body for solana offchain tx submission",
+      );
     }
 
     const parsedBody = JSON.parse(postBody) as { body?: string };
@@ -249,7 +257,9 @@ test.describe("Phantom mocked-provider with real rollup", () => {
     }
 
     const envelope = parseSolanaSimpleEnvelope(parsedBody.body);
-    const unsignedTx = JSON.parse(envelope.signedMessage.toString("utf8")) as SolanaUnsignedTx;
+    const unsignedTx = JSON.parse(
+      envelope.signedMessage.toString("utf8"),
+    ) as SolanaUnsignedTx;
 
     const liveChainHash = await fetchRollupChainHash();
     expect(envelope.chainHashHex).toBe(liveChainHash);
@@ -259,7 +269,9 @@ test.describe("Phantom mocked-provider with real rollup", () => {
     ).toBeTruthy();
 
     expect(unsignedTx.chain_name).toBe("TestChain");
-    expect(unsignedTx.details?.chain_id).toBe(CHAIN_ID);
+    expect(unsignedTx.details?.chain_hash_fragment).toBe(
+      chainHashFragment(Buffer.from(liveChainHash, "hex")),
+    );
     expect(unsignedTx.runtime_call?.bank?.create_token?.mint_to_address).toBe(
       walletAddress,
     );
@@ -281,6 +293,8 @@ test.describe("Phantom mocked-provider with real rollup", () => {
       throw new Error(`Rollup rejected transaction:\n${errorText}`);
     }
 
-    await expect(successMessage).toContainText("Transaction Submitted Successfully!");
+    await expect(successMessage).toContainText(
+      "Transaction Submitted Successfully!",
+    );
   });
 });

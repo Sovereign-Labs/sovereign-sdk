@@ -5,7 +5,6 @@ use std::time::Duration;
 use rand::Rng;
 use sov_bank::Bank;
 use sov_bank::CallMessageDiscriminants::Transfer;
-use sov_modules_api::capabilities::config_chain_id;
 use sov_modules_api::macros::config_value;
 use sov_modules_api::prelude::arbitrary::{self, Unstructured};
 use sov_modules_api::prelude::tracing;
@@ -47,7 +46,7 @@ pub fn plain_tx_with_default_details<R: Runtime<S>, S: Spec>(
             max_priority_fee_bips: TEST_DEFAULT_MAX_PRIORITY_FEE,
             max_fee: TEST_DEFAULT_MAX_FEE,
             gas_limit: None,
-            chain_id: config_chain_id(),
+            chain_hash_fragment: 0,
         },
     }
 }

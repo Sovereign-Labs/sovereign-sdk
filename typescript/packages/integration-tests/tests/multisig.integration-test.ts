@@ -1,5 +1,5 @@
+import { Multisig } from "@sovereign-sdk/multisig";
 import { Ed25519Signer, type Signer } from "@sovereign-sdk/signers";
-import type { UnsignedTransaction } from "@sovereign-sdk/types";
 import { bytesToHex } from "@sovereign-sdk/utils";
 import {
   DEFAULT_TX_DETAILS,
@@ -7,7 +7,6 @@ import {
   createStandardRollup,
 } from "@sovereign-sdk/web3";
 import { beforeAll, describe, expect, it } from "vitest";
-import { MultisigTransaction } from "../src";
 
 const testAddress = {
   Standard: "sov1lzkjgdaz08su3yevqu6ceywufl35se9f33kztu5cu2spja5hyyf",
@@ -23,9 +22,7 @@ function generateSigners(count = 5): Signer[] {
   const signers = [];
 
   for (let i = 0; i < count; i++) {
-    const pk = generatePrivateKey();
-    const signer = new Ed25519Signer(pk);
-    signers.push(signer);
+    signers.push(new Ed25519Signer(generatePrivateKey()));
   }
 
   return signers;
@@ -33,13 +30,9 @@ function generateSigners(count = 5): Signer[] {
 
 describe("multisig", async () => {
   let rollup: StandardRollup<any>;
-  // gets populated in beforeAll
-  let chain_id = 0;
 
   beforeAll(async () => {
     rollup = await createStandardRollup();
-    const constants = await rollup.rollup.constants();
-    chain_id = constants.chain_id;
   });
 
   it("should submit a multisig transaction successfully", async () => {
@@ -55,27 +48,37 @@ describe("multisig", async () => {
         },
       },
     };
-    const unsignedTx: UnsignedTransaction<any> = {
+    const unsignedTx = {
       runtime_call,
       uniqueness: { nonce: 0 },
-      details: { ...DEFAULT_TX_DETAILS, chain_id },
+      details: rollup.context.defaultTxDetails,
+      address_override: null,
     };
 
     const requiredSigners = 3;
     const multiSigSigners = generateSigners(requiredSigners);
     const allPublicKeyBytes = await Promise.all(
-      multiSigSigners.map((s) => s.publicKey()),
+      multiSigSigners.map((signer) => signer.publicKey()),
     );
-    const allPubKeys = allPublicKeyBytes.map(bytesToHex);
-    const signedTransactions = await Promise.all(
-      multiSigSigners.map((s) => rollup.signTransaction(unsignedTx, s)),
+    const multisig = Multisig.fromPubKeys(
+      allPublicKeyBytes.map(bytesToHex),
+      requiredSigners,
     );
-    const multisig = MultisigTransaction.fromTransactions({
-      txns: signedTransactions,
-      minSigners: requiredSigners,
-      allPubKeys,
-    });
-    const response = await rollup.submitTransaction(multisig.asTransaction());
+
+    for (const signer of multiSigSigners) {
+      const signingBytes = await rollup.multisigSigningBytes(
+        unsignedTx,
+        multisig,
+      );
+      multisig.addSignature(
+        bytesToHex(await signer.sign(signingBytes)),
+        bytesToHex(await signer.publicKey()),
+      );
+    }
+
+    const response = await rollup.submitTransaction(
+      multisig.toTransaction(unsignedTx),
+    );
 
     expect(response.status).toEqual("submitted");
   });

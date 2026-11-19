@@ -401,6 +401,7 @@ mod tests {
                 bind_port,
                 public_address: public_address.map(|s| s.to_string()),
                 cors: sov_stf_runner::CorsConfiguration::Permissive,
+                max_rpc_response_body_size: 10 * 1024 * 1024,
             },
             save_tx_bodies: false,
             concurrent_sync_tasks: 1,

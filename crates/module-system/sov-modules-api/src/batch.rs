@@ -192,7 +192,7 @@ pub struct ProvisionalSequencerOutcome<S: Spec> {
     pub execution_status: MaybeExecuted<S>,
     /// Native scratchpad recorded while executing with the transaction's sequencing data.
     #[cfg(feature = "native")]
-    pub sequencing_scratchpad: Option<sov_rollup_interface::Bytes>,
+    pub sequencing_scratchpad: crate::SequencingScratchpadContents,
 }
 
 /// The reason a transaction was rejected by the sequencer due to insufficient funds.
@@ -242,7 +242,7 @@ impl<S: Spec> ProvisionalSequencerOutcome<S> {
             penalty,
             execution_status: MaybeExecuted::SequencerOutOfFunds(reason),
             #[cfg(feature = "native")]
-            sequencing_scratchpad: None,
+            sequencing_scratchpad: Default::default(),
         }
     }
 
@@ -253,7 +253,7 @@ impl<S: Spec> ProvisionalSequencerOutcome<S> {
             penalty,
             execution_status: MaybeExecuted::Executed(receipt),
             #[cfg(feature = "native")]
-            sequencing_scratchpad: None,
+            sequencing_scratchpad: Default::default(),
         }
     }
     /// A convenient constructor for provisionally rewarding the sequencer
@@ -263,7 +263,7 @@ impl<S: Spec> ProvisionalSequencerOutcome<S> {
             penalty: Amount::ZERO,
             execution_status: MaybeExecuted::Executed(receipt),
             #[cfg(feature = "native")]
-            sequencing_scratchpad: None,
+            sequencing_scratchpad: Default::default(),
         }
     }
 }
@@ -277,7 +277,11 @@ pub trait InjectedControlFlow<S: Spec> {
     /// before the main executor.
     fn try_warm_up_cache(&mut self, scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>);
 
-    /// Runs after authentication but before the transaction executes
+    /// Runs after authentication but before the transaction executes.
+    ///
+    /// Returning [`TxControlFlow::IgnoreTx`] drops the transaction as if it had never been
+    /// submitted: no receipt is created and [`Self::post_tx`] is *not* called for it. This is
+    /// only allowed in the sequencer, since it would make execution non-deterministic elsewhere.
     fn pre_flight<RT: Runtime<S>>(
         &self,
         runtime: &RT,

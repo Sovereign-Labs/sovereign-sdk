@@ -56,6 +56,14 @@ pub struct HttpServerConfig {
     /// Enable or disable CORS policy headers. Enabled by default.
     #[serde(default)]
     pub cors: CorsConfiguration,
+    /// Maximum size in bytes of a single JSON-RPC response. Requests whose response would
+    /// exceed this fail with a "Response is too big" error. Defaults to 10 MiB.
+    #[serde(default = "default_max_rpc_response_body_size")]
+    pub max_rpc_response_body_size: u32,
+}
+
+fn default_max_rpc_response_body_size() -> u32 {
+    10 * 1024 * 1024
 }
 
 /// See [`HttpServerConfig::cors`].
@@ -93,6 +101,7 @@ impl HttpServerConfig {
             bind_port: port,
             public_address: None,
             cors: CorsConfiguration::Permissive,
+            max_rpc_response_body_size: default_max_rpc_response_body_size(),
         }
     }
 
@@ -104,6 +113,7 @@ impl HttpServerConfig {
             bind_port: port,
             public_address: None,
             cors: CorsConfiguration::Permissive,
+            max_rpc_response_body_size: default_max_rpc_response_body_size(),
         }
     }
 

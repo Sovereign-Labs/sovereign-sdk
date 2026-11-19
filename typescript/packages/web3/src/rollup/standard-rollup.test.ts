@@ -1,11 +1,27 @@
 import SovereignClient from "@sovereign-sdk/client";
+import { Multisig } from "@sovereign-sdk/multisig";
 import type { RollupSchema, Serializer } from "@sovereign-sdk/serializers";
+import { bytesToHex } from "@sovereign-sdk/utils";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
+import { addressFromPublicKey } from "../addresses";
+import { VersionMismatchError } from "../errors";
 import {
+  DEFAULT_TX_DETAILS,
   StandardRollup,
+  chainHashFragment,
   createStandardRollup,
   standardTypeBuilder,
 } from "./standard-rollup";
+
+describe("chainHashFragment", () => {
+  it("reads the first eight bytes as a little-endian u64", () => {
+    const backing = Uint8Array.from([255, 1, 2, 3, 4, 5, 6, 7, 8, 255]);
+
+    expect(chainHashFragment(backing.subarray(1, 9))).toBe(
+      "578437695752307201",
+    );
+  });
+});
 
 describe("standardTypeBuilder", () => {
   const mockRollup = {
@@ -17,7 +33,7 @@ describe("standardTypeBuilder", () => {
       defaultTxDetails: {
         max_priority_fee_bips: 100,
         max_fee: "1000",
-        chain_id: 1,
+        chain_hash_fragment: "1",
       },
     },
     rollup: {
@@ -52,8 +68,9 @@ describe("standardTypeBuilder", () => {
         details: {
           max_priority_fee_bips: 100,
           max_fee: "1000",
-          chain_id: 1,
+          chain_hash_fragment: "1",
         },
+        address_override: null,
       });
     });
 
@@ -72,8 +89,9 @@ describe("standardTypeBuilder", () => {
         details: {
           max_priority_fee_bips: 100,
           max_fee: "1000",
-          chain_id: 1,
+          chain_hash_fragment: "1",
         },
+        address_override: null,
       });
     });
 
@@ -98,8 +116,9 @@ describe("standardTypeBuilder", () => {
           max_priority_fee_bips: 100,
           max_fee: "2000",
           gas_limit: [1000000, 1000000],
-          chain_id: 1,
+          chain_hash_fragment: "1",
         },
+        address_override: null,
       });
     });
   });
@@ -115,9 +134,10 @@ describe("standardTypeBuilder", () => {
           details: {
             max_priority_fee_bips: 100,
             max_fee: "1000",
-            chain_id: 1,
+            chain_hash_fragment: "1",
             gas_limit: null,
           },
+          address_override: null,
         },
         sender: new Uint8Array([4, 5, 6]),
         signature: new Uint8Array([7, 8, 9]),
@@ -135,11 +155,48 @@ describe("standardTypeBuilder", () => {
           details: {
             max_priority_fee_bips: 100,
             max_fee: "1000",
-            chain_id: 1,
+            chain_hash_fragment: "1",
             gas_limit: null,
           },
+          address_override: null,
         },
       });
+    });
+  });
+
+  describe("transactionSigningPayload", () => {
+    it("should format a V0 signing payload with the provided chain hash", async () => {
+      const unsignedTx = {
+        runtime_call: {
+          value_setter: { set_value: { value: 5, gas: null } },
+        },
+        uniqueness: { generation: 5 },
+        details: {
+          max_priority_fee_bips: 100,
+          max_fee: "1000",
+          chain_hash_fragment: "1",
+          gas_limit: null,
+        },
+        address_override: null,
+      };
+
+      const result = await builder.transactionSigningPayload({
+        unsignedTx,
+        chainHash: new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]),
+        rollup: mockRollup as any,
+      });
+
+      expect(result).toEqual({
+        V0: {
+          ...unsignedTx,
+          details: {
+            ...unsignedTx.details,
+            chain_hash_fragment: "578437695752307201",
+          },
+          chain_hash: [1, 2, 3, 4, 5, 6, 7, 8],
+        },
+      });
+      expect(unsignedTx.details.chain_hash_fragment).toBe("578437695752307201");
     });
   });
 });
@@ -147,13 +204,33 @@ describe("standardTypeBuilder", () => {
 const mockSerializer = {
   serialize: vi.fn().mockReturnValue(new Uint8Array([1, 2, 3])),
   serializeRuntimeCall: vi.fn().mockReturnValue(new Uint8Array([4, 5, 6])),
-  serializeUnsignedTx: vi.fn().mockReturnValue(new Uint8Array([7, 8, 9])),
+  serializeSigningPayload: vi.fn().mockReturnValue(new Uint8Array([7, 8, 9])),
   serializeTx: vi.fn().mockReturnValue(new Uint8Array([10, 11, 12])),
   schema: { chainHash: new Uint8Array([1, 2, 3, 4]) } as any,
 };
 
 const getSerializer = (_schema: RollupSchema) =>
   mockSerializer as unknown as Serializer;
+
+function createMockStandardClient() {
+  const client = new SovereignClient({ fetch: vi.fn() });
+  const chainHash =
+    "0x0000000000000000000000000000000000000000000000000000000000000000";
+
+  client.rollup = {
+    constants: vi.fn().mockResolvedValue({ chain_id: 1 }),
+    schema: vi.fn().mockResolvedValue({
+      schema: { chain_data: { chain_id: 1, chain_name: "TestChain" } },
+      chain_hash: chainHash,
+    }),
+    addresses: {
+      dedup: vi.fn().mockResolvedValue({ nonce: 5 }),
+    },
+  } as any;
+  client.post = vi.fn().mockResolvedValue({ status: "submitted" });
+
+  return client;
+}
 
 describe("createStandardRollup", () => {
   const mockConfig = {
@@ -163,7 +240,7 @@ describe("createStandardRollup", () => {
       defaultTxDetails: {
         max_priority_fee_bips: 100,
         max_fee: "1000",
-        chain_id: 1,
+        chain_hash_fragment: "1",
         gas_limit: null,
       },
     },
@@ -212,12 +289,18 @@ describe("createStandardRollup", () => {
     expect(typeBuilder.unsignedTransaction).toBe(customUnsignedTransaction);
     expect(typeBuilder.transaction).toBeDefined();
     expect(typeof typeBuilder.transaction).toBe("function");
+    expect(typeBuilder.transactionSigningPayload).toBeDefined();
+    expect(typeof typeBuilder.transactionSigningPayload).toBe("function");
   });
 
   it("should be created using the default context", async () => {
     mockConfig.client.rollup.constants = vi
       .fn()
       .mockResolvedValue({ chain_id: 55 });
+    mockConfig.client.rollup.schema = vi.fn().mockResolvedValue({
+      chain_hash:
+        "0x0000000000000000000000000000000000000000000000000000000000000000",
+    });
     const rollup = await createStandardRollup({
       ...mockConfig,
       context: undefined,
@@ -227,9 +310,12 @@ describe("createStandardRollup", () => {
         max_priority_fee_bips: 0,
         max_fee: "100000000",
         gas_limit: null,
-        chain_id: 55,
+        chain_hash_fragment: "0",
       },
     });
+    await rollup.serializer();
+    await rollup.chainHash();
+    expect(mockConfig.client.rollup.schema).toHaveBeenCalledTimes(1);
   });
 
   it("should preserve supplied context and merge default context", async () => {
@@ -241,7 +327,7 @@ describe("createStandardRollup", () => {
       context: {
         defaultTxDetails: {
           max_priority_fee_bips: 5,
-          chain_id: 1,
+          chain_hash_fragment: "1",
         },
       },
     });
@@ -250,8 +336,305 @@ describe("createStandardRollup", () => {
         max_priority_fee_bips: 5,
         max_fee: "100000000",
         gas_limit: null,
-        chain_id: 1,
+        chain_hash_fragment: "1",
       },
     });
+  });
+
+  it("should refresh default transaction details after a chain hash change", async () => {
+    const client = createMockStandardClient();
+    const oldChainHash = `0x${"00".repeat(32)}`;
+    const newChainHash = `0x01${"00".repeat(31)}`;
+    client.rollup.schema = vi
+      .fn()
+      .mockResolvedValueOnce({
+        schema: { chain_data: { chain_name: "TestChain" } },
+        chain_hash: oldChainHash,
+      })
+      .mockResolvedValueOnce({
+        schema: { chain_data: { chain_name: "TestChain" } },
+        chain_hash: newChainHash,
+      });
+    client.post = vi.fn().mockRejectedValue({
+      error: {
+        details: {
+          code: "invalid_chain_hash_fragment",
+          error: "Authentication failed",
+        },
+      },
+    });
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer,
+      context: {
+        defaultTxDetails: {
+          ...DEFAULT_TX_DETAILS,
+          chain_hash_fragment: "0",
+        },
+      },
+    });
+
+    await rollup.chainHash();
+    await expect(
+      rollup.submitTransaction({ foo: "bar" } as any),
+    ).rejects.toThrow(VersionMismatchError);
+
+    const unsignedTx = await rollup.buildUnsignedTransaction({ test: "call" });
+    expect(unsignedTx.details.chain_hash_fragment).toBe("1");
+  });
+
+  it("should refresh default transaction details when rehydrated", async () => {
+    const client = createMockStandardClient();
+    client.rollup.schema = vi.fn().mockResolvedValue({
+      schema: { chain_data: { chain_name: "TestChain" } },
+      chain_hash: `0x02${"00".repeat(31)}`,
+    });
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer,
+      context: {
+        defaultTxDetails: {
+          ...DEFAULT_TX_DETAILS,
+          chain_hash_fragment: "0",
+        },
+      },
+    });
+
+    await rollup.hydrate();
+
+    expect(rollup.context.defaultTxDetails.chain_hash_fragment).toBe("2");
+    expect(client.rollup.schema).toHaveBeenCalledTimes(1);
+  });
+
+  it("should pass optional simulation parameters to the client", async () => {
+    const client = new SovereignClient({ fetch: vi.fn() });
+    client.rollup.simulate = vi.fn().mockResolvedValue({ outcome: "success" });
+    const rollup = await createStandardRollup({
+      ...mockConfig,
+      client,
+    });
+    const signer = {
+      publicKey: vi.fn().mockResolvedValue(new Uint8Array([0xab, 0xcd])),
+    };
+    const runtimeCall = {
+      bank: {
+        transfer: {
+          to: "receiver",
+          coins: { amount: "1", token_id: "token" },
+        },
+      },
+    };
+    const txDetails = {
+      max_fee: "1234",
+    };
+
+    await rollup.simulate(runtimeCall, {
+      signer: signer as any,
+      address_override: "sov1target",
+      tx_details: txDetails,
+      uniqueness: { nonce: 7 },
+    });
+
+    expect(client.rollup.simulate).toHaveBeenCalledWith({
+      sender: "abcd",
+      call: runtimeCall,
+      address_override: "sov1target",
+      tx_details: txDetails,
+      uniqueness: { nonce: 7 },
+    });
+  });
+
+  it("should serialize V0 unsigned transactions as versioned envelopes when signing", async () => {
+    const client = createMockStandardClient();
+    const serializer = {
+      ...mockSerializer,
+      serializeSigningPayload: vi
+        .fn()
+        .mockReturnValue(new Uint8Array([7, 8, 9])),
+    };
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer: () => serializer as unknown as Serializer,
+      context: mockConfig.context,
+    });
+    const signer = {
+      sign: vi.fn().mockResolvedValue(new Uint8Array([1, 2, 3])),
+      publicKey: vi.fn().mockResolvedValue(new Uint8Array([4, 5, 6])),
+    };
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 1 },
+      details: mockConfig.context.defaultTxDetails,
+      address_override: null,
+    };
+
+    const tx = await rollup.signTransaction(unsignedTx, signer as any);
+    const expectedUnsignedTx = {
+      ...unsignedTx,
+      details: {
+        ...unsignedTx.details,
+        chain_hash_fragment: "0",
+      },
+    };
+
+    expect(serializer.serializeSigningPayload).toHaveBeenCalledWith({
+      V0: {
+        ...expectedUnsignedTx,
+        chain_hash: new Array(32).fill(0),
+      },
+    });
+    expect(tx).toEqual({
+      V0: {
+        pub_key: "040506",
+        signature: "010203",
+        ...expectedUnsignedTx,
+      },
+    });
+    expect(unsignedTx.details.chain_hash_fragment).toBe("0");
+  });
+
+  it("should fetch dedup data directly by credential id", async () => {
+    const client = createMockStandardClient();
+    const dedup = vi.fn().mockResolvedValue({ nonce: 9 });
+    client.rollup.addresses = { dedup } as any;
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer,
+      context: mockConfig.context,
+    });
+
+    await expect(rollup.dedupByCredentialId("aabb")).resolves.toEqual({
+      nonce: 9,
+    });
+    expect(dedup).toHaveBeenCalledWith("aabb");
+  });
+
+  it("should create multisig signing bytes and finalize via Multisig.toTransaction()", async () => {
+    const client = createMockStandardClient();
+    const serializer = {
+      ...mockSerializer,
+      serializeSigningPayload: vi
+        .fn()
+        .mockReturnValue(new Uint8Array([7, 8, 9])),
+    };
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer: () => serializer as unknown as Serializer,
+      context: mockConfig.context,
+    });
+    const signerPublicKey = new Uint8Array(32).fill(7);
+    const signer = {
+      sign: vi.fn().mockResolvedValue(new Uint8Array(64).fill(8)),
+      publicKey: vi.fn().mockResolvedValue(signerPublicKey),
+    };
+    const otherPublicKey = new Uint8Array(32).fill(9);
+    const multisig = Multisig.fromPubKeys(
+      [bytesToHex(signerPublicKey), bytesToHex(otherPublicKey)],
+      1,
+    );
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 1 },
+      details: {
+        ...mockConfig.context.defaultTxDetails,
+        chain_hash_fragment: "0",
+      },
+      address_override: null,
+    };
+    const originalDetails = unsignedTx.details;
+    const originalUnsignedTx = {
+      ...unsignedTx,
+      details: { ...unsignedTx.details },
+    };
+
+    const signingBytes = await rollup.multisigSigningBytes(
+      unsignedTx,
+      multisig,
+    );
+
+    expect(serializer.serializeSigningPayload).toHaveBeenCalledWith({
+      V1: {
+        ...unsignedTx,
+        chain_hash: new Array(32).fill(0),
+        credential_address: addressFromPublicKey(
+          multisig.getMultisigAddress(),
+          "sov",
+        ),
+      },
+    });
+    expect(signingBytes).toEqual(new Uint8Array([7, 8, 9]));
+    expect(unsignedTx).toEqual(originalUnsignedTx);
+    expect(unsignedTx.details).toBe(originalDetails);
+
+    const signatureBytes = await signer.sign(signingBytes);
+    const signature = {
+      pub_key: bytesToHex(signerPublicKey),
+      signature: bytesToHex(signatureBytes),
+    };
+    multisig.addSignature(signature.signature, signature.pub_key);
+
+    expect(multisig.toTransaction(unsignedTx)).toEqual({
+      V1: {
+        ...unsignedTx,
+        signatures: [signature],
+        unused_pub_keys: [bytesToHex(otherPublicKey)],
+        min_signers: 1,
+      },
+    });
+  });
+
+  it("should reject multisig signing when the chain hash fragment is stale without mutation", async () => {
+    const client = createMockStandardClient();
+    const rollup = await createStandardRollup({
+      client,
+      getSerializer,
+      context: mockConfig.context,
+    });
+    const multisig = Multisig.fromPubKeys(
+      [
+        bytesToHex(new Uint8Array(32).fill(1)),
+        bytesToHex(new Uint8Array(32).fill(2)),
+      ],
+      1,
+    );
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 1 },
+      details: { ...mockConfig.context.defaultTxDetails },
+      address_override: null,
+    };
+    const originalDetails = unsignedTx.details;
+    const originalUnsignedTx = {
+      ...unsignedTx,
+      details: { ...unsignedTx.details },
+    };
+
+    await expect(
+      rollup.multisigSigningBytes(unsignedTx, multisig),
+    ).rejects.toThrow(
+      "Cannot sign transaction: chain_hash_fragment 1 does not match the current chain hash fragment 0",
+    );
+    expect(unsignedTx).toEqual(originalUnsignedTx);
+    expect(unsignedTx.details).toBe(originalDetails);
+  });
+
+  it("should fail fast when converting an incomplete multisig transaction", () => {
+    const multisig = Multisig.fromPubKeys(
+      [
+        bytesToHex(new Uint8Array(32).fill(1)),
+        bytesToHex(new Uint8Array(32).fill(2)),
+      ],
+      2,
+    );
+    const unsignedTx = {
+      runtime_call: { test: "call" },
+      uniqueness: { nonce: 1 },
+      details: mockConfig.context.defaultTxDetails,
+      address_override: null,
+    };
+
+    expect(() => multisig.toTransaction(unsignedTx)).toThrow(
+      "Multisig transaction is incomplete",
+    );
   });
 });

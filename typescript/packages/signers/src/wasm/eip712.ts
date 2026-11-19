@@ -27,7 +27,7 @@ function normalizeSignature(signature: Signature): Uint8Array {
 /**
  * EIP-712 signer implementation that uses MetaMask's eth_signTypedData_v4 method.
  *
- * This signer expects the message to be a valid UnsignedTransaction that can be
+ * This signer expects the message to be a valid TransactionSigningPayload that can be
  * parsed by the schema's eip712Json() method.
  *
  * The signer uses the provided address for signing operations.
@@ -84,29 +84,20 @@ export class Eip712Signer implements Signer {
   }
 
   /**
-   * Sign an UnsignedTransaction using EIP-712 typed data signing.
+   * Sign a TransactionSigningPayload using EIP-712 typed data signing.
    */
   async sign(message: Uint8Array): Promise<Uint8Array> {
     const address = this.address;
 
-    // Rollups invoke the signer with the chain hash appended, so drop the last 32 bytes of the message
-    if (message.length < 32) {
-      throw new SignerError(
-        "Message too short, expected at least 32 bytes for chain hash",
-        Eip712Signer.SIGNER_ID,
-      );
-    }
-    const unsignedTxBytes = message.slice(0, -32);
-
-    // Get the UnsignedTransaction type index
+    // Get the TransactionSigningPayload type index
     const typeIndex = this.schema.knownTypeIndex(
-      KnownTypeId.UnsignedTransaction,
+      KnownTypeId.TransactionSigningPayload,
     );
 
     // Generate the EIP-712 JSON from the message bytes
     let eip712Json: string;
     try {
-      eip712Json = this.schema.eip712Json(typeIndex, unsignedTxBytes);
+      eip712Json = this.schema.eip712Json(typeIndex, message);
     } catch (error) {
       throw new SignerError(
         `Failed to generate EIP-712 JSON from message: ${error}`,
@@ -117,7 +108,7 @@ export class Eip712Signer implements Signer {
     // Get the EIP-712 signing hash for public key recovery
     let signingHash: Uint8Array;
     try {
-      signingHash = this.schema.eip712SigningHash(typeIndex, unsignedTxBytes);
+      signingHash = this.schema.eip712SigningHash(typeIndex, message);
     } catch (error) {
       throw new SignerError(
         `Failed to generate EIP-712 signing hash: ${error}`,

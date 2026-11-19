@@ -140,6 +140,37 @@ impl DbOptions<ColumnFamilyDescriptor> {
     }
 }
 
+/// Runs `open` and logs how long it took, so that node startup time can be attributed
+/// to individual databases.
+pub(crate) fn timed_open<T>(
+    db: &'static str,
+    open: impl FnOnce() -> anyhow::Result<T>,
+) -> anyhow::Result<T> {
+    let start = std::time::Instant::now();
+    let result = open();
+    let elapsed = start.elapsed();
+    match &result {
+        Ok(_) => tracing::info!(db, ?elapsed, "Finished opening database"),
+        // `{:#}` prints the whole `anyhow` context chain, not just the outermost message.
+        Err(error) => {
+            tracing::error!(
+                db,
+                ?elapsed,
+                error = format!("{error:#}"),
+                "Failed to open database"
+            );
+        }
+    }
+    result
+}
+
+/// Joins a scoped thread and re-raises its panic, if any, on the current thread.
+pub(crate) fn join_scoped<T>(handle: std::thread::ScopedJoinHandle<'_, T>) -> T {
+    handle
+        .join()
+        .unwrap_or_else(|panic| std::panic::resume_unwind(panic))
+}
+
 pub(crate) fn ensure_version_is_correct(
     key: &[u8],
     version: sov_rollup_interface::common::SlotNumber,

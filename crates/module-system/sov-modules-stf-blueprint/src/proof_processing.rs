@@ -56,7 +56,7 @@ where
     };
 
     // The `pre_exec_working_set` is initialized, indicating that the sequencer is bonded and we can begin charging gas.
-    match SerializeProofWithDetails::<S>::deserialize(
+    match SerializeProofWithDetails::<S>::deserialize_from_slice(
         &mut &raw_proof[..],
         &mut pre_exec_working_set,
     ) {

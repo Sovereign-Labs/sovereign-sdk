@@ -138,6 +138,20 @@ pub(crate) type SequencerEventStream<Rt> = Pin<
     >,
 >;
 
+/// Mints a fresh [`EventEpoch`], marking a new run of event numbering.
+///
+/// The sequencer starts a new run whenever it may hand out event numbers again for different
+/// content: on startup, and whenever it discards its transaction cache.
+///
+/// UUIDv7 carries a millisecond timestamp in its leading bits, so epochs sort chronologically
+/// and the time of a rollback can be read straight out of the token. The trailing random bits
+/// keep two epochs distinct even on hosts with a coarse clock, or across one that steps
+/// backwards. Nothing persists it: a restarting sequencer mints a new one, which is correct,
+/// because its un-committed soft confirmations are lost and clients must resynchronise.
+pub(crate) fn new_event_epoch() -> EventEpoch {
+    EventEpoch::new(uuid::Uuid::now_v7().as_u128())
+}
+
 /// The [`Sequencer`] trait is responsible for accepting transactions and
 /// assembling them into batches.
 #[async_trait]
@@ -259,6 +273,10 @@ pub struct AcceptedTx<C> {
     pub tx: FullyBakedTx,
     /// Hash of the transaction.
     pub tx_hash: TxHash,
+    /// Credential identifier captured during sequencer ingress authentication.
+    /// May be unavailable, including for transactions reconstructed from ledger history.
+    #[serde(skip_serializing)]
+    pub credential_id: Option<CredentialId>,
     #[derivative(Debug(bound = "C: Debug"))]
     /// Confirmation data. Could be empty, a receipt, or other data.
     pub confirmation: C,
@@ -295,6 +313,7 @@ impl<C> AcceptedTx<C> {
         AcceptedTx {
             tx: self.tx,
             tx_hash: self.tx_hash,
+            credential_id: self.credential_id,
             confirmation: f(self.confirmation),
         }
     }
@@ -587,6 +606,8 @@ pub fn pre_exec_err_to_accept_tx_err(err: PreExecError) -> ErrorObject {
 pub enum AcceptTxErrorCode {
     /// The transaction's `maxFeePerGas` was below the rollup base fee.
     InsufficientMaxFeePerGas,
+    /// The transaction's chain hash fragment did not match the current runtime schema.
+    InvalidChainHashFragment,
 }
 
 /// Structured details attached to `accept_tx` failures.
@@ -606,6 +627,9 @@ impl AcceptTxErrorDetails {
         let code = match error {
             AuthenticationError::FatalError(FatalError::InsufficientMaxFeePerGas { .. }, _) => {
                 Some(AcceptTxErrorCode::InsufficientMaxFeePerGas)
+            }
+            AuthenticationError::FatalError(FatalError::InvalidChainHashFragment { .. }, _) => {
+                Some(AcceptTxErrorCode::InvalidChainHashFragment)
             }
             _ => None,
         };
