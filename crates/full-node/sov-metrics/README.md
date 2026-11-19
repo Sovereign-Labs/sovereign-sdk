@@ -157,7 +157,7 @@ are rules of thumb, not hard limits.
 | `sov_runner_process_stf_changes` | timer | `sov-metrics/src/influxdb/tracker.rs` | Post-STF pipeline (finalization, ledger materialization, prover dispatch, API push). `sending_stf_to_prover_time` high → prover queue/IO backlog. |
 | `sov_rollup_transaction_execution_us` | timer | `sov-metrics/src/influxdb/tracker.rs` | Per-tx latency tagged by `status`/`context`/`call_message`/`sequencer`. Group by tag to find expensive message types or misbehaving sequencers. ⚠️ See cardinality note below. |
 | `sov_rollup_slot_execution_time_us` | timer | `sov-metrics/src/influxdb/tracker.rs` | End-to-end slot latency; the top-level SLO for rollup throughput. If this grows, drill into `sov_rollup_runner_times_us` + `sov_storage_manager_finalization`. |
-| `sov_rollup_batch_processing` | timer + counter | `sov-metrics/src/influxdb/tracker.rs` | Per-batch cost and tx count; use together to compute per-tx cost trends inside a batch. |
+| `sov_rollup_batch_processing` | timer + counter | `sov-metrics/src/influxdb/tracker.rs` | Per-batch cost and tx count, tagged by `context`; use together to compute per-tx cost trends inside a batch. `processing_time_us` covers all of `apply_batch`, including per-tx metric submission. |
 | `sov_rollup_auth_and_process_metrics` | timer | `sov-metrics/src/influx_db_nonnative.rs` | Authentication + processing cost (emitted in non-native / ZK-guest code paths). Budgets ZK cycle consumption. |
 
 ### HTTP / RPC surface

@@ -719,10 +719,11 @@ where
                         let ignored_transactions_count = batch_receipt.ignored_tx_receipts.len();
 
                         sov_metrics::track_metrics(|tracker| {
-                            tracker.submit(sov_metrics::BatchMetrics {
+                            tracker.submit_known_metric(sov_metrics::BatchMetrics {
                                 processing_time,
                                 transactions_count,
                                 ignored_transactions_count,
+                                execution_context: execution_context.str(),
                             });
                         });
                     };
