@@ -189,10 +189,7 @@ where
             // If this state manager uses a channel, it MUST be correctly
             // initialized before usage.
             sender
-                .startup_notify_about_infos_from_db(
-                    &self.ledger_db,
-                    &*self.max_provable_slot_number_tracker,
-                )
+                .startup_notify_about_infos_from_db(&*self.max_provable_slot_number_tracker)
                 .await?;
         }
         self.is_initialized = true;
@@ -442,17 +439,20 @@ where
             );
         }
 
-        if let Some(stf_info_sender) = &self.stf_info_sender {
-            tracing::trace!("Going to materialize StateTransitionInfo");
+        if let Some(stf_info_sender) = &mut self.stf_info_sender {
+            tracing::trace!("Going to write finalized StateTransitionInfo");
             let stf_info = StateTransitionInfo {
                 data: transition_witness,
                 aggregated_proofs: all_aggregated_proofs,
             };
-            let stf_info_schema = stf_info_sender
-                .materialize_stf_info(&stf_info, &self.ledger_db)
-                .await?;
-            ledger_change_set.merge(stf_info_schema);
-            tracing::trace!("StateTransitionInfo is materialized into Ledger ChangeSet");
+            stf_info_sender.stage_stf_info(&stf_info);
+            // Written before the ledger finalizes these blocks below.
+            stf_info_sender.write_finalized_stf_infos(
+                finalized_transitions
+                    .iter()
+                    .map(|transition| transition.block_header.hash().into()),
+            )?;
+            tracing::trace!("Finalized StateTransitionInfo is written");
         }
 
         for aggregated_proof in accepted_aggregated_proofs {
@@ -519,9 +519,7 @@ where
                 ?max_provable_slot_number,
                 "Going to notify stf_info_sender about max provable slot"
             );
-            stf_info_sender
-                .notify(max_provable_slot_number, &self.ledger_db)
-                .await?;
+            stf_info_sender.notify(max_provable_slot_number).await?;
             tracing::trace!(
                 ?max_provable_slot_number,
                 "State transition info receiver has been notified about max provable slot number"

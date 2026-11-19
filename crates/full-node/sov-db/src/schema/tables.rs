@@ -58,10 +58,15 @@ pub const LEDGER_TABLES: &[ColumnFamilyName] = &[
     ProofReceiptByHash::table_name(),
     ProofReceiptHashesBySlot::table_name(),
     FinalizedSlots::table_name(),
+    // Unused since STF infos moved to `ProofManagerDb`; kept so existing ledger DBs still open.
+    // TODO(#1945): add in-place migration to drop these CFs.
     StfInfoByNumber::table_name(),
     StfInfoMetadata::table_name(),
     EventCountByKey::table_name(),
 ];
+
+/// Tables of the `ProofManagerDb`: the STF infos of finalized slots, waiting to be proven.
+pub const PROOF_MANAGER_TABLES: &[ColumnFamilyName] = &[StfInfoByNumber::table_name()];
 
 /// A list of all tables used by the AccessoryDB. These tables store
 /// "accessory" state only accessible from a native execution context, to be

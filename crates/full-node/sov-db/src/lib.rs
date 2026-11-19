@@ -27,6 +27,10 @@ pub mod schema;
 /// the provable state root and does not contribute to proofs of execution.
 pub mod accessory_db;
 
+/// RocksDB wrapper for the STF infos of finalized slots, kept apart from the `LedgerDb`.
+pub mod proof_manager_db;
+pub use proof_manager_db::ProofManagerDb;
+
 /// Define namespaces at the database level
 pub mod namespaces;
 

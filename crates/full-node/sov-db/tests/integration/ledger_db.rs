@@ -1,7 +1,7 @@
 use futures::StreamExt;
 use rockbound::SchemaBatch;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
-use sov_db::schema::types::{EventNumber, StoredStfInfo};
+use sov_db::schema::types::EventNumber;
 use sov_db::{
     define_table_with_seek_key_codec, define_table_without_codec, impl_borsh_value_codec,
 };
@@ -189,31 +189,6 @@ async fn test_save_aggregated_proof() {
 
         assert_eq!(proof_from_db.proof, agg_proof);
     }
-}
-
-#[tokio::test(flavor = "multi_thread")]
-async fn test_stf_info() {
-    let temp_dir = tempfile::tempdir().unwrap();
-    let mut storage_manager = SimpleLedgerStorageManager::new(temp_dir.path());
-    let ledger_storage = storage_manager.create_ledger_storage();
-
-    let ledger_db = LedgerDb::with_reader(ledger_storage).unwrap();
-
-    let original_stored_inf_info = StoredStfInfo {
-        data: vec![1, 2, 3],
-    };
-
-    let schema_batch = ledger_db
-        .materialize_stf_info(&original_stored_inf_info, SlotNumber::GENESIS)
-        .unwrap();
-
-    storage_manager.commit(&schema_batch);
-
-    let stored_stf_info = ledger_db
-        .get_stf_info(SlotNumber::GENESIS)
-        .unwrap()
-        .unwrap();
-    assert_eq!(original_stored_inf_info, stored_stf_info);
 }
 
 #[tokio::test(flavor = "multi_thread")]

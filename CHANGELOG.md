@@ -1,3 +1,6 @@
+# 2026-11-19
+- #2443 DB: STF infos for the prover now live in a separate `ProofManagerDb` (`<storage>/proof-manager`) instead of the `LedgerDb`. They are written only once their DA block is finalized, so the prover is no longer notified about non-finalized slots. The legacy STF-info column families stay in the `LedgerDb` so existing databases still open.
+
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 

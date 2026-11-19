@@ -683,6 +683,7 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             da_service_with_cache,
             genesis_da_height,
             latest_proof_final_slot,
+            &rollup_config.storage.path,
         )
         .await;
         let mut runner = match runner_result {

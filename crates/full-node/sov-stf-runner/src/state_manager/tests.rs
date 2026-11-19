@@ -170,7 +170,7 @@ async fn test_instant_finality() -> anyhow::Result<()> {
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let (sender, mut receiver) = crate::processes::new_stf_info_channel(
-        state_manager.ledger_db.clone(),
+        sov_db::ProofManagerDb::open(tempdir.path())?,
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
         None,
@@ -220,6 +220,52 @@ async fn test_instant_finality() -> anyhow::Result<()> {
 }
 
 #[tokio::test(flavor = "multi_thread")]
+async fn test_non_instant_finality_notifies_only_finalized_slots() -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    let finality = 2;
+    let da_service = MockDaService::new(SEQUENCER_ADDRESS).with_finality(finality);
+    let (mut state_manager, _initial_state_root, shutdown_sender) =
+        setup_state_manager(tempdir.path(), da_service.clone()).await?;
+
+    let (sender, mut receiver) = crate::processes::new_stf_info_channel(
+        sov_db::ProofManagerDb::open(tempdir.path())?,
+        NonZero::new(40).unwrap(),
+        NonZero::new(40).unwrap(),
+        None,
+    )
+    .await?;
+    state_manager.stf_info_sender = Some(sender);
+
+    for height in 1..=4 {
+        da_service
+            .send_transaction(&[height as u8; 10])
+            .await
+            .await??;
+        let filtered_block = da_service.get_block_at(height).await?;
+        tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
+        process_continuous_transition(&mut state_manager, filtered_block, &da_service, finality)
+            .await?;
+
+        if height <= finality as u64 {
+            assert!(
+                tokio::time::timeout(std::time::Duration::from_millis(100), receiver.read_next())
+                    .await
+                    .is_err(),
+                "non-finalized slots must not be emitted before finality"
+            );
+        } else {
+            let finalized = receiver.read_next().await?.unwrap();
+            assert_eq!(finalized.slot_number().get(), height - finality as u64);
+            receiver.inc_next_height_to_receive();
+        }
+    }
+
+    shutdown_sender.shutdown();
+
+    Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
 async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Result<()> {
     let tempdir = tempfile::tempdir()?;
     let da_service = MockDaService::new(SEQUENCER_ADDRESS);
@@ -227,7 +273,7 @@ async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Res
         setup_state_manager(tempdir.path(), da_service.clone()).await?;
 
     let (sender, mut receiver) = crate::processes::new_stf_info_channel(
-        state_manager.ledger_db.clone(),
+        sov_db::ProofManagerDb::open(tempdir.path())?,
         NonZero::new(40).unwrap(),
         NonZero::new(40).unwrap(),
         None,
@@ -236,6 +282,9 @@ async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Res
     state_manager.stf_info_sender = Some(sender);
 
     da_service.send_transaction(&[1; 10]).await.await??;
+    // STF infos are only written once finalized: let the background finalized-header poller
+    // observe block 1, otherwise `read_next()` below blocks forever.
+    tokio::time::sleep(DA_POLLING_INTERVAL * 2).await;
     let filtered_block = da_service.get_block_at(1).await?;
 
     let (prover_storage, pre_state_root, ledger_pre_state) = unwrap_continuation(
