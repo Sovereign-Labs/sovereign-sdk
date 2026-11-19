@@ -430,8 +430,6 @@ where
     fn commit_helper(
         &self,
         group: CommitGroup,
-        // Some(head) rewrites the current version for an offline migration after checking
-        // that the head still matches; None appends a new version for normal finalization.
         expected_latest: Option<SlotNumber>,
     ) -> anyhow::Result<()> {
         tracing::trace!(?expected_latest, "Committing a group...");
