@@ -282,8 +282,7 @@ impl HistoricalStateReader {
         VersionedSchemaBatch<NomtStateValues<KernelNamespace>>,
     )> {
         let mut metric = StateMaterializationMetrics::new();
-        // Collecting builds each map in one pass over the (already sorted) writes, instead of one
-        // tree descent per key. A `None` value is a delete, same as `delete_versioned`.
+        // A `None` value is a delete.
         let kernel_batch =
             VersionedSchemaBatch::from(kernel_changes.into_iter().inspect(|(key, value)| {
                 metric.inc_kernel_items();
