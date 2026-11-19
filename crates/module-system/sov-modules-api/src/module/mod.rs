@@ -202,31 +202,93 @@ pub trait EventEmitter: ModuleInfo {
 }
 
 fn event_key<T: Debug>(module_prefix: &str, event: &T) -> String {
-    let event_debug = format!("{event:?}");
-    // Hacky logic to get the first identifier in the Debug representation.
-    let event_identifier = event_debug
-        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-        .next()
-        .unwrap_or_default();
-
-    format!("{module_prefix}/{event_identifier}")
+    format!("{module_prefix}/{}", leading_ident(event))
 }
 
 /// A helper function to make string representation of the inner call message from the runtime's `Decodable` representation.
 pub fn call_message_repr<D: DispatchCall>(decodable: &D::Decodable) -> String {
-    // Extract the variant name from the part right after the first parenthesis
-    let dbg = format!("{decodable:?}");
-    let variant_part = dbg
-        .split_once('(')
-        .map(|(_idx, after_parent)| {
-            let end_idx = after_parent
-                .find([' ', '{', '('])
-                .unwrap_or(after_parent.len());
-            &after_parent[..end_idx]
-        })
-        .unwrap_or("Unknown");
+    let variant_part = first_variant(decodable);
+    format!(
+        "{}_{}",
+        decodable.discriminant().as_ref(),
+        variant_part.as_deref().unwrap_or("Unknown")
+    )
+}
 
-    format!("{}_{}", decodable.discriminant().as_ref(), variant_part)
+/// The first identifier in `value`'s Debug representation.
+fn leading_ident(value: &impl Debug) -> String {
+    let mut sink = LeadingIdent::default();
+    debug_prefix(value, &mut sink);
+    sink.ident
+}
+
+/// The text after the first `(` of `value`'s Debug representation, up to the next ` `, `{` or `(`.
+/// `None` if there is no `(`.
+fn first_variant(value: &impl Debug) -> Option<String> {
+    let mut sink = FirstVariant::default();
+    debug_prefix(value, &mut sink);
+    sink.variant
+}
+
+/// Writes `value`'s Debug representation into `sink` until `sink` returns an error, so that only
+/// the prefix the caller needs is formatted, not every (often bech32-encoded) field.
+fn debug_prefix(value: &impl Debug, sink: &mut impl core::fmt::Write) {
+    // An error only means that `sink` has seen enough.
+    let _ = core::fmt::write(sink, format_args!("{value:?}"));
+}
+
+/// Collects the leading run of alphanumeric and `_` characters.
+#[derive(Default)]
+struct LeadingIdent {
+    ident: String,
+    /// Set once the identifier has ended. Later writes are rejected, so a Debug impl that
+    /// ignores the error and keeps writing cannot extend the identifier.
+    done: bool,
+}
+
+impl core::fmt::Write for LeadingIdent {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        if self.done {
+            return Err(core::fmt::Error);
+        }
+        for c in s.chars() {
+            if !(c.is_alphanumeric() || c == '_') {
+                self.done = true;
+                return Err(core::fmt::Error);
+            }
+            self.ident.push(c);
+        }
+        Ok(())
+    }
+}
+
+/// Collects the text after the first `(` up to the next ` `, `{` or `(`.
+#[derive(Default)]
+struct FirstVariant {
+    variant: Option<String>,
+    /// Set once the variant has ended. Later writes are rejected, so a Debug impl that
+    /// ignores the error and keeps writing cannot extend the variant.
+    done: bool,
+}
+
+impl core::fmt::Write for FirstVariant {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        if self.done {
+            return Err(core::fmt::Error);
+        }
+        for c in s.chars() {
+            match &mut self.variant {
+                None if c == '(' => self.variant = Some(String::new()),
+                None => {}
+                Some(_) if matches!(c, ' ' | '{' | '(') => {
+                    self.done = true;
+                    return Err(core::fmt::Error);
+                }
+                Some(variant) => variant.push(c),
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<T> EventEmitter for T
@@ -456,5 +518,106 @@ mod tests {
             event_key("module", &Enum3::Variant1 { a: 1 }),
             "module/Variant1".to_string()
         );
+    }
+
+    /// The `format!`-based implementations that `leading_ident` and `first_variant` replace.
+    /// Their output ends up in ledger event keys and metric tags, so it must not change.
+    fn old_leading_ident(value: &impl Debug) -> String {
+        let event_debug = format!("{value:?}");
+        event_debug
+            .split(|c: char| !(c.is_alphanumeric() || c == '_'))
+            .next()
+            .unwrap_or_default()
+            .to_string()
+    }
+
+    fn old_first_variant(value: &impl Debug) -> Option<String> {
+        let dbg = format!("{value:?}");
+        dbg.split_once('(').map(|(_idx, after_parent)| {
+            let end_idx = after_parent
+                .find([' ', '{', '('])
+                .unwrap_or(after_parent.len());
+            after_parent[..end_idx].to_string()
+        })
+    }
+
+    #[allow(dead_code)]
+    #[derive(Debug)]
+    enum Inner {
+        Unit,
+        Tuple(u32, Vec<u8>),
+        Struct { to: String, amount: u128 },
+    }
+
+    #[allow(dead_code)]
+    #[derive(Debug)]
+    enum Outer {
+        Bank(Inner),
+        Nested(Option<Inner>),
+        NoParens,
+    }
+
+    /// Writes its pieces one by one, ignoring every write error.
+    struct ErrorIgnoringDebug(&'static [&'static str]);
+
+    impl Debug for ErrorIgnoringDebug {
+        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            for piece in self.0 {
+                let _ = f.write_str(piece);
+            }
+            Ok(())
+        }
+    }
+
+    fn samples() -> Vec<Box<dyn Debug>> {
+        vec![
+            Box::new(Outer::Bank(Inner::Unit)),
+            Box::new(Outer::Bank(Inner::Tuple(0x1234, vec![1, 2, 3]))),
+            Box::new(Outer::Bank(Inner::Struct {
+                to: "sov1abc".to_string(),
+                amount: 0x1234_5678,
+            })),
+            Box::new(Outer::Nested(Some(Inner::Unit))),
+            Box::new(Outer::Nested(None)),
+            Box::new(Outer::NoParens),
+            Box::new(Inner::Struct {
+                to: "a (b) {c}".to_string(),
+                amount: 0,
+            }),
+            Box::new("quoted (str)"),
+            Box::new((0x1234u32, "tuple")),
+            Box::new(ErrorIgnoringDebug(&["Ident", "(", "Var", " ", "more"])),
+            Box::new(ErrorIgnoringDebug(&["Ünï_cödé", "(", "Väriant", "{", "x"])),
+        ]
+    }
+
+    #[test]
+    fn leading_ident_matches_format_based_implementation() {
+        for sample in samples() {
+            assert_eq!(
+                leading_ident(&sample),
+                old_leading_ident(&sample),
+                "Leading identifier changed for {sample:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn first_variant_matches_format_based_implementation() {
+        for sample in samples() {
+            assert_eq!(
+                first_variant(&sample),
+                old_first_variant(&sample),
+                "Call message variant changed for {sample:?}"
+            );
+        }
+    }
+
+    #[test]
+    fn sinks_ignore_writes_after_they_are_done() {
+        // A Debug impl that ignores the stop signal and keeps writing must not extend the result.
+        let value = ErrorIgnoringDebug(&["Ab", "!", "cd", "(", "Var", " ", "tail", "(", "x"]);
+        assert_eq!(leading_ident(&value), "Ab");
+        assert_eq!(first_variant(&value), Some("Var".to_string()));
     }
 }
