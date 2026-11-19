@@ -161,7 +161,7 @@ pub type SignatureVerificationCache<T, TxId = TxHash> =
 ///
 /// At 5k TPS, this gives us 50 seconds of cache lifetime. This should be long enough that
 /// signatures almost always last until the node has processed the block.
-pub const DEFAULT_SIGNATURE_CACHE_SIZE: usize = 250_000;
+pub const DEFAULT_SIGNATURE_CACHE_SIZE: usize = 1_000_000;
 
 /// See [`RollupAuthenticator`].
 #[derive(std::fmt::Debug, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
