@@ -40,7 +40,9 @@ use super::{
 };
 use crate::common::AcceptedTx;
 use crate::common::ForcedTxBatchNotification;
-use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
+use crate::preferred::async_batch::{
+    recv_spinning_first, AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch,
+};
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{exit_rollup, PreferredProofToReplay};
 use crate::SequencerConfig;
@@ -179,26 +181,6 @@ pub(crate) struct RollupBlockExecutorErrorWithBudget<S: Spec> {
     #[allow(dead_code)]
     pub(crate) gas_used: <S as Spec>::Gas,
     pub(crate) inner_err: RollupBlockExecutorError<S>,
-}
-
-/// How long to spin for the executor's result before waiting for a wake-up. The executor usually
-/// answers within tens of microseconds, and a wake-up round trip costs a large share of that.
-const SPIN_BEFORE_WAIT: std::time::Duration = std::time::Duration::from_micros(50);
-
-async fn recv_spinning_first<T>(receiver: &mut mpsc::Receiver<T>) -> Option<T> {
-    let spin_until = std::time::Instant::now() + SPIN_BEFORE_WAIT;
-    loop {
-        match receiver.try_recv() {
-            Ok(item) => return Some(item),
-            Err(mpsc::error::TryRecvError::Disconnected) => return None,
-            Err(mpsc::error::TryRecvError::Empty) => {
-                if std::time::Instant::now() >= spin_until {
-                    return receiver.recv().await;
-                }
-                std::hint::spin_loop();
-            }
-        }
-    }
 }
 
 impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
