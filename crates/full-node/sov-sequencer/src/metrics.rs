@@ -384,7 +384,7 @@ impl<M: Metric> Metric for MetricBatch<M> {
 
 /// Helper struct for batching metrics and flushing when batch is full.
 /// Accumulates metrics and submits them in batches for efficiency.
-pub struct MetricBatcher<M: Metric> {
+pub struct MetricBatcher<M: Metric + 'static> {
     batch: Vec<M>,
     batch_size: usize,
 }
@@ -414,5 +414,12 @@ impl<M: Metric + 'static> MetricBatcher<M> {
                 t.submit(MetricBatch { metrics });
             });
         }
+    }
+}
+
+impl<M: Metric + 'static> Drop for MetricBatcher<M> {
+    /// Submits whatever is left, so the last partial batch is not lost.
+    fn drop(&mut self) {
+        self.flush();
     }
 }
