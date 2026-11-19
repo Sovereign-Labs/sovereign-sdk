@@ -346,7 +346,7 @@ impl<S: Spec> IncrementalBatch<S> for MaybeAsyncBatch<S> {
 
 /// How long to poll an actor <-> executor channel before blocking on it. The other side usually
 /// answers within tens of microseconds, while a park/wake round trip costs ~16-19 us.
-const SPIN_BEFORE_WAIT: std::time::Duration = std::time::Duration::from_micros(50);
+pub(crate) const SPIN_BEFORE_WAIT: std::time::Duration = std::time::Duration::from_micros(50);
 
 pub(crate) async fn recv_spinning_first<T>(receiver: &mut Receiver<T>) -> Option<T> {
     let spin_until = std::time::Instant::now() + SPIN_BEFORE_WAIT;

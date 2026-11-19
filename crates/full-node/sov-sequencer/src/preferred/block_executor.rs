@@ -41,7 +41,7 @@ use super::{
 use crate::common::AcceptedTx;
 use crate::common::ForcedTxBatchNotification;
 use crate::preferred::async_batch::{
-    recv_spinning_first, AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch,
+    recv_spinning_first, AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch, SPIN_BEFORE_WAIT,
 };
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{exit_rollup, PreferredProofToReplay};
@@ -352,7 +352,15 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             });
         }
 
-        let Some(result) = recv_spinning_first(&mut task_state.result_receiver).await else {
+        // Spinning only pays off if the result arrives within the spin window. After a slow tx,
+        // wait without spinning so the tokio worker is free for other tasks.
+        let received =
+            if u128::from(task_state.last_tx_execution_micros) < SPIN_BEFORE_WAIT.as_micros() {
+                recv_spinning_first(&mut task_state.result_receiver).await
+            } else {
+                task_state.result_receiver.recv().await
+            };
+        let Some(result) = received else {
             tracing::error!("The rollup block executor task failed unexpectedly. Gracefully shutting down the sequencer.");
             self.primary_shutdown.shutdown(); // We don't care if this was already triggered, because that would mean the sequencer is already shutting down - which is exactly what we want.
             return Err(RollupBlockExecutorErrorWithBudget {
@@ -367,6 +375,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             gas_used,
             inner_result,
         } = result;
+        task_state.last_tx_execution_micros = execution_time_micros;
 
         let ExecutedTxResponse {
             mut receipt,
@@ -651,6 +660,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             handle,
             tx_sender,
             result_receiver,
+            last_tx_execution_micros: 0,
         });
     }
 
@@ -881,6 +891,8 @@ struct BackgroundTaskState<S: Spec> {
     handle: JoinHandle<BlockExecutionOutput<S>>,
     tx_sender: mpsc::Sender<FullyBakedTxWithMaybeChangeSet>,
     result_receiver: mpsc::Receiver<AsyncBatchResult<S>>,
+    /// Execution time of the previous tx, used to decide whether to spin for the next result.
+    last_tx_execution_micros: u64,
 }
 
 impl<S: Spec> BackgroundTaskState<S> {
