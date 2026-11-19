@@ -1,3 +1,6 @@
+# 2026-11-19
+- #3177 **Breaking Change** Metrics: the per-transaction metrics `sov_rollup_transaction_execution_us` and `sov_rollup_auth_and_process_metrics`, and the "Slow transaction." debug log, are now emitted only when `sov-modules-stf-blueprint` is built with the new `expensive-observability` feature (off by default). The feature also enables `sov-modules-api/expensive-observability`. To keep these metrics, enable the feature in your rollup's dependency on `sov-modules-stf-blueprint`.
+
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 
