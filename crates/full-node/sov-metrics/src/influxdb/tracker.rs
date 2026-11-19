@@ -543,6 +543,8 @@ pub struct BatchMetrics {
     pub transactions_count: usize,
     /// Number of transactions have been ignored..
     pub ignored_transactions_count: usize,
+    /// Execution context the batch was applied in (e.g. `Node` or `Sequencer`). Published as the `context` tag.
+    pub execution_context: &'static str,
 }
 
 impl Metric for BatchMetrics {
@@ -553,8 +555,11 @@ impl Metric for BatchMetrics {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} processing_time_us={},transactions={},ignored_transactions={}",
+            "{},context={} processing_time_us={},transactions={},ignored_transactions={}",
             self.measurement_name(),
+            // tags
+            self.execution_context,
+            // fields
             self.processing_time.as_micros(),
             self.transactions_count,
             self.ignored_transactions_count,
@@ -861,5 +866,28 @@ impl Metric for RateLimiterMetrics {
         )?;
 
         Ok(())
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn batch_metrics_are_tagged_with_execution_context() {
+        let metrics = BatchMetrics {
+            processing_time: std::time::Duration::from_micros(0x1234),
+            transactions_count: 0x2345,
+            ignored_transactions_count: 0x0102,
+            execution_context: "Node",
+        };
+        let mut buffer = Vec::new();
+
+        metrics.serialize_for_telegraf(&mut buffer).unwrap();
+
+        assert_eq!(
+            std::str::from_utf8(&buffer).unwrap(),
+            "sov_rollup_batch_processing,context=Node processing_time_us=4660,transactions=9029,ignored_transactions=258"
+        );
     }
 }

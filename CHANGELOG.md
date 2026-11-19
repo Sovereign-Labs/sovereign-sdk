@@ -1,3 +1,6 @@
+# 2026-11-19
+- #3176 Metrics: `sov_rollup_batch_processing` now has a `context` tag (`Node`/`Sequencer`/`SequencerWarmUp`). Dashboards that aggregate it across all batches should group by or filter on `context`. **Breaking Change**: `sov_metrics::BatchMetrics` has a new public field `execution_context: &'static str`.
+
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 
