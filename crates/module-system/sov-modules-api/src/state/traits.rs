@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::fmt::Debug;
 use std::num::TryFromIntError;
 
-use sov_metrics::StateAccessMetric;
+use sov_metrics::{MaybeTimer, StateAccessMetric};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 #[cfg(feature = "native")]
 use sov_state::StorageProof;
@@ -661,6 +661,52 @@ fn charge_all<Accessor: GasMeter>(
     Ok(())
 }
 
+/// Charges a whole read: [`charge_read_access`] followed by [`charge_read_value`], as one
+/// [`charge_all`].
+fn charge_read<Accessor: GasMeter>(
+    accessor: &mut Accessor,
+    key: &SlotKey,
+    value_size: Option<u32>,
+) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
+    let Ok(key_size @ 1..) = u32::try_from(key.len()) else {
+        charge_read_access(accessor, key)?;
+        return charge_read_value(accessor, value_size);
+    };
+    let access = [
+        (<Accessor::Spec as GasSpec>::bias_to_charge_for_access(), None),
+        (<Accessor::Spec as GasSpec>::gas_to_charge_hash_update(), None),
+        (
+            <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+            Some(key_size),
+        ),
+        (<Accessor::Spec as GasSpec>::bias_to_charge_for_read(), None),
+    ];
+    match value_size {
+        Some(0) | None => charge_all(accessor, &access),
+        Some(value_size) => {
+            let [a, b, c, d] = access;
+            charge_all(
+                accessor,
+                &[
+                    a,
+                    b,
+                    c,
+                    d,
+                    (
+                        <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_read(),
+                        Some(value_size),
+                    ),
+                    (<Accessor::Spec as GasSpec>::gas_to_charge_hash_update(), None),
+                    (
+                        <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                        Some(value_size),
+                    ),
+                ],
+            )
+        }
+    }
+}
+
 /// Charges the part of a read that doesn't depend on the value.
 fn charge_read_access<Accessor: GasMeter>(
     accessor: &mut Accessor,
@@ -771,12 +817,37 @@ pub(crate) fn get_inner<Accessor: UniversalStateAccessor + GasMeter>(
     namespace: Namespace,
     key: &SlotKey,
 ) -> Result<ValueWithMetrics, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
-    charge_read_access(accessor, key)?;
-    let mut size_metric = StateAccessMetric::new_size();
-    let value_size = accessor.get_size(namespace, key, &mut size_metric);
-    charge_read_value(accessor, value_size)?;
-    let mut read_metric = StateAccessMetric::new_read();
+    // A cached value is read without side effects, so all of the read's gas can be charged at
+    // once after the lookup; that ends in the same state, error and out-of-gas point as charging
+    // for the access, looking up the size and charging for the value in turn.
+    if let Some(value) = accessor.get_cached_value(namespace, key) {
+        charge_read(accessor, key, value.as_ref().map(SlotValue::size))?;
+        #[cfg(feature = "expensive-observability")]
+        if enabled!(Level::TRACE) {
+            let size = value.as_ref().map(SlotValue::size).unwrap_or(0);
+            Span::current().record("value_size_bytes", size);
+        }
+        // An in-memory hit is not timed: it is counted as a size and a value access, like any
+        // read, but with zero duration and without reading the clock.
+        return Ok((
+            value,
+            StateAccessMetric::placeholder(),
+            StateAccessMetric::placeholder(),
+        ));
+    }
 
+    let mut size_metric = StateAccessMetric::new_size();
+    // Otherwise the size lookup may fetch from storage and update the witness, so the access is
+    // paid for first, and the value is only read after its size was paid for.
+    charge_read_access(accessor, key)?;
+    let value_size = accessor.get_size(namespace, key, &mut size_metric);
+    let mut read_metric = StateAccessMetric::new_read();
+    if let (MaybeTimer::InProgress(start), MaybeTimer::InProgress(end)) =
+        (size_metric.duration, read_metric.duration)
+    {
+        size_metric.duration = MaybeTimer::Completed(end.saturating_duration_since(start));
+    }
+    charge_read_value(accessor, value_size)?;
     let value = accessor.get_value(namespace, key, &mut read_metric);
 
     #[cfg(feature = "expensive-observability")]

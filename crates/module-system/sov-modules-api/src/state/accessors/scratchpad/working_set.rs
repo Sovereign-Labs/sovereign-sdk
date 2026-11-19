@@ -248,6 +248,10 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for WorkingSet<S, I> {
         self.delta.get_size(namespace, key, metrics)
     }
 
+    fn get_cached_value(&self, namespace: Namespace, key: &SlotKey) -> Option<Option<SlotValue>> {
+        self.delta.get_cached_value(namespace, key)
+    }
+
     fn get_value(
         &mut self,
         namespace: Namespace,

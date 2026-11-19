@@ -89,6 +89,10 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for PreExecWorkingSet<
         )
     }
 
+    fn get_cached_value(&self, namespace: Namespace, key: &SlotKey) -> Option<Option<SlotValue>> {
+        self.inner.get_cached_value(namespace, key)
+    }
+
     fn get_value(
         &mut self,
         namespace: Namespace,
