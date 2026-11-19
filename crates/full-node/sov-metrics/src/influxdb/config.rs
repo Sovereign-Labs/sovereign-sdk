@@ -119,6 +119,7 @@ pub struct MonitoringConfig {
     /// How many metrics are allowed to be in pending state, before new metrics will be dropped.
     /// This is a number of metrics, not serialized bytes.
     /// The total number of bytes to be held in memory might vary per metric + `max_datagram_size`
+    /// The publisher drains pending metrics every 2 ms, so this must cover the metrics submitted in that time.
     pub max_pending_metrics: Option<u32>,
     /// How often to collect tokio runtime metrics. Defaults to 500ms.
     #[serde(default = "default_tokio_runtime_metrics_interval_millis")]
