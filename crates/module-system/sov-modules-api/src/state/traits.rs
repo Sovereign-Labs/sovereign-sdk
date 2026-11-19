@@ -2,7 +2,7 @@ use std::convert::Infallible;
 use std::fmt::Debug;
 use std::num::TryFromIntError;
 
-use sov_metrics::StateAccessMetric;
+use sov_metrics::{MaybeTimer, StateAccessMetric};
 use sov_rollup_interface::common::{SlotNumber, VisibleSlotNumber};
 #[cfg(feature = "native")]
 use sov_state::StorageProof;
@@ -841,9 +841,13 @@ pub(crate) fn get_inner<Accessor: UniversalStateAccessor + GasMeter>(
     // paid for first, and the value is only read after its size was paid for.
     charge_read_access(accessor, key)?;
     let value_size = accessor.get_size(namespace, key, &mut size_metric);
-    charge_read_value(accessor, value_size)?;
     let mut read_metric = StateAccessMetric::new_read();
-
+    if let (MaybeTimer::InProgress(start), MaybeTimer::InProgress(end)) =
+        (size_metric.duration, read_metric.duration)
+    {
+        size_metric.duration = MaybeTimer::Completed(end.saturating_duration_since(start));
+    }
+    charge_read_value(accessor, value_size)?;
     let value = accessor.get_value(namespace, key, &mut read_metric);
 
     #[cfg(feature = "expensive-observability")]
