@@ -511,7 +511,9 @@ where
 
         let sending_to_prover_start = std::time::Instant::now();
         if let Some(stf_info_sender) = &mut self.stf_info_sender {
-            // Notify `StateTransitionInfo` consumers that the data is saved in the Db.
+            // Notify `StateTransitionInfo` consumers that the data is readable through the storage
+            // manager. Finalized slots may still be committing in the background, so it is not
+            // necessarily on disk yet.
             let max_provable_slot_number = self
                 .max_provable_slot_number_tracker
                 .max_provable_slot_number();

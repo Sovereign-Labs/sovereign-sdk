@@ -53,6 +53,22 @@ fn fail_pruning_commit_if_requested() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+static FAIL_NEXT_COMMIT: AtomicBool = AtomicBool::new(false);
+
+#[cfg(test)]
+pub(crate) fn fail_next_commit_for_test() {
+    FAIL_NEXT_COMMIT.store(true, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+fn fail_commit_if_requested() -> anyhow::Result<()> {
+    if FAIL_NEXT_COMMIT.swap(false, Ordering::SeqCst) {
+        anyhow::bail!("injected commit failure");
+    }
+    Ok(())
+}
+
 pub(crate) struct DbGroup<H, K> {
     merklized_state: Arc<NomtStateDb<H>>,
     flat_state: FlatStateDb,
@@ -172,10 +188,6 @@ where
             accessory: self.accessory.clone(),
             ledger: self.ledger.clone(),
         }
-    }
-
-    pub(crate) fn commit(&mut self, group: CommitGroup) -> anyhow::Result<()> {
-        self.committer().commit(group)
     }
 
     #[cfg(feature = "migration-script")]
@@ -456,7 +468,7 @@ enum FlatCommitMode {
     RewriteHead(SlotNumber),
 }
 
-/// Write handles of [`DbGroup`] used to commit a [`CommitGroup`].
+/// Write handles of [`DbGroup`] used to commit finalized blocks.
 pub(crate) struct DbCommitter<H> {
     merklized_state: Arc<NomtStateDb<H>>,
     flat_state: FlatStateDb,
@@ -468,10 +480,49 @@ impl<H> DbCommitter<H>
 where
     H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
 {
-    pub(crate) fn commit(&self, group: CommitGroup) -> anyhow::Result<()> {
-        self.commit_helper(group, FlatCommitMode::Append)
+    /// Commits `blocks` (oldest first) on a background thread.
+    /// Each block is committed to all DBs while holding the `nomt_snapshots` write lock, so NOMT
+    /// sessions cannot be opened while NOMT and RocksDB disagree on the latest block. Proof
+    /// generation (`get_with_proof`) relies on this.
+    ///
+    /// A failed commit panics while still holding that lock. That poisons it, so nothing can read
+    /// the partially committed state, which only a restart can recover.
+    pub(crate) fn spawn_commit<K>(
+        self,
+        blocks: Vec<(K, SnapshotGroup)>,
+        nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
+    ) -> JoinHandle<()>
+    where
+        H: 'static,
+        K: Eq + std::hash::Hash + std::fmt::Debug + Send + Sync + 'static,
+    {
+        std::thread::Builder::new()
+            .name("storage-commit".to_string())
+            .spawn(move || {
+                for (block_hash, rockbound) in blocks {
+                    tracing::trace!(?block_hash, "Committing finalized block in background");
+                    let mut nomt_snapshots = nomt_snapshots
+                        .write()
+                        .expect("Failed to lock nomt_snapshots for commit");
+                    let overlay = nomt_snapshots
+                        .remove(&block_hash)
+                        .expect("Block being committed must have a NOMT snapshot");
+                    if let Err(error) = self.commit_block(overlay, rockbound) {
+                        panic!("Background storage commit of block {block_hash:?} has failed: {error:?}");
+                    }
+                }
+            })
+            .expect("Failed to spawn storage commit thread")
     }
 
+    fn commit_block(&self, overlay: StateOverlay, rockbound: SnapshotGroup) -> anyhow::Result<()> {
+        #[cfg(test)]
+        fail_commit_if_requested()?;
+        let merklized_commit = self.commit_merklized(overlay)?;
+        self.commit_rockbound(rockbound, merklized_commit, FlatCommitMode::Append)
+    }
+
+    #[cfg(feature = "migration-script")]
     fn commit_helper(
         &self,
         group: CommitGroup,
@@ -568,6 +619,8 @@ where
     }
 }
 
+/// Cloning only bumps `Arc`s.
+#[derive(Clone)]
 pub(crate) struct SnapshotGroup {
     pub(crate) historical_state: StateChanges,
     pub(crate) accessory: Arc<SchemaBatch>,
@@ -585,6 +638,7 @@ impl PruneGroup {
     }
 }
 
+#[cfg(feature = "migration-script")]
 pub(crate) struct CommitGroup {
     // State
     pub(crate) nomt: StateOverlay,
