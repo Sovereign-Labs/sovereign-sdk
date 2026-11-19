@@ -560,7 +560,12 @@ jobs:
         with:
           cache: rust
       - name: Clone rollup-starter
-        run: git clone --depth 1 https://github.com/Sovereign-Labs/rollup-starter "${RUNNER_TEMP}/rollup-starter"
+        # SDK breaking changes are tracked on the starter's `sdk-upgrade` branch,
+        # which is merged to `main` with a delay. That branch is deleted after
+        # each merge and recreated for the next upgrade, so fall back to `main`.
+        run: |
+          git clone --depth 1 --branch sdk-upgrade https://github.com/Sovereign-Labs/rollup-starter "${RUNNER_TEMP}/rollup-starter" \
+            || git clone --depth 1 https://github.com/Sovereign-Labs/rollup-starter "${RUNNER_TEMP}/rollup-starter"
       - name: Update starter SDK revision
         working-directory: ${{ runner.temp }}/rollup-starter
         # For pull_request events, github.sha is a synthetic merge commit that

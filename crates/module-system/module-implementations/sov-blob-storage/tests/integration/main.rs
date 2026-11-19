@@ -1,9 +1,12 @@
 use std::collections::HashMap;
 
-use sov_mock_da::{MockBlob, MockDaSpec, MockHash};
-use sov_modules_api::{BlobReaderTrait, DaSpec, Spec, VersionReader};
+use sov_bank::derived_holder::DerivedHolder;
+use sov_mock_da::{MockAddress, MockBlob, MockDaSpec, MockHash};
+use sov_modules_api::{Amount, BlobReaderTrait, DaSpec, Spec, VersionReader};
 use sov_modules_stf_blueprint::{BatchReceipt, Runtime};
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::RelevantBlobs;
+use sov_sequencer_registry::SequencerRegistry;
 use sov_test_utils::runtime::traits::MinimalGenesis;
 use sov_test_utils::runtime::{BlobStorage, SlotReceipt, ValueSetter};
 use sov_test_utils::{EncodeCall, TestSequencer, TestSpec, TestUser};
@@ -34,6 +37,53 @@ pub fn visible_slot<RT: Runtime<S> + MinimalGenesis<S>>(runner: &TestRunner<RT>)
     runner
         .query_visible_state(|state| state.current_visible_slot_number())
         .get()
+}
+
+/// Returns the stake of the registered sequencer with the given DA address.
+pub fn sequencer_stake<RT: Runtime<S> + MinimalGenesis<S>>(
+    runner: &TestRunner<RT>,
+    da: &MockAddress,
+) -> Amount {
+    runner.query_state(|state| {
+        SequencerRegistry::<S>::default()
+            .get_sender_balance_via_api(da, state)
+            .expect("sequencer must be registered")
+    })
+}
+
+/// Escrow entries of all blobs still in deferred storage. Escrowed tokens stay in the registry's
+/// bank account and are only tracked in kernel state until the blob leaves storage.
+pub fn deferred_escrows<RT: Runtime<S> + MinimalGenesis<S>>(
+    runner: &TestRunner<RT>,
+) -> Vec<(DerivedHolder, Amount)> {
+    let true_slot = runner.true_slot_number().get();
+    runner.query_state(|state| {
+        let registry = SequencerRegistry::<S>::default();
+        let mut escrows = Vec::new();
+        for slot in 0..=true_slot {
+            for holder in BlobStorage::<S>::default()
+                .get_deferred_escrow_holders(SlotNumber::new(slot), state)
+                .unwrap()
+            {
+                let amount = registry
+                    .get_escrowed_amount_via_api(&holder, state)
+                    .unwrap_or_else(|| {
+                        panic!("Deferred blob with holder {holder} has no escrow entry")
+                    });
+                escrows.push((holder, amount));
+            }
+        }
+        escrows
+    })
+}
+
+/// Total escrow of all blobs still in deferred storage.
+pub fn pending_escrow<RT: Runtime<S> + MinimalGenesis<S>>(runner: &TestRunner<RT>) -> Amount {
+    deferred_escrows(runner)
+        .into_iter()
+        .fold(Amount::ZERO, |total, (_, amount)| {
+            total.checked_add(amount).unwrap()
+        })
 }
 
 /// Returns the last `k` slot receipts
