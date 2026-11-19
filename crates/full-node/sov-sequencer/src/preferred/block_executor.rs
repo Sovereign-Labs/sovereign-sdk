@@ -40,7 +40,9 @@ use super::{
 };
 use crate::common::AcceptedTx;
 use crate::common::ForcedTxBatchNotification;
-use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
+use crate::preferred::async_batch::{
+    recv_spinning_first, AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch,
+};
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{exit_rollup, PreferredProofToReplay};
 use crate::SequencerConfig;
@@ -350,7 +352,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             });
         }
 
-        let Some(result) = task_state.result_receiver.recv().await else {
+        let Some(result) = recv_spinning_first(&mut task_state.result_receiver).await else {
             tracing::error!("The rollup block executor task failed unexpectedly. Gracefully shutting down the sequencer.");
             self.primary_shutdown.shutdown(); // We don't care if this was already triggered, because that would mean the sequencer is already shutting down - which is exactly what we want.
             return Err(RollupBlockExecutorErrorWithBudget {

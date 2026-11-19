@@ -344,6 +344,26 @@ impl<S: Spec> IncrementalBatch<S> for MaybeAsyncBatch<S> {
     }
 }
 
+/// How long to poll an actor <-> executor channel before blocking on it. The other side usually
+/// answers within tens of microseconds, while a park/wake round trip costs ~16-19 us.
+const SPIN_BEFORE_WAIT: std::time::Duration = std::time::Duration::from_micros(50);
+
+pub(crate) async fn recv_spinning_first<T>(receiver: &mut Receiver<T>) -> Option<T> {
+    let spin_until = std::time::Instant::now() + SPIN_BEFORE_WAIT;
+    loop {
+        match receiver.try_recv() {
+            Ok(item) => return Some(item),
+            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => return None,
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty)
+                if std::time::Instant::now() >= spin_until =>
+            {
+                return receiver.recv().await
+            }
+            Err(tokio::sync::mpsc::error::TryRecvError::Empty) => std::hint::spin_loop(),
+        }
+    }
+}
+
 impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
     type Item = (FullyBakedTx, MaybeAsyncBatchControlFlow<S>);
 
@@ -357,7 +377,7 @@ impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
                 responder,
                 ..
             } => Handle::current()
-                .block_on(txs_receiver.recv())
+                .block_on(recv_spinning_first(txs_receiver))
                 .map(|mut item| {
                     (
                         item.tx,
