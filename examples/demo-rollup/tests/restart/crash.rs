@@ -22,6 +22,7 @@ use sov_sequencer::SeqConfigExtension;
 use sov_shutdown::SecondaryShutdownController;
 use sov_test_utils::test_rollup::read_private_key;
 use sov_test_utils::test_rollup::{RollupBuilder, StoragePath, TestRollup};
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
 use tempfile::TempDir;
 use tokio::sync::RwLock;
@@ -141,6 +142,7 @@ async fn test_start_stop_with_crash(
     {
         let test_rollup = start_node(temp_dir.clone(), da_layer.clone()).await;
         test_rollup.wait_for_sequencer_ready().await.unwrap();
+        let injected_panic_happened = watch_for_injected_panic(&crash_moment);
 
         let client = test_rollup.client.clone();
 
@@ -180,7 +182,7 @@ async fn test_start_stop_with_crash(
             );
         }
 
-        wait_for_rollup_to_crash(test_rollup, &crash_moment).await?;
+        wait_for_rollup_to_crash(test_rollup, &injected_panic_happened).await?;
     }
 
     // Give the OS time to clean up file handles after the crash.
@@ -222,6 +224,33 @@ async fn test_start_stop_with_crash(
     Ok(())
 }
 
+/// Returns a flag that is set once the injected commit fault panics anywhere in this process.
+///
+/// The fault panics on the background storage commit thread, so the rollup task itself may stop
+/// on a secondary failure instead, and its outcome alone cannot tell the two apart.
+fn watch_for_injected_panic(crash_moment: &CommitFaultInjectionLocation) -> Arc<AtomicBool> {
+    let expected_message =
+        format!("{CRASH_ON_COMMIT_ENV_NAME} is set to: {crash_moment}, crashing the node");
+    let happened = Arc::new(AtomicBool::new(false));
+    let happened_in_hook = happened.clone();
+    let previous_hook = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |panic_info| {
+        if panic_message(panic_info.payload()).contains(&expected_message) {
+            happened_in_hook.store(true, Ordering::SeqCst);
+        }
+        previous_hook(panic_info);
+    }));
+    happened
+}
+
+fn panic_message(payload: &(dyn std::any::Any + Send)) -> &str {
+    payload
+        .downcast_ref::<&str>()
+        .copied()
+        .or_else(|| payload.downcast_ref::<String>().map(String::as_str))
+        .unwrap_or_default()
+}
+
 /// Verifies that the rollup crashed because of the injected commit fault.
 ///
 /// The fault panics on the background storage commit thread while it holds the NOMT snapshots
@@ -230,22 +259,21 @@ async fn test_start_stop_with_crash(
 /// another background task (e.g. the sequencer) panics on it and the task monitor reports an error.
 async fn wait_for_rollup_to_crash(
     test_rollup: TestRollup<MockDemoRollup<Native>>,
-    crash_moment: &CommitFaultInjectionLocation,
+    injected_panic_happened: &AtomicBool,
 ) -> anyhow::Result<()> {
     let result = tokio::time::timeout(Duration::from_secs(30), test_rollup.rollup_task)
         .await
         .expect("Failed to join rollup task before timeout.");
+    anyhow::ensure!(
+        injected_panic_happened.load(Ordering::SeqCst),
+        "Rollup stopped, but the injected commit fault did not panic: {result:?}"
+    );
     match result {
         Err(join_error) if join_error.is_panic() => {
             let payload = join_error.into_panic();
-            let message = payload
-                .downcast_ref::<&str>()
-                .map(|message| message.to_string())
-                .or_else(|| payload.downcast_ref::<String>().cloned())
-                .unwrap_or_default();
+            let message = panic_message(payload.as_ref());
             anyhow::ensure!(
-                message.contains(&crash_moment.to_string())
-                    || message.contains("Snapshots lock poisoned"),
+                message.contains(CRASH_ON_COMMIT_ENV_NAME) || message.contains("PoisonError"),
                 "Rollup panicked with an unexpected message: {message}"
             );
         }

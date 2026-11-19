@@ -153,17 +153,13 @@ pub struct NomtStorageManager<Da: DaSpec, H, S: InitializableNativeNomtStorage<H
 }
 
 /// Finalized blocks whose commit runs on a background thread.
-///
-/// Their rockbound snapshots and `blocks_to_parent` links stay in the storage manager maps until
-/// the commit is joined, so storages created meanwhile still include them. Their NOMT overlays
-/// are removed from `nomt_snapshots` by the commit thread as each one lands on disk.
 struct Committing<K> {
     /// Oldest first.
     blocks: Vec<K>,
     /// Live flat state version before this commit started. Storages are built on top of it
     /// while the commit runs, because the live version advances under them.
     base_version: Option<u64>,
-    handle: std::thread::JoinHandle<anyhow::Result<()>>,
+    handle: std::thread::JoinHandle<()>,
 }
 
 impl<Da, H, S> NomtStorageManager<Da, H, S>
@@ -205,24 +201,22 @@ where
         })
     }
 
-    /// Waits for the background commit of finalized blocks and returns its result.
-    /// After it returns `Ok`, everything finalized so far is on disk.
+    /// Waits for the background commit of finalized blocks. After it returns, everything
+    /// finalized so far is on disk. A failed commit panics, and that panic is re-raised here.
     ///
     /// Must not be called by a thread that holds a live NOMT session:
     /// the commit waits for all sessions to end.
-    pub fn flush(&mut self) -> anyhow::Result<()> {
+    pub fn flush(&mut self) {
         let Some(Committing { blocks, handle, .. }) = self.committing.take() else {
-            return Ok(());
+            return;
         };
-        match handle.join() {
-            Ok(result) => result.context("Background storage commit has failed")?,
-            Err(panic) => std::panic::resume_unwind(panic),
+        if let Err(panic) = handle.join() {
+            std::panic::resume_unwind(panic);
         }
         for block_hash in &blocks {
             self.rockbound_snapshots.remove(block_hash);
             self.blocks_to_parent.remove(block_hash);
         }
-        Ok(())
     }
 
     // build a storage up to the given block_hash (inclusive).
@@ -270,11 +264,12 @@ where
     ) -> anyhow::Result<(S, DeltaReader)> {
         let base_version = match &self.committing {
             Some(committing) => {
-                // Blocks being committed are part of the finalized state. A chain walk that
-                // reaches them always ends at the oldest one, as their links are kept.
-                if rev_references.last() != committing.blocks.first() {
-                    rev_references.extend(committing.blocks.iter().rev().cloned());
-                }
+                // Blocks being committed are part of the finalized state, so storages always
+                // include all of them, as if they were already on disk. Stopping at one of them is
+                // not possible: the NOMT overlays of committed blocks are gone, so NOMT would read
+                // past it while the flat state would not.
+                rev_references.retain(|block_hash| !committing.blocks.contains(block_hash));
+                rev_references.extend(committing.blocks.iter().rev().cloned());
                 committing.base_version
             }
             None => self
@@ -374,8 +369,9 @@ where
     }
 
     /// Blocks until the background commit thread has finished, without joining it.
-    #[cfg(test)]
-    pub(crate) fn wait_for_commit_to_finish(&self) {
+    /// Test-only observability hook.
+    #[cfg(any(test, feature = "test-utils"))]
+    pub fn wait_for_commit_to_finish(&self) {
         if let Some(committing) = &self.committing {
             while !committing.handle.is_finished() {
                 std::thread::yield_now();
@@ -554,7 +550,7 @@ where
     /// Must not be called by a thread that holds a live NOMT session:
     /// the commit waits for all sessions to end.
     fn finalize(&mut self, block_header: &Da::BlockHeader) -> anyhow::Result<()> {
-        self.flush()?;
+        self.flush();
         tracing::trace!(block_hash = %block_header.hash(), "Finalizing changes");
 
         if !self.rockbound_snapshots.contains_key(&block_header.hash()) {
@@ -565,17 +561,14 @@ where
             );
         }
 
-        // Runs between commits, so pruning writes never overlap a commit.
-        let pruning_commit_time = self
-            .pruning
-            .on_finalize(&mut self.db_group, block_header.height())
-            .with_context(|| {
-                format!(
-                    "periodic pruning failed while finalizing block height={} hash={}",
-                    block_header.height(),
-                    block_header.hash()
-                )
-            })?;
+        // Every fallible step runs before the bookkeeping maps are changed, so an error leaves
+        // the storage manager as it was.
+
+        // No commit is in flight, so the on-disk version is stable.
+        let base_version = self
+            .db_group
+            .latest_flat_state_version()?
+            .map(|slot| slot.get());
 
         let start_prep = std::time::Instant::now();
         // --- Step 1: Collect block hashes to be finalized and discarded ---
@@ -636,68 +629,77 @@ where
                 }
             }
         }
-        let preparation_time = start_prep.elapsed();
         tracing::trace!(
             ?all_discard_hashes_set,
             "Collected all hashes to be discarded"
         );
 
-        let apply_start = std::time::Instant::now();
-        // --- Step 2: Apply changes.
+        // 1c. Collect the snapshots of the finalized blocks.
+        let mut blocks = Vec::with_capacity(finalization_segments.len());
         let mut blocks_to_commit = Vec::with_capacity(finalization_segments.len());
         {
-            let mut nomt_snapshots_guard = self
+            let nomt_snapshots = self
+                .nomt_snapshots
+                .read()
+                .expect("Failed to lock nomt_snapshots for finalization");
+            for (parent_hash, child_hash_to_keep) in &finalization_segments {
+                let Some(rockbound_snapshot) = self.rockbound_snapshots.get(child_hash_to_keep)
+                else {
+                    anyhow::bail!(
+                        "Snapshot for block to be finalized {child_hash_to_keep} (child of {parent_hash}) not found during finalization"
+                    );
+                };
+                anyhow::ensure!(
+                    nomt_snapshots.contains_key(child_hash_to_keep),
+                    "Inconsistent storage manager state: block to be finalized {child_hash_to_keep} has a rockbound snapshot but no NOMT snapshot"
+                );
+                blocks.push(child_hash_to_keep.clone());
+                blocks_to_commit.push((child_hash_to_keep.clone(), rockbound_snapshot.clone()));
+            }
+        }
+        let preparation_time = start_prep.elapsed();
+
+        // Runs between commits, so pruning writes never overlap a commit.
+        let pruning_commit_time = self
+            .pruning
+            .on_finalize(&mut self.db_group, block_header.height())
+            .with_context(|| {
+                format!(
+                    "periodic pruning failed while finalizing block height={} hash={}",
+                    block_header.height(),
+                    block_header.hash()
+                )
+            })?;
+
+        let apply_start = std::time::Instant::now();
+        // --- Step 2: Apply changes. Snapshots and links of the finalized blocks are removed after
+        // their commit is joined.
+        {
+            let mut nomt_snapshots = self
                 .nomt_snapshots
                 .write()
                 .expect("Failed to lock nomt_snapshots for finalization");
 
-            // 2a. Collect finalized blocks. Their snapshots and links are removed after the commit
-            // is joined.
             for (parent_hash, child_hash_to_keep) in &finalization_segments {
                 tracing::trace!(%parent_hash, %child_hash_to_keep, "Finalizing segment");
-                let (Some(rockbound_snapshot), true) = (
-                    self.rockbound_snapshots.get(child_hash_to_keep),
-                    nomt_snapshots_guard.contains_key(child_hash_to_keep),
-                ) else {
-                    return Err(anyhow::anyhow!(
-                        "Snapshot for block to be finalized {} (child of {}) not found during finalization",
-                        child_hash_to_keep, parent_hash
-                    ));
-                };
-                blocks_to_commit.push((child_hash_to_keep.clone(), rockbound_snapshot.share()));
                 self.chain_forks.remove(parent_hash);
             }
 
-            // Helper to remove snapshot data from both hashmaps
-            let mut remove_snapshot_payloads_fn = |block_hash: &Da::SlotHash| {
-                let nomt_snapshot = nomt_snapshots_guard.remove(block_hash);
-                let rockbound_snapshot = self.rockbound_snapshots.remove(block_hash);
-                match (nomt_snapshot, rockbound_snapshot) {
-                    (Some(_), Some(_)) | (None, None) => {}
-                    _ => panic!(
-                        "Inconsistent storage manager state: discrepancy between rockbound and nomt snapshots for block hash {block_hash}"
-                    ),
-                }
-            };
-            // 2b. Process discarded blocks
             for discarded_hash in &all_discard_hashes_set {
                 tracing::trace!(%discarded_hash, "Discarding block artifacts");
-                remove_snapshot_payloads_fn(discarded_hash);
-
+                let nomt_snapshot = nomt_snapshots.remove(discarded_hash);
+                let rockbound_snapshot = self.rockbound_snapshots.remove(discarded_hash);
+                assert_eq!(
+                    nomt_snapshot.is_some(),
+                    rockbound_snapshot.is_some(),
+                    "Inconsistent storage manager state: discrepancy between rockbound and nomt snapshots for block hash {discarded_hash}"
+                );
                 self.blocks_to_parent.remove(discarded_hash);
                 self.chain_forks.remove(discarded_hash);
             }
         }
-        // 2c. Commit finalized blocks in the background. Nothing is in flight, so the on-disk version
-        // is stable.
-        let base_version = self
-            .db_group
-            .latest_flat_state_version()?
-            .map(|slot| slot.get());
-        let blocks = blocks_to_commit
-            .iter()
-            .map(|(block_hash, _)| block_hash.clone())
-            .collect();
+
+        // Commit finalized blocks in the background.
         let handle = self
             .db_group
             .committer()
@@ -734,17 +736,16 @@ where
         let Some(committing) = self.committing.take() else {
             return;
         };
-        match committing.handle.join() {
-            Ok(Ok(())) => {}
-            Ok(Err(error)) => {
-                tracing::error!(
-                    ?error,
-                    "Background storage commit has failed during shutdown"
-                );
-            }
-            Err(_) => {
-                tracing::error!("Background storage commit has panicked during shutdown");
-            }
+        if let Err(panic) = committing.handle.join() {
+            let message = panic
+                .downcast_ref::<&str>()
+                .copied()
+                .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
+                .unwrap_or("<non-string panic payload>");
+            tracing::error!(
+                %message,
+                "Background storage commit has panicked during shutdown"
+            );
         }
     }
 }
