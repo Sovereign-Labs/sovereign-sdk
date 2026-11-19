@@ -281,35 +281,19 @@ impl HistoricalStateReader {
         VersionedSchemaBatch<NomtStateValues<UserNamespace>>,
         VersionedSchemaBatch<NomtStateValues<KernelNamespace>>,
     )> {
-        let mut has_kernel_been_updated = false;
-        let mut has_user_been_updated = false;
         let mut metric = StateMaterializationMetrics::new();
-        let mut kernel_batch = VersionedSchemaBatch::default();
-        let mut user_batch = VersionedSchemaBatch::default();
-
-        for (key, value) in kernel_changes {
-            metric.inc_kernel_items();
-            metric.track_key_value_size(&key, &value);
-            // Deletes are now handled correctly by rockbound, so we can `delete_versioned` instead of `put`ting None.
-            if let Some(value) = value {
-                kernel_batch.put_versioned(key, value);
-            } else {
-                kernel_batch.delete_versioned(key);
-            }
-            has_kernel_been_updated = true;
-        }
-        for (key, value) in user_changes {
-            metric.inc_user_items();
-            metric.track_key_value_size(&key, &value);
-            // Deletes are now handled correctly by rockbound, so we can `delete_versioned` instead of `put`ting None.
-            if let Some(value) = value {
-                user_batch.put_versioned(key, value);
-            } else {
-                user_batch.delete_versioned(key);
-            }
-            has_user_been_updated = true;
-        }
-        if has_user_been_updated && !has_kernel_been_updated {
+        // A `None` value is a delete.
+        let kernel_batch =
+            VersionedSchemaBatch::from(kernel_changes.into_iter().inspect(|(key, value)| {
+                metric.inc_kernel_items();
+                metric.track_key_value_size(key, value);
+            }));
+        let user_batch =
+            VersionedSchemaBatch::from(user_changes.into_iter().inspect(|(key, value)| {
+                metric.inc_user_items();
+                metric.track_key_value_size(key, value);
+            }));
+        if metric.user_items > 0 && metric.kernel_items == 0 {
             anyhow::bail!(
                 "User namespace got updated without kernel namespace, but always should be."
             );
