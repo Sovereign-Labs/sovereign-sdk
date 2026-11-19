@@ -12,8 +12,14 @@
 //!
 //! Prints `commit_ms_p50`, `commit_ms_p90`, `commit_ms_mean` and prefill/total time.
 //! `BENCH_DIR` sets the parent directory for the database (default: system temp dir).
+//!
+//! `BENCH_READERS=N` (default 0) adds N threads that keep reading random user keys through the
+//! latest storage snapshot, like REST API readers, while slots are built and committed. It also
+//! prints read throughput and read latency, split by whether a `finalize` was running.
 
 use std::collections::BTreeMap;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::RwLock;
 use std::time::{Duration, Instant};
 
 use nomt::trie::KeyPath;
@@ -253,9 +259,16 @@ fn ledger_commit(height: u64, txs: usize, rng: &mut StdRng) -> SlotCommit<MockBl
 }
 
 /// Builds and saves the change set for `height`, without finalizing it.
-fn save_slot(manager: &mut Manager, height: u64, input: SlotInput, rng: &mut StdRng) {
+fn save_slot(
+    manager: &mut Manager,
+    height: u64,
+    input: SlotInput,
+    rng: &mut StdRng,
+    latest_reader: &RwLock<Option<HistoricalStateReader>>,
+) {
     let hdr = header(height);
     let (storage, ledger_reader) = manager.create_state_for(&hdr).unwrap();
+    *latest_reader.write().unwrap() = Some(storage.historical.clone());
     let version = storage.historical.get_next_version();
 
     let sessions = storage.builder.begin_both_sessions(false).unwrap();
@@ -307,6 +320,70 @@ fn percentile(sorted: &[Duration], p: usize) -> f64 {
     sorted[idx].as_secs_f64() * 1000.0
 }
 
+/// Read latencies of one reader thread, split by whether a `finalize` was running.
+#[derive(Default)]
+struct ReadSamples {
+    during_finalize: Vec<Duration>,
+    outside_finalize: Vec<Duration>,
+}
+
+/// Shared state between the committing thread and the reader threads.
+struct ReaderControl {
+    latest_reader: RwLock<Option<HistoricalStateReader>>,
+    measuring: AtomicBool,
+    in_finalize: AtomicBool,
+    done: AtomicBool,
+}
+
+fn run_reader(control: &ReaderControl, max_user_key: u64, seed: u64) -> ReadSamples {
+    const READS_PER_SNAPSHOT: usize = 1_000;
+    let mut rng = StdRng::seed_from_u64(seed);
+    let mut samples = ReadSamples::default();
+    while !control.done.load(Ordering::Relaxed) {
+        let reader = control.latest_reader.read().unwrap().clone();
+        let Some(reader) = reader else {
+            std::thread::yield_now();
+            continue;
+        };
+        for _ in 0..READS_PER_SNAPSHOT {
+            let key = SlotKey::from_slice(&user_key(rng.gen_range(0..max_user_key)));
+            let in_finalize = control.in_finalize.load(Ordering::Relaxed);
+            let start = Instant::now();
+            std::hint::black_box(reader.get_user_value_option_by_key(&key).unwrap());
+            let elapsed = start.elapsed();
+            if control.measuring.load(Ordering::Relaxed) {
+                if in_finalize && control.in_finalize.load(Ordering::Relaxed) {
+                    samples.during_finalize.push(elapsed);
+                } else {
+                    samples.outside_finalize.push(elapsed);
+                }
+            }
+        }
+    }
+    samples
+}
+
+fn print_read_stats(name: &str, samples: &mut [Duration], measured: Duration) {
+    if samples.is_empty() {
+        println!("{name}_reads: 0");
+        return;
+    }
+    samples.sort();
+    let us = |p: usize| percentile(samples, p) * 1000.0;
+    let p999_idx = (samples.len() * 999 / 1000).min(samples.len() - 1);
+    println!("{name}_reads: {}", samples.len());
+    println!(
+        "{name}_reads_per_s: {:.0}",
+        samples.len() as f64 / measured.as_secs_f64()
+    );
+    println!("{name}_read_us_p50: {:.1}", us(50));
+    println!("{name}_read_us_p99: {:.1}", us(99));
+    println!(
+        "{name}_read_us_p999: {:.1}",
+        samples[p999_idx].as_secs_f64() * 1_000_000.0
+    );
+}
+
 fn main() {
     let total_start = Instant::now();
     let base_dir = std::env::var("BENCH_DIR")
@@ -337,6 +414,15 @@ fn main() {
     let mut manager = Manager::new(config, false).unwrap();
     let mut rng = StdRng::seed_from_u64(SEED);
     let mut keys = KeySpace::default();
+    let readers: u64 = std::env::var("BENCH_READERS")
+        .map(|v| v.parse().expect("BENCH_READERS must be a number"))
+        .unwrap_or(0);
+    let control = ReaderControl {
+        latest_reader: RwLock::new(None),
+        measuring: AtomicBool::new(false),
+        in_finalize: AtomicBool::new(false),
+        done: AtomicBool::new(false),
+    };
 
     // Prefill: large commits that build the initial state.
     let prefill_start = Instant::now();
@@ -360,30 +446,83 @@ fn main() {
             accessory: vec![],
             txs: 2,
         };
-        save_slot(&mut manager, height, input, &mut rng);
+        save_slot(
+            &mut manager,
+            height,
+            input,
+            &mut rng,
+            &control.latest_reader,
+        );
         manager.finalize(&header(height)).unwrap();
         height += 1;
     }
     let prefill = prefill_start.elapsed();
 
     let mut timings = Vec::with_capacity(MEASURED_SLOTS as usize);
-    for i in 0..WARMUP_SLOTS + MEASURED_SLOTS {
-        let input = keys.slot(&mut rng, height);
-        save_slot(&mut manager, height, input, &mut rng);
-        let start = Instant::now();
-        manager.finalize(&header(height)).unwrap();
-        let elapsed = start.elapsed();
-        if i >= WARMUP_SLOTS {
-            timings.push(elapsed);
+    let mut measured = Duration::ZERO;
+    let mut read_samples = ReadSamples::default();
+    std::thread::scope(|s| {
+        let reader_threads: Vec<_> = (0..readers)
+            .map(|id| {
+                let control = &control;
+                s.spawn(move || run_reader(control, PREFILL_USER_KEYS, SEED + 1 + id))
+            })
+            .collect();
+
+        let mut measure_start = Instant::now();
+        for i in 0..WARMUP_SLOTS + MEASURED_SLOTS {
+            if i == WARMUP_SLOTS {
+                measure_start = Instant::now();
+                control.measuring.store(true, Ordering::Relaxed);
+            }
+            let input = keys.slot(&mut rng, height);
+            save_slot(
+                &mut manager,
+                height,
+                input,
+                &mut rng,
+                &control.latest_reader,
+            );
+            control.in_finalize.store(true, Ordering::Relaxed);
+            let start = Instant::now();
+            manager.finalize(&header(height)).unwrap();
+            let elapsed = start.elapsed();
+            control.in_finalize.store(false, Ordering::Relaxed);
+            if i >= WARMUP_SLOTS {
+                timings.push(elapsed);
+            }
+            height += 1;
         }
-        height += 1;
-    }
+        measured = measure_start.elapsed();
+        control.done.store(true, Ordering::Relaxed);
+
+        for thread in reader_threads {
+            let samples = thread.join().unwrap();
+            read_samples.during_finalize.extend(samples.during_finalize);
+            read_samples
+                .outside_finalize
+                .extend(samples.outside_finalize);
+        }
+    });
 
     timings.sort();
     let mean = timings.iter().sum::<Duration>().as_secs_f64() * 1000.0 / timings.len() as f64;
     println!("commit_ms_p50: {:.2}", percentile(&timings, 50));
     println!("commit_ms_p90: {:.2}", percentile(&timings, 90));
     println!("commit_ms_mean: {:.2}", mean);
+    if readers > 0 {
+        let finalize_time: Duration = timings.iter().sum();
+        print_read_stats(
+            "during_finalize",
+            &mut read_samples.during_finalize,
+            finalize_time,
+        );
+        print_read_stats(
+            "outside_finalize",
+            &mut read_samples.outside_finalize,
+            measured.saturating_sub(finalize_time),
+        );
+    }
     println!("prefill_s: {:.1}", prefill.as_secs_f64());
     println!("total_s: {:.1}", total_start.elapsed().as_secs_f64());
 }
