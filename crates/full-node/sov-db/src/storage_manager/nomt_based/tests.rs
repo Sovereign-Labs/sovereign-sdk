@@ -9,7 +9,7 @@ use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::da::BlockHeaderTrait;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 
-use super::groups::fail_next_pruning_commit_for_test;
+use super::groups::{fail_next_commit_for_test, fail_next_pruning_commit_for_test};
 use super::{NomtChangeSet, NomtStorageManager, StateFinishedSession};
 use crate::accessory_db::AccessoryDb;
 use crate::config::{default_max_pruning_batch_size, PrunerConfig, RollupDbConfig};
@@ -1066,12 +1066,26 @@ mod background_commit {
 
     /// Saves block `height` that writes `key(height) = value(height)` at version `height - 1`.
     fn save_block(storage_manager: &mut Sm, height: u64) {
-        let header = MockBlockHeader::from_height(height);
-        let (storage, _) = storage_manager.create_state_for(&header).unwrap();
+        save_block_writing(
+            storage_manager,
+            &MockBlockHeader::from_height(height),
+            key(height),
+            value(height),
+        );
+    }
+
+    /// Saves block `header` that writes `key = value` at version `header.height - 1`.
+    fn save_block_writing(
+        storage_manager: &mut Sm,
+        header: &MockBlockHeader,
+        key: Vec<u8>,
+        value: Vec<u8>,
+    ) {
+        let (storage, _) = storage_manager.create_state_for(header).unwrap();
         let (changes, _) =
-            storage.materialize_from_key_values(&[(key(height), Some(value(height)))], height - 1);
+            storage.materialize_from_key_values(&[(key, Some(value))], header.height - 1);
         storage_manager
-            .save_change_set(&header, changes, SchemaBatch::default())
+            .save_change_set(header, changes, SchemaBatch::default())
             .unwrap();
     }
 
@@ -1128,7 +1142,7 @@ mod background_commit {
         );
 
         location.release_wait_gate();
-        storage_manager.flush().unwrap();
+        storage_manager.flush();
     }
 
     #[test]
@@ -1156,7 +1170,79 @@ mod background_commit {
         );
 
         location.release_wait_gate();
-        storage_manager.flush().unwrap();
+        storage_manager.flush();
+    }
+
+    /// Blocks 1 and 2 are committed together and both land on disk before the commit is joined.
+    /// State after block 1 alone can no longer be served, because NOMT has no overlay for it and
+    /// already reads block 2. It resolves to the newest committing block instead, as it did when
+    /// commits were synchronous.
+    #[test]
+    fn storage_after_older_committing_block_resolves_to_newest_committing_block() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut storage_manager = new_storage_manager(&temp_dir);
+        let shared_key = key(1);
+        for height in [1, 2] {
+            save_block_writing(
+                &mut storage_manager,
+                &MockBlockHeader::from_height(height),
+                shared_key.clone(),
+                value(height),
+            );
+        }
+        storage_manager
+            .finalize(&MockBlockHeader::from_height(2))
+            .unwrap();
+        storage_manager.wait_for_commit_to_finish();
+
+        let (storage, _) = storage_manager
+            .create_state_after(&MockBlockHeader::from_height(1))
+            .unwrap();
+
+        // `get_value` also asserts that NOMT, flat and accessory state agree.
+        assert_eq!(
+            storage.get_value(&shared_key),
+            Some(value(2)),
+            "State after block 1 should resolve to block 2, which is committed together with it"
+        );
+    }
+
+    /// Finalizing a chain that contains a block without saved changes fails. The failure must not
+    /// touch the fork bookkeeping, so finalizing the saved part of the chain later still discards
+    /// its forks.
+    #[test]
+    fn failed_finalize_leaves_fork_bookkeeping_intact() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut storage_manager = new_storage_manager(&temp_dir);
+        // Chain 1 -> 2 -> 3, where block 2 is never saved, and a sibling of block 1.
+        save_block(&mut storage_manager, 1);
+        let sibling_of_1 = MockBlockHeader {
+            hash: MockHash([0xAB; 32]),
+            ..MockBlockHeader::from_height(1)
+        };
+        save_block_writing(&mut storage_manager, &sibling_of_1, key(11), value(11));
+        storage_manager
+            .create_state_for(&MockBlockHeader::from_height(2))
+            .unwrap();
+        save_block(&mut storage_manager, 3);
+        let error = storage_manager
+            .finalize(&MockBlockHeader::from_height(3))
+            .unwrap_err();
+        assert!(
+            error.to_string().contains("not found during finalization"),
+            "Finalization should fail on the unsaved block 2, got: {error}"
+        );
+
+        storage_manager
+            .finalize(&MockBlockHeader::from_height(1))
+            .unwrap();
+        storage_manager.flush();
+
+        assert_eq!(
+            storage_manager.snapshots_count(),
+            1,
+            "Only block 3 should be left: the sibling of finalized block 1 must be discarded"
+        );
     }
 
     /// Executes and finalizes block 2 while the commit of block 1 is paused at `location`.
@@ -1190,7 +1276,7 @@ mod background_commit {
             .save_change_set(&header, changes, SchemaBatch::default())
             .unwrap();
         storage_manager.finalize(&header).unwrap();
-        storage_manager.flush().unwrap();
+        storage_manager.flush();
 
         let (storage, _) = storage_manager
             .create_state_for(&MockBlockHeader::from_height(3))
@@ -1252,6 +1338,40 @@ mod background_commit {
             .finalize(&MockBlockHeader::from_height(1))
             .unwrap();
 
-        let _ = storage_manager.flush();
+        storage_manager.flush();
+    }
+
+    #[test]
+    #[should_panic(expected = "injected commit failure")]
+    fn background_commit_error_is_raised_by_flush() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut storage_manager = new_storage_manager(&temp_dir);
+        save_block(&mut storage_manager, 1);
+        fail_next_commit_for_test();
+        storage_manager
+            .finalize(&MockBlockHeader::from_height(1))
+            .unwrap();
+
+        storage_manager.flush();
+    }
+
+    /// A failed commit may leave the DBs partially written. Storages created before the failure
+    /// surfaces through `flush` must not be able to read that state.
+    #[test]
+    #[should_panic(expected = "Snapshots lock poisoned")]
+    fn background_commit_error_blocks_nomt_sessions() {
+        let temp_dir = tempfile::TempDir::new().unwrap();
+        let mut storage_manager = new_storage_manager(&temp_dir);
+        save_block(&mut storage_manager, 1);
+        fail_next_commit_for_test();
+        storage_manager
+            .finalize(&MockBlockHeader::from_height(1))
+            .unwrap();
+        storage_manager.wait_for_commit_to_finish();
+
+        let (storage, _) = storage_manager
+            .create_state_for(&MockBlockHeader::from_height(2))
+            .unwrap();
+        storage.materialize_from_key_values(&[(key(2), Some(value(2)))], 1);
     }
 }

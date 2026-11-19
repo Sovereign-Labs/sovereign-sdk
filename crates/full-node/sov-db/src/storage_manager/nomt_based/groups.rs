@@ -53,6 +53,22 @@ fn fail_pruning_commit_if_requested() -> anyhow::Result<()> {
     Ok(())
 }
 
+#[cfg(test)]
+static FAIL_NEXT_COMMIT: AtomicBool = AtomicBool::new(false);
+
+#[cfg(test)]
+pub(crate) fn fail_next_commit_for_test() {
+    FAIL_NEXT_COMMIT.store(true, Ordering::SeqCst);
+}
+
+#[cfg(test)]
+fn fail_commit_if_requested() -> anyhow::Result<()> {
+    if FAIL_NEXT_COMMIT.swap(false, Ordering::SeqCst) {
+        anyhow::bail!("injected commit failure");
+    }
+    Ok(())
+}
+
 pub(crate) struct DbGroup<H, K> {
     merklized_state: Arc<NomtStateDb<H>>,
     flat_state: FlatStateDb,
@@ -468,11 +484,14 @@ where
     /// Each block is committed to all DBs while holding the `nomt_snapshots` write lock, so NOMT
     /// sessions cannot be opened while NOMT and RocksDB disagree on the latest block. Proof
     /// generation (`get_with_proof`) relies on this.
+    ///
+    /// A failed commit panics while still holding that lock. That poisons it, so nothing can read
+    /// the partially committed state, which only a restart can recover.
     pub(crate) fn spawn_commit<K>(
         self,
         blocks: Vec<(K, SnapshotGroup)>,
         nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
-    ) -> JoinHandle<anyhow::Result<()>>
+    ) -> JoinHandle<()>
     where
         H: 'static,
         K: Eq + std::hash::Hash + std::fmt::Debug + Send + Sync + 'static,
@@ -488,12 +507,19 @@ where
                     let overlay = nomt_snapshots
                         .remove(&block_hash)
                         .expect("Block being committed must have a NOMT snapshot");
-                    let merklized_commit = self.commit_merklized(overlay)?;
-                    self.commit_rockbound(rockbound, merklized_commit, FlatCommitMode::Append)?;
+                    if let Err(error) = self.commit_block(overlay, rockbound) {
+                        panic!("Background storage commit of block {block_hash:?} has failed: {error:?}");
+                    }
                 }
-                Ok(())
             })
             .expect("Failed to spawn storage commit thread")
+    }
+
+    fn commit_block(&self, overlay: StateOverlay, rockbound: SnapshotGroup) -> anyhow::Result<()> {
+        #[cfg(test)]
+        fail_commit_if_requested()?;
+        let merklized_commit = self.commit_merklized(overlay)?;
+        self.commit_rockbound(rockbound, merklized_commit, FlatCommitMode::Append)
     }
 
     #[cfg(feature = "migration-script")]
@@ -593,25 +619,12 @@ where
     }
 }
 
+/// Cloning only bumps `Arc`s.
+#[derive(Clone)]
 pub(crate) struct SnapshotGroup {
     pub(crate) historical_state: StateChanges,
     pub(crate) accessory: Arc<SchemaBatch>,
     pub(crate) ledger: Arc<SchemaBatch>,
-}
-
-impl SnapshotGroup {
-    /// Another handle to the same snapshot data. Only bumps `Arc`s.
-    pub(crate) fn share(&self) -> Self {
-        Self {
-            historical_state: StateChanges {
-                user: self.historical_state.user.clone(),
-                kernel: self.historical_state.kernel.clone(),
-                root_hash_batch: self.historical_state.root_hash_batch.clone(),
-            },
-            accessory: self.accessory.clone(),
-            ledger: self.ledger.clone(),
-        }
-    }
 }
 
 pub(crate) struct PruneGroup {
