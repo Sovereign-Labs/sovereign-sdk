@@ -49,7 +49,7 @@ impl FlatStateDb {
         cache_size: usize,
         custom_config: Option<&RollupDbConfigWithCustomizations>,
     ) -> anyhow::Result<Self> {
-        let live_db = {
+        let open_live_db = || -> anyhow::Result<Arc<DB>> {
             let mut live_columns = vec![Self::default_cf_descriptor(
                 RocksDbKind::FlatStateLive,
                 StateRootHashes::table_name(),
@@ -92,10 +92,10 @@ impl FlatStateDb {
                 .unwrap_or_else(|| path.join(Self::DB_PATH_SUFFIX));
             let live =
                 DB::open_with_cfds(&live_db_options, live_path, Self::DB_NAME, live_columns)?;
-            Arc::new(live)
+            Ok(Arc::new(live))
         };
 
-        let archival_db = {
+        let open_archival_db = || -> anyhow::Result<Arc<DB>> {
             let archival_path = path.join(Self::ARCHIVAL_DB_PATH_SUFFIX);
 
             let mut archival_columns = vec![Self::default_cf_descriptor(
@@ -144,8 +144,18 @@ impl FlatStateDb {
                     &archival_db_options,
                 )?;
 
-            Arc::new(archival)
+            Ok(Arc::new(archival))
         };
+
+        // The two RocksDB instances are independent, so open them concurrently.
+        // Opening can take seconds (e.g. WAL replay), and this is on the node startup path.
+        let (live_db, archival_db) = std::thread::scope(|s| {
+            let archival_db =
+                s.spawn(|| crate::timed_open("flat_state_archival", open_archival_db));
+            let live_db = crate::timed_open("flat_state_live", open_live_db);
+            (live_db, crate::join_scoped(archival_db))
+        });
+        let (live_db, archival_db) = (live_db?, archival_db?);
 
         let inner = Arc::new(RwLock::new(Inner {
             user_cache: rockbound::new_cache_for_schema::<NomtStateValues<UserNamespace>>(

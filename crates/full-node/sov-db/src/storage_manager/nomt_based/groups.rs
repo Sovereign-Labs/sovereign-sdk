@@ -70,33 +70,39 @@ where
         let ledger_db_path = config.ledger_db_path.clone();
         let state_cache_size = config.state_cache_size.unwrap_or(GIGABYTE);
 
-        let merklized_state = Arc::new(NomtStateDb::<H>::new(config.clone())?);
-        let flat_state = FlatStateDb::new_with_customizations(
-            path.clone(),
-            state_cache_size,
-            Some(&custom_config),
-        )?;
-        let ledger_db_options = custom_config.get_rocksdb_options(RocksDbKind::Ledger);
-        let ledger = Arc::new(if let Some(ledger_db_path) = ledger_db_path {
-            LedgerDb::get_rockbound_options().setup_db_with_options_and_cfs(
-                ledger_db_path,
-                &ledger_db_options,
-                |cf_name, builder| {
-                    custom_config.customize_rocksdb_cf(RocksDbKind::Ledger, cf_name, None, builder);
-                },
-            )?
-        } else {
-            LedgerDb::get_rockbound_options().setup_db_as_subdir_with_options_and_cfs(
-                &path,
-                &ledger_db_options,
-                |cf_name, builder| {
-                    custom_config.customize_rocksdb_cf(RocksDbKind::Ledger, cf_name, None, builder);
-                },
-            )?
-        });
+        let open_ledger = || {
+            let ledger_db_options = custom_config.get_rocksdb_options(RocksDbKind::Ledger);
+            if let Some(ledger_db_path) = ledger_db_path {
+                LedgerDb::get_rockbound_options().setup_db_with_options_and_cfs(
+                    ledger_db_path,
+                    &ledger_db_options,
+                    |cf_name, builder| {
+                        custom_config.customize_rocksdb_cf(
+                            RocksDbKind::Ledger,
+                            cf_name,
+                            None,
+                            builder,
+                        );
+                    },
+                )
+            } else {
+                LedgerDb::get_rockbound_options().setup_db_as_subdir_with_options_and_cfs(
+                    &path,
+                    &ledger_db_options,
+                    |cf_name, builder| {
+                        custom_config.customize_rocksdb_cf(
+                            RocksDbKind::Ledger,
+                            cf_name,
+                            None,
+                            builder,
+                        );
+                    },
+                )
+            }
+        };
 
-        let accessory_db_options = custom_config.get_rocksdb_options(RocksDbKind::Accessory);
-        let accessory = Arc::new(
+        let open_accessory = || {
+            let accessory_db_options = custom_config.get_rocksdb_options(RocksDbKind::Accessory);
             AccessoryDb::get_rockbound_options().setup_db_as_subdir_with_options_and_cfs(
                 &path,
                 &accessory_db_options,
@@ -108,8 +114,36 @@ where
                         builder,
                     );
                 },
-            )?,
-        );
+            )
+        };
+
+        // All databases are independent until the commit-flag validation below, so open them
+        // concurrently. Each open can take seconds (NOMT metadata reads, RocksDB WAL replay),
+        // and this is on the node startup path.
+        let start = std::time::Instant::now();
+        let (merklized_state, flat_state, ledger, accessory) = std::thread::scope(|s| {
+            let merklized_state = s.spawn(|| NomtStateDb::<H>::new(config.clone()));
+            let flat_state = s.spawn(|| {
+                FlatStateDb::new_with_customizations(
+                    path.clone(),
+                    state_cache_size,
+                    Some(&custom_config),
+                )
+            });
+            let ledger = s.spawn(|| crate::timed_open("ledger", open_ledger));
+            let accessory = crate::timed_open("accessory", open_accessory);
+            (
+                crate::join_scoped(merklized_state),
+                crate::join_scoped(flat_state),
+                crate::join_scoped(ledger),
+                accessory,
+            )
+        });
+        let merklized_state = Arc::new(merklized_state?);
+        let flat_state = flat_state?;
+        let ledger = Arc::new(ledger?);
+        let accessory = Arc::new(accessory?);
+        tracing::info!(elapsed = ?start.elapsed(), "Opened all databases");
 
         // Validate the commit state.
         Self::validate_commit_flag_and_rollback_if_necessary(

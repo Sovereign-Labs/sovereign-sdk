@@ -40,7 +40,9 @@ use super::{
 };
 use crate::common::AcceptedTx;
 use crate::common::ForcedTxBatchNotification;
-use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
+use crate::preferred::async_batch::{
+    recv_spinning_first, AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch,
+};
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{exit_rollup, PreferredProofToReplay};
 use crate::SequencerConfig;
@@ -350,7 +352,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             });
         }
 
-        let Some(result) = task_state.result_receiver.recv().await else {
+        let Some(result) = recv_spinning_first(&mut task_state.result_receiver).await else {
             tracing::error!("The rollup block executor task failed unexpectedly. Gracefully shutting down the sequencer.");
             self.primary_shutdown.shutdown(); // We don't care if this was already triggered, because that would mean the sequencer is already shutting down - which is exactly what we want.
             return Err(RollupBlockExecutorErrorWithBudget {
@@ -993,18 +995,12 @@ where
                     .as_true()
                     .next()
                     .range_inclusive(next_visible_slot_number.as_true()),
+                &next_gas_price,
                 &mut accessor,
                 NoOpControlFlow,
             )
             .into_iter()
-            .map(|mut b| {
-                // Batches from unregistered sequencers don't reserve any gas
-                // tokens.
-                if b.reserved_gas_tokens.is_some() {
-                    b.reserved_gas_tokens = Some(standard_gas_escrow);
-                }
-                b.map_batch(MaybeAsyncBatch::<S>::new_sync)
-            })
+            .map(|b| b.map_batch(MaybeAsyncBatch::<S>::new_sync))
             .collect::<Vec<_>>();
 
         tracing::debug!(count = %non_preferred_blobs.len(), "Extracted non-preferred blobs");

@@ -38,7 +38,8 @@ pub fn config_unregistered_blobs_per_slot() -> u64 {
 /// An escrow account for storing the reserved gas for a blob.
 #[derive(Clone, BorshSerialize, BorshDeserialize, Serialize, Deserialize, Debug, PartialEq)]
 pub enum Escrow {
-    /// The gas is held in a derived holder account in the bank module.
+    /// The gas is recorded in the sequencer registry's escrow map under this holder.
+    /// The tokens themselves stay in the registry's bank account.
     DerivedHolder(DerivedHolder),
     /// The given number of tokens is held directly in the sequencer module.
     Direct(Amount),
@@ -234,6 +235,26 @@ impl<S: Spec> BlobStorage<S> {
     ) -> Result<Option<PreferredBlobDataWithId>, R::Error> {
         self.deferred_preferred_sequencer_blobs
             .get(&sequence_number, state)
+    }
+
+    /// Returns the escrow holders of the deferred blobs stored for the given slot. Blobs whose
+    /// funds are not held in a deferred escrow (e.g. emergency registrations) are skipped.
+    #[cfg(feature = "test-utils")]
+    pub fn get_deferred_escrow_holders<R: sov_modules_api::StateReader<sov_state::Kernel>>(
+        &self,
+        slot_number: SlotNumber,
+        state: &mut R,
+    ) -> Result<Vec<DerivedHolder>, R::Error> {
+        Ok(self
+            .deferred_blobs
+            .get(&slot_number, state)?
+            .unwrap_or_default()
+            .into_iter()
+            .filter_map(|blob| match blob.balance_store {
+                Escrow::DerivedHolder(holder) => Some(holder),
+                Escrow::Direct(_) | Escrow::None => None,
+            })
+            .collect())
     }
 
     /// What the [`SequenceNumber`] of the next [`PreferredBlobData`]s MUST
