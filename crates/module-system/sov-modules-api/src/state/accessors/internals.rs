@@ -247,6 +247,15 @@ impl<S: Storage> Delta<S> {
         }
     }
 
+    /// See [`UniversalStateAccessor::get_cached_value`].
+    pub fn get_cached_value(&self, namespace: Namespace, key: &SlotKey) -> Option<Option<SlotValue>> {
+        match namespace {
+            Namespace::User => self.user_cache.get_cached_value(key),
+            Namespace::Kernel => self.kernel_cache.get_cached_value(key),
+            Namespace::Accessory => None,
+        }
+    }
+
     #[cfg(feature = "native")]
     pub fn get(
         &mut self,
@@ -546,6 +555,13 @@ where
             value.as_ref().map(|v| v.size())
         } else {
             <T as UniversalStateAccessor>::get_size(&mut self.inner, namespace, key, metric)
+        }
+    }
+
+    fn get_cached_value(&self, namespace: Namespace, key: &SlotKey) -> Option<Option<SlotValue>> {
+        match self.writes.get(&(key.clone(), namespace)) {
+            Some(value) => Some(value.clone()),
+            None => self.inner.get_cached_value(namespace, key),
         }
     }
 

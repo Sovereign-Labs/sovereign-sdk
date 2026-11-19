@@ -119,6 +119,13 @@ impl<S: Spec, I: TxState<S>> UniversalStateAccessor for RevertableTxState<'_, S,
         self.inner.get_size(namespace, key, metrics)
     }
 
+    fn get_cached_value(&self, namespace: Namespace, key: &SlotKey) -> Option<Option<SlotValue>> {
+        if let Some(value) = self.writes.get(&(namespace, key.clone())) {
+            return Some(value.clone());
+        }
+        self.inner.get_cached_value(namespace, key)
+    }
+
     fn get_value(
         &mut self,
         namespace: Namespace,

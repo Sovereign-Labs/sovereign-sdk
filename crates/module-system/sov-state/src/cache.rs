@@ -357,6 +357,28 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
         }
     }
 
+    /// Returns the value for `key` if the cache already holds it in a state where reading it has no
+    /// side effects (no storage fetch, no witness update), so that a `get_size_or_fetch` followed
+    /// by a `get_or_fetch` would return exactly this. Returns `None` otherwise.
+    pub fn get_cached_value(&self, key: &SlotKey) -> Option<Option<SlotValue>> {
+        match self.cache.get(key)? {
+            Access::Read { original: None } => Some(None),
+            Access::Read {
+                original: Some(node),
+            } => match &node.value {
+                // `Read` entries hold a value whose leaf was computed from it (or checked against it,
+                // in the `GetSizeValueNotFetched` transition), so this returns the size `get_size`
+                // would and touches no witness data. This is also what keeps it safe in ZK mode.
+                ReadType::Read(value) => {
+                    debug_assert_eq!(node.leaf.size, value.size(), "Cached read leaf size mismatch");
+                    Some(Some(value.clone()))
+                }
+                ReadType::GetSizeValueNotFetched | ReadType::GetSizeValueFetched(_) => None,
+            },
+            Access::Write { modified } => Some(modified.clone()),
+        }
+    }
+
     /// Get the size of the value.
     #[cfg(feature = "native")]
     pub fn get_size_or_fetch_historical<S: Storage + NativeStorage>(

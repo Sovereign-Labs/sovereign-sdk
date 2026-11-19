@@ -64,6 +64,17 @@ pub(super) mod seal {
             metric: &mut StateAccessMetric,
         ) -> Option<u32>;
 
+        /// The value for `key` if it can be read without side effects (no storage fetch, no
+        /// witness update): pending writes and already-read values. `None` if `get_size` and
+        /// `get_value` must be called. Never changes state, so it can run before gas is charged.
+        fn get_cached_value(
+            &self,
+            _namespace: Namespace,
+            _key: &SlotKey,
+        ) -> Option<Option<SlotValue>> {
+            None
+        }
+
         fn get_value(
             &mut self,
             namespace: Namespace,
