@@ -9,8 +9,8 @@ use borsh::BorshDeserialize;
 use sov_blob_storage::PreferredProofData;
 use sov_modules_api::capabilities::prune_sequencing_data;
 use sov_modules_api::capabilities::{
-    get_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState, FatalError,
-    RollupHeight, TransactionAuthenticator,
+    get_timestamp_from_sequencing_data, BlobSelector, BlobSelectorOutput, ChainState, RollupHeight,
+    TransactionAuthenticator,
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
@@ -59,8 +59,6 @@ type BlockExecutionOutput<S> = (Vec<BatchReceipt<S>>, StateCheckpoint<S>);
 
 #[derive(thiserror::Error, Debug)]
 pub(crate) enum RollupBlockExecutorError<S: Spec> {
-    #[error(transparent)]
-    DecodeCall(#[from] FatalError),
     #[error("The sequencer is temporarily overloaded. Try again in a few seconds")]
     Overloaded,
     #[error("The transaction was rejected: {reason:?} call {call}")]
@@ -74,13 +72,6 @@ pub(crate) enum RollupBlockExecutorError<S: Spec> {
 impl<S: Spec> RollupBlockExecutorError<S> {
     pub fn into_http_error(self) -> ErrorObject {
         match self {
-            RollupBlockExecutorError::DecodeCall(_) => ErrorObject {
-                status: StatusCode::BAD_REQUEST,
-                message: "Malformed transaction".to_string(),
-                details: json_obj!({
-                    "error": self.to_string(),
-                }),
-            },
             RollupBlockExecutorError::Overloaded => ErrorObject {
                 status: StatusCode::SERVICE_UNAVAILABLE,
                 message: "Temporarily unavailable".to_string(),
@@ -348,14 +339,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
 
-        let call = Rt::Auth::decode_serialized_tx(&baked_tx.tx).map_err(|e| {
-            RollupBlockExecutorErrorWithBudget {
-                execution_time_micros: 0,
-                gas_used: <S as Spec>::Gas::zero(),
-                inner_err: RollupBlockExecutorError::DecodeCall(e),
-            }
-        })?;
-        let call = Rt::wrap_call(call);
+        // Kept only to name the call if the executor rejects the tx; a cheap `Bytes` refcount bump.
+        let raw_tx = baked_tx.tx.clone();
 
         if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {
             return Err(RollupBlockExecutorErrorWithBudget {
@@ -386,13 +371,19 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             tx_changes,
             remaining_slot_gas,
             sequencing_scratchpad,
-        } = inner_result.map_err(|reason| RollupBlockExecutorErrorWithBudget {
-            execution_time_micros,
-            gas_used,
-            inner_err: RollupBlockExecutorError::Rejected {
-                reason,
-                call: call_message_repr::<Rt>(&call),
-            },
+        } = inner_result.map_err(|reason| {
+            let call = match Rt::Auth::decode_serialized_tx(&raw_tx) {
+                Ok(call) => call_message_repr::<Rt>(&Rt::wrap_call(call)),
+                Err(error) => {
+                    tracing::warn!(%error, ?reason, "Could not decode the call of a rejected tx");
+                    "unknown".to_string()
+                }
+            };
+            RollupBlockExecutorErrorWithBudget {
+                execution_time_micros,
+                gas_used,
+                inner_err: RollupBlockExecutorError::Rejected { reason, call },
+            }
         })?;
 
         if !receipt.receipt.is_successful() {
