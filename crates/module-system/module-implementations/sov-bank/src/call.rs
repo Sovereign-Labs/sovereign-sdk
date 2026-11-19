@@ -5,7 +5,7 @@ use sov_modules_api::{
     Spec, StateAccessor, StateReader, TxState,
 };
 use sov_rollup_interface::common::SizedSafeString;
-use sov_state::{EventContainer, User};
+use sov_state::{EventContainer, SlotKey, User};
 use strum::{EnumDiscriminants, EnumIs, EnumIter, VariantArray};
 
 use crate::error::{
@@ -571,11 +571,14 @@ impl<S: Spec> Bank<S> {
             return Ok(());
         }
 
-        let from_balance = self.decrease_balance_checked(token_id, from, amount, state)?;
+        // Each balance key is encoded once and reused for its reads and writes.
+        let from_key = self.balances.slot_key(&(from, token_id));
+        let from_balance = self.decrease_balance_by_key(&from_key, from, amount, state)?;
 
+        let to_key = self.balances.slot_key(&(to, token_id));
         let current_to_balance = self
             .balances
-            .get(&(to, token_id), state)
+            .get_by_slot_key(&to_key, state)
             .map_err(CoreModuleError::state_read)?
             .unwrap_or(Amount::ZERO);
 
@@ -588,10 +591,10 @@ impl<S: Spec> Bank<S> {
         })?;
 
         self.balances
-            .set(&(from, token_id), &from_balance, state)
+            .set_by_slot_key(&from_key, &from_balance, state)
             .map_err(CoreModuleError::state_write)?;
         self.balances
-            .set(&(to, token_id), &to_balance, state)
+            .set_by_slot_key(&to_key, &to_balance, state)
             .map_err(CoreModuleError::state_write)?;
         Ok(())
     }
@@ -605,9 +608,21 @@ impl<S: Spec> Bank<S> {
         amount: Amount,
         state: &mut impl StateAccessor,
     ) -> Result<Amount, CommonError> {
+        let key = self.balances.slot_key(&(from, token_id));
+        self.decrease_balance_by_key(&key, from, amount, state)
+    }
+
+    /// [`Self::decrease_balance_checked`] for a balance key built with `self.balances.slot_key`.
+    fn decrease_balance_by_key(
+        &mut self,
+        key: &SlotKey,
+        from: TokenHolderRef<'_, S>,
+        amount: Amount,
+        state: &mut impl StateAccessor,
+    ) -> Result<Amount, CommonError> {
         let balance = self
             .balances
-            .get(&(from, token_id), state)
+            .get_by_slot_key(key, state)
             .map_err(CoreModuleError::state_read)?
             .unwrap_or(Amount::ZERO);
 
@@ -620,7 +635,7 @@ impl<S: Spec> Bank<S> {
         })?;
 
         self.balances
-            .set(&(from, token_id), &new_balance, state)
+            .set_by_slot_key(key, &new_balance, state)
             .map_err(CoreModuleError::state_write)?;
         Ok(new_balance)
     }
