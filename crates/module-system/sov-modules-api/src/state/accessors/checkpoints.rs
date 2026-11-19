@@ -25,12 +25,15 @@ use sov_state::sequencer_state::RawStateChanges;
 #[derive(derive_more::Debug)]
 pub struct StateCheckpoint<S: Spec> {
     #[debug(skip)]
-    pub(super) delta: Delta<S::Storage>,
+    // Boxed so moving the checkpoint (and the scratchpads and working sets built on it) through the
+    // per-transaction pipeline copies a pointer instead of the whole delta.
+    pub(super) delta: Box<Delta<S::Storage>>,
     /// The rollup height visible to user-space modules
     pub(super) visible_slot_num: VisibleSlotNumber,
     pub(super) rollup_height: RollupHeight,
     pub(super) cache: TempCache,
-    pub(super) metrics: StateMetrics,
+    // Boxed for the same reason as `delta`.
+    pub(super) metrics: Box<StateMetrics>,
 }
 
 #[cfg(feature = "native")]
@@ -94,11 +97,11 @@ impl<S: Spec> StateCheckpoint<S> {
     #[cfg(feature = "native")]
     pub fn clone_with_empty_witness_dropping_temp_cache(&self) -> Self {
         Self {
-            delta: self.delta.clone_with_empty_witness(),
+            delta: Box::new(self.delta.clone_with_empty_witness()),
             visible_slot_num: self.visible_slot_num,
             rollup_height: self.rollup_height,
             cache: TempCache::new(),
-            metrics: StateMetrics::default(),
+            metrics: Box::default(),
         }
     }
 
@@ -190,11 +193,11 @@ impl<S: Spec> StateCheckpoint<S> {
         trace!(%visible_slot_num, "Initializing a `StateCheckpoint`");
         let rollup_height = kernel.rollup_height(&mut bootstrap_state);
         Self {
-            delta,
+            delta: Box::new(delta),
             visible_slot_num,
             rollup_height,
             cache: TempCache::new(),
-            metrics: StateMetrics::default(),
+            metrics: Box::default(),
         }
     }
 
