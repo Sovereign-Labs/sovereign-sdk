@@ -1002,18 +1002,12 @@ where
                     .as_true()
                     .next()
                     .range_inclusive(next_visible_slot_number.as_true()),
+                &next_gas_price,
                 &mut accessor,
                 NoOpControlFlow,
             )
             .into_iter()
-            .map(|mut b| {
-                // Batches from unregistered sequencers don't reserve any gas
-                // tokens.
-                if b.reserved_gas_tokens.is_some() {
-                    b.reserved_gas_tokens = Some(standard_gas_escrow);
-                }
-                b.map_batch(MaybeAsyncBatch::<S>::new_sync)
-            })
+            .map(|b| b.map_batch(MaybeAsyncBatch::<S>::new_sync))
             .collect::<Vec<_>>();
 
         tracing::debug!(count = %non_preferred_blobs.len(), "Extracted non-preferred blobs");

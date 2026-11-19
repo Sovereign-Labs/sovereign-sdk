@@ -19,7 +19,7 @@ use crate::helpers_basic_kernel::setup_basic_kernel;
 use crate::helpers_soft_confirmations::{
     build_soft_confirmation_blobs, setup_with_registration_soft_confirmation_kernel,
 };
-use crate::{visible_slot, TestData, TestRunner, S};
+use crate::{pending_escrow, sequencer_stake, visible_slot, TestData, TestRunner, S};
 
 fn is_registered<RT: Runtime<S> + MinimalGenesis<S>>(
     runner: &TestRunner<RT>,
@@ -107,26 +107,17 @@ fn registry_gas_balance<RT: Runtime<S> + MinimalGenesis<S>>(runner: &TestRunner<
     })
 }
 
-fn sequencer_stake<RT: Runtime<S> + MinimalGenesis<S>>(
-    runner: &TestRunner<RT>,
-    da: &MockAddress,
-) -> Amount {
-    runner.query_state(|state| {
-        SequencerRegistry::<S>::default()
-            .get_sender_balance_via_api(da, state)
-            .expect("sequencer must be registered")
-    })
-}
-
-/// Registry gas balance minus the stake of `registered_sequencer`, which must be the only sequencer
-/// whose stake changes between the compared slots.
+/// Registry gas balance minus the stake of `registered_sequencer` and minus pending escrow.
+/// `registered_sequencer` must be the only sequencer whose stake changes between the compared
+/// slots.
 fn unowned_registry_balance<RT: Runtime<S> + MinimalGenesis<S>>(
     runner: &TestRunner<RT>,
     registered_sequencer: &MockAddress,
 ) -> Amount {
     registry_gas_balance(runner)
         .checked_sub(sequencer_stake(runner, registered_sequencer))
-        .expect("Registry must hold at least the registered sequencer's stake")
+        .and_then(|balance| balance.checked_sub(pending_escrow(runner)))
+        .expect("Registry must hold at least the registered sequencer's stake and pending escrow")
 }
 
 /// - Slot A: a registered non-preferred sequencer posts a valid batch, which is deferred.
@@ -165,6 +156,10 @@ fn deferred_blob_of_slashed_sequencer_executes_and_returns_escrow_to_registry() 
     assert!(
         !is_registered(&runner, &da),
         "Garbage blob must slash the sender"
+    );
+    assert!(
+        pending_escrow(&runner) > Amount::ZERO,
+        "The slashed sequencer's deferred batch must still hold escrow"
     );
 
     let unowned_registry_balance_before =
@@ -210,7 +205,7 @@ fn deferred_blob_of_slashed_sequencer_executes_and_returns_escrow_to_registry() 
             .unwrap(),
         expected_returned,
         "The slashed sequencer's escrow, net of penalties and plus rewards, must be transferred to the registry"
-);
+    );
 }
 
 /// One DA block contains [preferred batch advancing visible, regular sequencer's valid empty batch,
