@@ -617,44 +617,100 @@ fn charge_storage_access<Accessor: GasMeter>(
     Ok(())
 }
 
-fn charge_read<Accessor: UniversalStateAccessor + GasMeter>(
+/// A gas charge: `amount * parameter` ([`GasMeter::charge_linear_gas`]), or `amount` alone
+/// ([`GasMeter::charge_gas`]) when `parameter` is `None`.
+type Charge<GU> = (GU, Option<u32>);
+
+/// Charges `charges` with the same result and final meter state as charging them one by one, in
+/// order.
+///
+/// When the meter is a [`BasicGasMeter`](crate::BasicGasMeter) that can afford the total, the
+/// total is charged at once: gas and its value are linear, so the meter ends in the same state.
+/// Otherwise the charges run one by one, which reproduces the exact out-of-gas point and error.
+/// Gas-constant estimation counts individual charges, so it always charges one by one.
+fn charge_all<Accessor: GasMeter>(
     accessor: &mut Accessor,
-    namespace: Namespace,
-    key: &SlotKey,
-) -> Result<StateAccessMetric, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
-    charge_storage_access(accessor, key)?;
-
-    maybe_trace_span!("access::charge_bias_for_read", {
-        accessor.charge_gas(<Accessor::Spec as GasSpec>::bias_to_charge_for_read())
-    })?;
-
-    let mut metric = StateAccessMetric::new_size();
-    let value_size = accessor.get_size(namespace, key, &mut metric);
-
-    match value_size {
-        Some(0) | None => {}
-        Some(value_size) => {
-            maybe_trace_span!("access::charge_per_byte_read", {
-                accessor.charge_linear_gas(
-                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_read(),
-                    value_size,
-                )
-            })?;
-
-            maybe_trace_span!("access::charge_hash_update", {
-                accessor.charge_gas(<Accessor::Spec as GasSpec>::gas_to_charge_hash_update())
-            })?;
-
-            maybe_trace_span!("access::charge_per_byte_hash_update", {
-                accessor.charge_linear_gas(
-                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
-                    value_size,
-                )
-            })?;
+    charges: &[Charge<<Accessor::Spec as Spec>::Gas>],
+) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
+    #[cfg(not(feature = "gas-constant-estimation"))]
+    if let Some(meter) = accessor.try_as_basic_gas_meter() {
+        use crate::GasArray;
+        let total = charges.iter().try_fold(None, |total, &(amount, parameter)| {
+            let amount = match parameter {
+                Some(parameter) => amount.checked_scalar_product(u64::from(parameter))?,
+                None => amount,
+            };
+            match total {
+                None => Some(Some(amount)),
+                Some(total) => amount.checked_combine(total).map(Some),
+            }
+        });
+        if let Some(Some(total)) = total {
+            if meter.try_charge_quietly(total) {
+                return Ok(());
+            }
         }
     }
 
-    Ok(metric)
+    for &(amount, parameter) in charges {
+        match parameter {
+            Some(parameter) => accessor.charge_linear_gas(amount, parameter)?,
+            None => accessor.charge_gas(amount)?,
+        }
+    }
+    Ok(())
+}
+
+/// Charges the part of a read that doesn't depend on the value.
+fn charge_read_access<Accessor: GasMeter>(
+    accessor: &mut Accessor,
+    key: &SlotKey,
+) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
+    match u32::try_from(key.len()) {
+        Ok(key_size) if key_size > 0 => charge_all(
+            accessor,
+            &[
+                (<Accessor::Spec as GasSpec>::bias_to_charge_for_access(), None),
+                (<Accessor::Spec as GasSpec>::gas_to_charge_hash_update(), None),
+                (
+                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                    Some(key_size),
+                ),
+                (<Accessor::Spec as GasSpec>::bias_to_charge_for_read(), None),
+            ],
+        ),
+        _ => {
+            charge_storage_access(accessor, key)?;
+
+            maybe_trace_span!("access::charge_bias_for_read", {
+                accessor.charge_gas(<Accessor::Spec as GasSpec>::bias_to_charge_for_read())
+            })
+        }
+    }
+}
+
+/// Charges the part of a read that depends on the size of the value read.
+fn charge_read_value<Accessor: GasMeter>(
+    accessor: &mut Accessor,
+    value_size: Option<u32>,
+) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
+    match value_size {
+        Some(0) | None => Ok(()),
+        Some(value_size) => charge_all(
+            accessor,
+            &[
+                (
+                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_read(),
+                    Some(value_size),
+                ),
+                (<Accessor::Spec as GasSpec>::gas_to_charge_hash_update(), None),
+                (
+                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                    Some(value_size),
+                ),
+            ],
+        ),
+    }
 }
 
 /// Charge gas for state write
@@ -664,6 +720,30 @@ pub fn charge_write<Accessor: GasMeter>(
     key: &SlotKey,
     value_size: u32,
 ) -> Result<(), GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
+    if let Ok(key_size @ 1..) = u32::try_from(key.len()) {
+        return charge_all(
+            accessor,
+            &[
+                (<Accessor::Spec as GasSpec>::bias_to_charge_for_access(), None),
+                (<Accessor::Spec as GasSpec>::gas_to_charge_hash_update(), None),
+                (
+                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                    Some(key_size),
+                ),
+                (<Accessor::Spec as GasSpec>::bias_to_charge_storage_update(), None),
+                (
+                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_storage_update(),
+                    Some(value_size),
+                ),
+                (<Accessor::Spec as GasSpec>::gas_to_charge_hash_update(), None),
+                (
+                    <Accessor::Spec as GasSpec>::gas_to_charge_per_byte_hash_update(),
+                    Some(value_size),
+                ),
+            ],
+        );
+    }
+
     charge_storage_access(accessor, key)?;
 
     accessor.charge_gas(<Accessor::Spec as GasSpec>::bias_to_charge_storage_update())?;
@@ -691,7 +771,10 @@ pub(crate) fn get_inner<Accessor: UniversalStateAccessor + GasMeter>(
     namespace: Namespace,
     key: &SlotKey,
 ) -> Result<ValueWithMetrics, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
-    let size_metric = charge_read(accessor, namespace, key)?;
+    charge_read_access(accessor, key)?;
+    let mut size_metric = StateAccessMetric::new_size();
+    let value_size = accessor.get_size(namespace, key, &mut size_metric);
+    charge_read_value(accessor, value_size)?;
     let mut read_metric = StateAccessMetric::new_read();
 
     let value = accessor.get_value(namespace, key, &mut read_metric);

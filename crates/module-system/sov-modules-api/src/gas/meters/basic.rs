@@ -128,6 +128,36 @@ impl<S: Spec> BasicGasMeter<S> {
         })
     }
 
+    /// Charges `amount` if [`GasMeter::charge_gas`] would succeed, leaving the meter in the same
+    /// state it would, and returns whether it did. Unlike charging, this doesn't log when the meter
+    /// can't afford it, and leaves the meter unchanged.
+    #[cfg(not(feature = "gas-constant-estimation"))]
+    pub(crate) fn try_charge_quietly(&mut self, amount: S::Gas) -> bool {
+        let new_remaining_funds = match self.remaining_funds {
+            Some(funds) => match amount
+                .checked_value(self.gas_price)
+                .and_then(|value| funds.checked_sub(value))
+            {
+                Some(new_funds) => Some(new_funds),
+                None => return false,
+            },
+            None => None,
+        };
+        let Some(new_remaining_gas) = self.remaining_gas.checked_sub(amount) else {
+            return false;
+        };
+        let affordable = self
+            .initial_gas
+            .checked_sub(new_remaining_gas)
+            .and_then(|used| used.checked_value(self.gas_price))
+            .is_some();
+        if affordable {
+            self.remaining_funds = new_remaining_funds;
+            self.remaining_gas = new_remaining_gas;
+        }
+        affordable
+    }
+
     fn charge_gas_inner(&mut self, amount: S::Gas) -> Result<(), GasMeteringError<S::Gas>> {
         let mut new_remaining_funds = None;
 
