@@ -45,6 +45,7 @@ impl Amount {
     /// Maximum number of decimals allowed for fixed-point representation of `Amount`s.
     pub const MAX_DECIMALS: u8 = MAX_U128_DECIMAL_PLACES;
     #[allow(missing_docs)]
+    #[inline]
     pub const fn new(amount: u128) -> Self {
         Self(amount)
     }
@@ -63,16 +64,19 @@ impl IntegerDisplayable for Amount {
 
 impl Amount {
     /// Checked addition.
+    #[inline]
     pub fn checked_add(&self, other: Amount) -> Option<Amount> {
         self.0.checked_add(other.0).map(Amount)
     }
 
     /// Checked subtraction.
+    #[inline]
     pub fn checked_sub(&self, other: Amount) -> Option<Amount> {
         self.0.checked_sub(other.0).map(Amount)
     }
 
     /// Checked multiplication.
+    #[inline]
     pub fn checked_mul(&self, other: Amount) -> Option<Amount> {
         self.0.checked_mul(other.0).map(Amount)
     }
@@ -81,14 +85,17 @@ impl Amount {
         self.0.checked_div(other.0).map(Amount)
     }
     /// Saturating addition
+    #[inline]
     pub fn saturating_add(&self, other: Amount) -> Amount {
         Amount(self.0.saturating_add(other.0))
     }
     /// Saturating subtraction
+    #[inline]
     pub fn saturating_sub(&self, other: Amount) -> Amount {
         Amount(self.0.saturating_sub(other.0))
     }
     /// Saturating multiplication
+    #[inline]
     pub fn saturating_mul(&self, other: Amount) -> Amount {
         Amount(self.0.saturating_mul(other.0))
     }
