@@ -43,5 +43,7 @@ pub trait HierarchicalStorageManager<Da: DaSpec>: Send + Sync {
 
     /// Finalizes state on given block header.
     /// Usually means that this state won't be altered anymore and can be persisted.
+    /// Implementations may persist it asynchronously: once this returns, the state is visible to
+    /// storages created afterwards, but it is not guaranteed to be on disk yet.
     fn finalize(&mut self, block_header: &Da::BlockHeader) -> anyhow::Result<()>;
 }
