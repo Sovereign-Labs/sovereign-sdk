@@ -53,11 +53,11 @@ where
     I: StateProvider<S>,
     C: InjectedControlFlow<S>,
 {
-    #[cfg(feature = "native")]
+    #[cfg(feature = "expensive-observability")]
     let visible_slot_number =
         sov_modules_api::VersionReader::current_visible_slot_number(&pre_exec_working_set);
 
-    #[cfg(feature = "native")]
+    #[cfg(feature = "expensive-observability")]
     let (start, discriminant) = {
         (
             std::time::Instant::now(),
@@ -80,7 +80,7 @@ where
         sequencer_type,
     );
 
-    #[cfg(feature = "native")]
+    #[cfg(feature = "expensive-observability")]
     track_transaction_metrics(
         &result.0,
         start.elapsed(),
@@ -95,7 +95,11 @@ where
     result
 }
 
-#[cfg(feature = "native")]
+/// Submits two metrics per transaction (`sov_rollup_transaction_execution_us` and
+/// `sov_rollup_auth_and_process_metrics`) and logs slow transactions.
+/// Gated behind `expensive-observability` because it runs on the STF hot path for every transaction,
+/// together with the `Debug`-formatted call message label. `sov_rollup_batch_processing` covers the per-batch view.
+#[cfg(feature = "expensive-observability")]
 fn track_transaction_metrics<S: Spec>(
     result: &Result<ApplyTxResult<S>, TxAndError>,
     execution_time: std::time::Duration,
