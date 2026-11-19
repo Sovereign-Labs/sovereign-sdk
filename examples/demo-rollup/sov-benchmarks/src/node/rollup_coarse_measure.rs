@@ -9,10 +9,11 @@ use humantime::format_duration;
 use prettytable::{row, Table};
 use sov_benchmarks::node::{generate_transfers, prefill_state};
 use sov_benchmarks::{setup_with_runner_and_spec, NomtBenchSpec};
+use sov_db::storage_manager::NomtStorageManager;
 use sov_mock_da::MockDaSpec;
 use sov_modules_api::prelude::anyhow;
-use sov_modules_api::Spec;
-use sov_test_utils::storage::{ForklessStorageManager, SimpleStorageManager};
+use sov_modules_api::{CryptoSpec, Spec};
+use sov_test_utils::storage::{CommitingStorageManager, ForklessStorageManager};
 use sov_test_utils::MockZkvm;
 
 // Minimum TPS, below which it is considered an issue
@@ -180,7 +181,20 @@ where
     Ok(())
 }
 
+/// The node's storage manager, finalizing every block (instant finality), so that the measured
+/// block time includes finalization and its background commit, as in the node.
+/// Witness generation is off: the witness is built when the block's session finishes, not at
+/// commit, so leaving it out keeps the measurement focused on execution and storage.
+type BenchStorageManager = CommitingStorageManager<
+    NomtStorageManager<
+        MockDaSpec,
+        <<NomtBenchSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher,
+        <NomtBenchSpec as Spec>::Storage,
+    >,
+    <NomtBenchSpec as Spec>::Storage,
+>;
+
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    run_with_spec::<NomtBenchSpec, SimpleStorageManager<_>>().await
+    run_with_spec::<NomtBenchSpec, BenchStorageManager>().await
 }

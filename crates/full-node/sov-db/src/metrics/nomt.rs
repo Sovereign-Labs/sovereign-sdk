@@ -20,7 +20,7 @@ use sov_rollup_interface::reexports::digest;
 ///   (compare with OS-level I/O metrics and other DBs' NOMT stats).
 ///
 /// **Correlate with:** `sov_nomt_commit_detailed` (slow commits often trace back here) and
-/// `sov_storage_manager_finalization` (finalization commit_time).
+/// `sov_nomt_begin_session` (`init_time`).
 #[derive(Debug)]
 pub struct NomtDbMetric {
     /// Logical name of the NOMT instance (user/kernel/ledger); used as the InfluxDB `db` tag.
@@ -96,8 +96,11 @@ impl Metric for NomtDbMetric {
 /// - `overlays` monotonically increasing → finalization is falling behind (the node cannot
 ///   promote unfinalized state to disk fast enough). Check `sov_rollup_runner_da.sync_distance`
 ///   and `sov_runner_process_stf_changes`.
-/// - `init_time` spiking with stable `overlays` → storage-engine contention at session start
-///   (often correlated with compaction or heavy commits on the same DB).
+/// - `init_time` growing → sessions wait for the background commit of finalized blocks, so
+///   commits are slower than slot execution and storage is the rollup's bottleneck. This is the
+///   main signal for it; `sov_storage_manager_finalization.wait_for_previous_commit_time` stays
+///   near zero because the next slot waits here first. Investigate `sov_nomt_db_stats`
+///   (disk/page-cache pressure) and `sov_nomt_commit_detailed`.
 ///
 /// **Correlate with:** `sov_storage_manager_finalization` (finalization latency drives overlays),
 /// `sov_nomt_commit_detailed` (commits can block session starts on the same DB).
@@ -132,18 +135,23 @@ impl Metric for NomtBeginSessionMetric {
 /// Wall-clock breakdown of finalizing one slot in the storage manager (promoting the oldest
 /// overlay to on-disk state). Emitted as `sov_storage_manager_finalization`.
 ///
-/// **What healthy looks like:** all three fields sub-second and stable from slot to slot.
+/// **What healthy looks like:** all fields sub-second and stable from slot to slot.
 ///
 /// **Diagnostic signals:**
-/// - `commit_time` dominates slot time → storage is the rollup's bottleneck. Investigate
-///   `sov_nomt_db_stats` (disk/page-cache pressure) and `sov_nomt_commit_detailed`.
+/// - Commits falling behind show up in `sov_nomt_begin_session.init_time`, not here:
+///   `wait_for_previous_commit_time` stays near zero because the next slot already waits for the
+///   commit when it starts its NOMT session.
 /// - `pruning_commit_time` is `Some` and consistently large → pruner backlog; cross-check
 ///   `sov_db_pruner` throughput and the rollup's retention configuration.
 /// - `preparation_time` rising → large overlays are being materialized; see
 ///   `sov_nomt_begin_session.overlays` and `sov_state_db_materialization`.
 #[derive(Debug)]
 pub struct StorageManagerFinalizationMetric {
+    /// Time spent waiting for the background commit of the previous finalization. Usually near
+    /// zero, even when commits lag; see `sov_nomt_begin_session.init_time`.
+    pub wait_for_previous_commit_time: std::time::Duration,
     pub preparation_time: std::time::Duration,
+    /// Time to discard dropped forks and start the background commit; excludes the commit itself.
     pub commit_time: std::time::Duration,
     /// `None` when pruning did not run this slot; `Some(_)` otherwise.
     pub pruning_commit_time: Option<std::time::Duration>,
@@ -157,8 +165,9 @@ impl Metric for StorageManagerFinalizationMetric {
     fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
         write!(
             buffer,
-            "{} prep_time_us={},commit_time_us={}",
+            "{} wait_for_previous_commit_time_us={},prep_time_us={},commit_time_us={}",
             self.measurement_name(),
+            self.wait_for_previous_commit_time.as_micros(),
             self.preparation_time.as_micros(),
             self.commit_time.as_micros(),
         )?;
