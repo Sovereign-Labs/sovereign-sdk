@@ -58,13 +58,15 @@ pub const LEDGER_TABLES: &[ColumnFamilyName] = &[
     ProofReceiptByHash::table_name(),
     ProofReceiptHashesBySlot::table_name(),
     FinalizedSlots::table_name(),
-    // NOTE: STF info tables are kept for backward compatibility with existing LedgerDb
-    // instances, even though ProofManagerDb owns this data now.
+    // Unused since STF infos moved to `ProofManagerDb`; kept so existing ledger DBs still open.
     // TODO(#1945): add in-place migration to drop these CFs.
     StfInfoByNumber::table_name(),
     StfInfoMetadata::table_name(),
     EventCountByKey::table_name(),
 ];
+
+/// Tables of the `ProofManagerDb`: the STF infos of finalized slots, waiting to be proven.
+pub const PROOF_MANAGER_TABLES: &[ColumnFamilyName] = &[StfInfoByNumber::table_name()];
 
 /// A list of all tables used by the AccessoryDB. These tables store
 /// "accessory" state only accessible from a native execution context, to be
@@ -74,11 +76,6 @@ pub const ACCESSORY_TABLES: &[ColumnFamilyName] = &[
     AccessoryKeysByVersion::table_name(),
     StateRootHashes::table_name(),
 ];
-
-/// A list of all tables used by the ProofManagerDb. These tables store
-/// proof-manager-specific data like STF info and metadata, persisted
-/// independently from the ledger commit loop.
-pub const PROOF_MANAGER_TABLES: &[ColumnFamilyName] = &[StfInfoByNumber::table_name()];
 
 /// Macro to define a table that implements [`rockbound::Schema`].
 /// `KeyCodec<Schema>` and `ValueCodec<Schema>` must be implemented separately.
@@ -240,11 +237,8 @@ define_table_with_seek_key_codec!(
 );
 
 define_table_with_seek_key_codec!(
-    /// The primary source for state transition info data, keyed by `(slot, DA block hash)` so
-    /// competing forks at the same slot are distinct rows. The consumer reads the finalized fork
-    /// (selected by the canonical hash carried on the notification); pruning sweeps all rows
-    /// below the cutoff by a slot-prefix range, removing orphan forks for free.
-    (StfInfoByNumber) (SlotNumber, DbHash) => StoredStfInfo
+    /// The primary source for state transition info data.
+    (StfInfoByNumber) SlotNumber => StoredStfInfo
 );
 
 define_table_with_default_codec!(

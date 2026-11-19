@@ -27,9 +27,7 @@ pub mod schema;
 /// the provable state root and does not contribute to proofs of execution.
 pub mod accessory_db;
 
-/// Implements a wrapper around RocksDB for storing proof manager state.
-/// This database persists proof-manager-specific data independently from the
-/// ledger commit loop, enabling immediate persistence of critical metadata.
+/// RocksDB wrapper for the STF infos of finalized slots, kept apart from the `LedgerDb`.
 pub mod proof_manager_db;
 pub use proof_manager_db::ProofManagerDb;
 

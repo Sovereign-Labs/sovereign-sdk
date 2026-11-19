@@ -288,20 +288,10 @@ pub async fn initialize_runner_with_stop_at(
         });
 
     let axum_tcp = TcpListener::bind(axum_socket_addr).await.unwrap();
-    let pm_config = nb_of_prover_threads
-        .is_some()
-        .then(|| {
-            rollup_config.proof_manager.clone().map(|mut pm| {
-                pm.storage_path.get_or_insert(path.to_path_buf());
-                pm
-            })
-        })
-        .flatten();
-
     let mut runner = StateTransitionRunner::new(
         rollup_config.runner.clone(),
         axum_tcp,
-        pm_config,
+        nb_of_prover_threads.and(rollup_config.proof_manager),
         da_service.clone(),
         ledger_db.clone(),
         stf,
@@ -316,7 +306,7 @@ pub async fn initialize_runner_with_stop_at(
         da_service_with_cache,
         0,
         None,
-        false,
+        path,
     )
     .await
     .unwrap();
@@ -332,7 +322,6 @@ pub async fn initialize_runner_with_stop_at(
             );
         let proof_manager = rollup_config
             .proof_manager
-            .as_ref()
             .expect("proof_manager must be set when prover is enabled");
         let handle = start_zk_workflow_in_background::<_>(
             prover_service,
@@ -476,7 +465,6 @@ pub fn rollup_config_with_da<Da: DaService<Config = MockDaConfig>>(
             prover_thread_count_override: None,
             max_number_of_aggregated_proofs_in_memory: NonZero::new(5).unwrap(),
             max_concurrent_proof_blobs: TEST_MAX_CONCURRENT_PROOF_BLOBS,
-            storage_path: None,
         }),
         sequencer: SequencerConfig {
             automatic_batch_production: true,
