@@ -187,7 +187,7 @@ where
         self.committer().commit_helper(group, Some(expected_latest))
     }
 
-    #[cfg(feature = "migration-script")]
+    /// The latest slot committed to the on-disk flat state DB.
     pub(crate) fn latest_flat_state_version(&self) -> anyhow::Result<Option<SlotNumber>> {
         Ok(self
             .flat_state
@@ -301,11 +301,11 @@ where
 
     pub(crate) fn create_storage<S: InitializableNativeNomtStorage<H, K>>(
         &self,
-        // Snapshot refs are in reveresed chronological order.
+        // Snapshot refs are in reverse chronological order.
         relevant_snapshot_refs: Vec<K>,
         // Rockbound snapshots of the same blocks as `relevant_snapshot_refs`, in chronological order.
         rockbound_snapshots: Vec<&SnapshotGroup>,
-        // Live flat state version that `rockbound_snapshots` are layered on top of.
+        // On-disk flat state version that `rockbound_snapshots` are layered on top of.
         base_version: Option<u64>,
         nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
         strict_mode: bool,
@@ -366,14 +366,6 @@ where
             witness_mode,
         );
         Ok((storage, ledger_reader))
-    }
-
-    /// The latest version committed to the live flat state DB.
-    pub(crate) fn live_flat_version(&self) -> anyhow::Result<Option<u64>> {
-        Ok(self
-            .flat_state
-            .latest_version_and_root_hash_live_db()?
-            .map(|(v, _)| v))
     }
 
     pub(crate) fn update_ledger_finalized_height(&self) -> anyhow::Result<()> {
@@ -452,6 +444,7 @@ where
         }
     }
 }
+
 /// Write handles of [`DbGroup`] used to commit a [`CommitGroup`].
 pub(crate) struct DbCommitter<H> {
     merklized_state: Arc<NomtStateDb<H>>,
@@ -471,9 +464,11 @@ where
     fn commit_helper(
         &self,
         group: CommitGroup,
+        // Some(head) rewrites the current version for an offline migration after checking
+        // that the head still matches; None appends a new version for normal finalization.
         expected_latest: Option<SlotNumber>,
     ) -> anyhow::Result<()> {
-        tracing::trace!("Commiting a group...");
+        tracing::trace!(?expected_latest, "Committing a group...");
         // The last commit had to be successful.
         let CommitGroup { nomt, rockbound } = group;
         let merklized_commit = self.commit_merklized(nomt)?;
@@ -568,8 +563,6 @@ where
 
     fn commit_ledger(&self, ledger: &SchemaBatch) -> anyhow::Result<Duration> {
         let ledger_start = std::time::Instant::now();
-        // Ledger goes after last, as its data is used during the start.
-        // So if ledger save failed, state and accessory will be synced from DA
         self.ledger.write_schemas(ledger)?;
         Ok(ledger_start.elapsed())
     }
