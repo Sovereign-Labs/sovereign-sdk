@@ -168,8 +168,8 @@ pub struct RollupDbConfig {
     /// A larger cache size can improve execution speed at the cost of more memory usage.
     pub state_cache_size: Option<usize>,
     /// Enables RocksDB statistics on the live flat state database and reports them in the
-    /// `sov_flat_state_reads` metric. Statistics add a few percent to every RocksDB read, i.e. to
-    /// reads that miss the state cache. Default is `false`.
+    /// `sov_flat_state_reads` metric. Statistics add a small overhead to every operation on that
+    /// database: reads that miss the state cache, writes, flushes and compactions. Default is `false`.
     #[serde(default)]
     pub flat_state_rocksdb_statistics: bool,
 

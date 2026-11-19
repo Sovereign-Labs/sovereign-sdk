@@ -304,10 +304,10 @@ pub struct FlatStateCommitMetric {
 
 /// Flat state reads since the previous flat state commit, emitted as `sov_flat_state_reads` once
 /// per commit. Every field is a counter delta:
-/// - `{user,kernel}_cache_{hits,misses}`: lookups in the in-memory state cache (`DbCache`). A miss
-///   reads RocksDB and fills the cache.
-/// - `{user,kernel}_cache_bypasses`: reads that skipped the cache because a commit held its write
-///   lock; each one reads RocksDB.
+/// - `{user,kernel}_cache_{hits,misses}` (only with the `sov-db/cache-stats` cargo feature):
+///   lookups in the in-memory state cache (`DbCache`). A miss reads RocksDB and fills the cache.
+/// - `{user,kernel}_cache_bypasses`: reads that skipped the cache because a commit held or was
+///   acquiring its write lock; each one reads RocksDB.
 /// - `rocksdb_*` (only with `flat_state_rocksdb_statistics = true`): live RocksDB tickers, plus
 ///   count and sum of the `get` and SST-read latency histograms. `*_sum_us / *_count` is the mean
 ///   latency over the interval.

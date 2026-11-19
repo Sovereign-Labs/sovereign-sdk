@@ -66,8 +66,8 @@ pub struct FlatStateDb {
     /// Options `live_db` was opened with, kept when RocksDB statistics are enabled: they share
     /// the statistics object with the open DB.
     live_db_statistics: Option<rocksdb::Options>,
-    /// Cumulative read counters at the previous commit, for [`FlatStateReadsMetric`] deltas.
-    previous_read_counters: parking_lot::Mutex<Vec<(&'static str, u64)>>,
+    /// Values of [`Self::read_counters`] at the previous commit, for [`FlatStateReadsMetric`] deltas.
+    previous_read_counters: parking_lot::Mutex<Vec<u64>>,
 }
 
 impl FlatStateDb {
@@ -242,23 +242,26 @@ impl FlatStateDb {
 
     /// Cumulative read counters since the DB was opened.
     fn read_counters(&self) -> Vec<(&'static str, u64)> {
-        let mut counters = {
+        let mut counters = vec![
+            (
+                "user_cache_bypasses",
+                self.db_cache.user_bypasses.load(Ordering::Relaxed),
+            ),
+            (
+                "kernel_cache_bypasses",
+                self.db_cache.kernel_bypasses.load(Ordering::Relaxed),
+            ),
+        ];
+        #[cfg(feature = "cache-stats")]
+        {
             let inner = self.db_cache.inner.read();
-            vec![
+            counters.extend([
                 ("user_cache_hits", inner.user_cache.hits()),
                 ("user_cache_misses", inner.user_cache.misses()),
                 ("kernel_cache_hits", inner.kernel_cache.hits()),
                 ("kernel_cache_misses", inner.kernel_cache.misses()),
-            ]
-        };
-        counters.push((
-            "user_cache_bypasses",
-            self.db_cache.user_bypasses.load(Ordering::Relaxed),
-        ));
-        counters.push((
-            "kernel_cache_bypasses",
-            self.db_cache.kernel_bypasses.load(Ordering::Relaxed),
-        ));
+            ]);
+        }
         if let Some(options) = &self.live_db_statistics {
             for (name, ticker) in ROCKSDB_TICKERS {
                 counters.push((name, options.get_ticker_count(ticker)));
@@ -273,17 +276,19 @@ impl FlatStateDb {
     }
 
     fn submit_read_metrics(&self) {
-        let counters = self.read_counters();
         let mut previous = self.previous_read_counters.lock();
+        let counters = self.read_counters();
         let deltas = counters
             .iter()
             .enumerate()
-            .map(|(i, (name, value))| {
-                let previous_value = previous.get(i).map_or(0, |(_, value)| *value);
-                (*name, value.saturating_sub(previous_value))
+            .map(|(i, &(name, value))| {
+                (
+                    name,
+                    value.saturating_sub(previous.get(i).copied().unwrap_or(0)),
+                )
             })
             .collect();
-        *previous = counters;
+        *previous = counters.into_iter().map(|(_, value)| value).collect();
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(FlatStateReadsMetric { counters: deltas });
         });
@@ -657,7 +662,7 @@ struct Inner {
 #[derive(Clone)]
 pub struct DbCache {
     inner: Arc<RwLock<Inner>>,
-    /// Reads that skipped the cache because a commit held its write lock.
+    /// Reads that skipped the cache because a commit held or was acquiring its write lock.
     user_bypasses: Arc<AtomicU64>,
     kernel_bypasses: Arc<AtomicU64>,
 }
@@ -1211,6 +1216,7 @@ mod tests {
             .1
     }
 
+    #[cfg(feature = "cache-stats")]
     #[test]
     fn cache_hits_and_misses_are_counted() {
         let tempdir = tempfile::tempdir().unwrap();
