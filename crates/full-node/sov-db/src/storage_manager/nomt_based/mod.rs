@@ -369,9 +369,8 @@ where
     }
 
     /// Blocks until the background commit thread has finished, without joining it.
-    /// Test-only observability hook.
-    #[cfg(any(test, feature = "test-utils"))]
-    pub fn wait_for_commit_to_finish(&self) {
+    #[cfg(test)]
+    pub(crate) fn wait_for_commit_to_finish(&self) {
         if let Some(committing) = &self.committing {
             while !committing.handle.is_finished() {
                 std::thread::yield_now();
@@ -736,16 +735,9 @@ where
         let Some(committing) = self.committing.take() else {
             return;
         };
-        if let Err(panic) = committing.handle.join() {
-            let message = panic
-                .downcast_ref::<&str>()
-                .copied()
-                .or_else(|| panic.downcast_ref::<String>().map(String::as_str))
-                .unwrap_or("<non-string panic payload>");
-            tracing::error!(
-                %message,
-                "Background storage commit has panicked during shutdown"
-            );
+        // The panic message has already been printed by the commit thread's panic hook.
+        if committing.handle.join().is_err() {
+            tracing::error!("Background storage commit has panicked during shutdown");
         }
     }
 }
