@@ -181,17 +181,17 @@ where
     Ok(())
 }
 
-type BenchStorage = <NomtBenchSpec as Spec>::Storage;
-
 /// The node's storage manager, finalizing every block (instant finality), so that the measured
 /// block time includes finalization and its background commit, as in the node.
+/// Witness generation is off: the witness is built when the block's session finishes, not at
+/// commit, so leaving it out keeps the measurement focused on execution and storage.
 type BenchStorageManager = CommitingStorageManager<
     NomtStorageManager<
         MockDaSpec,
         <<NomtBenchSpec as Spec>::CryptoSpec as CryptoSpec>::Hasher,
-        BenchStorage,
+        <NomtBenchSpec as Spec>::Storage,
     >,
-    BenchStorage,
+    <NomtBenchSpec as Spec>::Storage,
 >;
 
 #[tokio::main]
