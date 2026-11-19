@@ -817,7 +817,6 @@ pub(crate) fn get_inner<Accessor: UniversalStateAccessor + GasMeter>(
     namespace: Namespace,
     key: &SlotKey,
 ) -> Result<ValueWithMetrics, GasMeteringError<<Accessor::Spec as Spec>::Gas>> {
-    let mut size_metric = StateAccessMetric::new_size();
     // A cached value is read without side effects, so all of the read's gas can be charged at
     // once after the lookup; that ends in the same state, error and out-of-gas point as charging
     // for the access, looking up the size and charging for the value in turn.
@@ -828,9 +827,16 @@ pub(crate) fn get_inner<Accessor: UniversalStateAccessor + GasMeter>(
             let size = value.as_ref().map(SlotValue::size).unwrap_or(0);
             Span::current().record("value_size_bytes", size);
         }
-        return Ok((value, size_metric, StateAccessMetric::new_read()));
+        // An in-memory hit is not timed: it is counted as a size and a value access, like any
+        // read, but with zero duration and without reading the clock.
+        return Ok((
+            value,
+            StateAccessMetric::placeholder(),
+            StateAccessMetric::placeholder(),
+        ));
     }
 
+    let mut size_metric = StateAccessMetric::new_size();
     // Otherwise the size lookup may fetch from storage and update the witness, so the access is
     // paid for first, and the value is only read after its size was paid for.
     charge_read_access(accessor, key)?;
