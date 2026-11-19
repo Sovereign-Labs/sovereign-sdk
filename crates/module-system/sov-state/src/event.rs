@@ -62,4 +62,9 @@ impl TypeErasedEvent {
     pub fn event_key(&self) -> &[u8] {
         &self.event_key
     }
+
+    /// Takes the event key out, leaving it empty.
+    pub fn take_event_key(&mut self) -> Vec<u8> {
+        core::mem::take(&mut self.event_key)
+    }
 }
