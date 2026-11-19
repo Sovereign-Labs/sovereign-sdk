@@ -301,23 +301,22 @@ where
 
     pub(crate) fn create_storage<S: InitializableNativeNomtStorage<H, K>>(
         &self,
-        // Snapshot refs are in reverse chronological order.
-        relevant_snapshot_refs: Vec<K>,
-        // Rockbound snapshots of the same blocks as `relevant_snapshot_refs`, in chronological order.
-        rockbound_snapshots: Vec<&SnapshotGroup>,
-        // On-disk flat state version that `rockbound_snapshots` are layered on top of.
+        // Block refs with their rockbound snapshots, in reverse chronological order.
+        snapshots: Vec<(K, &SnapshotGroup)>,
+        // On-disk flat state version that `snapshots` are layered on top of.
         base_version: Option<u64>,
         nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
         strict_mode: bool,
         witness_mode: WitnessMode,
     ) -> anyhow::Result<(S, DeltaReader)> {
-        let mut historical_state_snapshots = Vec::with_capacity(rockbound_snapshots.len());
-        let mut user_state_snapshots = Vec::with_capacity(rockbound_snapshots.len());
-        let mut kernel_state_snapshots = Vec::with_capacity(rockbound_snapshots.len());
-        let mut accessory_snapshots = Vec::with_capacity(rockbound_snapshots.len());
-        let mut ledger_snapshots = Vec::with_capacity(rockbound_snapshots.len());
+        let mut historical_state_snapshots = Vec::with_capacity(snapshots.len());
+        let mut user_state_snapshots = Vec::with_capacity(snapshots.len());
+        let mut kernel_state_snapshots = Vec::with_capacity(snapshots.len());
+        let mut accessory_snapshots = Vec::with_capacity(snapshots.len());
+        let mut ledger_snapshots = Vec::with_capacity(snapshots.len());
 
-        for snapshot in rockbound_snapshots {
+        // rockbound-based readers expect snapshots in chronological order.
+        for (_, snapshot) in snapshots.iter().rev() {
             historical_state_snapshots.push(snapshot.historical_state.root_hash_batch.clone());
             user_state_snapshots.push(snapshot.historical_state.user.clone());
             kernel_state_snapshots.push(snapshot.historical_state.kernel.clone());
@@ -327,6 +326,7 @@ where
 
         // NOMT-based readers expect snapshots in reversed chronological order,
         // the same as it was passed to the function.
+        let relevant_snapshot_refs = snapshots.into_iter().map(|(k, _)| k).collect();
         let state_session_builder = NomtSessionBuilder::new(
             self.merklized_state.clone(),
             relevant_snapshot_refs,

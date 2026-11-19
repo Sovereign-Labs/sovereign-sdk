@@ -230,14 +230,14 @@ where
         strict_mode: bool,
         witness_mode: WitnessMode,
     ) -> anyhow::Result<(S, DeltaReader)> {
-        // NOMT uses newest-first references; Rockbound applies snapshots oldest-first.
-        let rockbound_snapshots = rev_references
-            .iter()
-            .rev()
+        let snapshots = rev_references
+            .into_iter()
             .map(|block_hash| {
-                self.rockbound_snapshots
-                    .get(block_hash)
-                    .expect("Referenced block must have a rockbound snapshot")
+                let snapshot = self
+                    .rockbound_snapshots
+                    .get(&block_hash)
+                    .expect("Referenced block must have a rockbound snapshot");
+                (block_hash, snapshot)
             })
             .collect();
         // Finalization commits synchronously under `&mut self`, so the on-disk base
@@ -247,8 +247,7 @@ where
             .latest_flat_state_version()?
             .map(|slot| slot.get());
         self.db_group.create_storage(
-            rev_references,
-            rockbound_snapshots,
+            snapshots,
             base_version,
             self.nomt_snapshots.clone(),
             strict_mode,
