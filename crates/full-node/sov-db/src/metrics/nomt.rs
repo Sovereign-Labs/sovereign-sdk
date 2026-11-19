@@ -302,6 +302,45 @@ pub struct FlatStateCommitMetric {
     pub write: std::time::Duration,
 }
 
+/// Flat state reads since the previous flat state commit, emitted as `sov_flat_state_reads` once
+/// per commit. Every field is a counter delta:
+/// - `{user,kernel}_cache_{hits,misses}` (only with the `sov-db/cache-stats` cargo feature):
+///   lookups in the in-memory state cache (`DbCache`). A miss reads RocksDB and fills the cache.
+/// - `{user,kernel}_cache_bypasses`: reads that skipped the cache because a commit held or was
+///   acquiring its write lock; each one reads RocksDB.
+/// - `rocksdb_*` (only with `flat_state_rocksdb_statistics = true`): live RocksDB tickers, plus
+///   count and sum of the `get` and SST-read latency histograms. `*_sum_us / *_count` is the mean
+///   latency over the interval.
+///
+/// **Diagnostic signals:**
+/// - `rocksdb_sst_read_sum_us / rocksdb_sst_read_count` rising → SST block reads leave the OS page
+///   cache and hit the disk.
+/// - `rocksdb_block_cache_data_miss` rising with flat `rocksdb_get_count` → the working set has
+///   outgrown the block cache.
+///
+/// **Correlate with:** `sov_nomt_commit_detailed.flat_write_us` (the window in which reads bypass
+/// the cache).
+#[derive(Debug)]
+pub struct FlatStateReadsMetric {
+    /// `(field name, delta)` pairs.
+    pub counters: Vec<(&'static str, u64)>,
+}
+
+impl Metric for FlatStateReadsMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_flat_state_reads"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        write!(buffer, "{}", self.measurement_name())?;
+        for (i, (name, value)) in self.counters.iter().enumerate() {
+            let separator = if i == 0 { ' ' } else { ',' };
+            write!(buffer, "{separator}{name}={value}")?;
+        }
+        Ok(())
+    }
+}
+
 #[derive(Debug)]
 pub struct CommitDetailedMetric {
     pub merklized_commit: MerklizedCommitMetric,

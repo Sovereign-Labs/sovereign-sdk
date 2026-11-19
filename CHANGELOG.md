@@ -1,3 +1,5 @@
+# 2026-11-19
+- #3156 DB: Adds the `sov_flat_state_reads` metric, emitted once per flat state commit with counter deltas of reads that bypassed the state cache during a commit. Optional extras: state cache hits/misses via the new `sov-db/cache-stats` cargo feature, and live flat state RocksDB tickers and get/SST-read latency via the new `storage.flat_state_rocksdb_statistics` config value (default `false`; adds a small overhead to every RocksDB operation on that database). `RollupDbConfig` gains the public `flat_state_rocksdb_statistics` field, so code that builds it with a struct literal must set it.
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 

@@ -19,6 +19,8 @@ sov-rollup-interface = { workspace = true, features = ["native"] }
 nomt = { workspace = true }
 sov-metrics = { workspace = true, features = ["native"] }
 parking_lot = "0.12.4"
+# Only to enable hit/miss counters on rockbound's cache (`cache-stats` feature).
+quick_cache = { workspace = true, optional = true }
 
 # External
 anyhow = { workspace = true, default-features = true }
@@ -72,6 +74,8 @@ arbitrary = [
 	"sov-db-types/arbitrary"
 ]
 migration-script = []
+# Reports flat state cache hits/misses in `sov_flat_state_reads`. Adds an atomic increment to every cache lookup.
+cache-stats = ["dep:quick_cache", "quick_cache/stats"]
 test-utils = ["dep:rand", "strum"]
 
 [[bench]]

@@ -167,6 +167,11 @@ pub struct RollupDbConfig {
     /// The size of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB.
     /// A larger cache size can improve execution speed at the cost of more memory usage.
     pub state_cache_size: Option<usize>,
+    /// Enables RocksDB statistics on the live flat state database and reports them in the
+    /// `sov_flat_state_reads` metric. Statistics add a small overhead to every operation on that
+    /// database: reads that miss the state cache, writes, flushes and compactions. Default is `false`.
+    #[serde(default)]
+    pub flat_state_rocksdb_statistics: bool,
 
     /// Number of concurrent commit workers for the user state.
     /// More details at [`Options::commit_concurrency`]
@@ -228,6 +233,7 @@ impl RollupDbConfig {
             ledger_db_path: None,
             user_nomt_db_path: None,
             state_cache_size: Some(1_000_000), // Use a 1MB state cache for tests
+            flat_state_rocksdb_statistics: false,
             user_commit_concurrency: Some(2),
             user_hashtable_buckets: Some(if cfg!(debug_assertions) {
                 500

@@ -2,7 +2,7 @@
 //! used by NOMT.
 
 use crate::historical_state::{HistoricalStateReader, STATE_ROOT_HASH_SINGLETON};
-use crate::metrics::nomt::FlatStateCommitMetric;
+use crate::metrics::nomt::{FlatStateCommitMetric, FlatStateReadsMetric};
 use crate::{
     config::{RocksDbKind, RollupDbConfigWithCustomizations},
     historical_state::StateChanges,
@@ -21,7 +21,40 @@ use rockbound::{
 };
 use rockbound::{rocksdb, SchemaBatch, DB};
 use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+
+const ROCKSDB_TICKERS: [(&str, rocksdb::statistics::Ticker); 9] = {
+    use rocksdb::statistics::Ticker;
+    [
+        ("rocksdb_memtable_hit", Ticker::MemtableHit),
+        ("rocksdb_memtable_miss", Ticker::MemtableMiss),
+        ("rocksdb_get_hit_l0", Ticker::GetHitL0),
+        ("rocksdb_get_hit_l1", Ticker::GetHitL1),
+        ("rocksdb_get_hit_l2_and_up", Ticker::GetHitL2AndUp),
+        ("rocksdb_bloom_filter_useful", Ticker::BloomFilterUseful),
+        (
+            "rocksdb_bloom_filter_full_positive",
+            Ticker::BloomFilterFullPositive,
+        ),
+        ("rocksdb_block_cache_data_hit", Ticker::BlockCacheDataHit),
+        ("rocksdb_block_cache_data_miss", Ticker::BlockCacheDataMiss),
+    ]
+};
+
+/// `(count field, sum field, histogram)`.
+const ROCKSDB_HISTOGRAMS: [(&str, &str, rocksdb::statistics::Histogram); 2] = [
+    (
+        "rocksdb_get_count",
+        "rocksdb_get_sum_us",
+        rocksdb::statistics::Histogram::DbGet,
+    ),
+    (
+        "rocksdb_sst_read_count",
+        "rocksdb_sst_read_sum_us",
+        rocksdb::statistics::Histogram::SstReadMicros,
+    ),
+];
 
 /// A database to store the flat state of the rollup (i.e. the raw key-value pairs)
 pub struct FlatStateDb {
@@ -30,6 +63,11 @@ pub struct FlatStateDb {
     pub(crate) live_db: Arc<rockbound::DB>,
     pub(crate) archival_db: Arc<rockbound::DB>,
     db_cache: DbCache,
+    /// Options `live_db` was opened with, kept when RocksDB statistics are enabled: they share
+    /// the statistics object with the open DB.
+    live_db_statistics: Option<rocksdb::Options>,
+    /// Values of [`Self::read_counters`] at the previous commit, for [`FlatStateReadsMetric`] deltas.
+    previous_read_counters: parking_lot::Mutex<Vec<u64>>,
 }
 
 impl FlatStateDb {
@@ -49,6 +87,15 @@ impl FlatStateDb {
         cache_size: usize,
         custom_config: Option<&RollupDbConfigWithCustomizations>,
     ) -> anyhow::Result<Self> {
+        let mut live_db_options = custom_config
+            .map(|custom_config| custom_config.get_rocksdb_options(RocksDbKind::FlatStateLive))
+            .unwrap_or_else(|| rocks_db_config::gen_rocksdb_options(&Default::default(), false));
+        let rocksdb_statistics =
+            custom_config.is_some_and(|config| config.config().flat_state_rocksdb_statistics);
+        if rocksdb_statistics {
+            live_db_options.enable_statistics();
+        }
+
         let open_live_db = || -> anyhow::Result<Arc<DB>> {
             let mut live_columns = vec![Self::default_cf_descriptor(
                 RocksDbKind::FlatStateLive,
@@ -80,12 +127,6 @@ impl FlatStateDb {
                     );
                 },
             )?;
-
-            let live_db_options = custom_config
-                .map(|custom_config| custom_config.get_rocksdb_options(RocksDbKind::FlatStateLive))
-                .unwrap_or_else(|| {
-                    rocks_db_config::gen_rocksdb_options(&Default::default(), false)
-                });
 
             let live_path = custom_config
                 .and_then(|config| config.config().live_db_path.clone())
@@ -166,7 +207,11 @@ impl FlatStateDb {
             ),
         }));
 
-        let db_cache = DbCache { inner };
+        let db_cache = DbCache {
+            inner,
+            user_bypasses: Default::default(),
+            kernel_bypasses: Default::default(),
+        };
 
         let user = Arc::new(
             VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::from_dbs(
@@ -190,7 +235,63 @@ impl FlatStateDb {
             kernel,
             live_db,
             archival_db,
+            live_db_statistics: rocksdb_statistics.then_some(live_db_options),
+            previous_read_counters: Default::default(),
         })
+    }
+
+    /// Cumulative read counters since the DB was opened.
+    fn read_counters(&self) -> Vec<(&'static str, u64)> {
+        let mut counters = vec![
+            (
+                "user_cache_bypasses",
+                self.db_cache.user_bypasses.load(Ordering::Relaxed),
+            ),
+            (
+                "kernel_cache_bypasses",
+                self.db_cache.kernel_bypasses.load(Ordering::Relaxed),
+            ),
+        ];
+        #[cfg(feature = "cache-stats")]
+        {
+            let inner = self.db_cache.inner.read();
+            counters.extend([
+                ("user_cache_hits", inner.user_cache.hits()),
+                ("user_cache_misses", inner.user_cache.misses()),
+                ("kernel_cache_hits", inner.kernel_cache.hits()),
+                ("kernel_cache_misses", inner.kernel_cache.misses()),
+            ]);
+        }
+        if let Some(options) = &self.live_db_statistics {
+            for (name, ticker) in ROCKSDB_TICKERS {
+                counters.push((name, options.get_ticker_count(ticker)));
+            }
+            for (count_name, sum_name, histogram) in ROCKSDB_HISTOGRAMS {
+                let data = options.get_histogram_data(histogram);
+                counters.push((count_name, data.count()));
+                counters.push((sum_name, data.sum()));
+            }
+        }
+        counters
+    }
+
+    fn submit_read_metrics(&self) {
+        let mut previous = self.previous_read_counters.lock();
+        let counters = self.read_counters();
+        let deltas = counters
+            .iter()
+            .enumerate()
+            .map(|(i, &(name, value))| {
+                (
+                    name,
+                    value.saturating_sub(previous.get(i).copied().unwrap_or(0)),
+                )
+            })
+            .collect();
+        *previous = counters.into_iter().map(|(_, value)| value).collect();
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(FlatStateReadsMetric { counters: deltas });
+        });
     }
 
     fn default_cf_descriptor(
@@ -456,6 +557,9 @@ impl FlatStateDb {
         );
 
         let write = start_write.elapsed();
+        if is_commit {
+            self.submit_read_metrics();
+        }
         Ok(FlatStateCommitMetric { prepare, write })
     }
 
@@ -558,6 +662,9 @@ struct Inner {
 #[derive(Clone)]
 pub struct DbCache {
     inner: Arc<RwLock<Inner>>,
+    /// Reads that skipped the cache because a commit held or was acquiring its write lock.
+    user_bypasses: Arc<AtomicU64>,
+    kernel_bypasses: Arc<AtomicU64>,
 }
 
 impl CacheForVersionedDB<NomtStateValues<UserNamespace>> for DbCache {
@@ -577,7 +684,10 @@ impl CacheForVersionedDB<NomtStateValues<UserNamespace>> for DbCache {
         &self,
     ) -> Option<MappedRwLockReadGuard<'_, rockbound::CacheForSchema<NomtStateValues<UserNamespace>>>>
     {
-        let lock = self.inner.try_read()?;
+        let Some(lock) = self.inner.try_read() else {
+            self.user_bypasses.fetch_add(1, Ordering::Relaxed);
+            return None;
+        };
         Some(RwLockReadGuard::map(lock, |c: &Inner| &c.user_cache))
     }
 }
@@ -602,7 +712,10 @@ impl CacheForVersionedDB<NomtStateValues<KernelNamespace>> for DbCache {
     ) -> Option<
         MappedRwLockReadGuard<'_, rockbound::CacheForSchema<NomtStateValues<KernelNamespace>>>,
     > {
-        let lock = self.inner.try_read()?;
+        let Some(lock) = self.inner.try_read() else {
+            self.kernel_bypasses.fetch_add(1, Ordering::Relaxed);
+            return None;
+        };
         Some(RwLockReadGuard::map(lock, |c: &Inner| &c.kernel_cache))
     }
 }
@@ -1092,5 +1205,79 @@ mod tests {
                 let _ = std::fs::remove_file(temp_dir.path().join(db).join(lock_file));
             }
         }
+    }
+
+    fn read_counter(flat_db: &FlatStateDb, name: &str) -> u64 {
+        flat_db
+            .read_counters()
+            .into_iter()
+            .find(|(counter, _)| *counter == name)
+            .unwrap_or_else(|| panic!("counter {name} is not reported"))
+            .1
+    }
+
+    #[cfg(feature = "cache-stats")]
+    #[test]
+    fn cache_hits_and_misses_are_counted() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let flat_db = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000).unwrap();
+        flat_db
+            .commit(data_to_insert_per_version().change_set(0))
+            .unwrap();
+        let hits_before = read_counter(&flat_db, "user_cache_hits");
+        let misses_before = read_counter(&flat_db, "user_cache_misses");
+
+        flat_db.user.get_live_value(&make_key("user_key1")).unwrap();
+        flat_db.user.get_live_value(&make_key("missing")).unwrap();
+
+        assert_eq!(
+            read_counter(&flat_db, "user_cache_hits") - hits_before,
+            1,
+            "A committed key is served from the cache"
+        );
+        assert_eq!(
+            read_counter(&flat_db, "user_cache_misses") - misses_before,
+            1,
+            "A key never seen before misses the cache"
+        );
+    }
+
+    #[test]
+    fn reads_during_a_commit_are_counted_as_bypasses() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let flat_db = FlatStateDb::new(tempdir.path().to_path_buf(), 1_000_000).unwrap();
+
+        let commit_lock = flat_db.db_cache.inner.write();
+        flat_db.user.get_live_value(&make_key("user_key1")).unwrap();
+        flat_db
+            .kernel
+            .get_live_value(&make_key("kernel_key1"))
+            .unwrap();
+        drop(commit_lock);
+
+        assert_eq!(read_counter(&flat_db, "user_cache_bypasses"), 1);
+        assert_eq!(read_counter(&flat_db, "kernel_cache_bypasses"), 1);
+    }
+
+    #[test]
+    fn rocksdb_statistics_count_live_db_reads() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let mut config = crate::config::RollupDbConfig::default_in_path(tempdir.path().into());
+        config.flat_state_rocksdb_statistics = true;
+        let flat_db = FlatStateDb::new_with_customizations(
+            tempdir.path().to_path_buf(),
+            1_000_000,
+            Some(&config.into()),
+        )
+        .unwrap();
+        let gets_before = read_counter(&flat_db, "rocksdb_get_count");
+
+        flat_db.user.get_live_value(&make_key("missing")).unwrap();
+
+        assert_eq!(
+            read_counter(&flat_db, "rocksdb_get_count") - gets_before,
+            1,
+            "A cache miss reads the live RocksDB once"
+        );
     }
 }
