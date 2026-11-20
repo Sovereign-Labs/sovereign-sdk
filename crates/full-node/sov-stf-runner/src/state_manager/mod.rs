@@ -1094,12 +1094,26 @@ where
 
         // 1. Determine effective finalized header (handles syncing/stale edge cases)
         let effective_finalized = self.get_effective_finalized_header(highest_seen).await?;
-        assert!(
-            self.state_on_block
-                .contains_key(&effective_finalized.hash())
-                || self.last_processed_finalized_header.hash() == effective_finalized.hash(),
-            "Effective finalized header must be a block we've processed"
-        );
+        if !self
+            .state_on_block
+            .contains_key(&effective_finalized.hash())
+            && self.last_processed_finalized_header.hash() != effective_finalized.hash()
+        {
+            assert!(
+                effective_finalized.height() > self.last_processed_finalized_header.height(),
+                "DA replaced an already finalized block: effective finalized {}, last processed finalized {}",
+                effective_finalized.display(),
+                self.last_processed_finalized_header.display(),
+            );
+            // The DA reorged and finalized a block while it was being executed.
+            // The next `check_continuation` detects the fork, so finalize after the runner re-executes it.
+            tracing::debug!(
+                effective_finalized = %effective_finalized.display(),
+                highest_seen,
+                "Finalized block hasn't been executed yet, postponing finalization"
+            );
+            return Ok(Vec::new());
+        }
 
         tracing::trace!(
             last_processed = %self.last_processed_finalized_header.display(),
