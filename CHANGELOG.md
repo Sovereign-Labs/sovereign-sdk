@@ -1,3 +1,6 @@
+# 2026-11-20
+- #PR_NUMBER Mock DA: execute a planned fork only once across cloned services, so rereading its trigger height does not truncate blocks submitted afterward.
+
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 
