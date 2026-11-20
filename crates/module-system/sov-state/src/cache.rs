@@ -133,10 +133,12 @@ pub(crate) mod internal {
                 self.revertable_log.is_empty(),
                 "Revertable cache should be merged or discarded before calling `take_writes`"
             );
-            self.log
-                .into_iter()
-                .filter_map(|(k, mut access)| access.modified_mut().map(|value| (k, value.take())))
-                .collect()
+            // `filter_map` gives no lower size hint, so `collect` would regrow the vector many times.
+            let mut writes = Vec::with_capacity(self.log.len());
+            writes.extend(self.log.into_iter().filter_map(|(k, mut access)| {
+                access.modified_mut().map(|value| (k, value.take()))
+            }));
+            writes
         }
 
         pub(crate) fn get(&self, key: &SlotKey) -> Option<&Access> {
@@ -339,8 +341,13 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
     pub fn to_ordered_writes_and_reads(mut self) -> OrderedReadsAndWrites {
         self.commit_revertable_storage_cache();
         let mut writes = self.cache.take_writes();
-        //This TODO is for performance enhancement, not a security concern.
-        // TODO: Make this more efficient
+        // Keys are unique, so an unstable sort gives the same order.
+        #[cfg(feature = "native")]
+        rayon::slice::ParallelSliceMut::par_sort_unstable_by(
+            writes.as_mut_slice(),
+            |(k1, _), (k2, _)| k1.cmp(k2),
+        );
+        #[cfg(not(feature = "native"))]
         writes.sort_by(|(k1, _), (k2, _)| k1.cmp(k2));
         OrderedReadsAndWrites {
             ordered_reads: self.ordered_db_reads,
