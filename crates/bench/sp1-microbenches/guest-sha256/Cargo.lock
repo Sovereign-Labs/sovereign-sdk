@@ -1153,8 +1153,7 @@ dependencies = [
 [[package]]
 name = "nomt-core"
 version = "1.0.5"
-source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "19b43245e3ed2b32eaf8c062506ec16a4ff3f08e0373c29c2b0b202e8c325409"
+source = "git+https://github.com/thrumdev/nomt.git?rev=0224973ee7579da410fe73169d3cf00ea422909c#0224973ee7579da410fe73169d3cf00ea422909c"
 dependencies = [
  "arrayvec",
  "bitvec",
@@ -1496,6 +1495,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "rand"
+version = "0.10.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "8f6fa277c67e6ea590466f04c3fe82cb509f0864fe470643e5570de9514a9b11"
+dependencies = [
+ "rand_core 0.10.1",
+]
+
+[[package]]
 name = "rand_chacha"
 version = "0.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1533,6 +1541,12 @@ dependencies = [
  "getrandom 0.3.4",
  "serde",
 ]
+
+[[package]]
+name = "rand_core"
+version = "0.10.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "63b8176103e19a2643978565ca18b50549f6101881c443590420e4dc998a3c69"
 
 [[package]]
 name = "rand_xorshift"
@@ -1578,11 +1592,12 @@ dependencies = [
 
 [[package]]
 name = "ruint"
-version = "1.18.0"
+version = "1.21.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "0298da754d1395046b0afdc2f20ee76d29a8ae310cd30ffa84ed42acba9cb12a"
+checksum = "a0de3fa9b4dac39cc2bd65679bacf9f531899d933605e2963b40c2129cdb55f2"
 dependencies = [
  "proptest",
+ "rand 0.10.4",
  "rand 0.8.6",
  "rand 0.9.4",
  "ruint-macro",
