@@ -29,7 +29,6 @@ sov-db = { workspace = true, optional = true }
 hex = { workspace = true }
 nomt-core = { workspace = true }
 nomt = { workspace = true, optional = true }
-rayon = { workspace = true, optional = true }
 sov-metrics = { workspace = true }
 tracing = { workspace = true, optional = true }
 sov-db-types = { workspace = true }
@@ -66,7 +65,6 @@ native = [
 	"sov-metrics/native",
 	"sov-db-types/native",
 	"dep:nomt",
-	"dep:rayon",
 	"dep:tracing",
 	"sov-mock-da/native"
 ]
