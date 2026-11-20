@@ -5826,12 +5826,11 @@ dependencies = [
 
 [[package]]
 name = "io-uring"
-version = "0.7.16"
+version = "0.6.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "878c26bc5e45fe089ce2ca25689260c152a87ce1d7de2ca86101efeea6973932"
+checksum = "595a0399f411a508feb2ec1e970a4a30c249351e30208960d58298de8660b0e5"
 dependencies = [
- "bitflags 2.9.4",
- "cfg-if",
+ "bitflags 1.3.2",
  "libc",
 ]
 
@@ -6955,13 +6954,16 @@ dependencies = [
 [[package]]
 name = "nomt"
 version = "1.0.5"
-source = "git+https://github.com/thrumdev/nomt.git?rev=0224973ee7579da410fe73169d3cf00ea422909c#0224973ee7579da410fe73169d3cf00ea422909c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "7a65036105486a9d88c99f95867de7e5b5d69280ef9048c10c9530a4566b3c3e"
 dependencies = [
  "anyhow",
  "bitvec",
  "borsh",
  "cfg-if",
+ "crossbeam",
  "crossbeam-channel",
+ "dashmap 5.5.3",
  "fxhash",
  "imbl",
  "io-uring",
@@ -6971,6 +6973,7 @@ dependencies = [
  "nomt-core",
  "parking_lot",
  "rand 0.10.1",
+ "serde",
  "slab",
  "thread_local",
  "threadpool",
@@ -6980,7 +6983,8 @@ dependencies = [
 [[package]]
 name = "nomt-core"
 version = "1.0.5"
-source = "git+https://github.com/thrumdev/nomt.git?rev=0224973ee7579da410fe73169d3cf00ea422909c#0224973ee7579da410fe73169d3cf00ea422909c"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "19b43245e3ed2b32eaf8c062506ec16a4ff3f08e0373c29c2b0b202e8c325409"
 dependencies = [
  "arrayvec",
  "bitvec",
