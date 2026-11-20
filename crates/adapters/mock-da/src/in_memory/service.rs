@@ -40,7 +40,8 @@ pub struct MockDaService {
     /// How many attempts to get block at given height this service is going to do before giving up.
     /// Wait time between attempts is defined by [`WAIT_ATTEMPT_PAUSE`].
     wait_attempts: u64,
-    planned_fork: Option<PlannedFork>,
+    /// Shared across clones so a planned fork is executed only once.
+    planned_fork: Arc<Mutex<Option<PlannedFork>>>,
     aggregated_proof_sender: broadcast::Sender<()>,
 }
 
@@ -69,7 +70,7 @@ impl MockDaService {
             blocks_to_finality: 0,
             finalized_header_sender: tx,
             wait_attempts: DEFAULT_WAIT_ATTEMPTS,
-            planned_fork: None,
+            planned_fork: Default::default(),
             aggregated_proof_sender: aggregated_proof_subscription,
         }
     }
@@ -141,6 +142,7 @@ impl MockDaService {
 
     /// Set planned fork, that will be executed at the specified height.
     pub async fn set_planned_fork(&mut self, planned_fork: PlannedFork) -> anyhow::Result<()> {
+        let mut current_plan = self.planned_fork.lock().await;
         let last_finalized_height = {
             let blocks = self.blocks.write().await;
             self.get_last_finalized_height(&blocks).await
@@ -153,7 +155,7 @@ impl MockDaService {
             );
         }
 
-        self.planned_fork = Some(planned_fork);
+        *current_plan = Some(planned_fork);
         Ok(())
     }
 
@@ -230,13 +232,15 @@ impl MockDaService {
 
     /// Executes planned fork if it is planned at a given height.
     async fn planned_fork_handler(&self, height: u64) -> anyhow::Result<()> {
-        if let Some(planned_fork_now) = &self.planned_fork {
+        let mut planned_fork = self.planned_fork.lock().await;
+        if let Some(planned_fork_now) = planned_fork.as_ref() {
             if planned_fork_now.trigger_at_height == height {
                 self.fork_at(
                     planned_fork_now.fork_height,
                     planned_fork_now.blobs.as_slice(),
                 )
                 .await?;
+                *planned_fork = None;
             }
         }
         Ok(())
@@ -790,7 +794,7 @@ mod tests {
             let planned_fork = PlannedFork::new(4, 2, vec![vec![3, 3, 3, 3], vec![4, 4, 4, 4]]);
 
             da.set_planned_fork(planned_fork).await?;
-            assert!(da.planned_fork.is_some());
+            assert!(da.planned_fork.lock().await.is_some());
 
             da.send_transaction(&[1, 2, 3, 4]).await.await??;
             da.send_transaction(&[4, 5, 6, 7]).await.await??;
@@ -808,8 +812,33 @@ mod tests {
             let block_3_after = da.get_block_at(3).await?;
             assert_consecutive_blocks(&block_3_after, &block_4);
             assert_consecutive_blocks(&block_2_before, &block_3_after);
-            // Still have it, but it is old
-            assert!(da.planned_fork.is_some());
+            assert!(da.planned_fork.lock().await.is_none());
+            Ok(())
+        }
+
+        #[tokio::test(flavor = "multi_thread")]
+        async fn test_planned_reorg_runs_once_across_clones() -> anyhow::Result<()> {
+            let mut da = MockDaService::new(MockAddress::new([1; 32])).with_finality(4);
+            da.set_planned_fork(PlannedFork::new(
+                4,
+                2,
+                vec![vec![3, 3, 3, 3], vec![4, 4, 4, 4]],
+            ))
+            .await?;
+            let da_clone = da.clone();
+
+            for blob in [1, 2, 3, 4] {
+                da.send_transaction(&[blob]).await.await??;
+            }
+
+            let block_4 = da.get_block_at(4).await?;
+            da.send_transaction(&[5]).await.await??;
+            let block_5 = da.get_block_at(5).await?;
+
+            assert_eq!(da.get_block_at(4).await?, block_4);
+            assert_eq!(da_clone.get_block_at(4).await?, block_4);
+            assert_eq!(da.get_block_at(5).await?, block_5);
+            assert_eq!(da.get_head_block_header().await?, block_5.header);
             Ok(())
         }
 
