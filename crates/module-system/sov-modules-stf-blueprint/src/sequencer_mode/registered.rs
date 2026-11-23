@@ -499,12 +499,34 @@ where
     //     - If so, do a consistency check (each read needs to match the latest value)
     //        - If the check passes, apply the tx to the state
     //        - If the check fails, discard the result and execute the tx on the main thread
+    // A replayed batch is fully known up front, so the stateless part of authentication (signature
+    // checks) is done for all of its transactions in parallel before the serial loop. The loop
+    // still authenticates every transaction and charges the same gas; it only finds the signature
+    // result in the cache. A sequencer builds its batch incrementally, and authenticates each
+    // transaction when it is submitted instead.
+    let prefetched: Vec<_> = if execution_context.is_sequencer() {
+        Vec::new()
+    } else {
+        batch_with_id.by_ref().collect()
+    };
+    #[cfg(feature = "native")]
+    {
+        let rollup_height = clean_scratchpad.rollup_height_to_access().get();
+        let raw_txs: Vec<&FullyBakedTx> = prefetched.iter().map(|(raw_tx, _)| raw_tx).collect();
+        rayon::iter::ParallelIterator::for_each(
+            rayon::iter::IntoParallelIterator::into_par_iter(raw_txs),
+            |raw_tx| RT::Auth::prewarm_authentication(raw_tx, rollup_height),
+        );
+    }
+
     // Discard lookups this thread made before the batch, so that the stats below cover only the
     // serial loop.
     #[cfg(feature = "native")]
     sov_modules_api::capabilities::take_auth_cache_stats();
 
-    for (idx, (raw_tx, mut injected_control_flow)) in batch_with_id.enumerate() {
+    for (idx, (raw_tx, mut injected_control_flow)) in
+        prefetched.into_iter().chain(batch_with_id).enumerate()
+    {
         injected_control_flow.try_warm_up_cache(&mut clean_scratchpad);
 
         // Authorize and process the transaction, handling sequencer rewards/penalties internally.

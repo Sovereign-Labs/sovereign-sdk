@@ -89,6 +89,15 @@ pub trait TransactionAuthenticator<S: Spec> {
     #[cfg(feature = "native")]
     fn decode_serialized_tx(tx: &FullyBakedTx) -> Result<Self::Decodable, FatalError>;
 
+    /// Does the stateless part of [`TransactionAuthenticator::authenticate`] for `tx` ahead of
+    /// time and caches the result, so that a batch can be pre-verified in parallel before it is
+    /// executed serially. `rollup_height` is the height `tx` will be authenticated at.
+    ///
+    /// This is an optimization only: it must not touch state or charge gas, and `authenticate`
+    /// must return the same result whether or not it was called. The default does nothing.
+    #[cfg(feature = "native")]
+    fn prewarm_authentication(_tx: &FullyBakedTx, _rollup_height: u64) {}
+
     /// Authenticates raw transaction that is submitted from unregistered sequencers for the
     /// purpose of forced registration (circumventing censorship by currently registered sequencers).
     ///
@@ -256,6 +265,15 @@ where
     fn compute_tx_hash(tx: &FullyBakedTx) -> anyhow::Result<TxHash> {
         let AuthenticatorInput::Standard(input) = borsh::from_slice(&tx.data)?;
         Ok(calculate_hash::<S>(&input.data))
+    }
+
+    #[cfg(feature = "native")]
+    fn prewarm_authentication(tx: &FullyBakedTx, rollup_height: u64) {
+        // Malformed input is skipped: `authenticate` decodes it again and reports the error.
+        let Ok(AuthenticatorInput::Standard(input)) = borsh::from_slice(&tx.data) else {
+            return;
+        };
+        prewarm_authentication::<S, Rt>(&input.data, &Rt::CHAIN_HASH, rollup_height);
     }
 
     fn authenticate_unregistered<
@@ -487,6 +505,54 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
     SIGNATURE_CACHE.insert((raw_tx_hash, *chain_hash), res.clone());
 
     res
+}
+
+/// Verifies the signature of a raw sov-transaction ahead of [`authenticate`] and stores the result
+/// in the signature cache, which [`authenticate`] reads after charging the signature gas.
+///
+/// `rollup_height` must be the height the transaction will be authenticated at, because it
+/// selects the chain hash that the transaction is verified against. Nothing is charged and no
+/// state is read, so [`authenticate`] behaves the same whether or not this was called.
+///
+/// Transactions that [`authenticate`] rejects before verifying a signature, and transactions in
+/// the legacy V0 encoding, are skipped.
+#[cfg(feature = "native")]
+pub fn prewarm_authentication<S: Spec, D: DispatchCall<Spec = S>>(
+    mut raw_tx: &[u8],
+    default_chain_hash: &[u8; 32],
+    rollup_height: u64,
+) {
+    let raw_tx_hash = calculate_hash::<S>(raw_tx);
+    // Undecodable transactions are skipped: `authenticate` reports the decoding error itself.
+    // Legacy V0 transactions are skipped because they are verified against several chain hashes.
+    let Ok(DecodedTransaction::Current(tx)) =
+        legacy_v0::deserialize_transaction_reader::<D, S, <S as Spec>::CryptoSpec, _>(&mut raw_tx)
+    else {
+        return;
+    };
+    // `authenticate` rejects trailing bytes before it verifies the signature.
+    if !raw_tx.is_empty() {
+        return;
+    }
+    let details = match &tx {
+        Transaction::V0(tx_v0) => &tx_v0.details,
+        Transaction::V1(tx_v1) => &tx_v1.details,
+    };
+    let resolved_hashes = resolve_chain_hashes_for_height(rollup_height, *default_chain_hash);
+    // `authenticate` reports a chain hash mismatch before it verifies the signature.
+    let Ok(chain_hash) = select_chain_hash(details, &resolved_hashes, raw_tx_hash) else {
+        return;
+    };
+    let serialized_tx = tx.to_signing_bytes(&chain_hash);
+    // The result is ignored on purpose: it is now in the signature cache, and `authenticate`
+    // reports it after charging the signature gas.
+    let _ = verify_signature_over_message(
+        &tx,
+        &serialized_tx,
+        &chain_hash,
+        raw_tx_hash,
+        &mut crate::UnlimitedGasMeter::<S>::default(),
+    );
 }
 
 /// Calculates the non-malleable hash to use for replay protection.
