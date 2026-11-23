@@ -292,6 +292,9 @@ fn storage_config(path: &Path) -> RollupDbConfig {
         .try_into()
         .expect("deserialize [storage] section");
     config.path = path.to_path_buf();
+    config.live_db_path = None;
+    config.ledger_db_path = None;
+    config.user_nomt_db_path = None;
     config
 }
 
