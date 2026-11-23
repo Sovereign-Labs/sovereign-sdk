@@ -178,6 +178,46 @@ pub enum AuthenticatorInput {
 static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<(), (TxHash, [u8; 32])>> =
     std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
+/// Signature cache lookups made by the current thread.
+///
+/// The counters are per thread so that lookups from a serial execution loop are not mixed with
+/// lookups from other threads, such as sequencer ingest, where a miss is the expected outcome.
+#[cfg(feature = "native")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AuthCacheStats {
+    /// Lookups that found a cached verification result, so no signature was verified.
+    pub signature_hits: u64,
+    /// Lookups that found nothing, so the signature was verified on the calling thread.
+    pub signature_misses: u64,
+}
+
+#[cfg(feature = "native")]
+thread_local! {
+    static AUTH_CACHE_STATS: std::cell::Cell<AuthCacheStats> =
+        const { std::cell::Cell::new(AuthCacheStats { signature_hits: 0, signature_misses: 0 }) };
+}
+
+/// Counts one signature cache lookup on the current thread. Authenticators with their own
+/// [`SignatureVerificationCache`] can call this to be included in [`AuthCacheStats`].
+#[cfg(feature = "native")]
+pub fn record_signature_cache_lookup(hit: bool) {
+    AUTH_CACHE_STATS.with(|stats| {
+        let mut current = stats.get();
+        if hit {
+            current.signature_hits = current.signature_hits.saturating_add(1);
+        } else {
+            current.signature_misses = current.signature_misses.saturating_add(1);
+        }
+        stats.set(current);
+    });
+}
+
+/// Returns the current thread's [`AuthCacheStats`] and resets them to zero.
+#[cfg(feature = "native")]
+pub fn take_auth_cache_stats() -> AuthCacheStats {
+    AUTH_CACHE_STATS.with(std::cell::Cell::take)
+}
+
 /// Canonical implementation of [`TransactionAuthenticator`].
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct RollupAuthenticator<S, Rt>(PhantomData<(S, Rt)>);
@@ -423,8 +463,12 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
         })?;
 
     #[cfg(feature = "native")]
-    if let Some(known_result) = SIGNATURE_CACHE.get(&(raw_tx_hash, *chain_hash)) {
-        return known_result;
+    {
+        let known_result = SIGNATURE_CACHE.get(&(raw_tx_hash, *chain_hash));
+        record_signature_cache_lookup(known_result.is_some());
+        if let Some(known_result) = known_result {
+            return known_result;
+        }
     }
 
     let res = tx
@@ -747,4 +791,33 @@ pub fn fatal_deserialization_error<
     };
 
     AuthenticationError::FatalError(FatalError::DeserializationFailed(err.to_string()), hash)
+}
+
+#[cfg(all(test, feature = "native"))]
+mod auth_cache_stats_tests {
+    use super::{record_signature_cache_lookup, take_auth_cache_stats, AuthCacheStats};
+
+    #[test]
+    fn take_auth_cache_stats_resets_counters() {
+        record_signature_cache_lookup(true);
+        take_auth_cache_stats();
+
+        assert_eq!(take_auth_cache_stats(), AuthCacheStats::default());
+    }
+
+    #[test]
+    fn hits_and_misses_are_counted_separately() {
+        take_auth_cache_stats();
+        record_signature_cache_lookup(false);
+        record_signature_cache_lookup(true);
+        record_signature_cache_lookup(true);
+
+        assert_eq!(
+            take_auth_cache_stats(),
+            AuthCacheStats {
+                signature_hits: 2,
+                signature_misses: 1,
+            }
+        );
+    }
 }
