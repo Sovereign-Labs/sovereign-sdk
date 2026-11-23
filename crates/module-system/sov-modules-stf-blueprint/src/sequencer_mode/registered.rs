@@ -146,7 +146,7 @@ fn track_transaction_metrics<S: Spec>(
     });
 }
 
-/// Signature cache lookups made by the serial transaction loop of one batch.
+/// Authentication cache lookups made by the serial transaction loop of one batch.
 #[cfg(feature = "native")]
 #[derive(Debug)]
 struct AuthCacheMetrics {
@@ -164,11 +164,13 @@ impl sov_metrics::Metric for AuthCacheMetrics {
         std::io::Write::write_fmt(
             buffer,
             format_args!(
-                "{},context={} signature_hits={},signature_misses={}",
+                "{},context={} signature_hits={},signature_misses={},prepared_hits={},prepared_misses={}",
                 self.measurement_name(),
                 self.context,
                 self.stats.signature_hits,
                 self.stats.signature_misses,
+                self.stats.prepared_hits,
+                self.stats.prepared_misses,
             ),
         )
     }
@@ -499,10 +501,10 @@ where
     //     - If so, do a consistency check (each read needs to match the latest value)
     //        - If the check passes, apply the tx to the state
     //        - If the check fails, discard the result and execute the tx on the main thread
-    // A replayed batch is fully known up front, so the stateless part of authentication (signature
-    // checks) is done for all of its transactions in parallel before the serial loop. The loop
-    // still authenticates every transaction and charges the same gas; it only finds the signature
-    // result in the cache. A sequencer builds its batch incrementally, and authenticates each
+    // A replayed batch is fully known up front, so the stateless part of authentication (decoding
+    // and signature checks) is done for all of its transactions in parallel before the serial
+    // loop. The loop still authenticates every transaction and charges the same gas; it only
+    // finds that work already done. A sequencer builds its batch incrementally, and authenticates each
     // transaction when it is submitted instead.
     let prefetched: Vec<_> = if execution_context.is_sequencer() {
         Vec::new()
