@@ -141,14 +141,14 @@ pub trait TransactionAuthenticator<S: Spec> {
 ///
 /// fn verify_signature(...) -> Result<(), AuthenticationError> {
 ///     #[cfg(feature = "native")]
-///     if let Some(cached) = SIGNATURE_CACHE.get(&tx_hash) {
+///     if let Some(cached) = get_cached_signature(&SIGNATURE_CACHE, &tx_hash) {
 ///         return cached;
 ///     }
 ///
 ///     let result = /* actual verification */;
 ///
 ///     #[cfg(feature = "native")]
-///     SIGNATURE_CACHE.insert(tx_hash, result.clone());
+///     cache_signature(&SIGNATURE_CACHE, tx_hash, &result);
 ///
 ///     result
 /// }
@@ -162,6 +162,52 @@ pub type SignatureVerificationCache<T, TxId = TxHash> =
 /// At 5k TPS, this gives us 50 seconds of cache lifetime. This should be long enough that
 /// signatures almost always last until the node has processed the block.
 pub const DEFAULT_SIGNATURE_CACHE_SIZE: usize = 250_000;
+
+#[cfg(feature = "native")]
+thread_local! {
+    static NODE_SIGNATURE_CACHE_MODE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Runs `f` with the signature caches in node mode: [`get_cached_signature`] doesn't promote the
+/// entry and [`cache_signature`] doesn't insert.
+///
+/// The node reads each entry at most once, after the sequencer inserted it. Promoting or inserting
+/// on the node path only evicts entries the node has yet to read, so a lagging node would miss more
+/// and lag further.
+pub fn with_node_signature_cache<R>(f: impl FnOnce() -> R) -> R {
+    #[cfg(feature = "native")]
+    let previous = NODE_SIGNATURE_CACHE_MODE.replace(true);
+    let result = f();
+    #[cfg(feature = "native")]
+    NODE_SIGNATURE_CACHE_MODE.set(previous);
+    result
+}
+
+/// Looks up a cached signature verification result. Inside [`with_node_signature_cache`] the
+/// lookup doesn't promote the entry.
+#[cfg(feature = "native")]
+pub fn get_cached_signature<T: Clone, TxId: Eq + std::hash::Hash>(
+    cache: &SignatureVerificationCache<T, TxId>,
+    key: &TxId,
+) -> Option<Result<T, AuthenticationError>> {
+    if NODE_SIGNATURE_CACHE_MODE.get() {
+        cache.peek(key)
+    } else {
+        cache.get(key)
+    }
+}
+
+/// Caches a signature verification result, except inside [`with_node_signature_cache`].
+#[cfg(feature = "native")]
+pub fn cache_signature<T: Clone, TxId: Eq + std::hash::Hash>(
+    cache: &SignatureVerificationCache<T, TxId>,
+    key: TxId,
+    result: &Result<T, AuthenticationError>,
+) {
+    if !NODE_SIGNATURE_CACHE_MODE.get() {
+        cache.insert(key, result.clone());
+    }
+}
 
 /// See [`RollupAuthenticator`].
 #[derive(std::fmt::Debug, Clone, borsh::BorshDeserialize, borsh::BorshSerialize)]
@@ -423,7 +469,8 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
         })?;
 
     #[cfg(feature = "native")]
-    if let Some(known_result) = SIGNATURE_CACHE.get(&(raw_tx_hash, *chain_hash)) {
+    if let Some(known_result) = get_cached_signature(&SIGNATURE_CACHE, &(raw_tx_hash, *chain_hash))
+    {
         return known_result;
     }
 
@@ -440,7 +487,7 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
         });
 
     #[cfg(feature = "native")]
-    SIGNATURE_CACHE.insert((raw_tx_hash, *chain_hash), res.clone());
+    cache_signature(&SIGNATURE_CACHE, (raw_tx_hash, *chain_hash), &res);
 
     res
 }
@@ -747,4 +794,24 @@ pub fn fatal_deserialization_error<
     };
 
     AuthenticationError::FatalError(FatalError::DeserializationFailed(err.to_string()), hash)
+}
+
+#[cfg(all(test, feature = "native"))]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn node_signature_cache_mode_reads_without_inserting() {
+        let cache = SignatureVerificationCache::<(), u64>::new(16);
+
+        with_node_signature_cache(|| cache_signature(&cache, 0x1234, &Ok(())));
+        assert_eq!(cache.len(), 0, "Node mode must not insert");
+
+        cache_signature(&cache, 0x1234, &Ok(()));
+        let hit = with_node_signature_cache(|| get_cached_signature(&cache, &0x1234));
+        assert!(
+            hit.is_some(),
+            "Node mode must still read entries the sequencer inserted"
+        );
+    }
 }

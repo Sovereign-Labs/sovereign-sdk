@@ -1,7 +1,7 @@
 use sov_metrics::{AuthAndProcessMetrics, AuthAndProcessTimings};
 use sov_modules_api::capabilities::{
-    AuthenticationError, ChainState, GasEnforcer, SequencerAuthorization, TransactionAuthenticator,
-    TransactionAuthorizer,
+    with_node_signature_cache, AuthenticationError, ChainState, GasEnforcer,
+    SequencerAuthorization, TransactionAuthenticator, TransactionAuthorizer,
 };
 use sov_modules_api::transaction::TransactionConsumption;
 use sov_modules_api::{
@@ -347,8 +347,13 @@ where
 fn deserialize_and_authenticate<S: Spec, R: Runtime<S>, I: StateProvider<S>>(
     tx: &FullyBakedTx,
     pre_exec_working_set: &mut PreExecWorkingSet<S, I>,
+    execution_context: ExecutionContext,
 ) -> Result<AuthTxOutput<S, R>, AuthenticationError> {
-    let (tx, auth_data, call) = R::Auth::authenticate(tx, pre_exec_working_set)?;
+    let (tx, auth_data, call) = if execution_context == ExecutionContext::Node {
+        with_node_signature_cache(|| R::Auth::authenticate(tx, pre_exec_working_set))?
+    } else {
+        R::Auth::authenticate(tx, pre_exec_working_set)?
+    };
     Ok((tx, auth_data, R::wrap_call(call)))
 }
 
@@ -809,8 +814,11 @@ where
     }
 
     timings.auth.start();
-    let authentication_result =
-        deserialize_and_authenticate::<S, RT, I>(&raw_tx, &mut pre_exec_working_set);
+    let authentication_result = deserialize_and_authenticate::<S, RT, I>(
+        &raw_tx,
+        &mut pre_exec_working_set,
+        execution_context,
+    );
     timings.auth.end();
 
     let validated_output = match authentication_result {

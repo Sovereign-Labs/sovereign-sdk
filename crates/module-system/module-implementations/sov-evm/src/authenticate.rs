@@ -29,7 +29,9 @@ use sov_rollup_interface::TxHash;
 use sov_state::User;
 
 #[cfg(feature = "native")]
-use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
+use sov_modules_api::capabilities::{
+    cache_signature, get_cached_signature, SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE,
+};
 
 /// At default size, and ~70 bytes per entry, this costs about 17.5 MB at the default size.
 #[cfg(feature = "native")]
@@ -82,7 +84,7 @@ fn recover_evm_signer(
     tx_hash: TxHash,
 ) -> Result<Address, AuthenticationError> {
     #[cfg(feature = "native")]
-    if let Some(known_result) = SIGNATURE_CACHE.get(&tx_hash) {
+    if let Some(known_result) = get_cached_signature(&SIGNATURE_CACHE, &tx_hash) {
         return known_result;
     }
 
@@ -95,7 +97,7 @@ fn recover_evm_signer(
         )
     });
     #[cfg(feature = "native")]
-    SIGNATURE_CACHE.insert(tx_hash, result.clone());
+    cache_signature(&SIGNATURE_CACHE, tx_hash, &result);
 
     result
 }

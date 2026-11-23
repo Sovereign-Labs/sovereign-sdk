@@ -19,7 +19,9 @@ use sov_modules_api::{
 };
 
 #[cfg(feature = "native")]
-use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
+use sov_modules_api::capabilities::{
+    cache_signature, get_cached_signature, SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE,
+};
 
 use self::parsing::{unpack_solana_message, UnpackedSolanaMessage};
 
@@ -80,7 +82,7 @@ fn verify_signatures<S: Spec>(
 
     // 2. Check cache (native-only)
     #[cfg(feature = "native")]
-    if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
+    if let Some(known_result) = get_cached_signature(&SIGNATURE_CACHE, &raw_tx_hash) {
         return known_result;
     }
 
@@ -118,7 +120,7 @@ fn verify_signatures<S: Spec>(
 
     // 4. Cache result (native-only)
     #[cfg(feature = "native")]
-    SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
+    cache_signature(&SIGNATURE_CACHE, raw_tx_hash, &res);
 
     res
 }
