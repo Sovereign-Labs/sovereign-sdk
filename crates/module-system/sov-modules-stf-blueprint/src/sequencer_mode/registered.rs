@@ -146,6 +146,34 @@ fn track_transaction_metrics<S: Spec>(
     });
 }
 
+/// Signature cache lookups made by the serial transaction loop of one batch.
+#[cfg(feature = "native")]
+#[derive(Debug)]
+struct AuthCacheMetrics {
+    context: &'static str,
+    stats: sov_modules_api::capabilities::AuthCacheStats,
+}
+
+#[cfg(feature = "native")]
+impl sov_metrics::Metric for AuthCacheMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_auth_cache"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        std::io::Write::write_fmt(
+            buffer,
+            format_args!(
+                "{},context={} signature_hits={},signature_misses={}",
+                self.measurement_name(),
+                self.context,
+                self.stats.signature_hits,
+                self.stats.signature_misses,
+            ),
+        )
+    }
+}
+
 /// Actual processing of transaction.
 ///
 /// The caller is responsible for penalizing the sequencer if this method returns an error. If the tx can be attempted,
@@ -471,6 +499,11 @@ where
     //     - If so, do a consistency check (each read needs to match the latest value)
     //        - If the check passes, apply the tx to the state
     //        - If the check fails, discard the result and execute the tx on the main thread
+    // Discard lookups this thread made before the batch, so that the stats below cover only the
+    // serial loop.
+    #[cfg(feature = "native")]
+    sov_modules_api::capabilities::take_auth_cache_stats();
+
     for (idx, (raw_tx, mut injected_control_flow)) in batch_with_id.enumerate() {
         injected_control_flow.try_warm_up_cache(&mut clean_scratchpad);
 
@@ -625,6 +658,19 @@ where
             }
         }
         clean_scratchpad = new_checkpoint.to_tx_scratchpad();
+    }
+
+    #[cfg(feature = "native")]
+    {
+        let stats = sov_modules_api::capabilities::take_auth_cache_stats();
+        if stats != sov_modules_api::capabilities::AuthCacheStats::default() {
+            sov_metrics::track_metrics(|tracker| {
+                tracker.submit(AuthCacheMetrics {
+                    context: execution_context.str(),
+                    stats,
+                });
+            });
+        }
     }
 
     let total_gas_used_in_batch = slot_gas_meter
