@@ -26,7 +26,9 @@ mod stub_evm_rpc;
 pub use stub_evm_rpc::stub_evm_rpc;
 
 #[cfg(feature = "native")]
-use sov_modules_api::capabilities::{SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE};
+use sov_modules_api::capabilities::{
+    cache_signature, get_cached_signature, SignatureVerificationCache, DEFAULT_SIGNATURE_CACHE_SIZE,
+};
 
 /// The length of an EIP712 signing hash in bytes.
 /// EIP712 hashes are 66 bytes: 1 byte prefix (0x19) + 1 byte version (0x01) + 32 bytes domain separator + 32 bytes struct hash.
@@ -341,7 +343,7 @@ fn verify_eip712_signature<
         })?;
 
     #[cfg(feature = "native")]
-    if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
+    if let Some(known_result) = get_cached_signature(&SIGNATURE_CACHE, &raw_tx_hash) {
         return known_result;
     }
 
@@ -361,7 +363,7 @@ fn verify_eip712_signature<
     let res = res.map(|()| eip712_hash);
 
     #[cfg(feature = "native")]
-    SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
+    cache_signature(&SIGNATURE_CACHE, raw_tx_hash, &res);
 
     res
 }
