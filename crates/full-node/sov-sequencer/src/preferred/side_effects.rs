@@ -1,16 +1,17 @@
 use std::collections::VecDeque;
 
 use anyhow::Result;
+use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{ConcurrentStateCheckpoint, EventFrontier, Runtime, Spec, StateCheckpoint};
 use sov_rollup_interface::node::da::DaService;
 use sov_shutdown::{BackgroundHandle, PrimaryShutdownController};
 use std::sync::Arc;
-use tokio::sync::{mpsc, watch};
+use tokio::sync::{mpsc, oneshot, watch};
 use tracing::{debug, enabled, error, warn, Level};
 
 use super::executor_events::ExecutorEvent;
 use crate::metrics::PreferredSequencerExecutorEventMetrics;
-use crate::preferred::db::BatchToStore;
+use crate::preferred::db::{BatchToStore, PreferredSequencerDbPruner};
 use crate::preferred::executor_events::AcceptedTxEventContents;
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{
@@ -28,7 +29,7 @@ where
     pub checkpoint_sender: watch::Sender<std::sync::Arc<ConcurrentStateCheckpoint<S>>>,
     pub blob_sender: PreferredBlobSender<Da>,
     pub db: PreferredSequencerDb,
-    pub api_ledger_db: LedgerDb,
+    pub deferred_side_effects_sender: mpsc::Sender<DeferredSideEffect>,
     pub executor_events_receiver: mpsc::Receiver<ExecutorEvent<S, Rt>>,
     pub primary_shutdown: PrimaryShutdownController,
     pub transaction_cache: TxResultWriter<S, Rt>,
@@ -82,35 +83,20 @@ where
         }
     }
 
-    #[tracing::instrument(skip_all, level = "trace")]
-    async fn update_api_ledger(
-        &self,
-        ledger_reader: rockbound::cache::delta_reader::DeltaReader,
-        slot_number: crate::SlotNumber,
-        latest_finalized_slot_number: crate::SlotNumber,
-        next_tx_number: u64,
-    ) {
-        let start = std::time::Instant::now();
-        tracing::trace!(
-            slot_number = %slot_number,
-            latest_finalized_slot_number = %latest_finalized_slot_number,
-            "Starting LedgerAPI storage update"
-        );
-        self.api_ledger_db.replace_reader(ledger_reader);
-        tracing::trace!(
-            time = ?start.elapsed(),
-            slot_number = %slot_number,
-            latest_finalized_slot_number = %latest_finalized_slot_number,
-            "LedgerDb reader is replaced, sending notifications for the slot"
-        );
-        self.api_ledger_db.send_notifications_for_slot(slot_number);
-        tracing::trace!(
-            time = ?start.elapsed(),
-            slot_number = %slot_number,
-            latest_finalized_slot_number = %latest_finalized_slot_number,
-            "LedgerAPI storage updated, notification has been sent"
-        );
-        self.transaction_cache.prune(next_tx_number).await;
+    async fn defer(&self, side_effect: DeferredSideEffect) -> Result<()> {
+        self.deferred_side_effects_sender
+            .send(side_effect)
+            .await
+            .map_err(|_| anyhow::anyhow!("The deferred side effects task has stopped"))
+    }
+
+    /// Waits until every side effect deferred so far has been applied.
+    async fn wait_for_deferred_side_effects(&self) -> Result<()> {
+        let (sender, receiver) = oneshot::channel();
+        self.defer(DeferredSideEffect::Barrier(sender)).await?;
+        receiver
+            .await
+            .map_err(|_| anyhow::anyhow!("The deferred side effects task has stopped"))
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
@@ -308,16 +294,17 @@ where
                 latest_finalized_slot_number,
                 next_tx_number,
             } => {
-                self.update_api_ledger(
+                self.defer(DeferredSideEffect::UpdateApiLedger {
                     ledger_reader,
                     slot_number,
                     latest_finalized_slot_number,
                     next_tx_number,
-                )
-                .await;
+                })
+                .await?;
             }
             ExecutorEvent::PruneDb(sequence_number) => {
-                self.db.prune_db(sequence_number).await?;
+                self.defer(DeferredSideEffect::PruneDb(sequence_number))
+                    .await?;
             }
             ExecutorEvent::UpdateStateForRecovery(checkpoint, next_event_number) => {
                 Self::maybe_delay_api_state_update_for_tests().await;
@@ -329,6 +316,10 @@ where
                 next_event_number,
                 oneshot_sender,
             } => {
+                // Afterwards the cache starts at `next_tx_number` and older txs are served from the
+                // ledger, so first apply the ledger updates queued before this flush, as when they
+                // ran on this task.
+                self.wait_for_deferred_side_effects().await?;
                 // Discarding the cache may rotate the epoch, so the published state must be
                 // re-stamped in the same step: the replayed events inserted next carry the new
                 // epoch, and a snapshot still labelled with the old one would send every client
@@ -415,6 +406,120 @@ fn drain_consecutive_accepted_txs<S: Spec, Rt: Runtime<S>>(
     txs_to_insert
 }
 
+/// About two side effects are deferred per slot; once this many are pending, the
+/// [`SideEffectsTask`] waits for the deferred task to catch up.
+pub(super) const DEFERRED_SIDE_EFFECTS_QUEUE_DEPTH: usize = 100;
+
+/// Side effects of a state update that no later executor event depends on. The
+/// [`SideEffectsTask`] forwards them in queue order, so each still runs after everything queued
+/// before it, but the confirmations queued after them no longer wait for them.
+#[derive(strum::IntoStaticStr)]
+pub(super) enum DeferredSideEffect {
+    #[strum(serialize = "DeferredUpdateApiLedger")]
+    UpdateApiLedger {
+        ledger_reader: rockbound::cache::delta_reader::DeltaReader,
+        slot_number: crate::SlotNumber,
+        latest_finalized_slot_number: crate::SlotNumber,
+        next_tx_number: u64,
+    },
+    #[strum(serialize = "DeferredPruneDb")]
+    PruneDb(SequenceNumber),
+    /// Acknowledged once every side effect sent before it has been applied.
+    #[strum(serialize = "DeferredBarrier")]
+    Barrier(oneshot::Sender<()>),
+}
+
+/// Applies the [`DeferredSideEffect`]s forwarded by the [`SideEffectsTask`], in order.
+pub(super) struct DeferredSideEffectsTask<S: Spec, Rt: Runtime<S>> {
+    pub api_ledger_db: LedgerDb,
+    pub db_pruner: PreferredSequencerDbPruner,
+    pub deferred_side_effects_receiver: mpsc::Receiver<DeferredSideEffect>,
+    pub primary_shutdown: PrimaryShutdownController,
+    pub transaction_cache: TxResultWriter<S, Rt>,
+}
+
+impl<S: Spec, Rt: Runtime<S>> DeferredSideEffectsTask<S, Rt> {
+    #[tracing::instrument(skip_all, level = "trace")]
+    async fn update_api_ledger(
+        &self,
+        ledger_reader: rockbound::cache::delta_reader::DeltaReader,
+        slot_number: crate::SlotNumber,
+        latest_finalized_slot_number: crate::SlotNumber,
+        next_tx_number: u64,
+    ) {
+        let start = std::time::Instant::now();
+        tracing::trace!(
+            slot_number = %slot_number,
+            latest_finalized_slot_number = %latest_finalized_slot_number,
+            "Starting LedgerAPI storage update"
+        );
+        self.api_ledger_db.replace_reader(ledger_reader);
+        tracing::trace!(
+            time = ?start.elapsed(),
+            slot_number = %slot_number,
+            latest_finalized_slot_number = %latest_finalized_slot_number,
+            "LedgerDb reader is replaced, sending notifications for the slot"
+        );
+        self.api_ledger_db.send_notifications_for_slot(slot_number);
+        tracing::trace!(
+            time = ?start.elapsed(),
+            slot_number = %slot_number,
+            latest_finalized_slot_number = %latest_finalized_slot_number,
+            "LedgerAPI storage updated, notification has been sent"
+        );
+        self.transaction_cache.prune(next_tx_number).await;
+    }
+
+    async fn apply(&mut self, side_effect: DeferredSideEffect) -> Result<()> {
+        let event_type: &'static str = (&side_effect).into();
+        let start_time = std::time::Instant::now();
+        match side_effect {
+            DeferredSideEffect::UpdateApiLedger {
+                ledger_reader,
+                slot_number,
+                latest_finalized_slot_number,
+                next_tx_number,
+            } => {
+                self.update_api_ledger(
+                    ledger_reader,
+                    slot_number,
+                    latest_finalized_slot_number,
+                    next_tx_number,
+                )
+                .await;
+            }
+            DeferredSideEffect::PruneDb(sequence_number) => {
+                self.db_pruner.prune_db(sequence_number).await?;
+            }
+            DeferredSideEffect::Barrier(sender) => {
+                let _ = sender.send(());
+            }
+        }
+        let duration = start_time.elapsed();
+        sov_metrics::track_metrics(|t| {
+            t.submit(PreferredSequencerExecutorEventMetrics {
+                event_type,
+                duration,
+                batch_size: 1,
+            });
+        });
+        Ok(())
+    }
+
+    pub(super) fn spawn(mut self) -> BackgroundHandle<()> {
+        BackgroundHandle::spawn("deferred-side-effects", async move {
+            while let Some(side_effect) = self.deferred_side_effects_receiver.recv().await {
+                if let Err(e) = self.apply(side_effect).await {
+                    tracing::error!(error = ?e, "Error handling deferred side effect");
+                    // Shut down before the channel closes, for the same reason as the side effects task.
+                    self.primary_shutdown.shutdown();
+                    return;
+                }
+            }
+        })
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use sov_blob_sender::BlobInternalId;
@@ -428,7 +533,9 @@ mod tests {
     use sov_test_utils::{generate_optimistic_runtime, TestSpec as S, TestStorageSpec};
     use tokio::sync::{broadcast, oneshot};
 
-    use crate::preferred::db::{DbBackend, DbError, InProgressBatch, SequencerRole, SnapshotData};
+    use crate::preferred::db::{
+        DbBackend, DbError, DbPruner, InProgressBatch, SequencerRole, SnapshotData,
+    };
     use crate::preferred::transaction_subscriptions::TransactionCache;
     use crate::preferred::{AcceptedTx, Confirmation};
     use crate::{PreferredProofDataBytes, TxStatusManager};
@@ -532,7 +639,7 @@ mod tests {
             unimplemented!()
         }
 
-        async fn prune(&mut self, _up_to_including: SequenceNumber) -> Result<(), DbError> {
+        fn pruner(&self) -> Box<dyn DbPruner> {
             unimplemented!()
         }
     }
@@ -544,6 +651,7 @@ mod tests {
         _storage_manager: SimpleStorageManager<TestStorageSpec>,
         _checkpoint_receiver: watch::Receiver<Arc<ConcurrentStateCheckpoint<S>>>,
         _transaction_cache: TransactionCache<S, TestRuntime<S>>,
+        deferred_side_effects_receiver: mpsc::Receiver<DeferredSideEffect>,
     }
 
     impl TestSideEffects {
@@ -584,12 +692,14 @@ mod tests {
             let transaction_cache = TransactionCache::new(ledger_db.clone(), 0, 1);
             let (events_sender, executor_events_receiver) =
                 mpsc::channel(Self::EVENT_QUEUE_CAPACITY);
+            let (deferred_side_effects_sender, deferred_side_effects_receiver) =
+                mpsc::channel(Self::EVENT_QUEUE_CAPACITY);
 
             let task = SideEffectsTask {
                 checkpoint_sender,
                 blob_sender,
                 db: PreferredSequencerDb::with_backend(Box::new(backend), primary_shutdown.clone()),
-                api_ledger_db: ledger_db,
+                deferred_side_effects_sender,
                 executor_events_receiver,
                 primary_shutdown,
                 transaction_cache: transaction_cache.write_handle(),
@@ -601,6 +711,7 @@ mod tests {
                     _storage_manager: storage_manager,
                     _checkpoint_receiver: checkpoint_receiver,
                     _transaction_cache: transaction_cache,
+                    deferred_side_effects_receiver,
                 },
                 events_sender,
             )
@@ -660,6 +771,67 @@ mod tests {
         assert!(
             primary_shutdown.is_triggered(),
             "A failed write should shut the rollup down"
+        );
+    }
+
+    /// A cache flush leaves older txs to the ledger, so it must not complete before the side
+    /// effects deferred ahead of it (ledger updates among them) have been applied.
+    #[tokio::test]
+    async fn test_flush_waits_for_previously_deferred_side_effects() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        // Neither a prune nor a flush writes to the database on this task.
+        let (attempts_sender, _) = mpsc::unbounded_channel();
+        let (_time_out_inserts, timed_out) = watch::channel(false);
+        let (side_effects, events_sender) = TestSideEffects::new(
+            temp_dir.path(),
+            FailingDbBackend {
+                attempted_tx_indices: attempts_sender,
+                timed_out,
+            },
+        )
+        .await;
+        let checkpoint = StateCheckpoint::<S>::new(
+            side_effects._storage_manager.create_storage(),
+            &TestRuntime::<S>::default().kernel(),
+        );
+        let mut deferred_side_effects = side_effects.deferred_side_effects_receiver;
+        let _side_effects_task = side_effects.task.spawn();
+
+        let (flushed_sender, mut flushed) = oneshot::channel();
+        events_sender
+            .send(ExecutorEvent::PruneDb(0x1234))
+            .await
+            .unwrap();
+        events_sender
+            .send(ExecutorEvent::FlushTransactionsCache {
+                next_tx_number: 0,
+                checkpoint,
+                next_event_number: 0,
+                oneshot_sender: flushed_sender,
+            })
+            .await
+            .unwrap();
+
+        let Some(DeferredSideEffect::PruneDb(sequence_number)) = deferred_side_effects.recv().await
+        else {
+            panic!("The prune queued before the flush should be deferred first");
+        };
+        assert_eq!(sequence_number, 0x1234);
+        let Some(DeferredSideEffect::Barrier(barrier)) = deferred_side_effects.recv().await else {
+            panic!("The flush should wait for the deferred side effects");
+        };
+        assert!(
+            tokio::time::timeout(std::time::Duration::from_millis(100), &mut flushed)
+                .await
+                .is_err(),
+            "The flush must not complete before the deferred side effects are applied"
+        );
+
+        barrier.send(()).unwrap();
+        assert_eq!(
+            flushed.await,
+            Ok(()),
+            "The flush should complete once the deferred side effects are applied"
         );
     }
 
