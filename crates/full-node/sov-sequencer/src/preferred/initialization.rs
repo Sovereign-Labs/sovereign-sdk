@@ -213,12 +213,24 @@ where
         let synchronized_state_task = synchronized_state.start().await;
         handles.push(synchronized_state_task);
 
+        let (deferred_side_effects_sender, deferred_side_effects_receiver) =
+            mpsc::channel(DEFERRED_SIDE_EFFECTS_QUEUE_DEPTH);
+        let deferred_side_effects_task = DeferredSideEffectsTask {
+            api_ledger_db,
+            db_pruner: db.pruner(),
+            deferred_side_effects_receiver,
+            primary_shutdown: primary_shutdown.clone(),
+            transaction_cache: cached_txs.write_handle(),
+        }
+        .spawn();
+        handles.push(deferred_side_effects_task);
+
         let side_effects_task = SideEffectsTask {
             checkpoint_sender,
             blob_sender,
             executor_events_receiver,
             db,
-            api_ledger_db,
+            deferred_side_effects_sender,
             primary_shutdown: primary_shutdown.clone(),
             transaction_cache: cached_txs.write_handle(),
         }
