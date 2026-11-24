@@ -206,11 +206,11 @@ where
         state: &mut ApiStateAccessor<S>,
         ethereum: &Arc<Ethereum<S, Seq>>,
     ) -> RpcResult<()> {
-        use alloy_consensus::transaction::SignerRecoverable;
         use alloy_consensus::Transaction;
 
-        let sender = signed_tx
-            .recover_signer()
+        // `authenticate` recovered the signer of this transaction just before, so this reads the
+        // result from the signature cache instead of recovering it again.
+        let sender = sov_evm::recover_signer_cached(signed_tx)
             .map_err(|_| rpc_invalid_params("failed to recover signer"))?;
         let sender_rollup_addr = S::Address::from_vm_address(EthereumAddress::from(sender));
 

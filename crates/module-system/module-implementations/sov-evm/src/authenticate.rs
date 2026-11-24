@@ -82,8 +82,12 @@ fn recover_evm_signer(
     tx_hash: TxHash,
 ) -> Result<Address, AuthenticationError> {
     #[cfg(feature = "native")]
-    if let Some(known_result) = SIGNATURE_CACHE.get(&tx_hash) {
-        return known_result;
+    {
+        let known_result = SIGNATURE_CACHE.get(&tx_hash);
+        capabilities::record_signature_cache_lookup(known_result.is_some());
+        if let Some(known_result) = known_result {
+            return known_result;
+        }
     }
 
     let result = tx.recover_signer().map_err(|_| {
@@ -98,6 +102,29 @@ fn recover_evm_signer(
     SIGNATURE_CACHE.insert(tx_hash, result.clone());
 
     result
+}
+
+/// Recovers the signer of a raw EVM transaction ahead of [`authenticate`] and keeps the result in
+/// the signature cache, so that [`authenticate`] does not recover it again.
+///
+/// Signer recovery reads no state and is not charged for, so [`authenticate`] behaves the same
+/// whether or not this was called. A transaction that fails to decode is skipped.
+#[cfg(feature = "native")]
+pub fn prewarm_signature_cache(raw_tx: &[u8]) {
+    // A transaction that fails to decode is reported by `authenticate`.
+    let Ok((_, tx)) = decode_evm_tx(raw_tx) else {
+        return;
+    };
+    // The result is ignored on purpose: it is now in the signature cache, and `authenticate`
+    // reports it.
+    let _ = recover_signer_cached(&tx);
+}
+
+/// Recovers the signer of an EVM transaction, using the result of an earlier recovery of the same
+/// transaction if there is one, as [`authenticate`] does.
+#[cfg(feature = "native")]
+pub fn recover_signer_cached(tx: &TransactionSigned) -> Result<Address, AuthenticationError> {
+    recover_evm_signer(tx, TxHash::new(**tx.hash()))
 }
 
 /// Builds authenticated transaction details for an EVM transaction.
@@ -465,6 +492,22 @@ where
                     EvmAuthenticatorInput::Standard(runtime_call),
                 ))
             }
+        }
+    }
+
+    #[cfg(feature = "native")]
+    fn prewarm_authentication(tx: &FullyBakedTx, rollup_height: u64) {
+        // Malformed input is skipped: `authenticate` decodes it again and reports the error.
+        let Ok(input) = borsh::from_slice::<EvmAuthenticatorInput>(&tx.data) else {
+            return;
+        };
+        match input {
+            EvmAuthenticatorInput::Evm(tx) => prewarm_signature_cache(&tx.data),
+            EvmAuthenticatorInput::Standard(tx) => capabilities::prewarm_authentication::<S, Rt>(
+                &tx.data,
+                &Rt::CHAIN_HASH,
+                rollup_height,
+            ),
         }
     }
 

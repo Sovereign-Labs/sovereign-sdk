@@ -938,8 +938,9 @@ where
     let span =
         tracing::info_span!("process_transaction", tx_hash = %raw_tx_hash, idx = %idx).entered();
 
+    // Decodes and hashes the transaction a second time, so it only runs in debug builds.
     #[cfg(feature = "native")]
-    assert_eq!(
+    debug_assert_eq!(
         RT::Auth::compute_tx_hash(&raw_tx).ok(),
         Some(raw_tx_hash),
         "Sanity check failed. The transaction hash computed by the authenticator does not match the hash computed by the dedicated tx hash calculation utility method. This is a bug, please report it."

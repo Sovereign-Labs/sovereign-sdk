@@ -43,10 +43,12 @@ mod helpers;
 
 use alloy_primitives::{Address, BlockHash, B256};
 use alloy_primitives::{BlockNumber, U256};
-#[cfg(feature = "native")]
-pub use authenticate::build_request_preflight_auth;
 pub use authenticate::{
     authenticate, decode_evm_tx, EthereumAuthenticator, EvmAuthenticator, EvmAuthenticatorInput,
+};
+#[cfg(feature = "native")]
+pub use authenticate::{
+    build_request_preflight_auth, prewarm_signature_cache, recover_signer_cached,
 };
 pub use revm::primitives::hardfork::SpecId;
 use serde::Serialize;
