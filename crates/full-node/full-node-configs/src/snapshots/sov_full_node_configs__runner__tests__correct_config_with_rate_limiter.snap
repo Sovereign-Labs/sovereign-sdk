@@ -82,7 +82,6 @@ expression: config
       "db_event_channel_size": 10000,
       "recovery_strategy": "TryToSave",
       "batch_execution_time_limit_millis": 2000,
-      "num_cache_warmup_workers": 0,
       "rate_limiter": {
         "max_nb_of_concurrent_users_in_rate_limiter": 100000,
         "max_requests_per_second": 1000000,
