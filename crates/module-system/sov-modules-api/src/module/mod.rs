@@ -613,6 +613,58 @@ mod tests {
         }
     }
 
+    /// Stands in for a payload that is expensive to format: formatting it fails the test.
+    struct UnformattablePayload;
+
+    impl Debug for UnformattablePayload {
+        fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            panic!("The payload must not be formatted");
+        }
+    }
+
+    #[allow(dead_code)]
+    #[derive(Debug)]
+    enum CallWithPayload {
+        Tuple(UnformattablePayload),
+        Struct { payload: UnformattablePayload },
+    }
+
+    #[allow(dead_code)]
+    #[derive(Debug)]
+    enum RuntimeCallWithPayload {
+        Module(CallWithPayload),
+    }
+
+    #[test]
+    fn leading_ident_does_not_format_payload() {
+        assert_eq!(
+            leading_ident(&CallWithPayload::Tuple(UnformattablePayload)),
+            "Tuple"
+        );
+        assert_eq!(
+            leading_ident(&CallWithPayload::Struct {
+                payload: UnformattablePayload
+            }),
+            "Struct"
+        );
+    }
+
+    #[test]
+    fn first_variant_does_not_format_payload() {
+        assert_eq!(
+            first_variant(&RuntimeCallWithPayload::Module(CallWithPayload::Tuple(
+                UnformattablePayload
+            ))),
+            Some("Tuple".to_string())
+        );
+        assert_eq!(
+            first_variant(&RuntimeCallWithPayload::Module(CallWithPayload::Struct {
+                payload: UnformattablePayload
+            })),
+            Some("Struct".to_string())
+        );
+    }
+
     #[test]
     fn sinks_ignore_writes_after_they_are_done() {
         // A Debug impl that ignores the stop signal and keeps writing must not extend the result.
