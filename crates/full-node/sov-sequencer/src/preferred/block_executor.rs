@@ -338,8 +338,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
 
-        // Kept only to name the call if the executor rejects the tx; a cheap `Bytes` refcount bump.
-        let raw_tx = baked_tx.tx.clone();
+        // Kept only to name the call if the executor rejects the tx.
+        let raw_tx = baked_tx.clone();
 
         if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {
             return Err(RollupBlockExecutorErrorWithBudget {
