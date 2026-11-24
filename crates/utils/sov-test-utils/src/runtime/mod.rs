@@ -1022,8 +1022,6 @@ pub fn assert_tx_reverted_with_reason<S: Spec>(result: TxEffect<S>, reason: anyh
 struct SeqControlFlow;
 
 impl<S: Spec> InjectedControlFlow<S> for SeqControlFlow {
-    fn try_warm_up_cache(&mut self, _scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {}
-
     fn pre_flight<RT: Runtime<S>>(
         &self,
         _runtime: &RT,
@@ -1039,7 +1037,7 @@ impl<S: Spec> InjectedControlFlow<S> for SeqControlFlow {
         dirty_scratchpad: TxScratchpad<S, StateCheckpoint<S>>,
         _slot_gas_meter_before_tx: &SlotGasMeter<S>,
         _gas_used: <S as Spec>::Gas,
-        execution_context: ExecutionContext,
+        _execution_context: ExecutionContext,
     ) -> (StateCheckpoint<S>, TxControlFlow<TransactionReceipt<S>>) {
         let ProvisionalSequencerOutcome {
             execution_status, ..
@@ -1049,7 +1047,7 @@ impl<S: Spec> InjectedControlFlow<S> for SeqControlFlow {
         };
 
         if !receipt.receipt.is_successful() {
-            let _ = dirty_scratchpad.tx_changes(execution_context);
+            let _ = dirty_scratchpad.tx_changes();
             return (dirty_scratchpad.revert(), TxControlFlow::IgnoreTx);
         }
 

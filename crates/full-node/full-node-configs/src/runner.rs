@@ -309,7 +309,6 @@ mod tests {
             disable_state_root_consistency_checks = true
             recovery_strategy = "TryToSave"
             batch_execution_time_limit_millis = 2000
-            num_cache_warmup_workers = 0
             ideal_lag_behind_finalized_slot = 3
             [sequencer.preferred.postgres_config]
             postgres_connection_string = "postgresql://postgres:pass@localhost:5432/db"
@@ -364,7 +363,6 @@ mod tests {
             disable_state_root_consistency_checks = true
             recovery_strategy = "TryToSave"
             batch_execution_time_limit_millis = 2000 
-            num_cache_warmup_workers = 0
             ideal_lag_behind_finalized_slot = 3
             [sequencer.preferred.postgres_config]
             postgres_connection_string = "postgresql://postgres:pass@localhost:5432/db"

@@ -82,7 +82,6 @@ expression: config
       "db_event_channel_size": 10000,
       "recovery_strategy": "TryToSave",
       "batch_execution_time_limit_millis": 2000,
-      "num_cache_warmup_workers": 0,
       "rate_limiter": null,
       "maximum_future_nonce_delta": 100,
       "future_nonce_transaction_timeout_millis": 2000,

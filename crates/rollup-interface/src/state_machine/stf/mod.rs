@@ -167,8 +167,6 @@ impl<Address, Da: DaSpec, Root, StorageProof>
 /// The context in which the execution is happening.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum ExecutionContext {
-    /// / The transaction is being executed in order to warm up the main executor cache.
-    SequencerWarmUp,
     /// The transaction is being executed by a sequencer before inclusion.
     Sequencer,
     /// The transaction is being executed by a node after inclusion.
@@ -180,8 +178,6 @@ impl ExecutionContext {
     // spans only accepts const &'static str, and strum generates only &'static str.
     // Therefore, we had to define these constants manually.
 
-    /// String representation of the SequencerWarmUp variant.
-    pub const SEQUENCER_WARM_UP: &'static str = "SequencerWarmUp";
     /// String representation of the Sequencer variant.
     pub const SEQUENCER: &'static str = "Sequencer";
     /// String representation of the NODE variant.
@@ -190,7 +186,7 @@ impl ExecutionContext {
     /// Returns true if and only if `self` matches [`ExecutionContext::Sequencer`].
     pub fn is_sequencer(&self) -> bool {
         match self {
-            Self::Sequencer | Self::SequencerWarmUp => true,
+            Self::Sequencer => true,
             Self::Node => false,
         }
     }
@@ -198,7 +194,6 @@ impl ExecutionContext {
     /// Converts `ExecutionContext` to `&' static str`
     pub fn str(&self) -> &'static str {
         match self {
-            ExecutionContext::SequencerWarmUp => ExecutionContext::SEQUENCER_WARM_UP,
             ExecutionContext::Sequencer => ExecutionContext::SEQUENCER,
             ExecutionContext::Node => ExecutionContext::NODE,
         }

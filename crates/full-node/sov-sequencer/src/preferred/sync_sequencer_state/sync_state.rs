@@ -1,18 +1,22 @@
 use crate::metrics::{PreferredSequencerPruneMetrics, PreferredSequencerSlotNumberMetrics};
+use crate::preferred::async_batch::ChunkMarker;
 use crate::preferred::block_executor::{RollupBlockExecutor, RollupBlockExecutorError};
 use crate::preferred::db::BatchToStore;
 use crate::preferred::preferred_blob_sender::proof_bytes;
-use crate::preferred::rate_limiter::IpAndCredentialId;
+use crate::preferred::rate_limiter::{IpAndCredentialId, LimiterToken, ResourceUsed};
 use crate::preferred::replica::db_data::DbData;
 use crate::preferred::replica::event_handler::ReplicaError;
 use crate::preferred::replica::replica_sync_task::DBDataRejected;
 use crate::preferred::sync_sequencer_state::conditions_table::{
     operation_for_master, operation_for_replica,
 };
+use crate::preferred::sync_sequencer_state::inner::{BegunNewTx, FinishedNewTx};
+use crate::preferred::sync_sequencer_state::AcceptTxRet;
 use crate::preferred::sync_sequencer_state::ConditionsTable;
 use crate::preferred::sync_sequencer_state::{InitialStatus, Message};
 use crate::preferred::update_state::do_next_event;
 use crate::preferred::update_state::SequenceNumberMismatchError;
+use crate::preferred::BatchSizeTracker;
 use crate::preferred::DoNewTxError;
 use crate::preferred::Inner;
 use crate::preferred::InnerGuard;
@@ -22,8 +26,8 @@ use crate::preferred::SequencerStateUpdatorError;
 use crate::preferred::StateUpdateNotification;
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
-    slot_count_delta_acceptable_lower_bound, AcceptedTx, Confirmation, DbEvent,
-    PreferredSeqOperation, PreferredSequencerFetchBatchesToReplayMetrics, ReadBatch,
+    slot_count_delta_acceptable_lower_bound, DbEvent, PreferredSeqOperation,
+    PreferredSequencerFetchBatchesToReplayMetrics, ReadBatch,
 };
 use crate::preferred::{AcceptTxError, PreferredBlobToReplay};
 use crate::{
@@ -33,10 +37,12 @@ use sov_blob_sender::{new_blob_id, BlobInternalId};
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::state::{ApiStateAccessor, ConcurrentStateCheckpoint};
-use sov_modules_api::{FullyBakedTx, HexString, Runtime, Spec, StateCheckpoint, VersionReader};
+use sov_modules_api::{
+    CredentialId, FullyBakedTx, Gas, HexString, Runtime, Spec, StateCheckpoint, VersionReader,
+};
 use sov_rollup_full_node_interface::StateUpdateInfo;
 use sov_state::{NativeStorage, ProvableNamespace, StateRoot, Storage};
-use std::collections::BTreeMap;
+use std::collections::{BTreeMap, VecDeque};
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::Arc;
 use std::time::Duration;
@@ -253,24 +259,47 @@ where
                 ip_and_credential,
                 reason,
             } => {
-                let ret = self
-                    .process_accept_tx(
+                // Take the other txs waiting at the top of the heap too, so that several can be
+                // in flight to the executor. Every other message type has a higher priority than
+                // any tx, so this doesn't skip ahead of any of them.
+                let mut requests = vec![AcceptTxRequest {
+                    resp,
+                    baked_tx,
+                    tx_hash,
+                    original_tx_queue_id,
+                    ip_and_credential,
+                    reason,
+                }];
+                while requests.len() < RollupBlockExecutor::<S, Rt>::PIPELINE_DEPTH
+                    && matches!(
+                        self.heap.last_key_value(),
+                        Some((_, Message::AcceptTx { .. }))
+                    )
+                {
+                    let Some((
+                        _,
+                        Message::AcceptTx {
+                            resp,
+                            baked_tx,
+                            tx_hash,
+                            original_tx_queue_id,
+                            ip_and_credential,
+                            reason,
+                        },
+                    )) = self.heap.pop_last()
+                    else {
+                        unreachable!("The top of the heap was just checked to be an AcceptTx");
+                    };
+                    requests.push(AcceptTxRequest {
+                        resp,
                         baked_tx,
                         tx_hash,
                         original_tx_queue_id,
                         ip_and_credential,
                         reason,
-                    )
-                    .await;
-                if let Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
-                    RollupBlockExecutorError::UnexpectedFailure,
-                ))) = ret
-                {
-                    // Propagate the error to the spawner of this task.
-                    panic!("Unexpected in the rollup block executor. The sequencer can no longer accept transactions!");
+                    });
                 }
-
-                self.send_response(resp, ret, "accept_tx").await;
+                self.process_accept_txs(requests).await;
             }
 
             Message::FinalCatchup {
@@ -1141,14 +1170,62 @@ where
         )
     }
 
-    async fn process_accept_tx(
+    /// Accepts txs in order, keeping up to [`RollupBlockExecutor::PIPELINE_DEPTH`] of them in
+    /// flight to the executor. Each tx goes through the same checks, in the same order, and ends
+    /// up in the same batch as if the txs were accepted one at a time.
+    async fn process_accept_txs(&mut self, requests: Vec<AcceptTxRequest<S, Rt>>) {
+        let mut admitted = VecDeque::with_capacity(requests.len());
+        for request in requests {
+            let AcceptTxRequest {
+                resp,
+                baked_tx,
+                tx_hash,
+                original_tx_queue_id,
+                ip_and_credential,
+                reason,
+            } = request;
+            match self
+                .admit_tx(
+                    baked_tx,
+                    tx_hash,
+                    original_tx_queue_id,
+                    ip_and_credential,
+                    reason,
+                )
+                .await
+            {
+                Ok((baked_tx, token)) => admitted.push_back(AdmittedTx {
+                    baked_tx,
+                    pending: PendingAcceptTx {
+                        resp,
+                        tx_hash,
+                        original_tx_queue_id,
+                        credential_id: ip_and_credential.credential_id,
+                        token,
+                        reason,
+                    },
+                }),
+                Err(err) => respond_accept_tx(resp, Err(err)),
+            }
+        }
+
+        let mut is_retry = false;
+        while !admitted.is_empty() {
+            admitted = self.execute_admitted_txs(admitted, is_retry).await;
+            is_retry = true;
+        }
+    }
+
+    /// Runs the checks that come before execution and attaches the sequencing data. Returns the
+    /// tx and its rate limiter token.
+    async fn admit_tx(
         &mut self,
         baked_tx: FullyBakedTx,
         tx_hash: TxHash,
         original_tx_queue_id: u64,
         ip_and_credential: IpAndCredentialId<S::Address>,
         reason: &'static str,
-    ) -> Result<oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>, AcceptTxError<S>> {
+    ) -> Result<(FullyBakedTx, Option<LimiterToken<S>>), AcceptTxError<S>> {
         let load_based_accept_probability = if self.use_pi_rate_limiter {
             self.get_acceptance_probability(&baked_tx)
         } else {
@@ -1161,38 +1238,7 @@ where
             return Err(AcceptTxError::ReplicaMode);
         }
 
-        // If the sequencer had to give out 503s at any point during the time we were waiting for the lock, we need to return a 503 - otherwise
-        // we've effectively jumped the line
-        let new_tx_queue_id = inner.tx_queue_id.load(Ordering::Acquire);
-        if new_tx_queue_id != original_tx_queue_id {
-            tracing::debug!(%tx_hash, "Transaction was queued before downtime. Dropping.");
-            return Err(AcceptTxError::SequencerOverloaded503(
-                "Transaction queued before downtime",
-            ));
-        }
-
-        inner
-            .check_readiness(
-                inner.seq_config.max_concurrent_batch_blobs,
-                inner.stop_at_rollup_height,
-            )
-            .await
-            .map_err(AcceptTxError::NotFullySynced)?;
-
-        if let Err(batch_creation_error) = inner
-            .try_to_create_and_start_batch_if_none_in_progress(false)
-            .await
-        {
-            // On all errors, we treat the sequencer as having had downtime and clear out the transaction queue.
-            // Note that we'll increment the queue ID once per rejected tx. This is totally fine - we have 2**64 ids to play with
-            // and atomic increments are very cheap relative to the cost of executing the tx
-            inner.tx_queue_id.fetch_add(1, Ordering::AcqRel);
-
-            return Err(AcceptTxError::BatchError {
-                batch_creation_error,
-                nb_of_batch_blobs_in_flight: inner.nb_of_concurrent_batch_blob_submissions(),
-            });
-        };
+        ensure_batch_open(&mut inner, tx_hash, original_tx_queue_id).await?;
 
         let token = inner
             .rate_limiter
@@ -1209,33 +1255,117 @@ where
         }
 
         let mut baked_tx = baked_tx;
-        // Important: the sequencing data must be attached before `do_new_tx`. Execution inside
-        // `apply_tx_to_in_progress_batch` reads it from the baked tx (time-oracle update,
-        // `handle_sequencing_data` hook, and pruning), and `do_new_tx`'s up-front
-        // `MAX_FULLY_BAKED_TX_SIZE` check must account for its length, or an accepted tx could
-        // produce a blob that every node's deserializer rejects.
+        // Important: the sequencing data must be attached before `begin_new_tx`. Execution
+        // reads it from the baked tx (time-oracle update, `handle_sequencing_data` hook, and
+        // pruning), and `begin_new_tx`'s up-front `MAX_FULLY_BAKED_TX_SIZE` check must account
+        // for its length, or an accepted tx could produce a blob that every node's deserializer
+        // rejects.
         // This runs after all the reject paths above so rejected transactions don't pay for
         // sequencing data creation.
         baked_tx.sequencing_data =
             Some(sov_modules_api::capabilities::new_tx_sequencing_data::<S, Rt>());
-        let (res, resource_used) = inner
-            .do_new_tx(tx_hash, baked_tx, Some(ip_and_credential.credential_id))
-            .await;
+        Ok((baked_tx, token))
+    }
 
-        // Do not use `?` or return early here. We must always call `rate_limiter.update`
-        // to ensure the limits are updated even for unsuccessful transactions.
-        let res = res.map_err(AcceptTxError::NewTxError);
-        if res.is_ok() {
-            inner.update_estimated_tx_execution_time_micros(
-                resource_used.inner.execution_time_micros,
-            );
+    /// Sends admitted txs to the executor, up to [`RollupBlockExecutor::PIPELINE_DEPTH`] at a
+    /// time, and collects their results in order. Returns the txs that must be tried again
+    /// because they no longer fit into the batch they were sent to. `is_retry` is true for
+    /// such txs, which must pass the batch checks again because a batch may have closed.
+    async fn execute_admitted_txs(
+        &mut self,
+        mut admitted: VecDeque<AdmittedTx<S, Rt>>,
+        is_retry: bool,
+    ) -> VecDeque<AdmittedTx<S, Rt>> {
+        let reason = admitted
+            .front()
+            .expect("Executing an empty list of txs")
+            .pending
+            .reason;
+        let mut inner = self.get_inner_with_timing(reason).await;
+        let mut in_flight = VecDeque::with_capacity(admitted.len());
+        let mut in_flight_bytes = 0;
+        let mut waiting = VecDeque::new();
+
+        while let Some(AdmittedTx { baked_tx, pending }) = admitted.pop_front() {
+            if is_retry {
+                if let Err(err) =
+                    ensure_batch_open(&mut inner, pending.tx_hash, pending.original_tx_queue_id)
+                        .await
+                {
+                    inner.rate_limiter.update(
+                        pending.token,
+                        ResourceUsed::new(1, 0, 0, <S as Spec>::Gas::zero()),
+                    );
+                    respond_accept_tx(pending.resp, Err(err));
+                    continue;
+                }
+            }
+
+            let chunk = if in_flight.is_empty() {
+                ChunkMarker::Start(inner.close_budget())
+            } else {
+                ChunkMarker::Continue
+            };
+            let tx_len = baked_tx.len();
+            match inner.begin_new_tx(pending.tx_hash, baked_tx, chunk, in_flight_bytes) {
+                BegunNewTx::Submitted => {
+                    in_flight_bytes += BatchSizeTracker::serialized_tx_size(tx_len);
+                    in_flight.push_back((pending, tx_len));
+                }
+                BegunNewTx::WaitForInFlight(baked_tx) => {
+                    waiting.push_back(AdmittedTx { baked_tx, pending });
+                    waiting.extend(admitted.drain(..));
+                }
+                BegunNewTx::Rejected(err, resource_used) => {
+                    inner.rate_limiter.update(pending.token, resource_used);
+                    respond_accept_tx(pending.resp, Err(AcceptTxError::NewTxError(err)));
+                }
+            }
         }
-        inner.rate_limiter.update(token, resource_used);
-        let (rx, remaining_slot_gas) = res?;
 
-        inner.close_batch_if_nearly_full(remaining_slot_gas).await;
+        let mut deferred = VecDeque::new();
+        let mut close_batch = false;
+        while let Some((pending, tx_len)) = in_flight.pop_front() {
+            let (res, resource_used) = match inner
+                .finish_new_tx(pending.tx_hash, tx_len, Some(pending.credential_id))
+                .await
+            {
+                FinishedNewTx::Deferred(baked_tx) => {
+                    deferred.push_back(AdmittedTx { baked_tx, pending });
+                    continue;
+                }
+                FinishedNewTx::Done(res, resource_used) => (res, resource_used),
+            };
+            // The executor stops the chunk no later than the tx after which the batch must close,
+            // and defers the rest.
+            assert!(
+                !close_batch,
+                "The executor ran a tx after the batch reached a close threshold. This is a bug, please report it."
+            );
 
-        Ok(rx)
+            // Do not use `?` or return early here. We must always call `rate_limiter.update`
+            // to ensure the limits are updated even for unsuccessful transactions.
+            let res = res.map_err(AcceptTxError::NewTxError);
+            if res.is_ok() {
+                inner.update_estimated_tx_execution_time_micros(
+                    resource_used.inner.execution_time_micros,
+                );
+            }
+            inner.rate_limiter.update(pending.token, resource_used);
+            if let Ok((_, remaining_slot_gas)) = &res {
+                close_batch = inner.should_close_batch(*remaining_slot_gas);
+            }
+            respond_accept_tx(pending.resp, res.map(|(rx, _)| rx));
+        }
+
+        // The batch can only be closed once nothing is in flight: the executor would still run
+        // the txs left in its channel.
+        if close_batch {
+            inner.close_current_batch().await;
+        }
+
+        deferred.extend(waiting);
+        deferred
     }
 
     async fn process_do_batch_start_replica(
@@ -1639,4 +1769,87 @@ struct RateLimitTick {
     /// The target execution time in micros/sec. This does not vary with current batch size or time until close.
     /// We pass it around with the limiters for convenience
     configured_target_execution_micros_per_second: f64,
+}
+
+/// A tx taken from an [`Message::AcceptTx`].
+struct AcceptTxRequest<S: Spec, Rt: Runtime<S>> {
+    resp: oneshot::Sender<AcceptTxRet<S, Rt>>,
+    baked_tx: FullyBakedTx,
+    tx_hash: TxHash,
+    original_tx_queue_id: u64,
+    ip_and_credential: IpAndCredentialId<S::Address>,
+    reason: &'static str,
+}
+
+/// A tx that passed the checks that come before execution.
+struct AdmittedTx<S: Spec, Rt: Runtime<S>> {
+    baked_tx: FullyBakedTx,
+    pending: PendingAcceptTx<S, Rt>,
+}
+
+/// What is needed to answer an [`AdmittedTx`] once it has been sent to the executor.
+struct PendingAcceptTx<S: Spec, Rt: Runtime<S>> {
+    resp: oneshot::Sender<AcceptTxRet<S, Rt>>,
+    tx_hash: TxHash,
+    original_tx_queue_id: u64,
+    credential_id: CredentialId,
+    token: Option<LimiterToken<S>>,
+    reason: &'static str,
+}
+
+/// Checks that a tx can go into a batch now, opening one if none is open.
+async fn ensure_batch_open<S: Spec, Rt: Runtime<S>>(
+    inner: &mut Inner<S, Rt>,
+    tx_hash: TxHash,
+    original_tx_queue_id: u64,
+) -> Result<(), AcceptTxError<S>> {
+    // If the sequencer had to give out 503s at any point during the time we were waiting for the lock, we need to return a 503 - otherwise
+    // we've effectively jumped the line
+    let new_tx_queue_id = inner.tx_queue_id.load(Ordering::Acquire);
+    if new_tx_queue_id != original_tx_queue_id {
+        tracing::debug!(%tx_hash, "Transaction was queued before downtime. Dropping.");
+        return Err(AcceptTxError::SequencerOverloaded503(
+            "Transaction queued before downtime",
+        ));
+    }
+
+    inner
+        .check_readiness(
+            inner.seq_config.max_concurrent_batch_blobs,
+            inner.stop_at_rollup_height,
+        )
+        .await
+        .map_err(AcceptTxError::NotFullySynced)?;
+
+    if let Err(batch_creation_error) = inner
+        .try_to_create_and_start_batch_if_none_in_progress(false)
+        .await
+    {
+        // On all errors, we treat the sequencer as having had downtime and clear out the transaction queue.
+        // Note that we'll increment the queue ID once per rejected tx. This is totally fine - we have 2**64 ids to play with
+        // and atomic increments are very cheap relative to the cost of executing the tx
+        inner.tx_queue_id.fetch_add(1, Ordering::AcqRel);
+
+        return Err(AcceptTxError::BatchError {
+            batch_creation_error,
+            nb_of_batch_blobs_in_flight: inner.nb_of_concurrent_batch_blob_submissions(),
+        });
+    };
+    Ok(())
+}
+
+fn respond_accept_tx<S: Spec, Rt: Runtime<S>>(
+    resp: oneshot::Sender<AcceptTxRet<S, Rt>>,
+    ret: AcceptTxRet<S, Rt>,
+) {
+    if let Err(AcceptTxError::NewTxError(DoNewTxError::ExecutorError(
+        RollupBlockExecutorError::UnexpectedFailure,
+    ))) = ret
+    {
+        // Propagate the error to the spawner of this task.
+        panic!("Unexpected in the rollup block executor. The sequencer can no longer accept transactions!");
+    }
+    if resp.send(ret).is_err() {
+        tracing::debug!("SynchronizedSequencerState: Response channel closed - unable to send response to accept_tx");
+    }
 }

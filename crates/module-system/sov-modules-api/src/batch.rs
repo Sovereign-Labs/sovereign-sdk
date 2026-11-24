@@ -272,11 +272,6 @@ impl<S: Spec> ProvisionalSequencerOutcome<S> {
 /// lifecycle. This is used by the sequencer to unwind failing transactions and to inspect
 /// the set of state changes made by a transaction before committing.
 pub trait InjectedControlFlow<S: Spec> {
-    /// Attempts to warm up the cache. This method only affects transactions executed on the main
-    /// sequencer executor and only if a warm up worker task finishes executing the given transaction
-    /// before the main executor.
-    fn try_warm_up_cache(&mut self, scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>);
-
     /// Runs after authentication but before the transaction executes.
     ///
     /// Returning [`TxControlFlow::IgnoreTx`] drops the transaction as if it had never been
@@ -318,8 +313,6 @@ pub trait IncrementalBatch<S: Spec>: Iterator<Item = (FullyBakedTx, Self::Contro
 }
 
 impl<S: Spec> InjectedControlFlow<S> for NoOpControlFlow {
-    fn try_warm_up_cache(&mut self, _scratchpad: &mut TxScratchpad<S, StateCheckpoint<S>>) {}
-
     fn pre_flight<RT: Runtime<S>>(
         &self,
         _runtime: &RT,
