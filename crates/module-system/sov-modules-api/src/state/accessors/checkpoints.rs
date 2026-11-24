@@ -9,7 +9,6 @@ use super::internals::{AccessoryDelta, Delta};
 use super::temp_cache::{CacheLookup, TempCache};
 use super::{BootstrapWorkingSet, BorshSerializedSize, UniversalStateAccessor};
 use crate::capabilities::{Kernel, RollupHeight};
-use crate::state::accessors::internals::FirstTimeReads;
 use crate::state::traits::PerBlockCache;
 #[cfg(feature = "native")]
 use crate::TxChangeSet;
@@ -69,11 +68,6 @@ impl<S: Spec> StateCheckpoint<S> {
     /// Check if key is in the cache.
     pub fn is_value_cached(&self, namespace: Namespace, key: &SlotKey) -> IsValueCached {
         self.delta.is_value_cached(namespace, key)
-    }
-
-    /// Keys and values that were read for the first time.
-    pub fn first_reads(&self) -> FirstTimeReads {
-        self.delta.first_reads()
     }
 
     /// Commits the revertable part of the `StateCheckpoint` cache.
@@ -261,11 +255,6 @@ impl<S: Spec> StateCheckpoint<S> {
     /// Returns the list of all changes contained in the state checkpoint.
     pub fn changes(&mut self) -> ChangeSet {
         self.delta.changes()
-    }
-
-    /// Warms up the cache with reads whose keys are not already present.
-    pub fn add_read_if_not_present(&mut self, reads: FirstTimeReads) {
-        self.delta.add_read_if_not_present(reads);
     }
 
     /// Directly apply a set of changes to the state checkpoint. This method should generally *not* be used

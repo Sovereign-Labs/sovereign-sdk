@@ -251,9 +251,6 @@ pub struct PreferredSequencerConfig<Address: Copy> {
     pub recovery_strategy: RecoveryStrategy,
     /// Target time in milliseconds to spend executing all the txs in a single batch. Batches will be closed when they exceed this value.
     pub batch_execution_time_limit_millis: u64,
-    #[serde(default = "default_num_cache_warmup_workers")]
-    /// The number of workers that warm up the main executor cache.
-    pub num_cache_warmup_workers: usize,
     /// Configuration for rate-limiting the sequencer.
     #[serde(default = "default_rate_limiter::<Address>")]
     pub rate_limiter: Option<SovRateLimiterConfig<Address>>,
@@ -287,7 +284,6 @@ impl<Address: Copy> Default for PreferredSequencerConfig<Address> {
             recovery_strategy: RecoveryStrategy::None,
             db_event_channel_size: default_db_event_channel_size(),
             batch_execution_time_limit_millis: 6_000, // 6 seconds
-            num_cache_warmup_workers: default_num_cache_warmup_workers(),
             maximum_future_nonce_delta: default_maximum_future_nonce_delta(),
             future_nonce_transaction_timeout_millis:
                 default_future_nonce_transaction_timeout_millis(),
@@ -307,10 +303,6 @@ pub const fn default_maximum_future_nonce_delta() -> u64 {
 
 pub const fn default_future_nonce_transaction_timeout_millis() -> u64 {
     2000
-}
-
-pub const fn default_num_cache_warmup_workers() -> usize {
-    3
 }
 
 /// The ideal buffer of finalized slots that the sequencer should maintain. The larger this number,

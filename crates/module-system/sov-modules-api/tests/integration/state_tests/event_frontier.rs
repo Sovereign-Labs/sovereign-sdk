@@ -41,10 +41,7 @@ fn accessor(
 }
 
 fn empty_changeset() -> TxChangeSet {
-    TxChangeSet {
-        writes: vec![],
-        reads: Default::default(),
-    }
+    TxChangeSet { writes: vec![] }
 }
 
 #[test]

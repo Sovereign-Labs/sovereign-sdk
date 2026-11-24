@@ -1,6 +1,5 @@
 use super::batch_size_tracker::BatchSizeTracker;
 use crate::preferred::block_executor::RollupBlockExecutor;
-use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::db::BatchToStore;
 use crate::preferred::db::SequencerRole;
 use crate::preferred::executor_events::ExecutorEventsSender;
@@ -181,7 +180,6 @@ pub(crate) fn create<S, Rt>(
     stop_at_rollup_height: Option<RollupHeight>,
     rollup_exec_config: RollupBlockExecutorConfig<S>,
     tx_cache_writer: TxResultWriter<S, Rt>,
-    cache_warm_up_executor: CacheWarmUpExecutor<S>,
     start_replica_task_notifier: EventReceiverStartNotifier,
     approximate_block_time: Duration,
 ) -> (
@@ -235,7 +233,6 @@ where
         stop_at_rollup_height,
         rollup_exec_config,
         tx_cache_writer,
-        cache_warm_up_executor,
         start_replica_task_notifier,
         rate_limiter,
 
@@ -327,4 +324,15 @@ pub(crate) fn comfortable_gas_limit<S: Spec>() -> <S as GasSpec>::Gas {
                     "Cannot overflow after dividing by {COMFORTABLE_GAS_LIMIT_DIVISOR} and multiplying by {COMFORTABLE_GAS_LIMIT_MULTIPLIER}",
                 )
             })
+}
+
+/// Whether the open batch has used enough gas to be closed. Shared by the actor and the executor,
+/// which must agree on it exactly.
+pub(crate) fn gas_reached_comfortable_limit<S: Spec>(
+    remaining_slot_gas: <S as GasSpec>::Gas,
+) -> bool {
+    let gas_used = <S as GasSpec>::block_gas_limit()
+        .checked_sub(remaining_slot_gas)
+        .expect("remaining_slot_gas is always smaller than block_gas_limit");
+    comfortable_gas_limit::<S>().dim_is_less_or_eq(gas_used)
 }

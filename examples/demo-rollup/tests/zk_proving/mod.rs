@@ -79,7 +79,6 @@ pub async fn start_test_rollup(
             sequencer_config.batch_execution_time_limit_millis = TEST_DEFAULT_MOCK_DA_BLOCK_TIME_MS;
             sequencer_config.recovery_strategy = RecoveryStrategy::TryToSave;
             sequencer_config.disable_state_root_consistency_checks = true;
-            sequencer_config.num_cache_warmup_workers = 0;
             sequencer_config.ideal_lag_behind_finalized_slot = 3;
         }
     })

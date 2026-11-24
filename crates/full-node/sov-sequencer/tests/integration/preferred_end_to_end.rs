@@ -2196,6 +2196,63 @@ async fn flaky_max_batch_execution_time() {
         .unwrap();
 }
 
+/// Txs submitted concurrently reach the executor several at a time. With a 1ms execution time cap,
+/// batches close in the middle of such a chunk, so the executor must stop at the close point and
+/// hand the rest back. If the sequencer's batches didn't match what it executed, accepted txs would
+/// go missing on the node or the sequencer would shut down on a state root mismatch.
+#[tokio::test(flavor = "multi_thread")]
+async fn pipelined_txs_stay_consistent_when_batches_close_mid_chunk() {
+    let num_txs = 200;
+    let (test_rollup, admin) = create_test_rollup(
+        0,
+        TEST_MAX_BATCH_SIZE,
+        TEST_BLOB_PROCESSING_TIMEOUT,
+        1,
+        TEST_FINALIZATION_BLOCKS,
+        TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
+    )
+    .await;
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+    let client = test_rollup.api_client().clone();
+    let mut slot_subscription = client
+        .subscribe_slots_with_children(IncludeChildren::new(true))
+        .await
+        .unwrap();
+
+    let results = future::join_all((0..num_txs).map(|value| {
+        let client = client.clone();
+        let tx = tx_set_value(&admin.private_key, 0, value);
+        async move { client.send_raw_tx_to_sequencer(&tx).await }
+    }))
+    .await;
+    let accepted = results.iter().filter(|result| result.is_ok()).count();
+    assert!(accepted > 0, "The sequencer rejected every tx");
+    test_rollup.force_close_batch().await.unwrap();
+
+    let mut included = 0;
+    while included < accepted {
+        let slot = tokio::time::timeout(Duration::from_secs(60), slot_subscription.next())
+            .await
+            .expect("Timed out waiting for the accepted txs to be included")
+            .unwrap()
+            .unwrap();
+        included += slot.batches.iter().map(|b| b.txs.len()).sum::<usize>();
+    }
+    assert_eq!(
+        included, accepted,
+        "The node must include exactly the txs the sequencer accepted"
+    );
+
+    test_rollup.produce_enough_finalized_slots().await;
+    test_rollup.wait_for_node_synced().await.unwrap();
+    test_rollup.wait_for_sequencer_ready().await.unwrap();
+    client
+        .send_raw_tx_to_sequencer_with_retry(&tx_set_value(&admin.private_key, 1, num_txs))
+        .await
+        .expect("The sequencer must still accept txs once the node has caught up");
+}
+
 /// Test that the sequencer can compute state roots for itself to avoid panics.
 ///
 /// This test works by causing the node to fall far behind the sequencer in processing rollup blocks.
