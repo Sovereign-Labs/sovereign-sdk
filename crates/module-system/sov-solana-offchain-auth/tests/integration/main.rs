@@ -1630,3 +1630,33 @@ fn test_v0_payload_with_address_override_round_trips() {
         serde_json::from_str(&json).expect("deserialize");
     assert_eq!(parsed.address_override, Some(target));
 }
+
+#[test]
+fn prewarm_signature_cache_caches_signature_check() {
+    use sov_modules_api::capabilities::{take_auth_cache_stats, AuthCacheStats};
+
+    let signer = <<S as Spec>::CryptoSpec as CryptoSpec>::PrivateKey::generate();
+    let signed_message = create_transfer_tx_json(Amount(0x1234), RECIPIENT_ADDRESS).into_bytes();
+    let signature = signer.sign(&signed_message);
+    let raw_tx = borsh::to_vec(&SolanaOffchainSimpleEnvelope::<S> {
+        signed_message,
+        chain_hash: RT::CHAIN_HASH,
+        pubkey: signer.pub_key(),
+        signature,
+    })
+    .unwrap();
+    sov_solana_offchain_auth::authentication::prewarm_signature_cache::<S>(&raw_tx);
+    take_auth_cache_stats();
+
+    // The second call looks the signature up again, which shows what the first one left behind.
+    sov_solana_offchain_auth::authentication::prewarm_signature_cache::<S>(&raw_tx);
+
+    assert_eq!(
+        take_auth_cache_stats(),
+        AuthCacheStats {
+            signature_hits: 1,
+            ..Default::default()
+        },
+        "The first prewarm should have cached the signature check"
+    );
+}
