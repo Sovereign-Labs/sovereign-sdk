@@ -57,12 +57,11 @@ where
     let visible_slot_number =
         sov_modules_api::VersionReader::current_visible_slot_number(&pre_exec_working_set);
 
+    // Name the call before starting the clock, so `execution_time` covers execution only.
     #[cfg(feature = "native")]
-    let (discriminant, start) = {
-        // Name the call before starting the clock, so `execution_time` covers execution only.
-        let discriminant = call_message_repr::<R>(&validated_output.2);
-        (discriminant, std::time::Instant::now())
-    };
+    let discriminant = call_message_repr::<R>(&validated_output.2);
+    #[cfg(feature = "native")]
+    let start = std::time::Instant::now();
 
     let result = process_tx_and_reward_prover_inner(
         runtime,

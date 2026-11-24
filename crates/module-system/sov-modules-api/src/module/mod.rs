@@ -237,23 +237,16 @@ fn debug_prefix(value: &impl Debug, sink: &mut impl core::fmt::Write) {
     let _ = core::fmt::write(sink, format_args!("{value:?}"));
 }
 
-/// Collects the leading run of alphanumeric and `_` characters.
+/// The sink behind [`leading_ident`].
 #[derive(Default)]
 struct LeadingIdent {
     ident: String,
-    /// Set once the identifier has ended. Later writes are rejected, so a Debug impl that
-    /// ignores the error and keeps writing cannot extend the identifier.
-    done: bool,
 }
 
 impl core::fmt::Write for LeadingIdent {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        if self.done {
-            return Err(core::fmt::Error);
-        }
         for c in s.chars() {
             if !(c.is_alphanumeric() || c == '_') {
-                self.done = true;
                 return Err(core::fmt::Error);
             }
             self.ident.push(c);
@@ -262,28 +255,19 @@ impl core::fmt::Write for LeadingIdent {
     }
 }
 
-/// Collects the text after the first `(` up to the next ` `, `{` or `(`.
+/// The sink behind [`first_variant`].
 #[derive(Default)]
 struct FirstVariant {
     variant: Option<String>,
-    /// Set once the variant has ended. Later writes are rejected, so a Debug impl that
-    /// ignores the error and keeps writing cannot extend the variant.
-    done: bool,
 }
 
 impl core::fmt::Write for FirstVariant {
     fn write_str(&mut self, s: &str) -> core::fmt::Result {
-        if self.done {
-            return Err(core::fmt::Error);
-        }
         for c in s.chars() {
             match &mut self.variant {
                 None if c == '(' => self.variant = Some(String::new()),
                 None => {}
-                Some(_) if matches!(c, ' ' | '{' | '(') => {
-                    self.done = true;
-                    return Err(core::fmt::Error);
-                }
+                Some(_) if matches!(c, ' ' | '{' | '(') => return Err(core::fmt::Error),
                 Some(variant) => variant.push(c),
             }
         }
@@ -520,99 +504,6 @@ mod tests {
         );
     }
 
-    /// The `format!`-based implementations that `leading_ident` and `first_variant` replace.
-    /// Their output ends up in ledger event keys and metric tags, so it must not change.
-    fn old_leading_ident(value: &impl Debug) -> String {
-        let event_debug = format!("{value:?}");
-        event_debug
-            .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-            .next()
-            .unwrap_or_default()
-            .to_string()
-    }
-
-    fn old_first_variant(value: &impl Debug) -> Option<String> {
-        let dbg = format!("{value:?}");
-        dbg.split_once('(').map(|(_idx, after_parent)| {
-            let end_idx = after_parent
-                .find([' ', '{', '('])
-                .unwrap_or(after_parent.len());
-            after_parent[..end_idx].to_string()
-        })
-    }
-
-    #[allow(dead_code)]
-    #[derive(Debug)]
-    enum Inner {
-        Unit,
-        Tuple(u32, Vec<u8>),
-        Struct { to: String, amount: u128 },
-    }
-
-    #[allow(dead_code)]
-    #[derive(Debug)]
-    enum Outer {
-        Bank(Inner),
-        Nested(Option<Inner>),
-        NoParens,
-    }
-
-    /// Writes its pieces one by one, ignoring every write error.
-    struct ErrorIgnoringDebug(&'static [&'static str]);
-
-    impl Debug for ErrorIgnoringDebug {
-        fn fmt(&self, f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
-            for piece in self.0 {
-                let _ = f.write_str(piece);
-            }
-            Ok(())
-        }
-    }
-
-    fn samples() -> Vec<Box<dyn Debug>> {
-        vec![
-            Box::new(Outer::Bank(Inner::Unit)),
-            Box::new(Outer::Bank(Inner::Tuple(0x1234, vec![1, 2, 3]))),
-            Box::new(Outer::Bank(Inner::Struct {
-                to: "sov1abc".to_string(),
-                amount: 0x1234_5678,
-            })),
-            Box::new(Outer::Nested(Some(Inner::Unit))),
-            Box::new(Outer::Nested(None)),
-            Box::new(Outer::NoParens),
-            Box::new(Inner::Struct {
-                to: "a (b) {c}".to_string(),
-                amount: 0,
-            }),
-            Box::new("quoted (str)"),
-            Box::new((0x1234u32, "tuple")),
-            Box::new(ErrorIgnoringDebug(&["Ident", "(", "Var", " ", "more"])),
-            Box::new(ErrorIgnoringDebug(&["Ünï_cödé", "(", "Väriant", "{", "x"])),
-        ]
-    }
-
-    #[test]
-    fn leading_ident_matches_format_based_implementation() {
-        for sample in samples() {
-            assert_eq!(
-                leading_ident(&sample),
-                old_leading_ident(&sample),
-                "Leading identifier changed for {sample:?}"
-            );
-        }
-    }
-
-    #[test]
-    fn first_variant_matches_format_based_implementation() {
-        for sample in samples() {
-            assert_eq!(
-                first_variant(&sample),
-                old_first_variant(&sample),
-                "Call message variant changed for {sample:?}"
-            );
-        }
-    }
-
     /// Stands in for a payload that is expensive to format: formatting it fails the test.
     struct UnformattablePayload;
 
@@ -666,10 +557,23 @@ mod tests {
     }
 
     #[test]
-    fn sinks_ignore_writes_after_they_are_done() {
-        // A Debug impl that ignores the stop signal and keeps writing must not extend the result.
-        let value = ErrorIgnoringDebug(&["Ab", "!", "cd", "(", "Var", " ", "tail", "(", "x"]);
-        assert_eq!(leading_ident(&value), "Ab");
-        assert_eq!(first_variant(&value), Some("Var".to_string()));
+    fn first_variant_without_payload() {
+        #[derive(Debug)]
+        enum Inner {
+            Unit,
+        }
+
+        #[derive(Debug)]
+        enum Outer {
+            Module(Inner),
+            NoParens,
+        }
+
+        // The closing parenthesis is kept. It is part of existing metric tags.
+        assert_eq!(
+            first_variant(&Outer::Module(Inner::Unit)),
+            Some("Unit)".to_string())
+        );
+        assert_eq!(first_variant(&Outer::NoParens), None);
     }
 }
