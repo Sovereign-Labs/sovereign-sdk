@@ -42,4 +42,8 @@ native = [
     "sov-metrics/native",
 ]
 test-utils = []
+# Per-transaction metrics (`sov_rollup_transaction_execution_us`, `sov_rollup_auth_and_process_metrics`)
+# and slow-transaction logs. Off by default because they run on the STF hot path for every transaction.
+# Also enables `sov-modules-api/expensive-observability`.
+expensive-observability = ["native", "sov-modules-api/expensive-observability"]
 gas-constant-estimation = ["bench", "sov-modules-api/gas-constant-estimation", "sov-metrics/gas-constant-estimation"] 
