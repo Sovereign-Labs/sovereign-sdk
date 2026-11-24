@@ -334,6 +334,10 @@ impl<S: Spec> UniversalStateAccessor for StateCheckpoint<S> {
         self.delta.get_size(namespace, key, metric)
     }
 
+    fn get_cached_value(&self, namespace: Namespace, key: &SlotKey) -> Option<Option<SlotValue>> {
+        self.delta.get_cached_value(namespace, key)
+    }
+
     fn get_value(
         &mut self,
         namespace: Namespace,

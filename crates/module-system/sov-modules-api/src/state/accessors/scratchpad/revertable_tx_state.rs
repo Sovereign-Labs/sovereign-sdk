@@ -43,6 +43,15 @@ impl<S: Spec, I: StateMetricsProvider> StateMetricsProvider for RevertableTxStat
 }
 
 impl<'a, S: Spec, I: TxState<S>> RevertableTxState<'a, S, I> {
+    /// The pending write for `key`, if any. Skips building the lookup key (a clone of `key`) when
+    /// nothing was written yet, which is the common case for reads.
+    fn lookup_write(&self, namespace: Namespace, key: &SlotKey) -> Option<&Option<SlotValue>> {
+        if self.writes.is_empty() {
+            return None;
+        }
+        self.writes.get(&(namespace, key.clone()))
+    }
+
     /// Creates a new [`RevertableTxState`] from the provided [`TxState`].
     ///
     /// # Important
@@ -113,10 +122,17 @@ impl<S: Spec, I: TxState<S>> UniversalStateAccessor for RevertableTxState<'_, S,
         key: &SlotKey,
         metrics: &mut StateAccessMetric,
     ) -> Option<u32> {
-        if let Some(value) = self.writes.get(&(namespace, key.clone())) {
+        if let Some(value) = self.lookup_write(namespace, key) {
             return value.as_ref().map(|v| v.size());
         }
         self.inner.get_size(namespace, key, metrics)
+    }
+
+    fn get_cached_value(&self, namespace: Namespace, key: &SlotKey) -> Option<Option<SlotValue>> {
+        if let Some(value) = self.lookup_write(namespace, key) {
+            return Some(value.clone());
+        }
+        self.inner.get_cached_value(namespace, key)
     }
 
     fn get_value(
@@ -125,7 +141,7 @@ impl<S: Spec, I: TxState<S>> UniversalStateAccessor for RevertableTxState<'_, S,
         key: &SlotKey,
         metrics: &mut StateAccessMetric,
     ) -> Option<SlotValue> {
-        if let Some(value) = self.writes.get(&(namespace, key.clone())) {
+        if let Some(value) = self.lookup_write(namespace, key) {
             return value.clone();
         }
         self.inner.get_value(namespace, key, metrics)
