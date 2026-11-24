@@ -133,12 +133,10 @@ pub(crate) mod internal {
                 self.revertable_log.is_empty(),
                 "Revertable cache should be merged or discarded before calling `take_writes`"
             );
-            // `filter_map` gives no lower size hint, so `collect` would regrow the vector many times.
-            let mut writes = Vec::with_capacity(self.log.len());
-            writes.extend(self.log.into_iter().filter_map(|(k, mut access)| {
-                access.modified_mut().map(|value| (k, value.take()))
-            }));
-            writes
+            self.log
+                .into_iter()
+                .filter_map(|(k, mut access)| access.modified_mut().map(|value| (k, value.take())))
+                .collect()
         }
 
         pub(crate) fn get(&self, key: &SlotKey) -> Option<&Access> {
