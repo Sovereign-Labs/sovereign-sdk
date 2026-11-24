@@ -3,7 +3,6 @@
 mod async_batch;
 mod batch_size_tracker;
 mod block_executor;
-mod cache_warm_up_executor;
 mod db;
 mod executor_events;
 mod initialization;
@@ -19,7 +18,6 @@ mod transaction_subscriptions;
 mod update_state;
 
 use crate::preferred::block_executor::RollupBlockExecutorConfig;
-use crate::preferred::cache_warm_up_executor::CacheWarmUpExecutor;
 use crate::preferred::rate_limiter::IpAndCredentialId;
 use crate::preferred::replica::replica_sync_task::ReplicaSyncTask;
 use crate::preferred::rpc_errors::{

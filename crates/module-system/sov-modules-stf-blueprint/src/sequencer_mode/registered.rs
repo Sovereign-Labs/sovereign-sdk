@@ -485,22 +485,6 @@ where
 
     let mut clean_scratchpad = checkpoint.to_tx_scratchpad();
 
-    // Optimistically execute each transaction in the batch.
-    // We need...
-    // - A pool of threads that can "run ahead" of the main thread
-    // - To periodically update the checkpoint that the worker threads are using
-    // - For each worker...
-    //   - Grab the next tx from the queue
-    //   - Update state from the broadcast channel
-    //   - Run the tx
-    //   - Send the result back to the main thread.
-    //
-    // For the main thread:
-    //   - For each tx...
-    //     - Check if optimistic results are available
-    //     - If so, do a consistency check (each read needs to match the latest value)
-    //        - If the check passes, apply the tx to the state
-    //        - If the check fails, discard the result and execute the tx on the main thread
     // A replayed batch is fully known up front, so the stateless part of authentication (decoding
     // and signature checks) is done for all of its transactions in parallel before the serial
     // loop. The loop still authenticates every transaction and charges the same gas; it only
@@ -526,11 +510,9 @@ where
     #[cfg(feature = "native")]
     sov_modules_api::capabilities::take_auth_cache_stats();
 
-    for (idx, (raw_tx, mut injected_control_flow)) in
+    for (idx, (raw_tx, injected_control_flow)) in
         prefetched.into_iter().chain(batch_with_id).enumerate()
     {
-        injected_control_flow.try_warm_up_cache(&mut clean_scratchpad);
-
         // Authorize and process the transaction, handling sequencer rewards/penalties internally.
         // The caller is responsible for maintaining the global gas limit.
         let AuthAndProcessOutput {

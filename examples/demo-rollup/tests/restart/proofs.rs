@@ -38,7 +38,6 @@ async fn build_rollup_with_prover(
             c.rollup_prover_config = RollupProverConfig::Prove;
             if let SequencerKindConfig::Preferred(p) = &mut c.sequencer_config {
                 p.disable_state_root_consistency_checks = true;
-                p.num_cache_warmup_workers = 0;
                 p.recovery_strategy = RecoveryStrategy::TryToSave;
                 p.ideal_lag_behind_finalized_slot = 3;
             }

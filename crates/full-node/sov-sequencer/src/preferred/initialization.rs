@@ -167,16 +167,6 @@ where
             forced_tx_batch_notifier: forced_tx_batch_notifier.clone(),
         };
 
-        let (cache_warm_up_executor, workers) = CacheWarmUpExecutor::spawn_execution_task::<Rt>(
-            latest_state_update.clone(),
-            rollup_exec_config.clone(),
-            config.clone(),
-            seq_role,
-        )
-        .await;
-
-        handles.extend(workers);
-
         let (mut replica_task, start_replica_task_notifier) =
             ReplicaSyncTask::new(primary_shutdown.clone(), seq_role).await?;
 
@@ -198,7 +188,6 @@ where
             stop_at_rollup_height,
             rollup_exec_config.clone(),
             cached_txs.write_handle(),
-            cache_warm_up_executor,
             start_replica_task_notifier,
             approximate_block_time,
         );
