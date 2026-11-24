@@ -80,8 +80,12 @@ fn verify_signatures<S: Spec>(
 
     // 2. Check cache (native-only)
     #[cfg(feature = "native")]
-    if let Some(known_result) = SIGNATURE_CACHE.get(&raw_tx_hash) {
-        return known_result;
+    {
+        let known_result = SIGNATURE_CACHE.get(&raw_tx_hash);
+        sov_modules_api::capabilities::record_signature_cache_lookup(known_result.is_some());
+        if let Some(known_result) = known_result {
+            return known_result;
+        }
     }
 
     // 3. Verify signatures (unmetered)
@@ -121,6 +125,29 @@ fn verify_signatures<S: Spec>(
     SIGNATURE_CACHE.insert(raw_tx_hash, res.clone());
 
     res
+}
+
+/// Verifies the signatures of a raw Solana offchain transaction ahead of [`authenticate`] and keeps
+/// the result in the signature cache, which [`authenticate`] reads after charging the signature
+/// gas.
+///
+/// The signatures cover bytes taken straight from the envelope, so verifying them reads no state.
+/// Nothing is charged, and [`authenticate`] behaves the same whether or not this was called. An
+/// envelope that cannot be unpacked is skipped.
+#[cfg(feature = "native")]
+pub fn prewarm_signature_cache<S: Spec>(raw_tx: &[u8]) {
+    let raw_tx_hash = sov_modules_api::capabilities::calculate_hash::<S>(raw_tx);
+    // An envelope that cannot be unpacked is reported by `authenticate`.
+    let Ok(unpacked) = unpack_solana_message::<S>(raw_tx) else {
+        return;
+    };
+    // The result is ignored on purpose: it is now in the signature cache, and `authenticate`
+    // reports it after charging the signature gas.
+    let _ = verify_signatures::<S>(
+        &unpacked,
+        raw_tx_hash,
+        &mut sov_modules_api::UnlimitedGasMeter::<S>::default(),
+    );
 }
 
 /// Builds authorization data for either single-sig or multisig transactions.
