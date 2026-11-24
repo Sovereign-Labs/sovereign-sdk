@@ -325,3 +325,14 @@ pub(crate) fn comfortable_gas_limit<S: Spec>() -> <S as GasSpec>::Gas {
                 )
             })
 }
+
+/// Whether the open batch has used enough gas to be closed. Shared by the actor and the executor,
+/// which must agree on it exactly.
+pub(crate) fn gas_reached_comfortable_limit<S: Spec>(
+    remaining_slot_gas: <S as GasSpec>::Gas,
+) -> bool {
+    let gas_used = <S as GasSpec>::block_gas_limit()
+        .checked_sub(remaining_slot_gas)
+        .expect("remaining_slot_gas is always smaller than block_gas_limit");
+    comfortable_gas_limit::<S>().dim_is_less_or_eq(gas_used)
+}
