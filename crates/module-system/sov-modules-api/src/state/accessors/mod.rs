@@ -64,6 +64,17 @@ pub(super) mod seal {
             metric: &mut StateAccessMetric,
         ) -> Option<u32>;
 
+        /// The value for `key` if it can be read without side effects (no storage fetch, no
+        /// witness update): pending writes and already-read values. `None` if `get_size` and
+        /// `get_value` must be called. Never changes state, so it can run before gas is charged.
+        fn get_cached_value(
+            &self,
+            _namespace: Namespace,
+            _key: &SlotKey,
+        ) -> Option<Option<SlotValue>> {
+            None
+        }
+
         fn get_value(
             &mut self,
             namespace: Namespace,
@@ -74,6 +85,16 @@ pub(super) mod seal {
         fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue);
 
         fn delete_value(&mut self, namespace: Namespace, key: &SlotKey);
+
+        /// Applies a committed layer's pending writes, as `set_value` / `delete_value` would.
+        fn commit_writes(&mut self, writes: super::internals::PendingWrites) {
+            for ((key, namespace), value) in writes.into_iter() {
+                match value {
+                    Some(value) => self.set_value(namespace, &key, value),
+                    None => self.delete_value(namespace, &key),
+                }
+            }
+        }
     }
 }
 

@@ -46,6 +46,10 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for TxScratchpad<S, I>
         )
     }
 
+    fn get_cached_value(&self, namespace: Namespace, key: &SlotKey) -> Option<Option<SlotValue>> {
+        self.inner.get_cached_value(namespace, key)
+    }
+
     fn get_value(
         &mut self,
         namespace: Namespace,
@@ -58,6 +62,10 @@ impl<S: Spec, I: StateProvider<S>> UniversalStateAccessor for TxScratchpad<S, I>
             key,
             metrics,
         )
+    }
+
+    fn commit_writes(&mut self, writes: super::super::internals::PendingWrites) {
+        self.inner.writes.merge_newer(writes);
     }
 
     fn set_value(&mut self, namespace: Namespace, key: &SlotKey, value: SlotValue) {
@@ -165,7 +173,7 @@ impl<S: Spec> TxScratchpad<S, StateCheckpoint<S>> {
         reads: &mut Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
         namespace: Namespace,
     ) {
-        reads.retain(|(k, _)| !self.inner.writes.contains_key(&(k.clone(), namespace)));
+        reads.retain(|(k, _)| self.inner.writes.get(namespace, k).is_none());
     }
 }
 
