@@ -126,6 +126,13 @@ pub trait DbBackend: Send + Sync + 'static {
         data: PreferredProofDataBytes,
     ) -> Result<(), DbError>;
 
+    /// Returns the handle that prunes this database. Pruning only deletes finalized data, so the
+    /// pruner runs on its own task without holding up writes. Use at most one pruner per backend.
+    fn pruner(&self) -> Box<dyn DbPruner>;
+}
+
+#[async_trait]
+pub trait DbPruner: Send + Sync + 'static {
     /// Instructs the database it MAY delete all data up to the given
     /// [`SequenceNumber`] (included).
     ///
@@ -740,20 +747,13 @@ impl PreferredSequencerDb {
     }
 
     async fn check_replica_err(&self, err: DbError) -> anyhow::Error {
-        match err {
-            DbError::Database(err) => err,
-            DbError::ReplicaDisallowed {
-                self_node_id,
-                operation,
-            } => {
-                tracing::error!(
-                    %self_node_id,
-                    %operation,
-                    "The primary has become a replica. Shutting down.",
-                );
-                exit_rollup(&self.primary_shutdown).await;
-                unreachable!()
-            }
+        check_replica_err(&self.primary_shutdown, err).await
+    }
+
+    pub(crate) fn pruner(&self) -> PreferredSequencerDbPruner {
+        PreferredSequencerDbPruner {
+            pruner: self.backend.as_ref().map(|backend| backend.pruner()),
+            primary_shutdown: self.primary_shutdown.clone(),
         }
     }
 
@@ -790,18 +790,6 @@ impl PreferredSequencerDb {
         Ok(())
     }
 
-    #[tracing::instrument(skip_all, level = "info")]
-    pub(super) async fn prune_db(&mut self, prune_up_to_including: SequenceNumber) -> Result<()> {
-        if let Some(backend) = &mut self.backend {
-            if let Some(prune_up_to_including) = prune_up_to_including.checked_sub(PRUNING_LAG) {
-                if let Err(err) = backend.prune(prune_up_to_including).await {
-                    return Err(self.check_replica_err(err).await);
-                }
-            }
-        }
-        Ok(())
-    }
-
     async fn debug_assert_in_progress_batch_is_none(
         msg: &str,
         backend: &mut Box<dyn DbBackend>,
@@ -815,6 +803,47 @@ impl PreferredSequencerDb {
                     exit_rollup(primary_shutdown).await;
                 }
             }
+        }
+    }
+}
+
+/// Prunes the sequencer database; see [`DbBackend::pruner`].
+pub(crate) struct PreferredSequencerDbPruner {
+    pruner: Option<Box<dyn DbPruner>>,
+    primary_shutdown: PrimaryShutdownController,
+}
+
+impl PreferredSequencerDbPruner {
+    #[tracing::instrument(skip_all, level = "info")]
+    pub(crate) async fn prune_db(&mut self, prune_up_to_including: SequenceNumber) -> Result<()> {
+        if let Some(pruner) = &mut self.pruner {
+            if let Some(prune_up_to_including) = prune_up_to_including.checked_sub(PRUNING_LAG) {
+                if let Err(err) = pruner.prune(prune_up_to_including).await {
+                    return Err(check_replica_err(&self.primary_shutdown, err).await);
+                }
+            }
+        }
+        Ok(())
+    }
+}
+
+async fn check_replica_err(
+    primary_shutdown: &PrimaryShutdownController,
+    err: DbError,
+) -> anyhow::Error {
+    match err {
+        DbError::Database(err) => err,
+        DbError::ReplicaDisallowed {
+            self_node_id,
+            operation,
+        } => {
+            tracing::error!(
+                %self_node_id,
+                %operation,
+                "The primary has become a replica. Shutting down.",
+            );
+            exit_rollup(primary_shutdown).await;
+            unreachable!()
         }
     }
 }
