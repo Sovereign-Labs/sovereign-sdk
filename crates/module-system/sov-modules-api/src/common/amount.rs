@@ -81,6 +81,7 @@ impl Amount {
         self.0.checked_mul(other.0).map(Amount)
     }
     /// Checked division
+    #[inline]
     pub fn checked_div(&self, other: Amount) -> Option<Amount> {
         self.0.checked_div(other.0).map(Amount)
     }
@@ -99,7 +100,13 @@ impl Amount {
     pub fn saturating_mul(&self, other: Amount) -> Amount {
         Amount(self.0.saturating_mul(other.0))
     }
-    /// Saturating division
+    /// Saturating division. Division cannot overflow, so this never saturates.
+    ///
+    /// # Panics
+    ///
+    /// Panics if `other` is zero, like [`u128::saturating_div`]. Use
+    /// [`Amount::checked_div`] when the divisor is not known to be non-zero.
+    #[inline]
     pub fn saturating_div(&self, other: Amount) -> Amount {
         Amount(self.0.saturating_div(other.0))
     }

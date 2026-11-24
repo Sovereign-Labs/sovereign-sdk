@@ -58,6 +58,7 @@ macro_rules! impl_gas_array {
                 true
             }
 
+            #[inline]
             fn calculate_min(lhs: Self, rhs: Self) -> Self {
                 let mut output = [<$u>::from(0u64); $n];
 
