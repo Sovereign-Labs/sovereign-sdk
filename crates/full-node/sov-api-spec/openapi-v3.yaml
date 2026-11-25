@@ -308,6 +308,30 @@ paths:
           $ref: "#/components/responses/AggregatedProof"
         "404":
           $ref: "#/components/responses/ApiErrorResponse"
+  /ledger/state-proofs/{slotNumber}:
+    get:
+      tags:
+        - Ledger
+      summary: Get the state proofs archived for a slot.
+      operationId: get_archived_state_proofs
+      description: |
+        Get merkle proofs of the state keys which the rollup archives, against the state
+        root of the given slot. The state tree can only prove against its latest root, so
+        these proofs are captured while the slot is the latest one and become available
+        once the next slot has been processed. Returns 404 if nothing was archived for
+        the slot, which is always the case for rollups that do not archive state proofs.
+      parameters:
+        - name: slotNumber
+          in: path
+          required: true
+          schema:
+            type: integer
+            format: uint64
+      responses:
+        "200":
+          $ref: "#/components/responses/ArchivedStateProofs"
+        "404":
+          $ref: "#/components/responses/ApiErrorResponse"
   /sequencer/txs:
     post:
       summary: Submit a transaction to the rollup
@@ -669,6 +693,12 @@ components:
         application/json:
           schema:
             $ref: "#/components/schemas/AggregatedProof"
+    ArchivedStateProofs:
+      description: Success
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ArchivedStateProofs"
     Slot:
       description: Success
       content:
@@ -798,6 +828,25 @@ components:
       required:
         - type
         - proof
+    ArchivedStateProofs:
+      type: object
+      properties:
+        slot_number:
+          type: integer
+          format: uint64
+          description: The slot whose state root the proofs verify against.
+        state_root:
+          type: object
+          description: The state root of the rollup after the slot, as serialized by the node.
+        proofs:
+          type: array
+          description: One storage proof per archived state key, as serialized by the node.
+          items:
+            type: object
+      required:
+        - slot_number
+        - state_root
+        - proofs
     Uint64Range:
       type: object
       properties:

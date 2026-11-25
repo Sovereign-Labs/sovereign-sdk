@@ -35,7 +35,7 @@ use sov_sequencer::standard::StdSequencer;
 use sov_sequencer::{ProofBlobSender, Sequencer, SequencerApis, SequencerKindConfig};
 use sov_shutdown::{BackgroundHandle, PrimaryShutdownController, SecondaryShutdownController};
 use sov_state::storage::NativeStorage;
-use sov_state::Storage;
+use sov_state::{SlotKey, Storage};
 use sov_stf_runner::processes::{
     start_op_workflow_in_background, start_operator_workflow_in_background,
     start_zk_workflow_in_background, ProverService, RollupProverConfig,
@@ -227,6 +227,15 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
             start_fresh_outer_proof_on_resync,
         )
         .await
+    }
+
+    /// State keys from the user namespace whose merkle proofs the node archives for every slot.
+    ///
+    /// The state tree only keeps its latest version, so a proof against the state root of a
+    /// past slot must be captured while that root is current. The archived proofs are served at
+    /// `/ledger/state-proofs/{slotNumber}`. Nothing is archived by default.
+    fn archived_state_proof_keys(&self) -> Vec<SlotKey> {
+        Vec::new()
     }
 
     /// Injects additional HTTP APIs for the sequencer.
@@ -698,6 +707,13 @@ pub trait FullNodeBlueprint<M: ExecutionMode>: RollupBlueprint<M> {
                 return Err(error);
             }
         };
+
+        let archived_state_proof_keys = self.archived_state_proof_keys();
+        if !archived_state_proof_keys.is_empty() {
+            runner.set_state_proof_archiver(state_proof_archiver::<Self::Spec>(
+                archived_state_proof_keys,
+            ));
+        }
 
         if let Some(stf_info_receiver) = runner.take_stf_info_receiver() {
             let prover_service = prover_service

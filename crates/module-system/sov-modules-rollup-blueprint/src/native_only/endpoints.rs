@@ -4,6 +4,7 @@ use sov_modules_api::capabilities::HasCapabilities;
 use sov_modules_api::execution_mode::ExecutionMode;
 use std::sync::Arc;
 
+use sov_modules_api::prelude::axum::extract::{Path, State};
 use sov_modules_api::prelude::utoipa_swagger_ui::Config;
 use sov_modules_api::rest::utils::errors;
 use sov_modules_api::rest::HasRestApi;
@@ -12,8 +13,10 @@ use sov_modules_stf_blueprint::Runtime as RuntimeTrait;
 use sov_rollup_apis::endpoints::simulate::SovereignSimulate;
 use sov_rollup_apis::rollup_tx_router;
 use sov_rollup_full_node_interface::StateUpdateReceiver;
+use sov_rollup_interface::common::SlotNumber;
 use sov_rollup_interface::node::SyncStatus;
 use sov_shutdown::PrimaryShutdownController;
+use sov_state::{SlotKey, StorageProof};
 use sov_stf_runner::{RollupConfig, RunnerConfig};
 
 use super::SequencerCreationReceipt;
@@ -65,6 +68,9 @@ where
             .axum_router
             .merge(ledger_axum_router.with_state(ledger_state));
     }
+    endpoints.axum_router = endpoints
+        .axum_router
+        .merge(archived_state_proofs_router::<B::Spec>(ledger_db.clone()));
 
     let simulate_v2 = SovereignSimulate::<B::Spec, B::Runtime>::new(
         state_update_receiver.clone(),
@@ -121,6 +127,93 @@ where
         .route("/swagger-ui/{*rest}", handler);
 
     Ok(endpoints)
+}
+
+/// What the node archives for a slot: the state root of that slot and one proof per key from
+/// [`FullNodeBlueprint::archived_state_proof_keys`], in the same order. Stored borsh-encoded.
+type StoredStateProofs<S> = (
+    <<S as Spec>::Storage as Storage>::Root,
+    Vec<StorageProof<<<S as Spec>::Storage as Storage>::Proof>>,
+);
+
+/// Builds the archiver which proves `keys` against the latest root of the given storage.
+pub(super) fn state_proof_archiver<S: Spec>(
+    keys: Vec<SlotKey>,
+) -> sov_stf_runner::StateProofArchiver<S::Storage>
+where
+    S::Storage: sov_state::NativeStorage,
+{
+    Box::new(move |storage: &S::Storage| {
+        let mut proofs = Vec::with_capacity(keys.len());
+        let mut proven_at = None;
+        for key in &keys {
+            let (proof, slot_number, state_root) =
+                sov_state::NativeStorage::get_with_proof::<sov_state::User>(storage, key.clone())?;
+            // Every proof is generated in its own storage session, so check that they all
+            // describe the same state.
+            let (expected_slot_number, expected_state_root) =
+                proven_at.get_or_insert_with(|| (slot_number, state_root.clone()));
+            anyhow::ensure!(
+                *expected_slot_number == slot_number && *expected_state_root == state_root,
+                "State changed while archiving proofs: key {key} is proven at slot {slot_number}, previous keys at slot {expected_slot_number}",
+            );
+            proofs.push(proof);
+        }
+        let (slot_number, state_root) =
+            proven_at.ok_or_else(|| anyhow::anyhow!("No state keys to archive proofs for"))?;
+        let stored: StoredStateProofs<S> = (state_root, proofs);
+        Ok(sov_stf_runner::ArchivedStateProofs {
+            slot_number,
+            state_root: stored.0.as_ref().to_vec(),
+            proofs: borsh::to_vec(&stored)?,
+        })
+    })
+}
+
+/// The response of `GET /ledger/state-proofs/{slotNumber}`.
+#[derive(serde::Serialize, serde::Deserialize)]
+#[serde(bound = "")]
+pub struct ArchivedStateProofsResponse<S: Spec> {
+    /// The slot whose state root the proofs verify against.
+    pub slot_number: u64,
+    /// The state root of the rollup after that slot.
+    pub state_root: <S::Storage as Storage>::Root,
+    /// One proof per key from [`FullNodeBlueprint::archived_state_proof_keys`], in the same
+    /// order.
+    pub proofs: Vec<StorageProof<<S::Storage as Storage>::Proof>>,
+}
+
+fn archived_state_proofs_router<S: Spec>(
+    ledger_db: LedgerDb,
+) -> sov_modules_api::prelude::axum::Router {
+    sov_modules_api::prelude::axum::Router::new()
+        .route(
+            "/ledger/state-proofs/{slotNumber}",
+            sov_modules_api::prelude::axum::routing::get(get_archived_state_proofs::<S>),
+        )
+        .with_state(ledger_db)
+}
+
+async fn get_archived_state_proofs<S: Spec>(
+    State(ledger_db): State<LedgerDb>,
+    Path(slot_number): Path<u64>,
+) -> sov_modules_api::rest::utils::ApiResult<ArchivedStateProofsResponse<S>> {
+    use sov_modules_api::prelude::axum::response::IntoResponse;
+
+    let serialized = ledger_db
+        .get_archived_state_proofs(SlotNumber::new(slot_number))
+        .await
+        .map_err(|err| errors::database_error_500(err).into_response())?
+        .ok_or_else(|| errors::not_found_404("Archived state proofs for slot", slot_number))?;
+    let (state_root, proofs): StoredStateProofs<S> =
+        borsh::from_slice(&serialized).map_err(errors::internal_server_error_response_500)?;
+
+    Ok(ArchivedStateProofsResponse {
+        slot_number,
+        state_root,
+        proofs,
+    }
+    .into())
 }
 
 /// Serves swagger-ui files using the public `utoipa_swagger_ui::serve` API.
