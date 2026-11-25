@@ -319,6 +319,39 @@ pub fn setup_harness<R: Runtime<S> + Clone, S: Spec>(rng_salt: u128) -> TestGene
     }
 }
 
+/// Randomness for picking each transaction's validity. It is re-randomized in place when used up,
+/// so memory stays constant however long the soak runs.
+struct ValidityRandomness {
+    bytes: Vec<u8>,
+    offset: usize,
+    salt: u128,
+}
+
+impl ValidityRandomness {
+    fn new(size: usize, salt: u128) -> Self {
+        Self {
+            bytes: get_random_bytes(size, salt),
+            offset: 0,
+            salt,
+        }
+    }
+
+    fn select<'a>(
+        &mut self,
+        validity: &'a Distribution<MessageValidity>,
+    ) -> arbitrary::Result<&'a MessageValidity> {
+        if self.offset == self.bytes.len() {
+            self.salt += 1;
+            randomize_buffer(&mut self.bytes, self.salt);
+            self.offset = 0;
+        }
+        let u = &mut Unstructured::new(&self.bytes[self.offset..]);
+        let selected = validity.select_value(u)?;
+        self.offset = self.bytes.len() - u.len();
+        Ok(selected)
+    }
+}
+
 async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
     modules: Vec<BasicModuleRef<S, R>>,
     client: &sov_api_spec::Client,
@@ -334,8 +367,7 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
         Default::default();
 
     let modules = Distribution::with_equiprobable_values(modules);
-    let random_bytes = get_random_bytes(100_000_000, worker_id);
-    let u = &mut Unstructured::new(&random_bytes[..]);
+    let mut validity_randomness = ValidityRandomness::new(1_000_000, worker_id);
 
     let mut generator: TestGenerator<R, S> = setup_harness::<R, _>(worker_id);
     let past_transaction_generations = config_value!("PAST_TRANSACTION_GENERATIONS") + 1;
@@ -358,7 +390,7 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
 
         let mut txns = vec![];
         for _ in 0..txn_count {
-            let validity = validity.select_value(u)?;
+            let validity = validity_randomness.select(&validity)?;
             let msg = generator.generate(&modules, *validity);
             let tx = plain_tx_with_default_details::<R, S>(&msg);
             let signed_tx = {
@@ -439,4 +471,26 @@ async fn prepare_and_send_txs<R: Runtime<S> + Clone, S: Spec>(
     }
 
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn validity_randomness_keeps_selecting_after_buffer_is_used_up() {
+        let half = ValidityProfile::Half.get_validity();
+        let mut randomness = ValidityRandomness::new(4, 0x1234);
+
+        let invalid_count = (0..1_000)
+            .map(|_| randomness.select(&half).unwrap())
+            .filter(|validity| validity.is_invalid())
+            .count();
+
+        // Without the refill, every pick after the first 4 bytes falls back to the first value (Valid).
+        assert!(
+            (300..=700).contains(&invalid_count),
+            "Expected about half of 1000 picks to be invalid, got {invalid_count}"
+        );
+    }
 }
