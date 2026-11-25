@@ -1,6 +1,4 @@
 //! Prover side of NOMT-based Storage implementation
-use std::collections::btree_map::Entry;
-use std::collections::BTreeMap;
 use std::fmt::Formatter;
 use std::io::Write;
 use std::time::{Duration, Instant};
@@ -10,6 +8,7 @@ use nomt::hasher::BinaryHasher;
 use nomt::proof::MultiProof;
 use nomt::FinishedSession;
 use nomt_core::trie::KeyPath;
+use rayon::prelude::*;
 use sov_db::accessory_db::AccessoryDb;
 use sov_db::historical_state::HistoricalStateReader;
 use sov_db::state_db_nomt::{HistoricalValueError, NomtSessionBuilder, SessionsContainer};
@@ -481,59 +480,81 @@ where
     }
 }
 
+/// Pure reads do not affect the root, so they are only kept when `keep_reads` is set (witness generation),
+/// sparing NOMT a merkle seek per read. Reads of written keys are always kept as `ReadThenWrite`,
+/// because they give NOMT the prior value for the rollback log.
 fn to_nomt_accesses<S: MerkleProofSpec>(
     sov_accesses: &OrderedReadsAndWrites,
-) -> anyhow::Result<Vec<(nomt::trie::KeyPath, nomt::KeyReadWrite)>> {
-    let mut merged_accesses: BTreeMap<nomt::trie::KeyPath, nomt::KeyReadWrite> = BTreeMap::new();
-
+    keep_reads: bool,
+) -> anyhow::Result<Vec<(KeyPath, nomt::KeyReadWrite)>> {
     let OrderedReadsAndWrites {
         ordered_reads,
         ordered_writes,
     } = sov_accesses;
 
-    // First, put all the reads into merged accesses, so later we can distinguish `Write` from `ReadThenWrite`
-    for (key, read_node_leaf) in ordered_reads {
-        // Reads are warmed up during normal `get/get_leaf`
-        let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
-
-        let combined_hash_and_size =
-            read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size());
-
-        let nomt_read = nomt::KeyReadWrite::Read(combined_hash_and_size);
-
-        if merged_accesses.insert(key_hash, nomt_read).is_some() {
-            anyhow::bail!("Duplicate key read in state: {:?}", key_hash);
-        };
+    let mut writes: Vec<(KeyPath, Option<nomt::Value>)> = ordered_writes
+        .par_iter()
+        .map(|(key, original_write)| {
+            (
+                S::Hasher::digest(key.as_ref()).into(),
+                original_write
+                    .as_ref()
+                    .map(|v| v.combine_val_hash_and_size::<S::Hasher>()),
+            )
+        })
+        .collect();
+    writes.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+    if let Some(w) = writes.windows(2).find(|w| w[0].0 == w[1].0) {
+        anyhow::bail!("Duplicate key write in state: {:?}", w[0].0);
     }
 
-    // Writes
-    for (key, original_write) in ordered_writes {
-        let key_hash: nomt::trie::KeyPath = S::Hasher::digest(key.as_ref()).into();
+    let reads: Vec<(KeyPath, Option<usize>, Option<nomt::Value>)> = ordered_reads
+        .par_iter()
+        .map(|(key, read_node_leaf)| {
+            let key_path: KeyPath = S::Hasher::digest(key.as_ref()).into();
+            let write_index = writes
+                .binary_search_by(|(write_path, _)| write_path.cmp(&key_path))
+                .ok();
+            (
+                key_path,
+                write_index,
+                read_node_leaf.map(|node_leaf| node_leaf.combine_val_hash_and_size()),
+            )
+        })
+        .collect();
 
-        let authenticated_write = original_write
-            .as_ref()
-            .map(|v| v.combine_val_hash_and_size::<S::Hasher>());
-
-        match merged_accesses.entry(key_hash) {
-            Entry::Vacant(vacant) => {
-                // Also warming up all writes. `ReadThenWrite` has been warmed up during reads collection.
-                vacant.insert(nomt::KeyReadWrite::Write(authenticated_write));
+    let mut priors: Vec<Option<Option<nomt::Value>>> = vec![None; writes.len()];
+    let mut pure_reads = Vec::new();
+    for (key_path, write_index, value) in reads {
+        match write_index {
+            Some(index) => {
+                if priors[index].replace(value).is_some() {
+                    anyhow::bail!("Duplicate key read in state: {:?}", key_path);
+                }
             }
-            Entry::Occupied(occupied) => match occupied.remove() {
-                nomt::KeyReadWrite::Read(read_value) => {
-                    merged_accesses.insert(
-                        key_hash,
-                        nomt::KeyReadWrite::ReadThenWrite(read_value, authenticated_write),
-                    );
-                }
-                _ => {
-                    anyhow::bail!("Duplicate key write in state: {:?}", key_hash);
-                }
-            },
+            None if keep_reads => pure_reads.push((key_path, nomt::KeyReadWrite::Read(value))),
+            None => {}
         }
     }
 
-    Ok(merged_accesses.into_iter().collect())
+    let mut accesses: Vec<(KeyPath, nomt::KeyReadWrite)> = writes
+        .into_iter()
+        .zip(priors)
+        .map(|((key_path, value), prior)| match prior {
+            Some(prior) => (key_path, nomt::KeyReadWrite::ReadThenWrite(prior, value)),
+            None => (key_path, nomt::KeyReadWrite::Write(value)),
+        })
+        .collect();
+    if keep_reads {
+        accesses.extend(pure_reads);
+        accesses.par_sort_unstable_by(|a, b| a.0.cmp(&b.0));
+        // Writes are unique and pure reads exclude written keys, so any duplicate is a repeated read.
+        if let Some(w) = accesses.windows(2).find(|w| w[0].0 == w[1].0) {
+            anyhow::bail!("Duplicate key read in state: {:?}", w[0].0);
+        }
+    }
+
+    Ok(accesses)
 }
 
 fn compute_state_update_namespace<S: MerkleProofSpec>(
@@ -686,8 +707,9 @@ where
         prev_state_root: Self::Root,
     ) -> anyhow::Result<(Self::Root, Self::StateUpdate)> {
         let start = std::time::Instant::now();
-        let nomt_accesses_user = to_nomt_accesses::<S>(&state_accesses.user)?;
-        let nomt_accesses_kernel = to_nomt_accesses::<S>(&state_accesses.kernel)?;
+        let keep_reads = self.witness_mode.is_witness_enabled();
+        let nomt_accesses_user = to_nomt_accesses::<S>(&state_accesses.user, keep_reads)?;
+        let nomt_accesses_kernel = to_nomt_accesses::<S>(&state_accesses.kernel, keep_reads)?;
         let accesses_build_time = start.elapsed();
         tracing::trace!(time = ?accesses_build_time, "Nomt accesses are computed");
 
