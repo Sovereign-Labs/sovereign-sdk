@@ -4,8 +4,9 @@ use crate::metrics::{
     track_sequence_number, track_sequence_number_delta, PreferredSequencerChannelMetrics,
     PreferredSequencerChannelMetricsBatch,
 };
+use crate::preferred::async_batch::{ChunkMarker, CloseBudget};
 use crate::preferred::block_executor::{
-    AcceptedTxWithBudgetInfo, RollupBlockExecutor, RollupBlockExecutorError,
+    AcceptedTxWithBudgetInfo, CollectedTx, RollupBlockExecutor, RollupBlockExecutorError,
 };
 use crate::preferred::block_executor::{RollupBlockExecutorErrorWithBudget, StartBlockData};
 use crate::preferred::db::{latest_finalized_sequence_number, SequencerRole};
@@ -16,13 +17,13 @@ use crate::preferred::sync_sequencer_state::EventReceiverStartNotifier;
 use crate::preferred::AcceptedTx;
 use crate::preferred::BatchSizeTracker;
 use crate::preferred::RollupBlockExecutorConfig;
-use crate::preferred::{comfortable_gas_limit, PreferredBlobToReplay};
 use crate::preferred::{
     current_visible_slot_number_according_to_node, get_next_sequence_number_according_to_node,
     is_lagging_less_than_ideal_amount, next_visible_slot_number_increase, BatchCreationError,
     Confirmation, PreferredSequencerConfig, PreferredSequencerFetchBatchesToReplayMetrics,
     TxResultWriter,
 };
+use crate::preferred::{gas_reached_comfortable_limit, PreferredBlobToReplay};
 use crate::{
     PreferredProofDataBytes, SequencerConfig, SequencerNotReadyDetails, SlotNumber, TxHash,
 };
@@ -31,7 +32,7 @@ use sov_blob_storage::SequenceNumber;
 use sov_modules_api::capabilities::RollupHeight;
 use sov_modules_api::Gas;
 use sov_modules_api::{
-    CredentialId, FullyBakedTx, GasArray, GasSpec, Runtime, Spec, StateCheckpoint, VersionReader,
+    CredentialId, FullyBakedTx, GasSpec, Runtime, Spec, StateCheckpoint, VersionReader,
     VisibleSlotNumber,
 };
 use sov_rollup_full_node_interface::StateUpdateInfo;
@@ -411,24 +412,14 @@ where
         (result, metrics)
     }
 
-    /// Closes the current batch if it is nearly full (by gas limit) or has reached the target batch execution time.
-    pub(crate) async fn close_batch_if_nearly_full(
-        &mut self,
-        remaining_slot_gas: <S as GasSpec>::Gas,
-    ) {
-        // Check if we're close to the gas limit and close the batch if we are.
+    /// Whether the open batch is nearly full (by gas limit or size) or has reached the target
+    /// batch execution time. The executor applies the same thresholds through [`CloseBudget`],
+    /// see [`Self::close_budget`].
+    pub(crate) fn should_close_batch(&self, remaining_slot_gas: <S as GasSpec>::Gas) -> bool {
         // We want to close when gas used is at least 95% of the block gas limit.
-        let block_gas_limit = <S as GasSpec>::block_gas_limit();
-        let comfortable_limit = comfortable_gas_limit::<S>();
-
-        let gas_used = block_gas_limit
-            .checked_sub(remaining_slot_gas)
-            .expect("remaining_slot_gas is always smaller than block_gas_limit");
-
-        let close_to_gas_limit = comfortable_limit.dim_is_less_or_eq(gas_used);
-        if close_to_gas_limit {
-            tracing::debug!(%comfortable_limit, %gas_used, "Closing and publishing current batch because we're close to the gas limit");
-            self.close_current_batch().await;
+        if gas_reached_comfortable_limit::<S>(remaining_slot_gas) {
+            tracing::debug!(%remaining_slot_gas, "Closing and publishing current batch because we're close to the gas limit");
+            return true;
         }
 
         let current_batch_execution_time_micros =
@@ -436,25 +427,40 @@ where
 
         if current_batch_execution_time_micros > self.batch_execution_time_limit_micros {
             tracing::debug!(%self.batch_execution_time_limit_micros, %current_batch_execution_time_micros, "Closing and publishing current batch because we've reached the batch execution time cap");
-            self.close_current_batch().await;
-        } else {
-            tracing::trace!(%self.batch_execution_time_limit_micros, %current_batch_execution_time_micros, "Batch execution time is within comfortable range, not closing batch");
+            return true;
         }
+        tracing::trace!(%self.batch_execution_time_limit_micros, %current_batch_execution_time_micros, "Batch execution time is within comfortable range, not closing batch");
 
-        let comfortable_size_limit = (self.batch_size_tracker.max_batch_size as u64)
+        let comfortable_size_limit = self.comfortable_size_limit();
+        if (self.batch_size_tracker.current_batch_size as u64) > comfortable_size_limit {
+            tracing::debug!(%comfortable_size_limit, current_batch_size = %self.batch_size_tracker.current_batch_size, "Closing and publishing current batch because we're close to the size limit");
+            return true;
+        }
+        tracing::trace!(%comfortable_size_limit, current_batch_size = %self.batch_size_tracker.current_batch_size, "Batch size is within comfortable range, not closing batch");
+        false
+    }
+
+    /// How much the open batch can grow before [`Self::should_close_batch`] returns true.
+    pub(crate) fn close_budget(&self) -> CloseBudget {
+        CloseBudget {
+            bytes_room: self
+                .comfortable_size_limit()
+                .saturating_sub(self.batch_size_tracker.current_batch_size as u64),
+            execution_time_room_micros: self
+                .batch_execution_time_limit_micros
+                .saturating_sub(self.batch_size_tracker.batch_execution_time_micros),
+        }
+    }
+
+    fn comfortable_size_limit(&self) -> u64 {
+        (self.batch_size_tracker.max_batch_size as u64)
             .checked_div(COMFORTABLE_SIZE_LIMIT_DIVISOR)
             .and_then(|x| x.checked_mul(COMFORTABLE_SIZE_LIMIT_MULTIPLIER))
             .unwrap_or_else(|| {
                 panic!(
                     "Cannot overflow after dividing by {COMFORTABLE_SIZE_LIMIT_DIVISOR} and multiplying by {COMFORTABLE_SIZE_LIMIT_MULTIPLIER}",
                 )
-            });
-        if (self.batch_size_tracker.current_batch_size as u64) > comfortable_size_limit {
-            tracing::debug!(%comfortable_size_limit, current_batch_size = %self.batch_size_tracker.current_batch_size, "Closing and publishing current batch because we're close to the size limit");
-            self.close_current_batch().await;
-        } else {
-            tracing::trace!(%comfortable_size_limit, current_batch_size = %self.batch_size_tracker.current_batch_size, "Batch size is within comfortable range, not closing batch");
-        }
+            })
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
@@ -732,27 +738,45 @@ where
         Ok(Some(sequence_number))
     }
 
+    /// Executes one tx and waits for its result.
     pub(crate) async fn do_new_tx(
         &mut self,
         tx_hash: TxHash,
         baked_tx: FullyBakedTx,
         credential_id: Option<CredentialId>,
-    ) -> (
-        Result<
-            (
-                oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
-                <S as Spec>::Gas,
-            ),
-            DoNewTxError<S>,
-        >,
-        ResourceUsed<S::Gas>,
-    ) {
+    ) -> (NewTxResult<S, Rt>, ResourceUsed<S::Gas>) {
+        let tx_len = baked_tx.len();
+        match self.begin_new_tx(tx_hash, baked_tx, ChunkMarker::Unbudgeted, 0) {
+            BegunNewTx::Submitted => {}
+            BegunNewTx::Rejected(err, resource_used) => return (Err(err), resource_used),
+            BegunNewTx::WaitForInFlight(_) => {
+                unreachable!("A tx can only wait for txs in flight if there are any")
+            }
+        }
+        match self.finish_new_tx(tx_hash, tx_len, credential_id).await {
+            FinishedNewTx::Done(res, resource_used) => (res, resource_used),
+            FinishedNewTx::Deferred(_) => {
+                unreachable!("The executor never defers a tx that starts an unbudgeted chunk")
+            }
+        }
+    }
+
+    /// Checks that `baked_tx` can go into the open batch and sends it to the executor without
+    /// waiting for its result. `in_flight_bytes` is the serialized size of the txs sent earlier
+    /// whose results haven't been collected yet.
+    pub(crate) fn begin_new_tx(
+        &mut self,
+        tx_hash: TxHash,
+        baked_tx: FullyBakedTx,
+        chunk: ChunkMarker,
+        in_flight_bytes: usize,
+    ) -> BegunNewTx<S> {
         // Even if this method return early it uses 1 request slot.
         let request_used = ResourceUsed::new(1, 0, 0, <S as Spec>::Gas::zero());
 
         if self.primary_shutdown.is_triggered() {
             tracing::info!("The sequencer is shutting down. Cannot accept transactions");
-            return (Err(DoNewTxError::Shutdown), request_used);
+            return BegunNewTx::Rejected(DoNewTxError::Shutdown, request_used);
         }
 
         if !self.executor.has_in_progress_batch() {
@@ -762,24 +786,20 @@ where
             );
         }
 
-        let sequence_number = self
-            .sequence_number_of_open_batch
-            .expect("No batch in progress in Inner::do_new_tx");
-        let Inner {
-            executor,
-            batch_size_tracker,
-            executor_events_sender,
-            ..
-        } = &mut *self;
-
         let tx_len = baked_tx.len();
-        if !batch_size_tracker.can_fit_tx_bytes(tx_len) {
-            return (
-                Err(DoNewTxError::TxTooBig {
-                    current_batch_size: batch_size_tracker.current_batch_size,
-                    max_batch_size: batch_size_tracker.max_batch_size,
+        if !self
+            .batch_size_tracker
+            .can_fit_tx_bytes(tx_len.saturating_add(in_flight_bytes))
+        {
+            if in_flight_bytes > 0 {
+                return BegunNewTx::WaitForInFlight(baked_tx);
+            }
+            return BegunNewTx::Rejected(
+                DoNewTxError::TxTooBig {
+                    current_batch_size: self.batch_size_tracker.current_batch_size,
+                    max_batch_size: self.batch_size_tracker.max_batch_size,
                     tx_len,
-                }),
+                },
                 request_used,
             );
         }
@@ -791,16 +811,41 @@ where
         // is conservative.
         let total_payload_len = baked_tx.payload_len();
         if total_payload_len > sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE {
-            return (
-                Err(DoNewTxError::TxWithSequencingDataTooBig {
+            return BegunNewTx::Rejected(
+                DoNewTxError::TxWithSequencingDataTooBig {
                     total_payload_len,
                     max_payload_len: sov_rollup_interface::stf::MAX_FULLY_BAKED_TX_SIZE,
-                }),
+                },
                 request_used,
             );
         }
 
-        let apply_tx_res = executor.apply_tx_to_in_progress_batch(baked_tx).await;
+        match self.executor.submit_tx(baked_tx, chunk) {
+            Ok(()) => BegunNewTx::Submitted,
+            Err(err) => {
+                let (err, resource_used) = executor_error_with_resources(tx_hash, tx_len, err);
+                BegunNewTx::Rejected(err, resource_used)
+            }
+        }
+    }
+
+    /// Collects the result of the oldest tx sent with [`Self::begin_new_tx`] and records it in
+    /// the open batch. `tx_len` is the length of that tx when it was sent.
+    pub(crate) async fn finish_new_tx(
+        &mut self,
+        tx_hash: TxHash,
+        tx_len: usize,
+        credential_id: Option<CredentialId>,
+    ) -> FinishedNewTx<S, Rt> {
+        let sequence_number = self
+            .sequence_number_of_open_batch
+            .expect("No batch in progress in Inner::finish_new_tx");
+        let Inner {
+            executor,
+            batch_size_tracker,
+            executor_events_sender,
+            ..
+        } = &mut *self;
 
         let (
             AcceptedTxWithBudgetInfo {
@@ -809,23 +854,18 @@ where
                 execution_time_micros,
             },
             tx_changes,
-        ) = match apply_tx_res {
-            Ok(res) => {
+        ) = match executor.collect_tx_result().await {
+            Ok(CollectedTx::Executed(accepted_tx, tx_changes)) => {
                 assert_eq!(
-                    tx_hash, res.0.accepted_tx.tx_hash,
+                    tx_hash, accepted_tx.accepted_tx.tx_hash,
                     "The executor returned a different tx hash than expected"
                 );
-                res
+                (accepted_tx, tx_changes)
             }
-            Err(RollupBlockExecutorErrorWithBudget {
-                inner_err: err,
-                execution_time_micros,
-                gas_used,
-            }) => {
-                tracing::debug!(%tx_hash, %err, "Transaction was dropped by the sequencer");
-
-                let resource_used = ResourceUsed::new(1, tx_len, execution_time_micros, gas_used);
-                return (Err(DoNewTxError::ExecutorError(err)), resource_used);
+            Ok(CollectedTx::Deferred(tx)) => return FinishedNewTx::Deferred(tx),
+            Err(err) => {
+                let (err, resource_used) = executor_error_with_resources(tx_hash, tx_len, err);
+                return FinishedNewTx::Done(Err(err), resource_used);
             }
         };
 
@@ -839,7 +879,7 @@ where
             .send_accept_tx(accepted_tx, tx_changes, sequence_number)
             .await;
 
-        (Ok((rx, remaining_slot_gas)), resource_used)
+        FinishedNewTx::Done(Ok((rx, remaining_slot_gas)), resource_used)
     }
 
     // Implements the I part of a PID controller for the batch size limit; we track our error rate over each batch and tune the bias
@@ -1045,4 +1085,46 @@ where
             .publish_proof_blob(blob_id, proof_bytes, sequence_number)
             .await;
     }
+}
+
+/// The result of executing a tx: a receiver for its confirmation and the slot gas left after it.
+pub(crate) type NewTxResult<S, Rt> = Result<
+    (
+        oneshot::Receiver<AcceptedTx<Confirmation<S, Rt>>>,
+        <S as Spec>::Gas,
+    ),
+    DoNewTxError<S>,
+>;
+
+/// The outcome of [`Inner::begin_new_tx`].
+pub(crate) enum BegunNewTx<S: Spec> {
+    Submitted,
+    /// The tx only fits next to the txs in flight if some of them end up outside this batch.
+    /// Retry it once their results are collected.
+    WaitForInFlight(FullyBakedTx),
+    Rejected(DoNewTxError<S>, ResourceUsed<S::Gas>),
+}
+
+/// The outcome of [`Inner::finish_new_tx`].
+pub(crate) enum FinishedNewTx<S: Spec, Rt: Runtime<S>> {
+    Done(NewTxResult<S, Rt>, ResourceUsed<S::Gas>),
+    /// The executor did not run the tx because the batch reached a close threshold first.
+    Deferred(FullyBakedTx),
+}
+
+fn executor_error_with_resources<S: Spec>(
+    tx_hash: TxHash,
+    tx_len: usize,
+    err: RollupBlockExecutorErrorWithBudget<S>,
+) -> (DoNewTxError<S>, ResourceUsed<S::Gas>) {
+    let RollupBlockExecutorErrorWithBudget {
+        inner_err: err,
+        execution_time_micros,
+        gas_used,
+    } = err;
+    tracing::debug!(%tx_hash, %err, "Transaction was dropped by the sequencer");
+    (
+        DoNewTxError::ExecutorError(err),
+        ResourceUsed::new(1, tx_len, execution_time_micros, gas_used),
+    )
 }

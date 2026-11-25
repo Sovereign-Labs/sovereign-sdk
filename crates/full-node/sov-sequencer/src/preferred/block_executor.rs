@@ -13,9 +13,9 @@ use sov_modules_api::capabilities::{
 };
 use sov_modules_api::macros::config_value;
 use sov_modules_api::{
-    call_message_repr, BlobDataWithId, ChangeSet, DaSpec, ExecutionContext, FullyBakedTx, Gas,
-    GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason, Runtime,
-    RuntimeEventProcessor, RuntimeEventResponse, SelectedBlob, Spec, StateCheckpoint,
+    call_message_repr, BlobDataWithId, ChangeSet, DaSpec, DispatchCall, ExecutionContext,
+    FullyBakedTx, Gas, GasSpec, HexString, KernelStateAccessor, NoOpControlFlow, RejectReason,
+    Runtime, RuntimeEventProcessor, RuntimeEventResponse, SelectedBlob, Spec, StateCheckpoint,
     TransactionReceipt, TxChangeSet, TxHash, VersionReader, VisibleSlotNumber,
 };
 use sov_modules_api::{CryptoSpec, HDTimestamp};
@@ -39,7 +39,9 @@ use super::{
 };
 use crate::common::AcceptedTx;
 use crate::common::ForcedTxBatchNotification;
-use crate::preferred::async_batch::{AsyncBatchResult, ExecutedTxResponse, MaybeAsyncBatch};
+use crate::preferred::async_batch::{
+    AsyncBatchResult, ChunkMarker, ExecutedTxResponse, ExecutorOutput, ExecutorTx, MaybeAsyncBatch,
+};
 use crate::preferred::transaction_subscriptions::TxResultWriter;
 use crate::preferred::{exit_rollup, PreferredProofToReplay};
 use crate::SequencerConfig;
@@ -52,6 +54,17 @@ where
     pub accepted_tx: AcceptedTx<Confirmation<S, Rt>>,
     pub remaining_slot_gas: <S as Spec>::Gas,
     pub execution_time_micros: u64,
+}
+
+/// The outcome of a tx sent with [`RollupBlockExecutor::submit_tx`].
+pub(crate) enum CollectedTx<S, Rt>
+where
+    S: Spec,
+    Rt: Runtime<S> + RuntimeEventProcessor,
+{
+    Executed(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet),
+    /// The executor stopped its chunk before this tx; see [`ExecutorOutput::Deferred`].
+    Deferred(FullyBakedTx),
 }
 
 type BlockExecutionOutput<S> = (Vec<BatchReceipt<S>>, StateCheckpoint<S>);
@@ -152,6 +165,9 @@ where
     primary_shutdown: PrimaryShutdownController,
 
     rollup_block_task_state: Option<BackgroundTaskState<S>>,
+    /// Decoded calls of the txs sent to the executor whose output hasn't been collected yet, in
+    /// the order they were sent. Outputs come back in the same order.
+    in_flight_calls: VecDeque<<Rt as DispatchCall>::Decodable>,
     next_event_number: u64,
     next_tx_number: u64,
     da_address: <S::Da as DaSpec>::Address,
@@ -181,9 +197,9 @@ pub(crate) struct RollupBlockExecutorErrorWithBudget<S: Spec> {
 }
 
 impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
-    /// The maximum number of transactions that can be buffered before incoming txs start getting
-    /// rejected.
-    const MAX_BUFFERED_TXS: usize = 1;
+    /// The maximum number of txs that can be in flight to the executor at once. Keeping several
+    /// in flight lets the executor go from one tx to the next without waiting for the actor.
+    pub(crate) const PIPELINE_DEPTH: usize = 16;
 
     #[allow(clippy::too_many_arguments)]
     pub fn new(
@@ -238,6 +254,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         Self {
             checkpoint,
             rollup_block_task_state: None,
+            in_flight_calls: VecDeque::new(),
             next_event_number: info.next_event_number,
             next_tx_number: info.next_tx_number,
             seq_config,
@@ -283,6 +300,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         self.checkpoint = other.checkpoint;
         self.rollup_block_task_state = other.rollup_block_task_state;
+        self.in_flight_calls = other.in_flight_calls;
         self.next_event_number = other.next_event_number;
         self.next_tx_number = other.next_tx_number;
         self.uncommitted_changes = other.uncommitted_changes;
@@ -293,6 +311,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         self.state_root_responses = other.state_root_responses;
     }
 
+    /// Executes one tx and waits for its result.
+    ///
     /// Calls to this method must happen "between"
     /// [`Self::start_rollup_block`] and
     /// [`Self::end_rollup_block`].
@@ -302,47 +322,25 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         baked_tx: FullyBakedTx,
     ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorErrorWithBudget<S>>
     {
-        let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
-
-        match result {
-            Ok((receipt, tx, remaining_slot_gas, execution_time_micros, tx_changes)) => {
-                // Extract the HDTimestamp from the finalized (pruned) tx body, rather than from
-                // the pre-pruning bytes or the locally generated value, so the preferred
-                // sequencer and replicas derive confirmation metadata from the same published
-                // transaction bytes. If pruning removed the timestamp, the confirmation must
-                // not report one either, since nodes deriving it from the stored body cannot
-                // reproduce it.
-                let timestamp = get_timestamp_from_sequencing_data(&tx, true);
-                let accepted_tx = self.process_tx_receipt(receipt, tx, timestamp);
-                if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
-                    writer.insert(accepted_tx.clone()).await;
-                }
-                Ok((
-                    AcceptedTxWithBudgetInfo {
-                        accepted_tx,
-                        remaining_slot_gas,
-                        execution_time_micros,
-                    },
-                    tx_changes,
-                ))
+        self.submit_tx(baked_tx, ChunkMarker::Unbudgeted)?;
+        match self.collect_tx_result().await? {
+            CollectedTx::Executed(accepted_tx, tx_changes) => Ok((accepted_tx, tx_changes)),
+            CollectedTx::Deferred(_) => {
+                unreachable!("The executor never defers a tx that starts an unbudgeted chunk")
             }
-            Err(e) => Err(e),
         }
     }
 
-    async fn apply_tx_to_in_progress_batch_inner(
+    /// Sends a tx to the executor without waiting for its result. Collect the result with
+    /// [`Self::collect_tx_result`]; results are collected in the order the txs were submitted.
+    /// At most [`Self::PIPELINE_DEPTH`] txs can be in flight.
+    // Same error type as `collect_tx_result`, which the lint doesn't check because it is async.
+    #[allow(clippy::result_large_err)]
+    pub(crate) fn submit_tx(
         &mut self,
         baked_tx: FullyBakedTx,
-    ) -> Result<
-        (
-            TransactionReceipt<S>,
-            FullyBakedTx,
-            <S as Spec>::Gas,
-            u64,
-            TxChangeSet,
-        ),
-        RollupBlockExecutorErrorWithBudget<S>,
-    > {
+        chunk: ChunkMarker,
+    ) -> Result<(), RollupBlockExecutorErrorWithBudget<S>> {
         let Some(task_state) = self.rollup_block_task_state.as_mut() else {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
@@ -356,15 +354,32 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         })?;
         let call = Rt::wrap_call(call);
 
-        if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(baked_tx) {
+        if let Err(TrySendError::Full(_)) = task_state.tx_sender.try_send(ExecutorTx {
+            tx: baked_tx,
+            chunk,
+        }) {
             return Err(RollupBlockExecutorErrorWithBudget {
                 execution_time_micros: 0,
                 gas_used: <S as Spec>::Gas::zero(),
                 inner_err: RollupBlockExecutorError::Overloaded,
             });
         }
+        self.in_flight_calls.push_back(call);
+        Ok(())
+    }
 
-        let Some(result) = task_state.result_receiver.recv().await else {
+    /// Waits for the result of the oldest tx sent with [`Self::submit_tx`].
+    pub(crate) async fn collect_tx_result(
+        &mut self,
+    ) -> Result<CollectedTx<S, Rt>, RollupBlockExecutorErrorWithBudget<S>> {
+        let call = self.in_flight_calls.pop_front().expect(
+            "Collecting a tx result, but no tx is in flight. This is a bug, please report it.",
+        );
+        let Some(task_state) = self.rollup_block_task_state.as_mut() else {
+            panic!("Collecting a tx result, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
+        };
+
+        let Some(output) = task_state.result_receiver.recv().await else {
             tracing::error!("The rollup block executor task failed unexpectedly. Gracefully shutting down the sequencer.");
             self.primary_shutdown.shutdown(); // We don't care if this was already triggered, because that would mean the sequencer is already shutting down - which is exactly what we want.
             return Err(RollupBlockExecutorErrorWithBudget {
@@ -372,6 +387,11 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 gas_used: <S as Spec>::Gas::zero(),
                 inner_err: RollupBlockExecutorError::UnexpectedFailure,
             });
+        };
+
+        let result = match output {
+            ExecutorOutput::Executed(result) => result,
+            ExecutorOutput::Deferred(tx) => return Ok(CollectedTx::Deferred(tx)),
         };
 
         let AsyncBatchResult {
@@ -410,11 +430,23 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
         self.checkpoint.apply_tx_changes(tx_changes.clone());
 
-        Ok((
-            receipt,
-            tx,
-            remaining_slot_gas,
-            execution_time_micros,
+        // Extract the HDTimestamp from the finalized (pruned) tx body, rather than from
+        // the pre-pruning bytes or the locally generated value, so the preferred
+        // sequencer and replicas derive confirmation metadata from the same published
+        // transaction bytes. If pruning removed the timestamp, the confirmation must
+        // not report one either, since nodes deriving it from the stored body cannot
+        // reproduce it.
+        let timestamp = get_timestamp_from_sequencing_data(&tx, true);
+        let accepted_tx = self.process_tx_receipt(receipt, tx, timestamp);
+        if let Some(writer) = self.startup_transaction_cache_writer.as_mut() {
+            writer.insert(accepted_tx.clone()).await;
+        }
+        Ok(CollectedTx::Executed(
+            AcceptedTxWithBudgetInfo {
+                accepted_tx,
+                remaining_slot_gas,
+                execution_time_micros,
+            },
             tx_changes,
         ))
     }
@@ -590,8 +622,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         );
 
         let (setup_sender, setup_receiver) = oneshot::channel();
-        let (tx_sender, tx_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
-        let (result_sender, result_receiver) = mpsc::channel(Self::MAX_BUFFERED_TXS);
+        let (tx_sender, tx_receiver) = mpsc::channel(Self::PIPELINE_DEPTH);
+        let (result_sender, result_receiver) = mpsc::channel(Self::PIPELINE_DEPTH);
 
         let handle = tokio::runtime::Handle::current().spawn_blocking({
             let ctx = RollupBlockTaskContext {
@@ -780,6 +812,13 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     /// Closes the current batch and returns confirmations for all of the non-preferred txs included in the batch.
     pub async fn end_rollup_block(&mut self) -> Vec<AcceptedTx<Confirmation<S, Rt>>> {
         trace!("Ending rollup block");
+        // The executor still runs txs buffered in its channel after the sender is dropped, so
+        // closing with txs in flight would put txs into the batch that the caller never saw.
+        assert!(
+            self.in_flight_calls.is_empty(),
+            "Ending a rollup block with {} txs in flight. This is a bug, please report it.",
+            self.in_flight_calls.len()
+        );
 
         let rollup_height = self.checkpoint.rollup_height_to_access();
         let (batch_receipts, new_checkpoint) = self
@@ -852,8 +891,8 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 #[derive(Debug)]
 struct BackgroundTaskState<S: Spec> {
     handle: JoinHandle<BlockExecutionOutput<S>>,
-    tx_sender: mpsc::Sender<FullyBakedTx>,
-    result_receiver: mpsc::Receiver<AsyncBatchResult<S>>,
+    tx_sender: mpsc::Sender<ExecutorTx>,
+    result_receiver: mpsc::Receiver<ExecutorOutput<S>>,
 }
 
 impl<S: Spec> BackgroundTaskState<S> {
@@ -872,9 +911,9 @@ struct RollupBlockTaskContext<S: Spec> {
     visible_increase: VisibleSlotNumberIncrease,
     // Channels
     // --------
-    tx_receiver: mpsc::Receiver<FullyBakedTx>,
+    tx_receiver: mpsc::Receiver<ExecutorTx>,
     setup_sender: oneshot::Sender<ChangeSet>,
-    result_sender: mpsc::Sender<AsyncBatchResult<S>>,
+    result_sender: mpsc::Sender<ExecutorOutput<S>>,
     shutdown_notifier: mpsc::Sender<()>,
     // Config values
     // --------
