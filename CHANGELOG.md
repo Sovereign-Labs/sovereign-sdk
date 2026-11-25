@@ -1,3 +1,6 @@
+# 2026-11-25
+- #3194 Runner: the state manager no longer panics with "Effective finalized header must be a block we've processed" when the DA reorgs and finalizes a block while the runner is executing it. Finalization is postponed until the runner re-executes the replacement block.
+
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 
