@@ -16,9 +16,10 @@ use sov_rollup_interface::zk::aggregated_proof::{
 };
 
 use crate::schema::tables::{
-    BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey, EventByNumber, EventCountByKey,
-    FinalizedSlots, ProofByUniqueId, ProofReceiptHashesBySlot, SlotByHash, SlotByNumber,
-    StfInfoByNumber, StfInfoMetadata, TxByHash, TxByNumber, LEDGER_TABLES,
+    ArchivedStateProofsBySlot, BatchByHash, BatchByNumber, DiscardedBlobByHash, EventByKey,
+    EventByNumber, EventCountByKey, FinalizedSlots, ProofByUniqueId, ProofReceiptHashesBySlot,
+    SlotByHash, SlotByNumber, StfInfoByNumber, StfInfoMetadata, TxByHash, TxByNumber,
+    LEDGER_TABLES,
 };
 use crate::schema::tables::{DiscardedBlobHahsByNumber, ProofReceiptByHash};
 use crate::schema::types::{
@@ -635,6 +636,29 @@ impl LedgerDb {
     pub fn get_stf_info(&self, slot_num: SlotNumber) -> anyhow::Result<Option<StoredStfInfo>> {
         let db = self.db.read().expect(DB_LOCK_POISONED).clone();
         db.get::<StfInfoByNumber>(&slot_num)
+    }
+
+    /// Materializes serialized state proofs against the post-state root of `slot_number` into a
+    /// [`SchemaBatch`]. The encoding of `proofs` is defined by the caller.
+    pub fn materialize_archived_state_proofs(
+        &self,
+        slot_number: SlotNumber,
+        proofs: Vec<u8>,
+    ) -> anyhow::Result<SchemaBatch> {
+        let mut schema_batch = SchemaBatch::new();
+        schema_batch.put::<ArchivedStateProofsBySlot>(&slot_number, &proofs)?;
+        Ok(schema_batch)
+    }
+
+    /// Get the serialized state proofs archived against the post-state root of `slot_number`.
+    /// Returns `None` if nothing was archived for that slot.
+    pub async fn get_archived_state_proofs(
+        &self,
+        slot_number: SlotNumber,
+    ) -> anyhow::Result<Option<Vec<u8>>> {
+        let db = self.db.read().expect(DB_LOCK_POISONED).clone();
+        db.get_async::<ArchivedStateProofsBySlot>(&slot_number)
+            .await
     }
 
     /// Materializes the latest height of the written STF info.

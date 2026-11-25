@@ -27,7 +27,7 @@ impl HashStf {
         Self
     }
 
-    fn hash_key() -> SlotKey {
+    pub fn hash_key() -> SlotKey {
         let prefix = Prefix::new(0, 0);
         SlotKey::singleton(&prefix)
     }

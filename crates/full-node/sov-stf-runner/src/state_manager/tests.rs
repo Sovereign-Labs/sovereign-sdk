@@ -270,6 +270,7 @@ async fn rejected_aggregated_proofs_are_not_published_as_latest() -> anyhow::Res
                 accepted_aggregated_proofs: vec![accepted_proof.clone()],
             },
             Vec::<DummyProofReceipt>::new(),
+            None,
         )
         .await?;
 
@@ -400,6 +401,7 @@ async fn test_reorg_happened_correct_block_returned() -> anyhow::Result<()> {
                     slot_commit,
                     AggregatedProofs::default(),
                     Vec::<DummyProofReceipt>::new(),
+                    None,
                 )
                 .await?;
             check_internal_consistency(&state_manager, finality as usize);
@@ -489,6 +491,7 @@ async fn test_save_last_finalized_larger_than_seen_latest_seen_transition() -> a
             slot_commit,
             AggregatedProofs::default(),
             Vec::<DummyProofReceipt>::new(),
+            None,
         )
         .await?;
     check_internal_consistency(&state_manager, finality as usize);
@@ -600,6 +603,7 @@ async fn test_progressing_with_shuffle(
                 slot_commit,
                 AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
+                None,
             )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
@@ -816,6 +820,7 @@ async fn test_with_frequent_periodic_batch_production() -> anyhow::Result<()> {
                 slot_commit,
                 AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
+                None,
             )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
@@ -914,6 +919,7 @@ async fn test_chain_progress_between_prepare_storage_and_save_changes(
                 slot_commit,
                 AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
+                None,
             )
             .await?;
         check_internal_consistency(&state_manager, finality as usize);
@@ -1361,6 +1367,7 @@ async fn process_continuous_transition(
             slot_commit,
             AggregatedProofs::default(),
             Vec::<DummyProofReceipt>::new(),
+            None,
         )
         .await?;
     check_internal_consistency(state_manager, finality as usize);
@@ -1636,6 +1643,7 @@ async fn test_progressing_with_rewind_below_finalized(
                 slot_commit,
                 AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
+                None,
             )
             .await?;
         // Skip check_internal_consistency - this test exercises abnormal DA behavior
@@ -1704,6 +1712,7 @@ async fn test_binary_search_handles_da_error() -> anyhow::Result<()> {
                 slot_commit,
                 AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
+                None,
             )
             .await?;
     }
@@ -1803,6 +1812,7 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
                 slot_commit,
                 AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
+                None,
             )
             .await?;
     }
@@ -1855,6 +1865,7 @@ async fn test_reorg_during_binary_search() -> anyhow::Result<()> {
             slot_commit,
             AggregatedProofs::default(),
             Vec::<DummyProofReceipt>::new(),
+            None,
         )
         .await?;
 
@@ -1975,6 +1986,7 @@ async fn test_finalized_height_monotonic() -> anyhow::Result<()> {
                 slot_commit,
                 AggregatedProofs::default(),
                 Vec::<DummyProofReceipt>::new(),
+                None,
             )
             .await?;
 

@@ -74,6 +74,24 @@ fn validate_proof_manager_config<Address>(
     Ok(())
 }
 
+/// State proofs captured so they can be served after the state tree has moved on.
+pub struct ArchivedStateProofs {
+    /// The slot whose post-state root the proofs verify against.
+    pub slot_number: SlotNumber,
+    /// The serialized state root the proofs verify against.
+    pub state_root: Vec<u8>,
+    /// The serialized proofs. The archiver defines the encoding; the runner stores it as is.
+    pub proofs: Vec<u8>,
+}
+
+/// Generates [`ArchivedStateProofs`] from the state a slot is about to be executed on.
+///
+/// The state tree only keeps its latest version, so a proof against the post-state root of
+/// slot `N` can only be generated until slot `N + 1` is applied. The runner calls the archiver
+/// with the pre-state of every slot, which is the post-state of the previous one.
+pub type StateProofArchiver<State> =
+    Box<dyn Fn(&State) -> anyhow::Result<ArchivedStateProofs> + Send + Sync>;
+
 /// Combines `DaService` with `StateTransitionFunction` and "runs" the rollup.
 #[allow(clippy::type_complexity)]
 pub struct StateTransitionRunner<Stf, Sm, Da>
@@ -99,6 +117,7 @@ where
     save_tx_bodies: bool,
     finalized_headers_provider: DaServiceWithCachedFinalizedHeaders<Da>,
     axum_tcp: Option<TcpListener>,
+    state_proof_archiver: Option<StateProofArchiver<Sm::StfState>>,
 }
 
 // Guarantees the runner's background tasks are signalled to stop whenever the runner is dropped.
@@ -277,7 +296,16 @@ where
             save_tx_bodies: runner_config.save_tx_bodies,
             finalized_headers_provider: da_service_with_cached_finalized_headers,
             axum_tcp: Some(axum_tcp),
+            state_proof_archiver: None,
         })
+    }
+
+    /// Makes the runner archive state proofs for every slot it processes from now on.
+    ///
+    /// The proofs for slot `N` are saved to the ledger together with slot `N + 1`, so they
+    /// become available one slot late. See [`StateProofArchiver`].
+    pub fn set_state_proof_archiver(&mut self, archiver: StateProofArchiver<Sm::StfState>) {
+        self.state_proof_archiver = Some(archiver);
     }
 
     /// Returns the socket address of the Axum server.
@@ -641,6 +669,24 @@ where
         );
         let da_extraction_time = stf_execution_start.elapsed();
 
+        // This is the last moment the state tree can prove against the previous slot's root:
+        // `apply_slot` consumes the pre-state.
+        let archived_state_proofs = match &self.state_proof_archiver {
+            Some(archive) => {
+                // Generating a proof reads from disk, so it must not block the async runtime.
+                let archived = tokio::task::block_in_place(|| archive(&stf_pre_state))
+                    .context("Failed to archive state proofs")?;
+                anyhow::ensure!(
+                    archived.state_root == pre_state_root.as_ref(),
+                    "Archived state proofs are for state root 0x{}, but the slot starts from 0x{}",
+                    hex::encode(&archived.state_root),
+                    hex::encode(pre_state_root.as_ref()),
+                );
+                Some(archived)
+            }
+            None => None,
+        };
+
         let apply_slot_start = std::time::Instant::now();
         // `apply_slot` is a CPU-bound, synchronous computation. Run it via
         // `block_in_place` so the tokio worker hands off its scheduler core to
@@ -723,6 +769,7 @@ where
                 data_to_commit,
                 aggregated_proofs,
                 proof_receipts,
+                archived_state_proofs,
             )
             .await?;
         trace!("Stf changes processing is completed");

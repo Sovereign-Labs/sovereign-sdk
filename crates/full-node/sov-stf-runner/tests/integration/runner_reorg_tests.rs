@@ -19,14 +19,15 @@ use sov_mock_da::{
 use sov_modules_api::provable_height_tracker::InfiniteHeight;
 use sov_modules_api::{FullyBakedTx, StateTransitionFunction};
 use sov_rollup_full_node_interface::StateChannel;
-use sov_rollup_interface::common::RollupHeight;
+use sov_rollup_interface::common::{RollupHeight, SlotNumber};
 use sov_rollup_interface::node::da::{DaService, SlotData};
 use sov_rollup_interface::node::SyncStatus;
 use sov_rollup_interface::storage::HierarchicalStorageManager;
 use sov_shutdown::{PrimaryShutdownController, SecondaryShutdownController};
-use sov_state::{ArrayWitness, NativeStorage, Storage, StorageRoot};
-use sov_stf_runner::StateTransitionRunner;
+use sov_state::namespaces::User;
+use sov_state::{ArrayWitness, NativeStorage, Storage, StorageProof, StorageRoot};
 use sov_stf_runner::{make_da_sync_state, DaServiceWithCachedFinalizedHeaders};
+use sov_stf_runner::{ArchivedStateProofs, StateProofArchiver, StateTransitionRunner};
 use sov_test_utils::storage::SimpleStorageManager;
 use sov_test_utils::{TestStorage, TestStorageManager, TEST_MOCK_DA_POLLING_INTERVAL};
 use tempfile::TempDir;
@@ -46,17 +47,25 @@ async fn test_runner_with_background_da_service(
     target_height: u64,
     da_config: MockDaConfig,
 ) -> anyhow::Result<()> {
+    let tempdir = tempfile::tempdir()?;
+    run_runner_with_background_da_service(target_height, da_config, tempdir.path(), None).await
+}
+
+/// Runs the rollup in `path` until `target_height` is synced, then shuts it down.
+async fn run_runner_with_background_da_service(
+    target_height: u64,
+    da_config: MockDaConfig,
+    path: &std::path::Path,
+    state_proof_archiver: Option<StateProofArchiver<TestStorage>>,
+) -> anyhow::Result<()> {
     let primary_shutdown = PrimaryShutdownController::new();
     let secondary_shutdown_controller = SecondaryShutdownController::new();
 
     let da_service =
         StorableMockDaService::from_config(da_config.clone(), &secondary_shutdown_controller).await;
     let da_service = Arc::new(da_service);
-    let tempdir = tempfile::tempdir()?;
     let rollup_config = crate::helpers::runner_init::rollup_config_with_da::<StorableMockDaService>(
-        tempdir.path(),
-        da_config,
-        1,
+        path, da_config, 1,
     );
 
     let da_service_with_cache = DaServiceWithCachedFinalizedHeaders::new(
@@ -68,10 +77,8 @@ async fn test_runner_with_background_da_service(
 
     let stf = HashStf::new();
 
-    let mut storage_manager = NomtStorageManager::new(
-        RollupDbConfig::default_in_path(tempdir.path().to_path_buf()),
-        false,
-    )?;
+    let mut storage_manager =
+        NomtStorageManager::new(RollupDbConfig::default_in_path(path.to_path_buf()), false)?;
 
     let block = da_service.get_block_at(0).await?;
     let genesis_header = block.header().clone();
@@ -125,6 +132,9 @@ async fn test_runner_with_background_da_service(
         None,
     )
     .await?;
+    if let Some(state_proof_archiver) = state_proof_archiver {
+        runner.set_state_proof_archiver(state_proof_archiver);
+    }
 
     let runner_task = tokio::spawn(async move {
         runner.run_in_process().await.map_err(|error| {
@@ -376,6 +386,117 @@ async fn test_instant_finality_data_stored() -> anyhow::Result<()> {
     let saved_root_hash = get_saved_root_hash(tmp_dir.path()).unwrap().unwrap();
     assert_eq!(expected_root_hash, saved_root_hash);
     Ok(())
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn test_archived_state_proofs_verify_against_slot_roots() -> anyhow::Result<()> {
+    let tmp_dir = tempfile::tempdir()?;
+    let da_service =
+        Arc::new(MockDaService::new(MockAddress::new([11u8; 32])).with_wait_attempts(2));
+    let genesis_block = da_service.get_block_at(0).await?;
+    for tx in [[1u8; 4], [2u8; 4], [3u8; 4]] {
+        da_service
+            .send_transaction(&batch(tx.to_vec()))
+            .await
+            .await??;
+    }
+    let init_variant: MockInitVariant = InitVariant::Genesis {
+        block: genesis_block,
+        genesis_params: vec![1, 2, 3, 4, 5].into(),
+    };
+
+    let (mut runner, _, test_node) =
+        initialize_runner(da_service, tmp_dir.path(), init_variant, 1, None).await;
+    runner.set_state_proof_archiver(hash_key_archiver());
+    // The runner stops with an error once the DA service runs out of blocks.
+    let end = runner.run_in_process().await;
+    assert!(end.is_err());
+    // Release the storage lock and the ledger references before reopening the databases.
+    drop(runner);
+    test_node.stop().await;
+
+    let verified_slots = verify_archived_state_proofs(tmp_dir.path()).await?;
+    assert_eq!(
+        verified_slots, 3,
+        "Genesis and every slot before the head should have an archived proof"
+    );
+    Ok(())
+}
+
+/// A proof archived for a slot must verify against that slot's root on the fork that got
+/// finalized, even if the runner first processed the slot on a fork that was later abandoned.
+#[tokio::test(flavor = "multi_thread")]
+async fn test_archived_state_proofs_follow_canonical_fork() -> anyhow::Result<()> {
+    let tmp_dir = tempfile::tempdir()?;
+    let finality = 5;
+    let block_time_ms = 400;
+    let randomization = RandomizationConfig {
+        seed: sov_mock_da::seed_for_test(4),
+        reorg_interval: 20..30,
+        behaviour: RandomizationBehaviour::Rewind,
+    };
+    let da_config = build_da_config(finality, block_time_ms, randomization, Default::default());
+
+    tokio::time::timeout(
+        TREE_MINUTES,
+        run_runner_with_background_da_service(
+            30,
+            da_config,
+            tmp_dir.path(),
+            Some(hash_key_archiver()),
+        ),
+    )
+    .await??;
+
+    let verified_slots = verify_archived_state_proofs(tmp_dir.path()).await?;
+    assert!(
+        verified_slots > 0,
+        "The runner should have finalized at least one slot after genesis"
+    );
+    Ok(())
+}
+
+/// Archives a proof of the key which [`HashStf`] writes to the user state on every slot.
+fn hash_key_archiver() -> StateProofArchiver<TestStorage> {
+    Box::new(|storage: &TestStorage| {
+        let (proof, slot_number, state_root) =
+            storage.get_with_proof::<User>(HashStf::hash_key())?;
+        Ok(ArchivedStateProofs {
+            slot_number,
+            state_root: state_root.as_ref().to_vec(),
+            proofs: borsh::to_vec(&proof)?,
+        })
+    })
+}
+
+/// Checks that every slot below the saved head has a proof archived by [`hash_key_archiver`]
+/// which verifies against the state root of that slot. Returns the number of slots checked.
+async fn verify_archived_state_proofs(path: &std::path::Path) -> anyhow::Result<u64> {
+    let config = RollupDbConfig::default_in_path(path.to_path_buf());
+    let mut storage_manager = TestStorageManager::new(config, false)?;
+    let mock_block_header = MockBlockHeader::from_height(1000000);
+    let (stf_state, ledger_state) = storage_manager.create_state_for(&mock_block_header)?;
+    let ledger_db = LedgerDb::with_reader(ledger_state)?;
+
+    // The proof for a slot is saved together with the next one, so the head has none yet.
+    let (head_slot_number, _) = ledger_db.get_head_slot()?.context("Ledger has no slots")?;
+    for slot_number in SlotNumber::GENESIS.range_exclusive(head_slot_number) {
+        let serialized_proof = ledger_db
+            .get_archived_state_proofs(slot_number)
+            .await?
+            .with_context(|| format!("No state proof is archived for slot {slot_number}"))?;
+        let proof: StorageProof<<TestStorage as Storage>::Proof> =
+            borsh::from_slice(&serialized_proof)?;
+        let state_root = stf_state
+            .get_root_hash(slot_number)
+            .with_context(|| format!("No state root is saved for slot {slot_number}"))?;
+
+        let (proven_key, _) = TestStorage::open_proof(state_root, proof).with_context(|| {
+            format!("Archived proof does not verify against the root of slot {slot_number}")
+        })?;
+        assert_eq!(proven_key, HashStf::hash_key());
+    }
+    Ok(head_slot_number.get())
 }
 
 async fn check_runner(

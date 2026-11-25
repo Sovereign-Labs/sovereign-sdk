@@ -61,6 +61,7 @@ pub const LEDGER_TABLES: &[ColumnFamilyName] = &[
     StfInfoByNumber::table_name(),
     StfInfoMetadata::table_name(),
     EventCountByKey::table_name(),
+    ArchivedStateProofsBySlot::table_name(),
 ];
 
 /// A list of all tables used by the AccessoryDB. These tables store
@@ -234,6 +235,13 @@ define_table_with_seek_key_codec!(
 define_table_with_seek_key_codec!(
     /// The primary source for state transition info data.
     (StfInfoByNumber) SlotNumber => StoredStfInfo
+);
+
+define_table_with_seek_key_codec!(
+    /// Serialized merkle proofs of selected state keys against the post-state root of a slot.
+    /// The state tree only keeps its latest version, so these proofs cannot be regenerated later.
+    /// The value is opaque to the ledger; whoever archives the proofs defines the encoding.
+    (ArchivedStateProofsBySlot) SlotNumber => Vec<u8>
 );
 
 define_table_with_default_codec!(

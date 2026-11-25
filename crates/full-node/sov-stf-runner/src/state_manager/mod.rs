@@ -9,6 +9,7 @@ use std::sync::Arc;
 use crate::da::DaServiceWithCachedFinalizedHeaders;
 use crate::processes::{Sender as StfInfoSender, StateTransitionInfo};
 use crate::query_state_update_info;
+use crate::runner::ArchivedStateProofs;
 use serde::de::DeserializeOwned;
 use serde::Serialize;
 use sov_db::ledger_db::{LedgerDb, SlotCommit};
@@ -338,6 +339,7 @@ where
         slot_commit: SlotCommit<S, B, T>,
         aggregated_proofs: AggregatedProofs,
         proof_receipts: Vec<PartialProofReceipt<Address, Da::Spec, StateRoot, StorageProof>>,
+        archived_state_proofs: Option<ArchivedStateProofs>,
     ) -> anyhow::Result<()> {
         let start = std::time::Instant::now();
         if !self.is_initialized {
@@ -416,6 +418,24 @@ where
             prev_slot_number = ?slot_number,
             "Initial Ledger ChangeSet is materialized"
         );
+
+        if let Some(archived) = archived_state_proofs {
+            // The proofs were generated from this slot's pre-state, so they belong to the
+            // previous slot. Saving them with this slot keeps them on the same fork as it.
+            anyhow::ensure!(
+                archived.slot_number.checked_add(1) == Some(slot_number),
+                "Archived state proofs are for slot {}, expected the slot before {slot_number}",
+                archived.slot_number,
+            );
+            ledger_change_set.merge(
+                self.ledger_db
+                    .materialize_archived_state_proofs(archived.slot_number, archived.proofs)?,
+            );
+            tracing::trace!(
+                slot_number = ?archived.slot_number,
+                "Archived state proofs are materialized into Ledger ChangeSet"
+            );
+        }
 
         let last_finalized_slot_number = finalized_transitions.iter().last().map(|t| {
             SlotNumber::new(
