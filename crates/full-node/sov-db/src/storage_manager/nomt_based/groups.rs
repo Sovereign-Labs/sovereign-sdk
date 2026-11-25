@@ -19,7 +19,9 @@ use crate::config::{RocksDbKind, RollupDbConfigWithCustomizations};
 use crate::flat_db::FlatStateDb;
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::ledger_db::LedgerDb;
-use crate::metrics::nomt::{CommitDetailedMetric, CompactionMetric, PrunerMetric};
+use crate::metrics::nomt::{
+    CommitDetailedMetric, CompactionMetric, MerklizedCommitMetric, PrunerMetric,
+};
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
 use crate::schema::namespace::NomtStateValues;
@@ -162,86 +164,18 @@ where
         })
     }
 
-    pub(crate) fn commit(&mut self, group: CommitGroup) -> anyhow::Result<()> {
-        self.commit_helper(group, None)
+    /// Handles to the DBs that a commit writes to.
+    pub(crate) fn committer(&self) -> DbCommitter<H> {
+        DbCommitter {
+            merklized_state: self.merklized_state.clone(),
+            flat_state: self.flat_state.clone(),
+            accessory: self.accessory.clone(),
+            ledger: self.ledger.clone(),
+        }
     }
 
-    fn commit_helper(
-        &mut self,
-        group: CommitGroup,
-        expected_latest: Option<SlotNumber>,
-    ) -> anyhow::Result<()> {
-        tracing::trace!("Commiting a group...");
-        // The last commit had to be successful.
-        let CommitGroup {
-            nomt: state,
-            rockbound:
-                SnapshotGroup {
-                    historical_state,
-                    accessory,
-                    ledger,
-                },
-        } = group;
-
-        // ======================= DANGER ZONE ======================
-        // The commit order here is relied on by NomtProverStorage::get_with_proof
-        // If you change the order, you'll need to update merkle proof generation.
-
-        // NOMT
-        tracing::trace!("Commiting NOMT DBs...");
-        let merklized_commit = self.merklized_state.commit(state)?;
-
-        // Ledger
-        tracing::trace!("Committing Ledger DB...");
-        #[cfg(feature = "test-utils")]
-        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLedger
-            .inject_fault_if_configured();
-        let ledger_commit = self.commit_ledger(&ledger)?;
-
-        // Accessory
-        tracing::trace!("Commiting Accessory DB...");
-        #[cfg(feature = "test-utils")]
-        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingAccessory
-            .inject_fault_if_configured();
-        let accessory_commit =
-            self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
-
-        // Flat State
-        tracing::trace!("Committing Flat DB..");
-        #[cfg(feature = "migration-script")]
-        let flat_metrics = if let Some(expected_latest) = expected_latest {
-            self.flat_state
-                .commit_at_latest_checked(historical_state, expected_latest)?
-        } else {
-            self.flat_state.commit(historical_state)?
-        };
-
-        #[cfg(not(feature = "migration-script"))]
-        let flat_metrics = {
-            assert!(
-                expected_latest.is_none(),
-                "expected_latest must be none when not in migration script"
-            );
-            self.flat_state.commit(historical_state)?
-        };
-
-        // ======================= END DANGER ZONE ======================
-
-        // Metrics
-        let merklized_commit_from_caller = merklized_commit.total;
-        let commit_detailed_metrics = CommitDetailedMetric {
-            merklized_commit,
-            merklized_commit_from_caller,
-            flat: flat_metrics,
-            accessory_commit,
-            ledger_commit,
-        };
-        sov_metrics::track_metrics(|tracker| {
-            tracker.submit(commit_detailed_metrics);
-        });
-        self.merklized_state.send_metrics();
-
-        Ok(())
+    pub(crate) fn commit(&mut self, group: CommitGroup) -> anyhow::Result<()> {
+        self.committer().commit(group)
     }
 
     #[cfg(feature = "migration-script")]
@@ -250,10 +184,11 @@ where
         group: CommitGroup,
         expected_latest: SlotNumber,
     ) -> anyhow::Result<()> {
-        self.commit_helper(group, Some(expected_latest))
+        self.committer()
+            .commit_helper(group, FlatCommitMode::RewriteHead(expected_latest))
     }
 
-    #[cfg(feature = "migration-script")]
+    /// The latest slot committed to the on-disk flat state DB.
     pub(crate) fn latest_flat_state_version(&self) -> anyhow::Result<Option<SlotNumber>> {
         Ok(self
             .flat_state
@@ -303,24 +238,6 @@ where
         state_roots.check_all();
 
         Ok(())
-    }
-
-    fn commit_accessory(
-        &self,
-        accessory: &SchemaBatch,
-        root_hash_batch: &SchemaBatch,
-    ) -> anyhow::Result<Duration> {
-        let accessory_start = std::time::Instant::now();
-        AccessoryDb::commit(&self.accessory, accessory, root_hash_batch)?;
-        Ok(accessory_start.elapsed())
-    }
-
-    fn commit_ledger(&self, ledger: &SchemaBatch) -> anyhow::Result<Duration> {
-        let ledger_start = std::time::Instant::now();
-        // Ledger goes after last, as its data is used during the start.
-        // So if ledger save failed, state and accessory will be synced from DA
-        self.ledger.write_schemas(ledger)?;
-        Ok(ledger_start.elapsed())
     }
 
     // Flush pruning schema batches to disk.
@@ -385,24 +302,22 @@ where
 
     pub(crate) fn create_storage<S: InitializableNativeNomtStorage<H, K>>(
         &self,
-        // Snapshot refs are in reveresed chronological order.
-        relevant_snapshot_refs: Vec<K>,
-        rockbound_snapshots: &HashMap<K, SnapshotGroup>,
+        // Block refs with their rockbound snapshots, in reverse chronological order.
+        snapshots: Vec<(K, &SnapshotGroup)>,
+        // On-disk flat state version that `snapshots` are layered on top of.
+        base_version: Option<u64>,
         nomt_snapshots: Arc<RwLock<HashMap<K, StateOverlay>>>,
         strict_mode: bool,
         witness_mode: WitnessMode,
     ) -> anyhow::Result<(S, DeltaReader)> {
-        let mut historical_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
-        let mut user_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
-        let mut kernel_state_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
-        let mut accessory_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
-        let mut ledger_snapshots = Vec::with_capacity(relevant_snapshot_refs.len());
+        let mut historical_state_snapshots = Vec::with_capacity(snapshots.len());
+        let mut user_state_snapshots = Vec::with_capacity(snapshots.len());
+        let mut kernel_state_snapshots = Vec::with_capacity(snapshots.len());
+        let mut accessory_snapshots = Vec::with_capacity(snapshots.len());
+        let mut ledger_snapshots = Vec::with_capacity(snapshots.len());
 
-        // rockbound-based readers expect snapshots in chronological order,
-        // so we iterate in reverse of the passed parameter
-        // (in normal chronological order).
-        for snapshot_ref in relevant_snapshot_refs.iter().rev() {
-            let snapshot = rockbound_snapshots.get(snapshot_ref).unwrap();
+        // rockbound-based readers expect snapshots in chronological order.
+        for (_, snapshot) in snapshots.iter().rev() {
             historical_state_snapshots.push(snapshot.historical_state.root_hash_batch.clone());
             user_state_snapshots.push(snapshot.historical_state.user.clone());
             kernel_state_snapshots.push(snapshot.historical_state.kernel.clone());
@@ -412,6 +327,7 @@ where
 
         // NOMT-based readers expect snapshots in reversed chronological order,
         // the same as it was passed to the function.
+        let relevant_snapshot_refs = snapshots.into_iter().map(|(k, _)| k).collect();
         let state_session_builder = NomtSessionBuilder::new(
             self.merklized_state.clone(),
             relevant_snapshot_refs,
@@ -419,21 +335,17 @@ where
         );
         let historical_state_reader =
             DeltaReader::new(self.flat_state.live_db.clone(), historical_state_snapshots);
-        let version = self
-            .flat_state
-            .latest_version_and_root_hash_live_db()?
-            .map(|(v, _)| v);
 
         let user_state_reader =
             VersionedDeltaReader::<NomtStateValues<UserNamespace>, DbCache>::new(
                 self.flat_state.user.clone(),
-                version,
+                base_version,
                 user_state_snapshots,
             );
         let kernel_state_reader =
             VersionedDeltaReader::<NomtStateValues<KernelNamespace>, DbCache>::new(
                 self.flat_state.kernel.clone(),
-                version,
+                base_version,
                 kernel_state_snapshots,
             );
 
@@ -533,6 +445,129 @@ where
         }
     }
 }
+
+/// How [`DbCommitter`] writes the flat state.
+#[derive(Debug, Clone, Copy)]
+enum FlatCommitMode {
+    /// Commit as a new version on top of the latest one (normal finalization).
+    Append,
+    /// Overwrite the latest version, which must equal the given slot (offline migration).
+    #[cfg(feature = "migration-script")]
+    RewriteHead(SlotNumber),
+}
+
+/// Write handles of [`DbGroup`] used to commit a [`CommitGroup`].
+pub(crate) struct DbCommitter<H> {
+    merklized_state: Arc<NomtStateDb<H>>,
+    flat_state: FlatStateDb,
+    accessory: Arc<rockbound::DB>,
+    ledger: Arc<rockbound::DB>,
+}
+
+impl<H> DbCommitter<H>
+where
+    H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
+{
+    pub(crate) fn commit(&self, group: CommitGroup) -> anyhow::Result<()> {
+        self.commit_helper(group, FlatCommitMode::Append)
+    }
+
+    fn commit_helper(
+        &self,
+        group: CommitGroup,
+        flat_commit_mode: FlatCommitMode,
+    ) -> anyhow::Result<()> {
+        tracing::trace!(?flat_commit_mode, "Committing a group...");
+        // The last commit had to be successful.
+        let CommitGroup { nomt, rockbound } = group;
+        let merklized_commit = self.commit_merklized(nomt)?;
+        self.commit_rockbound(rockbound, merklized_commit, flat_commit_mode)
+    }
+
+    // ======================= DANGER ZONE ======================
+    // The commit order (`commit_merklized`, then `commit_rockbound`: ledger, accessory, flat)
+    // is relied on by NomtProverStorage::get_with_proof.
+    // If you change the order, you'll need to update merkle proof generation.
+
+    fn commit_merklized(&self, state: StateOverlay) -> anyhow::Result<MerklizedCommitMetric> {
+        tracing::trace!("Commiting NOMT DBs...");
+        self.merklized_state.commit(state)
+    }
+
+    /// Must be called after [`Self::commit_merklized`] for the same block.
+    fn commit_rockbound(
+        &self,
+        group: SnapshotGroup,
+        merklized_commit: MerklizedCommitMetric,
+        flat_commit_mode: FlatCommitMode,
+    ) -> anyhow::Result<()> {
+        let SnapshotGroup {
+            historical_state,
+            accessory,
+            ledger,
+        } = group;
+
+        // Ledger
+        tracing::trace!("Committing Ledger DB...");
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLedger
+            .inject_fault_if_configured();
+        let ledger_commit = self.commit_ledger(&ledger)?;
+
+        // Accessory
+        tracing::trace!("Commiting Accessory DB...");
+        #[cfg(feature = "test-utils")]
+        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingAccessory
+            .inject_fault_if_configured();
+        let accessory_commit =
+            self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
+
+        // Flat State
+        tracing::trace!("Committing Flat DB..");
+        let flat_metrics = match flat_commit_mode {
+            FlatCommitMode::Append => self.flat_state.commit(historical_state)?,
+            #[cfg(feature = "migration-script")]
+            FlatCommitMode::RewriteHead(expected_latest) => self
+                .flat_state
+                .commit_at_latest_checked(historical_state, expected_latest)?,
+        };
+
+        // ======================= END DANGER ZONE ======================
+
+        // Metrics
+        let merklized_commit_from_caller = merklized_commit.total;
+        let commit_detailed_metrics = CommitDetailedMetric {
+            merklized_commit,
+            merklized_commit_from_caller,
+            flat: flat_metrics,
+            accessory_commit,
+            ledger_commit,
+        };
+        sov_metrics::track_metrics(|tracker| {
+            tracker.submit(commit_detailed_metrics);
+        });
+        self.merklized_state.send_metrics();
+
+        Ok(())
+    }
+
+    fn commit_accessory(
+        &self,
+        accessory: &SchemaBatch,
+        root_hash_batch: &SchemaBatch,
+    ) -> anyhow::Result<Duration> {
+        let accessory_start = std::time::Instant::now();
+        AccessoryDb::commit(&self.accessory, accessory, root_hash_batch)?;
+        Ok(accessory_start.elapsed())
+    }
+
+    fn commit_ledger(&self, ledger: &SchemaBatch) -> anyhow::Result<Duration> {
+        let ledger_start = std::time::Instant::now();
+        self.ledger.write_schemas(ledger)?;
+        Ok(ledger_start.elapsed())
+    }
+}
+
 pub(crate) struct SnapshotGroup {
     pub(crate) historical_state: StateChanges,
     pub(crate) accessory: Arc<SchemaBatch>,

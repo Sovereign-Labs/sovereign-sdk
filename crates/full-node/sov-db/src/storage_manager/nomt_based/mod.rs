@@ -218,9 +218,37 @@ where
 
         tracing::trace!(?rev_references, %block_hash, "Collected hashes storage up to block hash");
 
+        self.create_storage(rev_references, strict_mode, witness_mode)
+    }
+
+    /// Builds a storage on top of the finalized state plus the snapshots of `rev_references`.
+    /// `rev_references` are in reverse chronological order and must all be present in
+    /// `rockbound_snapshots`.
+    fn create_storage(
+        &self,
+        rev_references: Vec<Da::SlotHash>,
+        strict_mode: bool,
+        witness_mode: WitnessMode,
+    ) -> anyhow::Result<(S, DeltaReader)> {
+        let snapshots = rev_references
+            .into_iter()
+            .map(|block_hash| {
+                let snapshot = self
+                    .rockbound_snapshots
+                    .get(&block_hash)
+                    .expect("Referenced block must have a rockbound snapshot");
+                (block_hash, snapshot)
+            })
+            .collect();
+        // Finalization commits synchronously under `&mut self`, so the on-disk base
+        // cannot advance while we select snapshots and construct these readers.
+        let base_version = self
+            .db_group
+            .latest_flat_state_version()?
+            .map(|slot| slot.get());
         self.db_group.create_storage(
-            rev_references,
-            &self.rockbound_snapshots,
+            snapshots,
+            base_version,
             self.nomt_snapshots.clone(),
             strict_mode,
             witness_mode,
@@ -231,13 +259,7 @@ where
     /// Creates a strict storage view over the latest finalized state without mutating
     /// fork bookkeeping maps.
     pub fn create_state_for_migration(&self) -> anyhow::Result<(S, DeltaReader)> {
-        self.db_group.create_storage(
-            Vec::new(),
-            &self.rockbound_snapshots,
-            self.nomt_snapshots.clone(),
-            true,
-            WitnessMode::off(),
-        )
+        self.create_storage(Vec::new(), true, WitnessMode::off())
     }
 
     #[cfg(feature = "migration-script")]
@@ -397,13 +419,7 @@ where
         // So neither strict mode nor witness is needed.
         if !self.rockbound_snapshots.contains_key(&block_header.hash()) {
             tracing::debug!(block_header = %block_header.display(), "Creating new storage from finalized data as block header is not in the saved chain");
-            self.db_group.create_storage(
-                Vec::new(),
-                &self.rockbound_snapshots,
-                self.nomt_snapshots.clone(),
-                false,
-                WitnessMode::off(),
-            )
+            self.create_storage(Vec::new(), false, WitnessMode::off())
         } else {
             self.create_state_up_to(block_header.hash(), false, WitnessMode::off())
         }
