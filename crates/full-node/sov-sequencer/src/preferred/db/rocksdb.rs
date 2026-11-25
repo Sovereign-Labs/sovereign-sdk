@@ -7,7 +7,7 @@ use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_modules_api::{FullyBakedTx, TxHash};
 
-use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
+use super::{DbBackend, DbPruner, ReadBlob, SnapshotData, StoredBlob};
 use crate::{
     preferred::db::{BatchToStore, DbError, InProgressBatch},
     PreferredProofDataBytes,
@@ -16,10 +16,7 @@ use crate::{
 #[derive(Debug)]
 pub struct RocksDbBackend {
     db: Arc<rockbound::DB>,
-    // Overlapping range deletes are a RocksDB antipattern and can cause *massive* memory blowup on compaction/memtable flush.
-    // We remember which ranges we've pruned so far to avoid overlapping deletes.
-    //
-    // https://github.com/facebook/rocksdb/wiki/DeleteRange-Implementation
+    /// Where the pruner starts; see [`RocksDbPruner`].
     first_unpruned_sequence_number: SequenceNumber,
 }
 
@@ -97,6 +94,54 @@ impl DbBackend for RocksDbBackend {
         Ok(())
     }
 
+    fn pruner(&self) -> Box<dyn DbPruner> {
+        Box::new(RocksDbPruner {
+            db: self.db.clone(),
+            first_unpruned_sequence_number: self.first_unpruned_sequence_number,
+        })
+    }
+
+    #[tracing::instrument(skip_all, level = "trace")]
+    async fn add_proof_blob(
+        &mut self,
+        sequence_number: SequenceNumber,
+        blob_id: BlobInternalId,
+        data: PreferredProofDataBytes,
+    ) -> anyhow::Result<(), DbError> {
+        self.db
+            .put_async::<tables::CompletedBlobs>(
+                &sequence_number,
+                &StoredBlob::Proof {
+                    data: data.0,
+                    blob_id,
+                },
+            )
+            .await?;
+        Ok(())
+    }
+
+    async fn current_data(&self) -> anyhow::Result<SnapshotData, DbError> {
+        // RocksDB doesn't need atomicity, and doesn't track event_ids
+        let completed_blobs = self.read_completed_blobs().await?;
+        let in_progress_batch = self.read_in_progress_batch_inner().await?;
+        Ok(SnapshotData {
+            completed_blobs,
+            in_progress_batch,
+        })
+    }
+}
+
+struct RocksDbPruner {
+    db: Arc<rockbound::DB>,
+    // Overlapping range deletes are a RocksDB antipattern and can cause *massive* memory blowup on compaction/memtable flush.
+    // We remember which ranges we've pruned so far to avoid overlapping deletes.
+    //
+    // https://github.com/facebook/rocksdb/wiki/DeleteRange-Implementation
+    first_unpruned_sequence_number: SequenceNumber,
+}
+
+#[async_trait]
+impl DbPruner for RocksDbPruner {
     #[tracing::instrument(skip_all, level = "trace")]
     async fn prune(
         &mut self,
@@ -135,35 +180,6 @@ impl DbBackend for RocksDbBackend {
         );
 
         Ok(())
-    }
-
-    #[tracing::instrument(skip_all, level = "trace")]
-    async fn add_proof_blob(
-        &mut self,
-        sequence_number: SequenceNumber,
-        blob_id: BlobInternalId,
-        data: PreferredProofDataBytes,
-    ) -> anyhow::Result<(), DbError> {
-        self.db
-            .put_async::<tables::CompletedBlobs>(
-                &sequence_number,
-                &StoredBlob::Proof {
-                    data: data.0,
-                    blob_id,
-                },
-            )
-            .await?;
-        Ok(())
-    }
-
-    async fn current_data(&self) -> anyhow::Result<SnapshotData, DbError> {
-        // RocksDB doesn't need atomicity, and doesn't track event_ids
-        let completed_blobs = self.read_completed_blobs().await?;
-        let in_progress_batch = self.read_in_progress_batch_inner().await?;
-        Ok(SnapshotData {
-            completed_blobs,
-            in_progress_batch,
-        })
     }
 }
 
@@ -326,6 +342,7 @@ mod tests {
     async fn run_rocksdb_test(iters: u64) {
         let dir = TempDir::new().unwrap();
         let mut db = RocksDbBackend::new(dir.path()).await.unwrap();
+        let mut pruner = db.pruner();
 
         // Allocate batch once.
         let mut txs = vec![];
@@ -357,7 +374,7 @@ mod tests {
             db.end_rollup_block(batch_to_store).await.unwrap();
 
             if batch > 1 {
-                db.prune(SequenceNumber::from(batch)).await.unwrap();
+                pruner.prune(SequenceNumber::from(batch)).await.unwrap();
             }
         }
 

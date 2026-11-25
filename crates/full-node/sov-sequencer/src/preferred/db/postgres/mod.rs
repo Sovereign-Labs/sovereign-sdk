@@ -7,7 +7,7 @@ use anyhow::{anyhow, Result};
 use std::net::{IpAddr, SocketAddr};
 use std::time::Duration;
 
-use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
+use super::{DbBackend, DbPruner, ReadBlob, SnapshotData, StoredBlob};
 use crate::preferred::db::DbError;
 use crate::preferred::db::{BatchToStore, DbReadOutcome, InProgressBatch};
 use anyhow::Context;
@@ -31,6 +31,7 @@ pub(crate) struct SequencerLeader {
     pub(crate) last_updated: OffsetDateTime,
 }
 
+#[derive(Clone)]
 pub struct PostgresBackend {
     pool: PgPool,
     backoff_policy: ExponentialBuilder,
@@ -604,21 +605,8 @@ impl DbBackend for PostgresBackend {
         Ok(())
     }
 
-    async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError> {
-        let outcome = run_with_retries!(
-            &self.backoff_policy,
-            self.prune_inner(up_to_including),
-            "postgres_db_backend_prune"
-        )?;
-
-        if let DbReadOutcome::AbortedBecauseReplica { db_leader } = outcome {
-            return Err(DbError::ReplicaDisallowed {
-                self_node_id: self.node_id.clone(),
-                operation: FailedOperation::Prune { db_leader },
-            });
-        }
-
-        Ok(())
+    fn pruner(&self) -> Box<dyn DbPruner> {
+        Box::new(self.clone())
     }
     async fn read_in_progress_batch(&self) -> anyhow::Result<Option<InProgressBatch>, DbError> {
         let mut tx = self.pool.begin().await?;
@@ -705,6 +693,26 @@ impl DbBackend for PostgresBackend {
                 });
             }
         }
+    }
+}
+
+#[async_trait]
+impl DbPruner for PostgresBackend {
+    async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError> {
+        let outcome = run_with_retries!(
+            &self.backoff_policy,
+            self.prune_inner(up_to_including),
+            "postgres_db_backend_prune"
+        )?;
+
+        if let DbReadOutcome::AbortedBecauseReplica { db_leader } = outcome {
+            return Err(DbError::ReplicaDisallowed {
+                self_node_id: self.node_id.clone(),
+                operation: FailedOperation::Prune { db_leader },
+            });
+        }
+
+        Ok(())
     }
 }
 

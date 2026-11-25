@@ -103,7 +103,7 @@ async fn test_db_operations_leader() {
         "Proof data should be correct"
     );
 
-    db.as_mut().prune(3).await.unwrap();
+    db.as_mut().pruner().prune(3).await.unwrap();
     let data = db.as_mut().current_data().await.unwrap();
     assert!(data.is_empty(), "Data should be empty after prune");
 }
@@ -184,7 +184,7 @@ async fn test_db_operations_replica() {
 
     assert_replica_disallowed(err, &db_replica.node_id, &FailedOperation::EndBlock);
 
-    let err = db_replica.as_mut().prune(2).await.unwrap_err();
+    let err = db_replica.as_mut().pruner().prune(2).await.unwrap_err();
     assert_replica_disallowed(
         err,
         &db_replica.node_id,

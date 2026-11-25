@@ -146,6 +146,9 @@ impl<S: Spec, Rt: Runtime<S>> TxResultWriter<S, Rt> {
             let mut to_retain = event_numbers_index.split_off(&(event_number + 1)); // Retain everything after the last event number to prune
             std::mem::swap(&mut to_retain, event_numbers_index);
         }
+        // Free the pruned txs after unlocking: inserting confirmations waits on this lock.
+        drop(transaction_cache);
+        drop(to_drop);
     }
 }
 
