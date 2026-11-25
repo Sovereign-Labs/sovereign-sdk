@@ -182,7 +182,7 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
 // is DA-agnostic; it only signs/encodes transactions offline).
 impl WalletBlueprint<Native> for MockDemoRollup<Native> {}
 
-// soak: bloom filter (10 bits/key) and one shared 4 GiB block cache for the flat-state live DB.
+// soak: bloom filter (10 bits/key), one shared 4 GiB block cache and a 256 MiB write buffer for the flat-state live DB.
 fn tune_live_db(
     storage: sov_db::config::RollupDbConfig,
 ) -> sov_db::config::RollupDbConfigWithCustomizations {
@@ -195,6 +195,7 @@ fn tune_live_db(
             let table = builder.block_based_table_options_mut();
             table.set_bloom_filter(10.0, false);
             table.set_block_cache(&cache);
+            builder.options_mut().set_write_buffer_size(256 << 20);
         }),
     )
 }
