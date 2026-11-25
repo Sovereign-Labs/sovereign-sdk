@@ -105,6 +105,15 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         .await
     }
 
+    fn archived_state_proof_keys(&self) -> Vec<sov_state::SlotKey> {
+        // A ZK ISM on another chain verifies Hyperlane messages against the merkle tree stored
+        // under the state root of a past, proven slot.
+        vec![Runtime::<Self::Spec>::default()
+            .merkle_tree_hook
+            .tree
+            .slot_key()]
+    }
+
     async fn sequencer_additional_apis<Seq>(
         &self,
         sequencer: Seq,

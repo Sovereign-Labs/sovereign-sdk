@@ -12,7 +12,8 @@ use sov_cli::wallet_state::PrivateKeyAndAddress;
 use sov_demo_rollup::MockDemoRollup;
 use sov_modules_api::execution_mode::Native;
 use sov_modules_api::transaction::Transaction;
-use sov_modules_api::OperatingMode;
+use sov_modules_api::{OperatingMode, Spec, Storage};
+use sov_modules_rollup_blueprint::ArchivedStateProofsResponse;
 use sov_test_utils::test_rollup::{read_private_key, RollupBuilder, TestRollup};
 use sov_test_utils::{
     default_test_signed_transaction_with_nonce, TEST_DEFAULT_MOCK_DA_ON_SUBMIT,
@@ -346,6 +347,62 @@ async fn check_historical_data(client: &demo_stf_json_client::Client) -> anyhow:
 /// The chain-state module exposes a WebSocket subscription that streams the current
 /// rollup height (`current_heights.0`): the latest value on connection, then a new value
 /// each time the height advances.
+/// The state tree only proves against its latest root, so the node archives a proof of the
+/// Hyperlane merkle tree for every slot. A verifier which trusts the state root of a past slot
+/// must be able to check the tree against that root.
+#[tokio::test(flavor = "multi_thread")]
+async fn archived_hyperlane_tree_proof_verifies_against_past_slot_root() -> anyhow::Result<()> {
+    #[derive(Deserialize)]
+    struct SlotStateRoot {
+        state_root: String,
+    }
+    #[derive(Deserialize)]
+    struct TreeResponse {
+        value: serde_json::Value,
+    }
+
+    let test_rollup = start_warm_rollup().await?;
+    // The warm-up finalizes several slots, so this one is well behind the head.
+    let slot_number = 1;
+
+    let archived: ArchivedStateProofsResponse<TestSpec> = test_rollup
+        .client
+        .query_rest_endpoint(&format!("/ledger/state-proofs/{slot_number}"))
+        .await?;
+    let slot: SlotStateRoot = test_rollup
+        .client
+        .query_rest_endpoint(&format!("/ledger/slots/{slot_number}"))
+        .await?;
+    let tree_at_slot: TreeResponse = test_rollup
+        .client
+        .query_rest_endpoint(&format!(
+            "/modules/merkle-tree-hook/state/tree?slot_number={slot_number}"
+        ))
+        .await?;
+
+    // Verify against the root which the ledger reports for the slot, not the one returned
+    // next to the proof: that is the root an external verifier would hold.
+    let ledger_state_root: <<TestSpec as Spec>::Storage as Storage>::Root =
+        borsh::from_slice(&hex::decode(slot.state_root.trim_start_matches("0x"))?)?;
+    let proof = archived
+        .proofs
+        .into_iter()
+        .next()
+        .context("The demo rollup archives one state proof per slot")?;
+    let proven_tree = Runtime::<TestSpec>::default()
+        .merkle_tree_hook
+        .tree
+        .verify_proof::<TestSpec>(ledger_state_root, proof)?
+        .context("The merkle tree is set at genesis, so the proof must be of inclusion")?;
+
+    assert_eq!(
+        serde_json::to_value(&proven_tree)?,
+        tree_at_slot.value,
+        "The proven tree should be the one stored at slot {slot_number}"
+    );
+    Ok(())
+}
+
 #[tokio::test(flavor = "multi_thread")]
 async fn chain_state_rollup_height_subscription_streams_live_height() -> anyhow::Result<()> {
     let test_rollup = start_warm_rollup().await?;

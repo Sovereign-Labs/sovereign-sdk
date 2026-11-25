@@ -1,3 +1,6 @@
+# 2026-11-25
+- #PR_NUMBER Node: A rollup can now archive merkle proofs of selected user-state keys for every slot, so that a value can still be proven against the state root of a past slot (the state tree itself only proves against its latest root). Override the new `FullNodeBlueprint::archived_state_proof_keys` to choose the keys; the default archives nothing. The proofs are stored in a new ledger DB column family and served at `GET /ledger/state-proofs/{slotNumber}`; the proofs for a slot become available once the next slot has been processed. The demo rollup archives the Hyperlane `MerkleTreeHook` tree, which is what a ZK ISM on another chain needs to verify messages. Not state- or chain-hash-breaking.
+
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 
