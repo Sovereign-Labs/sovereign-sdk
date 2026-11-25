@@ -159,7 +159,10 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
         rollup_config: &RollupConfig<<Self::Spec as Spec>::Address, Self::DaService>,
         witness_generation: bool,
     ) -> anyhow::Result<Self::StorageManager> {
-        NomtStorageManager::new(rollup_config.storage.clone(), witness_generation)
+        NomtStorageManager::new_with_custom_config(
+            tune_live_db(rollup_config.storage.clone()),
+            witness_generation,
+        )
     }
 
     fn create_proof_sender(
@@ -178,3 +181,17 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
 // Enables the `sov-cli` wallet binary to build against the mock-DA rollup (the wallet
 // is DA-agnostic; it only signs/encodes transactions offline).
 impl WalletBlueprint<Native> for MockDemoRollup<Native> {}
+
+// soak: 256 MiB write buffer (RocksDB default 64 MiB) for the flat-state live DB.
+fn tune_live_db(
+    storage: sov_db::config::RollupDbConfig,
+) -> sov_db::config::RollupDbConfigWithCustomizations {
+    sov_db::config::RollupDbConfigWithCustomizations::new(storage).with_rocksdb_cf_options(
+        sov_db::config::RocksdbCfCustomization::new(|db_kind, _cf_name, _versioned, builder| {
+            if db_kind != sov_db::config::RocksDbKind::FlatStateLive {
+                return;
+            }
+            builder.options_mut().set_write_buffer_size(256 << 20);
+        }),
+    )
+}
