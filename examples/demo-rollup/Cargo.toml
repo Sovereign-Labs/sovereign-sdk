@@ -80,7 +80,7 @@ tokio = { workspace = true, features = [
     "tracing",
 ] }
 tracing = { workspace = true }
-rockbound = { workspace = true, optional = true }
+rockbound = { workspace = true }
 clap = { workspace = true, features = ["derive"] }
 secp256k1 = { workspace = true, features = ["global-context", "recovery"] }
 alloy = { workspace = true, features = ["genesis"] }
@@ -169,7 +169,6 @@ da-migration-script = [
     # The migration binary bridges both DAs (references MockDemoRollup + CelestiaDemoRollup).
     "mock_da",
     "celestia_da",
-    "dep:rockbound",
     "dep:bincode",
     "dep:hex",
     "sov-db/migration-script",
