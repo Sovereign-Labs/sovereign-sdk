@@ -624,25 +624,6 @@ impl<N: ProvableCompileTimeNamespace> ProvableStorageCache<N> {
 
         cache.add_read(key, node);
     }
-
-    /// Adds only the reads whose keys are not already in the cache.
-    pub fn add_read_if_not_present_in_cache(
-        &mut self,
-        reads: Vec<(SlotKey, Option<NodeLeafAndMaybeValue>)>,
-    ) {
-        for (key, node) in reads {
-            if self.cache.get(&key).is_some() {
-                continue;
-            }
-
-            Self::add_read(
-                key,
-                node,
-                &mut self.revertable_ordered_reads,
-                &mut self.cache,
-            );
-        }
-    }
 }
 
 /// A struct that contains the values read from the DB and the values to be written, both in

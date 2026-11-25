@@ -8,30 +8,11 @@ pub use crate::native_only::telemetry::{should_init_open_telemetry_exporter, Ote
 use crate::GIT_COMMIT_HASH;
 // The panic-hook implementation lives in `sov-shutdown` alongside the other
 // full-node lifecycle utilities; re-exported here to preserve the public path.
-use sov_modules_api::ExecutionContext;
 pub use sov_shutdown::set_tracing_panic_hook;
 use tracing::info;
 use tracing_subscriber::layer::SubscriberExt;
-use tracing_subscriber::layer::{Context, Filter};
 use tracing_subscriber::util::SubscriberInitExt;
 use tracing_subscriber::{fmt, EnvFilter, Layer};
-
-#[derive(Clone, Copy)]
-struct IgnoreSpan(&'static str);
-
-impl<S> Filter<S> for IgnoreSpan
-where
-    S: tracing::Subscriber + for<'a> tracing_subscriber::registry::LookupSpan<'a>,
-{
-    fn enabled(&self, _meta: &tracing::Metadata<'_>, ctx: &Context<'_, S>) -> bool {
-        if let Some(current) = ctx.lookup_current() {
-            if current.name() == self.0 {
-                return false;
-            }
-        }
-        true
-    }
-}
 
 /// Guard that must be held for the entire lifetime of the process for logging to keep working: it
 /// owns the non-blocking stdout writer's worker thread and, when enabled, the OpenTelemetry
@@ -72,7 +53,6 @@ pub fn initialize_logging() -> LoggingGuard {
     let mut layers = fmt::layer()
         .with_writer(non_blocking)
         .with_filter(get_env_filter())
-        .with_filter(IgnoreSpan(ExecutionContext::SEQUENCER_WARM_UP))
         .boxed();
 
     if cfg!(tokio_unstable) && should_init_tokio_console_subscriber() {

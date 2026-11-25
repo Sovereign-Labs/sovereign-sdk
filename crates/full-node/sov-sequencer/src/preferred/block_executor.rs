@@ -2,7 +2,6 @@ use std::collections::{BTreeMap, VecDeque};
 use std::marker::PhantomData;
 use std::sync::Arc;
 
-use crate::preferred::cache_warm_up_executor::FullyBakedTxWithMaybeChangeSet;
 use anyhow::Context;
 use axum::http::StatusCode;
 use borsh::BorshDeserialize;
@@ -300,7 +299,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
     #[tracing::instrument(skip_all, level = "trace")]
     pub async fn apply_tx_to_in_progress_batch(
         &mut self,
-        baked_tx: FullyBakedTxWithMaybeChangeSet,
+        baked_tx: FullyBakedTx,
     ) -> Result<(AcceptedTxWithBudgetInfo<S, Rt>, TxChangeSet), RollupBlockExecutorErrorWithBudget<S>>
     {
         let result = self.apply_tx_to_in_progress_batch_inner(baked_tx).await;
@@ -333,7 +332,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 
     async fn apply_tx_to_in_progress_batch_inner(
         &mut self,
-        baked_tx: FullyBakedTxWithMaybeChangeSet,
+        baked_tx: FullyBakedTx,
     ) -> Result<
         (
             TransactionReceipt<S>,
@@ -348,7 +347,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             panic!("Accepting a transaction, yet there's no in-progress batch. This is a bug in the sequencer, please report it.");
         };
 
-        let call = Rt::Auth::decode_serialized_tx(&baked_tx.tx).map_err(|e| {
+        let call = Rt::Auth::decode_serialized_tx(&baked_tx).map_err(|e| {
             RollupBlockExecutorErrorWithBudget {
                 execution_time_micros: 0,
                 gas_used: <S as Spec>::Gas::zero(),
@@ -517,8 +516,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
             "Re-applying state changes for the soft-confirmed transaction"
         );
 
-        let tx = FullyBakedTxWithMaybeChangeSet::new(tx);
-
         match self.apply_tx_to_in_progress_batch(tx).await {
             Ok((output, _tx_changes)) => {
                 if tx_hash != output.accepted_tx.tx_hash {
@@ -543,26 +540,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
                 unreachable!()
             }
         }
-    }
-
-    pub async fn start_rollup_block_with_provided_state_roots(
-        &mut self,
-        start_block_data: StartBlockData<S>,
-        checkpoint: StateCheckpoint<S>,
-        state_roots: BTreeMap<RollupHeight, <S::Storage as Storage>::Root>,
-    ) {
-        self.checkpoint = checkpoint;
-
-        assert!(
-            self.rollup_block_task_state.is_none(),
-            "Starting a rollup block, but there's already one in progress {:?}. This is a bug, please report it.",
-            self.rollup_block_task_state
-        );
-
-        self.state_roots = state_roots;
-        self.update_kernel_with_user_state_root();
-        self.spawn_exec_task(start_block_data, ExecutionContext::SequencerWarmUp)
-            .await;
     }
 
     #[tracing::instrument(skip_all, level = "trace")]
@@ -798,17 +775,6 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         }
     }
 
-    pub async fn shutdown(&mut self) -> Option<BlockExecutionOutput<S>> {
-        let task_state = self.rollup_block_task_state.take();
-        match task_state {
-            Some(task) => {
-                let ret = task.shutdown().await.expect("Transaction acceptor task failed unexpectedly! This is a bug, please report it.");
-                Some(ret)
-            }
-            None => None,
-        }
-    }
-
     #[tracing::instrument(skip_all, level = "trace")]
     #[must_use]
     /// Closes the current batch and returns confirmations for all of the non-preferred txs included in the batch.
@@ -886,7 +852,7 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
 #[derive(Debug)]
 struct BackgroundTaskState<S: Spec> {
     handle: JoinHandle<BlockExecutionOutput<S>>,
-    tx_sender: mpsc::Sender<FullyBakedTxWithMaybeChangeSet>,
+    tx_sender: mpsc::Sender<FullyBakedTx>,
     result_receiver: mpsc::Receiver<AsyncBatchResult<S>>,
 }
 
@@ -906,7 +872,7 @@ struct RollupBlockTaskContext<S: Spec> {
     visible_increase: VisibleSlotNumberIncrease,
     // Channels
     // --------
-    tx_receiver: mpsc::Receiver<FullyBakedTxWithMaybeChangeSet>,
+    tx_receiver: mpsc::Receiver<FullyBakedTx>,
     setup_sender: oneshot::Sender<ChangeSet>,
     result_sender: mpsc::Sender<AsyncBatchResult<S>>,
     shutdown_notifier: mpsc::Sender<()>,
@@ -949,9 +915,6 @@ where
 
     let _span = match executor_context {
         ExecutionContext::Sequencer => tracing::trace_span!(ExecutionContext::SEQUENCER),
-        ExecutionContext::SequencerWarmUp => {
-            tracing::trace_span!(ExecutionContext::SEQUENCER_WARM_UP)
-        }
         ExecutionContext::Node => tracing::trace_span!(ExecutionContext::NODE),
     }
     .entered();
