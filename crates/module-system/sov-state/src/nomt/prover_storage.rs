@@ -544,6 +544,15 @@ fn compute_state_update_namespace<S: MerkleProofSpec>(
 ) -> anyhow::Result<FinishedSession> {
     tracing::trace!(accesses = accesses.len(), "compute state update");
     let has_accesses = !accesses.is_empty();
+    // Debug-only delay that simulates a slow NOMT `finish`, for reproducing runner races in tests.
+    // Usage: SOV_TEST_DELAY_NOMT_FINISH_MS=35. An unset variable is the normal case, so the `Err` is ignored.
+    #[cfg(debug_assertions)]
+    if let Ok(ms) = std::env::var("SOV_TEST_DELAY_NOMT_FINISH_MS") {
+        let ms: u64 = ms
+            .parse()
+            .expect("SOV_TEST_DELAY_NOMT_FINISH_MS must be a number of milliseconds");
+        std::thread::sleep(std::time::Duration::from_millis(ms));
+    }
     let mut finished = session.finish(accesses)?;
     if write_witness && has_accesses {
         let nomt_witness = finished.take_witness().expect("Witness cannot be missing");
