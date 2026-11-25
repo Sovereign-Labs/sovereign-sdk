@@ -34,7 +34,7 @@ pub struct HistoricalStateReader {
 }
 
 /// A collection of changes to the state db. Includes versioned changes to user/kernel state, and a plain schema batch of changes to any other columns.
-#[derive(Debug, Default)]
+#[derive(Debug, Default, Clone)]
 pub struct StateChanges {
     pub(crate) user: Arc<VersionedSchemaBatch<NomtStateValues<UserNamespace>>>,
     pub(crate) kernel: Arc<VersionedSchemaBatch<NomtStateValues<KernelNamespace>>>,
