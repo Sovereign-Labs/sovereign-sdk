@@ -182,17 +182,19 @@ impl FullNodeBlueprint<Native> for MockDemoRollup<Native> {
 // is DA-agnostic; it only signs/encodes transactions offline).
 impl WalletBlueprint<Native> for MockDemoRollup<Native> {}
 
-// soak: bloom filter (10 bits/key) plus a block cache for the flat-state live DB (4 GiB, shared) and archival DB (2 GiB).
+// soak: bloom filter (10 bits/key) plus a block cache for the flat-state live DB (4 GiB, shared), archival DB (2 GiB) and ledger DB (1 GiB).
 fn tune_live_db(
     storage: sov_db::config::RollupDbConfig,
 ) -> sov_db::config::RollupDbConfigWithCustomizations {
     let live_cache = rockbound::rocksdb::Cache::new_lru_cache(4 << 30);
     let archival_cache = rockbound::rocksdb::Cache::new_lru_cache(2 << 30);
+    let ledger_cache = rockbound::rocksdb::Cache::new_lru_cache(1 << 30);
     sov_db::config::RollupDbConfigWithCustomizations::new(storage).with_rocksdb_cf_options(
         sov_db::config::RocksdbCfCustomization::new(move |db_kind, _cf_name, _versioned, builder| {
             let cache = match db_kind {
                 sov_db::config::RocksDbKind::FlatStateLive => &live_cache,
                 sov_db::config::RocksDbKind::FlatStateArchival => &archival_cache,
+                sov_db::config::RocksDbKind::Ledger => &ledger_cache,
                 _ => return,
             };
             let table = builder.block_based_table_options_mut();
