@@ -14,11 +14,14 @@ const SHUTDOWN_DRAINING_LIMIT: std::time::Duration = std::time::Duration::from_s
 
 /// How often the publisher drains the metrics channel.
 ///
-/// The publisher polls with `try_recv` instead of awaiting `recv`, so it never registers a waker
-/// on the channel. Senders on the hot path (e.g. per-transaction metrics in the STF) then don't
-/// pay for waking this task on every `try_send`, which was ~0.5 µs per transaction.
+/// The publisher polls with `try_recv` instead of awaiting `recv`, so this task's waker is never
+/// registered on the channel and senders on the hot path (e.g. per-transaction metrics in the STF)
+/// don't wake it on every `try_send`. `try_recv` still briefly parks the worker thread if it races
+/// with a send that is in progress, but that is rare.
 /// Metrics are timestamped at submission, so polling only delays delivery, not timestamps.
-/// The channel (`max_pending_metrics`) must be able to hold the metrics submitted during one interval.
+/// The interval is a target, not a bound: the next poll starts only after the previous drain,
+/// including its socket writes, has finished.
+/// The channel (`max_pending_metrics`) must be able to hold the metrics submitted between polls.
 const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(2);
 
 enum PublisherTransport {
@@ -144,33 +147,23 @@ pub(crate) async fn metrics_publisher_task(
 
             }
             result = secondary_shutdown_controller.future_or_shutdown(poll_interval.tick()) => {
-                let channel_closed = match result {
-                    FutureOrShutdownOutput::Output(_) => {
-                        // Bounded by capacity, so that steady inflow can't starve the other branches.
-                        let mut closed = false;
-                        for _ in 0..metrics_receiver.max_capacity() {
-                            match metrics_receiver.try_recv() {
-                                Ok(measurement) => {
-                                    #[cfg(feature = "gas-constant-estimation")]
-                                    if let Err(err) = measurement.write_to_csv(csv_writers) {
-                                        tracing::warn!(?err, "Failed to write metrics to CSV file");
-                                    }
-                                    process_measurement(&mut buffer, measurement, &mut publisher, max_buffer_size)
-                                        .await;
-                                }
-                                Err(tokio::sync::mpsc::error::TryRecvError::Empty) => break,
-                                Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => {
-                                    closed = true;
-                                    break;
-                                }
-                            }
+                if let FutureOrShutdownOutput::Output(_) = result {
+                    // Bounded by capacity, so that steady inflow can't starve the other branches.
+                    for _ in 0..metrics_receiver.max_capacity() {
+                        // Both errors mean there is nothing to receive now; disconnection is checked below.
+                        let Ok(measurement) = metrics_receiver.try_recv() else {
+                            break;
+                        };
+                        #[cfg(feature = "gas-constant-estimation")]
+                        if let Err(err) = measurement.write_to_csv(csv_writers) {
+                            tracing::warn!(?err, "Failed to write metrics to CSV file");
                         }
-                        closed
+                        process_measurement(&mut buffer, measurement, &mut publisher, max_buffer_size)
+                            .await;
                     }
-                    FutureOrShutdownOutput::Shutdown => true,
-                };
-                if !channel_closed {
-                    continue;
+                    if !metrics_receiver.is_closed() {
+                        continue;
+                    }
                 }
                 // Drain all remaining measurements from the channel
                 let mut drained_count = 0;
