@@ -12,6 +12,18 @@ use crate::{Metric, TelegrafSocketConfig};
 
 const SHUTDOWN_DRAINING_LIMIT: std::time::Duration = std::time::Duration::from_secs(1);
 
+/// How often the publisher drains the metrics channel.
+///
+/// The publisher polls with `try_recv` instead of awaiting `recv`, so this task's waker is never
+/// registered on the channel and senders on the hot path (e.g. per-transaction metrics in the STF)
+/// don't wake it on every `try_send`. `try_recv` still briefly parks the worker thread if it races
+/// with a send that is in progress, but that is rare.
+/// Metrics are timestamped at submission, so polling only delays delivery, not timestamps.
+/// The interval is a target, not a bound: the next poll starts only after the previous drain,
+/// including its socket writes, has finished.
+/// The channel (`max_pending_metrics`) must be able to hold the metrics submitted between polls.
+const POLL_INTERVAL: std::time::Duration = std::time::Duration::from_millis(2);
+
 enum PublisherTransport {
     Tcp(tokio::net::TcpStream),
     Udp(tokio::net::UdpSocket),
@@ -121,6 +133,8 @@ pub(crate) async fn metrics_publisher_task(
     let mut dropped_metrics_check_interval =
         tokio::time::interval(std::time::Duration::from_secs(10));
     dropped_metrics_check_interval.tick().await; // Skip first immediate tick
+    let mut poll_interval = tokio::time::interval(POLL_INTERVAL);
+    poll_interval.set_missed_tick_behavior(tokio::time::MissedTickBehavior::Delay);
 
     loop {
         tokio::select! {
@@ -132,9 +146,14 @@ pub(crate) async fn metrics_publisher_task(
                                 .await;
 
             }
-            result = secondary_shutdown_controller.future_or_shutdown(metrics_receiver.recv()) => {
-                match result {
-                    FutureOrShutdownOutput::Output(Some(measurement)) => {
+            result = secondary_shutdown_controller.future_or_shutdown(poll_interval.tick()) => {
+                if let FutureOrShutdownOutput::Output(_) = result {
+                    // Bounded by capacity, so that steady inflow can't starve the other branches.
+                    for _ in 0..metrics_receiver.max_capacity() {
+                        // Both errors mean there is nothing to receive now; disconnection is checked below.
+                        let Ok(measurement) = metrics_receiver.try_recv() else {
+                            break;
+                        };
                         #[cfg(feature = "gas-constant-estimation")]
                         if let Err(err) = measurement.write_to_csv(csv_writers) {
                             tracing::warn!(?err, "Failed to write metrics to CSV file");
@@ -142,39 +161,40 @@ pub(crate) async fn metrics_publisher_task(
                         process_measurement(&mut buffer, measurement, &mut publisher, max_buffer_size)
                             .await;
                     }
-                    FutureOrShutdownOutput::Shutdown | FutureOrShutdownOutput::Output(None) => {
-                        // Drain all remaining measurements from the channel
-                        let mut drained_count = 0;
-                        let start = std::time::Instant::now();
-                        while let Ok(remaining) = metrics_receiver.try_recv() {
-                            drained_count += 1;
-                            process_measurement(&mut buffer, remaining, &mut publisher, max_buffer_size)
-                                .await;
-                            if start.elapsed() > SHUTDOWN_DRAINING_LIMIT {
-                                break;
-                            }
-                        }
-
-                        if drained_count > 0 {
-                            tracing::info!(
-                                drained_metrics = drained_count,
-                                "Drained remaining metrics from channel during shutdown"
-                            );
-                        }
-                        tracing::info!(
-                            remaining_buffer_size = buffer.len(),
-                            "Metrics task is going to shutdown, send remaining metrics"
-                        );
-                        if !buffer.is_empty() {
-                            tracing::trace!("Some metrics remain in the buffer, publish before exit");
-                            if let Err(e) = publisher.publish(&buffer).await {
-                                tracing::warn!(?e, "Failed to publish metrics during shutdown");
-                            }
-                            buffer.clear();
-                        }
+                    if !metrics_receiver.is_closed() {
+                        continue;
+                    }
+                }
+                // Drain all remaining measurements from the channel
+                let mut drained_count = 0;
+                let start = std::time::Instant::now();
+                while let Ok(remaining) = metrics_receiver.try_recv() {
+                    drained_count += 1;
+                    process_measurement(&mut buffer, remaining, &mut publisher, max_buffer_size)
+                        .await;
+                    if start.elapsed() > SHUTDOWN_DRAINING_LIMIT {
                         break;
                     }
                 }
+
+                if drained_count > 0 {
+                    tracing::info!(
+                        drained_metrics = drained_count,
+                        "Drained remaining metrics from channel during shutdown"
+                    );
+                }
+                tracing::info!(
+                    remaining_buffer_size = buffer.len(),
+                    "Metrics task is going to shutdown, send remaining metrics"
+                );
+                if !buffer.is_empty() {
+                    tracing::trace!("Some metrics remain in the buffer, publish before exit");
+                    if let Err(e) = publisher.publish(&buffer).await {
+                        tracing::warn!(?e, "Failed to publish metrics during shutdown");
+                    }
+                    buffer.clear();
+                }
+                break;
             }
         }
     }
@@ -418,6 +438,51 @@ mod tests {
             .await
             .is_some());
 
+        Ok(())
+    }
+
+    /// The publisher polls the channel, so it learns that all senders are gone only on a poll.
+    /// Metrics that were pending at that moment, and the partially filled buffer, must still be published.
+    #[tokio::test(flavor = "multi_thread")]
+    async fn test_publisher_flushes_pending_metrics_when_senders_are_dropped() -> anyhow::Result<()>
+    {
+        let socket = tokio::net::UdpSocket::bind("127.0.0.1:0").await?;
+        let sample_metric = SampleMetric(b"sov-test-metric value=1".to_vec());
+        let monitoring_config = MonitoringConfig {
+            telegraf_address: TelegrafSocketConfig::udp(socket.local_addr()?),
+            // Large enough that the metrics below are never published because of the size limit.
+            max_datagram_size: Some(60_000),
+            max_pending_metrics: None,
+            tokio_runtime_metrics_interval_millis: 500,
+            rpc_aggregation: RpcAggregationConfig::standard(),
+        };
+
+        let (metrics_back_sender, mut metrics_back_receiver) = tokio::sync::mpsc::channel(10);
+        spawn_metrics_udp_receiver(socket, metrics_back_sender);
+
+        let metrics_count = 3;
+        let (sender, receiver) = tokio::sync::mpsc::channel(10);
+        for _ in 0..metrics_count {
+            sender.try_send(SubmittableMetric::new(
+                SubmittableMetricKind::Boxed(Box::new(sample_metric.clone())),
+                1234567890,
+            ))?;
+        }
+        drop(sender);
+
+        metrics_publisher_task(
+            receiver,
+            &monitoring_config,
+            SecondaryShutdownController::new(),
+        )
+        .await;
+
+        for i in 0..metrics_count {
+            let metric = receive_with_timeout(&mut metrics_back_receiver)
+                .await
+                .unwrap_or_else(|| panic!("Metric {i} not found"));
+            assert_eq!(metric, "sov-test-metric value=1 1234567890");
+        }
         Ok(())
     }
 }
