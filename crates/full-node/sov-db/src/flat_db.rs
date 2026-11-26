@@ -23,6 +23,10 @@ use rockbound::{rocksdb, SchemaBatch, DB};
 use sov_rollup_interface::common::{IntoSlotNumber, SlotNumber};
 use std::sync::Arc;
 
+/// Capacity of the LRU block cache shared by the live DB's column families. It fills only as
+/// blocks are read. 4 GiB is the soaked value.
+const LIVE_DB_BLOCK_CACHE_SIZE: usize = 4 << 30;
+
 /// A database to store the flat state of the rollup (i.e. the raw key-value pairs)
 pub struct FlatStateDb {
     pub(crate) user: Arc<VersionedDB<NomtStateValues<UserNamespace>, DbCache>>,
@@ -56,9 +60,19 @@ impl FlatStateDb {
                 custom_config,
             )];
 
+            // State reads hit the live DB on the sequencer's hot path. Without these, every
+            // lookup probes each level's blocks and hot blocks live only in the OS page cache.
+            let block_cache = rocksdb::Cache::new_lru_cache(LIVE_DB_BLOCK_CACHE_SIZE);
+            let tune_for_point_lookups = |builder: &mut rockbound::CfDescriptorBuilder| {
+                let table = builder.block_based_table_options_mut();
+                table.set_bloom_filter(10.0, false);
+                table.set_block_cache(&block_cache);
+            };
+
             VersionedDB::<NomtStateValues<UserNamespace>, DbCache>::add_live_db_column_families_with(
                 &mut live_columns,
                 |cf_name, versioned_kind, builder| {
+                    tune_for_point_lookups(builder);
                     Self::customize_cf(
                         RocksDbKind::FlatStateLive,
                         cf_name,
@@ -71,6 +85,7 @@ impl FlatStateDb {
             VersionedDB::<NomtStateValues<KernelNamespace>, DbCache>::add_live_db_column_families_with(
                 &mut live_columns,
                 |cf_name, versioned_kind, builder| {
+                    tune_for_point_lookups(builder);
                     Self::customize_cf(
                         RocksDbKind::FlatStateLive,
                         cf_name,
