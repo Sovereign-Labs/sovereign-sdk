@@ -1,3 +1,6 @@
+# 2026-11-17
+- #3149 Metrics: `sov_rollup_transaction_execution_us` no longer carries the `sequencer` tag (the DA address of the batch's sequencer). Formatting it cost an address encoding and allocation per tx, and no dashboard used it. **Breaking**: the `sequencer_address` field of `sov_metrics::TransactionProcessingMetrics` is removed.
+
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 

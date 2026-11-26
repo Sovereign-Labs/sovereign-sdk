@@ -202,31 +202,77 @@ pub trait EventEmitter: ModuleInfo {
 }
 
 fn event_key<T: Debug>(module_prefix: &str, event: &T) -> String {
-    let event_debug = format!("{event:?}");
-    // Hacky logic to get the first identifier in the Debug representation.
-    let event_identifier = event_debug
-        .split(|c: char| !(c.is_alphanumeric() || c == '_'))
-        .next()
-        .unwrap_or_default();
-
-    format!("{module_prefix}/{event_identifier}")
+    format!("{module_prefix}/{}", leading_ident(event))
 }
 
 /// A helper function to make string representation of the inner call message from the runtime's `Decodable` representation.
 pub fn call_message_repr<D: DispatchCall>(decodable: &D::Decodable) -> String {
-    // Extract the variant name from the part right after the first parenthesis
-    let dbg = format!("{decodable:?}");
-    let variant_part = dbg
-        .split_once('(')
-        .map(|(_idx, after_parent)| {
-            let end_idx = after_parent
-                .find([' ', '{', '('])
-                .unwrap_or(after_parent.len());
-            &after_parent[..end_idx]
-        })
-        .unwrap_or("Unknown");
+    let variant_part = first_variant(decodable);
+    format!(
+        "{}_{}",
+        decodable.discriminant().as_ref(),
+        variant_part.as_deref().unwrap_or("Unknown")
+    )
+}
 
-    format!("{}_{}", decodable.discriminant().as_ref(), variant_part)
+/// The first identifier in `value`'s Debug representation.
+fn leading_ident(value: &impl Debug) -> String {
+    let mut sink = LeadingIdent::default();
+    debug_prefix(value, &mut sink);
+    sink.ident
+}
+
+/// The text after the first `(` of `value`'s Debug representation, up to the next ` `, `{` or `(`.
+/// `None` if there is no `(`.
+fn first_variant(value: &impl Debug) -> Option<String> {
+    let mut sink = FirstVariant::default();
+    debug_prefix(value, &mut sink);
+    sink.variant
+}
+
+/// Writes `value`'s Debug representation into `sink` until `sink` returns an error, so that only
+/// the prefix the caller needs is formatted, not every (often bech32-encoded) field.
+fn debug_prefix(value: &impl Debug, sink: &mut impl core::fmt::Write) {
+    // An error only means that `sink` has seen enough.
+    let _ = core::fmt::write(sink, format_args!("{value:?}"));
+}
+
+/// The sink behind [`leading_ident`].
+#[derive(Default)]
+struct LeadingIdent {
+    ident: String,
+}
+
+impl core::fmt::Write for LeadingIdent {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for c in s.chars() {
+            if !(c.is_alphanumeric() || c == '_') {
+                return Err(core::fmt::Error);
+            }
+            self.ident.push(c);
+        }
+        Ok(())
+    }
+}
+
+/// The sink behind [`first_variant`].
+#[derive(Default)]
+struct FirstVariant {
+    variant: Option<String>,
+}
+
+impl core::fmt::Write for FirstVariant {
+    fn write_str(&mut self, s: &str) -> core::fmt::Result {
+        for c in s.chars() {
+            match &mut self.variant {
+                None if c == '(' => self.variant = Some(String::new()),
+                None => {}
+                Some(_) if matches!(c, ' ' | '{' | '(') => return Err(core::fmt::Error),
+                Some(variant) => variant.push(c),
+            }
+        }
+        Ok(())
+    }
 }
 
 impl<T> EventEmitter for T
@@ -456,5 +502,78 @@ mod tests {
             event_key("module", &Enum3::Variant1 { a: 1 }),
             "module/Variant1".to_string()
         );
+    }
+
+    /// Stands in for a payload that is expensive to format: formatting it fails the test.
+    struct UnformattablePayload;
+
+    impl Debug for UnformattablePayload {
+        fn fmt(&self, _f: &mut core::fmt::Formatter<'_>) -> core::fmt::Result {
+            panic!("The payload must not be formatted");
+        }
+    }
+
+    #[allow(dead_code)]
+    #[derive(Debug)]
+    enum CallWithPayload {
+        Tuple(UnformattablePayload),
+        Struct { payload: UnformattablePayload },
+    }
+
+    #[allow(dead_code)]
+    #[derive(Debug)]
+    enum RuntimeCallWithPayload {
+        Module(CallWithPayload),
+    }
+
+    #[test]
+    fn leading_ident_does_not_format_payload() {
+        assert_eq!(
+            leading_ident(&CallWithPayload::Tuple(UnformattablePayload)),
+            "Tuple"
+        );
+        assert_eq!(
+            leading_ident(&CallWithPayload::Struct {
+                payload: UnformattablePayload
+            }),
+            "Struct"
+        );
+    }
+
+    #[test]
+    fn first_variant_does_not_format_payload() {
+        assert_eq!(
+            first_variant(&RuntimeCallWithPayload::Module(CallWithPayload::Tuple(
+                UnformattablePayload
+            ))),
+            Some("Tuple".to_string())
+        );
+        assert_eq!(
+            first_variant(&RuntimeCallWithPayload::Module(CallWithPayload::Struct {
+                payload: UnformattablePayload
+            })),
+            Some("Struct".to_string())
+        );
+    }
+
+    #[test]
+    fn first_variant_without_payload() {
+        #[derive(Debug)]
+        enum Inner {
+            Unit,
+        }
+
+        #[derive(Debug)]
+        enum Outer {
+            Module(Inner),
+            NoParens,
+        }
+
+        // The closing parenthesis is kept. It is part of existing metric tags.
+        assert_eq!(
+            first_variant(&Outer::Module(Inner::Unit)),
+            Some("Unit)".to_string())
+        );
+        assert_eq!(first_variant(&Outer::NoParens), None);
     }
 }
