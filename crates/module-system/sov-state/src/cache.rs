@@ -1,6 +1,5 @@
 //! Cache key/value definitions
 
-use std::collections::hash_map::Entry;
 use std::convert::Infallible;
 
 #[cfg(feature = "native")]
@@ -89,11 +88,10 @@ pub(crate) mod internal {
     /// By tracking original values, we can detect and eliminate write patterns where a key is
     /// changed temporarily and then reset to its original value
     ///
-    /// Changes since the last commit or discard are applied to `log` directly and recorded in
-    /// `undo` with the entry they replaced, so a lookup hashes the key once and a commit only
-    /// clears `undo`. Reads that mutate an entry in place (fetching the value of a size-only read)
-    /// are not recorded, so they survive a discard, as they did when revertable changes were kept
-    /// in a separate map.
+    /// Revertable changes are applied to `log` directly and journaled in `undo`, so that a
+    /// discard can restore the entries they replaced. In-place updates through
+    /// [`CacheLog::get_mut`] are not journaled: they survive a discard unless the entry itself
+    /// was added since the last commit.
     #[derive(Debug, Clone)]
     pub(crate) struct CacheLog {
         log: HashMap<SlotKey, Access>,
@@ -144,49 +142,31 @@ pub(crate) mod internal {
 
         // Adds a read entry to the cache. Caller must guarantee that the key is not already present in the cache.
         pub(crate) fn add_read(&mut self, key: SlotKey, value: Option<NodeLeafAndMaybeValue>) {
-            match self.log.entry(key) {
-                Entry::Occupied(existing) => {
-                    // Sanity check.
-                    panic!(
-                        "Detected multiple calls to `add_read` for the same key.: {:?}",
-                        existing.key()
-                    );
-                }
-                Entry::Vacant(vacancy) => {
-                    self.undo.push((vacancy.key().clone(), None));
-                    vacancy.insert(Access::Read { original: value });
-                }
-            };
+            let previous = self
+                .log
+                .insert(key.clone(), Access::Read { original: value });
+            assert!(
+                previous.is_none(),
+                "Detected multiple calls to `add_read` for the same key: {key:?}"
+            );
+            self.undo.push((key, None));
         }
 
-        // Adds a write entry to the cache.
-        pub(crate) fn add_write(
-            &mut self,
-            key: SlotKey,
-            value: Option<SlotValue>,
-        ) -> IsValueCached {
-            let out = IsValueCached::Yes(AccessSize::Write(
-                value.as_ref().map(|v| v.size()).unwrap_or(0),
-            ));
-
-            match self.log.entry(key) {
-                Entry::Occupied(mut existing) => {
-                    // A write replaces any earlier read or write of the key.
-                    let previous =
-                        std::mem::replace(existing.get_mut(), Access::Write { modified: value });
-                    self.undo.push((existing.key().clone(), Some(previous)));
-                    out
-                }
-                Entry::Vacant(vacancy) => {
-                    self.undo.push((vacancy.key().clone(), None));
-                    vacancy.insert(Access::Write { modified: value });
-                    IsValueCached::No
-                }
-            }
+        // Adds a write entry to the cache. A write replaces any earlier read or write of the key.
+        pub(crate) fn add_write(&mut self, key: SlotKey, value: Option<SlotValue>) {
+            let previous = self
+                .log
+                .insert(key.clone(), Access::Write { modified: value });
+            self.undo.push((key, previous));
         }
 
         pub(crate) fn commit_revertable_log(&mut self) {
             self.undo.clear();
+        }
+
+        #[cfg(test)]
+        pub(crate) fn undo_len(&self) -> usize {
+            self.undo.len()
         }
 
         pub(crate) fn discard_revertable_log(&mut self) {
@@ -754,5 +734,46 @@ mod tests {
             let writes = cache_log.take_writes();
             assert_eq!(writes.len(), 0);
         }
+    }
+
+    #[test]
+    fn test_discard_restores_committed_write() {
+        let key = create_key(1);
+        let committed_value = create_value(2);
+        let mut cache_log = CacheLog::default();
+        cache_log.add_write(key.clone(), committed_value.clone());
+        cache_log.commit_revertable_log();
+
+        cache_log.add_write(key.clone(), None);
+        cache_log.add_write(key.clone(), create_value(3));
+        cache_log.discard_revertable_log();
+
+        assert_eq!(
+            cache_log.take_writes(),
+            vec![(key, committed_value)],
+            "Discarding a delete and rewrite should restore the previously committed value"
+        );
+    }
+
+    #[test]
+    fn test_commit_clears_undo_journal() {
+        let key = create_key(1);
+        let mut cache_log = CacheLog::default();
+        for v in 0..10 {
+            cache_log.add_write(key.clone(), create_value(v));
+        }
+        assert_eq!(
+            cache_log.undo_len(),
+            10,
+            "Every write to the same key should be journaled until commit"
+        );
+
+        cache_log.commit_revertable_log();
+
+        assert_eq!(
+            cache_log.undo_len(),
+            0,
+            "Commit should drop the undo history of overwritten values"
+        );
     }
 }
