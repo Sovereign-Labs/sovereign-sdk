@@ -1,3 +1,6 @@
+# 2026-11-26
+- #3196 DB: The flat-state live DB's column families now use a 10-bit bloom filter and one shared 4 GiB LRU block cache. Before, they ran on RocksDB defaults, with no filter and a small internal cache. The cache fills only as blocks are read, so a node's memory use can grow by up to 4 GiB. Rollups can still override these table options through `RollupDbConfigWithCustomizations::with_rocksdb_cf_options`, which runs after them. Not state- or chain-hash-breaking.
+
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 
