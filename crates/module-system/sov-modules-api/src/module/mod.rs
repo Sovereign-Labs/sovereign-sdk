@@ -231,10 +231,7 @@ fn leading_ident(value: &impl Debug) -> String {
 
 /// `prefix` followed by the first identifier in `value`'s Debug representation.
 fn leading_ident_after(prefix: String, value: &impl Debug) -> String {
-    let mut sink = LeadingIdent {
-        ident: prefix,
-        done: false,
-    };
+    let mut sink = LeadingIdent { ident: prefix };
     debug_prefix(value, &mut sink);
     sink.ident
 }
