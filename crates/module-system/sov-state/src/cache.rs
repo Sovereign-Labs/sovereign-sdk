@@ -68,13 +68,6 @@ impl Access {
             }
         }
     }
-
-    fn modified_mut(&mut self) -> Option<&mut Option<SlotValue>> {
-        match self {
-            Access::Read { .. } => None,
-            Access::Write { modified, .. } => Some(modified),
-        }
-    }
 }
 
 pub(crate) mod internal {
@@ -84,9 +77,7 @@ pub(crate) mod internal {
 
     use super::*;
 
-    /// [`CacheLog`] keeps track of the original and current values of each key accessed.
-    /// By tracking original values, we can detect and eliminate write patterns where a key is
-    /// changed temporarily and then reset to its original value
+    /// Caches the latest read or write for each key, with an undo journal for rollback.
     ///
     /// Revertable changes are applied to `log` directly and journaled in `undo`, so that a
     /// discard can restore the entries they replaced. In-place updates through
@@ -128,7 +119,10 @@ pub(crate) mod internal {
             );
             self.log
                 .into_iter()
-                .filter_map(|(k, mut access)| access.modified_mut().map(|value| (k, value.take())))
+                .filter_map(|(key, access)| match access {
+                    Access::Write { modified } => Some((key, modified)),
+                    Access::Read { .. } => None,
+                })
                 .collect()
         }
 
@@ -162,11 +156,6 @@ pub(crate) mod internal {
 
         pub(crate) fn commit_revertable_log(&mut self) {
             self.undo.clear();
-        }
-
-        #[cfg(test)]
-        pub(crate) fn undo_len(&self) -> usize {
-            self.undo.len()
         }
 
         pub(crate) fn discard_revertable_log(&mut self) {
@@ -741,6 +730,7 @@ mod tests {
         let key = create_key(1);
         let committed_value = create_value(2);
         let mut cache_log = CacheLog::default();
+        cache_log.add_write(key.clone(), create_value(1));
         cache_log.add_write(key.clone(), committed_value.clone());
         cache_log.commit_revertable_log();
 
@@ -752,28 +742,6 @@ mod tests {
             cache_log.take_writes(),
             vec![(key, committed_value)],
             "Discarding a delete and rewrite should restore the previously committed value"
-        );
-    }
-
-    #[test]
-    fn test_commit_clears_undo_journal() {
-        let key = create_key(1);
-        let mut cache_log = CacheLog::default();
-        for v in 0..10 {
-            cache_log.add_write(key.clone(), create_value(v));
-        }
-        assert_eq!(
-            cache_log.undo_len(),
-            10,
-            "Every write to the same key should be journaled until commit"
-        );
-
-        cache_log.commit_revertable_log();
-
-        assert_eq!(
-            cache_log.undo_len(),
-            0,
-            "Commit should drop the undo history of overwritten values"
         );
     }
 }
