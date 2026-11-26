@@ -9,7 +9,7 @@ use sov_modules_api::{
     TxControlFlow,
 };
 use tokio::runtime::Handle;
-use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::mpsc::error::{TryRecvError, TrySendError};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::oneshot;
 
@@ -344,6 +344,24 @@ impl<S: Spec> IncrementalBatch<S> for MaybeAsyncBatch<S> {
     }
 }
 
+/// How long the executor thread polls for the next tx before parking. Under load the next tx
+/// arrives within tens of microseconds, and a park/unpark round trip costs a large share of that.
+const SPIN_BEFORE_PARK: std::time::Duration = std::time::Duration::from_micros(50);
+
+fn recv_spinning_first(
+    txs_receiver: &mut Receiver<FullyBakedTxWithMaybeChangeSet>,
+) -> Option<FullyBakedTxWithMaybeChangeSet> {
+    let spin_until = std::time::Instant::now() + SPIN_BEFORE_PARK;
+    while std::time::Instant::now() < spin_until {
+        match txs_receiver.try_recv() {
+            Ok(item) => return Some(item),
+            Err(TryRecvError::Disconnected) => return None,
+            Err(TryRecvError::Empty) => std::hint::spin_loop(),
+        }
+    }
+    Handle::current().block_on(txs_receiver.recv())
+}
+
 impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
     type Item = (FullyBakedTx, MaybeAsyncBatchControlFlow<S>);
 
@@ -356,17 +374,15 @@ impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
                 txs_receiver,
                 responder,
                 ..
-            } => Handle::current()
-                .block_on(txs_receiver.recv())
-                .map(|mut item| {
-                    (
-                        item.tx,
-                        MaybeAsyncBatchControlFlow::Async {
-                            responder: responder.clone_for_tx(),
-                            maybe_tx_change_set: item.receiver.take(),
-                        },
-                    )
-                }),
+            } => recv_spinning_first(txs_receiver).map(|mut item| {
+                (
+                    item.tx,
+                    MaybeAsyncBatchControlFlow::Async {
+                        responder: responder.clone_for_tx(),
+                        maybe_tx_change_set: item.receiver.take(),
+                    },
+                )
+            }),
             MaybeAsyncBatch::Sync { batch } => batch
                 .next()
                 .map(|(item, _)| (item, MaybeAsyncBatchControlFlow::Sync)),
