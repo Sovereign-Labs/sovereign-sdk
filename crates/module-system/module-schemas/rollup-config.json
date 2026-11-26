@@ -470,7 +470,7 @@
           "minimum": 0
         },
         "max_pending_metrics": {
-          "description": "How many metrics are allowed to be in pending state, before new metrics will be dropped.\nThis is a number of metrics, not serialized bytes.\nThe total number of bytes to be held in memory might vary per metric + `max_datagram_size`",
+          "description": "How many metrics are allowed to be in pending state, before new metrics will be dropped.\nThis is a number of metrics, not serialized bytes.\nThe total number of bytes to be held in memory might vary per metric + `max_datagram_size`\nThe publisher drains pending metrics every 2 ms, so this must cover the metrics submitted in that time.",
           "type": [
             "integer",
             "null"
