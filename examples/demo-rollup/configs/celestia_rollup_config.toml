@@ -142,9 +142,9 @@ backoff_max_times = 10
 [storage]
 # The path to the rollup's data directory. Paths that do not begin with `/` are interpreted as relative paths.
 path = "demo_data"
-state_cache_size = 4294967296 # 4 GiB. Default is 1 GiB.
+state_cache_size = 4294967296 # In bytes (4 GiB). Default is 1 GiB.
 user_commit_concurrency = 4 # Number of concurrent commit workers for user state
-user_hashtable_buckets = 1_000_000 # Expected state size, cannot be changed after creation
+user_hashtable_buckets = 1_000_000 # Sized for expected state; can be raised later (grown at startup), never lowered
 user_preallocate_ht = false
 kernel_commit_concurrency = 2 # Number of concurrent commit workers for kernel state
 

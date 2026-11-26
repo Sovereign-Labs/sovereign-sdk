@@ -332,6 +332,7 @@ fn main() {
         kernel_page_cache_size: None,
         kernel_leaf_cache_size: None,
         kernel_page_cache_upper_levels: None,
+        nomt_metrics_enabled: true,
         pruner: PrunerConfig::Off,
     };
     let mut manager = Manager::new(config, false).unwrap();

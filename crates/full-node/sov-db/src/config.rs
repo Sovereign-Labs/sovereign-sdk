@@ -164,49 +164,58 @@ pub struct RollupDbConfig {
     /// Exact directory for the user NOMT database. Defaults to `path/user_nomt_db`.
     /// Relative paths are resolved from the process working directory.
     pub user_nomt_db_path: Option<std::path::PathBuf>,
-    /// The size of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB.
+    /// Size in bytes of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB.
     /// A larger cache size can improve execution speed at the cost of more memory usage.
     pub state_cache_size: Option<usize>,
 
-    /// Number of concurrent commit workers for the user state.
+    /// Number of concurrent commit workers for the user state. Required.
     /// More details at [`Options::commit_concurrency`]
     pub user_commit_concurrency: Option<usize>,
-    /// Value is determined by the expected size of the state. Recommended to start with 15_000_000.
-    /// Can be increased for an existing database, but cannot be decreased.
+    /// Number of NOMT hashtable buckets (one 4 KiB page each), sized for the expected state size.
+    /// Required. Recommended to start with 15_000_000.
+    /// Raising it for an existing database grows the hashtable at startup; lowering it is rejected.
     /// More details at [`Options::hashtable_buckets`]
     pub user_hashtable_buckets: Option<u32>,
     /// Sets whether to preallocate the hashtable file for user db.
     /// More details at [`Options::preallocate_ht`]
     pub user_preallocate_ht: Option<bool>,
-    /// Page cache size for user state.
+    /// Page cache size for user state, in MiB. Default is 256 MiB.
     /// More details at [`Options::page_cache_size`]
     pub user_page_cache_size: Option<usize>,
-    /// Leaf cache size for user state.
+    /// Leaf cache size for user state, in MiB. Default is 256 MiB.
     /// More details at [`Options::leaf_cache_size`]
     pub user_leaf_cache_size: Option<usize>,
-    /// Page cache upper levels for user state.
+    /// Number of upper page-tree levels permanently cached for user state. Default is 2.
     /// More details at [`Options::page_cache_upper_levels`]
     pub user_page_cache_upper_levels: Option<usize>,
 
     // Kernel state configuration
-    /// Number of concurrent commit workers for the kernel state.
+    /// Number of concurrent commit workers for the kernel state. Required.
     /// More details at [`Options::commit_concurrency`]
     pub kernel_commit_concurrency: Option<usize>,
-    /// Can be increased for an existing database, but cannot be decreased.
+    /// Number of NOMT hashtable buckets (one 4 KiB page each) for the kernel state.
+    /// Default is 256_000 (500 in debug builds).
+    /// Raising it for an existing database grows the hashtable at startup; lowering it is rejected.
     /// More details at [`Options::hashtable_buckets`]
     pub kernel_hashtable_buckets: Option<u32>,
     /// Sets whether to preallocate the hashtable file for kernel db.
     /// More details at [`Options::preallocate_ht`]
     pub kernel_preallocate_ht: Option<bool>,
-    /// Page cache size for kernel state.
+    /// Page cache size for kernel state, in MiB. Default is 256 MiB.
     /// More details at [`Options::page_cache_size`]
     pub kernel_page_cache_size: Option<usize>,
-    /// Leaf cache size for kernel state.
+    /// Leaf cache size for kernel state, in MiB. Default is 256 MiB.
     /// More details at [`Options::leaf_cache_size`]
     pub kernel_leaf_cache_size: Option<usize>,
-    /// Page cache upper levels for kernel state.
+    /// Number of upper page-tree levels permanently cached for kernel state. Default is 2.
     /// More details at [`Options::page_cache_upper_levels`]
     pub kernel_page_cache_upper_levels: Option<usize>,
+
+    /// Whether NOMT collects page-cache and fetch-time metrics for user and kernel state.
+    /// Hashtable occupancy is reported either way. Default is `true`.
+    /// More details at [`Options::metrics`]
+    #[serde(default = "default_nomt_metrics_enabled")]
+    pub nomt_metrics_enabled: bool,
 
     /// State-version pruning policy. Defaults to [`PrunerConfig::Off`] (full history
     /// retained) when omitted from config.
@@ -244,6 +253,7 @@ impl RollupDbConfig {
             kernel_page_cache_size: Some(16),
             kernel_leaf_cache_size: Some(16),
             kernel_page_cache_upper_levels: None,
+            nomt_metrics_enabled: true,
             pruner: PrunerConfig::Off,
         }
     }
@@ -251,7 +261,7 @@ impl RollupDbConfig {
     /// Kernel state is smaller, so we can have less required options.
     /// But it has rollback enabled for 2 database commit support
     pub(crate) fn get_kernel_options(&self) -> Options {
-        let mut opts = nomt_default_options();
+        let mut opts = self.nomt_default_options();
         // Enable rollback, so we can handle errors with commits to 2 databases.
         opts.rollback(true);
         opts.max_rollback_log_len(1);
@@ -293,7 +303,7 @@ impl RollupDbConfig {
     }
 
     pub(crate) fn get_user_options(&self) -> Options {
-        let mut opts = nomt_default_options();
+        let mut opts = self.nomt_default_options();
         // Enabling rollback for user space too, to be able to sync with the historical state.
         opts.rollback(true);
         opts.max_rollback_log_len(1);
@@ -331,6 +341,16 @@ impl RollupDbConfig {
     pub(crate) fn pruner(&self) -> PrunerConfig {
         self.pruner
     }
+
+    fn nomt_default_options(&self) -> Options {
+        let mut opts = Options::new();
+        opts.metrics(self.nomt_metrics_enabled);
+        opts
+    }
+}
+
+fn default_nomt_metrics_enabled() -> bool {
+    true
 }
 
 /// Open-time wrapper for [`RollupDbConfig`] that carries runtime-only RocksDB customizations.
@@ -400,17 +420,10 @@ impl From<RollupDbConfig> for RollupDbConfigWithCustomizations {
     }
 }
 
-fn nomt_default_options() -> Options {
-    let mut opts = Options::new();
-    opts.metrics(true);
-    opts
-}
-
 #[cfg(test)]
 mod tests {
     use super::RollupDbConfig;
     use std::path::PathBuf;
-
     #[test]
     fn database_paths_deserialize_when_omitted() {
         let config: RollupDbConfig = serde_json::from_str(r#"{"path":"data"}"#).unwrap();

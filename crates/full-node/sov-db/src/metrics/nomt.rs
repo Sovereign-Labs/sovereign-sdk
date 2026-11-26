@@ -27,14 +27,16 @@ pub struct NomtDbMetric {
     pub db: &'static str,
     pub hash_table_capacity: usize,
     pub hash_table_occupied: usize,
-    pub page_requests: u64,
-    pub page_cache_misses: u64,
+    /// `None` when NOMT metrics are disabled.
+    pub page_requests: Option<u64>,
+    /// `None` when NOMT metrics are disabled.
+    pub page_cache_misses: Option<u64>,
     pub avg_page_fetch_time_ns: Option<u64>,
     pub avg_value_fetch_time_ns: Option<u64>,
 }
 
 impl NomtDbMetric {
-    pub fn new<H>(db: &'static str, nomt: &Nomt<BinaryHasher<H>>) -> Self
+    pub fn new<H>(db: &'static str, nomt: &Nomt<BinaryHasher<H>>, metrics_enabled: bool) -> Self
     where
         H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync,
     {
@@ -45,15 +47,16 @@ impl NomtDbMetric {
                 rate = hash_table_utilization.occupancy_rate(),
                 "Occupancy rate for NOMT hashtable is too high. Please increase the configured bucket count and restart the node to resize the hashtable (note that this can take some time on the next startup).");
         }
-        let metrics = nomt.metrics();
+        // NOMT's metric getters panic when metrics collection is disabled.
+        let metrics = metrics_enabled.then(|| nomt.metrics());
         Self {
             db,
             hash_table_capacity: hash_table_utilization.capacity,
             hash_table_occupied: hash_table_utilization.occupied,
-            page_requests: metrics.get_page_requests(),
-            page_cache_misses: metrics.get_page_cache_misses(),
-            avg_page_fetch_time_ns: metrics.get_page_fetch_time(),
-            avg_value_fetch_time_ns: metrics.get_value_fetch_time(),
+            page_requests: metrics.as_ref().map(|m| m.get_page_requests()),
+            page_cache_misses: metrics.as_ref().map(|m| m.get_page_cache_misses()),
+            avg_page_fetch_time_ns: metrics.as_ref().and_then(|m| m.get_page_fetch_time()),
+            avg_value_fetch_time_ns: metrics.as_ref().and_then(|m| m.get_value_fetch_time()),
         }
     }
 }
@@ -67,14 +70,18 @@ impl Metric for NomtDbMetric {
         // DB as tag, rest as fields
         write!(
             buffer,
-            "{},db={} ht_capacity={},ht_occupied={},page_requests={},page_cache_misses={}",
+            "{},db={} ht_capacity={},ht_occupied={}",
             self.measurement_name(),
             self.db,
             self.hash_table_capacity,
             self.hash_table_occupied,
-            self.page_requests,
-            self.page_cache_misses,
         )?;
+        if let Some(page_requests) = &self.page_requests {
+            write!(buffer, ",page_requests={page_requests}")?;
+        }
+        if let Some(page_cache_misses) = &self.page_cache_misses {
+            write!(buffer, ",page_cache_misses={page_cache_misses}")?;
+        }
         if let Some(avg_page_fetch_time) = &self.avg_page_fetch_time_ns {
             write!(buffer, ",avg_page_fetch_time_ns={avg_page_fetch_time}")?;
         }
