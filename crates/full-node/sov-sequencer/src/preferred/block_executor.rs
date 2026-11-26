@@ -410,6 +410,9 @@ impl<S: Spec, Rt: Runtime<S>> RollupBlockExecutor<S, Rt> {
         Self::finalize_tx_sequencing_data(&mut tx, sequencing_scratchpad);
 
         self.checkpoint.apply_tx_changes(tx_changes.clone());
+        // The live checkpoint is never rolled back, so commit each accepted tx to keep its
+        // cache undo journal from growing with every write in the block.
+        self.checkpoint.commit_revertable_storage_cache();
 
         Ok((
             receipt,
