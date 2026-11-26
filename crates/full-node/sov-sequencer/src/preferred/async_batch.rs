@@ -9,7 +9,7 @@ use sov_modules_api::{
     TxControlFlow,
 };
 use tokio::runtime::Handle;
-use tokio::sync::mpsc::error::TrySendError;
+use tokio::sync::mpsc::error::{TryRecvError, TrySendError};
 use tokio::sync::mpsc::{Receiver, Sender};
 use tokio::sync::oneshot;
 
@@ -352,18 +352,14 @@ fn recv_spinning_first(
     txs_receiver: &mut Receiver<FullyBakedTxWithMaybeChangeSet>,
 ) -> Option<FullyBakedTxWithMaybeChangeSet> {
     let spin_until = std::time::Instant::now() + SPIN_BEFORE_PARK;
-    loop {
+    while std::time::Instant::now() < spin_until {
         match txs_receiver.try_recv() {
             Ok(item) => return Some(item),
-            Err(tokio::sync::mpsc::error::TryRecvError::Disconnected) => return None,
-            Err(tokio::sync::mpsc::error::TryRecvError::Empty) => {
-                if std::time::Instant::now() >= spin_until {
-                    return Handle::current().block_on(txs_receiver.recv());
-                }
-                std::hint::spin_loop();
-            }
+            Err(TryRecvError::Disconnected) => return None,
+            Err(TryRecvError::Empty) => std::hint::spin_loop(),
         }
     }
+    Handle::current().block_on(txs_receiver.recv())
 }
 
 impl<S: Spec> Iterator for MaybeAsyncBatch<S> {
