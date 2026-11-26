@@ -203,7 +203,7 @@ pub trait EventEmitter: ModuleInfo {
 
 fn event_key<T: Debug>(module_prefix: &str, event: &T) -> String {
     // `{module_prefix}/{leading_ident(event)}`, with the identifier written straight into the key.
-    let mut key = String::with_capacity(module_prefix.len() + 32);
+    let mut key = String::with_capacity(module_prefix.len().saturating_add(32));
     key.push_str(module_prefix);
     key.push('/');
     leading_ident_after(key, event)
@@ -211,22 +211,13 @@ fn event_key<T: Debug>(module_prefix: &str, event: &T) -> String {
 
 /// A helper function to make string representation of the inner call message from the runtime's `Decodable` representation.
 pub fn call_message_repr<D: DispatchCall>(decodable: &D::Decodable) -> String {
-    let variant_part = first_variant(decodable);
-    let variant = variant_part.as_deref().unwrap_or("Unknown");
-    let discriminant = decodable.discriminant();
-    let discriminant = discriminant.as_ref();
-    // `{discriminant}_{variant}`, without the formatting machinery.
-    let mut repr = String::with_capacity(discriminant.len() + 1 + variant.len());
-    repr.push_str(discriminant);
-    repr.push('_');
-    repr.push_str(variant);
-    repr
-}
-
-/// The first identifier in `value`'s Debug representation.
-#[cfg(test)]
-fn leading_ident(value: &impl Debug) -> String {
-    leading_ident_after(String::new(), value)
+    let variant = first_variant(decodable);
+    [
+        decodable.discriminant().as_ref(),
+        "_",
+        variant.as_deref().unwrap_or("Unknown"),
+    ]
+    .concat()
 }
 
 /// `prefix` followed by the first identifier in `value`'s Debug representation.
@@ -515,6 +506,11 @@ mod tests {
             event_key("module", &Enum3::Variant1 { a: 1 }),
             "module/Variant1".to_string()
         );
+    }
+
+    /// The first identifier in `value`'s Debug representation.
+    fn leading_ident(value: &impl Debug) -> String {
+        leading_ident_after(String::new(), value)
     }
 
     /// Stands in for a payload that is expensive to format: formatting it fails the test.
