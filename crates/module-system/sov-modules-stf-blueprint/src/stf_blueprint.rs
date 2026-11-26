@@ -102,13 +102,9 @@ where
 {
     events
         .into_iter()
-        .map(|typed_event| {
-            // This seems to be needed because doing `&typed_event.event_key().to_vec()`
-            // directly as the first function param to Event::new() is running into a linter bug
-            // where it thinks that the to_vec is not necessary.
-            // (probably due to the borrow and move in the same statement)
-            // https://github.com/rust-lang/rust-clippy/issues/12098
-            let key = typed_event.event_key().to_vec();
+        .map(|mut typed_event| {
+            // The conversion below doesn't read the key, so it is taken rather than copied.
+            let key = typed_event.take_event_key();
             StoredEvent::new(
                 &key,
                 &borsh::to_vec(
