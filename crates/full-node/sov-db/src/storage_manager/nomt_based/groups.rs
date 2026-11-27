@@ -5,7 +5,6 @@ use std::marker::PhantomData;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, RwLock};
 use std::thread::JoinHandle;
-use std::time::Duration;
 
 use anyhow::Context;
 use rockbound::cache::delta_reader::DeltaReader;
@@ -19,9 +18,7 @@ use crate::config::{RocksDbKind, RollupDbConfigWithCustomizations};
 use crate::flat_db::FlatStateDb;
 use crate::historical_state::{HistoricalStateReader, StateChanges};
 use crate::ledger_db::LedgerDb;
-use crate::metrics::nomt::{
-    CommitDetailedMetric, CompactionMetric, MerklizedCommitMetric, PrunerMetric,
-};
+use crate::metrics::nomt::{CommitDetailedMetric, CompactionMetric, PrunerMetric};
 use crate::namespaces::{KernelNamespace, UserNamespace};
 use crate::pruner::Pruner;
 use crate::schema::namespace::NomtStateValues;
@@ -32,6 +29,21 @@ use crate::storage_manager::{
 };
 
 const GIGABYTE: usize = 1024 * 1024 * 1024;
+
+/// Joins a store commit thread, re-raising its panic on the caller's thread.
+/// Errors are logged here because the caller propagates at most one of several store failures.
+fn join_commit_thread<T>(
+    store: &str,
+    handle: std::thread::ScopedJoinHandle<'_, anyhow::Result<T>>,
+) -> anyhow::Result<T> {
+    let result = handle
+        .join()
+        .unwrap_or_else(|panic| std::panic::resume_unwind(panic));
+    if let Err(error) = &result {
+        tracing::error!(store, ?error, "Failed to commit store");
+    }
+    result
+}
 
 // 300 thousand keys * 32 bytes is about 10 MB. This should be a large enough batch size to keep up with state growth,
 // without consuming excessive memory.
@@ -518,8 +530,7 @@ where
     fn commit_block(&self, overlay: StateOverlay, rockbound: SnapshotGroup) -> anyhow::Result<()> {
         #[cfg(test)]
         fail_commit_if_requested()?;
-        let merklized_commit = self.commit_merklized(overlay)?;
-        self.commit_rockbound(rockbound, merklized_commit, FlatCommitMode::Append)
+        self.commit_stores(overlay, rockbound, FlatCommitMode::Append)
     }
 
     #[cfg(feature = "migration-script")]
@@ -531,25 +542,22 @@ where
         tracing::trace!(?flat_commit_mode, "Committing a group...");
         // The last commit had to be successful.
         let CommitGroup { nomt, rockbound } = group;
-        let merklized_commit = self.commit_merklized(nomt)?;
-        self.commit_rockbound(rockbound, merklized_commit, flat_commit_mode)
+        self.commit_stores(nomt, rockbound, flat_commit_mode)
     }
 
     // ======================= DANGER ZONE ======================
-    // The commit order (`commit_merklized`, then `commit_rockbound`: ledger, accessory, flat)
-    // is relied on by NomtProverStorage::get_with_proof.
-    // If you change the order, you'll need to update merkle proof generation.
-
-    fn commit_merklized(&self, state: StateOverlay) -> anyhow::Result<MerklizedCommitMetric> {
-        tracing::trace!("Commiting NOMT DBs...");
-        self.merklized_state.commit(state)
-    }
-
-    /// Must be called after [`Self::commit_merklized`] for the same block.
-    fn commit_rockbound(
+    // Crash recovery treats the live flat DB as the commit marker: every other store
+    // (NOMT, ledger, accessory, flat archival) must be committed before the live DB is
+    // written, so after a crash each of them is at most one version ahead of live and can
+    // be rolled back. Those stores are independent of each other and are committed in
+    // parallel (#3087); the live DB is written only after all of them succeeded.
+    // The whole commit runs under the `nomt_snapshots` write lock (see `spawn_commit`), so
+    // NOMT sessions, and with them `NomtProverStorage::get_with_proof`, never observe a
+    // half-committed block.
+    fn commit_stores(
         &self,
+        state: StateOverlay,
         group: SnapshotGroup,
-        merklized_commit: MerklizedCommitMetric,
         flat_commit_mode: FlatCommitMode,
     ) -> anyhow::Result<()> {
         let SnapshotGroup {
@@ -557,31 +565,78 @@ where
             accessory,
             ledger,
         } = group;
+        let root_hash_batch = historical_state.root_hash_batch.clone();
+        // Spans are thread-local, so commit threads enter the caller's span explicitly.
+        let span = tracing::Span::current();
 
-        // Ledger
-        tracing::trace!("Committing Ledger DB...");
-        #[cfg(feature = "test-utils")]
-        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLedger
-            .inject_fault_if_configured();
-        let ledger_commit = self.commit_ledger(&ledger)?;
+        let (flat_metrics, others) = std::thread::scope(|s| {
+            let merklized = s.spawn(|| {
+                span.in_scope(|| {
+                    tracing::trace!("Commiting NOMT DBs...");
+                    self.merklized_state.commit(state)
+                })
+            });
+            let ledger_commit = s.spawn(|| {
+                span.in_scope(|| {
+                    tracing::trace!("Committing Ledger DB...");
+                    #[cfg(feature = "test-utils")]
+                    crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingLedger
+                        .inject_fault_if_configured();
+                    self.commit_ledger(&ledger)
+                })
+            });
+            let accessory_commit = s.spawn(|| {
+                span.in_scope(|| {
+                    tracing::trace!("Commiting Accessory DB...");
+                    #[cfg(feature = "test-utils")]
+                    crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingAccessory
+                        .inject_fault_if_configured();
+                    self.commit_accessory(&accessory, &root_hash_batch)
+                })
+            });
 
-        // Accessory
-        tracing::trace!("Commiting Accessory DB...");
-        #[cfg(feature = "test-utils")]
-        crate::test_utils::CommitFaultInjectionLocation::BeforeCommittingAccessory
-            .inject_fault_if_configured();
-        let accessory_commit =
-            self.commit_accessory(&accessory, &historical_state.root_hash_batch)?;
+            let mut handles = Some((merklized, ledger_commit, accessory_commit));
+            let mut others = None;
+            let wait_for_others = || -> anyhow::Result<()> {
+                let (merklized, ledger_commit, accessory_commit) = handles
+                    .take()
+                    .expect("other stores are awaited at most once");
+                // Join every thread before propagating, so each failure gets logged.
+                let merklized_commit = join_commit_thread("nomt", merklized);
+                let ledger_commit = join_commit_thread("ledger", ledger_commit);
+                let accessory_commit = join_commit_thread("accessory", accessory_commit);
+                others = Some((merklized_commit?, ledger_commit?, accessory_commit?));
+                Ok(())
+            };
 
-        // Flat State
-        tracing::trace!("Committing Flat DB..");
-        let flat_metrics = match flat_commit_mode {
-            FlatCommitMode::Append => self.flat_state.commit(historical_state)?,
-            #[cfg(feature = "migration-script")]
-            FlatCommitMode::RewriteHead(expected_latest) => self
-                .flat_state
-                .commit_at_latest_checked(historical_state, expected_latest)?,
-        };
+            tracing::trace!("Committing Flat DB..");
+            let flat_metrics = match flat_commit_mode {
+                FlatCommitMode::Append => self
+                    .flat_state
+                    .commit_with_before_live(historical_state, wait_for_others),
+                #[cfg(feature = "migration-script")]
+                FlatCommitMode::RewriteHead(expected_latest) => {
+                    let mut wait_for_others = wait_for_others;
+                    wait_for_others().and_then(|_| {
+                        self.flat_state
+                            .commit_at_latest_checked(historical_state, expected_latest)
+                    })
+                }
+            };
+
+            // The flat commit failed before waiting for the other stores. Join them anyway so
+            // their failures are logged instead of being dropped with the scope. Their results
+            // are ignored because the flat commit error is the one being propagated.
+            if let Some((merklized, ledger_commit, accessory_commit)) = handles.take() {
+                let _ = join_commit_thread("nomt", merklized);
+                let _ = join_commit_thread("ledger", ledger_commit);
+                let _ = join_commit_thread("accessory", accessory_commit);
+            }
+            (flat_metrics, others)
+        });
+        let flat_metrics = flat_metrics?;
+        let (merklized_commit, ledger_commit, accessory_commit) =
+            others.expect("all stores are committed before the live flat DB");
 
         // ======================= END DANGER ZONE ======================
 
@@ -606,13 +661,13 @@ where
         &self,
         accessory: &SchemaBatch,
         root_hash_batch: &SchemaBatch,
-    ) -> anyhow::Result<Duration> {
+    ) -> anyhow::Result<std::time::Duration> {
         let accessory_start = std::time::Instant::now();
         AccessoryDb::commit(&self.accessory, accessory, root_hash_batch)?;
         Ok(accessory_start.elapsed())
     }
 
-    fn commit_ledger(&self, ledger: &SchemaBatch) -> anyhow::Result<Duration> {
+    fn commit_ledger(&self, ledger: &SchemaBatch) -> anyhow::Result<std::time::Duration> {
         let ledger_start = std::time::Instant::now();
         self.ledger.write_schemas(ledger)?;
         Ok(ledger_start.elapsed())
@@ -714,7 +769,6 @@ impl AllDBsStateRoots {
         let root_hash_from_live_db = match flat_state_db.root_hash_from_live_db()? {
             Some(root_hash_from_live_db) => root_hash_from_live_db,
             None => {
-                // The merklized_state is committed first:
                 // root_hash_from_live_db == None and root_hash_nomt is empty. This indicates that the rollup is being run for the first time.
                 if root_hash_nomt.is_empty() {
                     pre_genesis_root()
@@ -828,6 +882,130 @@ impl AllDBsStateRoots {
             root_hash_nomt_user = hex::encode(self.root_hash_nomt.user),
             root_hash_nomt_kernel = hex::encode(self.root_hash_nomt.kernel),
             "State roots on startup {msg}"
+        );
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::panic::AssertUnwindSafe;
+
+    use rockbound::SchemaBatch;
+    use sov_mock_da::{MockBlockHeader, MockDaSpec};
+    use sov_rollup_interface::common::SlotNumber;
+    use sov_rollup_interface::da::BlockHeaderTrait;
+    use sov_rollup_interface::storage::HierarchicalStorageManager;
+
+    use super::AllDBsStateRoots;
+    use crate::config::RollupDbConfig;
+    use crate::ledger_db::LedgerDb;
+    use crate::schema::types::{BatchNumber, DiscardedBlobNumber, StoredSlot};
+    use crate::storage_manager::tests::generic_tests::TestableStorage;
+    use crate::storage_manager::NomtStorageManager;
+    use crate::test_utils::{CommitFaultInjectionLocation, TestNomtStorage, H};
+
+    type Manager = NomtStorageManager<MockDaSpec, H, TestNomtStorage>;
+
+    /// Saves a change set for `height` (with a consistent ledger slot) and returns its state root.
+    fn save_slot(manager: &mut Manager, height: u64) -> [u8; 64] {
+        let header = MockBlockHeader::from_height(height);
+        let (storage, ledger_reader) = manager.create_state_for(&header).unwrap();
+        let values = vec![
+            (
+                vec![1, 2, height as u8],
+                Some(height.to_be_bytes().to_vec()),
+            ),
+            (
+                vec![3, 4, height as u8],
+                Some(height.to_le_bytes().to_vec()),
+            ),
+        ];
+        let (stf_changes, state_root) = storage.materialize_from_key_values(&values, height);
+
+        let ledger_db = LedgerDb::with_reader(ledger_reader).unwrap();
+        let slot_number = SlotNumber::new(height);
+        let mut ledger_change_set = SchemaBatch::new();
+        let slot = StoredSlot {
+            hash: header.hash().into(),
+            state_root: state_root.to_vec().into(),
+            extra_data: vec![].into(),
+            batches: BatchNumber(0)..BatchNumber(0),
+            discarded_blobs: DiscardedBlobNumber(0)..DiscardedBlobNumber(0),
+            timestamp: header.time(),
+        };
+        ledger_db
+            .put_slot(&slot, &slot_number, &mut ledger_change_set)
+            .unwrap();
+        ledger_change_set.merge(
+            ledger_db
+                .materialize_latest_finalize_slot(slot_number, slot_number)
+                .unwrap(),
+        );
+        manager
+            .save_change_set(&header, stf_changes, ledger_change_set)
+            .unwrap();
+        state_root
+    }
+
+    /// Crash recovery treats the live flat DB as the commit marker: every other store must
+    /// already hold the new version by the time the live DB is written. This crashes a commit
+    /// right before the live write and checks that all other stores are at the new root while
+    /// the live DB is still at the previous one.
+    #[test]
+    fn test_all_stores_are_committed_before_live_db() {
+        let tempdir = tempfile::tempdir().unwrap();
+        let config = RollupDbConfig::default_in_path(tempdir.path().to_path_buf());
+        let mut manager = Manager::new(config, false).unwrap();
+
+        let root_1 = save_slot(&mut manager, 1);
+        manager.finalize(&MockBlockHeader::from_height(1)).unwrap();
+        // Commits run on a background thread; land slot 1 before arming the crash.
+        manager.flush();
+
+        let root_2 = save_slot(&mut manager, 2);
+        CommitFaultInjectionLocation::BeforeCommittingLive.set_crash_env();
+        let result = std::panic::catch_unwind(AssertUnwindSafe(|| {
+            manager.finalize(&MockBlockHeader::from_height(2)).unwrap();
+            // `flush` joins the background commit and re-raises its panic.
+            manager.flush();
+        }));
+        std::env::remove_var(crate::test_utils::CRASH_ON_COMMIT_ENV_NAME);
+        assert!(result.is_err(), "Commit should crash before the live write");
+
+        let group = &manager.db_group;
+        let roots = AllDBsStateRoots::from_dbs(
+            &group.merklized_state,
+            group.ledger.clone(),
+            group.accessory.clone(),
+            &group.flat_state,
+        )
+        .unwrap();
+
+        assert_eq!(
+            roots.root_hash_from_live_db, root_1,
+            "Live DB must not be written yet"
+        );
+        assert_eq!(
+            roots.root_hash_nomt.user,
+            root_2[..32],
+            "User NOMT must be committed before live"
+        );
+        assert_eq!(
+            roots.root_hash_nomt.kernel,
+            root_2[32..],
+            "Kernel NOMT must be committed before live"
+        );
+        assert_eq!(
+            roots.root_hash_from_ledger_db, root_2,
+            "Ledger must be committed before live"
+        );
+        assert_eq!(
+            roots.root_hash_from_accessory_db, root_2,
+            "Accessory must be committed before live"
+        );
+        assert_eq!(
+            roots.root_hash_from_archival_db, root_2,
+            "Archival must be committed before live"
         );
     }
 }
