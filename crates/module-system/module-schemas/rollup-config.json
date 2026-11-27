@@ -953,7 +953,7 @@
       "type": "object",
       "properties": {
         "kernel_commit_concurrency": {
-          "description": "Number of concurrent commit workers for the kernel state.\nMore details at [`Options::commit_concurrency`]",
+          "description": "Number of concurrent commit workers for the kernel state. Required.\nMore details at [`Options::commit_concurrency`]",
           "type": [
             "integer",
             "null"
@@ -962,7 +962,7 @@
           "minimum": 0
         },
         "kernel_hashtable_buckets": {
-          "description": "Can be increased for an existing database, but cannot be decreased.\nMore details at [`Options::hashtable_buckets`]",
+          "description": "Number of NOMT hashtable buckets (one 4 KiB page each) for the kernel state.\nDefault is 256_000 (500 in debug builds).\nRaising it for an existing database grows the hashtable at startup; lowering it is rejected.\nMore details at [`Options::hashtable_buckets`]",
           "type": [
             "integer",
             "null"
@@ -971,7 +971,7 @@
           "minimum": 0
         },
         "kernel_leaf_cache_size": {
-          "description": "Leaf cache size for kernel state.\nMore details at [`Options::leaf_cache_size`]",
+          "description": "Leaf cache size for kernel state, in MiB. Default is 256 MiB.\nMore details at [`Options::leaf_cache_size`]",
           "type": [
             "integer",
             "null"
@@ -980,7 +980,7 @@
           "minimum": 0
         },
         "kernel_page_cache_size": {
-          "description": "Page cache size for kernel state.\nMore details at [`Options::page_cache_size`]",
+          "description": "Page cache size for kernel state, in MiB. Default is 256 MiB.\nMore details at [`Options::page_cache_size`]",
           "type": [
             "integer",
             "null"
@@ -989,7 +989,7 @@
           "minimum": 0
         },
         "kernel_page_cache_upper_levels": {
-          "description": "Page cache upper levels for kernel state.\nMore details at [`Options::page_cache_upper_levels`]",
+          "description": "Number of upper page-tree levels permanently cached for kernel state. Default is 2.\nMore details at [`Options::page_cache_upper_levels`]",
           "type": [
             "integer",
             "null"
@@ -1018,6 +1018,11 @@
             "null"
           ]
         },
+        "nomt_metrics_enabled": {
+          "description": "Whether NOMT collects page-cache and fetch-time metrics for user and kernel state.\nHashtable occupancy is reported either way. Default is `true`.\nMore details at [`Options::metrics`]",
+          "type": "boolean",
+          "default": true
+        },
         "path": {
           "description": "Default parent directory for databases without a path override.",
           "type": "string"
@@ -1028,7 +1033,7 @@
           "default": "off"
         },
         "state_cache_size": {
-          "description": "The size of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB.\nA larger cache size can improve execution speed at the cost of more memory usage.",
+          "description": "Size in bytes of the cache which holds hot key-value pairs in the flat state database. Default is 1 GiB.\nA larger cache size can improve execution speed at the cost of more memory usage.",
           "type": [
             "integer",
             "null"
@@ -1037,7 +1042,7 @@
           "minimum": 0
         },
         "user_commit_concurrency": {
-          "description": "Number of concurrent commit workers for the user state.\nMore details at [`Options::commit_concurrency`]",
+          "description": "Number of concurrent commit workers for the user state. Required.\nMore details at [`Options::commit_concurrency`]",
           "type": [
             "integer",
             "null"
@@ -1046,7 +1051,7 @@
           "minimum": 0
         },
         "user_hashtable_buckets": {
-          "description": "Value is determined by the expected size of the state. Recommended to start with 15_000_000.\nCan be increased for an existing database, but cannot be decreased.\nMore details at [`Options::hashtable_buckets`]",
+          "description": "Number of NOMT hashtable buckets (one 4 KiB page each), sized for the expected state size.\nRequired. Recommended to start with 15_000_000.\nRaising it for an existing database grows the hashtable at startup; lowering it is rejected.\nMore details at [`Options::hashtable_buckets`]",
           "type": [
             "integer",
             "null"
@@ -1055,7 +1060,7 @@
           "minimum": 0
         },
         "user_leaf_cache_size": {
-          "description": "Leaf cache size for user state.\nMore details at [`Options::leaf_cache_size`]",
+          "description": "Leaf cache size for user state, in MiB. Default is 256 MiB.\nMore details at [`Options::leaf_cache_size`]",
           "type": [
             "integer",
             "null"
@@ -1071,7 +1076,7 @@
           ]
         },
         "user_page_cache_size": {
-          "description": "Page cache size for user state.\nMore details at [`Options::page_cache_size`]",
+          "description": "Page cache size for user state, in MiB. Default is 256 MiB.\nMore details at [`Options::page_cache_size`]",
           "type": [
             "integer",
             "null"
@@ -1080,7 +1085,7 @@
           "minimum": 0
         },
         "user_page_cache_upper_levels": {
-          "description": "Page cache upper levels for user state.\nMore details at [`Options::page_cache_upper_levels`]",
+          "description": "Number of upper page-tree levels permanently cached for user state. Default is 2.\nMore details at [`Options::page_cache_upper_levels`]",
           "type": [
             "integer",
             "null"

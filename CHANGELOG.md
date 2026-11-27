@@ -1,3 +1,7 @@
+# 2026-11-26
+- #3197 DB: Added `storage.nomt_metrics_enabled` (default `true`) to turn off NOMT page-cache and fetch-time metrics for user and kernel state. Hashtable occupancy is still reported when it is off. **Breaking Change** `RollupDbConfig` has a new public field, so code that builds it as a struct literal must set `nomt_metrics_enabled`.
+- #3197 DB: Fixed storage config docs. `user_page_cache_size`, `user_leaf_cache_size`, `kernel_page_cache_size` and `kernel_leaf_cache_size` are in MiB; the example configs gave byte counts. Raising `*_hashtable_buckets` on an existing database grows the hashtable at startup (lowering it is rejected), not "cannot be changed after creation".
+
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
 

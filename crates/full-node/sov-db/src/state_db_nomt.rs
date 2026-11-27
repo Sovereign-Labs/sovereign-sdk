@@ -18,6 +18,8 @@ const BOTH: &str = "user_and_kernel_state";
 pub struct NomtStateDb<H> {
     pub(crate) user: Nomt<BinaryHasher<H>>,
     pub(crate) kernel: Nomt<BinaryHasher<H>>,
+    /// Mirrors [`RollupDbConfig::nomt_metrics_enabled`], which NOMT does not expose.
+    metrics_enabled: bool,
 }
 
 impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtStateDb<H> {
@@ -44,7 +46,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let user_buckets =
             check_nomt_hashtable_buckets(USER, &user, config.user_hashtable_buckets())?;
 
-        if kernel_buckets.needs_growth() || user_buckets.needs_growth() {
+        let (kernel, user) = if kernel_buckets.needs_growth() || user_buckets.needs_growth() {
             drop(kernel);
             drop(user);
 
@@ -65,11 +67,16 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                 config.user_hashtable_buckets(),
                 config.get_user_options(),
             )?;
+            (kernel, user)
+        } else {
+            (kernel, user)
+        };
 
-            return Ok(Self { user, kernel });
-        }
-
-        Ok(Self { user, kernel })
+        Ok(Self {
+            user,
+            kernel,
+            metrics_enabled: config.nomt_metrics_enabled,
+        })
     }
 
     /// Commit [`StateOverlay`] to disk.
@@ -143,8 +150,8 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
     }
 
     pub(crate) fn send_metrics(&self) {
-        let user_metrics = NomtDbMetric::new(USER, &self.user);
-        let kernel_metrics = NomtDbMetric::new(KERNEL, &self.kernel);
+        let user_metrics = NomtDbMetric::new(USER, &self.user, self.metrics_enabled);
+        let kernel_metrics = NomtDbMetric::new(KERNEL, &self.kernel, self.metrics_enabled);
         sov_metrics::track_metrics(|tracker| {
             tracker.submit(user_metrics);
             tracker.submit(kernel_metrics);
@@ -532,6 +539,26 @@ mod tests {
             roots_before_growth.kernel
         );
         assert_value(&state_db, 7);
+    }
+
+    #[test]
+    fn db_metric_reports_occupancy_without_page_stats_when_nomt_metrics_disabled() {
+        use sov_metrics::Metric;
+
+        let temp_dir = tempfile::tempdir().unwrap();
+        let mut config = config_with_buckets(temp_dir.path().to_path_buf(), 4096);
+        config.nomt_metrics_enabled = false;
+        let state_db = NomtStateDb::<H>::new(config).unwrap();
+
+        let metric = NomtDbMetric::new(USER, &state_db.user, state_db.metrics_enabled);
+        let mut buffer = Vec::new();
+        metric.serialize_for_telegraf(&mut buffer).unwrap();
+
+        assert_eq!(
+            String::from_utf8(buffer).unwrap(),
+            "sov_nomt_db_stats,db=user_state ht_capacity=4096,ht_occupied=0",
+            "Hashtable occupancy must still be reported when NOMT metrics are disabled"
+        );
     }
 
     #[test]
