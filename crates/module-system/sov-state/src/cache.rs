@@ -71,6 +71,7 @@ impl Access {
 }
 
 pub(crate) mod internal {
+    use std::collections::hash_map::Entry;
     use std::collections::HashMap;
 
     use crate::DEFAULT_CACHE_CAPACITY;
@@ -80,14 +81,30 @@ pub(crate) mod internal {
     /// Caches the latest read or write for each key, with an undo journal for rollback.
     ///
     /// Revertable changes are applied to `log` directly and journaled in `undo`, so that a
-    /// discard can restore the entries they replaced. In-place updates through
-    /// [`CacheLog::get_mut`] are not journaled: they survive a discard unless the entry itself
-    /// was added since the last commit.
+    /// discard can restore the entries they replaced. Each key is journaled at most once per
+    /// revertable window (the span between two commits or discards), because a discard only
+    /// needs the entry from before the window's first change. This bounds `undo` by the number of
+    /// distinct keys touched, so a cache that is never committed does not grow with every write.
+    ///
+    /// In-place updates through [`CacheLog::get_mut`] are not journaled: they survive a discard
+    /// unless the entry itself was added since the last commit.
     #[derive(Debug, Clone)]
     pub(crate) struct CacheLog {
-        log: HashMap<SlotKey, Access>,
-        /// Revertable changes, oldest first: the key and the entry it replaced (`None` if absent).
-        undo: Vec<(SlotKey, Option<Access>)>,
+        log: HashMap<SlotKey, LogEntry>,
+        /// Revertable changes: the key and the entry it had before the current window
+        /// (`None` if absent). Holds at most one item per key.
+        undo: Vec<(SlotKey, Option<LogEntry>)>,
+        /// Identifies the current revertable window. Advanced on every commit and discard.
+        /// `u64` so that it cannot wrap around in practice: a wrapped value could make a stale
+        /// entry look already journaled, and a discard would then fail to restore it.
+        window: u64,
+    }
+
+    #[derive(Debug, Clone)]
+    struct LogEntry {
+        access: Access,
+        /// The window in which this entry was last added or replaced.
+        window: u64,
     }
 
     impl Default for CacheLog {
@@ -95,6 +112,7 @@ pub(crate) mod internal {
             Self {
                 log: HashMap::with_capacity(DEFAULT_CACHE_CAPACITY),
                 undo: Vec::new(),
+                window: 0,
             }
         }
     }
@@ -107,7 +125,7 @@ pub(crate) mod internal {
                 self.undo.is_empty(),
                 "Revertable cache should be merged or discarded before calling `iter`"
             );
-            self.log.iter()
+            self.log.iter().map(|(key, entry)| (key, &entry.access))
         }
 
         // This method is used to take all the changeset from the cache. The revertable changes
@@ -119,7 +137,7 @@ pub(crate) mod internal {
             );
             self.log
                 .into_iter()
-                .filter_map(|(key, access)| match access {
+                .filter_map(|(key, entry)| match entry.access {
                     Access::Write { modified } => Some((key, modified)),
                     Access::Read { .. } => None,
                 })
@@ -127,18 +145,22 @@ pub(crate) mod internal {
         }
 
         pub(crate) fn get(&self, key: &SlotKey) -> Option<&Access> {
-            self.log.get(key)
+            self.log.get(key).map(|entry| &entry.access)
         }
 
         pub(crate) fn get_mut(&mut self, key: &SlotKey) -> Option<&mut Access> {
-            self.log.get_mut(key)
+            self.log.get_mut(key).map(|entry| &mut entry.access)
         }
 
         // Adds a read entry to the cache. Caller must guarantee that the key is not already present in the cache.
         pub(crate) fn add_read(&mut self, key: SlotKey, value: Option<NodeLeafAndMaybeValue>) {
-            let previous = self
-                .log
-                .insert(key.clone(), Access::Read { original: value });
+            let previous = self.log.insert(
+                key.clone(),
+                LogEntry {
+                    access: Access::Read { original: value },
+                    window: self.window,
+                },
+            );
             assert!(
                 previous.is_none(),
                 "Detected multiple calls to `add_read` for the same key: {key:?}"
@@ -148,27 +170,48 @@ pub(crate) mod internal {
 
         // Adds a write entry to the cache. A write replaces any earlier read or write of the key.
         pub(crate) fn add_write(&mut self, key: SlotKey, value: Option<SlotValue>) {
-            let previous = self
-                .log
-                .insert(key.clone(), Access::Write { modified: value });
-            self.undo.push((key, previous));
+            let entry = LogEntry {
+                access: Access::Write { modified: value },
+                window: self.window,
+            };
+            match self.log.entry(key) {
+                Entry::Occupied(mut occupied) => {
+                    let previous = occupied.insert(entry);
+                    // If the key was already changed in this window, its undo item holds the
+                    // entry from before the window, which is the one a discard must restore.
+                    if previous.window != self.window {
+                        self.undo.push((occupied.key().clone(), Some(previous)));
+                    }
+                }
+                Entry::Vacant(vacant) => {
+                    self.undo.push((vacant.key().clone(), None));
+                    vacant.insert(entry);
+                }
+            }
         }
 
         pub(crate) fn commit_revertable_log(&mut self) {
             self.undo.clear();
+            self.window += 1;
         }
 
         pub(crate) fn discard_revertable_log(&mut self) {
-            for (key, previous) in self.undo.drain(..).rev() {
+            for (key, previous) in self.undo.drain(..) {
                 match previous {
-                    Some(access) => {
-                        self.log.insert(key, access);
+                    Some(entry) => {
+                        self.log.insert(key, entry);
                     }
                     None => {
                         self.log.remove(&key);
                     }
                 }
             }
+            self.window += 1;
+        }
+
+        #[cfg(test)]
+        pub(crate) fn undo_len(&self) -> usize {
+            self.undo.len()
         }
     }
 }
@@ -742,6 +785,31 @@ mod tests {
             cache_log.take_writes(),
             vec![(key, committed_value)],
             "Discarding a delete and rewrite should restore the previously committed value"
+        );
+    }
+
+    #[test]
+    fn test_repeated_writes_journal_key_once() {
+        let key = create_key(1);
+        let committed_value = create_value(2);
+        let mut cache_log = CacheLog::default();
+        cache_log.add_write(key.clone(), committed_value.clone());
+        cache_log.commit_revertable_log();
+
+        for v in 3..=10 {
+            cache_log.add_write(key.clone(), create_value(v));
+        }
+        assert_eq!(
+            cache_log.undo_len(),
+            1,
+            "Rewriting a key within one revertable window should journal it only once"
+        );
+
+        cache_log.discard_revertable_log();
+        assert_eq!(
+            cache_log.take_writes(),
+            vec![(key, committed_value)],
+            "Discarding repeated writes should restore the value from before the window"
         );
     }
 }
