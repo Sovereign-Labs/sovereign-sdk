@@ -73,3 +73,7 @@ arbitrary = [
 [[test]]
 name = "native"
 required-features = ["native", "arbitrary"]
+
+# sha2 uses ARMv8 SHA instructions only with "asm"; otherwise it falls back to software.
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+sha2 = { workspace = true, features = ["asm"] }

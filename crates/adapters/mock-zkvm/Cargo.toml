@@ -47,3 +47,7 @@ arbitrary = [
     "sov-mock-zkvm/arbitrary",
     "sov-rollup-interface/arbitrary",
 ]
+
+# sha2 uses ARMv8 SHA instructions only with "asm"; otherwise it falls back to software.
+[target.'cfg(target_arch = "aarch64")'.dependencies]
+sha2 = { workspace = true, features = ["asm"] }
