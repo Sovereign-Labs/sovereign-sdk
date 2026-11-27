@@ -1,5 +1,5 @@
 # 2026-11-27
-- #PR_NUMBER Preferred sequencer: New metric `sov_rollup_sequencer_postgres_write` times every Postgres write the sequencer makes, as the sequencer sees it (connection acquisition, network and server-side write), tagged by `operation` and `outcome`. Its `add_txs` operation is the Postgres share of transaction accept latency. See the `sov-metrics` README for the fields.
+- #3200 Preferred sequencer: New metric `sov_rollup_sequencer_postgres_write` times every Postgres write the sequencer makes, as the sequencer sees it (connection acquisition, network and server-side write), tagged by `operation` and `outcome`. Its `add_txs` operation is the Postgres share of transaction accept latency. See the `sov-metrics` README for the fields.
 
 # 2026-11-12
 - #3131 Preferred sequencer replica: Postgres notifications are now used only as wake-up signals. The replica fetches every event row from its last position in pages, instead of one query per notification targeting that notification's event id, so it no longer falls behind the leader (and the leader's pruning) under load. Notifications for already fetched rows are skipped without a query.
