@@ -1,11 +1,12 @@
 #[cfg(test)]
 mod tests;
 
+use crate::metrics::{PostgresWriteMetric, PostgresWriteOperation, PostgresWriteOutcome};
 use crate::preferred::db::FailedOperation;
 use crate::PreferredProofDataBytes;
 use anyhow::{anyhow, Result};
 use std::net::{IpAddr, SocketAddr};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use super::{DbBackend, ReadBlob, SnapshotData, StoredBlob};
 use crate::preferred::db::DbError;
@@ -17,7 +18,8 @@ use sov_blob_sender::BlobInternalId;
 use sov_blob_storage::SequenceNumber;
 use sov_full_node_configs::sequencer::PostgresConfig;
 use sov_modules_api::{FullyBakedTx, TxHash};
-use sqlx::postgres::{PgPool, PgPoolOptions};
+use sqlx::pool::PoolConnection;
+use sqlx::postgres::{PgArguments, PgPool, PgPoolOptions, PgQueryResult};
 use sqlx::FromRow;
 use sqlx::{PgConnection, Postgres};
 use time::OffsetDateTime;
@@ -65,7 +67,86 @@ macro_rules! run_with_retries {
     };
 }
 
+/// Times one write to Postgres, across all of its retry attempts, and submits it as a
+/// [`PostgresWriteMetric`].
+struct WriteTimer {
+    operation: PostgresWriteOperation,
+    start: Instant,
+    attempts: u32,
+    /// Connection acquisition time of the last attempt.
+    acquire: Duration,
+    /// Statement (or transaction) execution time of the last attempt.
+    query: Duration,
+    rows: u64,
+    payload_bytes: u64,
+}
+
+impl WriteTimer {
+    fn start(operation: PostgresWriteOperation, rows: u64, payload_bytes: usize) -> Self {
+        Self {
+            operation,
+            start: Instant::now(),
+            attempts: 0,
+            acquire: Duration::ZERO,
+            query: Duration::ZERO,
+            rows,
+            payload_bytes: payload_bytes as u64,
+        }
+    }
+
+    fn finish(self, outcome: PostgresWriteOutcome) {
+        let metric = PostgresWriteMetric {
+            operation: self.operation,
+            outcome,
+            duration: self.start.elapsed(),
+            acquire: self.acquire,
+            query: self.query,
+            attempts: self.attempts,
+            rows: self.rows,
+            payload_bytes: self.payload_bytes,
+        };
+        sov_metrics::track_metrics(|tracker| tracker.submit(metric));
+    }
+
+    /// Submits the metric for a single-statement write, whose `rows_affected() == 0` means
+    /// that the leader check in the statement filtered everything out.
+    fn finish_statement<E>(self, result: &Result<PgQueryResult, E>) {
+        let outcome = match result {
+            Ok(result) if result.rows_affected() == 0 => PostgresWriteOutcome::NotLeader,
+            Ok(_) => PostgresWriteOutcome::Ok,
+            Err(_) => PostgresWriteOutcome::Error,
+        };
+        self.finish(outcome);
+    }
+}
+
 impl PostgresBackend {
+    /// Gets a connection from the pool, starting a new attempt of the write timed by `timer`.
+    async fn acquire_timed(
+        &self,
+        timer: &mut WriteTimer,
+    ) -> Result<PoolConnection<Postgres>, sqlx::Error> {
+        let start = Instant::now();
+        let connection = self.pool.acquire().await;
+        timer.attempts += 1;
+        timer.acquire = start.elapsed();
+        timer.query = Duration::ZERO;
+        connection
+    }
+
+    /// Runs a single statement, timing the connection acquisition and the execution separately.
+    async fn execute_timed<'q>(
+        &self,
+        query: sqlx::query::Query<'q, Postgres, PgArguments>,
+        timer: &mut WriteTimer,
+    ) -> Result<PgQueryResult, sqlx::Error> {
+        let mut connection = self.acquire_timed(timer).await?;
+        let start = Instant::now();
+        let result = query.execute(&mut *connection).await;
+        timer.query = start.elapsed();
+        result
+    }
+
     /// Connects to Postgres db.
     pub async fn connect(config: &PostgresConfig, bind_addr: SocketAddr) -> Result<Self> {
         // Compute node address for registration
@@ -256,18 +337,40 @@ impl PostgresBackend {
         &self,
         config: Option<LeaderElectionConfig>,
     ) -> anyhow::Result<Option<SequencerLeader>> {
-        run_with_retries!(
+        let mut timer = WriteTimer::start(PostgresWriteOperation::Heartbeat, 1, 0);
+        let result = run_with_retries!(
             &self.backoff_policy,
-            self.heartbeat_in_tx(config),
+            self.heartbeat_in_tx(config, &mut timer),
             "postgres_db_backend_heartbeat"
-        )
+        );
+        // Not being the leader is a successful heartbeat: the node registration is written anyway.
+        timer.finish(match result {
+            Ok(_) => PostgresWriteOutcome::Ok,
+            Err(_) => PostgresWriteOutcome::Error,
+        });
+        result
     }
 
     async fn heartbeat_in_tx(
         &self,
         config: Option<LeaderElectionConfig>,
+        timer: &mut WriteTimer,
     ) -> anyhow::Result<Option<SequencerLeader>> {
-        let mut tx: sqlx::Transaction<'_, Postgres> = self.pool.begin().await?;
+        let mut connection = self.acquire_timed(timer).await?;
+        let start = Instant::now();
+        let result = self
+            .heartbeat_with_connection(&mut connection, config)
+            .await;
+        timer.query = start.elapsed();
+        result
+    }
+
+    async fn heartbeat_with_connection(
+        &self,
+        connection: &mut PgConnection,
+        config: Option<LeaderElectionConfig>,
+    ) -> anyhow::Result<Option<SequencerLeader>> {
+        let mut tx = sqlx::Connection::begin(connection).await?;
         let result = if let Some(config) = config {
             self.try_update_leader_inner(&mut tx, config.leader_timeout(), config.grace_period())
                 .await?
@@ -364,8 +467,23 @@ impl PostgresBackend {
     async fn prune_inner(
         &self,
         prune_up_to_including: SequenceNumber,
+        timer: &mut WriteTimer,
     ) -> anyhow::Result<DbReadOutcome<()>> {
-        let mut tx = self.pool.begin().await?;
+        let mut connection = self.acquire_timed(timer).await?;
+        let start = Instant::now();
+        let result = self
+            .prune_with_connection(&mut connection, prune_up_to_including)
+            .await;
+        timer.query = start.elapsed();
+        result
+    }
+
+    async fn prune_with_connection(
+        &self,
+        connection: &mut PgConnection,
+        prune_up_to_including: SequenceNumber,
+    ) -> anyhow::Result<DbReadOutcome<()>> {
+        let mut tx = sqlx::Connection::begin(connection).await?;
         let prune_up_to_including: i64 = prune_up_to_including.saturating_add(1).try_into()?;
 
         let result = sqlx::query(
@@ -428,10 +546,12 @@ impl DbBackend for PostgresBackend {
         // Compound CTE statement to avoid multiple roundtrips.
         // ON CONFLICT makes both inserts idempotent so retries after
         // a successful-but-unacknowledged write are harmless.
+        let mut timer = WriteTimer::start(PostgresWriteOperation::BeginBatch, 1, blob_data.len());
         let result = run_with_retries!(
             &self.backoff_policy,
-            sqlx::query(
-                "
+            self.execute_timed(
+                sqlx::query(
+                    "
             WITH batch_insert AS (
                 INSERT INTO in_progress_batch (sequence_number, borsh_value)
                 SELECT $1, $2
@@ -448,13 +568,16 @@ impl DbBackend for PostgresBackend {
                 WHERE event_type IN ('batch_start', 'batch_end', 'new_proof')
             DO UPDATE SET data = EXCLUDED.data;
             "
-            )
-            .bind(i64::try_from(batch_to_store.sequence_number)?)
-            .bind::<&[u8]>(blob_data.as_ref())
-            .bind(&self.node_id)
-            .execute(&self.pool),
+                )
+                .bind(i64::try_from(batch_to_store.sequence_number)?)
+                .bind::<&[u8]>(blob_data.as_ref())
+                .bind(&self.node_id),
+                &mut timer,
+            ),
             "postgres_db_backend_begin_rollup_block"
-        )?;
+        );
+        timer.finish_statement(&result);
+        let result = result?;
 
         if result.rows_affected() == 0 {
             return Err(DbError::ReplicaDisallowed {
@@ -485,10 +608,16 @@ impl DbBackend for PostgresBackend {
             .collect::<Vec<_>>();
         let txs_refs: Vec<&[u8]> = txs.iter().map(|t| t.as_slice()).collect();
 
+        let mut timer = WriteTimer::start(
+            PostgresWriteOperation::AddTxs,
+            txs.len() as u64,
+            txs.iter().map(Vec::len).sum(),
+        );
         let result = run_with_retries!(
             &self.backoff_policy,
-            sqlx::query::<Postgres>(
-                "INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
+            self.execute_timed(
+                sqlx::query::<Postgres>(
+                    "INSERT INTO events (sequence_number, event_type, index_in_batch, hash, data)
                 SELECT *
                     FROM UNNEST(
                     $1::bigint[],
@@ -501,16 +630,19 @@ impl DbBackend for PostgresBackend {
                 ON CONFLICT (sequence_number, index_in_batch)
                     WHERE event_type = 'transaction'
                 DO UPDATE SET data = EXCLUDED.data;"
-            )
-            .bind(&sequence_number[..])
-            .bind(&event_types[..])
-            .bind(&tx_indexes[..])
-            .bind(&hashes[..])
-            .bind(&txs_refs[..])
-            .bind(&self.node_id)
-            .execute(&self.pool),
+                )
+                .bind(&sequence_number[..])
+                .bind(&event_types[..])
+                .bind(&tx_indexes[..])
+                .bind(&hashes[..])
+                .bind(&txs_refs[..])
+                .bind(&self.node_id),
+                &mut timer,
+            ),
             "postgres_db_backend_add_tx"
-        )?;
+        );
+        timer.finish_statement(&result);
+        let result = result?;
 
         if result.rows_affected() == 0 {
             return Err(DbError::ReplicaDisallowed {
@@ -569,10 +701,12 @@ impl DbBackend for PostgresBackend {
         // The INSERT is gated on is_leader() rather than on the DELETE returning rows,
         // so that retries after a successful-but-unacknowledged write still insert
         // (or upsert) the batch_end event even though in_progress_batch is already gone.
+        let mut timer = WriteTimer::start(PostgresWriteOperation::EndBatch, 1, blob_data.len());
         let result = run_with_retries!(
             &self.backoff_policy,
-            sqlx::query(
-                "WITH leader_check AS (
+            self.execute_timed(
+                sqlx::query(
+                    "WITH leader_check AS (
                     SELECT 1 WHERE is_leader($3)
                 ),
                 batch_delete AS (
@@ -586,13 +720,16 @@ impl DbBackend for PostgresBackend {
                 ON CONFLICT (sequence_number, event_type)
                     WHERE event_type IN ('batch_start', 'batch_end', 'new_proof')
                 DO UPDATE SET data = EXCLUDED.data",
-            )
-            .bind(i64::try_from(sequence_number)?)
-            .bind::<&[u8]>(blob_data.as_ref())
-            .bind(&self.node_id)
-            .execute(&self.pool),
+                )
+                .bind(i64::try_from(sequence_number)?)
+                .bind::<&[u8]>(blob_data.as_ref())
+                .bind(&self.node_id),
+                &mut timer,
+            ),
             "postgres_db_backend_end_rollup_block"
-        )?;
+        );
+        timer.finish_statement(&result);
+        let result = result?;
 
         if result.rows_affected() == 0 {
             return Err(DbError::ReplicaDisallowed {
@@ -605,11 +742,18 @@ impl DbBackend for PostgresBackend {
     }
 
     async fn prune(&mut self, up_to_including: SequenceNumber) -> Result<(), DbError> {
-        let outcome = run_with_retries!(
+        let mut timer = WriteTimer::start(PostgresWriteOperation::Prune, 1, 0);
+        let result = run_with_retries!(
             &self.backoff_policy,
-            self.prune_inner(up_to_including),
+            self.prune_inner(up_to_including, &mut timer),
             "postgres_db_backend_prune"
-        )?;
+        );
+        timer.finish(match result {
+            Ok(DbReadOutcome::Success(())) => PostgresWriteOutcome::Ok,
+            Ok(DbReadOutcome::AbortedBecauseReplica { .. }) => PostgresWriteOutcome::NotLeader,
+            Err(_) => PostgresWriteOutcome::Error,
+        });
+        let outcome = result?;
 
         if let DbReadOutcome::AbortedBecauseReplica { db_leader } = outcome {
             return Err(DbError::ReplicaDisallowed {
@@ -653,10 +797,12 @@ impl DbBackend for PostgresBackend {
         // Compound CTE statement to avoid multiple roundtrips.
         // ON CONFLICT makes both inserts idempotent so retries after
         // a successful-but-unacknowledged write are harmless.
+        let mut timer = WriteTimer::start(PostgresWriteOperation::AddProof, 1, blob_data.len());
         let result = run_with_retries!(
             &self.backoff_policy,
-            sqlx::query(
-                "
+            self.execute_timed(
+                sqlx::query(
+                    "
                 WITH blob_insert AS (
                     INSERT INTO proof_blobs (sequence_number, borsh_value)
                     SELECT $1, $2
@@ -671,13 +817,16 @@ impl DbBackend for PostgresBackend {
                 ON CONFLICT (sequence_number, event_type)
                     WHERE event_type IN ('batch_start', 'batch_end', 'new_proof')
                 DO UPDATE SET data = EXCLUDED.data",
-            )
-            .bind(i64::try_from(sequence_number)?)
-            .bind::<&[u8]>(blob_data.as_ref())
-            .bind(&self.node_id)
-            .execute(&self.pool),
+                )
+                .bind(i64::try_from(sequence_number)?)
+                .bind::<&[u8]>(blob_data.as_ref())
+                .bind(&self.node_id),
+                &mut timer,
+            ),
             "postgres_db_backend_add_proof_blob"
-        )?;
+        );
+        timer.finish_statement(&result);
+        let result = result?;
 
         if result.rows_affected() == 0 {
             return Err(DbError::ReplicaDisallowed {

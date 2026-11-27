@@ -261,6 +261,78 @@ impl Metric for PreferredSequencerPruneMetrics {
     }
 }
 
+/// The kind of write a preferred sequencer makes to Postgres.
+#[derive(Debug, Clone, Copy, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
+pub enum PostgresWriteOperation {
+    BeginBatch,
+    /// Persisting accepted transactions: the write that tx acceptance waits for.
+    AddTxs,
+    EndBatch,
+    AddProof,
+    Prune,
+    /// Node registration and leader-election refresh. A small write of constant size, sent
+    /// every heartbeat interval regardless of load, so it serves as a baseline round trip.
+    Heartbeat,
+}
+
+/// How a Postgres write ended.
+#[derive(Debug, Clone, Copy, strum::IntoStaticStr)]
+#[strum(serialize_all = "snake_case")]
+pub enum PostgresWriteOutcome {
+    Ok,
+    /// The query went through, but the node is not the leader so nothing was written.
+    NotLeader,
+    /// Every attempt failed.
+    Error,
+}
+
+/// One write to Postgres by the preferred sequencer, as observed by the sequencer: connection
+/// acquisition, network round trip and the server-side write and commit.
+/// Emitted as `sov_rollup_sequencer_postgres_write`.
+#[derive(Debug)]
+pub struct PostgresWriteMetric {
+    pub operation: PostgresWriteOperation,
+    pub outcome: PostgresWriteOutcome,
+    /// The whole call, including retries and the backoff sleeps between them.
+    pub duration: std::time::Duration,
+    /// Time spent getting a connection from the pool in the last attempt. High values mean a
+    /// new connection had to be opened.
+    pub acquire: std::time::Duration,
+    /// Time spent running the statement (or the whole transaction) in the last attempt.
+    pub query: std::time::Duration,
+    /// Number of attempts made. Above 1, `duration` includes retries.
+    pub attempts: u32,
+    /// Number of transactions written for `add_txs`, 1 for other operations.
+    pub rows: u64,
+    /// Size of the serialized transactions or blob sent, 0 when there is none.
+    pub payload_bytes: u64,
+}
+
+impl Metric for PostgresWriteMetric {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_sequencer_postgres_write"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        let operation: &'static str = self.operation.into();
+        let outcome: &'static str = self.outcome.into();
+        write!(
+            buffer,
+            "{},operation={},outcome={} duration_us={},acquire_us={},query_us={},attempts={},rows={},payload_bytes={}",
+            self.measurement_name(),
+            operation,
+            outcome,
+            self.duration.as_micros(),
+            self.acquire.as_micros(),
+            self.query.as_micros(),
+            self.attempts,
+            self.rows,
+            self.payload_bytes,
+        )
+    }
+}
+
 #[derive(Debug, Default)]
 pub struct PreferredSequencerExecutorEventSendingMetrics {
     pub blocked_for_us: u64,
@@ -414,5 +486,34 @@ impl<M: Metric + 'static> MetricBatcher<M> {
                 t.submit(MetricBatch { metrics });
             });
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use std::time::Duration;
+
+    use super::*;
+
+    #[test]
+    fn postgres_write_metric_serializes_operation_and_outcome_as_tags() {
+        let metric = PostgresWriteMetric {
+            operation: PostgresWriteOperation::AddTxs,
+            outcome: PostgresWriteOutcome::NotLeader,
+            duration: Duration::from_micros(0x12345),
+            acquire: Duration::from_micros(0x1234),
+            query: Duration::from_micros(0x2345),
+            attempts: 3,
+            rows: 0x456,
+            payload_bytes: 0x56789,
+        };
+        let mut buffer = Vec::new();
+        metric.serialize_for_telegraf(&mut buffer).unwrap();
+
+        assert_eq!(
+            String::from_utf8(buffer).unwrap(),
+            "sov_rollup_sequencer_postgres_write,operation=add_txs,outcome=not_leader \
+             duration_us=74565,acquire_us=4660,query_us=9029,attempts=3,rows=1110,payload_bytes=354185",
+        );
     }
 }
