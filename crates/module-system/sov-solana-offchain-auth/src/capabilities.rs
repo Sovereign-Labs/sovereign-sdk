@@ -109,6 +109,26 @@ where
     }
 
     #[cfg(feature = "native")]
+    fn prewarm_authentication(tx: &FullyBakedTx, rollup_height: u64) {
+        // Malformed input is skipped: `authenticate` decodes it again and reports the error.
+        let Ok(input) = borsh::from_slice::<SolanaOffchainAuthenticatorInput>(&tx.data) else {
+            return;
+        };
+        match input {
+            SolanaOffchainAuthenticatorInput::SolanaOffchain(tx) => {
+                crate::authentication::prewarm_signature_cache::<S>(&tx.data);
+            }
+            SolanaOffchainAuthenticatorInput::Standard(tx) => {
+                sov_modules_api::capabilities::prewarm_authentication::<S, Rt>(
+                    &tx.data,
+                    &Rt::CHAIN_HASH,
+                    rollup_height,
+                );
+            }
+        }
+    }
+
+    #[cfg(feature = "native")]
     fn compute_tx_hash(
         tx: &sov_modules_api::FullyBakedTx,
     ) -> anyhow::Result<sov_modules_api::TxHash> {

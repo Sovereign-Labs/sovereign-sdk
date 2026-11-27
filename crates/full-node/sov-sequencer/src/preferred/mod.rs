@@ -417,6 +417,13 @@ where
             .default_api_state_accessor()
             .to_provable_reader();
 
+        // Decode and verify the transaction once here, on the request's task, and keep the result:
+        // the `authenticate` call below and the ones in the serial executors then only charge gas.
+        <Rt as Runtime<S>>::Auth::prewarm_authentication(
+            &baked_tx,
+            sov_modules_api::VersionReader::rollup_height_to_access(&state).get(),
+        );
+
         let (ip_and_addr, uniqueness, delay_ms) = {
             let (_, auth_data, call) =
                 <Rt as Runtime<S>>::Auth::authenticate(&baked_tx, &mut state).map_err(|e| {

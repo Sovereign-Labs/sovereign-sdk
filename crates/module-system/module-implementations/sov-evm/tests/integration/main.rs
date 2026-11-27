@@ -11,6 +11,7 @@ mod request_preflight;
 mod rpc_basefee;
 mod rpc_call_overrides;
 mod runtime;
+mod signature_prewarm;
 mod state;
 mod trace;
 mod transactions;
