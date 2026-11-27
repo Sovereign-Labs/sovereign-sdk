@@ -117,6 +117,22 @@ where
     }
 
     #[cfg(feature = "native")]
+    fn prewarm_authentication(tx: &FullyBakedTx, rollup_height: u64) {
+        // Malformed input is skipped: `authenticate` decodes it again and reports the error.
+        // EVM and Solana offchain transactions are not pre-verified yet.
+        let Ok(EvmAndSolanaOffchainAuthenticatorInput::Standard(tx)) =
+            borsh::from_slice::<EvmAndSolanaOffchainAuthenticatorInput>(&tx.data)
+        else {
+            return;
+        };
+        sov_modules_api::capabilities::prewarm_authentication::<S, Rt>(
+            &tx.data,
+            &Rt::CHAIN_HASH,
+            rollup_height,
+        );
+    }
+
+    #[cfg(feature = "native")]
     fn compute_tx_hash(
         tx: &sov_modules_api::FullyBakedTx,
     ) -> anyhow::Result<sov_modules_api::TxHash> {

@@ -146,6 +146,34 @@ fn track_transaction_metrics<S: Spec>(
     });
 }
 
+/// Signature cache lookups made by the serial transaction loop of one batch.
+#[cfg(feature = "native")]
+#[derive(Debug)]
+struct AuthCacheMetrics {
+    context: &'static str,
+    stats: sov_modules_api::capabilities::AuthCacheStats,
+}
+
+#[cfg(feature = "native")]
+impl sov_metrics::Metric for AuthCacheMetrics {
+    fn measurement_name(&self) -> &'static str {
+        "sov_rollup_auth_cache"
+    }
+
+    fn serialize_for_telegraf(&self, buffer: &mut Vec<u8>) -> std::io::Result<()> {
+        std::io::Write::write_fmt(
+            buffer,
+            format_args!(
+                "{},context={} signature_hits={},signature_misses={}",
+                self.measurement_name(),
+                self.context,
+                self.stats.signature_hits,
+                self.stats.signature_misses,
+            ),
+        )
+    }
+}
+
 /// Actual processing of transaction.
 ///
 /// The caller is responsible for penalizing the sequencer if this method returns an error. If the tx can be attempted,
@@ -455,7 +483,50 @@ where
 
     let mut clean_scratchpad = checkpoint.to_tx_scratchpad();
 
-    for (idx, (raw_tx, injected_control_flow)) in batch_with_id.enumerate() {
+    // Optimistically execute each transaction in the batch.
+    // We need...
+    // - A pool of threads that can "run ahead" of the main thread
+    // - To periodically update the checkpoint that the worker threads are using
+    // - For each worker...
+    //   - Grab the next tx from the queue
+    //   - Update state from the broadcast channel
+    //   - Run the tx
+    //   - Send the result back to the main thread.
+    //
+    // For the main thread:
+    //   - For each tx...
+    //     - Check if optimistic results are available
+    //     - If so, do a consistency check (each read needs to match the latest value)
+    //        - If the check passes, apply the tx to the state
+    //        - If the check fails, discard the result and execute the tx on the main thread
+    // A replayed batch is fully known up front, so the stateless part of authentication (signature
+    // checks) is done for all of its transactions in parallel before the serial loop. The loop
+    // still authenticates every transaction and charges the same gas; it only finds the signature
+    // result in the cache. A sequencer builds its batch incrementally, and authenticates each
+    // transaction when it is submitted instead.
+    let prefetched: Vec<_> = if execution_context.is_sequencer() {
+        Vec::new()
+    } else {
+        batch_with_id.by_ref().collect()
+    };
+    #[cfg(feature = "native")]
+    {
+        let rollup_height = clean_scratchpad.rollup_height_to_access().get();
+        let raw_txs: Vec<&FullyBakedTx> = prefetched.iter().map(|(raw_tx, _)| raw_tx).collect();
+        rayon::iter::ParallelIterator::for_each(
+            rayon::iter::IntoParallelIterator::into_par_iter(raw_txs),
+            |raw_tx| RT::Auth::prewarm_authentication(raw_tx, rollup_height),
+        );
+    }
+
+    // Discard lookups this thread made before the batch, so that the stats below cover only the
+    // serial loop.
+    #[cfg(feature = "native")]
+    sov_modules_api::capabilities::take_auth_cache_stats();
+
+    for (idx, (raw_tx, injected_control_flow)) in
+        prefetched.into_iter().chain(batch_with_id).enumerate()
+    {
         // Authorize and process the transaction, handling sequencer rewards/penalties internally.
         // The caller is responsible for maintaining the global gas limit.
         let AuthAndProcessOutput {
@@ -607,6 +678,19 @@ where
             }
         }
         clean_scratchpad = new_checkpoint.to_tx_scratchpad();
+    }
+
+    #[cfg(feature = "native")]
+    {
+        let stats = sov_modules_api::capabilities::take_auth_cache_stats();
+        if stats != sov_modules_api::capabilities::AuthCacheStats::default() {
+            sov_metrics::track_metrics(|tracker| {
+                tracker.submit(AuthCacheMetrics {
+                    context: execution_context.str(),
+                    stats,
+                });
+            });
+        }
     }
 
     let total_gas_used_in_batch = slot_gas_meter

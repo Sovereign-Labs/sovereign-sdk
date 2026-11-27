@@ -158,7 +158,8 @@ are rules of thumb, not hard limits.
 | `sov_rollup_transaction_execution_us` | timer | `sov-metrics/src/influxdb/tracker.rs` | Per-tx latency tagged by `status`/`context`/`call_message` (all bounded). Group by `call_message` to find expensive message types. Only emitted when `sov-modules-stf-blueprint` is built with the `expensive-observability` feature. |
 | `sov_rollup_slot_execution_time_us` | timer | `sov-metrics/src/influxdb/tracker.rs` | End-to-end slot latency; the top-level SLO for rollup throughput. If this grows, drill into `sov_rollup_runner_times_us` + `sov_storage_manager_finalization`. |
 | `sov_rollup_batch_processing` | timer + counter | `sov-metrics/src/influxdb/tracker.rs` | Per-batch cost and tx count; use together to compute per-tx cost trends inside a batch. |
-| `sov_rollup_auth_and_process_metrics` | timer | `sov-metrics/src/influx_db_nonnative.rs` | Authentication + processing cost (emitted in non-native / ZK-guest code paths). Budgets ZK cycle consumption. Only emitted when `sov-modules-stf-blueprint` is built with the `expensive-observability` feature. |
+| `sov_rollup_auth_and_process_metrics` | timer | `sov-metrics/src/influx_db_nonnative.rs` | Authentication + processing cost (emitted in non-native / ZK-guest code paths). Budgets ZK cycle consumption. |
+| `sov_rollup_auth_cache` | counter | `sov-modules-stf-blueprint/src/sequencer_mode/registered.rs` | Per-batch `signature_hits` / `signature_misses` of the serial tx loop, tagged by `context`. Any miss means a signature was verified on the serial thread; on the node, a falling hit rate means the signature cache is being outrun. |
 
 ### HTTP / RPC surface
 

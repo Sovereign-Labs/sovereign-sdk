@@ -89,6 +89,15 @@ pub trait TransactionAuthenticator<S: Spec> {
     #[cfg(feature = "native")]
     fn decode_serialized_tx(tx: &FullyBakedTx) -> Result<Self::Decodable, FatalError>;
 
+    /// Does the stateless part of [`TransactionAuthenticator::authenticate`] for `tx` ahead of
+    /// time and caches the result, so that a batch can be pre-verified in parallel before it is
+    /// executed serially. `rollup_height` is the height `tx` will be authenticated at.
+    ///
+    /// This is an optimization only: it must not touch state or charge gas, and `authenticate`
+    /// must return the same result whether or not it was called. The default does nothing.
+    #[cfg(feature = "native")]
+    fn prewarm_authentication(_tx: &FullyBakedTx, _rollup_height: u64) {}
+
     /// Authenticates raw transaction that is submitted from unregistered sequencers for the
     /// purpose of forced registration (circumventing censorship by currently registered sequencers).
     ///
@@ -178,6 +187,46 @@ pub enum AuthenticatorInput {
 static SIGNATURE_CACHE: std::sync::LazyLock<SignatureVerificationCache<(), (TxHash, [u8; 32])>> =
     std::sync::LazyLock::new(|| SignatureVerificationCache::new(DEFAULT_SIGNATURE_CACHE_SIZE));
 
+/// Signature cache lookups made by the current thread.
+///
+/// The counters are per thread so that lookups from a serial execution loop are not mixed with
+/// lookups from other threads, such as sequencer ingest, where a miss is the expected outcome.
+#[cfg(feature = "native")]
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub struct AuthCacheStats {
+    /// Lookups that found a cached verification result, so no signature was verified.
+    pub signature_hits: u64,
+    /// Lookups that found nothing, so the signature was verified on the calling thread.
+    pub signature_misses: u64,
+}
+
+#[cfg(feature = "native")]
+thread_local! {
+    static AUTH_CACHE_STATS: std::cell::Cell<AuthCacheStats> =
+        const { std::cell::Cell::new(AuthCacheStats { signature_hits: 0, signature_misses: 0 }) };
+}
+
+/// Counts one signature cache lookup on the current thread. Authenticators with their own
+/// [`SignatureVerificationCache`] can call this to be included in [`AuthCacheStats`].
+#[cfg(feature = "native")]
+pub fn record_signature_cache_lookup(hit: bool) {
+    AUTH_CACHE_STATS.with(|stats| {
+        let mut current = stats.get();
+        if hit {
+            current.signature_hits = current.signature_hits.saturating_add(1);
+        } else {
+            current.signature_misses = current.signature_misses.saturating_add(1);
+        }
+        stats.set(current);
+    });
+}
+
+/// Returns the current thread's [`AuthCacheStats`] and resets them to zero.
+#[cfg(feature = "native")]
+pub fn take_auth_cache_stats() -> AuthCacheStats {
+    AUTH_CACHE_STATS.with(std::cell::Cell::take)
+}
+
 /// Canonical implementation of [`TransactionAuthenticator`].
 #[derive(Debug, PartialEq, Clone, Default)]
 pub struct RollupAuthenticator<S, Rt>(PhantomData<(S, Rt)>);
@@ -216,6 +265,15 @@ where
     fn compute_tx_hash(tx: &FullyBakedTx) -> anyhow::Result<TxHash> {
         let AuthenticatorInput::Standard(input) = borsh::from_slice(&tx.data)?;
         Ok(calculate_hash::<S>(&input.data))
+    }
+
+    #[cfg(feature = "native")]
+    fn prewarm_authentication(tx: &FullyBakedTx, rollup_height: u64) {
+        // Malformed input is skipped: `authenticate` decodes it again and reports the error.
+        let Ok(AuthenticatorInput::Standard(input)) = borsh::from_slice(&tx.data) else {
+            return;
+        };
+        prewarm_authentication::<S, Rt>(&input.data, &Rt::CHAIN_HASH, rollup_height);
     }
 
     fn authenticate_unregistered<
@@ -423,8 +481,12 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
         })?;
 
     #[cfg(feature = "native")]
-    if let Some(known_result) = SIGNATURE_CACHE.get(&(raw_tx_hash, *chain_hash)) {
-        return known_result;
+    {
+        let known_result = SIGNATURE_CACHE.get(&(raw_tx_hash, *chain_hash));
+        record_signature_cache_lookup(known_result.is_some());
+        if let Some(known_result) = known_result {
+            return known_result;
+        }
     }
 
     let res = tx
@@ -443,6 +505,54 @@ fn verify_signature_over_message<S: Spec, D: DispatchCall<Spec = S>>(
     SIGNATURE_CACHE.insert((raw_tx_hash, *chain_hash), res.clone());
 
     res
+}
+
+/// Verifies the signature of a raw sov-transaction ahead of [`authenticate`] and stores the result
+/// in the signature cache, which [`authenticate`] reads after charging the signature gas.
+///
+/// `rollup_height` must be the height the transaction will be authenticated at, because it
+/// selects the chain hash that the transaction is verified against. Nothing is charged and no
+/// state is read, so [`authenticate`] behaves the same whether or not this was called.
+///
+/// Transactions that [`authenticate`] rejects before verifying a signature, and transactions in
+/// the legacy V0 encoding, are skipped.
+#[cfg(feature = "native")]
+pub fn prewarm_authentication<S: Spec, D: DispatchCall<Spec = S>>(
+    mut raw_tx: &[u8],
+    default_chain_hash: &[u8; 32],
+    rollup_height: u64,
+) {
+    let raw_tx_hash = calculate_hash::<S>(raw_tx);
+    // Undecodable transactions are skipped: `authenticate` reports the decoding error itself.
+    // Legacy V0 transactions are skipped because they are verified against several chain hashes.
+    let Ok(DecodedTransaction::Current(tx)) =
+        legacy_v0::deserialize_transaction_reader::<D, S, <S as Spec>::CryptoSpec, _>(&mut raw_tx)
+    else {
+        return;
+    };
+    // `authenticate` rejects trailing bytes before it verifies the signature.
+    if !raw_tx.is_empty() {
+        return;
+    }
+    let details = match &tx {
+        Transaction::V0(tx_v0) => &tx_v0.details,
+        Transaction::V1(tx_v1) => &tx_v1.details,
+    };
+    let resolved_hashes = resolve_chain_hashes_for_height(rollup_height, *default_chain_hash);
+    // `authenticate` reports a chain hash mismatch before it verifies the signature.
+    let Ok(chain_hash) = select_chain_hash(details, &resolved_hashes, raw_tx_hash) else {
+        return;
+    };
+    let serialized_tx = tx.to_signing_bytes(&chain_hash);
+    // The result is ignored on purpose: it is now in the signature cache, and `authenticate`
+    // reports it after charging the signature gas.
+    let _ = verify_signature_over_message(
+        &tx,
+        &serialized_tx,
+        &chain_hash,
+        raw_tx_hash,
+        &mut crate::UnlimitedGasMeter::<S>::default(),
+    );
 }
 
 /// Calculates the non-malleable hash to use for replay protection.
@@ -747,4 +857,33 @@ pub fn fatal_deserialization_error<
     };
 
     AuthenticationError::FatalError(FatalError::DeserializationFailed(err.to_string()), hash)
+}
+
+#[cfg(all(test, feature = "native"))]
+mod auth_cache_stats_tests {
+    use super::{record_signature_cache_lookup, take_auth_cache_stats, AuthCacheStats};
+
+    #[test]
+    fn take_auth_cache_stats_resets_counters() {
+        record_signature_cache_lookup(true);
+        take_auth_cache_stats();
+
+        assert_eq!(take_auth_cache_stats(), AuthCacheStats::default());
+    }
+
+    #[test]
+    fn hits_and_misses_are_counted_separately() {
+        take_auth_cache_stats();
+        record_signature_cache_lookup(false);
+        record_signature_cache_lookup(true);
+        record_signature_cache_lookup(true);
+
+        assert_eq!(
+            take_auth_cache_stats(),
+            AuthCacheStats {
+                signature_hits: 2,
+                signature_misses: 1,
+            }
+        );
+    }
 }
