@@ -424,6 +424,7 @@ impl From<RollupDbConfig> for RollupDbConfigWithCustomizations {
 mod tests {
     use super::RollupDbConfig;
     use std::path::PathBuf;
+
     #[test]
     fn database_paths_deserialize_when_omitted() {
         let config: RollupDbConfig = serde_json::from_str(r#"{"path":"data"}"#).unwrap();

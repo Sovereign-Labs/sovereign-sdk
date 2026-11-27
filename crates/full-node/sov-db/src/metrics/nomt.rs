@@ -7,6 +7,7 @@ use sov_rollup_interface::reexports::digest;
 
 /// Snapshot of NOMT hash-table occupancy and page-cache effectiveness for one database.
 /// The `db` tag disambiguates instances (user / kernel / ledger). Emitted as `sov_nomt_db_stats`.
+/// The page and fetch-time fields are `None` when `storage.nomt_metrics_enabled` is off.
 ///
 /// **What healthy looks like:** `hash_table_occupied / hash_table_capacity < 0.9`, page cache miss
 /// ratio low and steady, page/value fetch times flat.
@@ -27,9 +28,7 @@ pub struct NomtDbMetric {
     pub db: &'static str,
     pub hash_table_capacity: usize,
     pub hash_table_occupied: usize,
-    /// `None` when NOMT metrics are disabled.
     pub page_requests: Option<u64>,
-    /// `None` when NOMT metrics are disabled.
     pub page_cache_misses: Option<u64>,
     pub avg_page_fetch_time_ns: Option<u64>,
     pub avg_value_fetch_time_ns: Option<u64>,

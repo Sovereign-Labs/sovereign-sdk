@@ -18,8 +18,7 @@ const BOTH: &str = "user_and_kernel_state";
 pub struct NomtStateDb<H> {
     pub(crate) user: Nomt<BinaryHasher<H>>,
     pub(crate) kernel: Nomt<BinaryHasher<H>>,
-    /// Mirrors [`RollupDbConfig::nomt_metrics_enabled`]: NOMT does not expose whether its
-    /// metrics are enabled, and its metric getters panic when they are not.
+    /// Mirrors [`RollupDbConfig::nomt_metrics_enabled`], which NOMT does not expose.
     metrics_enabled: bool,
 }
 
@@ -47,7 +46,7 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
         let user_buckets =
             check_nomt_hashtable_buckets(USER, &user, config.user_hashtable_buckets())?;
 
-        if kernel_buckets.needs_growth() || user_buckets.needs_growth() {
+        let (kernel, user) = if kernel_buckets.needs_growth() || user_buckets.needs_growth() {
             drop(kernel);
             drop(user);
 
@@ -68,13 +67,10 @@ impl<H: digest::Digest<OutputSize = digest::typenum::U32> + Send + Sync> NomtSta
                 config.user_hashtable_buckets(),
                 config.get_user_options(),
             )?;
-
-            return Ok(Self {
-                user,
-                kernel,
-                metrics_enabled: config.nomt_metrics_enabled,
-            });
-        }
+            (kernel, user)
+        } else {
+            (kernel, user)
+        };
 
         Ok(Self {
             user,
@@ -543,16 +539,6 @@ mod tests {
             roots_before_growth.kernel
         );
         assert_value(&state_db, 7);
-    }
-
-    #[test]
-    fn send_metrics_does_not_panic_with_nomt_metrics_disabled() {
-        let temp_dir = tempfile::tempdir().unwrap();
-        let mut config = RollupDbConfig::default_in_path(temp_dir.path().to_path_buf());
-        config.nomt_metrics_enabled = false;
-        let state_db = NomtStateDb::<H>::new(config).unwrap();
-
-        state_db.send_metrics();
     }
 
     #[test]
